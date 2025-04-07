@@ -18,7 +18,7 @@
 // base
 #include <globals.h>
 
-// fvm
+// snap
 #include "mesh_formatter.hpp"
 #include "oct_tree.hpp"
 

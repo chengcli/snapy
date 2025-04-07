@@ -5,8 +5,8 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/registry.hpp>
+// snap
+#include <snap/registry.hpp>
 
 #include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"

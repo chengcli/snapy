@@ -8,7 +8,7 @@
 #include <formatter.hpp>
 #include <input/parameter_input.hpp>
 
-// fvm
+// snap
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"
 

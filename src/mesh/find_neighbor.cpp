@@ -2,7 +2,7 @@
 #include <sstream>
 #include <stdexcept>
 
-// fvm
+// snap
 #include "oct_tree.hpp"
 
 namespace snap {

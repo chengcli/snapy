@@ -11,10 +11,10 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/registry.hpp>
-#include <fvm/thermo/thermodynamics.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/registry.hpp>
+#include <snap/thermo/thermodynamics.hpp>
 
 namespace snap {
 struct EquationOfStateOptions {

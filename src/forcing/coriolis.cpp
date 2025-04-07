@@ -6,11 +6,11 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
-#include <fvm/mesh/meshblock.hpp>
-#include <fvm/registry.hpp>
+#include <snap/mesh/meshblock.hpp>
+#include <snap/registry.hpp>
 
 #include "forcing.hpp"
 #include "forcing_formatter.hpp"

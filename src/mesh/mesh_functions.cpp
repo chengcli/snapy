@@ -1,7 +1,7 @@
 // torch
 #include <torch/torch.h>
 
-// fvm
+// snap
 #include "mesh_functions.hpp"
 
 namespace snap {

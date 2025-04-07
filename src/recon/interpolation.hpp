@@ -11,7 +11,7 @@
 // base
 #include <add_arg.h>
 #include <configure.h>
-#include <fvm/index.h>
+#include <snap/index.h>
 
 // input
 #include <input/parameter_input.hpp>

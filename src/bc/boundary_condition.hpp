@@ -11,8 +11,8 @@
 #include <add_arg.h>
 // clang-format on
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 namespace snap {
 enum BoundaryFace {

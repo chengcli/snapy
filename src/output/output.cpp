@@ -88,7 +88,7 @@
 #include <stdexcept>
 #include <string>  // std::string, to_string()
 
-// fvm
+// snap
 #include "output.hpp"
 #include "output_formats.hpp"
 

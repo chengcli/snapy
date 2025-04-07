@@ -3,8 +3,8 @@
 // base
 #include <configure.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #define WL(n) wli[(n) * stride]
 #define WR(n) wri[(n) * stride]

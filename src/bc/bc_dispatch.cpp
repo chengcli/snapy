@@ -5,7 +5,7 @@
 #include <ATen/native/cpu/Loops.h>
 #include <torch/torch.h>
 
-// fvm
+// snap
 #include "flip_zero_impl.h"
 
 namespace snap {

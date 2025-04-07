@@ -6,7 +6,7 @@
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
 
-// fvm
+// snap
 #include "tridiag_thomas_impl.h"
 
 namespace snap {

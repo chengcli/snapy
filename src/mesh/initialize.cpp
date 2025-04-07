@@ -9,8 +9,8 @@
 #include <formatter.hpp>
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
 
 #include "mesh.hpp"
 #include "mesh_formatter.hpp"

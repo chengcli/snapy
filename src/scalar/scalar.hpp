@@ -11,10 +11,10 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/recon/reconstruct.hpp>
-#include <fvm/riemann/riemann_solver.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/recon/reconstruct.hpp>
+#include <snap/riemann/riemann_solver.hpp>
 
 namespace snap {
 struct ScalarOptions {

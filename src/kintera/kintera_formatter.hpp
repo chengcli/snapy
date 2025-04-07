@@ -3,7 +3,7 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
+// snap
 #include "reaction.hpp"
 
 template <>

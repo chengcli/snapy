@@ -2,7 +2,7 @@
 #include <configure.h>
 #include <spdlog/spdlog.h>
 
-// fvm
+// snap
 #include "interpolation.hpp"
 
 namespace snap {

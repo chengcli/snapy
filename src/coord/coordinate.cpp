@@ -8,8 +8,8 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/mesh/mesh_formatter.hpp>
+// snap
+#include <snap/mesh/mesh_formatter.hpp>
 
 #include "coordinate.hpp"
 

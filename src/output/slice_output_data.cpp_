@@ -1,6 +1,6 @@
-// fvm
-#include <fvm/mesh/meshblock.hpp>
-#include <fvm/hydro/hydro.hpp>
+// snap
+#include <snap/mesh/meshblock.hpp>
+#include <snap/hydro/hydro.hpp>
 #include "output_type.hpp"
 
 namespace snap {

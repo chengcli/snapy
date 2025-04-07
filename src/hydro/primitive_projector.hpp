@@ -9,9 +9,9 @@
 #include <add_arg.h>
 #include <configure.h>
 
-// fvm
-#include <fvm/recon/reconstruct.hpp>
-#include <fvm/thermo/thermodynamics.hpp>
+// snap
+#include <snap/recon/reconstruct.hpp>
+#include <snap/thermo/thermodynamics.hpp>
 
 namespace snap {
 

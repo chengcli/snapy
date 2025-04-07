@@ -3,7 +3,7 @@
 // base
 #include <configure.h>
 
-// fvm
+// snap
 #include "lubksb.h"
 
 /*! Using the above LU decomposition and backsubstitution routines,

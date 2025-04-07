@@ -11,9 +11,9 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/eos/equation_of_state.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/eos/equation_of_state.hpp>
 
 namespace snap {
 struct RiemannSolverOptions {

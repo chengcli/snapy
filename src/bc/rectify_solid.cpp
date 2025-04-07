@@ -2,7 +2,7 @@
 #include <ATen/TensorIterator.h>
 #include <torch/torch.h>
 
-// fvm
+// snap
 #include "boundary_condition.hpp"
 #include "internal_boundary.hpp"
 

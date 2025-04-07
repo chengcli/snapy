@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-// fvm
+// snap
 #include "output_type.hpp"
 
 namespace snap {

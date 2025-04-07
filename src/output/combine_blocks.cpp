@@ -13,8 +13,8 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/interface/athena_arrays.hpp>
+// snap
+#include <snap/interface/athena_arrays.hpp>
 
 #include "output_formats.hpp"
 

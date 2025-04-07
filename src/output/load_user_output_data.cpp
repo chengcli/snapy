@@ -1,7 +1,7 @@
 // base
 #include <input/parameter_input.hpp>
 
-// fvm
+// snap
 #include "output.hpp"
 
 namespace snap {

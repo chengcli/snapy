@@ -7,7 +7,7 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
+// snap
 #include "coord_formatter.hpp"
 #include "coordinate.hpp"
 

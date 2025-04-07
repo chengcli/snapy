@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 
-// fvm
+// snap
 #include <configure.h>
 
 #define INF (INT_MAX / 2)

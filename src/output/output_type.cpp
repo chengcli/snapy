@@ -5,7 +5,7 @@
 // base
 #include <configure.h>
 
-// fvm
+// snap
 #include "output.hpp"
 #include "output_formats.hpp"
 

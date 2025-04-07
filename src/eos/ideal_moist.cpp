@@ -8,8 +8,8 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #include "eos_formatter.hpp"
 #include "equation_of_state.hpp"

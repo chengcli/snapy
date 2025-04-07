@@ -3,8 +3,8 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
-#include <fvm/coord/coord_formatter.hpp>
+// snap
+#include <snap/coord/coord_formatter.hpp>
 
 template <>
 struct fmt::formatter<snap::VerticalImplicitOptions> {

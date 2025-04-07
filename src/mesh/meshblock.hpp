@@ -12,11 +12,11 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/bc/boundary_condition.hpp>
-#include <fvm/hydro/hydro.hpp>
-#include <fvm/intg/integrator.hpp>
-#include <fvm/scalar/scalar.hpp>
+// snap
+#include <snap/bc/boundary_condition.hpp>
+#include <snap/hydro/hydro.hpp>
+#include <snap/intg/integrator.hpp>
+#include <snap/scalar/scalar.hpp>
 
 #include "oct_tree.hpp"
 

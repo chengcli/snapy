@@ -11,7 +11,7 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
+// snap
 #include "interpolation.hpp"
 
 namespace snap {

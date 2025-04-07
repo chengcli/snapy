@@ -1,8 +1,8 @@
 // eigen
 #include <Eigen/Dense>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 #include "tridiag.h"
 
 #define DU(n, j, i) \

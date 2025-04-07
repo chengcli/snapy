@@ -3,8 +3,8 @@
 // base
 #include <configure.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #define PRIM(n) prim[(n) * stride]
 #define CONS(n) cons[(n) * stride]

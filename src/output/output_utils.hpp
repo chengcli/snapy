@@ -7,7 +7,7 @@
 // base
 #include <configure.h>
 
-#include <fvm/interface/athena_arrays.hpp>
+#include <snap/interface/athena_arrays.hpp>
 
 namespace snap {
 int get_num_variables(std::string grid, AthenaArray<Real> const& data);

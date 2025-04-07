@@ -25,7 +25,7 @@
 #include <harp/radiation_band.hpp>
 
 // utils
-#include <fvm/utils/vectorize.hpp>
+#include <snap/utils/vectorize.hpp>
 
 // outputs
 #include "output_formats.hpp"

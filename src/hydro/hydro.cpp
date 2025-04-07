@@ -5,10 +5,10 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
-#include <fvm/registry.hpp>
+#include <snap/registry.hpp>
 
 #include "hydro.hpp"
 #include "hydro_formatter.hpp"

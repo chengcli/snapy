@@ -3,7 +3,7 @@
 // base
 #include <configure.h>
 
-// fvm
+// snap
 #include "ludcmp.h"
 
 /*! Solves the set of n linear equations A X = B. Here

@@ -1,7 +1,7 @@
 // C/C++
 #include <stdexcept>
 
-// fvm
+// snap
 #include "boundary_condition.hpp"
 
 namespace snap {

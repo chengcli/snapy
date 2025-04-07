@@ -11,14 +11,14 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/bc/internal_boundary.hpp>
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/eos/equation_of_state.hpp>
-#include <fvm/forcing/forcing.hpp>
-#include <fvm/implicit/vertical_implicit.hpp>
-#include <fvm/recon/reconstruct.hpp>
-#include <fvm/riemann/riemann_solver.hpp>
+// snap
+#include <snap/bc/internal_boundary.hpp>
+#include <snap/coord/coordinate.hpp>
+#include <snap/eos/equation_of_state.hpp>
+#include <snap/forcing/forcing.hpp>
+#include <snap/implicit/vertical_implicit.hpp>
+#include <snap/recon/reconstruct.hpp>
+#include <snap/riemann/riemann_solver.hpp>
 
 #include "primitive_projector.hpp"
 

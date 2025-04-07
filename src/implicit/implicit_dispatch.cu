@@ -7,8 +7,8 @@
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
 
-// fvm
-#include <fvm/loops.cuh>
+// snap
+#include <snap/loops.cuh>
 #include "tridiag_thomas_impl.h"
 
 namespace snap {

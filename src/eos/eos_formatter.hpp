@@ -4,8 +4,8 @@
 #include <configure.h>
 #include <spdlog/spdlog.h>
 
-// fvm
-#include <fvm/thermo/thermo_formatter.hpp>
+// snap
+#include <snap/thermo/thermo_formatter.hpp>
 
 #include "equation_of_state.hpp"
 

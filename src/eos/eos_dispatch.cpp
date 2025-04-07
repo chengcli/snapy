@@ -4,7 +4,7 @@
 #include <ATen/native/ReduceOpsUtils.h>
 #include <ATen/native/cpu/Loops.h>
 
-// fvm
+// snap
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 

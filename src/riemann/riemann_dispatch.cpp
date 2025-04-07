@@ -5,8 +5,8 @@
 #include <ATen/native/cpu/Loops.h>
 #include <torch/torch.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #include "hllc_impl.h"
 #include "lmars_impl.h"

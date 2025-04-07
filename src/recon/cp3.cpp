@@ -8,8 +8,8 @@
 // torch
 #include <ATen/TensorIterator.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"

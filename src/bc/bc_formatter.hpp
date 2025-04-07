@@ -3,7 +3,7 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
+// snap
 #include "boundary_condition.hpp"
 #include "internal_boundary.hpp"
 

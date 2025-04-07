@@ -12,11 +12,11 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/mesh/mesh.hpp>
-#include <fvm/mesh/meshblock.hpp>
-#include <fvm/util/vectorize.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/mesh/mesh.hpp>
+#include <snap/mesh/meshblock.hpp>
+#include <snap/util/vectorize.hpp>
 
 // output
 #include "output_formats.hpp"

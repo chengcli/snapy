@@ -3,9 +3,9 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
-#include <fvm/recon/recon_formatter.hpp>
-#include <fvm/riemann/riemann_formatter.hpp>
+// snap
+#include <snap/recon/recon_formatter.hpp>
+#include <snap/riemann/riemann_formatter.hpp>
 
 #include "scalar.hpp"
 

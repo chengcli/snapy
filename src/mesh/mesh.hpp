@@ -12,8 +12,8 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/bc/boundary_condition.hpp>
+// snap
+#include <snap/bc/boundary_condition.hpp>
 
 #include "mesh_functions.hpp"
 #include "meshblock.hpp"

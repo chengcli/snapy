@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // fmv
-#include <fvm/loops.cuh>
+#include <snap/loops.cuh>
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 

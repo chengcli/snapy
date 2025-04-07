@@ -10,7 +10,7 @@
 #include <add_arg.h>
 // clang-format on
 
-// fvm
+// snap
 #include "boundary_condition.hpp"
 
 namespace snap {

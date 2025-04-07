@@ -3,9 +3,9 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
-#include <fvm/coord/coord_formatter.hpp>
-#include <fvm/eos/eos_formatter.hpp>
+// snap
+#include <snap/coord/coord_formatter.hpp>
+#include <snap/eos/eos_formatter.hpp>
 
 #include "riemann_solver.hpp"
 

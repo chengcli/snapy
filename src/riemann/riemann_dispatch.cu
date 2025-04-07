@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // fmv
-#include <fvm/loops.cuh>
+#include <snap/loops.cuh>
 #include "lmars_impl.h"
 #include "hllc_impl.h"
 

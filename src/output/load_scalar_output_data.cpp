@@ -4,8 +4,8 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/scalar/scalar.hpp>
+// snap
+#include <snap/scalar/scalar.hpp>
 
 #include "output.hpp"
 

@@ -5,8 +5,8 @@
 // base
 #include <globals.h>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
 #include "hydro_formatter.hpp"
 #include "primitive_projector.hpp"

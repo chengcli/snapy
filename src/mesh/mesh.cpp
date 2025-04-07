@@ -10,7 +10,7 @@
 // base
 #include <globals.h>
 
-// fvm
+// snap
 #include "mesh.hpp"
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"

@@ -4,7 +4,7 @@
 #include <ATen/native/cuda/Loops.cuh>
 #include <c10/cuda/CUDAGuard.h>
 
-// fvm
+// snap
 #include "interp_simple.hpp"
 
 namespace snap {

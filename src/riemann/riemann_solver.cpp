@@ -1,7 +1,7 @@
-// fvm
+// snap
 #include "riemann_solver.hpp"
 
-#include <fvm/registry.hpp>
+#include <snap/registry.hpp>
 
 namespace snap {
 RiemannSolverOptions::RiemannSolverOptions(ParameterInput pin) {

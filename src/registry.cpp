@@ -1,7 +1,7 @@
 // base
 #include <input/parameter_input.hpp>
 
-// fvm
+// snap
 #include "coord/coordinate.hpp"
 #include "eos/equation_of_state.hpp"
 #include "recon/interpolation.hpp"

@@ -4,7 +4,7 @@
 #include <ATen/native/cpu/Loops.h>
 #include <torch/torch.h>
 
-// fvm
+// snap
 #include "interp_simple.hpp"
 #include "interpolation.hpp"
 

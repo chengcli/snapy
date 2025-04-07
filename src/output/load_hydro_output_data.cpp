@@ -7,10 +7,10 @@
 // base
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
-#include <fvm/hydro/hydro.hpp>
+#include <snap/hydro/hydro.hpp>
 
 #include "output.hpp"
 

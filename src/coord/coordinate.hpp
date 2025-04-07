@@ -15,10 +15,10 @@
 
 #include <input/parameter_input.hpp>
 
-// fvm
-#include <fvm/index.h>
+// snap
+#include <snap/index.h>
 
-#include <fvm/mesh/mesh_functions.hpp>
+#include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"
 

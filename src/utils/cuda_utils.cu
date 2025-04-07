@@ -4,7 +4,7 @@
 // cuda
 #include <cuda_runtime.h>
 
-// fvm
+// snap
 #include "cuda_utils.h"
 
 int checkCudaError(const char *msg) {

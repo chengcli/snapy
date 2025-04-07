@@ -9,10 +9,10 @@
 #include <add_arg.h>
 #include <configure.h>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/eos/equation_of_state.hpp>
-#include <fvm/recon/reconstruct.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/eos/equation_of_state.hpp>
+#include <snap/recon/reconstruct.hpp>
 
 namespace snap {
 

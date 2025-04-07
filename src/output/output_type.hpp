@@ -7,11 +7,11 @@
 #include <add_arg.h>
 #include <configure.h>
 
-// fvm
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/interface/athena_arrays.hpp>
-#include <fvm/mesh/mesh.hpp>
-#include <fvm/mesh/meshblock.hpp>
+// snap
+#include <snap/coord/coordinate.hpp>
+#include <snap/interface/athena_arrays.hpp>
+#include <snap/mesh/mesh.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 namespace snap {
 //! \brief  container for parameters read from `<output>` block in the input

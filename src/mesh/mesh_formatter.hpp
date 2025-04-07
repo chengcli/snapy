@@ -3,9 +3,9 @@
 // spdlog
 #include <spdlog/spdlog.h>
 
-// fvm
-#include <fvm/bc/bc_formatter.hpp>
-#include <fvm/hydro/hydro_formatter.hpp>
+// snap
+#include <snap/bc/bc_formatter.hpp>
+#include <snap/hydro/hydro_formatter.hpp>
 
 #include "mesh.hpp"
 #include "meshblock.hpp"

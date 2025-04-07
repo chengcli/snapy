@@ -1,4 +1,4 @@
-// fvm
+// snap
 #include "boundary_condition.hpp"
 
 namespace snap {

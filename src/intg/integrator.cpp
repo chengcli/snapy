@@ -6,7 +6,7 @@
 // base
 #include <globals.h>
 
-// fvm
+// snap
 #include "integrator.hpp"
 #include "intg_formatter.hpp"
 

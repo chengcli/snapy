@@ -1,6 +1,6 @@
 #pragma once
 
-// fvm
+// snap
 #include <configure.h>
 
 namespace snap {

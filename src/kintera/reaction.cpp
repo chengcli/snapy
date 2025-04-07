@@ -1,8 +1,8 @@
 // C/C++
 #include <sstream>
 
-// fvm
-#include <fvm/util/vectorize.hpp>
+// snap
+#include <snap/util/vectorize.hpp>
 
 #include "reaction.hpp"
 

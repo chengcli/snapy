@@ -7,8 +7,8 @@
 // torch
 #include <ATen/Dispatch.h>
 
-// fvm
-#include <fvm/util/cuda_utils.h>
+// snap
+#include <snap/util/cuda_utils.h>
 
 namespace snap {
 template <int N>
