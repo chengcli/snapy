@@ -10,8 +10,9 @@
 
 // fvm
 #include <fvm/registry.hpp>
-#include "vertical_implicit.hpp"
+
 #include "implicit_formatter.hpp"
+#include "vertical_implicit.hpp"
 
 namespace canoe {
 template <int N>

@@ -7,8 +7,9 @@
 
 // fvm
 #include <fvm/registry.hpp>
-#include "scalar_formatter.hpp"
+
 #include "scalar.hpp"
+#include "scalar_formatter.hpp"
 
 namespace canoe {
 ScalarOptions::ScalarOptions(ParameterInput pin) {

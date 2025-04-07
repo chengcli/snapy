@@ -3,6 +3,7 @@
 
 // fvm
 #include <fvm/util/vectorize.hpp>
+
 #include "reaction.hpp"
 
 namespace canoe {

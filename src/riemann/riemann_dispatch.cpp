@@ -1,14 +1,15 @@
 // torch
-#include <torch/torch.h>
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
-#include <ATen/native/cpu/Loops.h>
 #include <ATen/native/ReduceOpsUtils.h>
+#include <ATen/native/cpu/Loops.h>
+#include <torch/torch.h>
 
 // fvm
 #include <fvm/index.h>
-#include "lmars_impl.h"
+
 #include "hllc_impl.h"
+#include "lmars_impl.h"
 
 namespace canoe {
 void call_lmars_cpu(at::TensorIterator& iter, int dim, int nvapor) {

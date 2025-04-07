@@ -6,13 +6,14 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
-#include <fvm/registry.hpp>
 #include <fvm/coord/coordinate.hpp>
+#include <fvm/registry.hpp>
 #include <fvm/thermo/thermodynamics.hpp>
 
 namespace canoe {

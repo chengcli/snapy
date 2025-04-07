@@ -1,15 +1,17 @@
 // spdlog
 #include <configure.h>
-#include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/spdlog.h>
 
 // base
 #include <globals.h>
 
 // fvm
 #include <fvm/index.h>
-#include <fvm/registry.hpp>
+
 #include <fvm/mesh/meshblock.hpp>
+#include <fvm/registry.hpp>
+
 #include "forcing.hpp"
 #include "forcing_formatter.hpp"
 

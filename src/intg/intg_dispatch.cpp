@@ -1,8 +1,8 @@
 // torch
-#include <torch/torch.h>
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
 #include <ATen/native/cpu/Loops.h>
+#include <torch/torch.h>
 
 namespace canoe {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,

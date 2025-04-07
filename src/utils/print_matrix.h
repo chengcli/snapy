@@ -1,8 +1,8 @@
 #pragma once
 
 // C/C++
-#include <cstdio>
 #include <cstdarg>
+#include <cstdio>
 
 // dispatch
 #include <configure.h>

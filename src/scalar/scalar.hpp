@@ -6,8 +6,9 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm

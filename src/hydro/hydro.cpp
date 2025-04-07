@@ -7,9 +7,11 @@
 
 // fvm
 #include <fvm/index.h>
+
 #include <fvm/registry.hpp>
-#include "hydro_formatter.hpp"
+
 #include "hydro.hpp"
+#include "hydro_formatter.hpp"
 
 namespace canoe {
 HydroOptions::HydroOptions(ParameterInput pin) {

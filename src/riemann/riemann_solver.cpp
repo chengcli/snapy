@@ -1,6 +1,7 @@
 // fvm
-#include <fvm/registry.hpp>
 #include "riemann_solver.hpp"
+
+#include <fvm/registry.hpp>
 
 namespace canoe {
 RiemannSolverOptions::RiemannSolverOptions(ParameterInput pin) {

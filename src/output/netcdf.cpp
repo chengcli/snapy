@@ -9,17 +9,18 @@
 
 // base
 #include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
+#include <fvm/coord/coordinate.hpp>
 #include <fvm/mesh/mesh.hpp>
 #include <fvm/mesh/meshblock.hpp>
-#include <fvm/coord/coordinate.hpp>
 #include <fvm/util/vectorize.hpp>
 
 // output
-#include "output_utils.hpp"
 #include "output_formats.hpp"
+#include "output_utils.hpp"
 
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT

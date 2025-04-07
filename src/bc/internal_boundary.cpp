@@ -7,8 +7,9 @@
 
 // fvm
 #include <fvm/index.h>
-#include "internal_boundary.hpp"
+
 #include "bc_formatter.hpp"
+#include "internal_boundary.hpp"
 
 namespace canoe {
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)

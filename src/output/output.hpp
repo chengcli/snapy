@@ -9,10 +9,12 @@
 
 // base
 #include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
 #include <fvm/mesh/mesh.hpp>
+
 #include "output_type.hpp"
 
 namespace canoe {

@@ -1,12 +1,12 @@
 // torch
-#include <torch/torch.h>
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
 #include <ATen/native/cpu/Loops.h>
+#include <torch/torch.h>
 
 // fvm
-#include "interpolation.hpp"
 #include "interp_simple.hpp"
+#include "interpolation.hpp"
 
 namespace canoe {
 InterpOptions::InterpOptions(ParameterInput pin, std::string section,

@@ -1,21 +1,23 @@
 #pragma once
 
 // torch
-#include <torch/nn/module.h>
 #include <torch/nn/cloneable.h>
+#include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/modulelist.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
 #include <fvm/bc/boundary_condition.hpp>
+
 #include "mesh_functions.hpp"
-#include "oct_tree.hpp"
 #include "meshblock.hpp"
+#include "oct_tree.hpp"
 
 namespace canoe {
 struct MeshOptions {

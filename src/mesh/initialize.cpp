@@ -6,15 +6,16 @@
 #include <globals.h>
 
 // base
-#include <input/parameter_input.hpp>
 #include <formatter.hpp>
+#include <input/parameter_input.hpp>
 
 // fvm
 #include <fvm/coord/coordinate.hpp>
+
 #include "mesh.hpp"
-#include "meshblock.hpp"
-#include "mesh_functions.hpp"
 #include "mesh_formatter.hpp"
+#include "mesh_functions.hpp"
+#include "meshblock.hpp"
 
 namespace canoe {
 void MeshBlockImpl::initialize(MeshOptions const& mesh_options,

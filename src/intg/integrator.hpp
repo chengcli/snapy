@@ -7,8 +7,8 @@
 #include <torch/nn/modules/container/any.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
 
 // according to:
 // https://gkeyll.readthedocs.io/en/latest/dev/ssp-rk.html

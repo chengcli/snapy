@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vector>
 #include <streambuf>
+#include <vector>
 
 class VectorStream : public std::streambuf {
  public:
@@ -18,13 +18,9 @@ class VectorStream : public std::streambuf {
     pbump(static_cast<int>(offset));
   }
 
-  char const* buffer() const {
-    return buffer_.data();
-  }
+  char const* buffer() const { return buffer_.data(); }
 
-  char* buffer() {
-    return buffer_.data();
-  }
+  char* buffer() { return buffer_.data(); }
 
  protected:
   std::streamsize xsputn(const char* s, std::streamsize n) override {
@@ -42,6 +38,6 @@ class VectorStream : public std::streambuf {
     return c;
   }
 
-private:
+ private:
   std::vector<char> buffer_;
 };

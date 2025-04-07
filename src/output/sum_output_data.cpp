@@ -1,6 +1,7 @@
 // fvm
-#include <fvm/mesh/meshblock.hpp>
 #include <fvm/hydro/hydro.hpp>
+#include <fvm/mesh/meshblock.hpp>
+
 #include "output_type.hpp"
 
 namespace canoe {

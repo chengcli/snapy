@@ -9,7 +9,9 @@
 
 // fvm
 #include <fvm/index.h>
+
 #include <fvm/hydro/hydro.hpp>
+
 #include "output.hpp"
 
 namespace canoe {

@@ -4,14 +4,14 @@
 #include <memory>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
 
 // fvm
-#include <fvm/mesh/mesh.hpp>
-#include <fvm/mesh/meshblock.hpp>
 #include <fvm/coord/coordinate.hpp>
 #include <fvm/interface/athena_arrays.hpp>
+#include <fvm/mesh/mesh.hpp>
+#include <fvm/mesh/meshblock.hpp>
 
 namespace canoe {
 //! \brief  container for parameters read from `<output>` block in the input

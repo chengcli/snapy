@@ -6,13 +6,14 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
-#include <fvm/eos/equation_of_state.hpp>
 #include <fvm/coord/coordinate.hpp>
+#include <fvm/eos/equation_of_state.hpp>
 
 namespace canoe {
 struct RiemannSolverOptions {

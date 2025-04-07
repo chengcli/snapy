@@ -6,18 +6,20 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
+#include <fvm/bc/internal_boundary.hpp>
+#include <fvm/coord/coordinate.hpp>
 #include <fvm/eos/equation_of_state.hpp>
+#include <fvm/forcing/forcing.hpp>
+#include <fvm/implicit/vertical_implicit.hpp>
 #include <fvm/recon/reconstruct.hpp>
 #include <fvm/riemann/riemann_solver.hpp>
-#include <fvm/coord/coordinate.hpp>
-#include <fvm/forcing/forcing.hpp>
-#include <fvm/bc/internal_boundary.hpp>
-#include <fvm/implicit/vertical_implicit.hpp>
+
 #include "primitive_projector.hpp"
 
 namespace canoe {

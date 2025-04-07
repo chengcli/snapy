@@ -8,12 +8,14 @@
 #include <stdexcept>
 
 // base
-#include <globals.h>
 #include <configure.h>
+#include <globals.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
 #include <fvm/interface/athena_arrays.hpp>
+
 #include "output_formats.hpp"
 
 int mppnccombine(int argc, char *argv[]);

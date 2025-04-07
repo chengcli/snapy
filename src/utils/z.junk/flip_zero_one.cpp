@@ -1,6 +1,6 @@
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #define INF (INT_MAX / 2)
 

@@ -1,14 +1,14 @@
 // spdlog
 #include <configure.h>
-#include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/spdlog.h>
 
 // base
 #include <globals.h>
 
 // fvm
-#include "intg_formatter.hpp"
 #include "integrator.hpp"
+#include "intg_formatter.hpp"
 
 namespace canoe {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,

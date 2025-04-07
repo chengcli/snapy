@@ -9,8 +9,8 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
 #include <fvm/index.h>
 
 // input

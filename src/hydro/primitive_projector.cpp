@@ -7,8 +7,9 @@
 
 // fvm
 #include <fvm/index.h>
-#include "primitive_projector.hpp"
+
 #include "hydro_formatter.hpp"
+#include "primitive_projector.hpp"
 
 namespace canoe {
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(

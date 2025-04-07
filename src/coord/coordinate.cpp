@@ -10,6 +10,7 @@
 
 // fvm
 #include <fvm/mesh/mesh_formatter.hpp>
+
 #include "coordinate.hpp"
 
 namespace canoe {

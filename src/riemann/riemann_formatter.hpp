@@ -6,6 +6,7 @@
 // fvm
 #include <fvm/coord/coord_formatter.hpp>
 #include <fvm/eos/eos_formatter.hpp>
+
 #include "riemann_solver.hpp"
 
 template <>

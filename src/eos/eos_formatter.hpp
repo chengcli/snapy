@@ -6,6 +6,7 @@
 
 // fvm
 #include <fvm/thermo/thermo_formatter.hpp>
+
 #include "equation_of_state.hpp"
 
 template <>

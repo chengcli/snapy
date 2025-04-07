@@ -4,12 +4,13 @@
 
 // base
 #include <globals.h>
-#include <input/parameter_input.hpp>
+
 #include <formatter.hpp>
+#include <input/parameter_input.hpp>
 
 // fvm
-#include "meshblock.hpp"
 #include "mesh_formatter.hpp"
+#include "meshblock.hpp"
 
 namespace canoe {
 MeshBlockOptions::MeshBlockOptions(ParameterInput pin) {

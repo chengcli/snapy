@@ -5,9 +5,10 @@
 
 // fvm
 #include <fvm/eos/eos_formatter.hpp>
-#include <fvm/riemann/riemann_formatter.hpp>
 #include <fvm/recon/recon_formatter.hpp>
+#include <fvm/riemann/riemann_formatter.hpp>
 #include <fvm/thermo/thermo_formatter.hpp>
+
 #include "hydro.hpp"
 
 template <>

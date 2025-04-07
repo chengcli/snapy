@@ -1,9 +1,9 @@
 #pragma once
 
 // C/C++
-#include <algorithm>
-
 #include <configure.h>
+
+#include <algorithm>
 
 #define sqr(x) ((x) * (x))
 

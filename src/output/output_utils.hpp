@@ -6,6 +6,7 @@
 
 // base
 #include <configure.h>
+
 #include <fvm/interface/athena_arrays.hpp>
 
 namespace canoe {

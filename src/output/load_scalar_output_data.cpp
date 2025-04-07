@@ -6,6 +6,7 @@
 
 // fvm
 #include <fvm/scalar/scalar.hpp>
+
 #include "output.hpp"
 
 namespace canoe {

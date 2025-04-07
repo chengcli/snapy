@@ -6,8 +6,8 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
 
 // fvm
 #include <fvm/recon/reconstruct.hpp>

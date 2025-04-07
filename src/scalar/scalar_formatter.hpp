@@ -4,8 +4,9 @@
 #include <spdlog/spdlog.h>
 
 // fvm
-#include <fvm/riemann/riemann_formatter.hpp>
 #include <fvm/recon/recon_formatter.hpp>
+#include <fvm/riemann/riemann_formatter.hpp>
+
 #include "scalar.hpp"
 
 template <>

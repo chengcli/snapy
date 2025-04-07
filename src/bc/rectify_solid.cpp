@@ -1,10 +1,10 @@
 // torch
-#include <torch/torch.h>
 #include <ATen/TensorIterator.h>
+#include <torch/torch.h>
 
 // fvm
-#include "internal_boundary.hpp"
 #include "boundary_condition.hpp"
+#include "internal_boundary.hpp"
 
 namespace canoe {
 enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };

@@ -26,6 +26,5 @@ macro(setup_problem namel)
 
   target_link_libraries(
     ${namel}.${buildl}
-    PRIVATE libsnap::snap
-            $<IF:$<BOOL:${CUDAToolkit_FOUND}>,libsnap::snap_cu,>)
+    PRIVATE libsnap::snap $<IF:$<BOOL:${CUDAToolkit_FOUND}>,libsnap::snap_cu,>)
 endmacro()

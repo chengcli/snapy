@@ -8,9 +8,9 @@
 
 // fvm
 #include <fvm/index.h>
-#include <fvm/util/print_matrix.h>
 #include <fvm/math/ludcmp.h>
 #include <fvm/math/luminv.h>
+#include <fvm/util/print_matrix.h>
 
 #define DU(n, i) du[(n) * stride + (i)]
 #define W(n, i) w[(n) * stride + (i)]

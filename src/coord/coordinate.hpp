@@ -1,8 +1,8 @@
 #pragma once
 
 // C/C++
-#include <iosfwd>
 #include <functional>
+#include <iosfwd>
 
 // torch
 #include <torch/nn/cloneable.h>
@@ -10,13 +10,16 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
+
 #include <input/parameter_input.hpp>
 
 // fvm
 #include <fvm/index.h>
+
 #include <fvm/mesh/mesh_functions.hpp>
+
 #include "coordgen.hpp"
 
 namespace canoe {

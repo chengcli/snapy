@@ -6,13 +6,13 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <configure.h>
 #include <add_arg.h>
+#include <configure.h>
 
 // fvm
+#include <fvm/coord/coordinate.hpp>
 #include <fvm/eos/equation_of_state.hpp>
 #include <fvm/recon/reconstruct.hpp>
-#include <fvm/coord/coordinate.hpp>
 
 namespace canoe {
 

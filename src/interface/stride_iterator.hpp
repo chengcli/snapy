@@ -16,7 +16,7 @@ class StrideIterator {
   typedef std::random_access_iterator_tag iterator_category;
 
   // constructors
-  StrideIterator() : data(NULL), step(0){};
+  StrideIterator() : data(NULL), step(0) {};
   StrideIterator(const StrideIterator& x) : data(x.data), step(x.step) {}
   StrideIterator(T x, difference_type n) : data(x), step(n) {}
 

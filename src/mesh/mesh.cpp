@@ -1,7 +1,7 @@
 // C/C++
-#include <stdexcept>
 #include <chrono>
 #include <future>
+#include <stdexcept>
 
 // spdlog
 #include <configure.h>
@@ -11,9 +11,9 @@
 #include <globals.h>
 
 // fvm
+#include "mesh.hpp"
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"
-#include "mesh.hpp"
 
 namespace canoe {
 MeshOptions::MeshOptions(ParameterInput pin) {
