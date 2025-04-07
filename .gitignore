@@ -1,0 +1,8 @@
+# builds
+build*/
+
+# cache
+.cache
+
+# data
+data/example.speos

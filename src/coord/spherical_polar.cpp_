@@ -1,0 +1,14 @@
+
+torch::TensorList SphericalPolarImpl::vec_from_cartesian(float vec[3]) {
+  auto theta = x2v.unsqueeze(0).unsqueeze(2);
+  auto phi = x3v.unsqueeze(1).unsqueeze(2);
+
+  auto omega1 = sin(theta) * cos(phi) * vec[0] +
+                sin(theta) * sin(phi) * vec[1] +
+                cos(theta) * vec[2];
+  auto omega2 = cos(theta) * cos(phi) * vec[0] +
+                cos(theta) * sin(phi) * vec[1] +
+                cos(theta) * vec[2];
+  auto omega3 = -sin(phi) * vec[0] + cos(phi) * vec[1];
+  return {omega1, omega2, omega3};
+}

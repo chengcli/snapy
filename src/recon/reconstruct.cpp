@@ -1,0 +1,110 @@
+// spdlog
+#include <configure.h>
+#include <spdlog/sinks/basic_file_sink.h>
+
+// base
+#include <globals.h>
+#include <formatter.hpp>
+
+// fvm
+#include <fvm/index.h>
+#include <fvm/registry.hpp>
+#include "recon_formatter.hpp"
+#include "reconstruct.hpp"
+
+namespace canoe {
+ReconstructOptions::ReconstructOptions(ParameterInput pin, std::string section,
+                                       std::string xorder) {
+  interp(InterpOptions(pin, section, xorder));
+}
+
+void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
+                    Interp &pinterp, torch::Tensor wlr) {
+  if (il > iu) return;
+
+  auto result = pinterp->forward(w, dim);
+
+  wlr[index::ILT].slice(dim, il, iu + 1) =
+      result[index::IRT].narrow(dim, 0, iu - il + 1);
+  wlr[index::IRT].slice(dim, il, iu + 1) =
+      result[index::ILT].narrow(dim, 1, iu - il + 1);
+}
+
+ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
+    : options(options_) {
+  reset();
+}
+
+void ReconstructImpl::reset() {
+  pinterp1 = register_module_op(this, "interp1", options.interp());
+  LOG_INFO(logger, "{} uses Interpolator-1 = {}", name(),
+           pinterp1->print_name());
+
+  pinterp2 = register_module_op(this, "interp2", options.interp());
+  LOG_INFO(logger, "{} uses Interpolator-2 = {}", name(),
+           pinterp2->print_name());
+
+  LOG_INFO(logger, "{} resets with options: {}", name(), options);
+}
+
+torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
+  torch::NoGradGuard no_grad;
+
+  auto vec = w.sizes().vec();
+  vec.insert(vec.begin(), 2);
+
+  auto result = torch::empty(vec, w.options());
+
+  auto dim_size = w.size(dim);
+  int nghost = pinterp1->stencils() / 2 + 1;
+  int il = nghost;
+  int iu = dim_size - nghost;
+
+  TORCH_CHECK(il <= iu, "il > iu");
+
+  if (options.shock()) {
+    _apply_inplace(dim, il, iu, w, pinterp1, result);
+    return result;
+  }
+
+  /* modify velocity/pressure variables
+  if (dim_size > 2 * nghost) {
+    if (options.is_boundary_lower()) {
+      il += nghost;
+    } else if (options.is_boundary_upper()) {
+      iu -= nghost;
+    }
+  } else {
+    if (options.is_boundary_lower() && !options.is_boundary_upper()) {
+      il += nghost;
+    } else if (!options.is_boundary_lower() && options.is_boundary_upper()) {
+      iu -= nghost;
+    } else if (options.is_boundary_lower() && options.is_boundary_upper()) {
+      int len1 = dim_size / 2;
+      int len2 = dim_size - len1;
+      il += len1;
+      iu -= len2;
+    }
+  }
+
+  // interior
+  auto w_ = w.narrow(0, index::IVX, 4);
+  auto wlr_ = result.narrow(1, index::IVX, 4);
+  _apply_inplace(dim, il, iu, w_, pinterp2, wlr_);*/
+
+  // density
+  _apply_inplace(dim, il, iu, w.narrow(0, index::IDN, 1), pinterp1,
+                 result.narrow(1, index::IDN, 1));
+
+  // velocity/pressure
+  _apply_inplace(dim, il, iu, w.narrow(0, index::IVX, 4), pinterp2,
+                 result.narrow(1, index::IVX, 4));
+
+  // others
+  int ny = w.size(0) - 5;
+  _apply_inplace(dim, il, iu, w.narrow(0, index::ICY, ny), pinterp1,
+                 result.narrow(1, index::ICY, ny));
+
+  return result;
+}
+}  // namespace canoe

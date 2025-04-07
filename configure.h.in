@@ -1,0 +1,16 @@
+#pragma once
+
+// NetCDF output (NETCDFOUTPUT or NO_NETCDFOUTPUT)
+#define @NETCDF_OPTION@
+
+// PNetCDF output (PNETCDFOUTPUT or NO_PNETCDFOUTPUT)
+#define @PNETCDF_OPTION@
+
+#ifdef __CUDACC__
+  #define DISPATCH_MACRO __host__ __device__
+#else
+  #define DISPATCH_MACRO
+#endif
+
+constexpr char KINTERA_ROOT_DIR[] = "@CMAKE_CURRENT_SOURCE_DIR@";
+constexpr char HARP_ROOT_DIR[] = "@HARP_INCLUDE_DIR@";

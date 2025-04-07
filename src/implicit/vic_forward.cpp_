@@ -1,0 +1,167 @@
+// eigen
+#include <Eigen/Dense>
+
+// fvm
+#include <fvm/index.h>
+#include "tridiag.h"
+
+#define DU(n, j, i) \
+  static_cast<T *>(du)[(n) * ncol * nlayer + (j) * nlayer + (i)]
+#define W(n, j, i) static_cast<T *>(w)[(n) * ncol * nlayer + (j) * nlayer + (i)]
+#define A(j, i)                                                \
+  reinterpret_cast<Eigen::Matrix<T, N, N, Eigen::RowMajor> *>( \
+      a)[(j) * nlayer + (i)]
+#define B(j, i)                                                \
+  reinterpret_cast<Eigen::Matrix<T, N, N, Eigen::RowMajor> *>( \
+      b)[(j) * nlayer + (i)]
+#define C(j, i)                                                \
+  reinterpret_cast<Eigen::Matrix<T, N, N, Eigen::RowMajor> *>( \
+      c)[(j) * nlayer + (i)]
+#define DELTA(j, i) \
+  reinterpret_cast<Eigen::Vector<T, N> *>(delta)[(j) * nlayer + (i)]
+#define CORR(j, i) \
+  reinterpret_cast<Eigen::Vector<T, N> *>(corr)[(j) * nlayer + (i)]
+
+namespace canoe {
+
+template <typename T, int N>
+void forward_sweep_cpu(char *a, char *b, char *c, char *delta, char *corr,
+                       void *du, float dt, TridiagSolverOptions options) {
+  int IDN = index::IDN;
+  int IVX = index::IVX;
+  int IVY = index::IVY;
+  int IVZ = index::IVZ;
+  int IPR = index::IPR;
+  int ICY = index::ICY;
+
+  int nhydro = options.nhydro();
+  int ncol = options.ncol();
+  int nlayer = options.nlayer();
+  int il = options.il();
+  int iu = options.iu();
+
+  Eigen::Vector<T, N> rhs;
+
+  for (int j = 0; j < ncol; j++) {
+    rhs(0) = DU(IDN, j, il);
+    for (int n = ICY; n < nhydro; ++n) {
+      rhs(0) += DU(n, j, il);
+    }
+    rhs(0) /= dt;
+    rhs(1) = DU(IVX, j, il) / dt;
+    rhs(N - 1) = DU(IPR, j, il) / dt;
+
+    if (N == 3) {  // partial matrix
+      rhs -= CORR(j, il);
+    } else {  // full matrix
+      rhs(2) = DU(IVY, j, il) / dt;
+      rhs(3) = DU(IVZ, j, il) / dt;
+    }
+
+    A(j, il) = A(j, il).inverse().eval();
+    DELTA(j, il) = A(j, il) * rhs;
+    A(j, il) = A(j, il) * C(j, il);
+
+    for (int i = il + 1; i <= iu; ++i) {
+      rhs(0) = DU(IDN, j, i);
+      for (int n = ICY; n < nhydro; ++n) {
+        rhs(0) += DU(n, j, i);
+      }
+      rhs(0) /= dt;
+      rhs(1) = DU(IVX, j, i) / dt;
+      rhs(N - 1) = DU(IPR, j, i) / dt;
+
+      if (N == 3) {  // partial matrix
+        rhs -= CORR(j, i);
+      } else {  // full matrix
+        rhs(2) = DU(IVY, j, i) / dt;
+        rhs(3) = DU(IVZ, j, i) / dt;
+      }
+
+      A(j, i) = (A(j, i) - B(j, i) * A(j, i - 1)).inverse().eval();
+      DELTA(j, i) = A(j, i) * (rhs - B(j, i) * DELTA(j, i - 1));
+      A(j, i) = A(j, i) * C(j, i);
+    }
+  }
+}
+
+template <typename T, int N>
+void backward_substitution_cpu(char *a, char *delta, void *w, void *du,
+                               TridiagSolverOptions options) {
+  int IDN = index::IDN;
+  int IVX = index::IVX;
+  int IVY = index::IVY;
+  int IVZ = index::IVZ;
+  int IPR = index::IPR;
+  int ICY = index::ICY;
+
+  int nhydro = options.nhydro();
+  int ncol = options.ncol();
+  int nlayer = options.nlayer();
+  int il = options.il();
+  int iu = options.iu();
+
+  for (int j = 0; j < ncol; j++) {
+    // update solutions, i=iu
+    for (int i = iu - 1; i >= il; --i) {
+      DELTA(j, i) -= A(j, i) * DELTA(j, i + 1);
+    }
+
+    for (int i = il; i <= iu; ++i) {
+      auto dens = DU(IDN, j, i);
+
+      for (int n = IVY; n < nhydro; ++n) {
+        dens += DU(n, j, i);
+      }
+      dens = DELTA(j, i)(0) - dens;
+
+      DU(IDN, j, i) = DELTA(j, i)(0);
+      for (int n = ICY; n < nhydro; ++n) {
+        DU(n, j, i) += dens * W(n, j, i);
+      }
+      DU(IVX, j, i) = DELTA(j, i)(1);
+      DU(IPR, j, i) = DELTA(j, i)(N - 1);
+
+      if (N == 5) {  // full matrix
+        DU(IVY, j, i) = DELTA(j, i)(2);
+        DU(IVZ, j, i) = DELTA(j, i)(3);
+      }
+
+      for (int n = ICY; n < nhydro; ++n) {
+        DU(IDN, j, i) -= DU(n, j, i);
+      }
+    }
+  }
+}
+
+template void forward_sweep_cpu<float, 3>(char *, char *, char *, char *,
+                                          char *, void *, float,
+                                          TridiagSolverOptions);
+template void forward_sweep_cpu<float, 5>(char *, char *, char *, char *,
+                                          char *, void *, float,
+                                          TridiagSolverOptions);
+template void backward_substitution_cpu<float, 3>(char *, char *, void *,
+                                                  void *, TridiagSolverOptions);
+template void backward_substitution_cpu<float, 5>(char *, char *, void *,
+                                                  void *, TridiagSolverOptions);
+template void forward_sweep_cpu<double, 3>(char *, char *, char *, char *,
+                                           char *, void *, float,
+                                           TridiagSolverOptions);
+template void forward_sweep_cpu<double, 5>(char *, char *, char *, char *,
+                                           char *, void *, float,
+                                           TridiagSolverOptions);
+template void backward_substitution_cpu<double, 3>(char *, char *, void *,
+                                                   void *,
+                                                   TridiagSolverOptions);
+template void backward_substitution_cpu<double, 5>(char *, char *, void *,
+                                                   void *,
+                                                   TridiagSolverOptions);
+}  // namespace canoe
+
+#undef DU
+#undef W
+#undef A
+#undef B
+#undef C
+#undef DELTA
+#undef CORR
