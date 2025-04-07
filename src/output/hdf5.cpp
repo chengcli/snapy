@@ -19,11 +19,11 @@
 // External library headers
 #include <hdf5.h>
 
-namespace canoe {
+namespace snap {
 HDF5Output::HDF5Output(OutputOptions const &options_) : OutputType(options_) {}
 
 void HDF5Output::write_output_file(MeshBlock pmb, float current_time,
                                    OctTreeOptions const &tree, bool flag) {}
-}  // namespace canoe
+}  // namespace snap
 
 #endif  // HDF5OUTPUT

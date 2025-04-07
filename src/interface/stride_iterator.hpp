@@ -4,7 +4,7 @@
 #include <cassert>
 #include <iterator>
 
-namespace canoe {
+namespace snap {
 template <typename T>
 class StrideIterator {
  public:
@@ -91,4 +91,4 @@ class StrideIterator {
   T data;
   difference_type step;
 };
-}  // namespace canoe
+}  // namespace snap

@@ -11,7 +11,7 @@
 #include "hllc_impl.h"
 #include "lmars_impl.h"
 
-namespace canoe {
+namespace snap {
 void call_lmars_cpu(at::TensorIterator& iter, int dim, int nvapor) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "lmars_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
@@ -57,4 +57,4 @@ void call_hllc_cpu(at::TensorIterator& iter, int dim, int nvapor) {
     });
   });
 }
-}  // namespace canoe
+}  // namespace snap

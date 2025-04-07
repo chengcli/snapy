@@ -4,7 +4,7 @@
 // fvm
 #include "forcing.hpp"
 
-namespace canoe {
+namespace snap {
 ConstGravityOptions::ConstGravityOptions(ParameterInput pin) {
   grav1(pin->GetOrAddReal("forcing", "grav1", 0.));
   grav2(pin->GetOrAddReal("forcing", "grav2", 0.));
@@ -20,4 +20,4 @@ CoriolisOptions::CoriolisOptions(ParameterInput pin) {
   omegay(pin->GetOrAddReal("forcing", "omegay", 0.));
   omegaz(pin->GetOrAddReal("forcing", "omegaz", 0.));
 }
-}  // namespace canoe
+}  // namespace snap

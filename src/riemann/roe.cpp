@@ -13,7 +13,7 @@
 #include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
-namespace canoe {
+namespace snap {
 void RoeSolverImpl::reset() {
   LOG_INFO(logger, "{} resets with options: {}", name(), options);
 
@@ -167,4 +167,4 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   return flx;
 }
-}  // namespace canoe
+}  // namespace snap

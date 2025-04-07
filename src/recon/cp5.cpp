@@ -14,7 +14,7 @@
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 void call_cp5_cpu(at::TensorIterator& iter);
 void call_cp5_cuda(at::TensorIterator& iter);
 
@@ -84,4 +84,4 @@ void Center5InterpImpl::right(torch::Tensor w, int dim,
     out.copy_(right_fallback(w, dim));
   }
 }
-}  // namespace canoe
+}  // namespace snap

@@ -7,11 +7,11 @@
 #include <fvm/coord/coord_formatter.hpp>
 
 template <>
-struct fmt::formatter<canoe::VerticalImplicitOptions> {
+struct fmt::formatter<snap::VerticalImplicitOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::VerticalImplicitOptions& p, FormatContext& ctx) {
+  auto format(const snap::VerticalImplicitOptions& p, FormatContext& ctx) {
     return fmt::format_to(
         ctx.out(),
         "(type = {}; nghost = {}; grav = {}; scheme = {}; coord = {})",

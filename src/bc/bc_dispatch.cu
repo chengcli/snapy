@@ -8,7 +8,7 @@
 #include <fvm/loops.cuh>
 #include "flip_zero_impl.h"
 
-namespace canoe {
+namespace snap {
 
 // device global number of flips
 __device__ int d_num_flips = 0;
@@ -47,4 +47,4 @@ int flip_zero_cuda(at::TensorIterator& iter, int dim, int dir) {
   return num_flips;
 }
 
-}  // namespace canoe
+}  // namespace snap

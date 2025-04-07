@@ -14,7 +14,7 @@
 // fvm
 #include <fvm/index.h>
 
-namespace canoe {
+namespace snap {
 enum BoundaryFace {
   kUnknown = -1,
   kInnerX1 = 0,
@@ -62,4 +62,4 @@ void solid_outer(torch::Tensor, int dim, BoundaryFuncOptions);
 
 bfunc_t get_boundary_function(BoundaryFace face, BoundaryFlag flag);
 
-}  // namespace canoe
+}  // namespace snap

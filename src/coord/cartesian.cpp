@@ -11,7 +11,7 @@
 #include "coord_formatter.hpp"
 #include "coordinate.hpp"
 
-namespace canoe {
+namespace snap {
 void CartesianImpl::reset() {
   auto const& op = options;
 
@@ -62,4 +62,4 @@ void CartesianImpl::reset_coordinates(std::vector<MeshGenerator> meshgens) {
   x3v.copy_(0.5 * (x3f.slice(0, 0, options.nc3()) +
                    x3f.slice(0, 1, options.nc3() + 1)));
 }
-}  // namespace canoe
+}  // namespace snap

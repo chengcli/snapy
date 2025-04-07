@@ -13,7 +13,7 @@
 
 #include "coordinate.hpp"
 
-namespace canoe {
+namespace snap {
 CoordinateOptions::CoordinateOptions(ParameterInput pin) {
   auto nghost = pin->GetOrAddInteger("meshblock", "nghost", 2);
 
@@ -334,4 +334,4 @@ IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
 
   return result;
 }
-}  // namespace canoe
+}  // namespace snap

@@ -4,7 +4,7 @@
 #include <ATen/native/cpu/Loops.h>
 #include <torch/torch.h>
 
-namespace canoe {
+namespace snap {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
                        double w3) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "averag3_cpu", [&] {
@@ -14,4 +14,4 @@ void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
         });
   });
 }
-}  // namespace canoe
+}  // namespace snap

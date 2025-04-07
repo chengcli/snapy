@@ -15,7 +15,7 @@
 #include "recon_formatter.hpp"
 #include "reconstruct.hpp"
 
-namespace canoe {
+namespace snap {
 ReconstructOptions::ReconstructOptions(ParameterInput pin, std::string section,
                                        std::string xorder) {
   interp(InterpOptions(pin, section, xorder));
@@ -110,4 +110,4 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 
   return result;
 }
-}  // namespace canoe
+}  // namespace snap

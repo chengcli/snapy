@@ -10,7 +10,7 @@
 #define CONS(n) cons[(n) * stride]
 #define GAMMAD (*gammad)
 
-namespace canoe {
+namespace snap {
 
 template <typename T>
 inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* gammad,
@@ -36,7 +36,7 @@ inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* gammad,
   PRIM(IPR) = (GAMMAD - 1.) * (CONS(IPR) - ke);
 }
 
-}  // namespace canoe
+}  // namespace snap
 
 #undef PRIM
 #undef CONS

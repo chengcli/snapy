@@ -14,7 +14,7 @@
 
 #include "output.hpp"
 
-namespace canoe {
+namespace snap {
 void OutputType::loadHydroOutputData(MeshBlock pmb) {
   OutputData *pod;
   auto peos = pmb->phydro->peos;
@@ -204,4 +204,4 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     }
   }
 }
-}  // namespace canoe
+}  // namespace snap

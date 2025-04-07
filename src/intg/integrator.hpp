@@ -13,7 +13,7 @@
 // according to:
 // https://gkeyll.readthedocs.io/en/latest/dev/ssp-rk.html
 
-namespace canoe {
+namespace snap {
 struct IntegratorWeight {
   ADD_ARG(double, wght0) = 0.0;
   ADD_ARG(double, wght1) = 0.0;
@@ -43,4 +43,4 @@ class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
 };
 
 TORCH_MODULE(Integrator);
-}  // namespace canoe
+}  // namespace snap

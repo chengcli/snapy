@@ -17,7 +17,7 @@
 #include "mesh_functions.hpp"
 #include "meshblock.hpp"
 
-namespace canoe {
+namespace snap {
 void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
                                OctTree const& tree) {
   LOG_INFO(logger, "initializing mesh block at {}", ploc);
@@ -168,4 +168,4 @@ void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap

@@ -10,7 +10,7 @@
 
 #include "forcing.hpp"
 
-namespace canoe {
+namespace snap {
 torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
                                      double dt) {
   // Real temp = pthermo->GetTemp(w.at(pmb->ks, j, i));
@@ -18,4 +18,4 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
 
   return du;
 }
-}  // namespace canoe
+}  // namespace snap

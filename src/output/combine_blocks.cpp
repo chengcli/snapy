@@ -20,7 +20,7 @@
 
 int mppnccombine(int argc, char *argv[]);
 
-namespace canoe {
+namespace snap {
 void NetcdfOutput::combine_blocks() {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
@@ -86,4 +86,4 @@ void NetcdfOutput::combine_blocks() {
 
 #endif  // NETCDFOUTPUT
 }
-}  // namespace canoe
+}  // namespace snap

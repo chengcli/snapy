@@ -14,7 +14,7 @@
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 torch::Tensor PLMInterpImpl::forward(torch::Tensor w, int dim) {
   torch::NoGradGuard no_grad;
 
@@ -43,4 +43,4 @@ torch::Tensor PLMInterpImpl::forward(torch::Tensor w, int dim) {
 
   return result;
 }
-}  // namespace canoe
+}  // namespace snap

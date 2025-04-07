@@ -14,7 +14,7 @@
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 void call_weno3_cpu(at::TensorIterator& iter, bool scale);
 void call_weno3_cuda(at::TensorIterator& iter, bool scale);
 
@@ -126,4 +126,4 @@ torch::Tensor Weno3InterpImpl::right_fallback(torch::Tensor w, int dim) const {
   }
 }
 
-}  // namespace canoe
+}  // namespace snap

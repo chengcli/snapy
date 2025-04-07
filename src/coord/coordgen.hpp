@@ -1,5 +1,5 @@
 #pragma once
 
-namespace canoe {
+namespace snap {
 float UniformCoord(float x, float xmin, float xmax, void*);
 }

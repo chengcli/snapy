@@ -8,11 +8,11 @@
 #include "internal_boundary.hpp"
 
 template <>
-struct fmt::formatter<canoe::InternalBoundaryOptions> {
+struct fmt::formatter<snap::InternalBoundaryOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::InternalBoundaryOptions& p, FormatContext& ctx) {
+  auto format(const snap::InternalBoundaryOptions& p, FormatContext& ctx) {
     return fmt::format_to(
         ctx.out(),
         "(nghost = {}; max_iter = {}, solid_density = {}; solid_pressure = {})",
@@ -21,27 +21,27 @@ struct fmt::formatter<canoe::InternalBoundaryOptions> {
 };
 
 template <>
-struct fmt::formatter<canoe::BoundaryFlag> {
+struct fmt::formatter<snap::BoundaryFlag> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::BoundaryFlag& p, FormatContext& ctx) {
+  auto format(const snap::BoundaryFlag& p, FormatContext& ctx) {
     switch (p) {
-      case canoe::BoundaryFlag::kExchange:
+      case snap::BoundaryFlag::kExchange:
         return fmt::format_to(ctx.out(), "Exchange");
-      case canoe::BoundaryFlag::kUser:
+      case snap::BoundaryFlag::kUser:
         return fmt::format_to(ctx.out(), "User");
-      case canoe::BoundaryFlag::kReflect:
+      case snap::BoundaryFlag::kReflect:
         return fmt::format_to(ctx.out(), "Reflect");
-      case canoe::BoundaryFlag::kOutflow:
+      case snap::BoundaryFlag::kOutflow:
         return fmt::format_to(ctx.out(), "Outflow");
-      case canoe::BoundaryFlag::kPeriodic:
+      case snap::BoundaryFlag::kPeriodic:
         return fmt::format_to(ctx.out(), "Periodic");
-      case canoe::BoundaryFlag::kShearPeriodic:
+      case snap::BoundaryFlag::kShearPeriodic:
         return fmt::format_to(ctx.out(), "ShearPeriodic");
-      case canoe::BoundaryFlag::kPolar:
+      case snap::BoundaryFlag::kPolar:
         return fmt::format_to(ctx.out(), "Polar");
-      case canoe::BoundaryFlag::kPolarWedge:
+      case snap::BoundaryFlag::kPolarWedge:
         return fmt::format_to(ctx.out(), "PolarWedge");
       default:
         return fmt::format_to(ctx.out(), "Unknown");
@@ -50,11 +50,11 @@ struct fmt::formatter<canoe::BoundaryFlag> {
 };
 
 template <>
-struct fmt::formatter<std::vector<canoe::BoundaryFlag>> {
+struct fmt::formatter<std::vector<snap::BoundaryFlag>> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const std::vector<canoe::BoundaryFlag>& p, FormatContext& ctx) {
+  auto format(const std::vector<snap::BoundaryFlag>& p, FormatContext& ctx) {
     std::string result = "(";
     for (size_t i = 0; i < p.size(); ++i) {
       result += fmt::format("{}", p[i]);
@@ -68,11 +68,11 @@ struct fmt::formatter<std::vector<canoe::BoundaryFlag>> {
 };
 
 template <>
-struct fmt::formatter<canoe::BoundaryFuncOptions> {
+struct fmt::formatter<snap::BoundaryFuncOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::BoundaryFuncOptions& p, FormatContext& ctx) {
+  auto format(const snap::BoundaryFuncOptions& p, FormatContext& ctx) {
     return fmt::format_to(ctx.out(), "(type = {}; nghost = {})", p.type(),
                           p.nghost());
   }

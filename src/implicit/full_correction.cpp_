@@ -2,7 +2,7 @@
 #include <iostream>
 #include <vector>
 
-// canoe
+// snap
 #include <configure.hpp>
 #include <impl.hpp>
 

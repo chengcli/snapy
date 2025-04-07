@@ -12,7 +12,7 @@
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"
 
-namespace canoe {
+namespace snap {
 MeshBlockOptions::MeshBlockOptions(ParameterInput pin) {
   nghost(pin->GetOrAddInteger("meshblock", "nghost", 2));
 
@@ -261,4 +261,4 @@ int MeshBlockImpl::forward(double dt, int stage,
 
   return 0;
 }
-}  // namespace canoe
+}  // namespace snap

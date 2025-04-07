@@ -7,7 +7,7 @@
 // fvm
 #include "output_type.hpp"
 
-namespace canoe {
+namespace snap {
 /*! \brief derived OutputType class for history dumps
 class HistoryOutput : public OutputType {
  public:
@@ -100,4 +100,4 @@ class FITSOutput : public OutputType {
   void write_output_file(MeshBlock pmb, float time, OctTreeOptions const& tree,
                          bool flag) override;
 };
-}  // namespace canoe
+}  // namespace snap

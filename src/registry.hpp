@@ -6,7 +6,7 @@
 // torch
 #include <torch/nn/module.h>
 
-namespace canoe {
+namespace snap {
 //! Choose between [IdealGas, IdealMoist, ShallowWaterXY, ShallowWaterYZ]
 class EquationOfStateImpl;
 class EquationOfStateOptions;
@@ -33,4 +33,4 @@ class InterpOptions;
 std::shared_ptr<InterpImpl> register_module_op(torch::nn::Module *p,
                                                std::string name,
                                                InterpOptions const &op);
-};  // namespace canoe
+};  // namespace snap

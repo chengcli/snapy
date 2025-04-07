@@ -5,7 +5,7 @@
 #include <coordinates/coordinates.hpp>
 #include <mesh/mesh.hpp>
 
-// canoe headers
+// snap headers
 #include "implicit_solver.hpp"
 
 inline double cot(double x) { return (1. / tan(x)); }

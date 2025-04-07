@@ -4,7 +4,7 @@
 
 #include "output_type.hpp"
 
-namespace canoe {
+namespace snap {
 void OutputType::SumOutputData(MeshBlock pmb, int dim) {
   // For each node in OutputData doubly linked list, sum arrays containing
   // output data
@@ -71,4 +71,4 @@ void OutputType::SumOutputData(MeshBlock pmb, int dim) {
   }
   return;
 }
-}  // namespace canoe
+}  // namespace snap

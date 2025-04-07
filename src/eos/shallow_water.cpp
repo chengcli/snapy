@@ -14,7 +14,7 @@
 #include "eos_formatter.hpp"
 #include "equation_of_state.hpp"
 
-namespace canoe {
+namespace snap {
 void ShallowWaterImpl::reset() {
   TORCH_CHECK(options.thermo().nvapor() == 0,
               "ShallowWaterEOS should not have vapor");
@@ -58,4 +58,4 @@ void ShallowWaterImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
 torch::Tensor ShallowWaterImpl::sound_speed(torch::Tensor prim) const {
   return torch::sqrt(prim[index::IDN]);
 }
-}  // namespace canoe
+}  // namespace snap

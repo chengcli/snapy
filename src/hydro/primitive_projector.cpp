@@ -11,7 +11,7 @@
 #include "hydro_formatter.hpp"
 #include "primitive_projector.hpp"
 
-namespace canoe {
+namespace snap {
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(
     PrimitiveProjectorOptions options_)
     : options(options_) {
@@ -121,4 +121,4 @@ torch::Tensor calc_nonhydrostatic_pressure(torch::Tensor pres,
   return pres - psv;
 }
 
-}  // namespace canoe
+}  // namespace snap

@@ -7,7 +7,7 @@
 #include "recon/interpolation.hpp"
 #include "riemann/riemann_solver.hpp"
 
-namespace canoe {
+namespace snap {
 EquationOfState register_module_op(torch::nn::Module *p, std::string name,
                                    EquationOfStateOptions const &op) {
   if (op.type() == "ideal_gas") {
@@ -86,4 +86,4 @@ Interp register_module_op(torch::nn::Module *p, std::string name,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap

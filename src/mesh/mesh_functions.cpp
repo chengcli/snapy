@@ -4,7 +4,7 @@
 // fvm
 #include "mesh_functions.hpp"
 
-namespace canoe {
+namespace snap {
 torch::Tensor UniformMesh(torch::Tensor x, float xmin, float xmax) {
   return 0.5 * (xmin + xmax) + (x * xmax - x * xmin);
 }
@@ -33,4 +33,4 @@ torch::Tensor compute_logical_position(torch::Tensor index, int64_t nrange,
     return (noffset + noffset_ceil) / (2.0 * nrange);
   }
 }
-}  // namespace canoe
+}  // namespace snap

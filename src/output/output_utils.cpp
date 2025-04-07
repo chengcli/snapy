@@ -4,7 +4,7 @@
 // outputs
 #include "output_utils.hpp"
 
-namespace canoe {
+namespace snap {
 static std::mutex table_mutex;
 
 int get_num_variables(std::string grid, AthenaArray<Real> const& data) {
@@ -234,4 +234,4 @@ std::string MetadataTable::GetLongName(std::string name) const {
 }
 
 MetadataTable* MetadataTable::myptr_ = nullptr;
-}  // namespace canoe
+}  // namespace snap

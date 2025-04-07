@@ -3,7 +3,7 @@
 
 #include <fvm/registry.hpp>
 
-namespace canoe {
+namespace snap {
 RiemannSolverOptions::RiemannSolverOptions(ParameterInput pin) {
   eos(EquationOfStateOptions(pin));
   coord(CoordinateOptions(pin));
@@ -24,4 +24,4 @@ torch::Tensor UpwindSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   return vel * (ui * wl + (1 - ui) * wr);
 }
 
-}  // namespace canoe
+}  // namespace snap

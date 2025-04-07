@@ -14,7 +14,7 @@
 #include <athena/hydro/hydro.hpp>
 #include <athena/mesh/mesh.hpp>
 
-// canoe
+// snap
 #include <impl.hpp>
 
 // snap

@@ -30,7 +30,7 @@
 
 #endif  // NETCDFOUTPUT
 
-namespace canoe {
+namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
@@ -407,4 +407,4 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
   delete[] var_ids;
 #endif  // NETCDFOUTPUT
 }
-}  // namespace canoe
+}  // namespace snap

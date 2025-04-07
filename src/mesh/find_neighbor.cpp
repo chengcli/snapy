@@ -5,7 +5,7 @@
 // fvm
 #include "oct_tree.hpp"
 
-namespace canoe {
+namespace snap {
 torch::optional<OctTreeNode> OctTreeImpl::find_neighbor(LogicalLocation myloc,
                                                         NeighborIndex nx,
                                                         BoundaryFlag const *bcs,
@@ -136,4 +136,4 @@ torch::optional<OctTreeNode> OctTreeImpl::find_neighbor(LogicalLocation myloc,
 
   return bt;
 }
-}  // namespace canoe
+}  // namespace snap

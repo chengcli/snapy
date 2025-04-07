@@ -11,7 +11,7 @@
 #include "bc_formatter.hpp"
 #include "internal_boundary.hpp"
 
-namespace canoe {
+namespace snap {
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
     : options(options_) {
   reset();
@@ -68,4 +68,4 @@ torch::Tensor InternalBoundaryImpl::forward(
   return wlr;
 }
 
-}  // namespace canoe
+}  // namespace snap

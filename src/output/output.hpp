@@ -17,7 +17,7 @@
 
 #include "output_type.hpp"
 
-namespace canoe {
+namespace snap {
 //! \brief root class for all Athena++ outputs. Provides a singly linked list of
 //! OutputTypes, with each node representing one mode/format of output to be
 //! made.
@@ -35,4 +35,4 @@ class OutputImpl : public torch::nn::Module {
 };
 TORCH_MODULE(Output);
 
-}  // namespace canoe
+}  // namespace snap

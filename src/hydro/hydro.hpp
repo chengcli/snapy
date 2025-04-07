@@ -22,7 +22,7 @@
 
 #include "primitive_projector.hpp"
 
-namespace canoe {
+namespace snap {
 
 struct HydroOptions {
   HydroOptions() = default;
@@ -97,4 +97,4 @@ TORCH_MODULE(Hydro);
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
                  int extend_x3);
 void check_eos(torch::Tensor w, int nghost);
-}  // namespace canoe
+}  // namespace snap

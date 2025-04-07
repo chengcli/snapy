@@ -18,7 +18,7 @@
   usedFlip[(i) * stride * MAXRUN * 2 + (len) * 2 + (bit)]
 #define INSEQ(i) inSeq[(i) * stride]
 
-namespace canoe {
+namespace snap {
 
 template <typename T>
 DISPATCH_MACRO void initialize_dp(int n, T *dp, T *fromLen, T *fromBit,
@@ -266,7 +266,7 @@ DISPATCH_MACRO void reconstruct_solution(T *inSeq, int n, int minRun0,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap
 
 #undef INF
 #undef DP

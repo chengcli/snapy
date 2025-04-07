@@ -9,7 +9,7 @@
 #include "lmars_impl.h"
 #include "hllc_impl.h"
 
-namespace canoe {
+namespace snap {
 void call_lmars_cuda(at::TensorIterator& iter, int dim, int nvapor) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
@@ -53,4 +53,4 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor) {
         });
   });
 }
-}  // namespace canoe
+}  // namespace snap

@@ -15,7 +15,7 @@
 #define DU(n, i) du[(n) * stride + (i)]
 #define W(n, i) w[(n) * stride + (i)]
 
-namespace canoe {
+namespace snap {
 template <typename T, int N>
 DISPATCH_MACRO void forward_sweep_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *a,
@@ -132,7 +132,7 @@ DISPATCH_MACRO void backward_substitution_impl(
     }
   }
 }
-}  // namespace canoe
+}  // namespace snap
 
 #undef DU
 #undef W

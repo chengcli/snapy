@@ -6,7 +6,7 @@
 #include "boundary_condition.hpp"
 #include "internal_boundary.hpp"
 
-namespace canoe {
+namespace snap {
 enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };
 
 int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir);
@@ -183,4 +183,4 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
 
   return solid;
 }
-}  // namespace canoe
+}  // namespace snap

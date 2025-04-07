@@ -20,7 +20,7 @@
 
 #include "oct_tree.hpp"
 
-namespace canoe {
+namespace snap {
 struct MeshBlockOptions {
   MeshBlockOptions() = default;
   explicit MeshBlockOptions(ParameterInput pin);
@@ -95,4 +95,4 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 };
 
 TORCH_MODULE(MeshBlock);
-}  // namespace canoe
+}  // namespace snap

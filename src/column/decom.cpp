@@ -6,7 +6,7 @@ enum {
   IDN = 0,
 };
 
-namespace canoe {
+namespace snap {
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> decom_obtain_anomaly(
     int64_t is, int64_t ie, torch::Tensor const& w, torch::Tensor const& dx1f,
@@ -73,4 +73,4 @@ void decom_apply_anomaly_inplace(torch::Tensor const& psf,
   wr[IDN] = wr[IPR] / torch::where(mask, tsf, wr[IDN]);
 }
 
-}  // namespace canoe
+}  // namespace snap

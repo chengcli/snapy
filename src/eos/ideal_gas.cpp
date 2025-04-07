@@ -14,7 +14,7 @@
 #include "eos_formatter.hpp"
 #include "equation_of_state.hpp"
 
-namespace canoe {
+namespace snap {
 void call_ideal_gas_cpu(at::TensorIterator& iter);
 void call_ideal_gas_cuda(at::TensorIterator& iter);
 
@@ -111,4 +111,4 @@ torch::Tensor IdealGasImpl::sound_speed(torch::Tensor prim) const {
   return torch::sqrt(gammad * prim[index::IPR] / prim[index::IDN]);
 }
 
-}  // namespace canoe
+}  // namespace snap

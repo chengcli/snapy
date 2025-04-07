@@ -7,26 +7,26 @@
 #include "integrator.hpp"
 
 template <>
-struct fmt::formatter<canoe::IntegratorWeight> {
+struct fmt::formatter<snap::IntegratorWeight> {
   // Parse format specifier if any (this example doesn't use custom specifiers)
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   // Define the format function for IntegratorOptions
   template <typename FormatContext>
-  auto format(const canoe::IntegratorWeight& p, FormatContext& ctx) {
+  auto format(const snap::IntegratorWeight& p, FormatContext& ctx) {
     return fmt::format_to(ctx.out(), "({}, {}, {})", p.wght0(), p.wght1(),
                           p.wght2());
   }
 };
 
 template <>
-struct fmt::formatter<canoe::IntegratorOptions> {
+struct fmt::formatter<snap::IntegratorOptions> {
   // Parse format specifier if any (this example doesn't use custom specifiers)
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   // Define the format function for IntegratorOptions
   template <typename FormatContext>
-  auto format(const canoe::IntegratorOptions& p, FormatContext& ctx) {
+  auto format(const snap::IntegratorOptions& p, FormatContext& ctx) {
     return fmt::format_to(ctx.out(), "(type = {}; cfl = {})", p.type(),
                           p.cfl());
   }

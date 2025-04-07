@@ -1,7 +1,7 @@
 // fvm
 #include "boundary_condition.hpp"
 
-namespace canoe {
+namespace snap {
 
 void reflect_inner(torch::Tensor var, int dim, BoundaryFuncOptions op) {
   if (var.size(dim) == 1) return;
@@ -29,4 +29,4 @@ void reflect_outer(torch::Tensor var, int dim, BoundaryFuncOptions op) {
   }
 }
 
-}  // namespace canoe
+}  // namespace snap

@@ -9,7 +9,7 @@
 #include "output.hpp"
 #include "output_formats.hpp"
 
-namespace canoe {
+namespace snap {
 OutputType::OutputType(OutputOptions const &options_)
     : options(options_),
       pnext_type(),    // Terminate this node in singly linked list with nullptr
@@ -121,4 +121,4 @@ bool OutputType::ContainVariable(const std::string &haystack,
   return false;
 }
 
-}  // namespace canoe
+}  // namespace snap

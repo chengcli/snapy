@@ -10,7 +10,7 @@
 #include "integrator.hpp"
 #include "intg_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
                        double w3);
 void call_average3_cuda(at::TensorIterator& iter, double w1, double w2,
@@ -100,4 +100,4 @@ torch::Tensor IntegratorImpl::forward(int s, torch::Tensor u0, torch::Tensor u1,
 
   return out;
 }
-}  // namespace canoe
+}  // namespace snap

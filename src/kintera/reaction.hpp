@@ -9,7 +9,7 @@
 #include <add_arg.h>
 // clang-format on
 
-namespace canoe {
+namespace snap {
 
 using Composition = std::map<std::string, double>;
 
@@ -31,4 +31,4 @@ struct Reaction {
 
 std::string to_string(Composition const& p);
 
-}  // namespace canoe
+}  // namespace snap

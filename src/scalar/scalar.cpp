@@ -11,7 +11,7 @@
 #include "scalar.hpp"
 #include "scalar_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 ScalarOptions::ScalarOptions(ParameterInput pin) {
   nscalar(pin->GetOrAddInteger("scalar", "nscalar", 0));
 
@@ -43,4 +43,4 @@ torch::Tensor ScalarImpl::forward(torch::Tensor u, double dt) {
   return u;
 }
 
-}  // namespace canoe
+}  // namespace snap

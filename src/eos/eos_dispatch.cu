@@ -9,7 +9,7 @@
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 
-namespace canoe {
+namespace snap {
 
 void call_ideal_gas_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -47,4 +47,4 @@ void call_ideal_moist_cuda(at::TensorIterator& iter) {
   });
 }
 
-}  // namespace canoe
+}  // namespace snap

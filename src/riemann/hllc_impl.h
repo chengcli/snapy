@@ -14,7 +14,7 @@
 #define CV_RATIO_M1(n) cv_ratio_m1[(n) * stride]
 #define MU_RATIO_M1(n) mu_ratio_m1[(n) * stride]
 
-namespace canoe {
+namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
@@ -156,7 +156,7 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
   FLX(IPR) = sl * fl[IPR] + sr * fr[IPR] + sm * cp * am;
 }
 
-}  // namespace canoe
+}  // namespace snap
 
 #undef WL
 #undef WR

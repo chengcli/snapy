@@ -11,7 +11,7 @@
 #include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
-namespace canoe {
+namespace snap {
 void ShallowRoeSolverImpl::reset() {
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
@@ -81,4 +81,4 @@ torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   return flx;
 }
-}  // namespace canoe
+}  // namespace snap

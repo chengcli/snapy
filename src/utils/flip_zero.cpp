@@ -19,7 +19,7 @@
 #define INSEQ(i) inSeq[(i) * stride]
 #define OUTSEQ(i) outSeq[(i) * stride]
 
-namespace canoe {
+namespace snap {
 
 DISPATCH_MACRO void initialize_dp(int n, int *dp, int *fromLen, int *fromBit,
                                   int *usedFlip, int stride) {
@@ -258,7 +258,7 @@ DISPATCH_MACRO void reconstruct_solution(int *outSeq, const int *inSeq, int n,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap
 
 #undef INF
 #undef DP

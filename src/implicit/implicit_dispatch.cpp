@@ -9,7 +9,7 @@
 // fvm
 #include "tridiag_thomas_impl.h"
 
-namespace canoe {
+namespace snap {
 template <int N>
 void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_forward_cpu", [&] {
@@ -47,4 +47,4 @@ template void vic_forward_cpu<3>(at::TensorIterator& iter, double dt, int il,
 template void vic_forward_cpu<5>(at::TensorIterator& iter, double dt, int il,
                                  int iu);
 
-}  // namespace canoe
+}  // namespace snap

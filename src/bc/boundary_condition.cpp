@@ -4,7 +4,7 @@
 // fvm
 #include "boundary_condition.hpp"
 
-namespace canoe {
+namespace snap {
 
 void bc_null_op(torch::Tensor var, int dim, BoundaryFuncOptions op) {
   // do nothing
@@ -51,4 +51,4 @@ bfunc_t get_boundary_function(BoundaryFace face, BoundaryFlag flag) {
   }
 }
 
-}  // namespace canoe
+}  // namespace snap

@@ -14,7 +14,7 @@
 #include <fvm/eos/equation_of_state.hpp>
 #include <fvm/recon/reconstruct.hpp>
 
-namespace canoe {
+namespace snap {
 
 struct VerticalImplicitOptions {
   VerticalImplicitOptions() = default;
@@ -70,4 +70,4 @@ torch::Tensor flux_jacobian(torch::Tensor w, torch::Tensor gm1);
 std::pair<torch::Tensor, torch::Tensor> eigen_vectors(torch::Tensor prim,
                                                       torch::Tensor gm1,
                                                       torch::Tensor cs);
-}  // namespace canoe
+}  // namespace snap

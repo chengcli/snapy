@@ -92,7 +92,7 @@
 #include "output.hpp"
 #include "output_formats.hpp"
 
-namespace canoe {
+namespace snap {
 OutputImpl::OutputImpl(Mesh pm, ParameterInput pin) {
   pfirst_type_ = nullptr;
   std::stringstream msg;
@@ -387,4 +387,4 @@ void OutputImpl::MakeOutput(Mesh pm, ParameterInput pin, bool wtflag) {
     ptype = ptype->pnext_type;
   }
 }
-}  // namespace canoe
+}  // namespace snap

@@ -4,7 +4,7 @@
 #include <ATen/native/cuda/Loops.cuh>
 #include <c10/cuda/CUDAGuard.h>
 
-namespace canoe {
+namespace snap {
 void call_average3_cuda(at::TensorIterator& iter, double w1, double w2,
                         double w3) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -17,4 +17,4 @@ void call_average3_cuda(at::TensorIterator& iter, double w1, double w2,
         });
   });
 }
-}  // namespace canoe
+}  // namespace snap

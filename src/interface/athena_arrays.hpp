@@ -16,7 +16,7 @@
 // torch
 #include <torch/torch.h>
 
-namespace canoe {
+namespace snap {
 template <typename T>
 class StrideIterator;
 
@@ -646,6 +646,6 @@ void AthenaArray<T>::ShallowSlice3DToPencil(AthenaArray<T> &src, const int k,
   state_ = DataStatus::shallow_slice;
   return;
 }
-}  // namespace canoe
+}  // namespace snap
 
 #include "init_from_tensor.hpp"

@@ -2,7 +2,7 @@
 #include <ATen/TensorIterator.h>
 #include <ATen/native/cuda/Loops.cuh>
 
-namespace canoe {
+namespace snap {
 namespace native {
 
 template <typename scalar_t, int Arity, typename func_t>
@@ -26,4 +26,4 @@ void gpu_kernel(at::TensorIterator& iter, const func_t& f) {
 }
 
 } // namespace native
-} // namespace canoe
+} // namespace snap

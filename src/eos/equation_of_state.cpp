@@ -9,7 +9,7 @@
 #include "eos_formatter.hpp"
 #include "equation_of_state.hpp"
 
-namespace canoe {
+namespace snap {
 
 EquationOfStateOptions::EquationOfStateOptions(ParameterInput pin) {
   type(pin->GetOrAddString("hydro", "eos", "ideal_gas"));
@@ -29,4 +29,4 @@ void EquationOfStateImpl::_apply_primitive_limiter_inplace(
   prim[index::IPR].clamp_min_(options.pressure_floor());
 }
 
-}  // namespace canoe
+}  // namespace snap

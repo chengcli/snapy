@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-// canoe
+// snap
 #include <configure.hpp>
 #include <constants.hpp>
 

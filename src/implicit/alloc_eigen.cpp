@@ -4,7 +4,7 @@
 // torch
 #include <ATen/Dispatch.h>
 
-namespace canoe {
+namespace snap {
 template <int N>
 void alloc_eigen_cpu(char *&a, char *&b, char *&c, char *&delta, char *&corr,
                      int ncol, int nlayer, c10::ScalarType dtype) {
@@ -34,4 +34,4 @@ template void alloc_eigen_cpu<3>(char *&, char *&, char *&, char *&, char *&,
                                  int, int, c10::ScalarType);
 template void alloc_eigen_cpu<5>(char *&, char *&, char *&, char *&, char *&,
                                  int, int, c10::ScalarType);
-}  // namespace canoe
+}  // namespace snap

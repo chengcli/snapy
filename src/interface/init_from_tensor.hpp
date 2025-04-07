@@ -1,6 +1,6 @@
 // to be included in athena_array.hpp
 
-namespace canoe {
+namespace snap {
 template <typename T>
 void AthenaArray<T>::InitFromTensor(torch::Tensor const& tensor, int dim) {
   if (dim == 4) {
@@ -51,4 +51,4 @@ void AthenaArray<T>::initFromTensor4D(torch::Tensor const& tensor, int index,
     state_ = DataStatus::allocated;
   }
 }
-}  // namespace canoe
+}  // namespace snap

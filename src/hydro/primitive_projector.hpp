@@ -13,7 +13,7 @@
 #include <fvm/recon/reconstruct.hpp>
 #include <fvm/thermo/thermodynamics.hpp>
 
-namespace canoe {
+namespace snap {
 
 //! Calculate the hydrostatic pressure field.
 /*!
@@ -70,4 +70,4 @@ class PrimitiveProjectorImpl
 };
 TORCH_MODULE(PrimitiveProjector);
 
-}  // namespace canoe
+}  // namespace snap

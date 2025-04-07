@@ -14,7 +14,7 @@
 #include "implicit_formatter.hpp"
 #include "vertical_implicit.hpp"
 
-namespace canoe {
+namespace snap {
 template <int N>
 void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu);
 
@@ -278,4 +278,4 @@ std::pair<torch::Tensor, torch::Tensor> eigen_vectors(torch::Tensor prim,
 
   return std::make_pair(result1, result2);
 }
-}  // namespace canoe
+}  // namespace snap

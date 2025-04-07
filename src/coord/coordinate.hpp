@@ -22,7 +22,7 @@
 
 #include "coordgen.hpp"
 
-namespace canoe {
+namespace snap {
 using IndexRange = std::vector<torch::indexing::TensorIndex>;
 
 struct CoordinateOptions {
@@ -130,7 +130,7 @@ class CoordinateImpl {
   explicit CoordinateImpl(const CoordinateOptions &options_);
 
  private:
-  std::string name_() const { return "canoe::CoordinateImpl"; }
+  std::string name_() const { return "snap::CoordinateImpl"; }
 };
 
 using Coordinate = std::shared_ptr<CoordinateImpl>;
@@ -227,4 +227,4 @@ TORCH_MODULE(CubedSphere);
 IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
                         int extend_x1 = 0, int extend_x2 = 0,
                         int extend_x3 = 0);
-}  // namespace canoe
+}  // namespace snap

@@ -13,7 +13,7 @@
 // fvm
 #include "boundary_condition.hpp"
 
-namespace canoe {
+namespace snap {
 struct InternalBoundaryOptions {
   static constexpr int MAXRUN = 4;
 
@@ -65,4 +65,4 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
 };
 TORCH_MODULE(InternalBoundary);
 
-}  // namespace canoe
+}  // namespace snap

@@ -13,7 +13,7 @@
 #include "hydro.hpp"
 #include "hydro_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 HydroOptions::HydroOptions(ParameterInput pin) {
   eos(EquationOfStateOptions(pin));
   coord(CoordinateOptions(pin));
@@ -250,4 +250,4 @@ void check_eos(torch::Tensor w, int nghost) {
               " 2) Activate EOS limiter and set the pressure floor");
 }
 
-}  // namespace canoe
+}  // namespace snap

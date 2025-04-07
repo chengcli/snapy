@@ -13,7 +13,7 @@
 #include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
-namespace canoe {
+namespace snap {
 void call_hllc_cpu(at::TensorIterator& iter, int dim, int nvapor);
 void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor);
 
@@ -162,4 +162,4 @@ torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
 
   return flx;
 }
-}  // namespace canoe
+}  // namespace snap

@@ -4,7 +4,7 @@
 // fvm
 #include "output.hpp"
 
-namespace canoe {
+namespace snap {
 void OutputType::loadUserOutputData(MeshBlock pmb) {
   OutputData* pod;
 
@@ -24,4 +24,4 @@ void OutputType::loadUserOutputData(MeshBlock pmb) {
     }
   }
 }
-}  // namespace canoe
+}  // namespace snap

@@ -8,7 +8,7 @@
 #include "interp_simple.hpp"
 #include "interpolation.hpp"
 
-namespace canoe {
+namespace snap {
 InterpOptions::InterpOptions(ParameterInput pin, std::string section,
                              std::string xorder) {
   if (pin->DoesParameterExist(section, xorder)) {
@@ -66,4 +66,4 @@ void call_weno5_cpu(at::TensorIterator& iter, bool scale) {
   });
 }
 
-}  // namespace canoe
+}  // namespace snap

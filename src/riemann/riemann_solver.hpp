@@ -15,7 +15,7 @@
 #include <fvm/coord/coordinate.hpp>
 #include <fvm/eos/equation_of_state.hpp>
 
-namespace canoe {
+namespace snap {
 struct RiemannSolverOptions {
   RiemannSolverOptions() = default;
   explicit RiemannSolverOptions(ParameterInput pin);
@@ -150,4 +150,4 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
                         torch::Tensor gammad) override;
 };
 TORCH_MODULE(ShallowRoeSolver);
-}  // namespace canoe
+}  // namespace snap

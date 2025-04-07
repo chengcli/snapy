@@ -9,7 +9,7 @@
 
 #include "output.hpp"
 
-namespace canoe {
+namespace snap {
 void OutputType::loadScalarOutputData(MeshBlock pmb) {
   OutputData *pod;
 
@@ -42,4 +42,4 @@ void OutputType::loadScalarOutputData(MeshBlock pmb) {
     }
   }
 }
-}  // namespace canoe
+}  // namespace snap

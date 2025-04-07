@@ -11,7 +11,7 @@
 #include <fvm/loops.cuh>
 #include "tridiag_thomas_impl.h"
 
-namespace canoe {
+namespace snap {
 template <int N>
 void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -49,4 +49,4 @@ template void vic_forward_cuda<3>(at::TensorIterator& iter, double dt, int il,
                                   int iu);
 template void vic_forward_cuda<5>(at::TensorIterator& iter, double dt, int il,
                                   int iu);
-}  // namespace canoe
+}  // namespace snap

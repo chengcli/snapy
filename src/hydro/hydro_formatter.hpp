@@ -12,11 +12,11 @@
 #include "hydro.hpp"
 
 template <>
-struct fmt::formatter<canoe::HydroOptions> {
+struct fmt::formatter<snap::HydroOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::HydroOptions& p, FormatContext& ctx) {
+  auto format(const snap::HydroOptions& p, FormatContext& ctx) {
     return fmt::format_to(
         ctx.out(),
         "(nghost = {}; eos = {}; riemann = {}; recon1 = {}; recon23 = {})",
@@ -25,11 +25,11 @@ struct fmt::formatter<canoe::HydroOptions> {
 };
 
 template <>
-struct fmt::formatter<canoe::PrimitiveProjectorOptions> {
+struct fmt::formatter<snap::PrimitiveProjectorOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::PrimitiveProjectorOptions& p, FormatContext& ctx) {
+  auto format(const snap::PrimitiveProjectorOptions& p, FormatContext& ctx) {
     return fmt::format_to(
         ctx.out(),
         "(type = {}; grav = {}; nghost = {}; margin = {}; thermo = {})",

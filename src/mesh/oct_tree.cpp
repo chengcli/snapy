@@ -22,7 +22,7 @@
 #include "mesh_formatter.hpp"
 #include "oct_tree.hpp"
 
-namespace canoe {
+namespace snap {
 bool LogicalLocationImpl::lesser(const LogicalLocation &other) const {
   return level < other->level;
 }
@@ -243,4 +243,4 @@ int octree_root_level(OctTreeOptions const &op) {
   return root_level;
 }
 
-}  // namespace canoe
+}  // namespace snap

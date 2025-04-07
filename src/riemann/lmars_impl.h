@@ -13,7 +13,7 @@
 #define CV_RATIO_M1(n) (cv_ratio_m1[(n) * stride])
 #define MU_RATIO_M1(n) (mu_ratio_m1[(n) * stride])
 
-namespace canoe {
+namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO lmars_impl(T *flx, T *wli, T *wri, T *gammad,
@@ -107,7 +107,7 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wli, T *wri, T *gammad,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap
 
 #undef WL
 #undef WR

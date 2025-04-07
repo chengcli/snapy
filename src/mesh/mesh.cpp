@@ -15,7 +15,7 @@
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"
 
-namespace canoe {
+namespace snap {
 MeshOptions::MeshOptions(ParameterInput pin) {
   x1min(pin->GetOrAddReal("mesh", "x1min", 0.0));
   x1max(pin->GetOrAddReal("mesh", "x1max", 1.0));
@@ -209,4 +209,4 @@ double MeshImpl::max_time_step() {
 void MeshImpl::load_balance() {
   LOG_INFO(logger, "{} does load balance", name());
 }
-}  // namespace canoe
+}  // namespace snap

@@ -5,7 +5,7 @@
 // application
 #include <application/exceptions.hpp>
 
-// canoe
+// snap
 #include <configure.hpp>
 
 // exo3

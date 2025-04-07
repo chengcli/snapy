@@ -7,7 +7,7 @@
 // fvm
 #include "interp_simple.hpp"
 
-namespace canoe {
+namespace snap {
 void call_cp3_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
@@ -65,4 +65,4 @@ void call_weno5_cuda(at::TensorIterator& iter, bool scale) {
         });
   });
 }
-}  // namespace canoe
+}  // namespace snap

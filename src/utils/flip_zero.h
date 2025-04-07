@@ -3,7 +3,7 @@
 // fvm
 #include <configure.h>
 
-namespace canoe {
+namespace snap {
 
 /*!
  * Resets dp[][][] arrays to INF, fromLen/fromBit/usedFlip to -1.
@@ -77,4 +77,4 @@ DISPATCH_MACRO void reconstruct_solution(int *outSeq, const int *inSeq, int n,
                                          int *fromLen, int *fromBit,
                                          int *usedFlip);
 
-}  // namespace canoe
+}  // namespace snap

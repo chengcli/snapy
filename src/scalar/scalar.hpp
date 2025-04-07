@@ -16,7 +16,7 @@
 #include <fvm/recon/reconstruct.hpp>
 #include <fvm/riemann/riemann_solver.hpp>
 
-namespace canoe {
+namespace snap {
 struct ScalarOptions {
   ScalarOptions() = default;
   explicit ScalarOptions(ParameterInput pin);
@@ -53,4 +53,4 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
 };
 
 TORCH_MODULE(Scalar);
-}  // namespace canoe
+}  // namespace snap

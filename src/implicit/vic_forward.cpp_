@@ -22,7 +22,7 @@
 #define CORR(j, i) \
   reinterpret_cast<Eigen::Vector<T, N> *>(corr)[(j) * nlayer + (i)]
 
-namespace canoe {
+namespace snap {
 
 template <typename T, int N>
 void forward_sweep_cpu(char *a, char *b, char *c, char *delta, char *corr,
@@ -156,7 +156,7 @@ template void backward_substitution_cpu<double, 3>(char *, char *, void *,
 template void backward_substitution_cpu<double, 5>(char *, char *, void *,
                                                    void *,
                                                    TridiagSolverOptions);
-}  // namespace canoe
+}  // namespace snap
 
 #undef DU
 #undef W

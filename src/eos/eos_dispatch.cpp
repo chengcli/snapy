@@ -8,7 +8,7 @@
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 
-namespace canoe {
+namespace snap {
 
 void call_ideal_gas_cpu(at::TensorIterator& iter) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_gas_cpu", [&] {
@@ -44,4 +44,4 @@ void call_ideal_moist_cpu(at::TensorIterator& iter) {
   });
 }
 
-}  // namespace canoe
+}  // namespace snap

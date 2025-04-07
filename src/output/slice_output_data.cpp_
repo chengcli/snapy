@@ -3,7 +3,7 @@
 #include <fvm/hydro/hydro.hpp>
 #include "output_type.hpp"
 
-namespace canoe {
+namespace snap {
 bool OutputType::SliceOutputData(MeshBlock pmb, int dim) {
   int islice(0), jslice(0), kslice(0);
 
@@ -107,4 +107,4 @@ bool OutputType::SliceOutputData(MeshBlock pmb, int dim) {
   }
   return true;
 }
-}  // namespace canoe
+}  // namespace snap

@@ -7,11 +7,11 @@
 #include "coordinate.hpp"
 
 template <>
-struct fmt::formatter<canoe::CoordinateOptions> {
+struct fmt::formatter<snap::CoordinateOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const canoe::CoordinateOptions& p, FormatContext& ctx) {
+  auto format(const snap::CoordinateOptions& p, FormatContext& ctx) {
     return fmt::format_to(ctx.out(),
                           "(type = {}; nghost = {}; x1 = {}, {}, {}; x2 = {}, "
                           "{}, {}; x3 = {}, {}, {})",

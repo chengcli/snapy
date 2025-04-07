@@ -15,7 +15,7 @@
 #include "forcing.hpp"
 #include "forcing_formatter.hpp"
 
-namespace canoe {
+namespace snap {
 void Coriolis123Impl::reset() {
   LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
@@ -63,4 +63,4 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
 
   return du;
 }
-}  // namespace canoe
+}  // namespace snap

@@ -14,7 +14,7 @@
 // fvm
 #include "interpolation.hpp"
 
-namespace canoe {
+namespace snap {
 struct ReconstructOptions {
   ReconstructOptions() = default;
   explicit ReconstructOptions(ParameterInput pin, std::string section,
@@ -48,4 +48,4 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
 };
 
 TORCH_MODULE(Reconstruct);
-}  // namespace canoe
+}  // namespace snap

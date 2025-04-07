@@ -9,7 +9,7 @@
 
 #include <fvm/interface/athena_arrays.hpp>
 
-namespace canoe {
+namespace snap {
 int get_num_variables(std::string grid, AthenaArray<Real> const& data);
 
 class MetadataTable {
@@ -38,4 +38,4 @@ class MetadataTable {
   //! Pointer to the single MetadataTable instance
   static MetadataTable* myptr_;
 };
-}  // namespace canoe
+}  // namespace snap

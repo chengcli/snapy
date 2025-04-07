@@ -4,7 +4,7 @@ namespace torch {
 class Tensor;
 }
 
-namespace canoe {
+namespace snap {
 // linear interp, equally weighted from left (x(xmin)=-0.5) and right
 // (x(xmax)=0.5)
 torch::Tensor UniformMesh(torch::Tensor x, float xmin, float xmax);
@@ -15,4 +15,4 @@ torch::Tensor compute_logical_position(torch::Tensor index, int64_t nrange,
                                        bool sym_interval);
 
 using MeshGenerator = std::function<torch::Tensor(torch::Tensor, float, float)>;
-}  // namespace canoe
+}  // namespace snap

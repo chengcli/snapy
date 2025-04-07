@@ -21,7 +21,7 @@
 // fvm
 #include <fvm/bc/boundary_condition.hpp>
 
-namespace canoe {
+namespace snap {
 class LogicalLocation;
 class LogicalLocationImpl : public torch::nn::Cloneable<LogicalLocationImpl> {
  public:
@@ -137,4 +137,4 @@ class OctTreeImpl : public torch::nn::Cloneable<OctTreeImpl> {
 };
 TORCH_MODULE(OctTree);
 
-}  // namespace canoe
+}  // namespace snap

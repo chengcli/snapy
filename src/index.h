@@ -1,6 +1,6 @@
 #pragma once
 
-namespace canoe {
+namespace snap {
 enum index {
   // hydro variables
   IDN = 0,
@@ -29,4 +29,4 @@ enum {
   kTPMassLR = 5,
   kDPMassLR = 6,
 };
-}  // namespace canoe
+}  // namespace snap

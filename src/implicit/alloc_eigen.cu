@@ -10,7 +10,7 @@
 // fvm
 #include <fvm/util/cuda_utils.h>
 
-namespace canoe {
+namespace snap {
 template <int N>
 void alloc_eigen_cuda(char *&a, char *&b, char *&c, char *&delta, char *&corr,
                       int ncol, int nlayer, c10::ScalarType dtype) {
@@ -59,4 +59,4 @@ template void alloc_eigen_cuda<3>(char *&, char *&, char *&, char *&, char *&,
 template void alloc_eigen_cuda<5>(char *&, char *&, char *&, char *&, char *&,
                                   int, int, c10::ScalarType);
 
-}  // namespace canoe
+}  // namespace snap

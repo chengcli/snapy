@@ -16,7 +16,7 @@
 // input
 #include <input/parameter_input.hpp>
 
-namespace canoe {
+namespace snap {
 struct InterpOptions {
   InterpOptions() = default;
   explicit InterpOptions(std::string type_);
@@ -43,7 +43,7 @@ class InterpImpl {
   explicit InterpImpl(InterpOptions const& options) : options(options) {}
 
  private:
-  std::string name_() const { return "canoe::InterpImpl"; }
+  std::string name_() const { return "snap::InterpImpl"; }
 };
 
 using Interp = std::shared_ptr<InterpImpl>;
@@ -235,4 +235,4 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
   torch::Tensor right_fallback(torch::Tensor w, int dim) const;
 };
 TORCH_MODULE(Weno5Interp);
-}  // namespace canoe
+}  // namespace snap

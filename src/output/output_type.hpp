@@ -13,7 +13,7 @@
 #include <fvm/mesh/mesh.hpp>
 #include <fvm/mesh/meshblock.hpp>
 
-namespace canoe {
+namespace snap {
 //! \brief  container for parameters read from `<output>` block in the input
 struct OutputOptions {
   ADD_ARG(int, fid) = 0;
@@ -138,4 +138,4 @@ class OutputType {
   // ptr to tail OutputData node in doubly linked list
   OutputData *plast_data_;
 };
-}  // namespace canoe
+}  // namespace snap

@@ -16,7 +16,7 @@
 #include <fvm/registry.hpp>
 #include <fvm/thermo/thermodynamics.hpp>
 
-namespace canoe {
+namespace snap {
 struct EquationOfStateOptions {
   EquationOfStateOptions() = default;
 
@@ -78,7 +78,7 @@ class EquationOfStateImpl {
   virtual void _apply_primitive_limiter_inplace(torch::Tensor& prim) const;
 
  private:
-  std::string name_() const { return "canoe::EquationOfStateImpl"; }
+  std::string name_() const { return "snap::EquationOfStateImpl"; }
 };
 
 using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
@@ -144,4 +144,4 @@ class ShallowWaterImpl : public torch::nn::Cloneable<ShallowWaterImpl>,
 TORCH_MODULE(ShallowWater);
 
 void apply_primitive_limiter_inplace(torch::Tensor prim);
-}  // namespace canoe
+}  // namespace snap

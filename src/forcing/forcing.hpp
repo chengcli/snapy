@@ -15,7 +15,7 @@
 // fvm
 #include <fvm/coord/coordinate.hpp>
 
-namespace canoe {
+namespace snap {
 struct ConstGravityOptions {
   ConstGravityOptions() = default;
   explicit ConstGravityOptions(ParameterInput pin);
@@ -116,4 +116,4 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
 };
-}  // namespace canoe
+}  // namespace snap
