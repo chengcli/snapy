@@ -292,8 +292,8 @@ AthenaArray<T>::~AthenaArray() {
 
 // copy constructor (does a deep copy)
 template <typename T>
-__attribute__((nothrow)) AthenaArray<T>::AthenaArray(
-    const AthenaArray<T> &src) {
+__attribute__((nothrow))
+AthenaArray<T>::AthenaArray(const AthenaArray<T> &src) {
   nx1_ = src.nx1_;
   nx2_ = src.nx2_;
   nx3_ = src.nx3_;

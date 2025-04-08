@@ -12,7 +12,8 @@
 
 namespace snap {
 void call_weno5_cpu(at::TensorIterator& iter, bool scale);
-__attribute__((weak)) void call_weno5_cuda(at::TensorIterator& iter, bool scale) {}
+__attribute__((weak)) void call_weno5_cuda(at::TensorIterator& iter,
+                                           bool scale) {}
 
 void Weno5InterpImpl::reset() {
   c1m = register_buffer(

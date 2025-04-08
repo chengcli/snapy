@@ -11,7 +11,8 @@
 
 namespace snap {
 void call_hllc_cpu(at::TensorIterator& iter, int dim, int nvapor);
-__attribute__((weak)) void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor) {}
+__attribute__((weak)) void call_hllc_cuda(at::TensorIterator& iter, int dim,
+                                          int nvapor) {}
 
 void HLLCSolverImpl::reset() {
   // set up equation-of-state model

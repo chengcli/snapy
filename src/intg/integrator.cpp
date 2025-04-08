@@ -10,8 +10,9 @@
 namespace snap {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
                        double w3);
-__attribute__((weak)) void call_average3_cuda(at::TensorIterator& iter, double w1, double w2,
-                        double w3) {}
+__attribute__((weak)) void call_average3_cuda(at::TensorIterator& iter,
+                                              double w1, double w2, double w3) {
+}
 
 IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)
     : options(options_) {

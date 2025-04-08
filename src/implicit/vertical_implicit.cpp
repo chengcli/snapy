@@ -13,7 +13,8 @@
 
 namespace snap {
 template <int N>
-__attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu) {}
+__attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt,
+                                            int il, int iu) {}
 
 template <int N>
 void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {}
