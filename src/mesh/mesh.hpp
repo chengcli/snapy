@@ -6,14 +6,11 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/modulelist.h>
 
-// base
-#include <add_arg.h>
-#include <configure.h>
-
-#include <input/parameter_input.hpp>
-
 // snap
+#include <snap/add_arg.h>
+
 #include <snap/bc/boundary_condition.hpp>
+#include <snap/input/parameter_input.hpp>
 
 #include "mesh_functions.hpp"
 #include "meshblock.hpp"

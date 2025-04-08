@@ -10,13 +10,8 @@
 #include <iostream>
 #include <stdexcept>
 
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
 #include "mesh_formatter.hpp"
@@ -101,8 +96,6 @@ OctTreeNodeImpl::OctTreeNodeImpl(OctTreeOptions const &options_,
 }
 
 void OctTreeNodeImpl::reset() {
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
-
   if (loc->level == 0) {
     loc = register_module("loc", LogicalLocation());
   }
@@ -229,8 +222,6 @@ void OctTreeImpl::reset() {
 }
 
 std::vector<OctTreeNode> OctTreeImpl::forward() {
-  LOG_INFO(logger, "{} retrieves tree nodes", name());
-
   std::vector<OctTreeNode> list;
   root->forward(&list);
   return list;

@@ -1,12 +1,8 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "hydro_formatter.hpp"
 #include "primitive_projector.hpp"
@@ -21,8 +17,6 @@ PrimitiveProjectorImpl::PrimitiveProjectorImpl(
 void PrimitiveProjectorImpl::reset() {
   // set up thermodynamic model
   pthermo = register_module("thermo", Thermodynamics(options.thermo()));
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
@@ -40,11 +34,11 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
 
   auto result = w.clone();
 
-  result[index::IPR] = calc_nonhydrostatic_pressure(
-      w[index::IPR], GET_SHARED("hydro/psf"), options.margin());
+  result[Index::IPR] = calc_nonhydrostatic_pressure(
+      w[Index::IPR], GET_SHARED("hydro/psf"), options.margin());
 
   if (options.type() == "temperature") {
-    result[index::IDN] = w[index::IPR] / (w[index::IDN] * options.Rd());
+    result[Index::IDN] = w[Index::IPR] / (w[Index::IDN] * options.Rd());
   } else if (options.type() == "density") {
     // do nothing
   } else {
@@ -64,14 +58,14 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
   int ie = wlr.size(4) - options.nghost();
 
   // restore pressure
-  wlr.select(1, index::IPR).slice(3, is, ie + 1) +=
+  wlr.select(1, Index::IPR).slice(3, is, ie + 1) +=
       GET_SHARED("hydro/psf").slice(2, is, ie + 1);
 
   // restore density
   if (options.type() == "temperature") {
-    wlr.select(1, index::IDN).slice(3, is, ie + 1) =
-        wlr.select(1, index::IPR).slice(3, is, ie + 1) /
-        (wlr.select(1, index::IDN).slice(3, is, ie + 1) * options.Rd());
+    wlr.select(1, Index::IDN).slice(3, is, ie + 1) =
+        wlr.select(1, Index::IPR).slice(3, is, ie + 1) /
+        (wlr.select(1, Index::IDN).slice(3, is, ie + 1) * options.Rd());
   } else if (options.type() == "density") {
     // do nothing
   } else {
@@ -87,19 +81,19 @@ torch::Tensor calc_hydrostatic_pressure(torch::Tensor w, double grav,
 
   // lower ghost zones and interior
   psf.slice(2, 0, ie) =
-      grav * w[index::IDN].slice(2, 0, ie) * dz.slice(0, 0, ie);
+      grav * w[Index::IDN].slice(2, 0, ie) * dz.slice(0, 0, ie);
 
   // flip lower ghost zones
   psf.slice(2, 0, is) *= -1;
 
   // isothermal extrapolation to top boundary
-  auto RdTv = w[index::IPR].select(2, ie - 1) / w[index::IDN].select(2, ie - 1);
+  auto RdTv = w[Index::IPR].select(2, ie - 1) / w[Index::IDN].select(2, ie - 1);
   psf.select(2, ie) =
-      w[index::IPR].select(2, ie - 1) * exp(-grav * dz[ie - 1] / (2. * RdTv));
+      w[Index::IPR].select(2, ie - 1) * exp(-grav * dz[ie - 1] / (2. * RdTv));
 
   // upper ghost zones
   psf.slice(2, ie + 1, nc1 + 1) =
-      grav * w[index::IDN].slice(2, ie, nc1) * dz.slice(0, ie, nc1);
+      grav * w[Index::IDN].slice(2, ie, nc1) * dz.slice(0, ie, nc1);
 
   // integrate downwards
   psf.slice(2, 0, ie + 1) =

@@ -6,9 +6,8 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
-// base
-#include <add_arg.h>
-#include <configure.h>
+// snap
+#include <snap/add_arg.h>
 
 // according to:
 // https://gkeyll.readthedocs.io/en/latest/dev/ssp-rk.html

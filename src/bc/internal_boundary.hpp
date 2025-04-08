@@ -5,12 +5,9 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// clang-format off
-#include <configure.h>
-#include <add_arg.h>
-// clang-format on
-
 // snap
+#include <snap/add_arg.h>
+
 #include "boundary_condition.hpp"
 
 namespace snap {

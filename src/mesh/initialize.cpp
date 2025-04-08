@@ -1,16 +1,12 @@
-// spdlog
+// base
 #include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
 
 // base
-#include <globals.h>
-
-// base
-#include <formatter.hpp>
-#include <input/parameter_input.hpp>
+// #include <formatter.hpp>
 
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/input/parameter_input.hpp>
 
 #include "mesh.hpp"
 #include "mesh_formatter.hpp"
@@ -20,8 +16,6 @@
 namespace snap {
 void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
                                OctTree const& tree) {
-  LOG_INFO(logger, "initializing mesh block at {}", ploc);
-
   // initialize coordinates
   auto lx1 = ploc->lx1;
   auto ll = ploc->level;

@@ -4,10 +4,7 @@
 #include <map>
 
 // base
-// clang-format off
-#include <configure.h>
-#include <add_arg.h>
-// clang-format on
+#include <snap/add_arg.h>
 
 namespace snap {
 

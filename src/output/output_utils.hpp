@@ -10,7 +10,7 @@
 #include <snap/interface/athena_arrays.hpp>
 
 namespace snap {
-int get_num_variables(std::string grid, AthenaArray<Real> const& data);
+int get_num_variables(std::string grid, AthenaArray<double> const& data);
 
 class MetadataTable {
  protected:

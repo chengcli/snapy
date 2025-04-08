@@ -10,14 +10,13 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <add_arg.h>
 #include <configure.h>
 
-#include <input/parameter_input.hpp>
-
 // snap
-#include <snap/index.h>
+#include <snap/add_arg.h>
+#include <snap/snap.h>
 
+#include <snap/input/parameter_input.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"

@@ -1,14 +1,9 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
-
-#include <formatter.hpp>
+#include <configure.h>
+// #include <formatter.hpp>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -27,10 +22,10 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
 
   auto result = pinterp->forward(w, dim);
 
-  wlr[index::ILT].slice(dim, il, iu + 1) =
-      result[index::IRT].narrow(dim, 0, iu - il + 1);
-  wlr[index::IRT].slice(dim, il, iu + 1) =
-      result[index::ILT].narrow(dim, 1, iu - il + 1);
+  wlr[Index::ILT].slice(dim, il, iu + 1) =
+      result[Index::IRT].narrow(dim, 0, iu - il + 1);
+  wlr[Index::IRT].slice(dim, il, iu + 1) =
+      result[Index::ILT].narrow(dim, 1, iu - il + 1);
 }
 
 ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
@@ -40,14 +35,7 @@ ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
 
 void ReconstructImpl::reset() {
   pinterp1 = register_module_op(this, "interp1", options.interp());
-  LOG_INFO(logger, "{} uses Interpolator-1 = {}", name(),
-           pinterp1->print_name());
-
   pinterp2 = register_module_op(this, "interp2", options.interp());
-  LOG_INFO(logger, "{} uses Interpolator-2 = {}", name(),
-           pinterp2->print_name());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
@@ -96,17 +84,17 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   _apply_inplace(dim, il, iu, w_, pinterp2, wlr_);*/
 
   // density
-  _apply_inplace(dim, il, iu, w.narrow(0, index::IDN, 1), pinterp1,
-                 result.narrow(1, index::IDN, 1));
+  _apply_inplace(dim, il, iu, w.narrow(0, Index::IDN, 1), pinterp1,
+                 result.narrow(1, Index::IDN, 1));
 
   // velocity/pressure
-  _apply_inplace(dim, il, iu, w.narrow(0, index::IVX, 4), pinterp2,
-                 result.narrow(1, index::IVX, 4));
+  _apply_inplace(dim, il, iu, w.narrow(0, Index::IVX, 4), pinterp2,
+                 result.narrow(1, Index::IVX, 4));
 
   // others
   int ny = w.size(0) - 5;
-  _apply_inplace(dim, il, iu, w.narrow(0, index::ICY, ny), pinterp1,
-                 result.narrow(1, index::ICY, ny));
+  _apply_inplace(dim, il, iu, w.narrow(0, Index::ICY, ny), pinterp1,
+                 result.narrow(1, Index::ICY, ny));
 
   return result;
 }

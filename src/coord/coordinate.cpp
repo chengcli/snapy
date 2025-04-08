@@ -1,12 +1,8 @@
 // torch
 #include <torch/torch.h>
 
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
@@ -67,11 +63,7 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
 
 void CoordinateImpl::reset_coordinates(std::vector<MeshGenerator> meshgens) {
   auto const& op = options;
-  LOG_INFO(logger, "{} resets coordinates in region", name_());
-
-  if (meshgens.size() != 3) {
-    LOG_ERROR(logger, "requires exactly three mesh generators");
-  }
+  TORCH_CHECK(meshgens.size() == 3, "requires exactly three mesh generators");
 
   if (meshgens[0] != nullptr) {
     int nx1f = x1f.size(0);
@@ -202,9 +194,9 @@ torch::Tensor CoordinateImpl::find_cell_index(
 
 torch::Tensor CoordinateImpl::vec_lower(torch::Tensor prim, int type) const {
   if (type == kPrimitive) {
-    return prim.narrow(0, index::IVX, 3);
+    return prim.narrow(0, Index::IVX, 3);
   } else if (type == kDPMassLR) {
-    return prim.narrow(1, index::IVX, 3);
+    return prim.narrow(1, Index::IVX, 3);
   } else {
     std::stringstream msg;
     msg << fmt::format("{}::vec_lower:unknown type id: {}", name_(), type);
@@ -214,9 +206,9 @@ torch::Tensor CoordinateImpl::vec_lower(torch::Tensor prim, int type) const {
 
 torch::Tensor CoordinateImpl::vec_raise(torch::Tensor prim, int type) const {
   if (type == kPrimitive) {
-    return prim.narrow(1, index::IVX, 3);
+    return prim.narrow(1, Index::IVX, 3);
   } else if (type == kDPMassLR) {
-    return prim.narrow(1, index::IVX, 3);
+    return prim.narrow(1, Index::IVX, 3);
   } else {
     std::stringstream msg;
     msg << fmt::format("{}::vec_raise:unknown type id: {}", name_(), type);

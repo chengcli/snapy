@@ -6,13 +6,13 @@
 #include <torch/nn/modules/common.h>
 
 // base
-#include <add_arg.h>
 #include <configure.h>
 
-#include <input/parameter_input.hpp>
-
 // snap
+#include <snap/add_arg.h>
+
 #include <snap/coord/coordinate.hpp>
+#include <snap/input/parameter_input.hpp>
 #include <snap/registry.hpp>
 #include <snap/thermo/thermodynamics.hpp>
 

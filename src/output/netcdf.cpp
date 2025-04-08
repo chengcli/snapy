@@ -10,13 +10,12 @@
 // base
 #include <configure.h>
 
-#include <input/parameter_input.hpp>
-
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/input/parameter_input.hpp>
 #include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
-#include <snap/util/vectorize.hpp>
+#include <snap/utils/vectorize.hpp>
 
 // output
 #include "output_formats.hpp"

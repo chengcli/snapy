@@ -1,9 +1,5 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
 #include <snap/registry.hpp>
@@ -34,8 +30,6 @@ void ScalarImpl::reset() {
 
   // set up riemann-solver model
   priemann = register_module_op(this, "riemann", options.riemann());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor ScalarImpl::forward(torch::Tensor u, double dt) {

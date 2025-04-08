@@ -1,12 +1,8 @@
 // spdlog
 #include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
-// base
-#include <globals.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -15,8 +11,6 @@
 
 namespace snap {
 void RoeSolverImpl::reset() {
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
-
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
 
@@ -28,9 +22,9 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                      int dim, torch::Tensor gammad) {
   torch::NoGradGuard no_grad;
 
-  using index::IDN;
-  using index::IPR;
-  using index::IVX;
+  using Index::IDN;
+  using Index::IPR;
+  using Index::IVX;
 
   // dim, ivx, ivy, ivz
   // 3, IVX, IVY, iVZ

@@ -1,36 +1,30 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "forcing.hpp"
 #include "forcing_formatter.hpp"
 
 namespace snap {
-void ConstGravityImpl::reset() {
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
-}
+void ConstGravityImpl::reset() {}
 
 torch::Tensor ConstGravityImpl::forward(torch::Tensor du, torch::Tensor w,
                                         double dt) {
   if (options.grav1() != 0.) {
-    du[index::IVX] += dt * w[index::IDN] * options.grav1();
-    du[index::IPR] += dt * w[index::IDN] * w[index::IVX] * options.grav1();
+    du[Index::IVX] += dt * w[Index::IDN] * options.grav1();
+    du[Index::IPR] += dt * w[Index::IDN] * w[Index::IVX] * options.grav1();
   }
 
   if (options.grav2() != 0.) {
-    du[index::IVY] += dt * w[index::IDN] * options.grav2();
-    du[index::IPR] += dt * w[index::IDN] * w[index::IVY] * w[index::IVY];
+    du[Index::IVY] += dt * w[Index::IDN] * options.grav2();
+    du[Index::IPR] += dt * w[Index::IDN] * w[Index::IVY] * w[Index::IVY];
   }
 
   if (options.grav3() != 0.) {
-    du[index::IVZ] += dt * w[index::IDN] * options.grav3();
-    du[index::IPR] += dt * w[index::IDN] * w[index::IVZ] * w[index::IVZ];
+    du[Index::IVZ] += dt * w[Index::IDN] * options.grav3();
+    du[Index::IPR] += dt * w[Index::IDN] * w[Index::IVZ] * w[Index::IVZ];
   }
 
   return du;

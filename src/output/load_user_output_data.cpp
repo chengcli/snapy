@@ -1,5 +1,5 @@
-// base
-#include <input/parameter_input.hpp>
+// snap
+#include <snap/input/parameter_input.hpp>
 
 // snap
 #include "output.hpp"

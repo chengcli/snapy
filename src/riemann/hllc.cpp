@@ -1,12 +1,8 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -23,8 +19,6 @@ void HLLCSolverImpl::reset() {
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
@@ -60,9 +54,9 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
                                                torch::Tensor wr, int dim,
                                                torch::Tensor gammad) {
-  using index::IDN;
-  using index::IPR;
-  using index::IVX;
+  using Index::IDN;
+  using Index::IPR;
+  using Index::IVX;
 
   auto TINY_NUMBER = 1.0e-10;
 

@@ -19,6 +19,7 @@ include_directories(
   ${CMAKE_BINARY_DIR}
   SYSTEM ${TORCH_API_INCLUDE_DIR}
   SYSTEM ${TORCH_INCLUDE_DIR}
+  SYSTEM ${EIGEN3_INCLUDE_DIR}
   )
 
 string(TOLOWER ${CMAKE_BUILD_TYPE} buildl)
@@ -44,6 +45,7 @@ file(GLOB src_files
     implicit/*.cpp
     intg/*.cpp
     kintera/*.cpp
+    input/*.cpp
     )
 
 add_library(${namel}_${buildl}

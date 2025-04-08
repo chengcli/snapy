@@ -8,13 +8,11 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// base
-#include <add_arg.h>
-#include <configure.h>
-#include <snap/index.h>
+// snap
+#include <snap/add_arg.h>
+#include <snap/snap.h>
 
-// input
-#include <input/parameter_input.hpp>
+#include <snap/input/parameter_input.hpp>
 
 namespace snap {
 struct InterpOptions {
@@ -83,11 +81,11 @@ class PLMInterpImpl : public torch::nn::Cloneable<PLMInterpImpl>,
   int stencils() const override { return 3; }
 
   void left(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[index::ILT];
+    out = forward(w, dim)[Index::ILT];
   }
 
   void right(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[index::IRT];
+    out = forward(w, dim)[Index::IRT];
   }
 };
 TORCH_MODULE(PLMInterp);
@@ -109,11 +107,11 @@ class PPMInterpImpl : public torch::nn::Cloneable<PPMInterpImpl>,
   int stencils() const override { return 5; }
 
   void left(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[index::ILT];
+    out = forward(w, dim)[Index::ILT];
   }
 
   void right(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[index::IRT];
+    out = forward(w, dim)[Index::IRT];
   }
 };
 TORCH_MODULE(PPMInterp);

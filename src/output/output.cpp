@@ -139,7 +139,7 @@ OutputImpl::OutputImpl(Mesh pm, ParameterInput pin) {
 
         // read slicing options.  Check that slice is within mesh
         if (pin->DoesParameterExist(op.block_name(), "x1_slice")) {
-          Real x1 = pin->GetReal(op.block_name(), "x1_slice");
+          auto x1 = pin->GetReal(op.block_name(), "x1_slice");
           if (x1 >= pm->options.x1min() && x1 < pm->options.x1max()) {
             op.x1_slice(x1);
             op.output_slicex1(true);
@@ -152,7 +152,7 @@ OutputImpl::OutputImpl(Mesh pm, ParameterInput pin) {
         }
 
         if (pin->DoesParameterExist(op.block_name(), "x2_slice")) {
-          Real x2 = pin->GetReal(op.block_name(), "x2_slice");
+          auto x2 = pin->GetReal(op.block_name(), "x2_slice");
           if (x2 >= pm->options.x2min() && x2 < pm->options.x2max()) {
             op.x2_slice(x2);
             op.output_slicex2(true);
@@ -165,7 +165,7 @@ OutputImpl::OutputImpl(Mesh pm, ParameterInput pin) {
         }
 
         if (pin->DoesParameterExist(op.block_name(), "x3_slice")) {
-          Real x3 = pin->GetReal(op.block_name(), "x3_slice");
+          auto x3 = pin->GetReal(op.block_name(), "x3_slice");
           if (x3 >= pm->options.x3min() && x3 < pm->options.x3max()) {
             op.x3_slice(x3);
             op.output_slicex3(true);

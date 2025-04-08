@@ -1,11 +1,9 @@
-// base
-#include <input/parameter_input.hpp>
-
 // snap
-#include "coord/coordinate.hpp"
-#include "eos/equation_of_state.hpp"
-#include "recon/interpolation.hpp"
-#include "riemann/riemann_solver.hpp"
+#include <snap/coord/coordinate.hpp>
+#include <snap/eos/equation_of_state.hpp>
+#include <snap/input/parameter_input.hpp>
+#include <snap/recon/interpolation.hpp>
+#include <snap/riemann/riemann_solver.hpp>
 
 namespace snap {
 EquationOfState register_module_op(torch::nn::Module *p, std::string name,

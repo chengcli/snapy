@@ -2,7 +2,7 @@
 #include <torch/torch.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -19,14 +19,14 @@ EquationOfStateOptions::EquationOfStateOptions(ParameterInput pin) {
 
 void EquationOfStateImpl::_apply_conserved_limiter_inplace(
     torch::Tensor& cons) const {
-  cons.narrow(0, index::IVX, 3)
-      .masked_fill_(torch::isnan(cons.narrow(0, index::IVX, 3)), 0.);
+  cons.narrow(0, Index::IVX, 3)
+      .masked_fill_(torch::isnan(cons.narrow(0, Index::IVX, 3)), 0.);
 }
 
 void EquationOfStateImpl::_apply_primitive_limiter_inplace(
     torch::Tensor& prim) const {
-  prim[index::IDN].clamp_min_(options.density_floor());
-  prim[index::IPR].clamp_min_(options.pressure_floor());
+  prim[Index::IDN].clamp_min_(options.density_floor());
+  prim[Index::IPR].clamp_min_(options.pressure_floor());
 }
 
 }  // namespace snap

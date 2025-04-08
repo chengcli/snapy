@@ -6,7 +6,7 @@
 #include <torch/torch.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "hllc_impl.h"
 #include "lmars_impl.h"
@@ -16,7 +16,7 @@ void call_lmars_cpu(at::TensorIterator& iter, int dim, int nvapor) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "lmars_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ncloud = nhydro - nvapor - index::ICY;
+    auto ncloud = nhydro - nvapor - Index::ICY;
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
@@ -39,7 +39,7 @@ void call_hllc_cpu(at::TensorIterator& iter, int dim, int nvapor) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "hllc_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ncloud = nhydro - nvapor - index::ICY;
+    auto ncloud = nhydro - nvapor - Index::ICY;
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {

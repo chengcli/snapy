@@ -1,9 +1,5 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
 #include <snap/registry.hpp>
@@ -18,8 +14,6 @@ void ShallowRoeSolverImpl::reset() {
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,

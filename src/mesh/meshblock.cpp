@@ -1,18 +1,15 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
-#include <formatter.hpp>
-#include <input/parameter_input.hpp>
+// snap
+#include <snap/input/parameter_input.hpp>
 
 // snap
 #include "mesh_formatter.hpp"
 #include "meshblock.hpp"
 
 namespace snap {
+
 MeshBlockOptions::MeshBlockOptions(ParameterInput pin) {
   nghost(pin->GetOrAddInteger("meshblock", "nghost", 2));
 
@@ -59,7 +56,6 @@ void MeshBlockImpl::reset() {
   } else {
     ploc = register_module("loc", options.loc().clone().get<LogicalLocation>());
   }
-  LOG_INFO(logger, "{} is at logical location: {}", name(), ploc);
 
   // set up integrator
   pintg = register_module("intg", Integrator(options.intg()));
@@ -76,30 +72,20 @@ void MeshBlockImpl::reset() {
   hydro_u = register_buffer(
       "hydro_u",
       torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-  LOG_INFO(logger, "{} registers hydro_u with shape: {}", name(),
-           hydro_u.sizes());
 
   hydro_u0_ = register_buffer(
       "hydro_u0",
       torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-  LOG_INFO(logger, "{} registers hydro_u0 with shape: {}", name(),
-           hydro_u0_.sizes());
 
   hydro_u1_ = register_buffer(
       "hydro_u1",
       torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-  LOG_INFO(logger, "{} registers hydro_u1 with shape: {}", name(),
-           hydro_u1_.sizes());
 
   if (pscalar->nvar() > 0) {
     scalar_u = register_buffer(
         "scalar_u",
         torch::zeros({pscalar->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-    LOG_INFO(logger, "{} reigsters scalar_u with shape: {}", name(),
-             scalar_u.sizes());
   }
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
@@ -166,7 +152,6 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
 void MeshBlockImpl::set_primitives(torch::Tensor hydro_w,
                                    torch::optional<torch::Tensor> scalar_w) {
-  LOG_INFO(logger, "{} sets primitives", name());
   phydro->peos->prim2cons(hydro_u, hydro_w);
 
   if (pscalar->nvar() > 0) {
@@ -183,9 +168,6 @@ void MeshBlockImpl::set_primitives(torch::Tensor hydro_w,
 
 double MeshBlockImpl::max_root_time_step(int root_level,
                                          torch::optional<torch::Tensor> solid) {
-  LOG_INFO(logger, "{} {} projects time step to root_level = {}", name(), ploc,
-           root_level);
-
   double dt = 1.e9;
   if (!HAS_SHARED("hydro/w")) {
     SET_SHARED("hydro/w") = phydro->peos->forward(hydro_u);
@@ -207,12 +189,10 @@ int MeshBlockImpl::forward(double dt, int stage,
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
-  LOG_INFO(logger, "{} marches with dt = {}", name(), dt);
   torch::NoGradGuard no_grad;
 
   // -------- (1) save initial state --------
   if (stage == 0) {
-    LOG_INFO(logger, "{} {} saves initial state", name(), ploc);
     hydro_u0_.copy_(hydro_u);
     hydro_u1_.copy_(hydro_u);
     if (pscalar->nvar() > 0) {
@@ -227,27 +207,21 @@ int MeshBlockImpl::forward(double dt, int stage,
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
   if (phydro->nvar() > 0) {
-    LOG_INFO(logger, "Stage-{}, {} {} advances hydro", stage + 1, name(), ploc);
     fut_hydro_du = phydro->forward(hydro_u, dt, solid);
   }
 
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
-    LOG_INFO(logger, "Stage-{}, {} {} advances scalar", stage + 1, name(),
-             ploc);
     fut_scalar_du = pscalar->forward(scalar_u, dt);
   }
 
   // -------- (4) multi-stage averaging --------
   if (phydro->nvar() > 0) {
-    LOG_INFO(logger, "Stage-{}, {} {} averages hydro", stage + 1, name(), ploc);
     hydro_u.copy_(pintg->forward(stage, hydro_u0_, hydro_u1_, fut_hydro_du));
     hydro_u1_.copy_(hydro_u);
   }
 
   if (pscalar->nvar() > 0) {
-    LOG_INFO(logger, "Stage-{], {} {} averages scalar", stage + 1, name(),
-             ploc);
     scalar_u.copy_(
         pintg->forward(stage, scalar_u0_, scalar_u1_, fut_scalar_du));
     scalar_u1_.copy_(scalar_u);

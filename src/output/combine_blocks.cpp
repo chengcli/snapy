@@ -9,11 +9,11 @@
 
 // base
 #include <configure.h>
-#include <globals.h>
-
-#include <input/parameter_input.hpp>
 
 // snap
+#include <snap/snap.h>
+
+#include <snap/input/parameter_input.hpp>
 #include <snap/interface/athena_arrays.hpp>
 
 #include "output_formats.hpp"

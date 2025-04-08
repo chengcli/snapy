@@ -5,11 +5,9 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// base
-#include <add_arg.h>
-#include <configure.h>
-
 // snap
+#include <snap/add_arg.h>
+
 #include <snap/recon/reconstruct.hpp>
 #include <snap/thermo/thermodynamics.hpp>
 

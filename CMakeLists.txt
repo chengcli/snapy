@@ -72,6 +72,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/parameters.cmake)
 message(STATUS "${Blue}${PROJECT_NAME}-3. Setting up system libraries ...${ColorReset}")
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 find_package(Torch REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 if (CUDA)
   find_package(CUDAToolkit REQUIRED)

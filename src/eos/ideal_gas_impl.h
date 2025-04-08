@@ -4,7 +4,7 @@
 #include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #define PRIM(n) prim[(n) * stride]
 #define CONS(n) cons[(n) * stride]
@@ -15,11 +15,11 @@ namespace snap {
 template <typename T>
 inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* gammad,
                                                int stride) {
-  constexpr int IDN = index::IDN;
-  constexpr int IVX = index::IVX;
-  constexpr int IVY = index::IVY;
-  constexpr int IVZ = index::IVZ;
-  constexpr int IPR = index::IPR;
+  constexpr int IDN = Index::IDN;
+  constexpr int IVX = Index::IVX;
+  constexpr int IVY = Index::IVY;
+  constexpr int IVZ = Index::IVZ;
+  constexpr int IPR = Index::IPR;
 
   // den -> den
   PRIM(IDN) = CONS(IDN);

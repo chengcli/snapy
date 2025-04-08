@@ -1,10 +1,9 @@
 // fmt
-#include <spdlog/spdlog.h>
-
-// base
-#include <globals.h>
+#include <fmt/format.h>
 
 // snap
+#include <snap/snap.h>
+
 #include <snap/scalar/scalar.hpp>
 
 #include "output.hpp"

@@ -6,13 +6,9 @@
 // torch
 #include <torch/torch.h>
 
-// clang-format off
-#include <configure.h>
-#include <add_arg.h>
-// clang-format on
-
 // snap
-#include <snap/index.h>
+#include <snap/add_arg.h>
+#include <snap/snap.h>
 
 namespace snap {
 enum BoundaryFace {

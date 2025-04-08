@@ -1,15 +1,11 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/spdlog.h>
-
-// global
-#include <globals.h>  // logger
-
 // torch
 #include <ATen/TensorIterator.h>
 
+// base
+#include <configure.h>
+
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
@@ -32,8 +28,6 @@ void Weno3InterpImpl::reset() {
 
   c4m = register_buffer("c4m", torch::tensor({0., 1., -1.}, torch::kFloat64));
   c4p = register_buffer("c4p", c4m.flip({0}));
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
@@ -45,8 +39,8 @@ torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
   vec.insert(vec.begin(), 2);
 
   auto result = torch::empty(vec, w.options());
-  left(w, dim, result[index::ILT]);
-  right(w, dim, result[index::IRT]);
+  left(w, dim, result[Index::ILT]);
+  right(w, dim, result[Index::IRT]);
   return result;
 }
 

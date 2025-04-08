@@ -1,6 +1,5 @@
-// spdlog
+// base
 #include <configure.h>
-#include <spdlog/spdlog.h>
 
 // snap
 #include "interpolation.hpp"

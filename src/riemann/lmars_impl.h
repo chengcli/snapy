@@ -4,7 +4,7 @@
 #include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #define WL(n) (wli[(n) * stride])
 #define WR(n) (wri[(n) * stride])
@@ -19,10 +19,10 @@ template <typename T>
 void DISPATCH_MACRO lmars_impl(T *flx, T *wli, T *wri, T *gammad,
                                T *cv_ratio_m1, T *mu_ratio_m1, int dim,
                                int nvapor, int ncloud, int stride) {
-  constexpr int ICY = index::ICY;
-  constexpr int IDN = index::IDN;
-  constexpr int IPR = index::IPR;
-  constexpr int IVX = index::IVX;
+  constexpr int ICY = Index::ICY;
+  constexpr int IDN = Index::IDN;
+  constexpr int IPR = Index::IPR;
+  constexpr int IVX = Index::IVX;
 
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;

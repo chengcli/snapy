@@ -1,15 +1,11 @@
 // C/C++
 #include <limits>
 
-// spdlog
+// base
 #include <configure.h>
-#include <spdlog/spdlog.h>
-
-// global
-#include <globals.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
@@ -38,8 +34,8 @@ torch::Tensor PLMInterpImpl::forward(torch::Tensor w, int dim) {
   // auto dw2i = (dw2 <= 0).to(torch::kInt);
   // dwm = dw2i * torch::zeros_like(dwm) + (1 - dw2i) * dwm;
 
-  result[index::ILT] = w.narrow(dim, 1, size - 2) - 0.5 * dwm;
-  result[index::IRT] = w.narrow(dim, 1, size - 2) + 0.5 * dwm;
+  result[Index::ILT] = w.narrow(dim, 1, size - 2) - 0.5 * dwm;
+  result[Index::IRT] = w.narrow(dim, 1, size - 2) + 0.5 * dwm;
 
   return result;
 }

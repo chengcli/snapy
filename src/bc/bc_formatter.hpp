@@ -1,7 +1,7 @@
 #pragma once
 
-// spdlog
-#include <spdlog/spdlog.h>
+// fmt
+#include <fmt/format.h>
 
 // snap
 #include "boundary_condition.hpp"

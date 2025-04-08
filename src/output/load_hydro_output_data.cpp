@@ -1,16 +1,11 @@
 // fmt
-#include <spdlog/spdlog.h>
-
-// base
-#include <globals.h>
-
-// base
-#include <input/parameter_input.hpp>
+#include <fmt/format.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/parameter_input.hpp>
 
 #include "output.hpp"
 
@@ -25,7 +20,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "dens";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, index::IDN, 1);
+    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -36,7 +31,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "rho";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IDN, 1);
+    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -48,7 +43,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "Etot";
-      pod->data.InitFromTensor(pmb->hydro_u, 4, index::IPR, 1);
+      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IPR, 1);
 
       AppendOutputDataNode(pod);
       num_vars_++;
@@ -60,7 +55,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "press";
-      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IPR, 1);
+      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IPR, 1);
       AppendOutputDataNode(pod);
       num_vars_++;
     }
@@ -72,13 +67,13 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "mom";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, index::IVX, 3);
+    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
-      src.InitFromTensor(pmb->hydro_u, 4, index::IVX, 3);
+      src.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 3);
 
       pod = new OutputData;
       pod->type = "VECTORS";
@@ -96,7 +91,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom1";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, index::IVX, 1);
+    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -105,7 +100,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom2";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, index::IVY, 1);
+    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -114,7 +109,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom3";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, index::IVZ, 1);
+    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -126,13 +121,13 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "vel";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IVX, 3);
+    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
-      src.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IVX, 3);
+      src.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 3);
 
       pod = new OutputData;
       pod->type = "VECTORS";
@@ -151,7 +146,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel1";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IVX, 1);
+    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -161,7 +156,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel2";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IVY, 1);
+    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -171,7 +166,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel3";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::IVZ, 1);
+    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -186,7 +181,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, index::ICY,
+      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::ICY,
                                vapor_cloud);
 
       AppendOutputDataNode(pod);
@@ -197,7 +192,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(pmb->hydro_u, 4, index::ICY, vapor_cloud);
+      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::ICY, vapor_cloud);
 
       AppendOutputDataNode(pod);
       num_vars_ += vapor_cloud;

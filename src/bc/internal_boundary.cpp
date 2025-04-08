@@ -1,15 +1,9 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
-// base
-#include <globals.h>
-
 // snap
-#include <snap/index.h>
+#include "internal_boundary.hpp"
+
+#include <snap/snap.h>
 
 #include "bc_formatter.hpp"
-#include "internal_boundary.hpp"
 
 namespace snap {
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
@@ -17,9 +11,7 @@ InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
   reset();
 }
 
-void InternalBoundaryImpl::reset() {
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
-}
+void InternalBoundaryImpl::reset() {}
 
 torch::Tensor InternalBoundaryImpl::mark_solid(
     torch::Tensor w, torch::optional<torch::Tensor> solid) {
@@ -27,8 +19,8 @@ torch::Tensor InternalBoundaryImpl::mark_solid(
 
   auto fill_solid = torch::zeros({w.size(0), 1, 1, 1}, w.options());
 
-  fill_solid[index::IDN] = options.solid_density();
-  fill_solid[index::IPR] = options.solid_pressure();
+  fill_solid[Index::IDN] = options.solid_density();
+  fill_solid[Index::IPR] = options.solid_pressure();
 
   return torch::where(solid.value(), fill_solid, w);
 }
@@ -39,11 +31,11 @@ torch::Tensor InternalBoundaryImpl::forward(
 
   if (!solid.has_value()) return wlr;
 
-  using index::ILT;
-  using index::IRT;
-  using index::IVX;
-  using index::IVY;
-  using index::IVZ;
+  using Index::ILT;
+  using Index::IRT;
+  using Index::IVX;
+  using Index::IVY;
+  using Index::IVZ;
 
   auto solidl = solid.value();
   auto solidr = solid.value().roll(1, dim - 1);

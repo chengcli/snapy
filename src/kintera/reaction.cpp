@@ -2,7 +2,7 @@
 #include <sstream>
 
 // snap
-#include <snap/util/vectorize.hpp>
+#include <snap/utils/vectorize.hpp>
 
 #include "reaction.hpp"
 

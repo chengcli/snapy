@@ -1,8 +1,7 @@
 #pragma once
 
 // spdlog
-#include <configure.h>
-#include <spdlog/spdlog.h>
+#include <fmt/format.h>
 
 // snap
 #include <snap/thermo/thermo_formatter.hpp>

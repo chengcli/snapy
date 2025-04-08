@@ -4,7 +4,7 @@
 #include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #define PRIM(n) prim[(n) * stride]
 #define CONS(n) cons[(n) * stride]
@@ -18,12 +18,12 @@ template <typename T>
 inline DISPATCH_MACRO void ideal_moist_cons2prim(T* prim, T* cons, T* gammad,
                                                  T* feps, T* fsig, int nmass,
                                                  int stride) {
-  constexpr int IDN = index::IDN;
-  constexpr int IVX = index::IVX;
-  constexpr int IVY = index::IVY;
-  constexpr int IVZ = index::IVZ;
-  constexpr int IPR = index::IPR;
-  constexpr int ICY = index::ICY;
+  constexpr int IDN = Index::IDN;
+  constexpr int IVX = Index::IVX;
+  constexpr int IVY = Index::IVY;
+  constexpr int IVZ = Index::IVZ;
+  constexpr int IPR = Index::IPR;
+  constexpr int ICY = Index::ICY;
 
   // den -> mixr
   for (int n = 0; n < nmass; ++n) {

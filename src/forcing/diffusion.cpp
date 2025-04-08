@@ -1,12 +1,8 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "forcing.hpp"
 

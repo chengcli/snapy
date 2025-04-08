@@ -4,10 +4,11 @@
 #include <memory>
 
 // base
-#include <add_arg.h>
 #include <configure.h>
 
 // snap
+#include <snap/add_arg.h>
+
 #include <snap/coord/coordinate.hpp>
 #include <snap/interface/athena_arrays.hpp>
 #include <snap/mesh/mesh.hpp>
@@ -53,7 +54,7 @@ struct OutputData {
   std::string longname;
   std::string units;
 
-  AthenaArray<Real> data;  // array containing data
+  AthenaArray<double> data;  // array containing data
 
   // ptrs to previous and next nodes in doubly linked list:
   OutputData *pnext, *pprev;

@@ -7,20 +7,21 @@
 #include <torch/nn/modules/container/any.h>
 
 // base
-#include <add_arg.h>
 #include <configure.h>
 
-#include <input/parameter_input.hpp>
-
 // snap
+#include <snap/add_arg.h>
+
 #include <snap/bc/boundary_condition.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/parameter_input.hpp>
 #include <snap/intg/integrator.hpp>
 #include <snap/scalar/scalar.hpp>
 
 #include "oct_tree.hpp"
 
 namespace snap {
+
 struct MeshBlockOptions {
   MeshBlockOptions() = default;
   explicit MeshBlockOptions(ParameterInput pin);

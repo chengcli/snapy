@@ -1,13 +1,8 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -30,8 +25,6 @@ void IdealGasImpl::reset() {
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 void IdealGasImpl::cons2prim(torch::Tensor prim, torch::Tensor cons) const {
@@ -67,48 +60,48 @@ void IdealGasImpl::cons2prim_fallback(torch::Tensor prim, torch::Tensor cons,
   //_apply_conserved_limiter_inplace(cons);
 
   // den -> den
-  prim[index::IDN] = cons[index::IDN];
+  prim[Index::IDN] = cons[Index::IDN];
 
   // mom -> vel
-  prim.slice(0, 1, index::IPR) =
-      cons.slice(0, 1, index::IPR) / prim[index::IDN];
+  prim.slice(0, 1, Index::IPR) =
+      cons.slice(0, 1, Index::IPR) / prim[Index::IDN];
 
   pcoord->vec_raise_inplace(prim);
 
   auto ke =
       0.5 *
-      (prim.narrow(0, index::IVX, 3) * cons.narrow(0, index::IVX, 3)).sum(0);
+      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
 
   // eng -> pr
-  prim[index::IPR] = (gammad - 1.) * (cons[index::IPR] - ke);
+  prim[Index::IPR] = (gammad - 1.) * (cons[Index::IPR] - ke);
 }
 
 void IdealGasImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
   //_apply_primitive_limiter_inplace(prim);
 
   // den -> den
-  cons[index::IDN] = prim[index::IDN];
+  cons[Index::IDN] = prim[Index::IDN];
 
   // vel -> mom
-  cons.slice(0, 1, index::IPR) =
-      prim.slice(0, 1, index::IPR) * prim[index::IDN];
+  cons.slice(0, 1, Index::IPR) =
+      prim.slice(0, 1, Index::IPR) * prim[Index::IDN];
 
   pcoord->vec_lower_inplace(cons);
 
   auto ke =
       0.5 *
-      (prim.narrow(0, index::IVX, 3) * cons.narrow(0, index::IVX, 3)).sum(0);
+      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
 
   // pr -> eng
   auto gammad = pthermo->get_gammad(cons, kConserved);
-  cons[index::IPR] = prim[index::IPR] / (gammad - 1.) + ke;
+  cons[Index::IPR] = prim[Index::IPR] / (gammad - 1.) + ke;
 
   _apply_conserved_limiter_inplace(cons);
 }
 
 torch::Tensor IdealGasImpl::sound_speed(torch::Tensor prim) const {
   auto gammad = pthermo->get_gammad(prim);
-  return torch::sqrt(gammad * prim[index::IPR] / prim[index::IDN]);
+  return torch::sqrt(gammad * prim[Index::IPR] / prim[Index::IDN]);
 }
 
 }  // namespace snap

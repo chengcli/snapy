@@ -1,15 +1,11 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/spdlog.h>
-
-// global
-#include <globals.h>
-
 // torch
 #include <ATen/TensorIterator.h>
 
+// base
+#include <configure.h>
+
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include "interpolation.hpp"
 #include "recon_formatter.hpp"
@@ -23,8 +19,6 @@ void Center5InterpImpl::reset() {
                                             -13. / 60., 1. / 30.},
                                            torch::kFloat64));
   cp = register_buffer("cp", cm.flip({0}));
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor Center5InterpImpl::forward(torch::Tensor w, int dim) {
@@ -36,8 +30,8 @@ torch::Tensor Center5InterpImpl::forward(torch::Tensor w, int dim) {
   vec.insert(vec.begin(), 2);
 
   auto result = torch::empty(vec, w.options());
-  left(w, dim, result[index::ILT]);
-  right(w, dim, result[index::IRT]);
+  left(w, dim, result[Index::ILT]);
+  right(w, dim, result[Index::IRT]);
   return result;
 }
 

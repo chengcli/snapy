@@ -1,13 +1,6 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
-// base
-#include <globals.h>
-
-#include <input/parameter_input.hpp>
-
 // snap
+#include <configure.h>
+
 #include "coord_formatter.hpp"
 #include "coordinate.hpp"
 
@@ -37,8 +30,6 @@ void CartesianImpl::reset() {
   register_buffer("x1f", x1f);
   register_buffer("x2f", x2f);
   register_buffer("x3f", x3f);
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 void CartesianImpl::reset_coordinates(std::vector<MeshGenerator> meshgens) {

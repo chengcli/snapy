@@ -1,17 +1,14 @@
 // torch
 #include <ATen/TensorIterator.h>
 
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
+#include <snap/snap.h>
+
 #include <snap/registry.hpp>
 
-#include "implicit_formatter.hpp"
 #include "vertical_implicit.hpp"
 
 namespace snap {
@@ -36,8 +33,6 @@ void VerticalImplicitImpl::reset() {
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 torch::Tensor VerticalImplicitImpl::diffusion_matrix(torch::Tensor w,
@@ -46,7 +41,7 @@ torch::Tensor VerticalImplicitImpl::diffusion_matrix(torch::Tensor w,
   auto wroe = roe_average(wlr, gm1);
   auto cs = peos->sound_speed(wroe);
   auto [Rmat, Rimat] = eigen_vectors(wroe, gm1, cs);
-  auto vel = wroe[index::IVX];
+  auto vel = wroe[Index::IVX];
   auto nc1 = w.size(3);
   auto b = Rmat * torch::stack({vel - cs, vel, vel + cs, vel, vel}).abs();
   return torch::einsum("jk...,kl...->...jl",
@@ -73,12 +68,12 @@ torch::Tensor VerticalImplicitImpl::forward(torch::Tensor w, torch::Tensor du,
   auto Dt = torch::eye(msize, w.options()).view({1, 1, msize, msize}) * 1. / dt;
 
   auto Phi = torch::zeros({msize, msize}, w.options());
-  Phi[index::IVX][index::IDN] = options.grav();
-  Phi[msize - 1][index::IVX] = options.grav();
+  Phi[Index::IVX][Index::IDN] = options.grav();
+  Phi[msize - 1][Index::IVX] = options.grav();
   Phi = Phi.view({1, 1, msize, msize});
 
   auto Bnd = torch::eye(msize, w.options());
-  Bnd[index::IVX][index::IVX] = -1.;
+  Bnd[Index::IVX][Index::IVX] = -1.;
 
   //// -------------- Populating Matrix -------------- ////
   int is = options.nghost();
@@ -174,11 +169,11 @@ torch::Tensor VerticalImplicitImpl::forward(torch::Tensor w, torch::Tensor du,
 }
 
 torch::Tensor roe_average(torch::Tensor wlr, torch::Tensor gm1) {
-  using index::IDN;
-  using index::ILT;
-  using index::IPR;
-  using index::IRT;
-  using index::IVX;
+  using Index::IDN;
+  using Index::ILT;
+  using Index::IPR;
+  using Index::IRT;
+  using Index::IVX;
 
   auto sqrtdlr = torch::sqrt(wlr.select(1, IDN));
   auto isdlpdr = 1.0 / (sqrtdlr[ILT] + sqrtdlr[IRT]);
@@ -207,11 +202,11 @@ torch::Tensor roe_average(torch::Tensor wlr, torch::Tensor gm1) {
 }
 
 torch::Tensor flux_jacobian(torch::Tensor w, torch::Tensor gm1) {
-  using index::IDN;
-  using index::IPR;
-  using index::IVX;
-  using index::IVY;
-  using index::IVZ;
+  using Index::IDN;
+  using Index::IPR;
+  using Index::IVX;
+  using Index::IVY;
+  using Index::IVZ;
 
   auto v1 = w[IVX];
   auto v2 = w[IVY];
@@ -239,11 +234,11 @@ torch::Tensor flux_jacobian(torch::Tensor w, torch::Tensor gm1) {
 std::pair<torch::Tensor, torch::Tensor> eigen_vectors(torch::Tensor prim,
                                                       torch::Tensor gm1,
                                                       torch::Tensor cs) {
-  using index::IDN;
-  using index::IPR;
-  using index::IVX;
-  using index::IVY;
-  using index::IVZ;
+  using Index::IDN;
+  using Index::IPR;
+  using Index::IVX;
+  using Index::IVY;
+  using Index::IVZ;
 
   auto r = prim[IDN];
   auto u = prim[IVX];

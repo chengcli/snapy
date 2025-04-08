@@ -7,7 +7,7 @@
 namespace snap {
 static std::mutex table_mutex;
 
-int get_num_variables(std::string grid, AthenaArray<Real> const& data) {
+int get_num_variables(std::string grid, AthenaArray<double> const& data) {
   int nvar;
   if (grid == "--C" || grid == "--F") {
     nvar = data.GetDim2();

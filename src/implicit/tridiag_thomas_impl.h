@@ -7,10 +7,10 @@
 #include <configure.h>
 
 // snap
-#include <snap/index.h>
 #include <snap/math/ludcmp.h>
 #include <snap/math/luminv.h>
-#include <snap/util/print_matrix.h>
+#include <snap/snap.h>
+#include <snap/utils/print_matrix.h>
 
 #define DU(n, i) du[(n) * stride + (i)]
 #define W(n, i) w[(n) * stride + (i)]
@@ -23,12 +23,12 @@ DISPATCH_MACRO void forward_sweep_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *c, Eigen::Vector<T, N> *delta,
     Eigen::Vector<T, N> *corr, T *du, double dt, int nhydro, int stride, int il,
     int iu) {
-  constexpr int IDN = index::IDN;
-  constexpr int IVX = index::IVX;
-  constexpr int IVY = index::IVY;
-  constexpr int IVZ = index::IVZ;
-  constexpr int IPR = index::IPR;
-  constexpr int ICY = index::ICY;
+  constexpr int IDN = Index::IDN;
+  constexpr int IVX = Index::IVX;
+  constexpr int IVY = Index::IVY;
+  constexpr int IVZ = Index::IVZ;
+  constexpr int IPR = Index::IPR;
+  constexpr int ICY = Index::ICY;
 
   Eigen::Vector<T, N> rhs;
 
@@ -95,12 +95,12 @@ template <typename T, int N>
 DISPATCH_MACRO void backward_substitution_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *a, Eigen::Vector<T, N> *delta,
     T *w, T *du, int nhydro, int stride, int il, int iu) {
-  constexpr int IDN = index::IDN;
-  constexpr int IVX = index::IVX;
-  constexpr int IVY = index::IVY;
-  constexpr int IVZ = index::IVZ;
-  constexpr int IPR = index::IPR;
-  constexpr int ICY = index::ICY;
+  constexpr int IDN = Index::IDN;
+  constexpr int IVX = Index::IVX;
+  constexpr int IVY = Index::IVY;
+  constexpr int IVZ = Index::IVZ;
+  constexpr int IPR = Index::IPR;
+  constexpr int ICY = Index::ICY;
 
   // update solutions, i=iu
   for (int i = iu - 1; i >= il; --i) {

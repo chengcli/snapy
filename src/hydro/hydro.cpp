@@ -1,12 +1,8 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
-#include <snap/index.h>
+#include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
@@ -98,14 +94,10 @@ void HydroImpl::reset() {
   for (auto i = 0; i < forcings.size(); i++) {
     register_module("forcing" + std::to_string(i), forcings[i].ptr());
   }
-
-  LOG_INFO(logger, "{} resets with options: {}", name(), options);
 }
 
 double HydroImpl::max_time_step(torch::Tensor w,
                                 torch::optional<torch::Tensor> solid) const {
-  LOG_INFO(logger, "{} calculates max time step", name());
-
   auto cs = peos->sound_speed(w);
   if (solid.has_value()) {
     cs = torch::where(solid.value(), 1.e-8, cs);
@@ -114,17 +106,17 @@ double HydroImpl::max_time_step(torch::Tensor w,
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
   if ((cs.size(2) > 1) && (pvic->options.scheme() == 0)) {
-    dt1 = torch::min(pcoord->center_width1() / (w[index::IVX].abs() + cs))
+    dt1 = torch::min(pcoord->center_width1() / (w[Index::IVX].abs() + cs))
               .item<double>();
   }
 
   if (cs.size(1) > 1) {
-    dt2 = torch::min(pcoord->center_width2() / (w[index::IVY].abs() + cs))
+    dt2 = torch::min(pcoord->center_width2() / (w[Index::IVY].abs() + cs))
               .item<double>();
   }
 
   if (cs.size(0) > 1) {
-    dt3 = torch::min(pcoord->center_width3() / (w[index::IVZ].abs() + cs))
+    dt3 = torch::min(pcoord->center_width3() / (w[Index::IVZ].abs() + cs))
               .item<double>();
   }
 
@@ -133,7 +125,6 @@ double HydroImpl::max_time_step(torch::Tensor w,
 
 torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
                                  torch::optional<torch::Tensor> solid) {
-  LOG_INFO(logger, "{} marches with dt = {}", name(), dt);
   torch::NoGradGuard no_grad;
 
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
@@ -160,7 +151,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     check_recon(wlr1, options.nghost(), 1, 0, 0);
 
     SET_SHARED("hydro/flux1") = priemann->forward(
-        wlr1[index::ILT], wlr1[index::IRT], DIM1, GET_SHARED("hydro/gammad"));
+        wlr1[Index::ILT], wlr1[Index::IRT], DIM1, GET_SHARED("hydro/gammad"));
   } else {
     SET_SHARED("hydro/flux1") = torch::Tensor();
   }
@@ -176,7 +167,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     check_recon(wlr2, options.nghost(), 0, 1, 0);
 
     SET_SHARED("hydro/flux2") = priemann->forward(
-        wlr2[index::ILT], wlr2[index::IRT], DIM2, GET_SHARED("hydro/gammad"));
+        wlr2[Index::ILT], wlr2[Index::IRT], DIM2, GET_SHARED("hydro/gammad"));
   } else {
     SET_SHARED("hydro/flux2") = torch::Tensor();
   }
@@ -192,7 +183,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     check_recon(wlr3, options.nghost(), 0, 0, 1);
 
     SET_SHARED("hydro/flux3") = priemann->forward(
-        wlr3[index::ILT], wlr3[index::IRT], DIM3, GET_SHARED("hydro/gammad"));
+        wlr3[Index::ILT], wlr3[Index::IRT], DIM3, GET_SHARED("hydro/gammad"));
   } else {
     SET_SHARED("hydro/flux3") = torch::Tensor();
   }
@@ -216,12 +207,12 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
 void HydroImpl::fix_negative_dp_inplace(torch::Tensor wlr,
                                         torch::Tensor wdc) const {
-  auto mask = torch::logical_or(wlr.select(1, index::IDN) < 0.,
-                                wlr.select(1, index::IPR) < 0.);
-  wlr.select(1, index::IDN) =
-      torch::where(mask, wdc.select(1, index::IDN), wlr.select(1, index::IDN));
-  wlr.select(1, index::IPR) =
-      torch::where(mask, wdc.select(1, index::IPR), wlr.select(1, index::IPR));
+  auto mask = torch::logical_or(wlr.select(1, Index::IDN) < 0.,
+                                wlr.select(1, Index::IPR) < 0.);
+  wlr.select(1, Index::IDN) =
+      torch::where(mask, wdc.select(1, Index::IDN), wlr.select(1, Index::IDN));
+  wlr.select(1, Index::IPR) =
+      torch::where(mask, wdc.select(1, Index::IPR), wlr.select(1, Index::IPR));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
@@ -231,20 +222,20 @@ void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
 
   int dim = extend_x1 == 1 ? 1 : (extend_x2 == 1 ? 2 : 3);
   TORCH_CHECK(
-      wlr.index(interior).select(1, index::IDN).min().item<double>() > 0.,
+      wlr.index(interior).select(1, Index::IDN).min().item<double>() > 0.,
       "Negative density detected after reconstruction in dimension ", dim);
   TORCH_CHECK(
-      wlr.index(interior).select(1, index::IPR).min().item<double>() > 0.,
+      wlr.index(interior).select(1, Index::IPR).min().item<double>() > 0.,
       "Negative pressure detected after reconstruction in dimension ", dim);
 }
 
 void check_eos(torch::Tensor w, int nghost) {
   auto interior = get_interior(w.sizes(), nghost);
-  TORCH_CHECK(w.index(interior)[index::IDN].min().item<double>() > 0.,
+  TORCH_CHECK(w.index(interior)[Index::IDN].min().item<double>() > 0.,
               "Negative density detected after EOS. ",
               "Suggestions: 1) Reducting the CFL number;",
               " 2) Activate EOS limiter and set the density floor");
-  TORCH_CHECK(w.index(interior)[index::IPR].min().item<double>() > 0.,
+  TORCH_CHECK(w.index(interior)[Index::IPR].min().item<double>() > 0.,
               "Negative pressure detected after EOS. ",
               "Suggestions: 1) Reducting the CFL number; ",
               " 2) Activate EOS limiter and set the pressure floor");

@@ -1,12 +1,9 @@
-// spdlog
-#include <configure.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-
 // base
-#include <globals.h>
+#include <configure.h>
 
 // snap
+#include <snap/snap.h>
+
 #include "integrator.hpp"
 #include "intg_formatter.hpp"
 
@@ -69,9 +66,7 @@ IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)
   reset();
 }
 
-void IntegratorImpl::reset() {
-  LOG_INFO(logger, "{} resets with options: {}", name(), options.type());
-}
+void IntegratorImpl::reset() {}
 
 torch::Tensor IntegratorImpl::forward(int s, torch::Tensor u0, torch::Tensor u1,
                                       torch::Tensor u2) {
