@@ -1,17 +1,12 @@
-// base
-#include <globals.h>
-
 // snap
 #include <snap/snap.h>
 
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
-using namespace canoe;
+using namespace snap;
 
 int main(int argc, char **argv) {
-  start_logging(argc, argv);
-
   torch::NoGradGuard no_grad;
 
   double p0 = 1.E5;
@@ -79,9 +74,9 @@ int main(int argc, char **argv) {
   auto L = torch::sqrt(((x1v - xc) / xr).square() + ((x2v - zc) / zr).square());
   auto temp = Ts - grav * x1v / cp;
 
-  w[index::IPR] = p0 * torch::pow(temp / Ts, cp / Rd);
+  w[Index::IPR] = p0 * torch::pow(temp / Ts, cp / Rd);
   temp += torch::where(L <= 1, dT * (torch::cos(L * M_PI) + 1.) / 2., 0);
-  w[index::IDN] = w[index::IPR] / (Rd * temp);
+  w[Index::IDN] = w[Index::IPR] / (Rd * temp);
 
   block->set_primitives(w);
 
