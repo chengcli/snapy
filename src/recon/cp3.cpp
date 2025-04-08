@@ -12,7 +12,7 @@
 
 namespace snap {
 void call_cp3_cpu(at::TensorIterator& iter);
-void call_cp3_cuda(at::TensorIterator& iter);
+__attribute__((weak)) void call_cp3_cuda(at::TensorIterator& iter) {}
 
 void Center3InterpImpl::reset() {
   cm = register_buffer(

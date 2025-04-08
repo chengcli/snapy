@@ -1,8 +1,10 @@
 #pragma once
 
-namespace torch {
-class Tensor;
-}
+// C/C+
+#include <functional>
+
+// torch
+#include <torch/torch.h>
 
 namespace snap {
 // linear interp, equally weighted from left (x(xmin)=-0.5) and right

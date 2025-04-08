@@ -11,7 +11,7 @@
 
 namespace snap {
 void call_lmars_cpu(at::TensorIterator& iter, int dim, int nvapor);
-void call_lmars_cuda(at::TensorIterator& iter, int dim, int nvapor);
+__attribute__((weak)) void call_lmars_cuda(at::TensorIterator& iter, int dim, int nvapor) {}
 
 void LmarsSolverImpl::reset() {
   // set up equation-of-state model

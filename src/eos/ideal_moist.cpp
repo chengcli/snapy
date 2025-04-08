@@ -12,7 +12,7 @@
 
 namespace snap {
 void call_ideal_moist_cpu(at::TensorIterator& iter);
-void call_ideal_moist_cuda(at::TensorIterator& iter);
+__attribute__((weak)) void call_ideal_moist_cuda(at::TensorIterator& iter) {}
 
 void IdealMoistImpl::reset() {
   // set up thermodynamics model

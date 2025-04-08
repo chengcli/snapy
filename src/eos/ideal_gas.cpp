@@ -11,7 +11,7 @@
 
 namespace snap {
 void call_ideal_gas_cpu(at::TensorIterator& iter);
-void call_ideal_gas_cuda(at::TensorIterator& iter);
+__attribute__((weak)) void call_ideal_gas_cuda(at::TensorIterator& iter) {}
 
 void IdealGasImpl::reset() {
   if (options.thermo().nvapor() != 0 || options.thermo().ncloud() != 0) {

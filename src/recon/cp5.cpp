@@ -12,7 +12,7 @@
 
 namespace snap {
 void call_cp5_cpu(at::TensorIterator& iter);
-void call_cp5_cuda(at::TensorIterator& iter);
+__attribute__((weak)) void call_cp5_cuda(at::TensorIterator& iter) {}
 
 void Center5InterpImpl::reset() {
   cm = register_buffer("cm", torch::tensor({-1. / 20., 9. / 20., 47. / 60.,

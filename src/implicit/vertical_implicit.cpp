@@ -13,10 +13,10 @@
 
 namespace snap {
 template <int N>
-void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu);
+__attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu) {}
 
 template <int N>
-void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu);
+void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {}
 
 VerticalImplicitImpl::VerticalImplicitImpl(VerticalImplicitOptions options_)
     : options(options_) {

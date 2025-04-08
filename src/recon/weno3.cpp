@@ -12,7 +12,7 @@
 
 namespace snap {
 void call_weno3_cpu(at::TensorIterator& iter, bool scale);
-void call_weno3_cuda(at::TensorIterator& iter, bool scale);
+__attribute__((weak)) void call_weno3_cuda(at::TensorIterator& iter, bool scale) {}
 
 void Weno3InterpImpl::reset() {
   c1m = register_buffer("c1m",
