@@ -16,7 +16,7 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim, int nvapor) {
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "lmars_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ncloud = nhydro - nvapor - index::ICY;
+    auto ncloud = nhydro - nvapor - Index::ICY;
 
     native::gpu_kernel<scalar_t, 6>(
         iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {
@@ -38,7 +38,7 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor) {
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "hllc_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ncloud = nhydro - nvapor - index::ICY;
+    auto ncloud = nhydro - nvapor - Index::ICY;
 
     native::gpu_kernel<scalar_t, 6>(
         iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {

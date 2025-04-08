@@ -8,7 +8,7 @@
 #include <ATen/Dispatch.h>
 
 // snap
-#include <snap/util/cuda_utils.h>
+#include <snap/utils/cuda_utils.h>
 
 namespace snap {
 template <int N>
