@@ -1,7 +1,7 @@
 #pragma once
 
-// spdlog
-#include <spdlog/spdlog.h>
+// fmt
+#include <fmt/format.h>
 
 template <>
 struct fmt::formatter<snap::OutputOptions> {
@@ -10,7 +10,7 @@ struct fmt::formatter<snap::OutputOptions> {
 
   // Define the format function for OutputOptions
   template <typename FormatContext>
-  auto format(const snap::OutputOptions& p, FormatContext& ctx) {
+  auto format(const snap::OutputOptions& p, FormatContext& ctx) const {
     return fmt::format_to(
         ctx.out(),
         "(fid = {}; dt = {}; dcycle = {}; block_name = {}; file_basename = {})",

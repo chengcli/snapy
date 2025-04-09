@@ -2,9 +2,9 @@
 #include <torch/extension.h>
 #include <torch/nn/modules/container/any.h>
 
-// fvm
-#include <fvm/intg/integrator.hpp>
-#include <fvm/intg/intg_formatter.hpp>
+// snap
+#include <snap/intg/integrator.hpp>
+#include <snap/intg/intg_formatter.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -12,26 +12,26 @@
 namespace py = pybind11;
 
 void bind_intg(py::module &m) {
-  py::class_<canoe::IntegratorWeight>(m, "IntegratorWeight")
+  py::class_<snap::IntegratorWeight>(m, "IntegratorWeight")
       .def(py::init<>())
       .def("__repr__",
-           [](const canoe::IntegratorWeight &a) {
+           [](const snap::IntegratorWeight &a) {
              return fmt::format("IntegratorWeight{}", a);
            })
-      .ADD_OPTION(double, canoe::IntegratorWeight, wght0)
-      .ADD_OPTION(double, canoe::IntegratorWeight, wght1)
-      .ADD_OPTION(double, canoe::IntegratorWeight, wght2);
+      .ADD_OPTION(double, snap::IntegratorWeight, wght0)
+      .ADD_OPTION(double, snap::IntegratorWeight, wght1)
+      .ADD_OPTION(double, snap::IntegratorWeight, wght2);
 
-  py::class_<canoe::IntegratorOptions>(m, "IntegratorOptions")
+  py::class_<snap::IntegratorOptions>(m, "IntegratorOptions")
       .def(py::init<>())
       .def("__repr__",
-           [](const canoe::IntegratorOptions &a) {
+           [](const snap::IntegratorOptions &a) {
              return fmt::format("IntegratorOptions{}", a);
            })
-      .ADD_OPTION(std::string, canoe::IntegratorOptions, type)
-      .ADD_OPTION(double, canoe::IntegratorOptions, cfl);
+      .ADD_OPTION(std::string, snap::IntegratorOptions, type)
+      .ADD_OPTION(double, snap::IntegratorOptions, cfl);
 
-  ADD_CANOE_MODULE(Integrator, IntegratorOptions)
-      .def_readonly("options", &canoe::IntegratorImpl::options)
-      .def_readonly("stages", &canoe::IntegratorImpl::stages);
+  ADD_SNAP_MODULE(Integrator, IntegratorOptions)
+      .def_readonly("options", &snap::IntegratorImpl::options)
+      .def_readonly("stages", &snap::IntegratorImpl::stages);
 }

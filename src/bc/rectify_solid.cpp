@@ -10,7 +10,10 @@ namespace snap {
 enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };
 
 int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir);
-int flip_zero_cuda(at::TensorIterator& iter, int dim, int dir);
+__attribute__((weak)) int flip_zero_cuda(at::TensorIterator& iter, int dim,
+                                         int dir) {
+  return 0;
+}
 
 // run dimension 1
 int run_flip_dim1(torch::Tensor& solid, int dir) {

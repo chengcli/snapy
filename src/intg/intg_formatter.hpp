@@ -13,7 +13,7 @@ struct fmt::formatter<snap::IntegratorWeight> {
 
   // Define the format function for IntegratorOptions
   template <typename FormatContext>
-  auto format(const snap::IntegratorWeight& p, FormatContext& ctx) {
+  auto format(const snap::IntegratorWeight& p, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "({}, {}, {})", p.wght0(), p.wght1(),
                           p.wght2());
   }
@@ -26,7 +26,7 @@ struct fmt::formatter<snap::IntegratorOptions> {
 
   // Define the format function for IntegratorOptions
   template <typename FormatContext>
-  auto format(const snap::IntegratorOptions& p, FormatContext& ctx) {
+  auto format(const snap::IntegratorOptions& p, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "(type = {}; cfl = {})", p.type(),
                           p.cfl());
   }

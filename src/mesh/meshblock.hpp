@@ -37,7 +37,7 @@ struct MeshBlockOptions {
 };
 
 class OctTree;
-class MeshOptions;
+struct MeshOptions;
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
   //! options with which this `MeshBlock` was constructed

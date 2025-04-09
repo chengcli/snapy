@@ -1,9 +1,9 @@
 // torch
 #include <torch/extension.h>
 
-// fvm
-#include <fvm/recon/recon_formatter.hpp>
-#include <fvm/recon/reconstruct.hpp>
+// snap
+#include <snap/recon/recon_formatter.hpp>
+#include <snap/recon/reconstruct.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -11,29 +11,29 @@
 namespace py = pybind11;
 
 void bind_recon(py::module &m) {
-  py::class_<canoe::InterpOptions>(m, "InterpOptions")
+  py::class_<snap::InterpOptions>(m, "InterpOptions")
       .def(py::init<>())
       .def(py::init<std::string>())
-      .def(py::init<canoe::ParameterInput, std::string, std::string>())
+      .def(py::init<snap::ParameterInput, std::string, std::string>())
       .def("__repr__",
-           [](const canoe::InterpOptions &a) {
+           [](const snap::InterpOptions &a) {
              return fmt::format("InterpOptions{}", a);
            })
-      .ADD_OPTION(std::string, canoe::InterpOptions, type)
-      .ADD_OPTION(bool, canoe::InterpOptions, scale);
+      .ADD_OPTION(std::string, snap::InterpOptions, type)
+      .ADD_OPTION(bool, snap::InterpOptions, scale);
 
-  py::class_<canoe::ReconstructOptions>(m, "ReconstructOptions")
+  py::class_<snap::ReconstructOptions>(m, "ReconstructOptions")
       .def(py::init<>())
-      .def(py::init<canoe::ParameterInput, std::string, std::string>())
+      .def(py::init<snap::ParameterInput, std::string, std::string>())
       .def("__repr__",
-           [](const canoe::ReconstructOptions &a) {
+           [](const snap::ReconstructOptions &a) {
              return fmt::format("ReconstructOptions{}", a);
            })
-      .ADD_OPTION(bool, canoe::ReconstructOptions, shock)
-      .ADD_OPTION(canoe::InterpOptions, canoe::ReconstructOptions, interp);
+      .ADD_OPTION(bool, snap::ReconstructOptions, shock)
+      .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptions, interp);
 
-  ADD_CANOE_MODULE(Reconstruct, ReconstructOptions)
+  ADD_SNAP_MODULE(Reconstruct, ReconstructOptions)
       .def(py::init<>())
-      .def(py::init<canoe::ReconstructOptions>())
-      .def("forward", &canoe::ReconstructImpl::forward);
+      .def(py::init<snap::ReconstructOptions>())
+      .def("forward", &snap::ReconstructImpl::forward);
 }

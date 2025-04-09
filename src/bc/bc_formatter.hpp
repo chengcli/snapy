@@ -12,7 +12,8 @@ struct fmt::formatter<snap::InternalBoundaryOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::InternalBoundaryOptions& p, FormatContext& ctx) {
+  auto format(const snap::InternalBoundaryOptions& p,
+              FormatContext& ctx) const {
     return fmt::format_to(
         ctx.out(),
         "(nghost = {}; max_iter = {}, solid_density = {}; solid_pressure = {})",
@@ -25,7 +26,7 @@ struct fmt::formatter<snap::BoundaryFlag> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::BoundaryFlag& p, FormatContext& ctx) {
+  auto format(const snap::BoundaryFlag& p, FormatContext& ctx) const {
     switch (p) {
       case snap::BoundaryFlag::kExchange:
         return fmt::format_to(ctx.out(), "Exchange");
@@ -54,7 +55,8 @@ struct fmt::formatter<std::vector<snap::BoundaryFlag>> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const std::vector<snap::BoundaryFlag>& p, FormatContext& ctx) {
+  auto format(const std::vector<snap::BoundaryFlag>& p,
+              FormatContext& ctx) const {
     std::string result = "(";
     for (size_t i = 0; i < p.size(); ++i) {
       result += fmt::format("{}", p[i]);
@@ -72,7 +74,7 @@ struct fmt::formatter<snap::BoundaryFuncOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::BoundaryFuncOptions& p, FormatContext& ctx) {
+  auto format(const snap::BoundaryFuncOptions& p, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "(type = {}; nghost = {})", p.type(),
                           p.nghost());
   }

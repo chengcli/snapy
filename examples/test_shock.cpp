@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
   auto block = MeshBlock(op_block);
 
-  block->to(torch::kCUDA);
+  // block->to(torch::kCUDA);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;

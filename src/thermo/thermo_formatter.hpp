@@ -13,7 +13,7 @@ struct fmt::formatter<snap::Nucleation> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::Nucleation& p, FormatContext& ctx) {
+  auto format(const snap::Nucleation& p, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "({}; min_tem = {}; max_tem = {})",
                           p.reaction(), p.min_tem(), p.max_tem());
   }
@@ -24,7 +24,7 @@ struct fmt::formatter<snap::CondensationOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::CondensationOptions& p, FormatContext& ctx) {
+  auto format(const snap::CondensationOptions& p, FormatContext& ctx) const {
     std::ostringstream reactions;
     for (size_t i = 0; i < p.react().size(); ++i) {
       reactions << fmt::format("R{}: {}", i + 1, p.react()[i]);
@@ -51,7 +51,7 @@ struct fmt::formatter<snap::ThermodynamicsOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::ThermodynamicsOptions& p, FormatContext& ctx) {
+  auto format(const snap::ThermodynamicsOptions& p, FormatContext& ctx) const {
     std::ostringstream species;
     for (size_t i = 0; i < p.species().size(); ++i) {
       species << p.species()[i];

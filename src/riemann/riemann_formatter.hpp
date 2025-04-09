@@ -14,7 +14,7 @@ struct fmt::formatter<snap::RiemannSolverOptions> {
   constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snap::RiemannSolverOptions& p, FormatContext& ctx) {
+  auto format(const snap::RiemannSolverOptions& p, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "(type = {}; eos = {}; coord = {})",
                           p.type(), p.eos(), p.coord());
   }

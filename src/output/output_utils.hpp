@@ -10,7 +10,6 @@
 #include <snap/interface/athena_arrays.hpp>
 
 namespace snap {
-int get_num_variables(std::string grid, AthenaArray<double> const& data);
 
 class MetadataTable {
  protected:
@@ -38,4 +37,19 @@ class MetadataTable {
   //! Pointer to the single MetadataTable instance
   static MetadataTable* myptr_;
 };
+
+template <typename T>
+int get_num_variables(std::string grid, AthenaArray<T> const& data) {
+  int nvar;
+  if (grid == "--C" || grid == "--F") {
+    nvar = data.GetDim2();
+  } else if (grid == "---") {
+    nvar = data.GetDim1();
+  } else {
+    nvar = data.GetDim4();
+  }
+
+  return nvar;
+}
+
 }  // namespace snap

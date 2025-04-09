@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     op_block.bflags().push_back(BoundaryFlag::kReflect);
   auto block = MeshBlock(op_block);
 
-  block->to(torch::Device(torch::kCUDA, 0));
+  // block->to(torch::Device(torch::kCUDA, 0));
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;

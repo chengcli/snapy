@@ -29,7 +29,7 @@ void NetcdfOutput::combine_blocks() {
 #ifdef MPI_PARALLEL
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
-  if (Globals::my_rank == 0) {
+  if (my_rank == 0) {
     char number[64];
     snprintf(number, sizeof(number), "%05d", file_number);
 
