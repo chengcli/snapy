@@ -1,10 +1,7 @@
 import torch
-import canoe
 import math
 import time
-from canoe import *
-
-start_logging("robert")
+from snapy import *
 
 dT = 0.5
 p0 = 1.0e5
@@ -46,7 +43,7 @@ op_block.bflags([BoundaryFlag.kReflect] * 4)
 # initialize block
 block = MeshBlock(op_block)
 # block.to(torch.float32)
-block.to(torch.device("cuda:0"))
+# block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
