@@ -10,7 +10,7 @@ from amars_rt import calc_amars_rt, config_amars_rt
 # set hydrodynamic options
 def setup_hydro():
     op_coord = CoordinateOptions().nx1(nx1).nx2(nx2)
-    op_coord.x1min(0.0).x1max(6.4e3).x2min(0.0).x2max(25.6e3)
+    op_coord.x1min(0.0).x1max(20.0e3).x2min(0.0).x2max(100.0e3)
 
     op_recon = ReconstructOptions().interp(InterpOptions("weno5")).shock(False)
     op_thermo = ThermodynamicsOptions().gammad_ref(gamma).Rd(Rd)
@@ -19,13 +19,20 @@ def setup_hydro():
     op_grav = ConstGravityOptions().grav1(-grav)
     op_proj = PrimitiveProjectorOptions().type("temperature")
     op_vic = VerticalImplicitOptions().scheme(0)
-    op_intg = IntegratorOptions().type("rk3").cfl(0.9)
+    op_intg = IntegratorOptions().type("rk3").cfl(0.45)
 
     op_hydro = HydroOptions().eos(op_eos).coord(op_coord).riemann(op_riemann)
     op_hydro.recon1(op_recon).recon23(op_recon).grav(op_grav).proj(op_proj).vic(op_vic)
 
     op_block = MeshBlockOptions().nghost(nghost).intg(op_intg).hydro(op_hydro)
-    op_block.bflags([BoundaryFlag.kReflect] * 4)
+    op_block.bflags(
+        [
+            BoundaryFlag.kReflect,
+            BoundaryFlag.kReflect,
+            BoundaryFlag.kPeriodic,
+            BoundaryFlag.kPeriodic,
+        ]
+    )
     return op_block
 
 
@@ -47,6 +54,7 @@ def set_initial_conditions(block):
 
     w[index.ipr] = pbot * torch.pow(temp / Ts, cp / Rd)
     w[index.idn] = w[index.ipr] / (Rd * temp)
+    w[index.ivx] = torch.randn_like(w[index.ivx]) * 1.0e-3
 
     block.set_primitives(w)
 
@@ -58,8 +66,8 @@ if __name__ == "__main__":
     pbot, ptop = 0.5e5, 100.0
 
     gamma = 1.4
-    Rd = 287.0
-    Ts = 300.0
+    Rd = 188.0
+    Ts = 200.0
     grav = 3.0
 
     nx1 = 80
@@ -121,11 +129,13 @@ if __name__ == "__main__":
             pres = w[index.ipr]
             # netflux, downward_flux, upward_flux = calc_amars_rt(
             #        pres[0], temp[0], nstr=4)
-            netflux, downward_flux, upward_flux = calc_amars_rt(
-                rad, xfrac, pres[0], temp[0], atm, dz, bc
-            )
+            if (n % 10) == 0:
+                netflux, downward_flux, upward_flux = calc_amars_rt(
+                    rad, xfrac, pres[0], temp[0], atm, dz, bc
+                )
+
             block.hydro_u[interior][index.ipr] -= (
-                (netflux[:, 1:] - netflux[:, :-1]) / 1.0e5 * dt
+                1.0 * dt * (netflux[:, 1:] - netflux[:, :-1])
             )
 
         current_time += dt
@@ -141,7 +151,7 @@ if __name__ == "__main__":
                 out.combine_blocks()
 
         n += 1
-        if current_time > 900:
+        if current_time > 90000:
             break
 
     print("elapsed time = ", time.time() - start_time)

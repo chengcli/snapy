@@ -21,8 +21,8 @@ inline torch::Tensor satfunc1v(torch::Tensor& b, torch::Tensor& jac,
   b.select(3, j) = x - s;
   b.select(3, j).clamp_min_(-y);
 
-  jac.select(3, j).select(3, ix) = where(b.select(3, j) > 0., 1., 0.);
-  jac.select(3, j).select(3, iy) = where(b.select(3, j) < 0., -1., 0.);
+  jac.select(3, j).select(3, ix) = where(b.select(3, j) >= 0., 1., 0.);
+  jac.select(3, j).select(3, iy) = where(b.select(3, j) <= 0., -1., 0.);
 
   return -s * logs_ddT;
 }
@@ -117,7 +117,7 @@ torch::Tensor CondensationImpl::forward(torch::Tensor temp, torch::Tensor pres,
   // std::cout << "srv = " << srv << std::endl;
 
   auto A = jac.matmul(stoich_local);
-  auto rates = -torch::linalg::solve(A, b, true);
+  auto rates = -torch::linalg_solve(A, b, true);
 
   if (!krate.has_value()) {
     return stoich_local.matmul(rates.unsqueeze(-1)).squeeze(-1);
@@ -186,7 +186,7 @@ torch::Tensor CondensationImpl::equilibrate_tp(torch::Tensor temp,
   }
 
   auto A = jac.matmul(stoich_local);
-  auto rates = -torch::linalg::solve(A, b, true);
+  auto rates = -torch::linalg_solve(A, b, true);
 
   return stoich_local.matmul(rates.unsqueeze(-1)).squeeze(-1);
 }
