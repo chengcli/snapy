@@ -9,10 +9,12 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
 #include <snap/snap.h>
 
 #include <snap/input/parameter_input.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct InterpOptions {
@@ -234,3 +236,5 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
 };
 TORCH_MODULE(Weno5Interp);
 }  // namespace snap
+
+#undef ADD_ARG

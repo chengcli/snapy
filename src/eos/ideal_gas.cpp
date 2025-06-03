@@ -14,14 +14,15 @@ void call_ideal_gas_cpu(at::TensorIterator& iter);
 __attribute__((weak)) void call_ideal_gas_cuda(at::TensorIterator& iter) {}
 
 void IdealGasImpl::reset() {
-  if (options.thermo().nvapor() != 0 || options.thermo().ncloud() != 0) {
+  if (options.thermo().vapor_ids().size() != 0 ||
+      options.thermo().cloud_ids().size() != 0) {
     std::stringstream msg;
     msg << "IdealGasEOS should not have vapor or cloud";
     throw std::runtime_error(msg.str());
   }
 
   // set up thermodynamics model
-  pthermo = register_module("thermo", Thermodynamics(options.thermo()));
+  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
@@ -29,7 +30,9 @@ void IdealGasImpl::reset() {
 
 void IdealGasImpl::cons2prim(torch::Tensor prim, torch::Tensor cons) const {
   if (!HAS_SHARED("hydro/gammad")) {
-    SET_SHARED("hydro/gammad") = pthermo->get_gammad(cons, kConserved);
+    // SET_SHARED("hydro/gammad") = pthermo->get_gammad(cons, kConserved);
+    SET_SHARED("hydro/gammad") =
+        pthermo->options.gammad() * torch::ones_like(cons[Index::IDN]);
   }
 
   auto iter = at::TensorIteratorConfig()
@@ -93,14 +96,16 @@ void IdealGasImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
       (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
 
   // pr -> eng
-  auto gammad = pthermo->get_gammad(cons, kConserved);
+  // auto gammad = pthermo->get_gammad(cons, kConserved);
+  auto gammad = pthermo->options.gammad();
   cons[Index::IPR] = prim[Index::IPR] / (gammad - 1.) + ke;
 
   _apply_conserved_limiter_inplace(cons);
 }
 
 torch::Tensor IdealGasImpl::sound_speed(torch::Tensor prim) const {
-  auto gammad = pthermo->get_gammad(prim);
+  // auto gammad = pthermo->get_gammad(prim);
+  auto gammad = pthermo->options.gammad();
   return torch::sqrt(gammad * prim[Index::IPR] / prim[Index::IDN]);
 }
 

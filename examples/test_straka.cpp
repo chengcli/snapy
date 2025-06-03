@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
   auto op_recon =
       ReconstructOptions().interp(InterpOptions("weno5")).shock(false);
-  auto op_thermo = ThermodynamicsOptions().gammad_ref(gamma).Rd(Rd);
+  auto op_thermo = kintera::ThermoOptions::from_yaml("xxxx.yaml");
   auto op_eos = EquationOfStateOptions().thermo(op_thermo).type("ideal_gas");
   auto op_riemann = RiemannSolverOptions().type("lmars");
   auto op_grav = ConstGravityOptions().grav1(-grav);
@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
       OutputOptions().file_basename("straka").fid(3).variable("uov"));
   double current_time = 0.;
 
-  block->user_out_var.insert("temp", pthermo->get_temp(w));
-  block->user_out_var.insert("theta", pthermo->get_theta_ref(w, p0));
+  // block->user_out_var.insert("temp", pthermo->get_temp(w));
+  // block->user_out_var.insert("theta", pthermo->get_theta_ref(w, p0));
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();

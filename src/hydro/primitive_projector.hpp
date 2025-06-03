@@ -5,11 +5,14 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// snap
-#include <snap/add_arg.h>
+// kintera
+#include <kintera/thermo/thermo.hpp>
 
+// snap
 #include <snap/recon/reconstruct.hpp>
-#include <snap/thermo/thermodynamics.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 
@@ -44,7 +47,7 @@ struct PrimitiveProjectorOptions {
   ADD_ARG(double, Rd) = 287.;
 
   //! thermodynamic model options
-  ADD_ARG(ThermodynamicsOptions, thermo);
+  ADD_ARG(kintera::ThermoOptions, thermo);
 };
 
 class PrimitiveProjectorImpl
@@ -54,7 +57,7 @@ class PrimitiveProjectorImpl
   PrimitiveProjectorOptions options;
 
   //! submodules
-  Thermodynamics pthermo = nullptr;
+  kintera::ThermoY pthermo = nullptr;
 
   //! Constructor to initialize the layer
   PrimitiveProjectorImpl() = default;
@@ -69,3 +72,5 @@ class PrimitiveProjectorImpl
 TORCH_MODULE(PrimitiveProjector);
 
 }  // namespace snap
+
+#undef ADD_ARG

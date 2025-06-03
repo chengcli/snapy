@@ -173,29 +173,28 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
   }
 
   // vapor
-  auto vapor_cloud =
-      peos->pthermo->options.nvapor() + peos->pthermo->options.ncloud();
-  if (vapor_cloud > 0) {
+  auto ny = peos->pthermo->options.vapor_ids().size() +
+            peos->pthermo->options.cloud_ids().size();
+  if (ny > 0) {
     if (options.variable().compare("prim") == 0 ||
         options.variable().compare("vapor") == 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::ICY,
-                               vapor_cloud);
+      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
-      num_vars_ += vapor_cloud;
+      num_vars_ += ny;
     }
 
     if (options.variable().compare("cons") == 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::ICY, vapor_cloud);
+      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
-      num_vars_ += vapor_cloud;
+      num_vars_ += ny;
     }
   }
 }

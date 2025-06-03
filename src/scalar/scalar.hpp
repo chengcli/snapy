@@ -6,12 +6,13 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct ScalarOptions {

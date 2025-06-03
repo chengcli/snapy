@@ -13,10 +13,11 @@
 #include <torch/nn/modules/container/modulelist.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/bc/boundary_condition.hpp>
 #include <snap/input/parameter_input.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 class LogicalLocation;
@@ -135,3 +136,5 @@ class OctTreeImpl : public torch::nn::Cloneable<OctTreeImpl> {
 TORCH_MODULE(OctTree);
 
 }  // namespace snap
+
+#undef ARG

@@ -7,10 +7,11 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct ConstGravityOptions {
@@ -114,3 +115,5 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
 };
 }  // namespace snap
+
+#undef ADD_ARG

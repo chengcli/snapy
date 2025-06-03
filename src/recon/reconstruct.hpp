@@ -6,11 +6,12 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/input/parameter_input.hpp>
 
 #include "interpolation.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct ReconstructOptions {
@@ -47,3 +48,5 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
 
 TORCH_MODULE(Reconstruct);
 }  // namespace snap
+
+#undef ADD_ARG

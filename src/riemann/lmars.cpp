@@ -42,9 +42,9 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
           .build();
 
   if (wl.is_cpu()) {
-    call_lmars_cpu(iter, dim, peos->pthermo->options.nvapor());
+    call_lmars_cpu(iter, dim, peos->pthermo->options.vapor_ids().size());
   } else if (wl.is_cuda()) {
-    call_lmars_cuda(iter, dim, peos->pthermo->options.nvapor());
+    call_lmars_cuda(iter, dim, peos->pthermo->options.vapor_ids().size());
   } else {
     return forward_fallback(wl, wr, dim, gammad);
   }

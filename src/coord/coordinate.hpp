@@ -13,13 +13,15 @@
 #include <configure.h>
 
 // snap
-#include <snap/add_arg.h>
 #include <snap/snap.h>
 
 #include <snap/input/parameter_input.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 using IndexRange = std::vector<torch::indexing::TensorIndex>;
@@ -227,3 +229,5 @@ IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
                         int extend_x1 = 0, int extend_x2 = 0,
                         int extend_x3 = 0);
 }  // namespace snap
+
+#undef ADD_ARG
