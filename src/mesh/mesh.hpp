@@ -7,14 +7,15 @@
 #include <torch/nn/modules/container/modulelist.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/bc/boundary_condition.hpp>
 #include <snap/input/parameter_input.hpp>
 
 #include "mesh_functions.hpp"
 #include "meshblock.hpp"
 #include "oct_tree.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct MeshOptions {
@@ -76,3 +77,5 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
 
 TORCH_MODULE(Mesh);
 }  // namespace snap
+
+#undef ADD_ARG

@@ -13,7 +13,7 @@ namespace snap {
 
 EquationOfStateOptions::EquationOfStateOptions(ParameterInput pin) {
   type(pin->GetOrAddString("hydro", "eos", "ideal_gas"));
-  thermo(ThermodynamicsOptions(pin));
+  // thermo(ThermodynamicsOptions(pin));
   coord(CoordinateOptions(pin));
 }
 

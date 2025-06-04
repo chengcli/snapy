@@ -14,9 +14,8 @@ macro(setup_test namel)
   target_include_directories(
     ${namel}.${buildl}
     PRIVATE ${CMAKE_BINARY_DIR}
-            ${HARP_INCLUDE_DIR}
             ${DISORT_INCLUDE_DIR}
-            ${ELEMENTS_INCLUDE_DIR}
+            ${HARP_INCLUDE_DIR}
             ${KINTERA_INCLUDE_DIR}
             ${SNAP_INCLUDE_DIR}
             ${TORCH_INCLUDE_DIR}
@@ -25,7 +24,7 @@ macro(setup_test namel)
   target_link_libraries(
     ${namel}.${buildl}
     PRIVATE libsnap::snap gtest_main
-            $<IF:$<BOOL:${CUDAToolkit_FOUND}>,libsnap::snap,>)
+            $<IF:$<BOOL:${CUDAToolkit_FOUND}>,libsnap::snap_cu,>)
 
   add_test(NAME ${namel}.${buildl} COMMAND ${namel}.${buildl})
 endmacro()

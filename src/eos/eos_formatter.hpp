@@ -4,7 +4,7 @@
 #include <fmt/format.h>
 
 // snap
-#include <snap/thermo/thermo_formatter.hpp>
+#include <kintera/thermo/thermo_formatter.hpp>
 
 #include "equation_of_state.hpp"
 

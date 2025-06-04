@@ -6,9 +6,10 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include "boundary_condition.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct InternalBoundaryOptions {
@@ -63,3 +64,5 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
 TORCH_MODULE(InternalBoundary);
 
 }  // namespace snap
+
+#undef ADD_ARG

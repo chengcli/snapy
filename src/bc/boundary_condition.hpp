@@ -7,8 +7,10 @@
 #include <torch/torch.h>
 
 // snap
-#include <snap/add_arg.h>
 #include <snap/snap.h>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 enum BoundaryFace {
@@ -59,3 +61,5 @@ void solid_outer(torch::Tensor, int dim, BoundaryFuncOptions);
 bfunc_t get_boundary_function(BoundaryFace face, BoundaryFlag flag);
 
 }  // namespace snap
+
+#undef ADD_ARG

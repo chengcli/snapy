@@ -6,3 +6,9 @@ build*/
 
 # data
 data/example.speos
+
+# nc
+*.nc
+
+# mac
+.DS_Store

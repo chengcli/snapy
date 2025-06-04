@@ -6,11 +6,12 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/input/parameter_input.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct RiemannSolverOptions {
@@ -148,3 +149,5 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
 };
 TORCH_MODULE(ShallowRoeSolver);
 }  // namespace snap
+
+#undef ADD_ARG

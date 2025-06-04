@@ -6,11 +6,12 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/recon/reconstruct.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 
@@ -69,3 +70,5 @@ std::pair<torch::Tensor, torch::Tensor> eigen_vectors(torch::Tensor prim,
                                                       torch::Tensor gm1,
                                                       torch::Tensor cs);
 }  // namespace snap
+
+#undef ADD_ARG

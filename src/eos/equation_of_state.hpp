@@ -8,13 +8,16 @@
 // base
 #include <configure.h>
 
-// snap
-#include <snap/add_arg.h>
+// kintera
+#include <kintera/thermo/thermo.hpp>
 
+// snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
 #include <snap/registry.hpp>
-#include <snap/thermo/thermodynamics.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 struct EquationOfStateOptions {
@@ -27,7 +30,7 @@ struct EquationOfStateOptions {
   ADD_ARG(bool, limiter) = false;
 
   //! submodules options
-  ADD_ARG(ThermodynamicsOptions, thermo);
+  ADD_ARG(kintera::ThermoOptions, thermo);
   ADD_ARG(CoordinateOptions, coord);
 };
 
@@ -38,10 +41,11 @@ class EquationOfStateImpl {
 
   //! submodules
   Coordinate pcoord = nullptr;
-  Thermodynamics pthermo = nullptr;
+  kintera::ThermoY pthermo = nullptr;
 
   virtual int nhydro() const {
-    return 5 + pthermo->options.nvapor() + pthermo->options.ncloud();
+    return 5 + pthermo->options.vapor_ids().size() +
+           pthermo->options.cloud_ids().size();
   }
 
   virtual void cons2prim(torch::Tensor prim, torch::Tensor cons) const {}
@@ -145,3 +149,5 @@ TORCH_MODULE(ShallowWater);
 
 void apply_primitive_limiter_inplace(torch::Tensor prim);
 }  // namespace snap
+
+#undef ADD_ARG

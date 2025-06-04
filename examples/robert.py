@@ -1,10 +1,7 @@
 import torch
-import canoe
 import math
 import time
-from canoe import *
-
-start_logging("robert")
+from snapy import *
 
 dT = 0.5
 p0 = 1.0e5

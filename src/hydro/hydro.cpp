@@ -130,7 +130,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
   //// ------------ (1) Calculate Primitives ------------ ////
-  SET_SHARED("hydro/gammad") = peos->pthermo->get_gammad(u, kConserved);
+  // SET_SHARED("hydro/gammad") = peos->pthermo->get_gammad(u, kConserved);
+  SET_SHARED("hydro/gammad") =
+      peos->pthermo->options.gammad() * torch::ones_like(u[Index::IDN]);
   SET_SHARED("hydro/w") = pib->mark_solid(peos->forward(u), solid);
   check_eos(GET_SHARED("hydro/w"), options.nghost());
 

@@ -12,14 +12,14 @@
 
 namespace snap {
 void ShallowWaterImpl::reset() {
-  TORCH_CHECK(options.thermo().nvapor() == 0,
+  TORCH_CHECK(options.thermo().vapor_ids().size() == 0,
               "ShallowWaterEOS should not have vapor");
 
-  TORCH_CHECK(options.thermo().ncloud() == 0,
+  TORCH_CHECK(options.thermo().cloud_ids().size() == 0,
               "ShallowWaterEOS should not have cloud");
 
   // set up thermodynamics model
-  pthermo = register_module("thermo", Thermodynamics(options.thermo()));
+  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());

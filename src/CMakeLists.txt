@@ -43,10 +43,8 @@ file(GLOB src_files
     utils/*.cpp
     bc/*.cpp
     forcing/*.cpp
-    thermo/*.cpp
     implicit/*.cpp
     intg/*.cpp
-    kintera/*.cpp
     input/*.cpp
     )
 

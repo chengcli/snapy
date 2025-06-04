@@ -10,8 +10,6 @@
 #include <configure.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/bc/boundary_condition.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/parameter_input.hpp>
@@ -19,6 +17,9 @@
 #include <snap/scalar/scalar.hpp>
 
 #include "oct_tree.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 
@@ -97,3 +98,5 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
 TORCH_MODULE(MeshBlock);
 }  // namespace snap
+
+#undef ADD_ARG

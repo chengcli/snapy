@@ -1,13 +1,12 @@
 #pragma once
 
-// fmt
-#include <fmt/format.h>
+// kintera
+#include <kintera/thermo/thermo_formatter.hpp>
 
 // snap
 #include <snap/eos/eos_formatter.hpp>
 #include <snap/recon/recon_formatter.hpp>
 #include <snap/riemann/riemann_formatter.hpp>
-#include <snap/thermo/thermo_formatter.hpp>
 
 #include "hydro.hpp"
 

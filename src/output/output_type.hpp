@@ -7,12 +7,13 @@
 #include <configure.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/coord/coordinate.hpp>
 #include <snap/interface/athena_arrays.hpp>
 #include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 //! \brief  container for parameters read from `<output>` block in the input
@@ -140,3 +141,5 @@ class OutputType {
   OutputData *plast_data_;
 };
 }  // namespace snap
+
+#undef ADD_ARG

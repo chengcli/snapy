@@ -6,7 +6,7 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
-// snap
+// arg
 #include <snap/add_arg.h>
 
 // according to:
@@ -43,3 +43,5 @@ class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
 
 TORCH_MODULE(Integrator);
 }  // namespace snap
+
+#undef ADD_ARG

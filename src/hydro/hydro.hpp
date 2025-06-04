@@ -6,8 +6,6 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/add_arg.h>
-
 #include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
@@ -18,6 +16,9 @@
 #include <snap/riemann/riemann_solver.hpp>
 
 #include "primitive_projector.hpp"
+
+// arg
+#include <snap/add_arg.h>
 
 namespace snap {
 
@@ -95,3 +96,5 @@ void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
                  int extend_x3);
 void check_eos(torch::Tensor w, int nghost);
 }  // namespace snap
+
+#undef ADD_ARG

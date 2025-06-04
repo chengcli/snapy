@@ -16,7 +16,7 @@ __attribute__((weak)) void call_ideal_moist_cuda(at::TensorIterator& iter) {}
 
 void IdealMoistImpl::reset() {
   // set up thermodynamics model
-  pthermo = register_module("thermo", Thermodynamics(options.thermo()));
+  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
 
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
@@ -24,11 +24,14 @@ void IdealMoistImpl::reset() {
 
 void IdealMoistImpl::cons2prim(torch::Tensor prim, torch::Tensor cons) const {
   if (!HAS_SHARED("hydro/gammad")) {
-    SET_SHARED("hydro/gammad") = pthermo->get_gammad(cons, kConserved);
+    // SET_SHARED("hydro/gammad") = pthermo->get_gammad(cons, kConserved);
+    SET_SHARED("hydro/gammad") =
+        pthermo->options.gammad() * torch::ones_like(cons[Index::IDN]);
   }
 
-  auto nmass = pthermo->options.nvapor() + pthermo->options.ncloud();
-  auto rho = cons[Index::IDN] + cons.narrow(0, Index::ICY, nmass).sum(0);
+  auto ny =
+      pthermo->options.vapor_ids().size() + pthermo->options.cloud_ids().size();
+  auto rho = cons[Index::IDN] + cons.narrow(0, Index::ICY, ny).sum(0);
   prim[Index::IDN] = rho;
 
   auto feps = pthermo->f_eps(cons / rho);
@@ -61,14 +64,15 @@ void IdealMoistImpl::cons2prim_fallback(torch::Tensor prim, torch::Tensor cons,
                                         torch::Tensor fsig) const {
   _apply_conserved_limiter_inplace(cons);
 
-  auto nmass = pthermo->options.nvapor() + pthermo->options.ncloud();
+  auto ny =
+      pthermo->options.vapor_ids().size() + pthermo->options.cloud_ids().size();
 
   // den -> den
-  prim[Index::IDN] = cons[0] + cons.narrow(0, Index::ICY, nmass).sum(0);
+  prim[Index::IDN] = cons[0] + cons.narrow(0, Index::ICY, ny).sum(0);
 
   // den -> mixr
-  prim.narrow(0, Index::ICY, nmass) =
-      cons.narrow(0, Index::ICY, nmass) / prim[Index::IDN];
+  prim.narrow(0, Index::ICY, ny) =
+      cons.narrow(0, Index::ICY, ny) / prim[Index::IDN];
 
   // mom -> vel
   prim.narrow(0, Index::IVX, 3) =
@@ -89,15 +93,16 @@ void IdealMoistImpl::cons2prim_fallback(torch::Tensor prim, torch::Tensor cons,
 void IdealMoistImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
   _apply_primitive_limiter_inplace(prim);
 
-  auto nmass = pthermo->options.nvapor() + pthermo->options.ncloud();
+  auto ny =
+      pthermo->options.vapor_ids().size() + pthermo->options.cloud_ids().size();
 
   // den -> den
   cons[Index::IDN] =
-      (1. - prim.narrow(0, Index::ICY, nmass).sum(0)) * prim[Index::IDN];
+      (1. - prim.narrow(0, Index::ICY, ny).sum(0)) * prim[Index::IDN];
 
   // mixr -> den
-  cons.narrow(0, Index::ICY, nmass) =
-      prim.narrow(0, Index::ICY, nmass) * prim[Index::IDN];
+  cons.narrow(0, Index::ICY, ny) =
+      prim.narrow(0, Index::ICY, ny) * prim[Index::IDN];
 
   // vel -> mom
   cons.narrow(0, Index::IVX, 3) =
@@ -109,7 +114,8 @@ void IdealMoistImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
       0.5 *
       (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
 
-  auto gammad = pthermo->get_gammad(prim);
+  // auto gammad = pthermo->get_gammad(prim);
+  auto gammad = pthermo->options.gammad();
 
   // pr -> eng
   cons[Index::IPR] = prim[Index::IPR] * pthermo->f_sig(prim) /
@@ -120,7 +126,8 @@ void IdealMoistImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
 }
 
 torch::Tensor IdealMoistImpl::sound_speed(torch::Tensor prim) const {
-  auto gammad_m1 = pthermo->get_gammad(prim) - 1;
+  // auto gammad_m1 = pthermo->get_gammad(prim) - 1;
+  auto gammad_m1 = pthermo->options.gammad() - 1;
   return torch::sqrt(
       (1. + gammad_m1 * pthermo->f_eps(prim) / pthermo->f_sig(prim)) *
       prim[Index::IPR] / prim[Index::IDN]);

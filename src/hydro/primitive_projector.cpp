@@ -16,7 +16,7 @@ PrimitiveProjectorImpl::PrimitiveProjectorImpl(
 
 void PrimitiveProjectorImpl::reset() {
   // set up thermodynamic model
-  pthermo = register_module("thermo", Thermodynamics(options.thermo()));
+  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
 }
 
 torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
