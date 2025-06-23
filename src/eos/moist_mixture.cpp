@@ -12,7 +12,7 @@
 namespace snap {
 
 MoistMixtureImpl::MoistMixtureImpl(EquationOfStateOptions const &options_)
-    : options(options_) {
+    : EquationOfStateImpl(options_) {
   reset()
 }
 
@@ -21,7 +21,7 @@ void MoistMixtureImpl::reset() {
   pcoord = register_module_op(this, "coord", options.coord());
 
   // set up thermodynamics model
-  pthermo = register_module("thermo_y", kintera::ThermoY(options.thermo()));
+  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
 
   // populate buffers
   int nx1 = options.coord().nx1();
@@ -29,16 +29,15 @@ void MoistMixtureImpl::reset() {
   int nx3 = options.coord().nx3();
 
   _prim = register_buffer(
-      "prim", torch::empty({nhydro(), nx3(), nx2(), nx1()}, torch::kFloat64));
+      "prim", torch::empty({nhydro(), nx3, nx2, nx1}, torch::kFloat64));
 
   _cons = register_buffer(
-      "cons", torch::empty({nhydro(), nx3(), nx2(), nx1()}, torch::kFloat64));
+      "cons", torch::empty({nhydro(), nx3, nx2, nx1}, torch::kFloat64));
 
-  _gamma = register_buffer(
-      "gamma", torch::empty({nx3(), nx2(), nx1()}, torch::kFloat64));
+  _gamma =
+      register_buffer("gamma", torch::empty({nx3, nx2, nx1}, torch::kFloat64));
 
-  _ct = register_buffer("ct",
-                        torch::empty({nx3(), nx2(), nx1()}, torch::kFloat64));
+  _ct = register_buffer("ct", torch::empty({nx3, nx2, nx1}, torch::kFloat64));
 }
 
 torch::Tensor const &MoistMixture::compute(
@@ -52,22 +51,18 @@ torch::Tensor const &MoistMixture::compute(
     _cons2prim(_cons, _prim);
     return _prim;
   } else if (ab == "TV->gamma") {
-    _gamma.set_(args[2]);
     _adiabatic_index(args[0], args[1], _gamma);
+    return _gamma;
   } else if (ab == "TV->ct") {
-    _ct.set_(args[2]);
     _isothermal_sound_speed(args[0], args[1], _ct);
+    return _ct;
+  } else if (ab == "TV->cs") {
+    _adiabatic_index(args[0], args[1], _gamma);
+    _isothermal_sound_speed(args[0], args[1], _ct);
+    return _gamma.sqrt() * _ct;
   } else {
     TORCH_CHECK(false, "Unknown abbreviation: ", ab);
   }
-}
-
-torch::Tensor MoistMixture::forward(
-    torch::Tensor hydro_u,
-    torch::optional<torch::Tensor> out = torch::nullopt) {
-  auto prim = out.value_or(_prim);
-  _cons2prim(hydro_u, prim);
-  return prim;
 }
 
 void MoistMixtureImpl::prim2cons(torch::Tensor prim,
@@ -88,7 +83,7 @@ void MoistMixtureImpl::prim2cons(torch::Tensor prim,
   cons.narrow(0, Index::IVX, 3) =
       prim.narrow(0, Index::IVX, 3) * prim[Index::IDN];
 
-  pcoord->vec_lower_inplace(cons);
+  pcoord->vec_lower_(cons);
 
   // KE
   cons[Index::IPR] =
@@ -122,7 +117,7 @@ void MoistMixtureImpl::_cons2prim(torch::Tensor cons,
   prim.narrow(0, Index::IVX, 3) =
       cons.narrow(0, Index::IVX, 3) / prim[Index::IDN];
 
-  pcoord->vec_raise_inplace(prim);
+  pcoord->vec_raise_(prim);
 
   auto KE =
       0.5 *
