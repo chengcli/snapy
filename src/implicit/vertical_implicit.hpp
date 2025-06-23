@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/eos/equation_of_state.hpp>
 #include <snap/recon/reconstruct.hpp>
 
 // arg
@@ -19,11 +18,9 @@ struct VerticalImplicitOptions {
   VerticalImplicitOptions() = default;
 
   ADD_ARG(std::string, type) = "vic";
-  ADD_ARG(int, batch_size) = 1;
   ADD_ARG(int, nghost) = 1;
   ADD_ARG(float, grav) = 0.;
   ADD_ARG(int, scheme) = 0;
-  ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(CoordinateOptions, coord);
   ADD_ARG(ReconstructOptions, recon);
 };
@@ -34,7 +31,6 @@ class VerticalImplicitImpl : public torch::nn::Cloneable<VerticalImplicitImpl> {
   VerticalImplicitOptions options;
 
   //! submodules
-  EquationOfState peos = nullptr;
   Reconstruct precon = nullptr;
   Coordinate pcoord = nullptr;
 

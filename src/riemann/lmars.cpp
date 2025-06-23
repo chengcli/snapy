@@ -24,27 +24,28 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor gammad) {
-  torch::NoGradGuard no_grad;
-
   auto out = torch::empty_like(wl);
 
-  auto iter =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(true)
-          .declare_static_shape(out.sizes(), /*squash_dims=*/0)
-          .add_output(out)
-          .add_owned_const_input(wl)
-          .add_owned_const_input(wr)
-          .add_owned_const_input(gammad.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->cv_ratio_m1.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->mu_ratio_m1.unsqueeze(0))
-          .build();
+  // FIXME(cli): This is a place holder
+  auto cv_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+  auto mu_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dims=*/0)
+                  .add_output(out)
+                  .add_owned_const_input(wl)
+                  .add_owned_const_input(wr)
+                  .add_owned_const_input(gammad.unsqueeze(0))
+                  .add_owned_const_input(cv_ratio_m1.unsqueeze(0))
+                  .add_owned_const_input(mu_ratio_m1.unsqueeze(0))
+                  .build();
 
   if (wl.is_cpu()) {
-    call_lmars_cpu(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_lmars_cpu(iter, dim, peos->options.thermo().vapor_ids().size());
   } else if (wl.is_cuda()) {
-    call_lmars_cuda(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_lmars_cuda(iter, dim, peos->options.thermo().vapor_ids().size());
   } else {
     return forward_fallback(wl, wr, dim, gammad);
   }
@@ -69,13 +70,8 @@ torch::Tensor LmarsSolverImpl::forward_fallback(torch::Tensor wl,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  auto fepsl = peos->pthermo->f_eps(wl);
-  auto fepsr = peos->pthermo->f_eps(wr);
-  auto fsigl = peos->pthermo->f_sig(wl);
-  auto fsigr = peos->pthermo->f_sig(wr);
-
-  auto kappal = 1. / (gammad - 1.) * fsigl / fepsl;
-  auto kappar = 1. / (gammad - 1.) * fsigr / fepsr;
+  auto kappal = 1. / (peos->compute("W->A", {wl}) - 1.);
+  auto kappar = 1. / (peos->compute("W->A", {wr}) - 1.);
 
   pcoord->prim2local_inplace(wl);
 

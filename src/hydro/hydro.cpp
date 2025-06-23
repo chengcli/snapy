@@ -65,7 +65,6 @@ void HydroImpl::reset() {
   options.ib() = pib->options;
 
   // set up vertical implicit solver
-  options.vic().eos(options.eos());
   options.vic().coord(options.coord());
   options.vic().grav(options.grav().grav1());
   options.vic().nghost(options.nghost());
@@ -94,11 +93,44 @@ void HydroImpl::reset() {
   for (auto i = 0; i < forcings.size(); i++) {
     register_module("forcing" + std::to_string(i), forcings[i].ptr());
   }
+
+  // populate buffers
+  int nx1 = options.coord().nx1();
+  int nx2 = options.coord().nx2();
+  int nx3 = options.coord().nx3();
+  int nhydro = peos->nhydro();
+
+  if (nx1 > 1) {
+    _flux1 = register_buffer(
+        "flux1", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+  } else {
+    _flux1 = register_buffer("F1", torch::Tensor());
+  }
+
+  if (nx2 > 1) {
+    _flux2 = register_buffer(
+        "flux2", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+  } else {
+    _flux2 = register_buffer("F2", torch::Tensor());
+  }
+
+  if (nx3 > 1) {
+    _flux3 = register_buffer(
+        "flux3", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+  } else {
+    _flux3 = register_buffer("F3", torch::Tensor());
+  }
+
+  _div = register_buffer(
+      "div", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+
+  _vic = register_buffer(
+      "vic", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
 }
 
 double HydroImpl::max_time_step(torch::Tensor w,
                                 torch::optional<torch::Tensor> solid) const {
-  auto cs = peos->sound_speed(w);
+  auto cs = peos->compute("W->L", {w});
   if (solid.has_value()) {
     cs = torch::where(solid.value(), 1.e-8, cs);
   }
@@ -125,20 +157,25 @@ double HydroImpl::max_time_step(torch::Tensor w,
 
 torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
                                  torch::optional<torch::Tensor> solid) {
-  torch::NoGradGuard no_grad;
-
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
   //// ------------ (1) Calculate Primitives ------------ ////
-  // SET_SHARED("hydro/gammad") = peos->pthermo->get_gammad(u, kConserved);
-  SET_SHARED("hydro/gammad") =
-      peos->pthermo->options.gammad() * torch::ones_like(u[Index::IDN]);
-  SET_SHARED("hydro/w") = pib->mark_solid(peos->forward(u), solid);
-  check_eos(GET_SHARED("hydro/w"), options.nghost());
+  // TODO(cli) : 1. check valid buffer
+  torch::Tensor gamma;
+
+  if (peos->options.type() == "moist_mixture") {
+    auto ivol = peos->get_buffer("thermo.V");
+    auto temp = peos->get_buffer("thermo.T");
+    gamma = peos->compute("TV->A", {temp, ivol});
+  }
+
+  auto w = pib->mark_solid(peos->forward(u), solid);
+
+  // check_eos(GET_SHARED("hydro/w"), options.nghost());
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
-    auto wp = pproj->forward(GET_SHARED("hydro/w"), pcoord->dx1f);
+    auto wp = pproj->forward(w, pcoord->dx1f);
 
     // high-order
     auto wtmp = precon1->forward(wp, DIM1);
@@ -152,57 +189,47 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
     check_recon(wlr1, options.nghost(), 1, 0, 0);
 
-    SET_SHARED("hydro/flux1") = priemann->forward(
-        wlr1[Index::ILT], wlr1[Index::IRT], DIM1, GET_SHARED("hydro/gammad"));
-  } else {
-    SET_SHARED("hydro/flux1") = torch::Tensor();
+    _flux1.set_(
+        priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, gamma));
   }
 
   //// ------------ (3) Calculate dimension 2 flux ------------ ////
   if (u.size(DIM2) > 1) {
     // high-order
-    auto wtmp = precon23->forward(GET_SHARED("hydro/w"), DIM2);
-    fix_negative_dp_inplace(wtmp,
-                            precon_dc->forward(GET_SHARED("hydro/w"), DIM2));
+    auto wtmp = precon23->forward(w, DIM2);
+    fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM2));
 
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
     check_recon(wlr2, options.nghost(), 0, 1, 0);
 
-    SET_SHARED("hydro/flux2") = priemann->forward(
-        wlr2[Index::ILT], wlr2[Index::IRT], DIM2, GET_SHARED("hydro/gammad"));
-  } else {
-    SET_SHARED("hydro/flux2") = torch::Tensor();
+    _flux2.set_(
+        priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2, gamma));
   }
 
   //// ------------ (4) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
     // high-order
-    auto wtmp = precon23->forward(GET_SHARED("hydro/w"), DIM3);
-    fix_negative_dp_inplace(wtmp,
-                            precon_dc->forward(GET_SHARED("hydro/w"), DIM3));
+    auto wtmp = precon23->forward(w, DIM3);
+    fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM3));
 
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
     check_recon(wlr3, options.nghost(), 0, 0, 1);
 
-    SET_SHARED("hydro/flux3") = priemann->forward(
-        wlr3[Index::ILT], wlr3[Index::IRT], DIM3, GET_SHARED("hydro/gammad"));
-  } else {
-    SET_SHARED("hydro/flux3") = torch::Tensor();
+    _flux3.set_(
+        priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3, gamma));
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
-  SET_SHARED("hydro/div") =
-      pcoord->forward(GET_SHARED("hydro/flux1"), GET_SHARED("hydro/flux2"),
-                      GET_SHARED("hydro/flux3"));
+  _div.set_(pcoord->forward(_flux1, _flux2, _flux3));
 
   //// ------------ (6) Calculate external forcing ------------ ////
-  torch::Tensor du = -dt * GET_SHARED("hydro/div");
-  for (auto& f : forcings) f.forward(du, GET_SHARED("hydro/w"), dt);
+  auto du = -dt * _div;
+  for (auto& f : forcings) f.forward(du, w, dt);
 
   //// ------------ (7) Perform implicit correction ------------ ////
   torch::Tensor du0 = du.clone();
-  pvic->forward(GET_SHARED("hydro/w"), du, GET_SHARED("hydro/gammad") - 1., dt);
-  SET_SHARED("hydro/vic") = du - du0;
+  pvic->forward(w, du, gamma - 1., dt);
+  torch::sub_out(_vic, du, du0);
 
   return du;
 }

@@ -46,8 +46,10 @@ class EquationOfStateImpl {
 
   virtual int nhydro() const { return 5; }
 
-  virtual torch::Tensor const& compute(std::string ab,
-                                       std::vector<torch::Tensor> const& args);
+  virtual torch::Tensor compute(std::string ab,
+                                std::vector<torch::Tensor> const& args = {});
+
+  virtual torch::Tensor get_buffer(std::string) const;
 
   torch::Tensor forward(torch::Tensor cons,
                         torch::optional<torch::Tensor> out = torch::nullopt);
@@ -65,12 +67,11 @@ class EquationOfStateImpl {
   virtual void _apply_primitive_limiter_(torch::Tensor& prim) const;
 };
 
+using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
+
 class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                                public EquationOfStateImpl {
  public:
-  //! options with which this `EquationOfState` was constructed
-  EquationOfStateOptions options;
-
   //! submodules
   kintera::ThermoY pthermo = nullptr;
 
@@ -86,26 +87,30 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
            pthermo->options.cloud_ids().size();
   }
 
-  torch::Tensor const& compute(std::string ab,
-                               std::vector<torch::Tensor> const& args) override;
+  torch::Tensor get_buffer(std::string var) const override {
+    return named_buffers()[var];
+  }
+
+  torch::Tensor compute(std::string ab,
+                        std::vector<torch::Tensor> const& args) override;
 
  private:
   //! cache
-  torch::Tensor _prim, _cons, _gamma, _ct;
+  torch::Tensor _prim, _cons, _gamma, _ct, _cs;
 
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
    * \param[out] out  conserved variables
    */
-  void _prim2cons(torch::Tensor prim, torch::Tensor& cons) const;
+  void _prim2cons(torch::Tensor prim, torch::Tensor& cons);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
    * \param[in] cons  conserved variables
    * \param[ou] out   primitive variables
    */
-  void _cons2prim(torch::Tensor cons, torch::Tensor& prim) const;
+  void _cons2prim(torch::Tensor cons, torch::Tensor& prim);
 
   //! \brief Compute the adiabatic index
   /*
@@ -132,28 +137,29 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
  public:
   // Constructor to initialize the layers
   ShallowWaterImpl() = default;
-  ShallowWaterImpl(EquationOfStateOptions const& options_)
-      : EquationOfStateImpl(options_) {
-    reset();
-  }
+  ShallowWaterImpl(EquationOfStateOptions const& options_);
   void reset() override;
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;
 
   int nhydro() const override { return 4; }
 
-  torch::Tensor const& compute(std::string ab,
-                               std::vector<torch::Tensor> const& args) override;
+  torch::Tensor get_buffer(std::string var) const override {
+    return named_buffers()[var];
+  }
+
+  torch::Tensor compute(std::string ab,
+                        std::vector<torch::Tensor> const& args) override;
 
  private:
   //! cache
   torch::Tensor _prim, _cons, _cs;
 
-  torch::Tensor _cons2prim(torch::Tensor cons, torch::Tensor& out) const;
+  void _cons2prim(torch::Tensor cons, torch::Tensor& out);
 
-  torch::Tensor _prim2cons(torch::Tensor prim, torch::Tensor& out) const;
+  void _prim2cons(torch::Tensor prim, torch::Tensor& out);
 
-  torch::Tensor _sound_speed(torch::Tensor prim, torch::Tensor& out) const;
+  void _sound_speed(torch::Tensor prim, torch::Tensor& out) const;
 };
 TORCH_MODULE(ShallowWater);
 

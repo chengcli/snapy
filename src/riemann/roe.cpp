@@ -153,8 +153,8 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   //--- Step 6.  Overwrite with LLF flux if any of intermediate states are
   // negative
-  auto cl = peos->sound_speed(wl);
-  auto cr = peos->sound_speed(wr);
+  auto cl = peos->compute("W->L", {wl});
+  auto cr = peos->compute("W->L", {wr});
   auto cmax =
       0.5 * torch::max(torch::abs(wl[ivx]) + cl, torch::abs(wr[ivx]) + cr);
   flx = llf_flag * (0.5 * (fl + fr) - cmax * du) + (1 - llf_flag) * flx;

@@ -25,9 +25,6 @@ VerticalImplicitImpl::VerticalImplicitImpl(VerticalImplicitOptions options_)
 }
 
 void VerticalImplicitImpl::reset() {
-  // set up eos model
-  peos = register_module_op(this, "eos", options.eos());
-
   // set up reconstruct model
   auto op = ReconstructOptions();
   precon = register_module("recon", Reconstruct(options.recon()));
@@ -36,11 +33,16 @@ void VerticalImplicitImpl::reset() {
   pcoord = register_module_op(this, "coord", options.coord());
 }
 
+torch::Tensor sound_speed_ideal_gas(torch::Tensor w, torch::Tensor gm1) {
+  return torch::sqrt((1. + gm1) * w[Index::IPR] / w[Index::IDN]);
+}
+
 torch::Tensor VerticalImplicitImpl::diffusion_matrix(torch::Tensor w,
                                                      torch::Tensor gm1) {
-  auto wlr = precon->forward(w, 3);
+  enum { DIM1 = 3 };
+  auto wlr = precon->forward(w, DIM1);
   auto wroe = roe_average(wlr, gm1);
-  auto cs = peos->sound_speed(wroe);
+  auto cs = sound_speed_ideal_gas(wroe, gm1);
   auto [Rmat, Rimat] = eigen_vectors(wroe, gm1, cs);
   auto vel = wroe[Index::IVX];
   auto nc1 = w.size(3);

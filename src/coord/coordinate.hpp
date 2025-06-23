@@ -112,8 +112,8 @@ class CoordinateImpl {
   virtual torch::Tensor vec_raise(torch::Tensor prim,
                                   int type = kPrimitive) const;
 
-  virtual void vec_lower_inplace(torch::Tensor &prim) const {}
-  virtual void vec_raise_inplace(torch::Tensor &prim) const {}
+  virtual void vec_lower_(torch::Tensor &prim) const {}
+  virtual void vec_raise_(torch::Tensor &prim) const {}
 
   virtual std::array<torch::Tensor, 3> vec_from_cartesian(
       std::array<double, 3> vec) const;

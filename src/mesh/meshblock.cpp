@@ -152,7 +152,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
 void MeshBlockImpl::set_primitives(torch::Tensor hydro_w,
                                    torch::optional<torch::Tensor> scalar_w) {
-  phydro->peos->prim2cons(hydro_u, hydro_w);
+  hydro_w = phydro->peos->compute("U->W", {hydro_u});
 
   if (pscalar->nvar() > 0) {
     // scalar_u.set_(scalar_w);

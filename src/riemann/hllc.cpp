@@ -24,27 +24,28 @@ void HLLCSolverImpl::reset() {
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor gammad) {
-  torch::NoGradGuard no_grad;
-
   auto out = torch::empty_like(wl);
 
-  auto iter =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(false)
-          .declare_static_shape(out.sizes(), /*squash_dims=*/0)
-          .add_output(out)
-          .add_owned_const_input(wl)
-          .add_owned_const_input(wr)
-          .add_owned_const_input(gammad.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->cv_ratio_m1.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->mu_ratio_m1.unsqueeze(0))
-          .build();
+  // FIXME(cli): This is a place holder
+  auto cv_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+  auto mu_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(false)
+                  .declare_static_shape(out.sizes(), /*squash_dims=*/0)
+                  .add_output(out)
+                  .add_owned_const_input(wl)
+                  .add_owned_const_input(wr)
+                  .add_owned_const_input(gammad.unsqueeze(0))
+                  .add_owned_const_input(cv_ratio_m1.unsqueeze(0))
+                  .add_owned_const_input(mu_ratio_m1.unsqueeze(0))
+                  .build();
 
   if (wl.is_cpu()) {
-    call_hllc_cpu(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_hllc_cpu(iter, dim, peos->options.thermo().vapor_ids().size());
   } else if (wl.is_cuda()) {
-    call_hllc_cuda(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_hllc_cuda(iter, dim, peos->options.thermo().vapor_ids().size());
   } else {
     return forward_fallback(wl, wr, dim, gammad);
   }
@@ -73,8 +74,8 @@ torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
 
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
 
-  auto cl = peos->sound_speed(wl);
-  auto cr = peos->sound_speed(wr);
+  auto cl = peos->compute("W->L", {wl});
+  auto cr = peos->compute("W->L", {wr});
 
   auto el =
       wl[IPR] * igm1 + 0.5 * wl[IDN] * wl.narrow(0, IVX, 3).square().sum(0);

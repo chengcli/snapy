@@ -13,6 +13,7 @@ namespace snap {
 void OutputType::loadHydroOutputData(MeshBlock pmb) {
   OutputData *pod;
   auto peos = pmb->phydro->peos;
+  auto w = peos->get_buffer("W");
 
   // (lab-frame) density
   if (ContainVariable(options.variable(), "D") ||
@@ -31,7 +32,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "rho";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IDN, 1);
+    pod->data.InitFromTensor(w, 4, Index::IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -55,7 +56,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "press";
-      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IPR, 1);
+      pod->data.InitFromTensor(w, 4, Index::IPR, 1);
       AppendOutputDataNode(pod);
       num_vars_++;
     }
@@ -121,7 +122,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "vel";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 3);
+    pod->data.InitFromTensor(w, 4, Index::IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
@@ -173,8 +174,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
   }
 
   // vapor
-  auto ny = peos->pthermo->options.vapor_ids().size() +
-            peos->pthermo->options.cloud_ids().size();
+  auto ny = peos->nhydro() - 5;
   if (ny > 0) {
     if (options.variable().compare("prim") == 0 ||
         options.variable().compare("vapor") == 0) {

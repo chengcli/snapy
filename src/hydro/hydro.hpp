@@ -83,6 +83,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                         torch::optional<torch::Tensor> solid = torch::nullopt);
 
   void fix_negative_dp_inplace(torch::Tensor wlr, torch::Tensor wdc) const;
+
+ private:
+  torch::Tensor _flux1, _flux2, _flux3, _div, _vic;
 };
 
 /// A `ModuleHolder` subclass for `HydroImpl`.

@@ -10,14 +10,19 @@ EquationOfStateOptions::EquationOfStateOptions(ParameterInput pin) {
   coord(CoordinateOptions(pin));
 }
 
-void EquationOfStateImpl::compute(std::string ab,
-                                  std::vector<torch::Tensor> const& args) {
+torch::Tensor EquationOfStateImpl::compute(
+    std::string ab, std::vector<torch::Tensor> const& args) {
   TORCH_CHECK(false, "EquationOfStateImpl::compute() is not implemented.",
               "Please use this method in a derived class.");
 }
 
-torch::Tensor EquationOfStateImpl::forward(
-    torch::Tensor cons, torch::optional<torch::Tensor> out = torch::nullopt) {
+torch::Tensor EquationOfStateImpl::get_buffer(std::string) const {
+  TORCH_CHECK(false, "EquationOfStateImpl::get_buffer() is not implemented.",
+              "Please use this method in a derived class.");
+}
+
+torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
+                                           torch::optional<torch::Tensor> out) {
   auto prim = out.value_or(torch::empty_like(cons));
   return compute("cons->prim", {cons, prim});
 }
