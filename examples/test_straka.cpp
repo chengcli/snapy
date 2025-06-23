@@ -56,7 +56,6 @@ int main(int argc, char **argv) {
   // initial conditions
   auto pcoord = block->phydro->pcoord;
   auto peos = block->phydro->peos;
-  auto pthermo = peos->pthermo;
 
   // thermodynamics
   auto cp = gamma / (gamma - 1.) * Rd;
