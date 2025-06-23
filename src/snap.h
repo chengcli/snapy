@@ -31,10 +31,6 @@ enum {
   kConserved = 1,
   kScalar = 2,
 
-  // mole fractions
-  kMole = 3,
-  kMass = 4,
-
   // temperature, pressure, mass fraction with LR states
   kTPMassLR = 5,
   kDPMassLR = 6,

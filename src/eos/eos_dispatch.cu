@@ -6,6 +6,7 @@
 
 // fmv
 #include <snap/loops.cuh>
+#include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 
@@ -14,7 +15,7 @@ namespace snap {
 void call_ideal_gas_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "ideal_gas_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_ideal_gas_cuda", [&]() {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
     native::gpu_kernel<scalar_t, 3>(
@@ -30,7 +31,7 @@ void call_ideal_gas_cuda(at::TensorIterator& iter) {
 void call_ideal_moist_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "ideal_moist_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_ideal_moist_cuda", [&]() {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto nmass = nhydro - 5;
@@ -48,3 +49,10 @@ void call_ideal_moist_cuda(at::TensorIterator& iter) {
 }
 
 }  // namespace snap
+
+namespace at::native {
+
+REGISTER_CUDA_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_cuda);
+REGISTER_CUDA_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cuda);
+
+}  // namespace at::native

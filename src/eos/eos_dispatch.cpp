@@ -5,13 +5,14 @@
 #include <ATen/native/cpu/Loops.h>
 
 // snap
+#include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
 #include "ideal_moist_impl.h"
 
 namespace snap {
 
 void call_ideal_gas_cpu(at::TensorIterator& iter) {
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_gas_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_ideal_gas_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
@@ -25,8 +26,32 @@ void call_ideal_gas_cpu(at::TensorIterator& iter) {
   });
 }
 
+void call_ideal_gas_mps(at::TensorIterator& iter) {
+  auto prim = iter.output();
+  auto cons = iter.input(0);
+  auto gammad = iter.input(1);
+
+  //_apply_conserved_limiter_inplace(cons);
+
+  // den -> den
+  prim[Index::IDN] = cons[Index::IDN];
+
+  // mom -> vel
+  prim.slice(0, 1, Index::IPR) =
+      cons.slice(0, 1, Index::IPR) / prim[Index::IDN];
+
+  pcoord->vec_raise_inplace(prim);
+
+  auto ke =
+      0.5 *
+      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
+
+  // eng -> pr
+  prim[Index::IPR] = (gammad - 1.) * (cons[Index::IPR] - ke);
+}
+
 void call_ideal_moist_cpu(at::TensorIterator& iter) {
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_moist_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_ideal_moist_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto nmass = nhydro - 5;
@@ -45,3 +70,16 @@ void call_ideal_moist_cpu(at::TensorIterator& iter) {
 }
 
 }  // namespace snap
+
+namespace at::native {
+
+DEFINE_DISPATCH(call_ideal_gas);
+DEFINE_DISPATCH(call_ideal_moist);
+
+REGISTER_ALL_CPU_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_cpu);
+REGISTER_ALL_CPU_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cpu);
+
+REGISTER_MPS_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_mps);
+REGISTER_MPS_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_mps);
+
+}  // namespace at::native

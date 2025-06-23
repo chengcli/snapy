@@ -14,17 +14,17 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
-#include <snap/registry.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
+
 struct EquationOfStateOptions {
   EquationOfStateOptions() = default;
 
   explicit EquationOfStateOptions(ParameterInput pin);
-  ADD_ARG(std::string, type) = "ideal_gas";
+  ADD_ARG(std::string, type) = "moist_mixture";
   ADD_ARG(double, density_floor) = 1.e-6;
   ADD_ARG(double, pressure_floor) = 1.e-3;
   ADD_ARG(bool, limiter) = false;
@@ -34,7 +34,7 @@ struct EquationOfStateOptions {
   ADD_ARG(CoordinateOptions, coord);
 };
 
-class EquationOfStateImpl {
+class MoistMixtureImpl : public torch::nn::Cloneable<MoistMixtureImpl> {
  public:
   //! options with which this `EquationOfState` was constructed
   EquationOfStateOptions options;
@@ -43,93 +43,67 @@ class EquationOfStateImpl {
   Coordinate pcoord = nullptr;
   kintera::ThermoY pthermo = nullptr;
 
-  virtual int nhydro() const {
+  // Constructor to initialize the layers
+  MoistMixtureImpl() = default;
+  explicit MoistMixtureImpl(EquationOfStateOptions const& options_);
+  void reset() override;
+
+  int nhydro() const {
     return 5 + pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size();
   }
 
-  virtual void cons2prim(torch::Tensor prim, torch::Tensor cons) const {}
-  virtual void prim2cons(torch::Tensor cons, torch::Tensor prim) const {}
-
-  virtual torch::Tensor sound_speed(torch::Tensor prim) const {
-    return torch::zeros_like(prim[0]);
-  }
+  torch::Tensor const& compute(std::string ab,
+                               std::vector<torch::Tensor> const& args);
 
   torch::Tensor forward(torch::Tensor hydro_u,
-                        torch::optional<torch::Tensor> out = torch::nullopt) {
-    torch::NoGradGuard no_grad;
-
-    if (out.has_value()) {
-      cons2prim(out.value(), hydro_u);
-      return out.value();
-    } else {
-      auto prim = torch::empty_like(hydro_u);
-      cons2prim(prim, hydro_u);
-      return prim;
-    }
-  }
-
- protected:
-  //! Disable constructor
-  EquationOfStateImpl() = default;
-  explicit EquationOfStateImpl(EquationOfStateOptions const& options_)
-      : options(options_) {}
-
-  //! Implement this function.
-  virtual void _apply_conserved_limiter_inplace(torch::Tensor& cons) const;
-
-  //! Implement this function.
-  virtual void _apply_primitive_limiter_inplace(torch::Tensor& prim) const;
+                        torch::optional<torch::Tensor> out = torch::nullopt);
 
  private:
-  std::string name_() const { return "snap::EquationOfStateImpl"; }
+  //! cache
+  torch::Tensor _prim, _cons, _gamma, _ct;
+
+  //! \brief Convert primitive variables to conserved variables.
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  conserved variables
+   */
+  void _prim2cons(torch::Tensor prim, torch::Tensor& cons) const;
+
+  //! \brief Convert conserved variables to primitive variables.
+  /*
+   * \param[in] cons  conserved variables
+   * \param[ou] out   primitive variables
+   */
+  void _cons2prim(torch::Tensor cons, torch::Tensor& prim) const;
+
+  //! \brief Compute the adiabatic index
+  /*
+   * \param[in] temp  temperature
+   * \param[in] ivol  inverse specific volume
+   * \param[out] out  adiabatic index
+   */
+  void _adiabatic_index(torch::Tensor temp, torch::Tensor ivol,
+                        torch::Tensor& out) const;
+
+  //! \brief Compute the isothermal sound speed
+  /*
+   * \param[in] temp  temperature
+   * \param[in] ivol  inverse specific volume
+   * \param[out] out  isothermal sound speed
+   */
+  void _isothermal_sound_speed(torch::Tensor temp, torch::Tensor ivol,
+                               torch::Tensor& out) const;
+
+  //! \brief Apply the conserved variable limiter in place.
+  void _apply_conserved_limiter_(torch::Tensor& cons) const;
+
+  //! \brief Apply the primitive variable limiter in place.
+  void _apply_primitive_limiter_(torch::Tensor& prim) const;
 };
+TORCH_MODULE(MoistMixture);
 
-using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
-
-class IdealGasImpl : public torch::nn::Cloneable<IdealGasImpl>,
-                     public EquationOfStateImpl {
- public:
-  // Constructor to initialize the layers
-  IdealGasImpl() = default;
-  explicit IdealGasImpl(EquationOfStateOptions const& options_)
-      : EquationOfStateImpl(options_) {
-    reset();
-  }
-  void reset() override;
-  using EquationOfStateImpl::forward;
-
-  void cons2prim(torch::Tensor prim, torch::Tensor cons) const override;
-  void cons2prim_fallback(torch::Tensor prim, torch::Tensor cons,
-                          torch::Tensor gammad) const;
-  void prim2cons(torch::Tensor cons, torch::Tensor prim) const override;
-  torch::Tensor sound_speed(torch::Tensor prim) const override;
-};
-TORCH_MODULE(IdealGas);
-
-class IdealMoistImpl : public torch::nn::Cloneable<IdealMoistImpl>,
-                       public EquationOfStateImpl {
- public:
-  // Constructor to initialize the layers
-  IdealMoistImpl() = default;
-  explicit IdealMoistImpl(EquationOfStateOptions const& options_)
-      : EquationOfStateImpl(options_) {
-    reset();
-  }
-  void reset() override;
-  using EquationOfStateImpl::forward;
-
-  void cons2prim(torch::Tensor prim, torch::Tensor cons) const override;
-  void cons2prim_fallback(torch::Tensor prim, torch::Tensor cons,
-                          torch::Tensor gammad, torch::Tensor feps,
-                          torch::Tensor fsig) const;
-  void prim2cons(torch::Tensor cons, torch::Tensor prim) const override;
-  torch::Tensor sound_speed(torch::Tensor prim) const override;
-};
-TORCH_MODULE(IdealMoist);
-
-class ShallowWaterImpl : public torch::nn::Cloneable<ShallowWaterImpl>,
-                         public EquationOfStateImpl {
+class ShallowWaterImpl : public torch::nn::Cloneable<ShallowWaterImpl> {
  public:
   // Constructor to initialize the layers
   ShallowWaterImpl() = default;
@@ -138,16 +112,29 @@ class ShallowWaterImpl : public torch::nn::Cloneable<ShallowWaterImpl>,
     reset();
   }
   void reset() override;
-  using EquationOfStateImpl::forward;
 
   int nhydro() const override { return 4; }
-  void cons2prim(torch::Tensor prim, torch::Tensor cons) const override;
-  void prim2cons(torch::Tensor cons, torch::Tensor prim) const override;
-  torch::Tensor sound_speed(torch::Tensor prim) const override;
+
+  torch::Tensor cons2prim(
+      torch::Tensor cons,
+      torch::optional<torch::Tensor> out = torch::nullopt) const;
+
+  torch::Tensor prim2cons(
+      torch::Tensor prim,
+      torch::optional<torch::Tensor> out = torch::nullopt) const;
+
+  torch::Tensor sound_speed(
+      torch::Tensor prim,
+      torch::optional<torch::Tensor> out = torch::nullopt) const;
+
+  torch::Tensor forward(torch::Tensor hydro_u,
+                        torch::optional<torch::Tensor> out = torch::nullopt);
+
+ private:
+  void apply_primitive_limiter_inplace(torch::Tensor prim);
 };
 TORCH_MODULE(ShallowWater);
 
-void apply_primitive_limiter_inplace(torch::Tensor prim);
 }  // namespace snap
 
 #undef ADD_ARG
