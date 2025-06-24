@@ -12,20 +12,18 @@ InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
     const YAML::Node &root) {
   InternalBoundaryOptions op;
 
-  TORCH_CHECK(root["geometry"], "'geometry' section missing");
-  TORCH_CHECK(root["geometry"]["cells"], "'geometry/cells' section missing");
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
 
-  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(2);
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
 
-  TORCH_CHECK(root["boundary"], "'boundary' section missing");
-  TORCH_CHECK(root["boundary"]["internal"],
-              "'boundary/internal' section missing");
+  if (!root["boundary-condition"]) return op;
+  if (!root["boundary-condition"]["internal"]) return op;
 
-  op.max_iter() = root["boundary"]["internal"]["max_iter"].as<int>(5);
-  op.solid_density() =
-      root["boundary"]["internal"]["solid_density"].as<double>(1.e3);
-  op.solid_pressure() =
-      root["boundary"]["internal"]["solid_pressure"].as<double>(1.9);
+  auto bc = root["boundary-condition"]["internal"];
+  op.max_iter() = bc["max_iter"].as<int>(5);
+  op.solid_density() = bc["solid_density"].as<double>(1.e3);
+  op.solid_pressure() = bc["solid_pressure"].as<double>(1.9);
 
   return op;
 }

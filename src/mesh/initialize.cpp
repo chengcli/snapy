@@ -16,6 +16,8 @@
 namespace snap {
 void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
                                OctTree const& tree) {
+  auto nghost = options.hydro().coord().nghost();
+
   // initialize coordinates
   auto lx1 = ploc->lx1;
   auto ll = ploc->level;
@@ -33,7 +35,7 @@ void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
 
     // calculate physical block size, x1
     if (nc1() > 1) {
-      rghost = 1. * options.nghost() / (nc1() - 2 * options.nghost());
+      rghost = 1. * nghost / (nc1() - 2 * nghost);
     } else {
       rghost = 0.0;
     }
@@ -66,7 +68,7 @@ void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
 
     // calculate physical block size, x2
     if (nc2() > 1) {
-      rghost = 1. * options.nghost() / (nc2() - 2 * options.nghost());
+      rghost = 1. * nghost / (nc2() - 2 * nghost);
     } else {
       rghost = 0.0;
     }
@@ -113,7 +115,7 @@ void MeshBlockImpl::initialize(MeshOptions const& mesh_options,
 
     // calculate physical block size, x3
     if (nc3() > 1) {
-      rghost = 1. * options.nghost() / (nc3() - 2 * options.nghost());
+      rghost = 1. * nghost / (nc3() - 2 * nghost);
     } else {
       rghost = 0.0;
     }

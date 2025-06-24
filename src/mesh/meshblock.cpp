@@ -79,17 +79,19 @@ void MeshBlockImpl::reset() {
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     std::tuple<int, int, int> offset, bool exterior, int extend_x1,
     int extend_x2, int extend_x3) const {
+  int nghost_coord = options.hydro().coord().nghost();
+
   int is_ghost = exterior ? 1 : 0;
 
   auto [o3, o2, o1] = offset;
   int start1, len1, start2, len2, start3, len3;
 
-  int nx1 = nc1() > 1 ? nc1() - 2 * options.nghost() : 1;
-  int nx2 = nc2() > 1 ? nc2() - 2 * options.nghost() : 1;
-  int nx3 = nc3() > 1 ? nc3() - 2 * options.nghost() : 1;
+  int nx1 = nc1() > 1 ? nc1() - 2 * nghost_coord : 1;
+  int nx2 = nc2() > 1 ? nc2() - 2 * nghost_coord : 1;
+  int nx3 = nc3() > 1 ? nc3() - 2 * nghost_coord : 1;
 
   // ---- dimension 1 ---- //
-  int nghost = nx1 == 1 ? 0 : options.nghost();
+  int nghost = nx1 == 1 ? 0 : nghost_coord;
 
   if (o1 == -1) {
     start1 = nghost * (1 - is_ghost);
@@ -103,7 +105,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   }
 
   // ---- dimension 2 ---- //
-  nghost = nx2 == 1 ? 0 : options.nghost();
+  nghost = nx2 == 1 ? 0 : nghost_coord;
 
   if (o2 == -1) {
     start2 = nghost * (1 - is_ghost);
@@ -117,7 +119,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   }
 
   // ---- dimension 3 ---- //
-  nghost = nx3 == 1 ? 0 : options.nghost();
+  nghost = nx3 == 1 ? 0 : nghost_coord;
 
   if (o3 == -1) {
     start3 = nghost * (1 - is_ghost);
@@ -147,7 +149,7 @@ void MeshBlockImpl::set_primitives(torch::Tensor const& hydro_w,
   }
 
   BoundaryFuncOptions op;
-  op.nghost(options.nghost());
+  op.nghost(options.hydro().coord().nghost());
   op.type(kConserved);
   for (int i = 0; i < bfuncs.size(); ++i) bfuncs[i](hydro_u, 3 - i / 2, op);
 
@@ -215,7 +217,7 @@ int MeshBlockImpl::forward(double dt, int stage,
 
   // -------- (5) exchange boundary and update ghost zones --------
   BoundaryFuncOptions op;
-  op.nghost(options.nghost());
+  op.nghost(options.hydro().coord().nghost());
   op.type(kConserved);
   for (int i = 0; i < bfuncs.size(); ++i) bfuncs[i](hydro_u, 3 - i / 2, op);
 

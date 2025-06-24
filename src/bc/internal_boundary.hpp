@@ -6,7 +6,8 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include "boundary_condition.hpp"
+#include "bc.hpp"
+#include "bc_func.hpp"
 
 // arg
 #include <snap/add_arg.h>
@@ -56,7 +57,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \return rectified internal solid boundary
    */
   torch::Tensor rectify_solid(torch::Tensor solid_in, int &total_num_flips,
-                              std::vector<bfunc_t> const &bfuncs = {});
+                              std::vector<bcfunc_t> const &bfuncs = {});
 
   //! Revise the left/right states
   /*!

@@ -13,7 +13,7 @@
 #include <torch/nn/modules/container/modulelist.h>
 
 // snap
-#include <snap/bc/boundary_condition.hpp>
+#include <snap/bc/bc.hpp>
 #include <snap/input/parameter_input.hpp>
 
 // arg

@@ -10,7 +10,7 @@
 #include <configure.h>
 
 // snap
-#include <snap/bc/boundary_condition.hpp>
+#include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/parameter_input.hpp>
 #include <snap/intg/integrator.hpp>
@@ -31,7 +31,7 @@ struct MeshBlockOptions {
   ADD_ARG(IntegratorOptions, intg);
   ADD_ARG(HydroOptions, hydro);
   ADD_ARG(ScalarOptions, scalar);
-  ADD_ARG(std::vector<BoundaryFlag>, bflags);
+  ADD_ARG(std::vector<bcfunc_t>, bc_func);
   ADD_ARG(torch::nn::AnyModule, loc);
 };
 
@@ -46,7 +46,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   torch::Tensor scalar_u;
 
   //! boundary functions
-  std::vector<bfunc_t> bfuncs;
+  std::vector<bfunc_t> bcfuncs;
 
   //! user output variables
   torch::OrderedDict<std::string, torch::Tensor> user_out_var;
