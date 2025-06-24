@@ -4,7 +4,6 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
-#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/vectorize.hpp>
 

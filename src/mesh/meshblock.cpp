@@ -1,57 +1,33 @@
-// base
-#include <configure.h>
-
 // snap
-#include <snap/input/parameter_input.hpp>
-
-// snap
-#include "mesh_formatter.hpp"
 #include "meshblock.hpp"
 
 namespace snap {
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(std::move(options_)) {
-  // set up logical location
-  options.loc(torch::nn::AnyModule(LogicalLocation()));
+  int nc1 = options.hydro().coord().nc1();
+  int nc2 = options.hydro().coord().nc2();
+  int nc3 = options.hydro().coord().nc3();
 
-  if (nc1() > 1 && options.bflags().size() < 2) {
-    throw std::runtime_error("MeshBlockImpl: bflags size must be at least 2");
+  if (nc1 > 1 && options.bfuncs().size() < 2) {
+    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 2");
   }
 
-  if (nc2() > 1 && options.bflags().size() < 4) {
-    throw std::runtime_error("MeshBlockImpl: bflags size must be at least 4");
+  if (nc2 > 1 && options.bfuncs().size() < 4) {
+    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 4");
   }
 
-  if (nc3() > 1 && options.bflags().size() < 6) {
-    throw std::runtime_error("MeshBlockImpl: bflags size must be at least 6");
+  if (nc3 > 1 && options.bfuncs().size() < 6) {
+    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 6");
   }
 
-  bfuncs.resize(options.bflags().size());
-  for (int i = 0; i < options.bflags().size(); ++i) {
-    bfuncs[i] = get_boundary_function(static_cast<BoundaryFace>(i),
-                                      options.bflags()[i]);
-  }
-  reset();
-}
-
-MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_,
-                             LogicalLocation ploc_)
-    : options(options_) {
-  // set up logical location
-  options.loc(torch::nn::AnyModule(ploc_));
   reset();
 }
 
 void MeshBlockImpl::reset() {
-  if (options.loc().is_empty()) {
-    ploc = register_module("loc", LogicalLocation());
-  } else {
-    ploc = register_module("loc", options.loc().clone().get<LogicalLocation>());
-  }
-
   // set up integrator
   pintg = register_module("intg", Integrator(options.intg()));
+  options.intg() = pintg->options;
 
   // set up hydro model
   phydro = register_module("hydro", Hydro(options.hydro()));
@@ -59,26 +35,25 @@ void MeshBlockImpl::reset() {
 
   // set up scalar model
   pscalar = register_module("scalar", Scalar(options.scalar()));
+  options.scalar() = pscalar->options;
 
-  // set up data
-  hydro_u0_ = register_buffer(
-      "HU0", torch::zeros({phydro->peos->nvar(), nc3(), nc2(), nc1()},
-                          torch::kFloat64));
+  // set up hydro buffer
+  auto const& hydro_u = phydro->peos->get_buffer("U");
+  _hydro_u0 = register_buffer("HU0", torch::zeros_like(hydro_u));
+  _hydro_u1 = register_buffer("HU1", torch::zeros_like(hydro_u));
 
-  hydro_u1_ = register_buffer(
-      "HU1", torch::zeros({phydro->peos->nvar(), nc3(), nc2(), nc1()},
-                          torch::kFloat64));
-
-  if (pscalar->nvar() > 0) {
-    scalar_u = register_buffer(
-        "scalar_u",
-        torch::zeros({pscalar->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-  }
+  // set up scalar buffer
+  auto const& scalar_v = pscalar->get_buffer("V");
+  _scalar_v0 = register_buffer("SV0", torch::zeros_like(scalar_v));
+  _scalar_v1 = register_buffer("SV0", torch::zeros_like(scalar_v));
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     std::tuple<int, int, int> offset, bool exterior, int extend_x1,
     int extend_x2, int extend_x3) const {
+  int nc1 = options.hydro().coord().nc1();
+  int nc2 = options.hydro().coord().nc2();
+  int nc3 = options.hydro().coord().nc3();
   int nghost_coord = options.hydro().coord().nghost();
 
   int is_ghost = exterior ? 1 : 0;
@@ -86,9 +61,9 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   auto [o3, o2, o1] = offset;
   int start1, len1, start2, len2, start3, len3;
 
-  int nx1 = nc1() > 1 ? nc1() - 2 * nghost_coord : 1;
-  int nx2 = nc2() > 1 ? nc2() - 2 * nghost_coord : 1;
-  int nx3 = nc3() > 1 ? nc3() - 2 * nghost_coord : 1;
+  int nx1 = nc1 > 1 ? nc1 - 2 * nghost_coord : 1;
+  int nx2 = nc2 > 1 ? nc2 - 2 * nghost_coord : 1;
+  int nx3 = nc3 > 1 ? nc3 - 2 * nghost_coord : 1;
 
   // ---- dimension 1 ---- //
   int nghost = nx1 == 1 ? 0 : nghost_coord;
@@ -140,57 +115,77 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-void MeshBlockImpl::set_primitives(torch::Tensor const& hydro_w,
-                                   torch::optional<torch::Tensor> scalar_w) {
-  auto hydro_u = phydro->peos->compute("W->U", {hydro_w});
-
-  if (pscalar->nvar() > 0) {
-    // scalar_u.set_(scalar_w);
-  }
-
+void MeshBlockImpl::initialize(torch::Tensor const& hydro_w, 
+                               torch::Tensor const& scalar_x) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
-  op.type(kConserved);
-  for (int i = 0; i < bfuncs.size(); ++i) bfuncs[i](hydro_u, 3 - i / 2, op);
 
-  phydro->peos->forward(hydro_u, hydro_w);
+  // hydro
+  if (phydro->peos->nvar() > 0) {
+    auto const& hydro_u = phydro->peos->compute("W->U", {hydro_w});
+
+    op.type(kConserved);
+    for (int i = 0; i < options.bfuncs().size(); ++i) {
+      options.bfuncs()[i](hydro_u, 3 - i / 2, op);
+    }
+
+    phydro->peos->forward(hydro_u, /*out=*/hydro_w);
+  }
+
+  // scalar
+  if (pscalar->nvar() > 0) {
+    auto const& temp = phydro->peos->get_buffer("thermo.T");
+    auto const& scalar_v = pscalar->pthermo->compute("TPX->V", 
+      {temp, hydro_w[Index::IPR], scalar_x});
+
+    op.type(kScalar);
+    for (int i = 0; i < options.bfuncs().size(); ++i) {
+      options.bfuncs()[i](scalar_v, 3 - i / 2, op);
+    }
+
+    // FIXME: scalar should have an eos as well
+    //scalar_x.set_(pscalar->pthermo->compute("V->X", {scalar_v}));
+  }
 }
 
-double MeshBlockImpl::max_root_time_step(int root_level,
-                                         torch::optional<torch::Tensor> solid) {
+double MeshBlockImpl::max_time_step(torch::Tensor solid) {
   double dt = 1.e9;
   auto const& w = phydro->peos->get_buffer("W");
+  auto const& x = pscalar->get_buffer("X");
 
   if (phydro->peos->nvar() > 0) {
     dt = std::min(dt, phydro->max_time_step(w, solid));
   }
 
   if (pscalar->nvar() > 0) {
-    dt = std::min(dt, pscalar->max_time_step(scalar_u));
+    dt = std::min(dt, pscalar->max_time_step(x));
   }
 
-  return pintg->options.cfl() * dt * (1 << (ploc->level - root_level));
+  return pintg->options.cfl() * dt;
 }
 
-int MeshBlockImpl::forward(double dt, int stage,
-                           torch::optional<torch::Tensor> solid) {
+int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
   auto const& hydro_u = phydro->peos->get_buffer("U");
+  auto const& scalar_v = pscalar->get_buffer("V");
 
   // -------- (1) save initial state --------
   if (stage == 0) {
-    hydro_u0_.copy_(hydro_u);
-    hydro_u1_.copy_(hydro_u);
+    if (phydro->peos->nvar() > 0) {
+      _hydro_u0.copy_(hydro_u);
+      _hydro_u1.copy_(hydro_u);
+    }
+
     if (pscalar->nvar() > 0) {
-      scalar_u0_.copy_(scalar_u);
-      scalar_u1_.copy_(scalar_u);
+      _scalar_v0.copy_(scalar_v);
+      _scalar_v1.copy_(scalar_v);
     }
   }
 
   // -------- (2) set containers for future results --------
-  torch::Tensor fut_hydro_du, fut_scalar_du;
+  torch::Tensor fut_hydro_du, fut_scalar_dv;
 
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
@@ -200,27 +195,40 @@ int MeshBlockImpl::forward(double dt, int stage,
 
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
-    fut_scalar_du = pscalar->forward(scalar_u, dt);
+    fut_scalar_dv = pscalar->forward(scalar_v, dt);
   }
 
   // -------- (4) multi-stage averaging --------
   if (phydro->peos->nvar() > 0) {
-    hydro_u.set_(pintg->forward(stage, hydro_u0_, hydro_u1_, fut_hydro_du));
-    hydro_u1_.copy_(hydro_u);
+    hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
+    _hydro_u1.copy_(hydro_u);
   }
 
   if (pscalar->nvar() > 0) {
-    scalar_u.copy_(
-        pintg->forward(stage, scalar_u0_, scalar_u1_, fut_scalar_du));
-    scalar_u1_.copy_(scalar_u);
+    scalar_v.set_(
+        pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
+    _scalar_v1.copy_(scalar_v);
   }
 
-  // -------- (5) exchange boundary and update ghost zones --------
+  // -------- (5) update ghost zones --------
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
-  op.type(kConserved);
-  for (int i = 0; i < bfuncs.size(); ++i) bfuncs[i](hydro_u, 3 - i / 2, op);
+
+  // (5.1) apply hydro boundary
+  if (phydro->peos->nvar() > 0) {
+    op.type(kConserved);
+    for (int i = 0; i < options.bfuncs().size(); ++i)
+      options.bfuncs()[i](hydro_u, 3 - i / 2, op);
+  }
+
+  // (5.2) apply scalar boundary
+  if (pscalar->nvar() > 0) {
+    op.type(kScalar);
+    for (int i = 0; i < options.bfuncs().size(); ++i)
+      options.bfuncs()[i](scalar_v, 3 - i / 2, op);
+  }
 
   return 0;
 }
+
 }  // namespace snap

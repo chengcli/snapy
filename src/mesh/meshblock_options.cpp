@@ -25,17 +25,17 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
   if (op.hydro().coord().nc1() > 1) {
     // x1-inner
     auto ix1 = external_bc["x1-inner"].as<std::string>("reflecting");
-    ix1 +=
-        "_inner" TORCH_CHECK(get_bc_func().find(formula) != get_bc_func().end(),
-                             "Boundary function '", ix1, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ix1]);
+    ix1 += "_inner";
+    TORCH_CHECK(get_bc_func().find(ix1) != get_bc_func().end(),
+                "Boundary function '", ix1, "' is not defined.");
+    op.bfuncs().push_back(get_bc_func()[ix1]);
 
     // x1-outer
     auto ox1 = external_bc["x1-outer"].as<std::string>("reflecting");
     ox1 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox1) != get_bc_func().end(),
                 "Boundary function '", ox1, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ox1]);
+    op.bfuncs().push_back(get_bc_func()[ox1]);
   }
 
   if (op.hydro().coord().nc2() > 1) {
@@ -44,14 +44,14 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
     ix2 += "_inner";
     TORCH_CHECK(get_bc_func().find(ix2) != get_bc_func().end(),
                 "Boundary function '", ix2, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ix2]);
+    op.bfuncs().push_back(get_bc_func()[ix2]);
 
     // x2-outer
     auto ox2 = external_bc["x2-outer"].as<std::string>("reflecting");
     ox2 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox2) != get_bc_func().end(),
                 "Boundary function '", ox2, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ox2]);
+    op.bfuncs().push_back(get_bc_func()[ox2]);
   }
 
   if (op.hydro().coord().nc3() > 1) {
@@ -60,15 +60,17 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
     ix3 += "_inner";
     TORCH_CHECK(get_bc_func().find(ix3) != get_bc_func().end(),
                 "Boundary function '", ix3, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ix3]);
+    op.bfuncs().push_back(get_bc_func()[ix3]);
 
     // x3-outer
     auto ox3 = external_bc["x3-outer"].as<std::string>("reflecting");
     ox3 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox3) != get_bc_func().end(),
                 "Boundary function '", ox3, "' is not defined.");
-    bc_func.push_back(get_bc_func()[ox3]);
+    op.bfuncs().push_back(get_bc_func()[ox3]);
   }
+
+  return op;
 }
 
 }  // namespace snap

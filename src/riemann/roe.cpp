@@ -6,7 +6,7 @@
 #include "riemann_solver.hpp"
 
 namespace snap {
-torch::Tensor _compute_uroe(torch::Tensor wroe, EquatioOfState const& peos) {
+torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState const& peos) {
   return wroe;
 }
 
@@ -89,8 +89,9 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto wroe1 = peos->compute("U->W", {uroe});
   auto gamma_roe = peos->compute("W->A", {wroe1});
 
-  auto cs = peos->pthermo->compute("WA->L", {wroe1, gamma_roe});
+  auto cs = peos->compute("WA->L", {wroe1, gamma_roe});
   auto cs_sq = cs.square();
+  auto gm1_roe = gamma_roe - 1.0;
 
   // Compute eigenvalues (eq. B2)
   auto ev = torch::zeros_like(du);

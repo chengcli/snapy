@@ -24,8 +24,8 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto out = torch::empty_like(wl);
 
   // FIXME(cli): This is a place holder
-  auto cv_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
-  auto mu_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+  auto cv_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
+  auto mu_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -74,8 +74,6 @@ torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
   auto er = peos->compute("W->U", {wl});
   auto gammar = peos->compute("W->A", {wr});
   auto cr = peos->compute("WA->L", {wr, gammar});
-
-  auto igm1 = 1.0 / (gammad - 1.0);
 
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
 

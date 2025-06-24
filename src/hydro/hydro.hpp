@@ -75,13 +75,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   explicit HydroImpl(const HydroOptions& options_);
   void reset() override;
 
-  virtual double max_time_step(
-      torch::Tensor hydro_w,
-      torch::optional<torch::Tensor> solid = torch::nullopt) const;
+  virtual double max_time_step(torch::Tensor hydro_w,
+                               torch::Tensor solid = torch::Tensor()) const;
 
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(torch::Tensor hydro_u, double dt,
-                        torch::optional<torch::Tensor> solid = torch::nullopt);
+                        torch::Tensor solid = torch::Tensor());
 
   void fix_negative_dp_inplace(torch::Tensor wlr, torch::Tensor wdc) const;
 

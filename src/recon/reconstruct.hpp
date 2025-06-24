@@ -6,12 +6,14 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/input/parameter_input.hpp>
-
 #include "interpolation.hpp"
 
 // arg
 #include <snap/add_arg.h>
+
+namespace YAML {
+class Node;
+}  // namespace YAML
 
 namespace snap {
 struct ReconstructOptions {

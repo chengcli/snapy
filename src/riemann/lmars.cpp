@@ -20,8 +20,8 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto out = torch::empty_like(wl);
 
   // FIXME(cli): This is a place holder
-  auto cv_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
-  auto mu_ratio_m1 = torch::ones(peos->nhydro() - 5, wl.options());
+  auto cv_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
+  auto mu_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -69,7 +69,7 @@ torch::Tensor LmarsSolverImpl::forward_fallback(torch::Tensor wl,
   auto er = peos->compute("W->U", {wr});
   auto gammar = peos->compute("W->A", {wr});
 
-  pcoord->prim2local_inplace(wl);
+  peos->pcoord->prim2local_inplace(wl);
 
   auto kel = 0.5 * wl.narrow(0, IVX, 3).square().sum(0);
   auto ker = 0.5 * wr.narrow(0, IVX, 3).square().sum(0);
@@ -107,7 +107,7 @@ torch::Tensor LmarsSolverImpl::forward_fallback(torch::Tensor wl,
 
   auto ui = (ubar > 0).to(torch::kInt);
   auto flx = ui * fluxl + (1 - ui) * fluxr;
-  pcoord->flux2global_inplace(flx);
+  peos->pcoord->flux2global_inplace(flx);
 
   return flx;
 }

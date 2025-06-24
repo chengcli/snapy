@@ -36,22 +36,20 @@ InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
 void InternalBoundaryImpl::reset() {}
 
 torch::Tensor InternalBoundaryImpl::mark_solid(
-    torch::Tensor w, torch::optional<torch::Tensor> solid) {
-  if (!solid.has_value()) return w;
+    torch::Tensor w, torch::Tensor solid) {
+  if (!solid.defined()) return w;
 
   auto fill_solid = torch::zeros({w.size(0), 1, 1, 1}, w.options());
 
   fill_solid[Index::IDN] = options.solid_density();
   fill_solid[Index::IPR] = options.solid_pressure();
 
-  return torch::where(solid.value(), fill_solid, w);
+  return torch::where(solid, fill_solid, w);
 }
 
 torch::Tensor InternalBoundaryImpl::forward(
-    torch::Tensor wlr, int dim, torch::optional<torch::Tensor> solid) {
-  torch::NoGradGuard no_grad;
-
-  if (!solid.has_value()) return wlr;
+    torch::Tensor wlr, int dim, torch::Tensor solid) {
+  if (!solid.defined()) return wlr;
 
   using Index::ILT;
   using Index::IRT;
@@ -59,8 +57,8 @@ torch::Tensor InternalBoundaryImpl::forward(
   using Index::IVY;
   using Index::IVZ;
 
-  auto solidl = solid.value();
-  auto solidr = solid.value().roll(1, dim - 1);
+  auto solidl = solid;
+  auto solidr = solid.roll(1, dim - 1);
   solidr.select(dim - 1, 0) = solidl.select(dim - 1, 0);
 
   for (size_t n = 0; n < wlr.size(1); ++n) {

@@ -2,11 +2,8 @@
 #include <sstream>
 #include <stdexcept>
 
-// base
-#include <configure.h>
-
 // snap
-#include "output.hpp"
+#include "output_type.hpp"
 #include "output_formats.hpp"
 
 namespace snap {

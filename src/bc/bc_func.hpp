@@ -12,7 +12,7 @@
 #include "bc.hpp"
 
 using bcfunc_t =
-    std::function<void(torch::Tensor&, int, snap::BoundaryFuncOptions)>;
+    std::function<void(torch::Tensor const&, int, snap::BoundaryFuncOptions)>;
 
 inline std::unordered_map<std::string, bcfunc_t>& get_bc_func() {
   static std::unordered_map<std::string, bcfunc_t> bcmap;
@@ -26,6 +26,6 @@ struct BCRegistrar {
 };
 
 #define BC_FUNCTION(name, var, dim, op)                      \
-  void name(torch::Tensor&, int, snap::BoundaryFuncOptions); \
+  void name(torch::Tensor const&, int, snap::BoundaryFuncOptions); \
   static BCRegistrar bc_##name(#name, name);                 \
-  void name(torch::Tensor& var, int dim, snap::BoundaryFuncOptions op)
+  void name(torch::Tensor const& var, int dim, snap::BoundaryFuncOptions op)

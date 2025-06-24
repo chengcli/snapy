@@ -115,11 +115,10 @@ void HydroImpl::reset() {
                          torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
 }
 
-double HydroImpl::max_time_step(torch::Tensor w,
-                                torch::optional<torch::Tensor> solid) const {
+double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   auto cs = peos->compute("W->L", {w});
-  if (solid.has_value()) {
-    cs = torch::where(solid.value(), 1.e-8, cs);
+  if (solid.defined()) {
+    cs = torch::where(solid, 1.e-8, cs);
   }
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
@@ -143,7 +142,7 @@ double HydroImpl::max_time_step(torch::Tensor w,
 }
 
 torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
-                                 torch::optional<torch::Tensor> solid) {
+                                 torch::Tensor solid) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
   //// ------------ (1) Calculate Primitives ------------ ////

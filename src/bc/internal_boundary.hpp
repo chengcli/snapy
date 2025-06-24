@@ -46,8 +46,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid internal solid boundary in [0, 1]
    * \return primitive states with solid cells marked
    */
-  torch::Tensor mark_solid(torch::Tensor w,
-                           torch::optional<torch::Tensor> solid);
+  torch::Tensor mark_solid(torch::Tensor w, torch::Tensor solid);
 
   //! Rectify the solid cells
   /*!
@@ -65,8 +64,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid internal solid boundary in [0, 1]
    * \return revised primitive left/right states
    */
-  torch::Tensor forward(torch::Tensor wlr, int dim,
-                        torch::optional<torch::Tensor> solid);
+  torch::Tensor forward(torch::Tensor wlr, int dim, torch::Tensor solid);
 };
 TORCH_MODULE(InternalBoundary);
 

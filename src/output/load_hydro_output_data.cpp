@@ -1,13 +1,9 @@
-// fmt
-#include <fmt/format.h>
-
 // snap
 #include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
-#include <snap/input/parameter_input.hpp>
 
-#include "output.hpp"
+#include "output_type.hpp"
 
 namespace snap {
 void OutputType::loadHydroOutputData(MeshBlock pmb) {

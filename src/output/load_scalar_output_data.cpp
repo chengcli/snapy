@@ -1,16 +1,16 @@
-// fmt
-#include <fmt/format.h>
-
 // snap
 #include <snap/snap.h>
 
 #include <snap/scalar/scalar.hpp>
 
-#include "output.hpp"
+#include "output_type.hpp"
 
 namespace snap {
 void OutputType::loadScalarOutputData(MeshBlock pmb) {
   OutputData *pod;
+
+  auto const& x = pmb->pscalar->get_buffer("X");
+  auto const& v = pmb->pscalar->get_buffer("V");
 
   std::string root_name_cons = "s";
   std::string root_name_prim = "r";
@@ -25,7 +25,7 @@ void OutputType::loadScalarOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_cons;
-      pod->data.InitFromTensor(pmb->scalar_u, 4, n, 1);
+      pod->data.InitFromTensor(v, 4, n, 1);
       AppendOutputDataNode(pod);
       num_vars_++;
     }
@@ -35,9 +35,8 @@ void OutputType::loadScalarOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_prim;
-      // TODO (cli) Finish scalar
-      // pod->data.InitFromTensor(GET_SHARED("scalar/w"), 4, n, 1);
-      // AppendOutputDataNode(pod);
+      pod->data.InitFromTensor(x, 4, n, 1);
+      AppendOutputDataNode(pod);
       num_vars_++;
     }
   }

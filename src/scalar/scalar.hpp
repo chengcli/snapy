@@ -5,9 +5,12 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
+// kintera
+#include <kintera/thermo/thermo.hpp>
+#include <kintera/kinetics/kinetics.hpp>
+
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 
@@ -16,11 +19,14 @@
 
 namespace snap {
 struct ScalarOptions {
+  static ScalarOptions from_yaml(std::string const& filename);
   ScalarOptions() = default;
-  explicit ScalarOptions(ParameterInput pin);
 
-  //! configure options
-  ADD_ARG(int, nscalar) = 0;
+  //! Thermodynamics options
+  ADD_ARG(kintera::ThermoOptions, thermo);
+
+  //! Kinetics options
+  ADD_ARG(kintera::KineticsOptions, kinetics);
 
   //! submodules options
   ADD_ARG(CoordinateOptions, coord);
@@ -38,16 +44,27 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   Reconstruct precon = nullptr;
   RiemannSolver priemann = nullptr;
 
+  kintera::ThermoX pthermo = nullptr;
+  kintera::Kinetics pkinetics = nullptr;
+
   //! Constructor to initialize the layers
   ScalarImpl() = default;
   explicit ScalarImpl(const ScalarOptions& options_);
   void reset() override;
 
-  int nvar() const { return options.nscalar(); }
+  int nvar() const { return 0; }
   virtual double max_time_step(torch::Tensor w) const { return 1.e9; }
+
+  torch::Tensor get_buffer(std::string var) const {
+    return named_buffers()[var];
+  }
 
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(torch::Tensor scalar_u, double dt);
+
+ private:
+  //! cache
+  torch::Tensor _X, _V;
 };
 
 TORCH_MODULE(Scalar);
