@@ -6,24 +6,25 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
-#include <snap/input/parameter_input.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
+namespace YAML {
+class Node;
+}  // namespace YAML
+
 namespace snap {
 struct RiemannSolverOptions {
+  static RiemannSolverOptions from_yaml(YAML::Node const& node);
   RiemannSolverOptions() = default;
-  explicit RiemannSolverOptions(ParameterInput pin);
 
   ADD_ARG(std::string, type) = "roe";
   ADD_ARG(std::string, dir) = "xy";
 
   //! submodule options
   ADD_ARG(EquationOfStateOptions, eos);
-  ADD_ARG(CoordinateOptions, coord);
 };
 
 class RiemannSolverImpl {
@@ -33,7 +34,7 @@ class RiemannSolverImpl {
 
   //! Solver the Riemann problem
   virtual torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                                torch::Tensor);
+                                torch::Tensor vel = torch::Tensor());
 
  protected:
   //! Disable constructor
@@ -56,7 +57,7 @@ class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel) override;
+                        torch::Tensor vel = torch::Tensor()) override;
 };
 TORCH_MODULE(UpwindSolver);
 
@@ -65,7 +66,6 @@ class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
  public:
   //! submodules
   EquationOfState peos = nullptr;
-  Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layers
   RoeSolverImpl() = default;
@@ -77,7 +77,7 @@ class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor gammad) override;
+                        torch::Tensor dummy = torch::Tensor()) override;
 };
 TORCH_MODULE(RoeSolver);
 
@@ -86,7 +86,6 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
  public:
   //! submodules
   EquationOfState peos = nullptr;
-  Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layers
   LmarsSolverImpl() = default;
@@ -98,7 +97,8 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor gammad) override;
+                        torch::Tensor vel = torch::Tensor()) override;
+
   torch::Tensor forward_fallback(torch::Tensor wl, torch::Tensor wr, int dim,
                                  torch::Tensor gammad);
 };
@@ -109,7 +109,6 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
  public:
   //! submodules
   EquationOfState peos = nullptr;
-  Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layers
   HLLCSolverImpl() = default;
@@ -121,7 +120,7 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor gammad) override;
+                        torch::Tensor vel = torch::Tensor()) override;
 
   torch::Tensor forward_fallback(torch::Tensor wl, torch::Tensor wr, int dim,
                                  torch::Tensor gammad);
@@ -133,7 +132,6 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
  public:
   //! submodules
   EquationOfState peos = nullptr;
-  Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layers
   ShallowRoeSolverImpl() = default;
@@ -145,7 +143,7 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor gammad) override;
+                        torch::Tensor vel = torch::Tensor()) override;
 };
 TORCH_MODULE(ShallowRoeSolver);
 }  // namespace snap

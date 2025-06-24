@@ -24,10 +24,8 @@
 namespace snap {
 
 struct MeshBlockOptions {
+  static MeshBlockOptions from_yaml(std::string input_file);
   MeshBlockOptions() = default;
-  explicit MeshBlockOptions(ParameterInput pin);
-
-  ADD_ARG(int, nghost) = 1;
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);
@@ -45,7 +43,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   MeshBlockOptions options;
 
   //! prognostic data
-  torch::Tensor hydro_u, scalar_u;
+  torch::Tensor scalar_u;
 
   //! boundary functions
   std::vector<bfunc_t> bfuncs;
@@ -78,7 +76,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   int gid() const { return gid_; }
   void set_gid(int gid) { gid_ = gid; }
 
-  void set_primitives(torch::Tensor hydro_w,
+  void set_primitives(torch::Tensor const& hydro_w,
                       torch::optional<torch::Tensor> scalar_w = torch::nullopt);
   void initialize(MeshOptions const& mesh_options, OctTree const& tree);
 

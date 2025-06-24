@@ -7,10 +7,4 @@ namespace snap {
 int my_rank = 0;  // MPI rank of this process
 int nranks = 1;   // total number of MPI ranks
 
-#ifndef __CUDACC__
-std::unordered_map<std::string, torch::Tensor> shared;
-std::vector<std::string> species_names;
-std::vector<double> species_weights;
-#endif
-
 }  // namespace snap

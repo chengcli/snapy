@@ -17,17 +17,17 @@ void ShallowWaterImpl::reset() {
   pcoord = register_module_op(this, "coord", options.coord());
 
   // populate buffers
-  int nx1 = options.coord().nx1();
-  int nx2 = options.coord().nx2();
-  int nx3 = options.coord().nx3();
+  int nc1 = options.coord().nc1();
+  int nc2 = options.coord().nc2();
+  int nc3 = options.coord().nc3();
 
   _prim = register_buffer(
-      "prim", torch::empty({nhydro(), nx3, nx2, nx1}, torch::kFloat64));
+      "prim", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
   _cons = register_buffer(
-      "cons", torch::empty({nhydro(), nx3, nx2, nx1}, torch::kFloat64));
+      "cons", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
-  _cs = register_buffer("cs", torch::empty({nx3, nx2, nx1}, torch::kFloat64));
+  _cs = register_buffer("cs", torch::empty({nc3, nc2, nc1}, torch::kFloat64));
 }
 
 torch::Tensor ShallowWaterImpl::compute(
@@ -40,9 +40,11 @@ torch::Tensor ShallowWaterImpl::compute(
     _cons.set_(args[0]);
     _cons2prim(_cons, _prim);
     return _prim;
-  } else if (ab == "W->L") {
+  } else if (ab == "W->A") {
+    return torch::Tensor();
+  } else if (ab == "WA->L") {
     _prim.set_(args[0]);
-    _sound_speed(args[0], _cs);
+    _gravity_wave_speed(args[0], _cs);
     return _cs;
   } else {
     TORCH_CHECK(false, "Unknown abbreviation: ", ab);
@@ -77,9 +79,9 @@ void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   _apply_conserved_limiter_(cons);
 }
 
-void ShallowWaterImpl::_sound_speed(torch::Tensor prim,
-                                    torch::Tensor &out) const {
-  torch::sqrt_out(/*out=*/out, prim[Index::IDN]);
+void ShallowWaterImpl::_gravity_wave_speed(torch::Tensor prim,
+                                           torch::Tensor &out) const {
+  torch::sqrt_out(out, prim[Index::IDN]);
 }
 
 }  // namespace snap

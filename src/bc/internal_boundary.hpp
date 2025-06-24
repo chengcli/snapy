@@ -11,10 +11,16 @@
 // arg
 #include <snap/add_arg.h>
 
+namespace YAML {
+class Node;
+}  // namespace YAML
+
 namespace snap {
+
 struct InternalBoundaryOptions {
   static constexpr int MAXRUN = 4;
 
+  static InternalBoundaryOptions from_yaml(const YAML::Node &root);
   InternalBoundaryOptions() = default;
 
   ADD_ARG(int, nghost) = 1;

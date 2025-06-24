@@ -10,15 +10,8 @@
 
 namespace snap {
 
-MeshBlockOptions::MeshBlockOptions(ParameterInput pin) {
-  nghost(pin->GetOrAddInteger("meshblock", "nghost", 2));
-
-  hydro(HydroOptions(pin));
-  scalar(ScalarOptions(pin));
-}
-
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
-    : options(options_) {
+    : options(std::move(options_)) {
   // set up logical location
   options.loc(torch::nn::AnyModule(LogicalLocation()));
 
@@ -61,7 +54,6 @@ void MeshBlockImpl::reset() {
   pintg = register_module("intg", Integrator(options.intg()));
 
   // set up hydro model
-  options.hydro().nghost(options.nghost());
   phydro = register_module("hydro", Hydro(options.hydro()));
   options.hydro() = phydro->options;
 
@@ -69,17 +61,13 @@ void MeshBlockImpl::reset() {
   pscalar = register_module("scalar", Scalar(options.scalar()));
 
   // set up data
-  hydro_u = register_buffer(
-      "hydro_u",
-      torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
-
   hydro_u0_ = register_buffer(
-      "hydro_u0",
-      torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
+      "HU0", torch::zeros({phydro->peos->nvar(), nc3(), nc2(), nc1()},
+                          torch::kFloat64));
 
   hydro_u1_ = register_buffer(
-      "hydro_u1",
-      torch::zeros({phydro->nvar(), nc3(), nc2(), nc1()}, torch::kFloat64));
+      "HU1", torch::zeros({phydro->peos->nvar(), nc3(), nc2(), nc1()},
+                          torch::kFloat64));
 
   if (pscalar->nvar() > 0) {
     scalar_u = register_buffer(
@@ -150,9 +138,9 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-void MeshBlockImpl::set_primitives(torch::Tensor hydro_w,
+void MeshBlockImpl::set_primitives(torch::Tensor const& hydro_w,
                                    torch::optional<torch::Tensor> scalar_w) {
-  hydro_w = phydro->peos->compute("U->W", {hydro_u});
+  auto hydro_u = phydro->peos->compute("W->U", {hydro_w});
 
   if (pscalar->nvar() > 0) {
     // scalar_u.set_(scalar_w);
@@ -163,18 +151,16 @@ void MeshBlockImpl::set_primitives(torch::Tensor hydro_w,
   op.type(kConserved);
   for (int i = 0; i < bfuncs.size(); ++i) bfuncs[i](hydro_u, 3 - i / 2, op);
 
-  SET_SHARED("hydro/w") = phydro->peos->forward(hydro_u);
+  phydro->peos->forward(hydro_u, hydro_w);
 }
 
 double MeshBlockImpl::max_root_time_step(int root_level,
                                          torch::optional<torch::Tensor> solid) {
   double dt = 1.e9;
-  if (!HAS_SHARED("hydro/w")) {
-    SET_SHARED("hydro/w") = phydro->peos->forward(hydro_u);
-  }
+  auto const& w = phydro->peos->get_buffer("W");
 
-  if (phydro->nvar() > 0) {
-    dt = std::min(dt, phydro->max_time_step(GET_SHARED("hydro/w"), solid));
+  if (phydro->peos->nvar() > 0) {
+    dt = std::min(dt, phydro->max_time_step(w, solid));
   }
 
   if (pscalar->nvar() > 0) {
@@ -189,7 +175,7 @@ int MeshBlockImpl::forward(double dt, int stage,
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
-  torch::NoGradGuard no_grad;
+  auto const& hydro_u = phydro->peos->get_buffer("U");
 
   // -------- (1) save initial state --------
   if (stage == 0) {
@@ -206,7 +192,7 @@ int MeshBlockImpl::forward(double dt, int stage,
 
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
-  if (phydro->nvar() > 0) {
+  if (phydro->peos->nvar() > 0) {
     fut_hydro_du = phydro->forward(hydro_u, dt, solid);
   }
 
@@ -216,8 +202,8 @@ int MeshBlockImpl::forward(double dt, int stage,
   }
 
   // -------- (4) multi-stage averaging --------
-  if (phydro->nvar() > 0) {
-    hydro_u.copy_(pintg->forward(stage, hydro_u0_, hydro_u1_, fut_hydro_du));
+  if (phydro->peos->nvar() > 0) {
+    hydro_u.set_(pintg->forward(stage, hydro_u0_, hydro_u1_, fut_hydro_du));
     hydro_u1_.copy_(hydro_u);
   }
 

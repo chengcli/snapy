@@ -1,13 +1,43 @@
-// base
-#include <configure.h>
+// C/C++
+#include <sstream>
+
+// yaml
+#include <yaml-cpp/yaml.h>
 
 // snap
 #include <snap/snap.h>
 
-#include "hydro_formatter.hpp"
 #include "primitive_projector.hpp"
 
 namespace snap {
+
+PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
+    YAML::Node const &root) {
+  PrimitiveProjectorOptions op;
+
+  if (!root["dynamics"]) return op;
+
+  if (root["dynamics"]["vertical-projection"]) {
+    op.type() =
+        root["dynamics"]["vertical-projection"]["type"].as<std::string>("none");
+    op.margin() =
+        root["dynamics"]["vertical-projection"]["pressure-margin"].as<double>(
+            1.e-6);
+  }
+
+  if (root["forcing"]) {
+    if (root["forcing"]["const-gravity"])
+      op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.);
+  }
+
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
+
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+
+  return op;
+}
+
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(
     PrimitiveProjectorOptions options_)
     : options(options_) {
@@ -15,27 +45,24 @@ PrimitiveProjectorImpl::PrimitiveProjectorImpl(
 }
 
 void PrimitiveProjectorImpl::reset() {
-  // set up thermodynamic model
-  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
+  // populate buffer
+  _psf = register_buffer("psf", torch::empty({0}, torch::kFloat64));
 }
 
 torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
                                               torch::Tensor dz) {
-  torch::NoGradGuard no_grad;
-
   if (options.type() == "none") {
     return w;
   }
 
   int is = options.nghost();
   int ie = w.size(3) - options.nghost();
-  SET_SHARED("hydro/psf") =
-      calc_hydrostatic_pressure(w, -options.grav(), dz, is, ie);
+  _psf.set_(calc_hydrostatic_pressure(w, -options.grav(), dz, is, ie));
 
   auto result = w.clone();
 
-  result[Index::IPR] = calc_nonhydrostatic_pressure(
-      w[Index::IPR], GET_SHARED("hydro/psf"), options.margin());
+  result[Index::IPR] =
+      calc_nonhydrostatic_pressure(w[Index::IPR], _psf, options.margin());
 
   if (options.type() == "temperature") {
     result[Index::IDN] = w[Index::IPR] / (w[Index::IDN] * options.Rd());
@@ -58,8 +85,7 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
   int ie = wlr.size(4) - options.nghost();
 
   // restore pressure
-  wlr.select(1, Index::IPR).slice(3, is, ie + 1) +=
-      GET_SHARED("hydro/psf").slice(2, is, ie + 1);
+  wlr.select(1, Index::IPR).slice(3, is, ie + 1) += _psf.slice(2, is, ie + 1);
 
   // restore density
   if (options.type() == "temperature") {

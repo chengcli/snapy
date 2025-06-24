@@ -11,9 +11,11 @@
 
 namespace snap {
 void OutputType::loadHydroOutputData(MeshBlock pmb) {
-  OutputData *pod;
+  OutputData* pod;
   auto peos = pmb->phydro->peos;
-  auto w = peos->get_buffer("W");
+
+  auto const& w = peos->get_buffer("W");
+  auto const& u = peos->get_buffer("U");
 
   // (lab-frame) density
   if (ContainVariable(options.variable(), "D") ||
@@ -21,7 +23,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "dens";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IDN, 1);
+    pod->data.InitFromTensor(u, 4, Index::IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -38,13 +40,13 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
   }
 
   // total energy
-  if (peos->nhydro() > 4) {
+  if (peos->nvar() > 4) {
     if (ContainVariable(options.variable(), "E") ||
         ContainVariable(options.variable(), "cons")) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "Etot";
-      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IPR, 1);
+      pod->data.InitFromTensor(u, 4, Index::IPR, 1);
 
       AppendOutputDataNode(pod);
       num_vars_++;
@@ -68,7 +70,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "mom";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 3);
+    pod->data.InitFromTensor(u, 4, Index::IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
@@ -92,7 +94,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom1";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 1);
+    pod->data.InitFromTensor(u, 4, Index::IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -101,7 +103,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom2";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVY, 1);
+    pod->data.InitFromTensor(u, 4, Index::IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -110,7 +112,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom3";
-    pod->data.InitFromTensor(pmb->hydro_u, 4, Index::IVZ, 1);
+    pod->data.InitFromTensor(u, 4, Index::IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -147,7 +149,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel1";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 1);
+    pod->data.InitFromTensor(w, 4, Index::IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -157,7 +159,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel2";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVY, 1);
+    pod->data.InitFromTensor(w, 4, Index::IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -167,21 +169,21 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel3";
-    pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVZ, 1);
+    pod->data.InitFromTensor(w, 4, Index::IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
   }
 
   // vapor
-  auto ny = peos->nhydro() - 5;
+  auto ny = peos->nvar() - 5;
   if (ny > 0) {
     if (options.variable().compare("prim") == 0 ||
         options.variable().compare("vapor") == 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::ICY, ny);
+      pod->data.InitFromTensor(w, 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;
@@ -191,7 +193,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = "vapor";
-      pod->data.InitFromTensor(pmb->hydro_u, 4, Index::ICY, ny);
+      pod->data.InitFromTensor(u, 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;

@@ -1,8 +1,8 @@
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // torch
 #include <ATen/TensorIterator.h>
-
-// base
-#include <configure.h>
 
 // snap
 #include <snap/snap.h>
@@ -19,7 +19,42 @@ __attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt,
 template <int N>
 void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {}
 
-VerticalImplicitImpl::VerticalImplicitImpl(VerticalImplicitOptions options_)
+ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
+  ImplicitOptions op;
+
+  if (!root["dynamics"]) return op;
+  if (!root["dynamics"]["implicit-scheme"]) return op;
+
+  switch (root["dynamics"]["implicit-scheme"]["scheme"].as<int>()) {
+    case 0:
+      op.type() = "none";
+      op.scheme() = 0;
+      break;
+    case 1:
+      op.type() = "vic-partial";
+      op.scheme() = 1;
+      break;
+    case 9:
+      op.type() = "vic-full";
+      op.scheme() = 9;
+      break;
+    default:
+      TORCH_CHECK(false, "Unsupported implicit scheme");
+  }
+
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+
+  if (!root["forcing"]) return op;
+  if (!root["forcing"]["const-gravity"]) return op;
+
+  op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.0);
+
+  return op;
+}
+
+VerticalImplicitImpl::VerticalImplicitImpl(ImplicitOptions options_)
     : options(options_) {
   reset();
 }

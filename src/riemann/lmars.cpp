@@ -1,12 +1,8 @@
-// base
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
-#include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
 namespace snap {
@@ -17,9 +13,6 @@ __attribute__((weak)) void call_lmars_cuda(at::TensorIterator& iter, int dim,
 void LmarsSolverImpl::reset() {
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
-
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
 }
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
@@ -70,8 +63,11 @@ torch::Tensor LmarsSolverImpl::forward_fallback(torch::Tensor wl,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  auto kappal = 1. / (peos->compute("W->A", {wl}) - 1.);
-  auto kappar = 1. / (peos->compute("W->A", {wr}) - 1.);
+  auto el = peos->compute("W->U", {wl});
+  auto gammal = peos->compute("W->A", {wl});
+
+  auto er = peos->compute("W->U", {wr});
+  auto gammar = peos->compute("W->A", {wr});
 
   pcoord->prim2local_inplace(wl);
 
@@ -79,12 +75,12 @@ torch::Tensor LmarsSolverImpl::forward_fallback(torch::Tensor wl,
   auto ker = 0.5 * wr.narrow(0, IVX, 3).square().sum(0);
 
   // enthalpy
-  auto hl = wl[IPR] / wl[IDN] * (kappal + 1.) + kel;
-  auto hr = wr[IPR] / wr[IDN] * (kappar + 1.) + ker;
+  auto hl = el + wl[IPR];
+  auto hr = er + wr[IPR];
 
   auto rhobar = 0.5 * (wl[IDN] + wr[IDN]);
-  auto cbar = torch::sqrt(0.5 * (1. + (1. / kappar + 1. / kappal) / 2.) *
-                          (wl[IPR] + wr[IPR]) / rhobar);
+  auto gamma_bar = 0.5 * (gammal + gammar);
+  auto cbar = torch::sqrt(gamma_bar * 0.5 * (wl[IPR] + wr[IPR]) / rhobar);
   auto pbar =
       0.5 * (wl[IPR] + wr[IPR]) + 0.5 * (rhobar * cbar) * (wl[ivx] - wr[ivx]);
   auto ubar =

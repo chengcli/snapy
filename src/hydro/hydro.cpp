@@ -7,67 +7,54 @@
 #include <snap/registry.hpp>
 
 #include "hydro.hpp"
-#include "hydro_formatter.hpp"
 
 namespace snap {
-HydroOptions::HydroOptions(ParameterInput pin) {
-  eos(EquationOfStateOptions(pin));
-  coord(CoordinateOptions(pin));
-  riemann(RiemannSolverOptions(pin));
-
-  recon1(ReconstructOptions(pin, "hydro", "x1order"));
-  recon23(ReconstructOptions(pin, "hydro", "x23order"));
-
-  grav() = ConstGravityOptions(pin);
-  coriolis() = CoriolisOptions(pin);
-}
-
 HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
   reset();
 }
 
 void HydroImpl::reset() {
   // set up coordinate model
-  options.coord().nghost(options.nghost());
   pcoord = register_module_op(this, "coord", options.coord());
   options.coord() = pcoord->options;
 
   // set up equation-of-state model
-  options.eos().coord(options.coord());
   peos = register_module_op(this, "eos", options.eos());
   options.eos() = peos->options;
 
-  // set up riemann-solver model
-  options.riemann().coord(options.coord());
-  options.riemann().eos(options.eos());
-  priemann = register_module_op(this, "riemann", options.riemann());
-  options.riemann() = priemann->options;
+  // set up primitive projector model
+  // options.proj().grav(options.grav().grav1());
+  // options.proj().nghost(options.nghost());
+  // options.proj().thermo(options.eos().thermo());
+  pproj = register_module("proj", PrimitiveProjector(options.proj()));
+  options.proj() = pproj->options;
 
   // set up reconstruction-x1 model
   precon1 = register_module("recon1", Reconstruct(options.recon1()));
+  options.recon1() = precon1->options;
 
   // set up reconstruction-x23 model
   precon23 = register_module("recon23", Reconstruct(options.recon23()));
+  options.recon23() = precon23->options;
 
   // set up reconstruction-dc model
   precon_dc = register_module("recon_dc", Reconstruct(ReconstructOptions()));
 
-  // set up primitive projector model
-  options.proj().grav(options.grav().grav1());
-  options.proj().nghost(options.nghost());
-  options.proj().thermo(options.eos().thermo());
-  pproj = register_module("proj", PrimitiveProjector(options.proj()));
-  options.proj() = pproj->options;
+  // set up riemann-solver model
+  // options.riemann().coord(options.coord());
+  // options.riemann().eos(options.eos());
+  priemann = register_module_op(this, "riemann", options.riemann());
+  options.riemann() = priemann->options;
 
   // set up internal boundary
-  options.ib().nghost(options.nghost());
+  // options.ib().nghost(options.nghost());
   pib = register_module("ib", InternalBoundary(options.ib()));
   options.ib() = pib->options;
 
   // set up vertical implicit solver
-  options.vic().coord(options.coord());
-  options.vic().grav(options.grav().grav1());
-  options.vic().nghost(options.nghost());
+  // options.vic().coord(options.coord());
+  // options.vic().grav(options.grav().grav1());
+  // options.vic().nghost(options.nghost());
   pvic = register_module("vic", VerticalImplicit(options.vic()));
   options.vic() = pvic->options;
 
@@ -95,37 +82,37 @@ void HydroImpl::reset() {
   }
 
   // populate buffers
-  int nx1 = options.coord().nx1();
-  int nx2 = options.coord().nx2();
-  int nx3 = options.coord().nx3();
-  int nhydro = peos->nhydro();
+  int nc1 = options.coord().nc1();
+  int nc2 = options.coord().nc2();
+  int nc3 = options.coord().nc3();
+  int nvar = peos->nvar();
 
-  if (nx1 > 1) {
+  if (nc1 > 1) {
     _flux1 = register_buffer(
-        "flux1", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+        "F1", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux1 = register_buffer("F1", torch::Tensor());
   }
 
-  if (nx2 > 1) {
+  if (nc2 > 1) {
     _flux2 = register_buffer(
-        "flux2", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+        "F2", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux2 = register_buffer("F2", torch::Tensor());
   }
 
-  if (nx3 > 1) {
+  if (nc3 > 1) {
     _flux3 = register_buffer(
-        "flux3", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+        "F3", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux3 = register_buffer("F3", torch::Tensor());
   }
 
-  _div = register_buffer(
-      "div", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+  _div = register_buffer("D",
+                         torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
-  _vic = register_buffer(
-      "vic", torch::empty({nhydro, nx3, nx2, nx1}, torch::kFloat64));
+  _vic = register_buffer("I",
+                         torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
 }
 
 double HydroImpl::max_time_step(torch::Tensor w,
@@ -160,16 +147,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
   //// ------------ (1) Calculate Primitives ------------ ////
-  // TODO(cli) : 1. check valid buffer
-  torch::Tensor gamma;
-
-  if (peos->options.type() == "moist_mixture") {
-    auto ivol = peos->get_buffer("thermo.V");
-    auto temp = peos->get_buffer("thermo.T");
-    gamma = peos->compute("TV->A", {temp, ivol});
-  }
-
   auto w = pib->mark_solid(peos->forward(u), solid);
+
+  auto gamma = peos->compute("W->A", {w});
 
   // check_eos(GET_SHARED("hydro/w"), options.nghost());
 
@@ -187,7 +167,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     fix_negative_dp_inplace(wtmp, wtmp_dc);
 
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
-    check_recon(wlr1, options.nghost(), 1, 0, 0);
+    // check_recon(wlr1, options.nghost(), 1, 0, 0);
 
     _flux1.set_(
         priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, gamma));
@@ -200,7 +180,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM2));
 
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
-    check_recon(wlr2, options.nghost(), 0, 1, 0);
+    // check_recon(wlr2, options.nghost(), 0, 1, 0);
 
     _flux2.set_(
         priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2, gamma));
@@ -213,7 +193,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM3));
 
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
-    check_recon(wlr3, options.nghost(), 0, 0, 1);
+    // check_recon(wlr3, options.nghost(), 0, 0, 1);
 
     _flux3.set_(
         priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3, gamma));

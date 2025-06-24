@@ -9,13 +9,7 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// base
-#include <configure.h>
-
 // snap
-#include <snap/snap.h>
-
-#include <snap/input/parameter_input.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"
@@ -23,12 +17,16 @@
 // arg
 #include <snap/add_arg.h>
 
+namespace YAML {
+class Node;
+}
+
 namespace snap {
 using IndexRange = std::vector<torch::indexing::TensorIndex>;
 
 struct CoordinateOptions {
+  static CoordinateOptions from_yaml(const YAML::Node &node);
   CoordinateOptions() = default;
-  explicit CoordinateOptions(ParameterInput pin);
 
   int nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
   int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
@@ -107,10 +105,8 @@ class CoordinateImpl {
 
   virtual torch::Tensor find_cell_index(torch::Tensor const &coords) const;
 
-  virtual torch::Tensor vec_lower(torch::Tensor prim,
-                                  int type = kPrimitive) const;
-  virtual torch::Tensor vec_raise(torch::Tensor prim,
-                                  int type = kPrimitive) const;
+  virtual torch::Tensor vec_lower(torch::Tensor prim, int dim = 0) const;
+  virtual torch::Tensor vec_raise(torch::Tensor prim, int dim = 0) const;
 
   virtual void vec_lower_(torch::Tensor &prim) const {}
   virtual void vec_raise_(torch::Tensor &prim) const {}

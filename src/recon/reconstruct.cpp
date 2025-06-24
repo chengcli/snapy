@@ -11,6 +11,19 @@
 #include "reconstruct.hpp"
 
 namespace snap {
+ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
+                                                 std::string section) {
+  ReconstructOptions op;
+
+  if (!node[section]) return;
+
+  op.shock() = node[section]["shock"].as<bool>(false);
+  op.interp().type() = node[section]["type"].as<std::string>("dc");
+  op.interp().scale() = node[section]["scale"].as<bool>(false);
+
+  return op;
+}
+
 ReconstructOptions::ReconstructOptions(ParameterInput pin, std::string section,
                                        std::string xorder) {
   interp(InterpOptions(pin, section, xorder));

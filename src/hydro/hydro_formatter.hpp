@@ -16,10 +16,9 @@ struct fmt::formatter<snap::HydroOptions> {
 
   template <typename FormatContext>
   auto format(const snap::HydroOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(
-        ctx.out(),
-        "(nghost = {}; eos = {}; riemann = {}; recon1 = {}; recon23 = {})",
-        p.nghost(), p.eos(), p.riemann(), p.recon1(), p.recon23());
+    return fmt::format_to(ctx.out(),
+                          "(eos = {}; riemann = {}; recon1 = {}; recon23 = {})",
+                          p.eos(), p.riemann(), p.recon1(), p.recon23());
   }
 };
 
@@ -30,9 +29,8 @@ struct fmt::formatter<snap::PrimitiveProjectorOptions> {
   template <typename FormatContext>
   auto format(const snap::PrimitiveProjectorOptions& p,
               FormatContext& ctx) const {
-    return fmt::format_to(
-        ctx.out(),
-        "(type = {}; grav = {}; nghost = {}; margin = {}; thermo = {})",
-        p.type(), p.grav(), p.nghost(), p.margin(), p.thermo());
+    return fmt::format_to(ctx.out(),
+                          "(type = {}; grav = {}; nghost = {}; margin = {})",
+                          p.type(), p.grav(), p.nghost(), p.margin());
   }
 };

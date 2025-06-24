@@ -1,11 +1,35 @@
-// snap
-#include "internal_boundary.hpp"
+// yaml
+#include <yaml-cpp/yaml.h>
 
+// snap
 #include <snap/snap.h>
 
-#include "bc_formatter.hpp"
+#include "internal_boundary.hpp"
 
 namespace snap {
+
+InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
+    const YAML::Node &root) {
+  InternalBoundaryOptions op;
+
+  TORCH_CHECK(root["geometry"], "'geometry' section missing");
+  TORCH_CHECK(root["geometry"]["cells"], "'geometry/cells' section missing");
+
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(2);
+
+  TORCH_CHECK(root["boundary"], "'boundary' section missing");
+  TORCH_CHECK(root["boundary"]["internal"],
+              "'boundary/internal' section missing");
+
+  op.max_iter() = root["boundary"]["internal"]["max_iter"].as<int>(5);
+  op.solid_density() =
+      root["boundary"]["internal"]["solid_density"].as<double>(1.e3);
+  op.solid_pressure() =
+      root["boundary"]["internal"]["solid_pressure"].as<double>(1.9);
+
+  return op;
+}
+
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
     : options(options_) {
   reset();

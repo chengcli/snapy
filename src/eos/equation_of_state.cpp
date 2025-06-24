@@ -1,13 +1,23 @@
-// snap
-#include "equation_of_state.hpp"
+// yaml
+#include <yaml-cpp/yaml.h>
 
+// snap
 #include <snap/snap.h>  // Index
+
+#include "equation_of_state.hpp"
 
 namespace snap {
 
-EquationOfStateOptions::EquationOfStateOptions(ParameterInput pin) {
-  type(pin->GetOrAddString("hydro", "eos", "moist_mixture"));
-  coord(CoordinateOptions(pin));
+EquationOfStateOptions EquationOfStateOptions::from_yaml(
+    YAML::Node const& node) {
+  EquationOfStateOptions op;
+
+  op.type() = node["type"].as<std::string>("moist-mixture");
+  op.density_floor() = node["density_floor"].as<double>(1.e-6);
+  op.pressure_floor() = node["pressure_floor"].as<double>(1.e-3);
+  op.limiter() = node["limiter"].as<bool>(false);
+
+  return op;
 }
 
 torch::Tensor EquationOfStateImpl::compute(
@@ -28,16 +38,20 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::_apply_conserved_limiter_(torch::Tensor& cons) const {
+  if (!options.limiter()) return;  // no limiter
+
   cons.narrow(0, Index::IVX, 3)
       .masked_fill_(torch::isnan(cons.narrow(0, Index::IVX, 3)), 0.);
-  int ny = nhydro() - 5;
+  int ny = nvar() - 5;
   cons.narrow(0, Index::ICY, ny).clamp_min_(0.);
 }
 
 void EquationOfStateImpl::_apply_primitive_limiter_(torch::Tensor& prim) const {
+  if (!options.limiter()) return;  // no limiter
+
   prim[Index::IDN].clamp_min_(options.density_floor());
   prim[Index::IPR].clamp_min_(options.pressure_floor());
-  int ny = nhydro() - 5;
+  int ny = nvar() - 5;
   prim.narrow(0, Index::ICY, ny).clamp_min_(0.);
 }
 

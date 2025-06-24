@@ -5,13 +5,15 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
+// kintera
+#include <kintera/thermo/thermo.hpp>
+
 // snap
 #include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/implicit/vertical_implicit.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 
@@ -23,11 +25,11 @@
 namespace snap {
 
 struct HydroOptions {
+  static HydroOptions from_yaml(std::string const& filename);
   HydroOptions() = default;
-  explicit HydroOptions(ParameterInput pin);
 
-  //! number of ghost cells (populated from MeshBlock)
-  ADD_ARG(int, nghost) = 1;
+  //! Thermodynamics options
+  ADD_ARG(kintera::ThermoOptions, thermo);
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav);
@@ -35,16 +37,16 @@ struct HydroOptions {
   ADD_ARG(DiffusionOptions, visc);
 
   //! submodule options
-  ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(CoordinateOptions, coord);
-  ADD_ARG(RiemannSolverOptions, riemann);
+  ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(PrimitiveProjectorOptions, proj);
 
   ADD_ARG(ReconstructOptions, recon1);
   ADD_ARG(ReconstructOptions, recon23);
+  ADD_ARG(RiemannSolverOptions, riemann);
 
   ADD_ARG(InternalBoundaryOptions, ib);
-  ADD_ARG(VerticalImplicitOptions, vic);
+  ADD_ARG(ImplicitOptions, vic);
 };
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
@@ -73,7 +75,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   explicit HydroImpl(const HydroOptions& options_);
   void reset() override;
 
-  int nvar() const { return peos->nhydro(); }
   virtual double max_time_step(
       torch::Tensor hydro_w,
       torch::optional<torch::Tensor> solid = torch::nullopt) const;

@@ -35,8 +35,9 @@ void OutputType::loadScalarOutputData(MeshBlock pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_prim;
-      pod->data.InitFromTensor(GET_SHARED("scalar/w"), 4, n, 1);
-      AppendOutputDataNode(pod);
+      // TODO (cli) Finish scalar
+      // pod->data.InitFromTensor(GET_SHARED("scalar/w"), 4, n, 1);
+      // AppendOutputDataNode(pod);
       num_vars_++;
     }
   }

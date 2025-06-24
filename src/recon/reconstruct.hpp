@@ -15,9 +15,9 @@
 
 namespace snap {
 struct ReconstructOptions {
+  static ReconstructOptions from_yaml(const YAML::Node& node,
+                                      std::string section);
   ReconstructOptions() = default;
-  explicit ReconstructOptions(ParameterInput pin, std::string section,
-                              std::string xorder);
 
   //! configure options
   ADD_ARG(bool, is_boundary_lower) = false;
