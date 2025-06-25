@@ -17,6 +17,9 @@
 namespace snap {
 struct InterpOptions {
   InterpOptions() = default;
+  explicit InterpOptions(std::string name) {
+    type(name);
+  }
 
   ADD_ARG(std::string, type) = "dc";
   ADD_ARG(bool, scale) = false;

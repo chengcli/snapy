@@ -1,35 +1,30 @@
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
-#include <ATen/native/cuda/Loops.cuh>
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include "interp_simple.hpp"
+#include <snap/loops.cuh>
+#include "interp_impl.cuh"
 
 namespace snap {
-void call_cp3_cuda(at::TensorIterator& iter) {
+
+template <int N>
+void call_poly_cuda(at::TensorIterator& iter, int dim, torch::Tensor) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "cp3_cuda", [&]() {
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    at::native::gpu_kernel(
-        iter,
-        [] GPU_LAMBDA(scalar_t in1, scalar_t in2, scalar_t in3) -> scalar_t {
-          return interp_cp3(in1, in2, in3);
-        });
-  });
-}
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_cp3_cuda", [&]() {
+    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-void call_cp5_cuda(at::TensorIterator& iter) {
-  at::cuda::CUDAGuard device_guard(iter.device());
+    auto c = data[1].data_ptr<scalar_t>();
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "cp5_cuda", [&]() {
-    at::native::gpu_kernel(
-        iter,
-        [] GPU_LAMBDA(scalar_t in1, scalar_t in2, scalar_t in3, scalar_t in4,
-                      scalar_t in5) -> scalar_t {
-          return interp_cp5(in1, in2, in3, in4, in5);
+    native::stencil_kernel<scalar_t, 2>(
+        iter, dim, 1, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
+          auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          interp_poly_impl<scalar_t, N>(out, w, c, dim, stride1, stride2, nvar);
         });
   });
 }
@@ -37,7 +32,7 @@ void call_cp5_cuda(at::TensorIterator& iter) {
 void call_weno3_cuda(at::TensorIterator& iter, bool scale) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "weno3_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno3_cuda", [&]() {
     at::native::gpu_kernel(
         iter,
         [scale] GPU_LAMBDA(scalar_t in1, scalar_t in2,
@@ -52,7 +47,7 @@ void call_weno3_cuda(at::TensorIterator& iter, bool scale) {
 void call_weno5_cuda(at::TensorIterator& iter, bool scale) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "weno5_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno5_cuda", [&]() {
     at::native::gpu_kernel(
         iter,
         [scale] GPU_LAMBDA(scalar_t in1, scalar_t in2, scalar_t in3,
@@ -70,8 +65,8 @@ void call_weno5_cuda(at::TensorIterator& iter, bool scale) {
 
 namespace at::native {
 
-REGISTER_CUDA_DISPATCH(call_cp3, &snap::call_cp3_cuda);
-REGISTER_CUDA_DISPATCH(call_cp5, &snap::call_cp5_cuda);
+REGISTER_CUDA_DISPATCH(call_poly3, &snap::call_poly_cuda<3>);
+REGISTER_CUDA_DISPATCH(call_poly5, &snap::call_poly_cuda<5>);
 REGISTER_CUDA_DISPATCH(call_weno3, &snap::call_weno3_cuda);
 REGISTER_CUDA_DISPATCH(call_weno5, &snap::call_weno5_cuda);
 

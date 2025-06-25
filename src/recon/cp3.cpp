@@ -32,28 +32,26 @@ torch::Tensor Center3InterpImpl::forward(torch::Tensor w, int dim) {
 void Center3InterpImpl::left(torch::Tensor w, int dim,
                              torch::Tensor out) const {
   int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
                   .add_owned_const_input(w.narrow(dim, 0, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_input(cm)
                   .build();
 
-  at::native::call_cp3(out.device().type(), iter, dim);
+  std::vector<torch::Tensor> args = {w, cm};
+  at::native::call_poly3(out.device().type(), iter, dim, args);
 }
 
 void Center3InterpImpl::right(torch::Tensor w, int dim,
                               torch::Tensor out) const {
   int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
                   .add_owned_const_input(w.narrow(dim, 0, len))
-                  .add_input(cp)
                   .build();
 
-  at::native::call_cp3(out.device().type(), iter, dim);
+  std::vector<torch::Tensor> args = {w, cp};
+  at::native::call_poly3(out.device().type(), iter, dim, args);
 }
 }  // namespace snap
