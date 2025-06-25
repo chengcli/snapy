@@ -23,9 +23,9 @@ ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
   ImplicitOptions op;
 
   if (!root["dynamics"]) return op;
-  if (!root["dynamics"]["implicit-scheme"]) return op;
+  if (!root["dynamics"]["integrator"]) return op;
 
-  switch (root["dynamics"]["implicit-scheme"]["scheme"].as<int>()) {
+  switch (root["dynamics"]["integrator"]["implicit-scheme"].as<int>(0)) {
     case 0:
       op.type() = "none";
       op.scheme() = 0;
