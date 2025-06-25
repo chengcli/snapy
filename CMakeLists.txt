@@ -41,7 +41,6 @@ add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${_ABI_OUTPUT})
 
 # Set MacOS deployment target
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
-set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
 
 # make colorful output
 string(ASCII 27 Esc)
