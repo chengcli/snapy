@@ -12,6 +12,7 @@ void call_cp3_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "cp3_cuda", [&]() {
+    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     at::native::gpu_kernel(
         iter,
         [] GPU_LAMBDA(scalar_t in1, scalar_t in2, scalar_t in3) -> scalar_t {
@@ -66,3 +67,12 @@ void call_weno5_cuda(at::TensorIterator& iter, bool scale) {
   });
 }
 }  // namespace snap
+
+namespace at::native {
+
+REGISTER_CUDA_DISPATCH(call_cp3, &snap::call_cp3_cuda);
+REGISTER_CUDA_DISPATCH(call_cp5, &snap::call_cp5_cuda);
+REGISTER_CUDA_DISPATCH(call_weno3, &snap::call_weno3_cuda);
+REGISTER_CUDA_DISPATCH(call_weno5, &snap::call_weno5_cuda);
+
+}  // namespace at::native

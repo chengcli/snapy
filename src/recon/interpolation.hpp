@@ -11,16 +11,12 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/input/parameter_input.hpp>
-
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
 struct InterpOptions {
   InterpOptions() = default;
-  explicit InterpOptions(std::string type_);
-  InterpOptions(ParameterInput pin, std::string section, std::string xorder);
 
   ADD_ARG(std::string, type) = "dc";
   ADD_ARG(bool, scale) = false;
@@ -138,14 +134,7 @@ class Center3InterpImpl : public torch::nn::Cloneable<Center3InterpImpl>,
   int stencils() const override { return 3; }
 
   void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor left_fallback(torch::Tensor w, int dim) const {
-    return w.unfold(dim, stencils(), 1).matmul(cm);
-  }
-
   void right(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor right_fallback(torch::Tensor w, int dim) const {
-    return w.unfold(dim, stencils(), 1).matmul(cp);
-  }
 };
 TORCH_MODULE(Center3Interp);
 
@@ -170,8 +159,6 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
   int stencils() const override { return 3; }
 
   void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor left_fallback(torch::Tensor w, int dim) const;
-
   void right(torch::Tensor w, int dim, torch::Tensor out) const;
   torch::Tensor right_fallback(torch::Tensor w, int dim) const;
 };

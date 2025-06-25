@@ -57,8 +57,6 @@ void Weno5InterpImpl::reset() {
 }
 
 torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
   int nghost = stencils() / 2;
 

@@ -8,12 +8,9 @@
 #include <snap/snap.h>
 
 #include "interpolation.hpp"
-#include "recon_formatter.hpp"
+#include "recon_dispatch.hpp"
 
 namespace snap {
-void call_weno3_cpu(at::TensorIterator& iter, bool scale);
-__attribute__((weak)) void call_weno3_cuda(at::TensorIterator& iter,
-                                           bool scale) {}
 
 void Weno3InterpImpl::reset() {
   c1m = register_buffer("c1m",
@@ -52,15 +49,13 @@ void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .add_owned_const_input(w.narrow(dim, 1, len))
                   .add_owned_const_input(w.narrow(dim, 2, len))
+                  .add_input(c1m)
+                  .add_input(c2m)
+                  .add_input(c3m)
+                  .add_input(c4m)
                   .build();
 
-  if (w.is_cpu()) {
-    call_weno3_cpu(iter, options.scale());
-  } else if (w.is_cuda()) {
-    call_weno3_cuda(iter, options.scale());
-  } else {
-    out.copy_(left_fallback(w, dim));
-  }
+  at::native::call_weno3(out.device().type(), iter, options.scale());
 }
 
 void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
@@ -70,35 +65,13 @@ void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_owned_const_input(w.narrow(dim, 2, len))
                   .add_owned_const_input(w.narrow(dim, 1, len))
                   .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(c1p)
+                  .add_input(c2p)
+                  .add_input(c3p)
+                  .add_input(c4p)
                   .build();
 
-  if (w.is_cpu()) {
-    call_weno3_cpu(iter, options.scale());
-  } else if (w.is_cuda()) {
-    call_weno3_cuda(iter, options.scale());
-  } else {
-    out.copy_(right_fallback(w, dim));
-  }
-}
-
-torch::Tensor Weno3InterpImpl::left_fallback(torch::Tensor w, int dim) const {
-  auto wu = w.unfold(dim, stencils(), 1);
-  torch::Tensor scale;
-  if (options.scale()) {
-    scale = wu.abs().mean(-1) + 1.e-10;
-    wu /= scale.unsqueeze(-1);
-  }
-
-  auto alpha1 = 1. / 3. / (wu.matmul(c3m).square() + 1e-6).square();
-  auto alpha2 = 2. / 3. / (wu.matmul(c4m).square() + 1e-6).square();
-  auto result =
-      (alpha1 * wu.matmul(c1m) + alpha2 * wu.matmul(c2m)) / (alpha1 + alpha2);
-
-  if (options.scale()) {
-    return result * scale;
-  } else {
-    return result;
-  }
+  at::native::call_weno3(out.device().type(), iter, options.scale());
 }
 
 torch::Tensor Weno3InterpImpl::right_fallback(torch::Tensor w, int dim) const {
