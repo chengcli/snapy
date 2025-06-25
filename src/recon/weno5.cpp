@@ -75,7 +75,7 @@ void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();
 
-  std::vector<torch::Tensor> args = {w, c1m, c2m, c3m, c4m,
+  std::vector<torch::Tensor> args = {w,   c1m, c2m, c3m, c4m,
                                      c5m, c6m, c7m, c8m, c9m};
   at::native::call_weno3(out.device().type(), iter, args, dim, options.scale());
 }
@@ -88,7 +88,7 @@ void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();
 
-  std::vector<torch::Tensor> args = {w, c1p, c2p, c3p, c4p,
+  std::vector<torch::Tensor> args = {w,   c1p, c2p, c3p, c4p,
                                      c5p, c6p, c7p, c8p, c9p};
   at::native::call_weno3(out.device().type(), iter, args, dim, options.scale());
 }

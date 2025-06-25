@@ -63,8 +63,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   double max_time_step(torch::Tensor solid = torch::Tensor());
 
-  int forward(double dt, int stage,
-              torch::Tensor solid = torch::Tensor());
+  int forward(double dt, int stage, torch::Tensor solid = torch::Tensor());
 
  private:
   //! stage registers

@@ -1,8 +1,8 @@
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
-#include <ATen/native/cpu/Loops.h>
 #include <ATen/native/ReduceOpsUtils.h>
+#include <ATen/native/cpu/Loops.h>
 #include <torch/torch.h>
 
 // snap
@@ -12,7 +12,8 @@
 namespace snap {
 
 template <int N>
-void call_poly_cpu(at::TensorIterator& iter, int dim, std::vector<torch::Tensor> data) {
+void call_poly_cpu(at::TensorIterator& iter, int dim,
+                   std::vector<torch::Tensor> data) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_poly_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
@@ -31,14 +32,16 @@ void call_poly_cpu(at::TensorIterator& iter, int dim, std::vector<torch::Tensor>
 }
 
 template <int N>
-void call_poly_mps(at::TensorIterator& iter, int dim, std::vector<torch::Tensor> data) {
+void call_poly_mps(at::TensorIterator& iter, int dim,
+                   std::vector<torch::Tensor> data) {
   auto out = iter.output();
   auto w = data[0];
   auto c = data[1];
   torch::matmul_out(out, w.unfold(dim, N, 1), c);
 }
 
-void call_weno3_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data, int dim, bool scale) {
+void call_weno3_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
+                    int dim, bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno3_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
@@ -53,13 +56,15 @@ void call_weno3_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data, i
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno3_impl(out, w, c1, c2, c3, c4, stride1, stride2, nvar, scale);
+        interp_weno3_impl(out, w, c1, c2, c3, c4, stride1, stride2, nvar,
+                          scale);
       }
     });
   });
 }
 
-void call_weno3_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data, int dim, bool scale) {
+void call_weno3_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data,
+                    int dim, bool scale) {
   auto result = iter.output();
 
   auto w = data[0];
@@ -86,7 +91,8 @@ void call_weno3_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data, i
   }
 }
 
-void call_weno5_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data, int dim, bool scale) {
+void call_weno5_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
+                    int dim, bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno5_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
@@ -106,14 +112,15 @@ void call_weno5_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data, i
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno5_impl(out, w, c1, c2, c3, c4, c5, c6, c7, c8, c9, 
-                          stride1, stride2, nvar, scale);
+        interp_weno5_impl(out, w, c1, c2, c3, c4, c5, c6, c7, c8, c9, stride1,
+                          stride2, nvar, scale);
       }
     });
   });
 }
 
-void call_weno5_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data, int dim, bool scale) {
+void call_weno5_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data,
+                    int dim, bool scale) {
   auto result = iter.output();
 
   auto w = data[0];
@@ -145,7 +152,8 @@ void call_weno5_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data, i
   auto alpha2 = 0.6 / (beta2 + 1e-6).square();
   auto alpha3 = 0.1 / (beta3 + 1e-6).square();
 
-  torch::div_out(result,
+  torch::div_out(
+      result,
       alpha1 * wu.matmul(c1) + alpha2 * wu.matmul(c2) + alpha3 * wu.matmul(c3),
       alpha1 + alpha2 + alpha3);
 

@@ -11,8 +11,9 @@ namespace at::native {
 
 using recon_poly_fn = void (*)(at::TensorIterator &iter, int dim,
                                std::vector<torch::Tensor> data);
-using recon_weno_fn = void (*)(at::TensorIterator &iter, std::vector<torch::Tensor> data, 
-                               int dim, bool scale);
+using recon_weno_fn = void (*)(at::TensorIterator &iter,
+                               std::vector<torch::Tensor> data, int dim,
+                               bool scale);
 
 DECLARE_DISPATCH(recon_poly_fn, call_poly3);
 DECLARE_DISPATCH(recon_poly_fn, call_poly5);

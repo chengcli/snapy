@@ -2,9 +2,9 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include "riemann_solver.hpp"
-
 #include <snap/registry.hpp>
+
+#include "riemann_solver.hpp"
 
 namespace snap {
 

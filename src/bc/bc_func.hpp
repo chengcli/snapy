@@ -25,7 +25,7 @@ struct BCRegistrar {
   }
 };
 
-#define BC_FUNCTION(name, var, dim, op)                      \
+#define BC_FUNCTION(name, var, dim, op)                            \
   void name(torch::Tensor const&, int, snap::BoundaryFuncOptions); \
-  static BCRegistrar bc_##name(#name, name);                 \
+  static BCRegistrar bc_##name(#name, name);                       \
   void name(torch::Tensor const& var, int dim, snap::BoundaryFuncOptions op)

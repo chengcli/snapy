@@ -230,8 +230,7 @@ std::vector<OctTreeNode> OctTreeImpl::forward() {
 int octree_root_level(OctTreeOptions const &op) {
   int nbmax = std::max(op.nb1(), std::max(op.nb2(), op.nb3()));
   int root_level;
-  for (root_level = 0; (1 << root_level) < nbmax; root_level++)
-    ;
+  for (root_level = 0; (1 << root_level) < nbmax; root_level++);
   return root_level;
 }
 

@@ -27,7 +27,7 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int stride, 
     sinp[idx[dim-1]] = INP(j);
 
     __syncthreads();
-    
+
     T sout = 0.;
 
 #pragma unroll

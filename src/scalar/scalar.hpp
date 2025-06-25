@@ -6,8 +6,8 @@
 #include <torch/nn/modules/common.h>
 
 // kintera
-#include <kintera/thermo/thermo.hpp>
 #include <kintera/kinetics/kinetics.hpp>
+#include <kintera/thermo/thermo.hpp>
 
 // snap
 #include <snap/coord/coordinate.hpp>

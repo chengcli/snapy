@@ -7,7 +7,7 @@
 
 namespace snap {
 void OutputType::loadScalarOutputData(MeshBlock pmb) {
-  OutputData *pod;
+  OutputData* pod;
 
   auto const& x = pmb->pscalar->get_buffer("X");
   auto const& v = pmb->pscalar->get_buffer("V");
