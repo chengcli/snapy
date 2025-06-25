@@ -7,8 +7,6 @@
 using namespace snap;
 
 int main(int argc, char** argv) {
-  torch::NoGradGuard no_grad;
-
   double p0 = 1.E5;
   double Ts = 300.;
   double xc = 0.;
