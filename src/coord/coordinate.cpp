@@ -16,20 +16,18 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
 
   op.type(node["type"].as<std::string>("cartesian"));
 
-  if (!node["bounds"])
-    return op
+  if (!node["bounds"]) return op;
 
-               op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
+  op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
   op.x2min() = node["bounds"]["x2min"].as<double>(0.0);
   op.x3min() = node["bounds"]["x3min"].as<double>(0.0);
   op.x1max() = node["bounds"]["x1max"].as<double>(1.0);
   op.x2max() = node["bounds"]["x2max"].as<double>(1.0);
   op.x3max() = node["bounds"]["x3max"].as<double>(1.0);
 
-  if (!node["cells"])
-    return op
+  if (!node["cells"]) return op;
 
-               op.nx1() = node["cells"]["nx1"].as<int>(1);
+  op.nx1() = node["cells"]["nx1"].as<int>(1);
   op.nx2() = node["cells"]["nx2"].as<int>(1);
   op.nx3() = node["cells"]["nx3"].as<int>(1);
   op.nghost() = node["cells"]["nghost"].as<int>(1);
