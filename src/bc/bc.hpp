@@ -23,17 +23,6 @@ enum BoundaryFace {
   kOuterX3 = 5
 };
 
-enum class BoundaryFlag : int {
-  kExchange = -1,
-  kUser = 0,
-  kReflect = 1,
-  kOutflow = 2,
-  kPeriodic = 3,
-  kShearPeriodic = 4,
-  kPolar = 5,
-  kPolarWedge = 6,
-};
-
 struct BoundaryFuncOptions {
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, nghost) = 1;
