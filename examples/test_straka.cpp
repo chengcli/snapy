@@ -6,7 +6,7 @@
 
 using namespace snap;
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   torch::NoGradGuard no_grad;
 
   double p0 = 1.E5;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   auto op_riemann = RiemannSolverOptions().type("lmars");
   auto op_grav = ConstGravityOptions().grav1(-grav);
   auto op_proj = PrimitiveProjectorOptions().type("temperature");
-  auto op_vic = VerticalImplicitOptions().scheme(1);
+  auto op_vic = ImplicitOptions().scheme(1);
   auto op_intg = IntegratorOptions().type("rk3").cfl(0.9);
 
   auto op_hydro =
@@ -44,11 +44,10 @@ int main(int argc, char **argv) {
   op_hydro.recon1(op_recon).recon23(op_recon).grav(op_grav).proj(op_proj).vic(
       op_vic);
 
-  auto op_block =
-      MeshBlockOptions().nghost(nghost).intg(op_intg).hydro(op_hydro);
+  auto op_block = MeshBlockOptions().intg(op_intg).hydro(op_hydro);
 
   for (int i = 0; i < 6; ++i)
-    op_block.bflags().push_back(BoundaryFlag::kReflect);
+    op_block.bfuncs().push_back(get_bc_func()["reflecting_inner"]);
   auto block = MeshBlock(op_block);
 
   // block->to(torch::Device(torch::kCUDA, 0));
@@ -68,7 +67,7 @@ int main(int argc, char **argv) {
   auto x1v = result[2];
   auto x2v = result[1];
 
-  auto w = torch::zeros_like(block->hydro_u);
+  auto const& w = torch::zeros_like(block->phydro->peos->get_buffer("W"));
 
   auto L = torch::sqrt(((x1v - xc) / xr).square() + ((x2v - zc) / zr).square());
   auto temp = Ts - grav * x1v / cp;
@@ -77,7 +76,7 @@ int main(int argc, char **argv) {
   temp += torch::where(L <= 1, dT * (torch::cos(L * M_PI) + 1.) / 2., 0);
   w[Index::IDN] = w[Index::IPR] / (Rd * temp);
 
-  block->set_primitives(w);
+  block->initialize(w);
 
   // output
   auto out2 = NetcdfOutput(
@@ -95,7 +94,7 @@ int main(int argc, char **argv) {
   // integration
   int n = 0;
   while (true) {
-    auto dt = block->max_root_time_step(0);
+    auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(dt, stage);
     }

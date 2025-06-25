@@ -15,25 +15,19 @@ ScalarOptions ScalarOptions::from_yaml(std::string const& filename) {
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
     op.coord() = CoordinateOptions::from_yaml(config["geometry"]);
-  } else {
-    op.coord() = CoordinateOptions();
   }
 
   // reconstruction
   if (config["reconstruct"]) {
-    op.recon() = ReconstructOptions::from_yaml(config["reconstruct"]);
-  } else {
-    op.recon() = ReconstructOptions();
+    op.recon() = ReconstructOptions::from_yaml(config["reconstruct"], "scalar");
   }
 
   // riemann solver
   if (config["riemann"]) {
     op.riemann() = RiemannSolverOptions::from_yaml(config["riemann"]);
-  } else {
-    op.riemann() = RiemannSolverOptions();
   }
-  
+
   return op;
 }
 
-} // namespace snap
+}  // namespace snap

@@ -1,16 +1,24 @@
 // snap
-#include <snap/mesh/meshblock.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
+
 #include "output_type.hpp"
 
 namespace snap {
 bool OutputType::SliceOutputData(MeshBlock pmb, int dim) {
   int islice(0), jslice(0), kslice(0);
 
-  // Compute i,j,k indices of slice; check if in range of data in this block
-  if (dim == 1) {
-    if (options.x1_slice() >= pmb->x1min() &&
-        options.x1_slice() < pmb->x1max()) {
+  auto x1min = pmb->phydro->pcoord->options.x1min() auto x1max =
+      pmb->phydro->pcoord->options.x1max() auto x2min =
+          pmb->phydro->pcoord->options.x2min() auto x2max =
+              pmb->phydro->pcoord->options.x2max() auto x3min =
+                  pmb->phydro->pcoord->options.x3min() auto x3max =
+                      pmb->phydro->pcoord->options.x3max()
+
+                      // Compute i,j,k indices of slice; check if in range of
+                      // data in this block
+                      if (dim == 1) {
+    if (options.x1_slice() >= x1min() && options.x1_slice() < pmb->x1max()) {
       for (int i = pmb->is() + 1; i <= pmb->ie() + 1; ++i) {
         if (pmb->phydro->pcoord->x1f[i].item<float>() > options.x1_slice()) {
           islice = i - 1;
@@ -20,7 +28,8 @@ bool OutputType::SliceOutputData(MeshBlock pmb, int dim) {
     } else {
       return false;
     }
-  } else if (dim == 2) {
+  }
+  else if (dim == 2) {
     if (options.x2_slice() >= pmb->x2min() &&
         options.x2_slice() < pmb->x2max()) {
       for (int j = pmb->js() + 1; j <= pmb->je() + 1; ++j) {
@@ -32,7 +41,8 @@ bool OutputType::SliceOutputData(MeshBlock pmb, int dim) {
     } else {
       return false;
     }
-  } else {
+  }
+  else {
     if (options.x3_slice() >= pmb->x3min() &&
         options.x3_slice() < pmb->x3max()) {
       for (int k = pmb->ks() + 1; k <= pmb->ke() + 1; ++k) {

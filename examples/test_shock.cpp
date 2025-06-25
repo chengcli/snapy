@@ -28,11 +28,10 @@ int main(int argc, char** argv) {
       HydroOptions().eos(op_eos).coord(op_coord).riemann(op_riemann);
   op_hydro.recon1(op_recon).recon23(op_recon);
 
-  auto op_block =
-      MeshBlockOptions().nghost(nghost).intg(op_intg).hydro(op_hydro);
+  auto op_block = MeshBlockOptions().intg(op_intg).hydro(op_hydro);
 
   for (int i = 0; i < 4; ++i)
-    op_block.bflags().push_back(BoundaryFlag::kOutflow);
+    op_block.bfuncs().push_back(get_bc_func()["outflow_inner"]);
 
   auto block = MeshBlock(op_block);
 
@@ -51,7 +50,7 @@ int main(int argc, char** argv) {
   w[Index::IPR] = torch::where(x1v < 0, 1.0, 0.1);
   w[Index::IVX] = w[Index::IVY] = w[Index::IVZ] = 0.0;
 
-  block->set_primitives(w);
+  block->initialize(w);
 
   // internal boundary
   auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
@@ -66,7 +65,7 @@ int main(int argc, char** argv) {
   out.combine_blocks();
 
   for (int n = 0; n < 200; ++n) {
-    auto dt = block->max_root_time_step(0, solid);
+    auto dt = block->max_time_step(solid);
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
       block->forward(dt, stage, solid);
 

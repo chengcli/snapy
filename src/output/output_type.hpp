@@ -112,6 +112,7 @@ class OutputType {
   void AppendOutputDataNode(OutputData *pdata);
   void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
   void ClearOutputData();
+
   bool TransformOutputData(MeshBlock pmb);
 
   //! \brief perform data slicing and update the data list
@@ -132,10 +133,6 @@ class OutputType {
  protected:
   void loadHydroOutputData(MeshBlock pmb);
   void loadScalarOutputData(MeshBlock pmb);
-  // void loadFieldsOutputData(MeshBlock pmb);
-  // void loadRadiationOutputData(MeshBlock pmb);
-  void loadUserOutputData(MeshBlock pmb);
-  // void loadDiagOutputData(MeshBlock pmb);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):

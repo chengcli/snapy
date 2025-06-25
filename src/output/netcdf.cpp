@@ -72,10 +72,6 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
 
   // set ptrs to data in OutputData linked list, then slice/sum as needed
   LoadOutputData(pmb);
-  if (!TransformOutputData(pmb)) {
-    ClearOutputData();  // required when LoadOutputData() is used.
-    return;
-  }  // skip if slice was out of range
 
   // create filename: "file_basename"+
   // "."+"blockid"+"."+"fileid"+"."+XXXXX+".nc", where XXXXX = 5-digit

@@ -14,8 +14,6 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
     op.coord() = CoordinateOptions::from_yaml(config["geometry"]);
-  } else {
-    op.coord() = CoordinateOptions();
   }
 
   // project primitive variables
@@ -24,8 +22,6 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   // equation of state
   if (config["equation-of-state"]) {
     op.eos() = EquationOfStateOptions::from_yaml(config["equation-of-state"]);
-  } else {
-    op.eos() = EquationOfStateOptions();
   }
   op.eos().coord() = op.coord();
   op.eos().thermo() = op.thermo();
@@ -36,16 +32,11 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
         ReconstructOptions::from_yaml(config["reconstruct"], "vertical");
     op.recon23() =
         ReconstructOptions::from_yaml(config["reconstruct"], "horizontal");
-  } else {
-    op.recon1() = ReconstructOptions();
-    op.recon23() = ReconstructOptions();
   }
 
   // riemann solver
   if (config["riemann"]) {
     op.riemann() = RiemannSolverOptions::from_yaml(config["riemann"]);
-  } else {
-    op.riemann() = RiemannSolverOptions();
   }
   op.riemann().eos() = op.eos();
 
