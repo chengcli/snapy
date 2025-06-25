@@ -3,7 +3,7 @@
 #include <torch/torch.h>
 
 // snap
-#include "boundary_condition.hpp"
+#include "bc.hpp"
 #include "internal_boundary.hpp"
 
 namespace snap {
@@ -131,7 +131,7 @@ int run_flip_dim3(torch::Tensor& solid, int dir) {
 
 torch::Tensor InternalBoundaryImpl::rectify_solid(
     torch::Tensor solid_in, int& total_num_flips,
-    std::vector<bfunc_t> const& bfuncs) {
+    std::vector<bcfunc_t> const& bfuncs) {
   int nc3 = solid_in.size(0);
   int nc2 = solid_in.size(1);
   int nc1 = solid_in.size(2);
@@ -142,6 +142,9 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
   BoundaryFuncOptions op;
   op.nghost(options.nghost());
   op.type(kScalar);
+
+  auto solid_inner = get_bc_func()["solid_inner"];
+  auto solid_outer = get_bc_func()["solid_inner"];
 
   solid_inner(solid, DIM1, op);
   solid_outer(solid, DIM1, op);

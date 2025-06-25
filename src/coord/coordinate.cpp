@@ -1,44 +1,38 @@
-// torch
-#include <torch/torch.h>
+// fmt
+#include <fmt/format.h>
 
-// base
-#include <configure.h>
+// yaml
+#include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/mesh/mesh_formatter.hpp>
+#include <snap/snap.h>
 
 #include "coordinate.hpp"
 
 namespace snap {
-CoordinateOptions::CoordinateOptions(ParameterInput pin) {
-  auto nghost = pin->GetOrAddInteger("meshblock", "nghost", 2);
 
-  x1min(pin->GetOrAddReal("meshblock", "x1min", 0.0));
-  x1max(pin->GetOrAddReal("meshblock", "x1max", 1.0));
+CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
+  CoordinateOptions op;
 
-  x2min(pin->GetOrAddReal("meshblock", "x2min", 0.0));
-  x2max(pin->GetOrAddReal("meshblock", "x2max", 1.0));
+  op.type(node["type"].as<std::string>("cartesian"));
 
-  x3min(pin->GetOrAddReal("meshblock", "x3min", 0.0));
-  x3max(pin->GetOrAddReal("meshblock", "x3max", 1.0));
+  if (!node["bounds"]) return op;
 
-  if (pin->DoesParameterExist("meshblock", "nx1")) {
-    nx1(pin->GetInteger("meshblock", "nx1"));
-  } else {
-    nx1(pin->GetOrAddInteger("mesh", "nx1", 1));
-  }
+  op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
+  op.x2min() = node["bounds"]["x2min"].as<double>(0.0);
+  op.x3min() = node["bounds"]["x3min"].as<double>(0.0);
+  op.x1max() = node["bounds"]["x1max"].as<double>(1.0);
+  op.x2max() = node["bounds"]["x2max"].as<double>(1.0);
+  op.x3max() = node["bounds"]["x3max"].as<double>(1.0);
 
-  if (pin->DoesParameterExist("meshblock", "nx2")) {
-    nx2(pin->GetInteger("meshblock", "nx2"));
-  } else {
-    nx2(pin->GetOrAddInteger("mesh", "nx2", 1));
-  }
+  if (!node["cells"]) return op;
 
-  if (pin->DoesParameterExist("meshblock", "nx3")) {
-    nx3(pin->GetInteger("meshblock", "nx3"));
-  } else {
-    nx3(pin->GetOrAddInteger("mesh", "nx3", 1));
-  }
+  op.nx1() = node["cells"]["nx1"].as<int>(1);
+  op.nx2() = node["cells"]["nx2"].as<int>(1);
+  op.nx3() = node["cells"]["nx3"].as<int>(1);
+  op.nghost() = node["cells"]["nghost"].as<int>(1);
+
+  return op;
 }
 
 CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
@@ -192,28 +186,12 @@ torch::Tensor CoordinateImpl::find_cell_index(
   return index;
 }
 
-torch::Tensor CoordinateImpl::vec_lower(torch::Tensor prim, int type) const {
-  if (type == kPrimitive) {
-    return prim.narrow(0, Index::IVX, 3);
-  } else if (type == kDPMassLR) {
-    return prim.narrow(1, Index::IVX, 3);
-  } else {
-    std::stringstream msg;
-    msg << fmt::format("{}::vec_lower:unknown type id: {}", name_(), type);
-    throw std::runtime_error(msg.str());
-  }
+torch::Tensor CoordinateImpl::vec_lower(torch::Tensor prim, int dim) const {
+  return prim.narrow(dim, Index::IVX, 3);
 }
 
-torch::Tensor CoordinateImpl::vec_raise(torch::Tensor prim, int type) const {
-  if (type == kPrimitive) {
-    return prim.narrow(1, Index::IVX, 3);
-  } else if (type == kDPMassLR) {
-    return prim.narrow(1, Index::IVX, 3);
-  } else {
-    std::stringstream msg;
-    msg << fmt::format("{}::vec_raise:unknown type id: {}", name_(), type);
-    throw std::runtime_error(msg.str());
-  }
+torch::Tensor CoordinateImpl::vec_raise(torch::Tensor prim, int dim) const {
+  return prim.narrow(dim, Index::IVX, 3);
 }
 
 std::array<torch::Tensor, 3> CoordinateImpl::vec_from_cartesian(

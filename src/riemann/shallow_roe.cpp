@@ -11,9 +11,6 @@ namespace snap {
 void ShallowRoeSolverImpl::reset() {
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
-
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,

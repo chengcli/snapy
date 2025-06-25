@@ -1,27 +1,22 @@
-// spdlog
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
 #include <snap/registry.hpp>
 
-#include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
 namespace snap {
+torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState const& peos) {
+  return wroe;
+}
+
 void RoeSolverImpl::reset() {
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
-
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
 }
 
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                     int dim, torch::Tensor gammad) {
-  torch::NoGradGuard no_grad;
-
+                                     int dim, torch::Tensor dummy) {
   using Index::IDN;
   using Index::IPR;
   using Index::IVX;
@@ -34,7 +29,13 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  auto gm1 = gammad - 1.0;
+  auto el = peos->compute("W->U", {wl});
+  auto gammal = peos->compute("W->A", {wl});
+  auto cl = peos->compute("WA->L", {wl, gammal});
+
+  auto er = peos->compute("W->U", {wr});
+  auto gammar = peos->compute("W->A", {wr});
+  auto cr = peos->compute("WA->L", {wr, gammar});
 
   //--- Step 2.  Compute Roe-averaged data from left- and right-states
   auto wroe = torch::zeros_like(wl);
@@ -50,10 +51,6 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   // Following Roe(1981), the enthalpy H=(E+P)/d is averaged for adiabatic
   // flows, rather than E or P directly.  sqrtdl*hl = sqrtdl*(el+pl)/dl =
   // (el+pl)/sqrtdl
-  auto el =
-      wl[IPR] / gm1 + 0.5 * wl[IDN] * wl.narrow(0, IVX, 3).square().sum(0);
-  auto er =
-      wr[IPR] / gm1 + 0.5 * wr[IDN] * wr.narrow(0, IVX, 3).square().sum(0);
   wroe[IPR] = ((el + wl[IPR]) / sqrtdl + (er + wr[IPR]) / sqrtdr) * isdlpdr;
 
   //--- Step 3.  Compute L/R fluxes
@@ -86,8 +83,15 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto q = wroe[IPR] - 0.5 * vsq;
   auto qi = (q < 0.).to(torch::kInt);
 
-  auto cs_sq = qi * 1.e-20 + (1. - qi) * gm1 * q;
-  auto cs = torch::sqrt(cs_sq);
+  // FIXME: compute uroe
+  auto uroe = _compute_uroe(wroe, peos);
+
+  auto wroe1 = peos->compute("U->W", {uroe});
+  auto gamma_roe = peos->compute("W->A", {wroe1});
+
+  auto cs = peos->compute("WA->L", {wroe1, gamma_roe});
+  auto cs_sq = cs.square();
+  auto gm1_roe = gamma_roe - 1.0;
 
   // Compute eigenvalues (eq. B2)
   auto ev = torch::zeros_like(du);
@@ -101,21 +105,21 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   // eq. B4
   auto a = torch::zeros_like(du);
   auto na = 0.5 / cs_sq;
-  a[0] = (du[0] * (0.5 * gm1 * vsq + wroe[ivx] * cs) -
-          du[ivx] * (gm1 * wroe[ivx] + cs) - du[ivy] * gm1 * wroe[ivy] -
-          du[ivz] * gm1 * wroe[ivz] + du[4] * gm1) *
+  a[0] = (du[0] * (0.5 * gm1_roe * vsq + wroe[ivx] * cs) -
+          du[ivx] * (gm1_roe * wroe[ivx] + cs) - du[ivy] * gm1_roe * wroe[ivy] -
+          du[ivz] * gm1_roe * wroe[ivz] + du[4] * gm1_roe) *
          na;
 
   a[1] = -du[0] * wroe[ivy] + du[ivy];
   a[2] = -du[0] * wroe[ivz] + du[ivz];
 
-  auto qa = gm1 / cs_sq;
-  a[3] = du[0] * (1.0 - na * gm1 * vsq) + du[ivx] * qa * wroe[ivx] +
+  auto qa = gm1_roe / cs_sq;
+  a[3] = du[0] * (1.0 - na * gm1_roe * vsq) + du[ivx] * qa * wroe[ivx] +
          du[ivy] * qa * wroe[ivy] + du[ivz] * qa * wroe[ivz] - du[4] * qa;
 
-  a[4] = (du[0] * (0.5 * gm1 * vsq - wroe[ivx] * cs) -
-          du[ivx] * (gm1 * wroe[ivx] - cs) - du[ivy] * gm1 * wroe[ivy] -
-          du[ivz] * gm1 * wroe[ivz] + du[4] * gm1) *
+  a[4] = (du[0] * (0.5 * gm1_roe * vsq - wroe[ivx] * cs) -
+          du[ivx] * (gm1_roe * wroe[ivx] - cs) - du[ivy] * gm1_roe * wroe[ivy] -
+          du[ivz] * gm1_roe * wroe[ivz] + du[4] * gm1_roe) *
          na;
 
   auto coeff = -0.5 * torch::abs(ev) * a;
@@ -153,8 +157,6 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   //--- Step 6.  Overwrite with LLF flux if any of intermediate states are
   // negative
-  auto cl = peos->sound_speed(wl);
-  auto cr = peos->sound_speed(wr);
   auto cmax =
       0.5 * torch::max(torch::abs(wl[ivx]) + cl, torch::abs(wr[ivx]) + cr);
   flx = llf_flag * (0.5 * (fl + fr) - cmax * du) + (1 - llf_flag) * flx;

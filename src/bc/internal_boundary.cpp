@@ -1,11 +1,33 @@
-// snap
-#include "internal_boundary.hpp"
+// yaml
+#include <yaml-cpp/yaml.h>
 
+// snap
 #include <snap/snap.h>
 
-#include "bc_formatter.hpp"
+#include "internal_boundary.hpp"
 
 namespace snap {
+
+InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
+    const YAML::Node &root) {
+  InternalBoundaryOptions op;
+
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
+
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+
+  if (!root["boundary-condition"]) return op;
+  if (!root["boundary-condition"]["internal"]) return op;
+
+  auto bc = root["boundary-condition"]["internal"];
+  op.max_iter() = bc["max_iter"].as<int>(5);
+  op.solid_density() = bc["solid_density"].as<double>(1.e3);
+  op.solid_pressure() = bc["solid_pressure"].as<double>(1.9);
+
+  return op;
+}
+
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
     : options(options_) {
   reset();
@@ -14,22 +36,20 @@ InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
 void InternalBoundaryImpl::reset() {}
 
 torch::Tensor InternalBoundaryImpl::mark_solid(
-    torch::Tensor w, torch::optional<torch::Tensor> solid) {
-  if (!solid.has_value()) return w;
+    torch::Tensor w, torch::Tensor solid) {
+  if (!solid.defined()) return w;
 
   auto fill_solid = torch::zeros({w.size(0), 1, 1, 1}, w.options());
 
   fill_solid[Index::IDN] = options.solid_density();
   fill_solid[Index::IPR] = options.solid_pressure();
 
-  return torch::where(solid.value(), fill_solid, w);
+  return torch::where(solid, fill_solid, w);
 }
 
 torch::Tensor InternalBoundaryImpl::forward(
-    torch::Tensor wlr, int dim, torch::optional<torch::Tensor> solid) {
-  torch::NoGradGuard no_grad;
-
-  if (!solid.has_value()) return wlr;
+    torch::Tensor wlr, int dim, torch::Tensor solid) {
+  if (!solid.defined()) return wlr;
 
   using Index::ILT;
   using Index::IRT;
@@ -37,8 +57,8 @@ torch::Tensor InternalBoundaryImpl::forward(
   using Index::IVY;
   using Index::IVZ;
 
-  auto solidl = solid.value();
-  auto solidr = solid.value().roll(1, dim - 1);
+  auto solidl = solid;
+  auto solidr = solid.roll(1, dim - 1);
   solidr.select(dim - 1, 0) = solidl.select(dim - 1, 0);
 
   for (size_t n = 0; n < wlr.size(1); ++n) {

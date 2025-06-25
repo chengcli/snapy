@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/eos/equation_of_state.hpp>
 #include <snap/recon/reconstruct.hpp>
 
 // arg
@@ -15,32 +14,32 @@
 
 namespace snap {
 
-struct VerticalImplicitOptions {
-  VerticalImplicitOptions() = default;
+struct ImplicitOptions {
+  static ImplicitOptions from_yaml(const YAML::Node& root);
+  ImplicitOptions() = default;
 
   ADD_ARG(std::string, type) = "vic";
-  ADD_ARG(int, batch_size) = 1;
   ADD_ARG(int, nghost) = 1;
-  ADD_ARG(float, grav) = 0.;
+  ADD_ARG(double, grav) = 0.;
   ADD_ARG(int, scheme) = 0;
-  ADD_ARG(EquationOfStateOptions, eos);
-  ADD_ARG(CoordinateOptions, coord);
+
+  //! submodules options
   ADD_ARG(ReconstructOptions, recon);
+  ADD_ARG(CoordinateOptions, coord);
 };
 
 class VerticalImplicitImpl : public torch::nn::Cloneable<VerticalImplicitImpl> {
  public:
   //! options with which this `VerticalImplicit` was constructed
-  VerticalImplicitOptions options;
+  ImplicitOptions options;
 
   //! submodules
-  EquationOfState peos = nullptr;
   Reconstruct precon = nullptr;
   Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layer
   VerticalImplicitImpl() = default;
-  explicit VerticalImplicitImpl(VerticalImplicitOptions options);
+  explicit VerticalImplicitImpl(ImplicitOptions options);
   void reset() override;
 
   torch::Tensor diffusion_matrix(torch::Tensor w, torch::Tensor gm1);

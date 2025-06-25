@@ -7,7 +7,7 @@
 #include <torch/nn/modules/container/modulelist.h>
 
 // snap
-#include <snap/bc/boundary_condition.hpp>
+#include <snap/bc/bc.hpp>
 #include <snap/input/parameter_input.hpp>
 
 #include "mesh_functions.hpp"
@@ -20,7 +20,6 @@
 namespace snap {
 struct MeshOptions {
   MeshOptions() = default;
-  explicit MeshOptions(ParameterInput pin);
 
   //! boundary conditions
   std::array<BoundaryFlag, 6> bflags;

@@ -6,17 +6,12 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
-// base
-#include <configure.h>
-
 // snap
-#include <snap/bc/boundary_condition.hpp>
+#include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/parameter_input.hpp>
 #include <snap/intg/integrator.hpp>
 #include <snap/scalar/scalar.hpp>
-
-#include "oct_tree.hpp"
 
 // arg
 #include <snap/add_arg.h>
@@ -24,76 +19,57 @@
 namespace snap {
 
 struct MeshBlockOptions {
+  static MeshBlockOptions from_yaml(std::string input_file);
   MeshBlockOptions() = default;
-  explicit MeshBlockOptions(ParameterInput pin);
-
-  ADD_ARG(int, nghost) = 1;
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);
   ADD_ARG(HydroOptions, hydro);
   ADD_ARG(ScalarOptions, scalar);
-  ADD_ARG(std::vector<BoundaryFlag>, bflags);
-  ADD_ARG(torch::nn::AnyModule, loc);
+
+  //! boundary functions
+  ADD_ARG(std::vector<bcfunc_t>, bfuncs);
+
+  //! meshblock id
+  ADD_ARG(int, lx1) = 0;
+  ADD_ARG(int, lx2) = 0;
+  ADD_ARG(int, lx3) = 0;
+  ADD_ARG(int, level) = 0;
+  ADD_ARG(int, gid) = 0;
 };
 
-class OctTree;
-struct MeshOptions;
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
   //! options with which this `MeshBlock` was constructed
   MeshBlockOptions options;
 
-  //! prognostic data
-  torch::Tensor hydro_u, scalar_u;
-
-  //! boundary functions
-  std::vector<bfunc_t> bfuncs;
-
-  //! user output variables
-  torch::OrderedDict<std::string, torch::Tensor> user_out_var;
-
   //! submodules
   Integrator pintg = nullptr;
-  LogicalLocation ploc = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
   explicit MeshBlockImpl(MeshBlockOptions const& options_);
-  explicit MeshBlockImpl(MeshBlockOptions const& options_,
-                         LogicalLocation ploc_);
   void reset() override;
-
-  int nc1() const { return options.hydro().coord().nc1(); }
-  int nc2() const { return options.hydro().coord().nc2(); }
-  int nc3() const { return options.hydro().coord().nc3(); }
 
   //! \brief return an index tensor for part of the meshblock
   std::vector<torch::indexing::TensorIndex> part(
       std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
       int extend_x2 = 0, int extend_x3 = 0) const;
 
-  int gid() const { return gid_; }
-  void set_gid(int gid) { gid_ = gid; }
+  void initialize(torch::Tensor const& hydro_w,
+                  torch::Tensor const& scalar_x = torch::Tensor());
 
-  void set_primitives(torch::Tensor hydro_w,
-                      torch::optional<torch::Tensor> scalar_w = torch::nullopt);
-  void initialize(MeshOptions const& mesh_options, OctTree const& tree);
-
-  double max_root_time_step(
-      int root_level, torch::optional<torch::Tensor> solid = torch::nullopt);
+  double max_time_step(torch::Tensor solid = torch::Tensor());
 
   int forward(double dt, int stage,
-              torch::optional<torch::Tensor> solid = torch::nullopt);
+              torch::Tensor solid = torch::Tensor());
 
- protected:
+ private:
   //! stage registers
-  torch::Tensor hydro_u0_, hydro_u1_;
-  torch::Tensor scalar_u0_, scalar_u1_;
-
-  int gid_ = 0;
+  torch::Tensor _hydro_u0, _hydro_u1;
+  torch::Tensor _scalar_v0, _scalar_v1;
 };
 
 TORCH_MODULE(MeshBlock);

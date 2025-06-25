@@ -1,8 +1,8 @@
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // torch
 #include <ATen/TensorIterator.h>
-
-// base
-#include <configure.h>
 
 // snap
 #include <snap/snap.h>
@@ -19,15 +19,47 @@ __attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt,
 template <int N>
 void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {}
 
-VerticalImplicitImpl::VerticalImplicitImpl(VerticalImplicitOptions options_)
+ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
+  ImplicitOptions op;
+
+  if (!root["dynamics"]) return op;
+  if (!root["dynamics"]["integrator"]) return op;
+
+  switch (root["dynamics"]["integrator"]["implicit-scheme"].as<int>(0)) {
+    case 0:
+      op.type() = "none";
+      op.scheme() = 0;
+      break;
+    case 1:
+      op.type() = "vic-partial";
+      op.scheme() = 1;
+      break;
+    case 9:
+      op.type() = "vic-full";
+      op.scheme() = 9;
+      break;
+    default:
+      TORCH_CHECK(false, "Unsupported implicit scheme");
+  }
+
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
+  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+
+  if (!root["forcing"]) return op;
+  if (!root["forcing"]["const-gravity"]) return op;
+
+  op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.0);
+
+  return op;
+}
+
+VerticalImplicitImpl::VerticalImplicitImpl(ImplicitOptions options_)
     : options(options_) {
   reset();
 }
 
 void VerticalImplicitImpl::reset() {
-  // set up eos model
-  peos = register_module_op(this, "eos", options.eos());
-
   // set up reconstruct model
   auto op = ReconstructOptions();
   precon = register_module("recon", Reconstruct(options.recon()));
@@ -36,11 +68,16 @@ void VerticalImplicitImpl::reset() {
   pcoord = register_module_op(this, "coord", options.coord());
 }
 
+torch::Tensor sound_speed_ideal_gas(torch::Tensor w, torch::Tensor gm1) {
+  return torch::sqrt((1. + gm1) * w[Index::IPR] / w[Index::IDN]);
+}
+
 torch::Tensor VerticalImplicitImpl::diffusion_matrix(torch::Tensor w,
                                                      torch::Tensor gm1) {
-  auto wlr = precon->forward(w, 3);
+  enum { DIM1 = 3 };
+  auto wlr = precon->forward(w, DIM1);
   auto wroe = roe_average(wlr, gm1);
-  auto cs = peos->sound_speed(wroe);
+  auto cs = sound_speed_ideal_gas(wroe, gm1);
   auto [Rmat, Rimat] = eigen_vectors(wroe, gm1, cs);
   auto vel = wroe[Index::IVX];
   auto nc1 = w.size(3);

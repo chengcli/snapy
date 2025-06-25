@@ -13,7 +13,6 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/input/parameter_input.hpp>
-#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/vectorize.hpp>
 
@@ -39,39 +38,40 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;
 
+  int nc1 = pmb->options.hydro().coord().nc1();
+  int nc2 = pmb->options.hydro().coord().nc2();
+  int nc3 = pmb->options.hydro().coord().nc3();
+  int nghost = pmb->options.hydro().coord().nghost();
+
   // set start/end array indices depending on whether ghost zones are included
-  out_is = pmb->nc1() > 1 ? pmb->options.nghost() : 0;
-  out_ie = pmb->nc1() > 1 ? pmb->nc1() - pmb->options.nghost() - 1 : 0;
-  out_js = pmb->nc2() > 1 ? pmb->options.nghost() : 0;
-  out_je = pmb->nc2() > 1 ? pmb->nc2() - pmb->options.nghost() - 1 : 0;
-  out_ks = pmb->nc3() > 1 ? pmb->options.nghost() : 0;
-  out_ke = pmb->nc3() > 1 ? pmb->nc3() - pmb->options.nghost() - 1 : 0;
+  out_is = nc1 > 1 ? nghost : 0;
+  out_ie = nc1 > 1 ? nc1 - nghost - 1 : 0;
+  out_js = nc2 > 1 ? nghost : 0;
+  out_je = nc2 > 1 ? nc2 - nghost - 1 : 0;
+  out_ks = nc3 > 1 ? nghost : 0;
+  out_ke = nc3 > 1 ? nc3 - nghost - 1 : 0;
 
   // FIXME: include_ghost zones probably doesn't work with grids other than
   // CCC
   if (options.include_ghost_zones()) {
     if (out_is != out_ie) {
-      out_is -= pmb->options.nghost();
-      out_ie += pmb->options.nghost();
+      out_is -= nghost;
+      out_ie += nghost;
     }
 
     if (out_js != out_je) {
-      out_js -= pmb->options.nghost();
-      out_je += pmb->options.nghost();
+      out_js -= nghost;
+      out_je += nghost;
     }
 
     if (out_ks != out_ke) {
-      out_ks -= pmb->options.nghost();
-      out_ke += pmb->options.nghost();
+      out_ks -= nghost;
+      out_ke += nghost;
     }
   }
 
   // set ptrs to data in OutputData linked list, then slice/sum as needed
   LoadOutputData(pmb);
-  if (!TransformOutputData(pmb)) {
-    ClearOutputData();  // required when LoadOutputData() is used.
-    return;
-  }  // skip if slice was out of range
 
   // create filename: "file_basename"+
   // "."+"blockid"+"."+"fileid"+"."+XXXXX+".nc", where XXXXX = 5-digit
@@ -80,7 +80,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.gid());
 
   fname.assign(options.file_basename());
   fname.append(".");
@@ -125,8 +125,8 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
 
   // 3. define variables
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f, imu, iphi;
-  int loc[4] = {(int)pmb->ploc->lx1, (int)pmb->ploc->lx2, (int)pmb->ploc->lx3,
-                pmb->ploc->level};
+  int loc[4] = {pmb->options.lx1(), pmb->options.lx2(), pmb->options.lx3(),
+                pmb->options.level()};
   int pos[4];
 
   nc_def_var(ifile, "time", NC_FLOAT, 1, &idt, &ivt);

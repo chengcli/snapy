@@ -9,13 +9,19 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/interface/athena_arrays.hpp>
-#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
+
+struct OctTreeOptions {
+  ADD_ARG(int, nb1) = 1;  // number of blocks in x1 direction
+  ADD_ARG(int, nb2) = 1;  // number of blocks in x2 direction
+  ADD_ARG(int, nb3) = 1;  // number of blocks in x3 direction
+};
+
 //! \brief  container for parameters read from `<output>` block in the input
 struct OutputOptions {
   ADD_ARG(int, fid) = 0;
@@ -106,6 +112,7 @@ class OutputType {
   void AppendOutputDataNode(OutputData *pdata);
   void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
   void ClearOutputData();
+
   bool TransformOutputData(MeshBlock pmb);
 
   //! \brief perform data slicing and update the data list
@@ -126,10 +133,6 @@ class OutputType {
  protected:
   void loadHydroOutputData(MeshBlock pmb);
   void loadScalarOutputData(MeshBlock pmb);
-  // void loadFieldsOutputData(MeshBlock pmb);
-  // void loadRadiationOutputData(MeshBlock pmb);
-  void loadUserOutputData(MeshBlock pmb);
-  // void loadDiagOutputData(MeshBlock pmb);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):

@@ -12,7 +12,6 @@
 
 // snap
 #include <snap/input/parameter_input.hpp>
-#include <snap/mesh/mesh.hpp>
 
 #include "output_type.hpp"
 

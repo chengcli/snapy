@@ -5,14 +5,12 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// kintera
-#include <kintera/thermo/thermo.hpp>
-
-// snap
-#include <snap/recon/reconstruct.hpp>
-
 // arg
 #include <snap/add_arg.h>
+
+namespace YAML {
+class Node;
+}
 
 namespace snap {
 
@@ -37,6 +35,7 @@ torch::Tensor calc_nonhydrostatic_pressure(torch::Tensor pres,
                                            double margin = 1.e-6);
 
 struct PrimitiveProjectorOptions {
+  static PrimitiveProjectorOptions from_yaml(YAML::Node const &node);
   PrimitiveProjectorOptions() = default;
 
   //! choose from ["none", "temperature"]
@@ -44,10 +43,9 @@ struct PrimitiveProjectorOptions {
   ADD_ARG(double, margin) = 1.e-6;
   ADD_ARG(int, nghost) = 1;
   ADD_ARG(double, grav) = 0.;
-  ADD_ARG(double, Rd) = 287.;
 
-  //! thermodynamic model options
-  ADD_ARG(kintera::ThermoOptions, thermo);
+  // FIXME: initialize this
+  ADD_ARG(double, Rd) = 287.05;  // specific gas constant for dry air
 };
 
 class PrimitiveProjectorImpl
@@ -55,9 +53,6 @@ class PrimitiveProjectorImpl
  public:
   //! options with which this `PrimitiveProjector` was constructed
   PrimitiveProjectorOptions options;
-
-  //! submodules
-  kintera::ThermoY pthermo = nullptr;
 
   //! Constructor to initialize the layer
   PrimitiveProjectorImpl() = default;
@@ -68,6 +63,10 @@ class PrimitiveProjectorImpl
   torch::Tensor forward(torch::Tensor w, torch::Tensor dz);
 
   void restore_inplace(torch::Tensor wlr);
+
+ private:
+  //! cache
+  torch::Tensor _psf;
 };
 TORCH_MODULE(PrimitiveProjector);
 

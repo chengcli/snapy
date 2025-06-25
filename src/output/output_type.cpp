@@ -2,12 +2,9 @@
 #include <sstream>
 #include <stdexcept>
 
-// base
-#include <configure.h>
-
 // snap
-#include "output.hpp"
 #include "output_formats.hpp"
+#include "output_type.hpp"
 
 namespace snap {
 OutputType::OutputType(OutputOptions const &options_)
@@ -24,7 +21,6 @@ void OutputType::LoadOutputData(MeshBlock pmb) {
 
   loadHydroOutputData(pmb);
   loadScalarOutputData(pmb);
-  loadUserOutputData(pmb);
 
   // throw an error if output variable name not recognized
   if (num_vars_ == 0) {
@@ -82,32 +78,6 @@ void OutputType::ClearOutputData() {
   // reset pointers to head and tail nodes of doubly linked list:
   pfirst_data_ = nullptr;
   plast_data_ = nullptr;
-}
-
-bool OutputType::TransformOutputData(MeshBlock pmb) {
-  bool flag = true;
-  if (options.output_slicex3()) {
-    bool ret = SliceOutputData(pmb, 3);
-    if (!ret) flag = false;
-  }
-  if (options.output_slicex2()) {
-    bool ret = SliceOutputData(pmb, 2);
-    if (!ret) flag = false;
-  }
-  if (options.output_slicex1()) {
-    bool ret = SliceOutputData(pmb, 1);
-    if (!ret) flag = false;
-  }
-  if (options.output_sumx3()) {
-    SumOutputData(pmb, 3);
-  }
-  if (options.output_sumx2()) {
-    SumOutputData(pmb, 2);
-  }
-  if (options.output_sumx1()) {
-    SumOutputData(pmb, 1);
-  }
-  return flag;
 }
 
 bool OutputType::ContainVariable(const std::string &haystack,

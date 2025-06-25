@@ -1,12 +1,18 @@
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // snap
 #include "riemann_solver.hpp"
 
 #include <snap/registry.hpp>
 
 namespace snap {
-RiemannSolverOptions::RiemannSolverOptions(ParameterInput pin) {
-  eos(EquationOfStateOptions(pin));
-  coord(CoordinateOptions(pin));
+
+RiemannSolverOptions RiemannSolverOptions::from_yaml(YAML::Node const& node) {
+  RiemannSolverOptions op;
+  op.type() = node["type"].as<std::string>("roe");
+  op.dir() = node["dir"].as<std::string>("xy");
+  return op;
 }
 
 RiemannSolverImpl::RiemannSolverImpl(const RiemannSolverOptions& options_)

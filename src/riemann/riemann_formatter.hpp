@@ -4,7 +4,6 @@
 #include <fmt/format.h>
 
 // snap
-#include <snap/coord/coord_formatter.hpp>
 #include <snap/eos/eos_formatter.hpp>
 
 #include "riemann_solver.hpp"
@@ -15,7 +14,7 @@ struct fmt::formatter<snap::RiemannSolverOptions> {
 
   template <typename FormatContext>
   auto format(const snap::RiemannSolverOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "(type = {}; eos = {}; coord = {})",
-                          p.type(), p.eos(), p.coord());
+    return fmt::format_to(ctx.out(), "(type = {}; eos = {})", p.type(),
+                          p.eos());
   }
 };

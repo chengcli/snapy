@@ -1,23 +1,33 @@
-// snap
-#include <snap/input/parameter_input.hpp>
+// yaml
+#include <yaml-cpp/yaml.h>
 
 // snap
 #include "forcing.hpp"
 
 namespace snap {
-ConstGravityOptions::ConstGravityOptions(ParameterInput pin) {
-  grav1(pin->GetOrAddReal("forcing", "grav1", 0.));
-  grav2(pin->GetOrAddReal("forcing", "grav2", 0.));
-  grav3(pin->GetOrAddReal("forcing", "grav3", 0.));
+ConstGravityOptions ConstGravityOptions::from_yaml(YAML::Node const& node) {
+  ConstGravityOptions op;
+  op.grav1() = node["grav1"].as<double>(0.);
+  op.grav2() = node["grav2"].as<double>(0.);
+  op.grav3() = node["grav3"].as<double>(0.);
+  return op;
 }
 
-CoriolisOptions::CoriolisOptions(ParameterInput pin) {
-  omega1(pin->GetOrAddReal("forcing", "omega1", 0.));
-  omega2(pin->GetOrAddReal("forcing", "omega2", 0.));
-  omega3(pin->GetOrAddReal("forcing", "omega3", 0.));
+CoriolisOptions CoriolisOptions::from_yaml(YAML::Node const& node) {
+  CoriolisOptions op;
+  op.omega1() = node["omega1"].as<double>(0.);
+  op.omega2() = node["omega2"].as<double>(0.);
+  op.omega3() = node["omega3"].as<double>(0.);
+  op.omegax() = node["omegax"].as<double>(0.);
+  op.omegay() = node["omegay"].as<double>(0.);
+  op.omegaz() = node["omegaz"].as<double>(0.);
+  return op;
+}
 
-  omegax(pin->GetOrAddReal("forcing", "omegax", 0.));
-  omegay(pin->GetOrAddReal("forcing", "omegay", 0.));
-  omegaz(pin->GetOrAddReal("forcing", "omegaz", 0.));
+DiffusionOptions DiffusionOptions::from_yaml(YAML::Node const& node) {
+  DiffusionOptions op;
+  op.K() = node["K"].as<double>(0.);
+  op.type() = node["type"].as<std::string>("theta");
+  return op;
 }
 }  // namespace snap

@@ -17,34 +17,32 @@ __attribute__((weak)) void call_hllc_cuda(at::TensorIterator& iter, int dim,
 void HLLCSolverImpl::reset() {
   // set up equation-of-state model
   peos = register_module_op(this, "eos", options.eos());
-
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
 }
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor gammad) {
-  torch::NoGradGuard no_grad;
-
   auto out = torch::empty_like(wl);
 
-  auto iter =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(false)
-          .declare_static_shape(out.sizes(), /*squash_dims=*/0)
-          .add_output(out)
-          .add_owned_const_input(wl)
-          .add_owned_const_input(wr)
-          .add_owned_const_input(gammad.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->cv_ratio_m1.unsqueeze(0))
-          .add_owned_const_input(peos->pthermo->mu_ratio_m1.unsqueeze(0))
-          .build();
+  // FIXME(cli): This is a place holder
+  auto cv_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
+  auto mu_ratio_m1 = torch::ones(peos->nvar() - 5, wl.options());
+
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(false)
+                  .declare_static_shape(out.sizes(), /*squash_dims=*/0)
+                  .add_output(out)
+                  .add_owned_const_input(wl)
+                  .add_owned_const_input(wr)
+                  .add_owned_const_input(gammad.unsqueeze(0))
+                  .add_owned_const_input(cv_ratio_m1.unsqueeze(0))
+                  .add_owned_const_input(mu_ratio_m1.unsqueeze(0))
+                  .build();
 
   if (wl.is_cpu()) {
-    call_hllc_cpu(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_hllc_cpu(iter, dim, peos->options.thermo().vapor_ids().size());
   } else if (wl.is_cuda()) {
-    call_hllc_cuda(iter, dim, peos->pthermo->options.vapor_ids().size());
+    call_hllc_cuda(iter, dim, peos->options.thermo().vapor_ids().size());
   } else {
     return forward_fallback(wl, wr, dim, gammad);
   }
@@ -54,7 +52,7 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
 torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
                                                torch::Tensor wr, int dim,
-                                               torch::Tensor gammad) {
+                                               torch::Tensor dummy) {
   using Index::IDN;
   using Index::IPR;
   using Index::IVX;
@@ -69,17 +67,15 @@ torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  auto igm1 = 1.0 / (gammad - 1.0);
+  auto el = peos->compute("W->U", {wl});
+  auto gammal = peos->compute("W->A", {wl});
+  auto cl = peos->compute("WA->L", {wl, gammal});
+
+  auto er = peos->compute("W->U", {wl});
+  auto gammar = peos->compute("W->A", {wr});
+  auto cr = peos->compute("WA->L", {wr, gammar});
 
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
-
-  auto cl = peos->sound_speed(wl);
-  auto cr = peos->sound_speed(wr);
-
-  auto el =
-      wl[IPR] * igm1 + 0.5 * wl[IDN] * wl.narrow(0, IVX, 3).square().sum(0);
-  auto er =
-      wr[IPR] * igm1 + 0.5 * wr[IDN] * wr.narrow(0, IVX, 3).square().sum(0);
 
   auto rhoa = .5 * (wl[IDN] + wr[IDN]);  // average density
   auto ca = .5 * (cl + cr);              // average sound speed
@@ -89,11 +85,11 @@ torch::Tensor HLLCSolverImpl::forward_fallback(torch::Tensor wl,
   //--- Step 3.  Compute sound speed in L,R
 
   auto ql =
-      torch::sqrt(1.0 + (gammad + 1) / (2 * gammad) * (pmid / wl[IPR] - 1.0));
+      torch::sqrt(1.0 + (gammal + 1) / (2 * gammal) * (pmid / wl[IPR] - 1.0));
   ql = torch::where(pmid <= wl[IPR], 1., ql);
 
   auto qr =
-      torch::sqrt(1.0 + (gammad + 1) / (2 * gammad) * (pmid / wr[IPR] - 1.0));
+      torch::sqrt(1.0 + (gammar + 1) / (2 * gammar) * (pmid / wr[IPR] - 1.0));
   qr = torch::where(pmid <= wr[IPR], 1., qr);
 
   //--- Step 4.  Compute the max/min wave speeds based on L/R

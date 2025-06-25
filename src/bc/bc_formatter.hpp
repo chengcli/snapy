@@ -4,7 +4,7 @@
 #include <fmt/format.h>
 
 // snap
-#include "boundary_condition.hpp"
+#include "bc.hpp"
 #include "internal_boundary.hpp"
 
 template <>

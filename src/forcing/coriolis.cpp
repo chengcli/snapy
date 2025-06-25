@@ -1,14 +1,9 @@
-// base
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
-#include <snap/mesh/meshblock.hpp>
 #include <snap/registry.hpp>
 
 #include "forcing.hpp"
-#include "forcing_formatter.hpp"
 
 namespace snap {
 void Coriolis123Impl::reset() {}

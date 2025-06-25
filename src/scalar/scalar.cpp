@@ -8,15 +8,6 @@
 #include "scalar_formatter.hpp"
 
 namespace snap {
-ScalarOptions::ScalarOptions(ParameterInput pin) {
-  nscalar(pin->GetOrAddInteger("scalar", "nscalar", 0));
-
-  coord(CoordinateOptions(pin));
-  riemann(RiemannSolverOptions(pin));
-
-  recon(ReconstructOptions(pin, "scalar", "xorder"));
-}
-
 ScalarImpl::ScalarImpl(const ScalarOptions& options_) : options(options_) {
   reset();
 }
@@ -30,6 +21,23 @@ void ScalarImpl::reset() {
 
   // set up riemann-solver model
   priemann = register_module_op(this, "riemann", options.riemann());
+
+  // set up thermodynamics model
+  pthermo = register_module("thermo", kintera::ThermoX(options.thermo()));
+
+  // set up kinetics model
+  pkinetics = register_module("kinetics", kintera::Kinetics(options.kinetics()));
+
+  // populate buffers
+  int nc1 = options.coord().nc1();
+  int nc2 = options.coord().nc2();
+  int nc3 = options.coord().nc3();
+
+  _X = register_buffer(
+      "X", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
+
+  _V = register_buffer(
+      "V", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
 }
 
 torch::Tensor ScalarImpl::forward(torch::Tensor u, double dt) {

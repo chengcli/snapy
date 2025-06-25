@@ -61,6 +61,7 @@ set_target_properties(${namel}_${buildl}
 target_link_libraries(${namel}_${buildl}
     PUBLIC
     kintera::kintera
+    kintera::vapors
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}

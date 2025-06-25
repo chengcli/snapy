@@ -6,15 +6,22 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include "boundary_condition.hpp"
+#include "bc.hpp"
+#include "bc_func.hpp"
 
 // arg
 #include <snap/add_arg.h>
 
+namespace YAML {
+class Node;
+}  // namespace YAML
+
 namespace snap {
+
 struct InternalBoundaryOptions {
   static constexpr int MAXRUN = 4;
 
+  static InternalBoundaryOptions from_yaml(const YAML::Node &root);
   InternalBoundaryOptions() = default;
 
   ADD_ARG(int, nghost) = 1;
@@ -39,8 +46,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid internal solid boundary in [0, 1]
    * \return primitive states with solid cells marked
    */
-  torch::Tensor mark_solid(torch::Tensor w,
-                           torch::optional<torch::Tensor> solid);
+  torch::Tensor mark_solid(torch::Tensor w, torch::Tensor solid);
 
   //! Rectify the solid cells
   /*!
@@ -50,7 +56,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \return rectified internal solid boundary
    */
   torch::Tensor rectify_solid(torch::Tensor solid_in, int &total_num_flips,
-                              std::vector<bfunc_t> const &bfuncs = {});
+                              std::vector<bcfunc_t> const &bfuncs = {});
 
   //! Revise the left/right states
   /*!
@@ -58,8 +64,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid internal solid boundary in [0, 1]
    * \return revised primitive left/right states
    */
-  torch::Tensor forward(torch::Tensor wlr, int dim,
-                        torch::optional<torch::Tensor> solid);
+  torch::Tensor forward(torch::Tensor wlr, int dim, torch::Tensor solid);
 };
 TORCH_MODULE(InternalBoundary);
 

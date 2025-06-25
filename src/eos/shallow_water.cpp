@@ -1,55 +1,87 @@
-// torch
-#include <torch/torch.h>
-
-// base
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
-#include "eos_formatter.hpp"
+#include <snap/registry.hpp>
+
 #include "equation_of_state.hpp"
 
 namespace snap {
+
+ShallowWaterImpl::ShallowWaterImpl(EquationOfStateOptions const &options_)
+    : EquationOfStateImpl(options_) {
+  reset();
+}
+
 void ShallowWaterImpl::reset() {
-  TORCH_CHECK(options.thermo().vapor_ids().size() == 0,
-              "ShallowWaterEOS should not have vapor");
-
-  TORCH_CHECK(options.thermo().cloud_ids().size() == 0,
-              "ShallowWaterEOS should not have cloud");
-
-  // set up thermodynamics model
-  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
-
   // set up coordinate model
   pcoord = register_module_op(this, "coord", options.coord());
+
+  // populate buffers
+  int nc1 = options.coord().nc1();
+  int nc2 = options.coord().nc2();
+  int nc3 = options.coord().nc3();
+
+  _prim = register_buffer(
+      "prim", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
+
+  _cons = register_buffer(
+      "cons", torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
+
+  _cs = register_buffer("cs", torch::empty({nc3, nc2, nc1}, torch::kFloat64));
 }
 
-void ShallowWaterImpl::cons2prim(torch::Tensor prim, torch::Tensor cons) const {
-  _apply_conserved_limiter_inplace(cons);
+torch::Tensor ShallowWaterImpl::compute(
+    std::string ab, std::vector<torch::Tensor> const &args) {
+  if (ab == "W->U") {
+    _prim.set_(args[0]);
+    _prim2cons(_prim, _cons);
+    return _cons;
+  } else if (ab == "U->W") {
+    _cons.set_(args[0]);
+    _cons2prim(_cons, _prim);
+    return _prim;
+  } else if (ab == "W->A") {
+    return torch::Tensor();
+  } else if (ab == "WA->L") {
+    _prim.set_(args[0]);
+    _gravity_wave_speed(args[0], _cs);
+    return _cs;
+  } else {
+    TORCH_CHECK(false, "Unknown abbreviation: ", ab);
+  }
+}
+
+void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
+  _apply_conserved_limiter_(cons);
 
   prim[Index::IDN] = cons[Index::IDN];
-  prim.narrow(0, Index::IVX, 3) =
-      cons.narrow(0, Index::IVX, 3) / cons[Index::IDN];
 
-  pcoord->vec_raise_inplace(prim);
+  // lvalue view
+  auto out = prim.narrow(0, Index::IVX, 3);
+  torch::div_out(out, cons.narrow(0, Index::IVX, 3), cons[Index::IDN]);
 
-  _apply_primitive_limiter_inplace(prim);
+  pcoord->vec_raise_(prim);
+
+  _apply_primitive_limiter_(prim);
 }
 
-void ShallowWaterImpl::prim2cons(torch::Tensor cons, torch::Tensor prim) const {
-  _apply_primitive_limiter_inplace(prim);
+void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
+  _apply_primitive_limiter_(prim);
 
   cons[Index::IDN] = prim[Index::IDN];
-  cons.narrow(0, Index::IVX, 3) =
-      prim.narrow(0, Index::IVX, 3) * prim[Index::IDN];
 
-  pcoord->vec_lower_inplace(cons);
+  // lvalue view
+  auto out = cons.narrow(0, Index::IVX, 3);
+  torch::mul_out(out, prim.narrow(0, Index::IVX, 3), prim[Index::IDN]);
 
-  _apply_conserved_limiter_inplace(cons);
+  pcoord->vec_lower_(cons);
+
+  _apply_conserved_limiter_(cons);
 }
 
-torch::Tensor ShallowWaterImpl::sound_speed(torch::Tensor prim) const {
-  return torch::sqrt(prim[Index::IDN]);
+void ShallowWaterImpl::_gravity_wave_speed(torch::Tensor prim,
+                                           torch::Tensor &out) const {
+  torch::sqrt_out(out, prim[Index::IDN]);
 }
+
 }  // namespace snap

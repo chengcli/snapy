@@ -1,17 +1,27 @@
-// base
-#include <configure.h>
+// yaml
+#include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/snap.h>
-
 #include "integrator.hpp"
-#include "intg_formatter.hpp"
 
 namespace snap {
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
                        double w3);
 __attribute__((weak)) void call_average3_cuda(at::TensorIterator& iter,
                                               double w1, double w2, double w3) {
+}
+
+IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
+  IntegratorOptions op;
+
+  auto config = YAML::LoadFile(filename);
+  if (config["integrator"]) {
+    auto intg = config["integrator"];
+    op.type() = intg["type"].as<std::string>("rk3");
+    op.cfl() = intg["dt"].as<double>(0.9);
+  }
+
+  return op;
 }
 
 IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)

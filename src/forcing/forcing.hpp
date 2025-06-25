@@ -8,15 +8,18 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/input/parameter_input.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
+namespace YAML {
+class Node;
+}  // namespace YAML
+
 namespace snap {
 struct ConstGravityOptions {
+  static ConstGravityOptions from_yaml(YAML::Node const& node);
   ConstGravityOptions() = default;
-  explicit ConstGravityOptions(ParameterInput pin);
 
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
@@ -24,8 +27,8 @@ struct ConstGravityOptions {
 };
 
 struct CoriolisOptions {
+  static CoriolisOptions from_yaml(YAML::Node const& node);
   CoriolisOptions() = default;
-  explicit CoriolisOptions(ParameterInput pin);
 
   ADD_ARG(double, omega1) = 0.;
   ADD_ARG(double, omega2) = 0.;
@@ -39,8 +42,8 @@ struct CoriolisOptions {
 };
 
 struct DiffusionOptions {
+  static DiffusionOptions from_yaml(YAML::Node const& node);
   DiffusionOptions() = default;
-  explicit DiffusionOptions(ParameterInput pin);
 
   ADD_ARG(double, K) = 0.;
   ADD_ARG(std::string, type) = "theta";
