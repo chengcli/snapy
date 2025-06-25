@@ -114,8 +114,8 @@ class CoordinateImpl {
   virtual std::array<torch::Tensor, 3> vec_from_cartesian(
       std::array<double, 3> vec) const;
 
-  virtual void prim2local_inplace(torch::Tensor &prim) const {}
-  virtual void flux2global_inplace(torch::Tensor &flux) const {}
+  virtual void prim2local_(torch::Tensor &prim) const {}
+  virtual void flux2global_(torch::Tensor &flux) const {}
 
   //! fluxes -> flux divergence
   virtual torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
