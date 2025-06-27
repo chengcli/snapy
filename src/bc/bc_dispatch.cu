@@ -23,7 +23,7 @@ int flip_zero_cuda(at::TensorIterator& iter, int dim, int dir) {
     auto len = at::native::ensure_nonempty_size(iter.output(), dim);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), dim);
 
-    native::gpu_kernel<scalar_t, 5>(
+    native::gpu_kernel<5>(
         iter, [=] __device__(char* const data[5], unsigned int strides[5]) {
           auto solid = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto dp = reinterpret_cast<scalar_t*>(data[1] + strides[1]);

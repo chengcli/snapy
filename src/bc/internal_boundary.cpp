@@ -35,8 +35,8 @@ InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
 
 void InternalBoundaryImpl::reset() {}
 
-torch::Tensor InternalBoundaryImpl::mark_solid(
-    torch::Tensor w, torch::Tensor solid) {
+torch::Tensor InternalBoundaryImpl::mark_solid(torch::Tensor w,
+                                               torch::Tensor solid) {
   if (!solid.defined()) return w;
 
   auto fill_solid = torch::zeros({w.size(0), 1, 1, 1}, w.options());
@@ -47,8 +47,8 @@ torch::Tensor InternalBoundaryImpl::mark_solid(
   return torch::where(solid, fill_solid, w);
 }
 
-torch::Tensor InternalBoundaryImpl::forward(
-    torch::Tensor wlr, int dim, torch::Tensor solid) {
+torch::Tensor InternalBoundaryImpl::forward(torch::Tensor wlr, int dim,
+                                            torch::Tensor solid) {
   if (!solid.defined()) return wlr;
 
   using Index::ILT;

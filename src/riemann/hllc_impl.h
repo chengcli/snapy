@@ -6,19 +6,22 @@
 // snap
 #include <snap/snap.h>
 
-#define WL(n) wli[(n) * stride]
-#define WR(n) wri[(n) * stride]
+#define WL(n) wl[(n) * stride]
+#define WR(n) wr[(n) * stride]
 #define FLX(n) flx[(n) * stride]
 #define SQR(x) ((x) * (x))
-#define GAMMAD (*gammad)
-#define CV_RATIO_M1(n) cv_ratio_m1[(n) * stride]
-#define MU_RATIO_M1(n) mu_ratio_m1[(n) * stride]
+#define EL (*el)
+#define ER (*er)
+#define GAMMAL (*gammal)
+#define GAMMAR (*gammar)
+#define CL (*gammal)
+#define CR (*gammar)
 
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
-                              T *mu_ratio_m1, int dim, int nvapor, int ncloud,
+void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
+                              T *gammar, T *cl, T *cr, int dim, int ny,
                               int stride) {
   constexpr int ICY = Index::ICY;
   constexpr int IDN = Index::IDN;
@@ -35,60 +38,29 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
 
   //--- Step 1.  Compute kappa
 
-  // Compute kappal (for the left state)
-  T fsig = 1.0;
-  T feps = 1.0;
-  for (int n = 0; n < nvapor; n++) {
-    fsig += WL(ICY + n) * CV_RATIO_M1(n);
-    feps += WL(ICY + n) * MU_RATIO_M1(n);
-  }
-  for (int n = nvapor; n < nvapor + ncloud; n++) {
-    fsig += WL(ICY + nvapor + n) * CV_RATIO_M1(n);
-    fsig -= WL(ICY + nvapor + n);
-  }
-  auto kappal = 1.0 / (GAMMAD - 1.0) * (fsig / feps);
-
-  // Compute kappar (for the right state)
-  fsig = 1.0;
-  feps = 1.0;
-  for (int n = 0; n < nvapor; n++) {
-    fsig += WR(ICY + n) * CV_RATIO_M1(n);
-    feps += WR(ICY + n) * MU_RATIO_M1(n);
-  }
-  for (int n = nvapor; n < nvapor + ncloud; n++) {
-    fsig += WR(ICY + nvapor + n) * CV_RATIO_M1(n);
-    fsig -= WR(ICY + nvapor + n);
-  }
-  auto kappar = 1.0 / (GAMMAD - 1.0) * (fsig / feps);
-
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
 
-  auto cl = sqrt((1.0 + 1.0 / kappal) * WL(IPR) / WL(IDN));
-  auto cr = sqrt((1.0 + 1.0 / kappar) * WR(IPR) / WR(IDN));
-
-  auto el = WL(IPR) * kappal +
-            0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
-  auto er = WR(IPR) * kappar +
-            0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
+  EL += 0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  ER += 0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
   auto rhoa = .5 * (WL(IDN) + WR(IDN));  // average density
-  auto ca = .5 * (cl + cr);              // average sound speed
+  auto ca = .5 * (CL + CR);              // average sound speed
   auto pmid = .5 * (WL(IPR) + WR(IPR) + (WL(ivx) - WR(ivx)) * rhoa * ca);
   auto umid = .5 * (WL(ivx) + WR(ivx) + (WL(IPR) - WR(IPR)) / (rhoa * ca));
 
   //--- Step 3.  Compute sound speed in L,R
 
   auto ql = (pmid <= WL(IPR)) ? 1.0
-                              : std::sqrt(1.0 + (GAMMAD + 1) / (2 * GAMMAD) *
+                              : std::sqrt(1.0 + (GAMMAL + 1) / (2 * GAMMAL) *
                                                     (pmid / WL(IPR) - 1.0));
   auto qr = (pmid <= WR(IPR)) ? 1.0
-                              : std::sqrt(1.0 + (GAMMAD + 1) / (2 * GAMMAD) *
+                              : std::sqrt(1.0 + (GAMMAR + 1) / (2 * GAMMAR) *
                                                     (pmid / WR(IPR) - 1.0));
 
   //--- Step 4.  Compute the max/min wave speeds based on L/R
 
-  auto al = WL(ivx) - cl * ql;
-  auto ar = WR(ivx) + cr * qr;
+  auto al = WL(ivx) - CL * ql;
+  auto ar = WR(ivx) + CR * qr;
 
   auto bp = ar > 0.0 ? ar : (TINY_NUMBER);
   auto bm = al < 0.0 ? al : -(TINY_NUMBER);
@@ -129,8 +101,8 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
   fl[ivz] = WL(IDN) * WL(ivz) * vxl;
   fr[ivz] = WR(IDN) * WR(ivz) * vxr;
 
-  fl[IPR] = el * vxl + WL(IPR) * WL(ivx);
-  fr[IPR] = er * vxr + WR(IPR) * WR(ivx);
+  fl[IPR] = EL * vxl + WL(IPR) * WL(ivx);
+  fr[IPR] = ER * vxr + WR(IPR) * WR(ivx);
 
   //--- Step 8. Compute flux weights or scales
 
@@ -162,6 +134,9 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wli, T *wri, T *gammad, T *cv_ratio_m1,
 #undef WR
 #undef FLX
 #undef SQR
-#undef GAMMAD
-#undef CV_RATIO_M1
-#undef MU_RATIO_M1
+#undef EL
+#undef ER
+#undef GAMMAL
+#undef GAMMAR
+#undef CL
+#undef CR

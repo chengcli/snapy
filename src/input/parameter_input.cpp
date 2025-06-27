@@ -154,7 +154,7 @@ void ParameterInputImpl::LoadFromStream(std::istream& is) {
       }
       blocks_found++;
       continue;  // skip to next line if block name was found
-    }            // end "a new block was found"
+    }  // end "a new block was found"
 
     // if line does not contain a block name or skippable information (comments,
     // whitespace), it must contain a parameter value

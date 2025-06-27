@@ -4,20 +4,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(CUDA "Enable CUDA support" OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" OFF)
+option(CUDA "Enable CUDA support" OFF)
 
+project(
+  libsnap
+  LANGUAGES CXX C
+  DESCRIPTION "finite volume method library for compressible fluids")
+
+# Try to enable CUDA
 if (CUDA)
-  project(
-    libsnap
-    LANGUAGES CXX C CUDA
-    DESCRIPTION "finite volume method library for compressible fluids")
-else()
-  project(
-    libsnap
-    LANGUAGES CXX C
-    DESCRIPTION "finite volume method library for compressible fluids")
+  enable_language(CUDA)
 endif()
 
 # search for <Package>_ROOT
@@ -40,7 +38,7 @@ endif()
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${_ABI_OUTPUT})
 
 # Set MacOS deployment target
-set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0")
 
 # make colorful output
 string(ASCII 27 Esc)
@@ -83,11 +81,17 @@ message(STATUS "Include ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parameters.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/parameters.cmake)
 
 message(STATUS "${Blue}${PROJECT_NAME}-3. Setting up system libraries ...${ColorReset}")
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
+#include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 find_package(Torch REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(Disort REQUIRED)
+find_package(Harp REQUIRED)
+find_package(Kintera REQUIRED)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/yamlpp.cmake)
 
-if (CUDA)
+if (CMAKE_CUDA_COMPILER)
   find_package(CUDAToolkit REQUIRED)
 else()
   set(CUDAToolkit_FOUND OFF)

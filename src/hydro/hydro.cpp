@@ -23,9 +23,6 @@ void HydroImpl::reset() {
   options.eos() = peos->options;
 
   // set up primitive projector model
-  // options.proj().grav(options.grav().grav1());
-  // options.proj().nghost(options.nghost());
-  // options.proj().thermo(options.eos().thermo());
   pproj = register_module("proj", PrimitiveProjector(options.proj()));
   options.proj() = pproj->options;
 
@@ -41,20 +38,14 @@ void HydroImpl::reset() {
   precon_dc = register_module("recon_dc", Reconstruct(ReconstructOptions()));
 
   // set up riemann-solver model
-  // options.riemann().coord(options.coord());
-  // options.riemann().eos(options.eos());
   priemann = register_module_op(this, "riemann", options.riemann());
   options.riemann() = priemann->options;
 
   // set up internal boundary
-  // options.ib().nghost(options.nghost());
   pib = register_module("ib", InternalBoundary(options.ib()));
   options.ib() = pib->options;
 
   // set up vertical implicit solver
-  // options.vic().coord(options.coord());
-  // options.vic().grav(options.grav().grav1());
-  // options.vic().nghost(options.nghost());
   pvic = register_module("vic", VerticalImplicit(options.vic()));
   options.vic() = pvic->options;
 

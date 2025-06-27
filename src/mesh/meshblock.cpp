@@ -115,7 +115,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-void MeshBlockImpl::initialize(torch::Tensor const& hydro_w, 
+void MeshBlockImpl::initialize(torch::Tensor const& hydro_w,
                                torch::Tensor const& scalar_x) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
@@ -135,8 +135,8 @@ void MeshBlockImpl::initialize(torch::Tensor const& hydro_w,
   // scalar
   if (pscalar->nvar() > 0) {
     auto const& temp = phydro->peos->get_buffer("thermo.T");
-    auto const& scalar_v = pscalar->pthermo->compute("TPX->V", 
-      {temp, hydro_w[Index::IPR], scalar_x});
+    auto const& scalar_v = pscalar->pthermo->compute(
+        "TPX->V", {temp, hydro_w[Index::IPR], scalar_x});
 
     op.type(kScalar);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
@@ -144,7 +144,7 @@ void MeshBlockImpl::initialize(torch::Tensor const& hydro_w,
     }
 
     // FIXME: scalar should have an eos as well
-    //scalar_x.set_(pscalar->pthermo->compute("V->X", {scalar_v}));
+    // scalar_x.set_(pscalar->pthermo->compute("V->X", {scalar_v}));
   }
 }
 
@@ -205,8 +205,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   }
 
   if (pscalar->nvar() > 0) {
-    scalar_v.set_(
-        pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
+    scalar_v.set_(pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
     _scalar_v1.copy_(scalar_v);
   }
 

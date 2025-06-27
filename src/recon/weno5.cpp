@@ -1,19 +1,13 @@
 // torch
 #include <ATen/TensorIterator.h>
 
-// base
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
 #include "interpolation.hpp"
-#include "recon_formatter.hpp"
+#include "recon_dispatch.hpp"
 
 namespace snap {
-void call_weno5_cpu(at::TensorIterator& iter, bool scale);
-__attribute__((weak)) void call_weno5_cuda(at::TensorIterator& iter,
-                                           bool scale) {}
 
 void Weno5InterpImpl::reset() {
   c1m = register_buffer(
@@ -57,8 +51,6 @@ void Weno5InterpImpl::reset() {
 }
 
 torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
   int nghost = stencils() / 2;
 
@@ -77,101 +69,28 @@ torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
 
 void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
   int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
                   .add_owned_const_input(w.narrow(dim, 0, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_owned_const_input(w.narrow(dim, 3, len))
-                  .add_owned_const_input(w.narrow(dim, 4, len))
                   .build();
 
-  if (w.is_cpu()) {
-    call_weno5_cpu(iter, options.scale());
-  } else if (w.is_cuda()) {
-    call_weno5_cuda(iter, options.scale());
-  } else {
-    out.copy_(left_fallback(w, dim));
-  }
+  std::vector<torch::Tensor> args = {w,   c1m, c2m, c3m, c4m,
+                                     c5m, c6m, c7m, c8m, c9m};
+  at::native::call_weno5(out.device().type(), iter, args, dim, options.scale());
 }
 
 void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
   int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 4, len))
-                  .add_owned_const_input(w.narrow(dim, 3, len))
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();
 
-  if (w.is_cpu()) {
-    call_weno5_cpu(iter, options.scale());
-  } else if (w.is_cuda()) {
-    call_weno5_cuda(iter, options.scale());
-  } else {
-    out.copy_(right_fallback(w, dim));
-  }
+  std::vector<torch::Tensor> args = {w,   c1p, c2p, c3p, c4p,
+                                     c5p, c6p, c7p, c8p, c9p};
+  at::native::call_weno5(out.device().type(), iter, args, dim, options.scale());
 }
 
-torch::Tensor Weno5InterpImpl::left_fallback(torch::Tensor w, int dim) const {
-  auto wu = w.unfold(dim, stencils(), 1);
-  torch::Tensor scale;
-  if (options.scale()) {
-    scale = wu.abs().mean(-1) + 1.e-10;
-    wu /= scale.unsqueeze(-1);
-  }
-
-  auto beta1 =
-      13. / 12. * wu.matmul(c4m).square() + 1. / 4. * wu.matmul(c5m).square();
-  auto beta2 =
-      13. / 12. * wu.matmul(c6m).square() + 1. / 4. * wu.matmul(c7m).square();
-  auto beta3 =
-      13. / 12. * wu.matmul(c8m).square() + 1. / 4. * wu.matmul(c9m).square();
-
-  auto alpha1 = 0.3 / (beta1 + 1e-6).square();
-  auto alpha2 = 0.6 / (beta2 + 1e-6).square();
-  auto alpha3 = 0.1 / (beta3 + 1e-6).square();
-
-  auto result = (alpha1 * wu.matmul(c1m) + alpha2 * wu.matmul(c2m) +
-                 alpha3 * wu.matmul(c3m)) /
-                (alpha1 + alpha2 + alpha3);
-
-  if (options.scale()) {
-    return result * scale;
-  } else {
-    return result;
-  }
-}
-
-torch::Tensor Weno5InterpImpl::right_fallback(torch::Tensor w, int dim) const {
-  auto wu = w.unfold(dim, stencils(), 1);
-  torch::Tensor scale;
-  if (options.scale()) {
-    scale = wu.abs().mean(-1) + 1.e-10;
-    wu /= scale.unsqueeze(-1);
-  }
-
-  auto beta1 =
-      13. / 12. * wu.matmul(c4p).square() + 1. / 4. * wu.matmul(c5p).square();
-  auto beta2 =
-      13. / 12. * wu.matmul(c6p).square() + 1. / 4. * wu.matmul(c7p).square();
-  auto beta3 =
-      13. / 12. * wu.matmul(c8p).square() + 1. / 4. * wu.matmul(c9p).square();
-
-  auto alpha1 = 0.3 / (beta1 + 1e-6).square();
-  auto alpha2 = 0.6 / (beta2 + 1e-6).square();
-  auto alpha3 = 0.1 / (beta3 + 1e-6).square();
-
-  auto result = (alpha1 * wu.matmul(c1p) + alpha2 * wu.matmul(c2p) +
-                 alpha3 * wu.matmul(c3p)) /
-                (alpha1 + alpha2 + alpha3);
-
-  if (options.scale()) {
-    return result * scale;
-  } else {
-    return result;
-  }
-}
 }  // namespace snap

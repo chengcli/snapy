@@ -1,18 +1,13 @@
 // torch
 #include <ATen/TensorIterator.h>
 
-// base
-#include <configure.h>
-
 // snap
 #include <snap/snap.h>
 
 #include "interpolation.hpp"
-#include "recon_formatter.hpp"
+#include "recon_dispatch.hpp"
 
 namespace snap {
-void call_cp5_cpu(at::TensorIterator& iter);
-__attribute__((weak)) void call_cp5_cuda(at::TensorIterator& iter) {}
 
 void Center5InterpImpl::reset() {
   cm = register_buffer("cm", torch::tensor({-1. / 20., 9. / 20., 47. / 60.,
@@ -37,45 +32,27 @@ torch::Tensor Center5InterpImpl::forward(torch::Tensor w, int dim) {
 
 void Center5InterpImpl::left(torch::Tensor w, int dim,
                              torch::Tensor out) const {
-  int nghost = stencils() / 2;
-  int len = w.size(dim) - 2 * nghost;
+  int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
                   .add_owned_const_input(w.narrow(dim, 0, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_owned_const_input(w.narrow(dim, 3, len))
-                  .add_owned_const_input(w.narrow(dim, 4, len))
                   .build();
 
-  if (w.is_cpu()) {
-    call_cp5_cpu(iter);
-  } else if (w.is_cuda()) {
-    call_cp5_cuda(iter);
-  } else {
-    out.copy_(left_fallback(w, dim));
-  }
+  std::vector<torch::Tensor> args = {w, cm};
+  at::native::call_poly5(out.device().type(), iter, args, dim);
 }
 
 void Center5InterpImpl::right(torch::Tensor w, int dim,
                               torch::Tensor out) const {
-  int nghost = stencils() / 2;
-  int len = w.size(dim) - 2 * nghost;
+  int len = out.size(dim);
+
   auto iter = at::TensorIteratorConfig()
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 4, len))
-                  .add_owned_const_input(w.narrow(dim, 3, len))
-                  .add_owned_const_input(w.narrow(dim, 2, len))
-                  .add_owned_const_input(w.narrow(dim, 1, len))
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();
 
-  if (w.is_cpu()) {
-    call_cp5_cpu(iter);
-  } else if (w.is_cuda()) {
-    call_cp5_cuda(iter);
-  } else {
-    out.copy_(right_fallback(w, dim));
-  }
+  std::vector<torch::Tensor> args = {w, cp};
+  at::native::call_poly3(out.device().type(), iter, args, dim);
 }
 }  // namespace snap

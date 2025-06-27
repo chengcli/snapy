@@ -3,14 +3,9 @@
 
 // snap
 #include "integrator.hpp"
+#include "intg_dispatch.hpp"
 
 namespace snap {
-void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
-                       double w3);
-__attribute__((weak)) void call_average3_cuda(at::TensorIterator& iter,
-                                              double w1, double w2, double w3) {
-}
-
 IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   IntegratorOptions op;
 
@@ -93,16 +88,8 @@ torch::Tensor IntegratorImpl::forward(int s, torch::Tensor u0, torch::Tensor u1,
                   .add_input(u2)
                   .build();
 
-  if (u0.is_cpu()) {
-    call_average3_cpu(iter, stages[s].wght0(), stages[s].wght1(),
-                      stages[s].wght2());
-  } else if (u0.is_cuda()) {
-    call_average3_cuda(iter, stages[s].wght0(), stages[s].wght1(),
-                       stages[s].wght2());
-  } else {
-    return stages[s].wght0() * u0 + stages[s].wght1() * u1 +
-           stages[s].wght2() * u2;
-  }
+  at::native::call_average3(out.device().type(), iter, stages[s].wght0(),
+                            stages[s].wght1(), stages[s].wght2());
 
   return out;
 }

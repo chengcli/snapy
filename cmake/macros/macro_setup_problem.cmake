@@ -18,7 +18,20 @@ macro(setup_problem namel)
     PRIVATE ${CMAKE_BINARY_DIR} ${KINTERA_INCLUDE_DIR} ${SNAP_INCLUDE_DIR}
             ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
 
-  target_link_libraries(
-    ${namel}.${buildl}
-    PRIVATE libsnap::snap $<IF:$<BOOL:${CUDAToolkit_FOUND}>,libsnap::snap_cu,>)
+  if(APPLE)
+    target_link_libraries(
+      ${namel}.${buildl}
+      PRIVATE ${KINTERA_LIBRARY} ${VAPORS_LIBRARY} snapy::bc snapy::snap
+              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
+  else()
+    target_link_libraries(
+      ${namel}.${buildl}
+      PRIVATE ${KINTERA_LIBRARY}
+              -Wl,--no-as-needed
+              ${VAPORS_LIBRARY}
+              snapy::bc
+              -Wl,--as-needed
+              snapy::snap
+              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
+  endif()
 endmacro()
