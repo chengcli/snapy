@@ -61,20 +61,24 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t
 
   ////// prepare to launch elementwise kernel  /////
   int len[3] = {1, 1, 1};
-  len[dim - 1] = at::native::ensure_nonempty_size(iter.output(), dim);
+  auto ndim = iter.output().dim();
+  len[3 + dim - ndim] = at::native::ensure_nonempty_size(iter.output(), dim);
 
   dim3 block(len[2], len[1], len[0]);
 
   // get dimensions
-  len[2] = at::native::ensure_nonempty_size(iter.output(), 3);
-  len[1] = at::native::ensure_nonempty_size(iter.output(), 2);
-  len[0] = at::native::ensure_nonempty_size(iter.output(), 1);
+  for (int i = 1; i < ndim; ++i)
+    len[i - 1] = at::native::ensure_nonempty_size(iter.output(), i);
 
   // get stencil size
-  int stencil = at::native::ensure_nonempty_size(iter.input(1), dim);
+  int stencil = at::native::ensure_nonempty_size(iter.input(), dim)
+    - len[3 + dim - ndim] + 1;
+
+  // number of variables
+  int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
   dim3 grid(len[2] / block.x, len[1] / block.y, len[0] / block.z);
-  size_t shared = (len[dim - 1] + buffers * stencil) * sizeof(scalar_t);
+  size_t shared = (len[3 + dim - ndim] * nvar + buffers * stencil) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
 

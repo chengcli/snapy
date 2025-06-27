@@ -8,6 +8,7 @@ namespace at::native {
 
 using recon_poly_fn = void (*)(at::TensorIterator &iter,
                                std::vector<at::Tensor> payload, int dim);
+
 using recon_weno_fn = void (*)(at::TensorIterator &iter,
                                std::vector<at::Tensor> payload, int dim,
                                bool scale);

@@ -35,6 +35,9 @@ void Center5InterpImpl::left(torch::Tensor w, int dim,
   int len = out.size(dim);
 
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();
@@ -48,6 +51,9 @@ void Center5InterpImpl::right(torch::Tensor w, int dim,
   int len = out.size(dim);
 
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
                   .add_owned_const_input(w.narrow(dim, 0, len))
                   .build();

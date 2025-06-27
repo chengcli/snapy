@@ -14,9 +14,11 @@ template <int N>
 void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_cp3_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_poly_cuda", [&]() {
     int vstride = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
+
+    std::cout << "nvar: " << nvar << ", vstride: " << vstride << std::endl;
 
     auto c = payload[1].data_ptr<scalar_t>();
 

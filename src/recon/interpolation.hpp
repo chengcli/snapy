@@ -122,7 +122,11 @@ class Center3InterpImpl : public torch::nn::Cloneable<Center3InterpImpl>,
   torch::Tensor cm, cp;
 
   //! Constructor to initialize the layer
-  Center3InterpImpl() = default;
+  Center3InterpImpl() {
+    options.type("cp3");
+    reset();
+  }
+
   explicit Center3InterpImpl(InterpOptions const& options_)
       : InterpImpl(options_) {
     reset();
@@ -147,7 +151,11 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
   torch::Tensor c1p, c2p, c3p, c4p;
 
   //! Constructor to initialize the layer
-  Weno3InterpImpl() = default;
+  Weno3InterpImpl() {
+    options.type("weno3");
+    reset();
+  }
+
   explicit Weno3InterpImpl(InterpOptions const& options_)
       : InterpImpl(options_) {
     reset();
@@ -172,7 +180,11 @@ class Center5InterpImpl : public torch::nn::Cloneable<Center5InterpImpl>,
   torch::Tensor cm, cp;
 
   //! Constructor to initialize the layer
-  Center5InterpImpl() = default;
+  Center5InterpImpl() {
+    options.type("cp5");
+    reset();
+  }
+
   explicit Center5InterpImpl(InterpOptions const& options_)
       : InterpImpl(options_) {
     reset();
@@ -204,7 +216,11 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
   torch::Tensor c1p, c2p, c3p, c4p, c5p, c6p, c7p, c8p, c9p;
 
   //! Constructor to initialize the layer
-  Weno5InterpImpl() = default;
+  Weno5InterpImpl() {
+    options.type("weno5");
+    reset();
+  }
+
   explicit Weno5InterpImpl(InterpOptions const& options_)
       : InterpImpl(options_) {
     reset();
