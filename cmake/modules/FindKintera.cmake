@@ -1,15 +1,20 @@
 # Find the kintera includes and library
 #
-# KINTERA_INCLUDE_DIR  - where to find element.hpp
-#
-# KINTERA_LIBRARY      - Link these libraries when using KINTERA
-#
-# KINTERA_FOUND        - True if kintera found
+# KINTERA_INCLUDE_DIR:  Where to find reaction.hpp
+
+# KINTERA_LIBRARY:      Link these libraries when using KINTERA
+
+# VAPORS_LIBRARY:       Link these libraries when using KINTERA
+
+# KINTERA_FOUND:        True if kintera found
 #
 # Normal usage would be:
 #
-# find_package(Kintera REQUIRED) include_directories(${KINTERA_INCLUDE_DIR})
-# target_link_libraries(${KINTERA_LIBRARY})
+# find_package(Kintera REQUIRED)
+#
+# include_directories(${KINTERA_INCLUDE_DIR})
+#
+# target_link_libraries(${KINTERA_LIBRARY} ${VAPORS_LIBRARY})
 
 include(FindPackageHandleStandardArgs)
 
@@ -35,7 +40,6 @@ endmacro()
 # Find Python
 set(Python3_FIND_VIRTUALENV ONLY)
 find_package(Python3 QUIET COMPONENTS Interpreter)
-message(STATUS "Python3_EXECUTABLE: ${Python3_EXECUTABLE}")
 if(Python3_Interpreter_FOUND)
   execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import kintera; print(kintera.__file__)"
@@ -55,7 +59,7 @@ endif()
 
 # Step 1: Find header
 find_path(
-  _KINTERA_HEADER_DIR element.hpp
+  _KINTERA_HEADER_DIR reaction.hpp
   HINTS ${kintera_include_dir}
         /opt/homebrew/include
         /usr/include
@@ -87,7 +91,18 @@ find_library(
         $ENV{KINTERA_DIR}/lib
         $ENV{KINTERA_ROOT}/lib)
 
-set(kintera_required_vars KINTERA_LIBRARY KINTERA_INCLUDE_DIR)
+find_library(
+  VAPORS_LIBRARY vapors_release
+  HINTS ${kintera_lib_dir}
+        /opt/homebrew/lib
+        /usr/lib/x86_64-linux-gnu/
+        KINTERA_DIR/lib
+        KINTERA_LIB
+        $ENV{KINTERA_LIB}
+        $ENV{KINTERA_DIR}/lib
+        $ENV{KINTERA_ROOT}/lib)
+
+set(kintera_required_vars VAPORS_LIBRARY KINTERA_LIBRARY KINTERA_INCLUDE_DIR)
 mark_as_advanced(${kintera_required_vars})
 
 if(APPLE)

@@ -34,7 +34,6 @@ endmacro()
 # Find Python
 set(Python3_FIND_VIRTUALENV ONLY)
 find_package(Python3 QUIET COMPONENTS Interpreter)
-message(STATUS "Python3_EXECUTABLE: ${Python3_EXECUTABLE}")
 if(Python3_Interpreter_FOUND)
   execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import pyharp; print(pyharp.__file__)"
