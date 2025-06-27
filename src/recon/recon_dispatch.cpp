@@ -12,14 +12,14 @@
 namespace snap {
 
 template <int N>
-void call_poly_cpu(at::TensorIterator& iter, int dim,
-                   std::vector<torch::Tensor> data) {
+void call_poly_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
+                   int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_poly_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c = data[1].data_ptr<scalar_t>();
+    auto c = payload[1].data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
@@ -32,25 +32,25 @@ void call_poly_cpu(at::TensorIterator& iter, int dim,
 }
 
 template <int N>
-void call_poly_mps(at::TensorIterator& iter, int dim,
-                   std::vector<torch::Tensor> data) {
+void call_poly_mps(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
+                   int dim) {
   auto out = iter.output();
-  auto w = data[0];
-  auto c = data[1];
+  auto w = payload[0];
+  auto c = payload[1];
   torch::matmul_out(out, w.unfold(dim, N, 1), c);
 }
 
-void call_weno3_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
-                    int dim, bool scale) {
+void call_weno3_cpu(at::TensorIterator& iter,
+                    std::vector<torch::Tensor> payload, int dim, bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno3_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c1 = data[1].data_ptr<scalar_t>();
-    auto c2 = data[2].data_ptr<scalar_t>();
-    auto c3 = data[3].data_ptr<scalar_t>();
-    auto c4 = data[4].data_ptr<scalar_t>();
+    auto c1 = payload[1].data_ptr<scalar_t>();
+    auto c2 = payload[2].data_ptr<scalar_t>();
+    auto c3 = payload[3].data_ptr<scalar_t>();
+    auto c4 = payload[4].data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
@@ -63,15 +63,15 @@ void call_weno3_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
   });
 }
 
-void call_weno3_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data,
-                    int dim, bool scale) {
+void call_weno3_mps(at::TensorIterator& iter,
+                    std::vector<torch::Tensor> payload, int dim, bool scale) {
   auto result = iter.output();
 
-  auto w = data[0];
-  auto c1 = data[1];
-  auto c2 = data[2];
-  auto c3 = data[3];
-  auto c4 = data[4];
+  auto w = payload[0];
+  auto c1 = payload[1];
+  auto c2 = payload[2];
+  auto c3 = payload[3];
+  auto c4 = payload[4];
 
   auto wu = w.unfold(dim, 3, 1);
   torch::Tensor wscale;
@@ -91,22 +91,22 @@ void call_weno3_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data,
   }
 }
 
-void call_weno5_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
-                    int dim, bool scale) {
+void call_weno5_cpu(at::TensorIterator& iter,
+                    std::vector<torch::Tensor> payload, int dim, bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno5_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c1 = data[1].data_ptr<scalar_t>();
-    auto c2 = data[2].data_ptr<scalar_t>();
-    auto c3 = data[3].data_ptr<scalar_t>();
-    auto c4 = data[4].data_ptr<scalar_t>();
-    auto c5 = data[5].data_ptr<scalar_t>();
-    auto c6 = data[6].data_ptr<scalar_t>();
-    auto c7 = data[7].data_ptr<scalar_t>();
-    auto c8 = data[8].data_ptr<scalar_t>();
-    auto c9 = data[9].data_ptr<scalar_t>();
+    auto c1 = payload[1].data_ptr<scalar_t>();
+    auto c2 = payload[2].data_ptr<scalar_t>();
+    auto c3 = payload[3].data_ptr<scalar_t>();
+    auto c4 = payload[4].data_ptr<scalar_t>();
+    auto c5 = payload[5].data_ptr<scalar_t>();
+    auto c6 = payload[6].data_ptr<scalar_t>();
+    auto c7 = payload[7].data_ptr<scalar_t>();
+    auto c8 = payload[8].data_ptr<scalar_t>();
+    auto c9 = payload[9].data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
@@ -119,20 +119,20 @@ void call_weno5_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> data,
   });
 }
 
-void call_weno5_mps(at::TensorIterator& iter, std::vector<torch::Tensor> data,
-                    int dim, bool scale) {
+void call_weno5_mps(at::TensorIterator& iter,
+                    std::vector<torch::Tensor> payload, int dim, bool scale) {
   auto result = iter.output();
 
-  auto w = data[0];
-  auto c1 = data[1];
-  auto c2 = data[2];
-  auto c3 = data[3];
-  auto c4 = data[4];
-  auto c5 = data[5];
-  auto c6 = data[6];
-  auto c7 = data[7];
-  auto c8 = data[8];
-  auto c9 = data[9];
+  auto w = payload[0];
+  auto c1 = payload[1];
+  auto c2 = payload[2];
+  auto c3 = payload[3];
+  auto c4 = payload[4];
+  auto c5 = payload[5];
+  auto c6 = payload[6];
+  auto c7 = payload[7];
+  auto c8 = payload[8];
+  auto c9 = payload[9];
 
   auto wu = w.unfold(dim, 5, 1);
   torch::Tensor wscale;

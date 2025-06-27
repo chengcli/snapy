@@ -4,10 +4,11 @@
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
 
-// fmv
+// snap
 #include <snap/loops.cuh>
 #include "lmars_impl.h"
 #include "hllc_impl.h"
+#include "riemann_dispatch.hpp"
 
 namespace snap {
 
@@ -19,7 +20,7 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
 
-    native::gpu_kernel<scalar_t, 7>(
+    native::gpu_kernel<7>(
         iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
@@ -33,7 +34,7 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
   });
 }
 
-void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor) {
+void call_hllc_cuda(at::TensorIterator& iter, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "hllc_cuda", [&]() {
@@ -41,7 +42,7 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim, int nvapor) {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
 
-    native::gpu_kernel<scalar_t, 9>(
+    native::gpu_kernel<9>(
         iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);

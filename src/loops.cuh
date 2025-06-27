@@ -1,40 +1,44 @@
 // torch
 #include <ATen/TensorIterator.h>
 #include <ATen/native/cuda/Loops.cuh>
+#include <ATen/native/ReduceOpsUtils.h>
 
 namespace snap {
 namespace native {
 
-template <typename func_t>
-__global__ void elementwise_kernel(int numel, func_t f) {
+template <typename scalar_t, typename func_t>
+__global__ void elementwise_kernel(int64_t numel, func_t f) {
   int x = threadIdx.x + blockIdx.x * blockDim.x;
   int y = threadIdx.y + blockIdx.y * blockDim.y;
   int z = threadIdx.z + blockIdx.z * blockDim.z;
 
   int idx = x + y * blockDim.x * gridDim.x + z * blockDim.x * blockDim.y * gridDim.x * gridDim.y;
 
+  // Shared memory allocation
+  extern __shared__ unsigned char memory[];
+  scalar_t *smem = reinterpret_cast<scalar_t *>(memory);
+
   if (idx < numel) {
-    f(idx);
+    f(idx, smem);
   }
 }
 
-template <typename scalar_t, int Arity, typename func_t>
+template <int Arity, typename func_t>
 void gpu_kernel(at::TensorIterator& iter, const func_t& f) {
   TORCH_CHECK(iter.ninputs() + iter.noutputs() == Arity);
 
-  at::detail::Array<char*, Arity> data;
+  std::array<char*, Arity> data;
   for (int i = 0; i < Arity; i++) {
     data[i] = (char*)iter.data_ptr(i);
   }
 
   auto offset_calc = ::make_offset_calculator<Arity>(iter);
   int64_t numel = iter.numel();
-  constexpr int unroll_factor = sizeof(scalar_t) >= 4 ? 2 : 4;
 
-  at::native::launch_legacy_kernel<128, unroll_factor>(numel,
+  at::native::launch_legacy_kernel<128, 1>(numel,
       [=] __device__ (int idx) {
       auto offsets = offset_calc.get(idx);
-      f(data.data, offsets.data);
+      f(data.data(), offsets.data());
     });
 }
 
@@ -42,7 +46,7 @@ template <typename scalar_t, int Arity, typename func_t>
 void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t& f) {
   TORCH_CHECK(iter.ninputs() + iter.noutputs() == Arity);
 
-  at::detail::Array<char*, Arity> data;
+  std::array<char*, Arity> data;
   for (int i = 0; i < Arity; i++) {
     data[i] = (char*)iter.data_ptr(i);
   }
@@ -74,10 +78,10 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t
 
   auto stream = at::cuda::getCurrentCUDAStream();
 
-  elementwise_kernel<func_t><<<grid, block, shared, stream>>>(numel,
-      [=] __device__ (int idx) {
+  elementwise_kernel<scalar_t><<<grid, block, shared, stream>>>(numel,
+      [=] __device__ (int idx, scalar_t *smem) {
       auto offsets = offset_calc.get(idx);
-      f(data.data, offsets.data);
+      f(data.data(), offsets.data(), smem);
     });
 
   C10_CUDA_KERNEL_LAUNCH_CHECK();

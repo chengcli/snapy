@@ -20,7 +20,7 @@ void vic_forward_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    native::gpu_kernel<scalar_t, 7>(iter, [=] GPU_LAMBDA(
+    native::gpu_kernel<7>(iter, [=] GPU_LAMBDA(
                                               char* const data[7],
                                               unsigned int strides[7]) {
       auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
