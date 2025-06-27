@@ -15,7 +15,6 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim,
 
   // Load input into shared memory
   T *sinp = smem;
-#pragma unroll
   for (int j = 0; j < nvar; ++j) {
     sinp[idx[dim-1] + j * len[dim-1]] = INP(j);
   }
@@ -28,12 +27,13 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim,
   __syncthreads();
 
   // calculation
+  int count = 0;
   for (int j = 0; j < nvar; ++j) {
     T sout = 0.;
 
 #pragma unroll
     for (int i = 0; i < N; ++i) {
-      sout += scoeff[i] * sinp[i + j * len[dim-1]];
+      sout += scoeff[i] * sinp[count++];
     }
 
     // copy to global memory
