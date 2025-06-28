@@ -9,15 +9,15 @@ namespace snap {
 // weno5
 template <typename T>
 __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
-                                 int nvar, int stride1, int stride2, int stride_out,
-                                 bool scale, T *smem) {
+                                  int nvar, int stride1, int stride2,
+                                  int stride_out, bool scale, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
 
-  printf("idx: %u %u %u, len: %u %u %u\n", idx[0], idx[1], idx[2],
-         len[0], len[1], len[2]);
-  printf("block.x: %d, block.y: %d, block.z: %d\n",
-         blockIdx.x, blockIdx.y, blockIdx.z);
+  printf("idx: %u %u %u, len: %u %u %u\n", idx[0], idx[1], idx[2], len[0],
+         len[1], len[2]);
+  printf("block.x: %d, block.y: %d, block.z: %d\n", blockIdx.x, blockIdx.y,
+         blockIdx.z);
   int idim = 3 + dim - ndim;
 
   // Load input into shared memory
@@ -28,7 +28,7 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   // Load coefficient into shared memory
   T *scoeff = smem + len[idim] * nvar;
-  constexpr int N = 45; // Number of coefficients for WENO5
+  constexpr int N = 45;  // Number of coefficients for WENO5
   for (int i = idx[idim]; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
@@ -50,12 +50,13 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   for (int j = 0; j < nvar; ++j) {
     int i = idx[idim] + j * len[idim];
-    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i+1]) + fabs(sinp[i+2])
-        + fabs(sinp[i+3]) + fabs(sinp[i+4])) / 5.0 : 1.0;
+    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2]) +
+                        fabs(sinp[i + 3]) + fabs(sinp[i + 4])) /
+                           5.0
+                     : 1.0;
 
     if (vscale != 0.0) {
-      for (int k = 0; k < 5; ++k)
-        phi[k]  = sinp[i + k];
+      for (int k = 0; k < 5; ++k) phi[k] = sinp[i + k];
     } else {
       OUT(j) = 0.0;
       continue;
@@ -65,21 +66,23 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
     T p1 = _vvdot<5>(phi, c2);
     T p2 = _vvdot<5>(phi, c3);
 
-    T beta0 = 13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
-    T beta1 = 13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
-    T beta2 = 13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
+    T beta0 =
+        13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
+    T beta1 =
+        13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
+    T beta2 =
+        13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
 
     T alpha0 = .3 / SQR(beta0 + 1e-6);
     T alpha1 = .6 / SQR(beta1 + 1e-6);
     T alpha2 = .1 / SQR(beta2 + 1e-6);
 
-    OUT(j) = vscale *
-        (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) / (alpha0 + alpha1 + alpha2);
-
+    OUT(j) = vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
+             (alpha0 + alpha1 + alpha2);
   }
 };
 
-} // namespace snap
+}  // namespace snap
 
 #undef SQR
 #undef INP

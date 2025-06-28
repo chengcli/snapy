@@ -18,8 +18,8 @@ inline __device__ T _vvdot(T *v1, T *v2) {
 // weno3
 template <typename T>
 __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
-                                 int nvar, int stride1, int stride2, int stride_out,
-                                 bool scale, T *smem) {
+                                  int nvar, int stride1, int stride2,
+                                  int stride_out, bool scale, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
 
@@ -33,7 +33,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   // Load coefficient into shared memory
   T *scoeff = smem + len[idim] * nvar;
-  constexpr int N = 12; // Number of coefficients for WENO3
+  constexpr int N = 12;  // Number of coefficients for WENO3
   for (int i = idx[idim]; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
@@ -50,12 +50,14 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   for (int j = 0; j < nvar; ++j) {
     int i = idx[idim] + j * len[idim];
-    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i+1]) + fabs(sinp[i+2])) / 3.0 : 1.0;
+    T vscale =
+        scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2])) / 3.0
+              : 1.0;
 
     if (vscale != 0.0) {
       phi[0] = sinp[i] / vscale;
-      phi[1] = sinp[i+1] / vscale;
-      phi[2] = sinp[i+2] / vscale;
+      phi[1] = sinp[i + 1] / vscale;
+      phi[2] = sinp[i + 2] / vscale;
     } else {
       OUT(j) = 0.0;
       continue;
@@ -74,7 +76,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   }
 };
 
-} // namespace snap
+}  // namespace snap
 
 #undef SQR
 #undef INP

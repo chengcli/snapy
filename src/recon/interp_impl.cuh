@@ -8,7 +8,8 @@ namespace snap {
 // polynomial
 template <typename T, int N>
 __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
-                                 int nvar, int stride1, int stride2, int stride_out, T *smem) {
+                                 int nvar, int stride1, int stride2,
+                                 int stride_out, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
 
@@ -43,7 +44,7 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   }
 };
 
-} // namespace snap
+}  // namespace snap
 
 #undef INP
 #undef OUT
