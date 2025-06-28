@@ -6,11 +6,11 @@
 
 namespace at::native {
 
-using recon_poly_fn = void (*)(at::TensorIterator &iter,
-                               std::vector<at::Tensor> payload, int dim);
-using recon_weno_fn = void (*)(at::TensorIterator &iter,
-                               std::vector<at::Tensor> payload, int dim,
-                               bool scale);
+using recon_poly_fn = void (*)(at::TensorIterator &iter, at::Tensor payload,
+                               int dim);
+
+using recon_weno_fn = void (*)(at::TensorIterator &iter, at::Tensor payload,
+                               int dim, bool scale);
 
 DECLARE_DISPATCH(recon_poly_fn, call_poly3);
 DECLARE_DISPATCH(recon_poly_fn, call_poly5);

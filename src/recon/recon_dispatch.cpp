@@ -12,66 +12,64 @@
 namespace snap {
 
 template <int N>
-void call_poly_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
-                   int dim) {
+void call_poly_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_poly_cpu", [&] {
-    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c = payload[1].data_ptr<scalar_t>();
+    auto c = coeff.data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2, nvar);
+        interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2, stride_out,
+                                      nvar);
       }
     });
   });
 }
 
 template <int N>
-void call_poly_mps(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
-                   int dim) {
+void call_poly_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim) {
   auto out = iter.output();
-  auto w = payload[0];
-  auto c = payload[1];
-  torch::matmul_out(out, w.unfold(dim, N, 1), c);
+  auto w = iter.input();
+  torch::matmul_out(out, w.unfold(dim, N, 1), coeff);
 }
 
-void call_weno3_cpu(at::TensorIterator& iter,
-                    std::vector<torch::Tensor> payload, int dim, bool scale) {
+void call_weno3_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
+                    bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno3_cpu", [&] {
-    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c1 = payload[1].data_ptr<scalar_t>();
-    auto c2 = payload[2].data_ptr<scalar_t>();
-    auto c3 = payload[3].data_ptr<scalar_t>();
-    auto c4 = payload[4].data_ptr<scalar_t>();
+    auto c = coeff.data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno3_impl(out, w, c1, c2, c3, c4, stride1, stride2, nvar,
-                          scale);
+        interp_weno3_impl(out, w, c, stride1, stride2, stride_out, nvar, scale);
       }
     });
   });
 }
 
-void call_weno3_mps(at::TensorIterator& iter,
-                    std::vector<torch::Tensor> payload, int dim, bool scale) {
+void call_weno3_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim,
+                    bool scale) {
   auto result = iter.output();
+  auto w = iter.input();
 
-  auto w = payload[0];
-  auto c1 = payload[1];
-  auto c2 = payload[2];
-  auto c3 = payload[3];
-  auto c4 = payload[4];
+  auto c1 = coeff[0];
+  auto c2 = coeff[1];
+  auto c3 = coeff[2];
+  auto c4 = coeff[3];
 
   auto wu = w.unfold(dim, 3, 1);
   torch::Tensor wscale;
@@ -91,48 +89,41 @@ void call_weno3_mps(at::TensorIterator& iter,
   }
 }
 
-void call_weno5_cpu(at::TensorIterator& iter,
-                    std::vector<torch::Tensor> payload, int dim, bool scale) {
+void call_weno5_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
+                    bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno5_cpu", [&] {
-    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
-    auto c1 = payload[1].data_ptr<scalar_t>();
-    auto c2 = payload[2].data_ptr<scalar_t>();
-    auto c3 = payload[3].data_ptr<scalar_t>();
-    auto c4 = payload[4].data_ptr<scalar_t>();
-    auto c5 = payload[5].data_ptr<scalar_t>();
-    auto c6 = payload[6].data_ptr<scalar_t>();
-    auto c7 = payload[7].data_ptr<scalar_t>();
-    auto c8 = payload[8].data_ptr<scalar_t>();
-    auto c9 = payload[9].data_ptr<scalar_t>();
+    auto c = coeff.data_ptr<scalar_t>();
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno5_impl(out, w, c1, c2, c3, c4, c5, c6, c7, c8, c9, stride1,
-                          stride2, nvar, scale);
+        interp_weno5_impl(out, w, c, stride1, stride2, stride_out, nvar, scale);
       }
     });
   });
 }
 
-void call_weno5_mps(at::TensorIterator& iter,
-                    std::vector<torch::Tensor> payload, int dim, bool scale) {
+void call_weno5_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim,
+                    bool scale) {
   auto result = iter.output();
+  auto w = iter.input();
 
-  auto w = payload[0];
-  auto c1 = payload[1];
-  auto c2 = payload[2];
-  auto c3 = payload[3];
-  auto c4 = payload[4];
-  auto c5 = payload[5];
-  auto c6 = payload[6];
-  auto c7 = payload[7];
-  auto c8 = payload[8];
-  auto c9 = payload[9];
+  auto c1 = coeff[0];
+  auto c2 = coeff[1];
+  auto c3 = coeff[2];
+  auto c4 = coeff[3];
+  auto c5 = coeff[4];
+  auto c6 = coeff[5];
+  auto c7 = coeff[6];
+  auto c8 = coeff[7];
+  auto c9 = coeff[8];
 
   auto wu = w.unfold(dim, 5, 1);
   torch::Tensor wscale;

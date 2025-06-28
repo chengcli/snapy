@@ -10,19 +10,13 @@
 namespace snap {
 
 void Weno3InterpImpl::reset() {
-  c1m = register_buffer("c1m",
-                        torch::tensor({1. / 2., 1. / 2., 0.}, torch::kFloat64));
-  c1p = register_buffer("c1p", c1m.flip({0}));
+  cm = register_buffer("cm", torch::tensor({{1. / 2., 1. / 2., 0.},
+                                            {0., 3. / 2., -1. / 2.},
+                                            {1., -1., 0.},
+                                            {0., 1., -1.}},
+                                           torch::kFloat64));
 
-  c2m = register_buffer(
-      "c2m", torch::tensor({0., 3. / 2., -1. / 2.}, torch::kFloat64));
-  c2p = register_buffer("c2p", c2m.flip({0}));
-
-  c3m = register_buffer("c3m", torch::tensor({1., -1., 0.}, torch::kFloat64));
-  c3p = register_buffer("c3p", c3m.flip({0}));
-
-  c4m = register_buffer("c4m", torch::tensor({0., 1., -1.}, torch::kFloat64));
-  c4p = register_buffer("c4p", c4m.flip({0}));
+  cp = register_buffer("cp", cm.flip({1}));
 }
 
 torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
@@ -40,27 +34,27 @@ torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
 }
 
 void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w, c1m, c2m, c3m, c4m};
-  at::native::call_weno3(out.device().type(), iter, args, dim, options.scale());
+  at::native::call_weno3(out.device().type(), iter, cm, dim, options.scale());
 }
 
 void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w, c1p, c2p, c3p, c4p};
-  at::native::call_weno3(out.device().type(), iter, args, dim, options.scale());
+  at::native::call_weno3(out.device().type(), iter, cp, dim, options.scale());
 }
 
 }  // namespace snap

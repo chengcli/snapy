@@ -18,20 +18,18 @@ macro(setup_test namel)
 
   if(APPLE)
     target_link_libraries(
-      ${namel}.${buildl}
-      PRIVATE ${KINTERA_LIBRARY} ${VAPORS_LIBRARY} snapy::bc snapy::snap
-              gtest_main $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
+      ${namel}.${buildl} PRIVATE snapy::snapy ${VAPORS_LIBRARY} snapy::bc
+                                 gtest_main)
   else()
     target_link_libraries(
       ${namel}.${buildl}
-      PRIVATE ${KINTERA_LIBRARY}
+      PRIVATE snapy::snap
               -Wl,--no-as-needed
-              kintera::vapors
+              ${VAPORS_LIBRARY}
               snapy::bc
+              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
               -Wl,--as-needed
-              snapy::snap
-              gtest_main
-              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
+              gtest_main)
   endif()
 
   add_test(NAME ${namel}.${buildl} COMMAND ${namel}.${buildl})

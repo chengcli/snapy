@@ -4,6 +4,8 @@
 
 enable_testing()
 
+setup_test(test_weno)
+
 #setup_problem(test_yaml_parse)
 #setup_problem(test_kinetics_rates)
 
