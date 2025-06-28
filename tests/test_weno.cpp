@@ -28,29 +28,21 @@ TEST_P(DeviceTest, interp_cp5m_torch1) {
       auto result1 = interp_cp5(phi[0].item<float>(), phi[1].item<float>(),
                                 phi[2].item<float>(), phi[3].item<float>(),
                                 phi[4].item<float>());
-      std::cout << "result1f: " << result1 << std::endl;
-
       auto result2 = torch::zeros({1}, phi.options());
       interp->left(phi, 0, result2);
-      std::cout << "result2f: " << result2 << std::endl;
-
       EXPECT_NEAR(result1, result2.item<float>(), 1.E-6);
     } else {
       auto result1 = interp_cp5(phi[0].item<double>(), phi[1].item<double>(),
                                 phi[2].item<double>(), phi[3].item<double>(),
                                 phi[4].item<double>());
-      std::cout << "result1d: " << result1 << std::endl;
-
       auto result2 = torch::zeros({1}, phi.options());
       interp->left(phi, 0, result2);
-      std::cout << "result2d: " << result2 << std::endl;
-
       EXPECT_NEAR(result1, result2.item<double>(), 1.E-6);
     }
   }
 }
 
-/*TEST_P(DeviceTest, interp_cp5m_torch2) {
+TEST_P(DeviceTest, interp_cp5m_torch2) {
   Center5Interp interp;
   interp->to(device, dtype);
 
@@ -87,7 +79,7 @@ TEST_P(DeviceTest, interp_cp5m_torch1) {
   }
 }
 
-TEST_P(DeviceTest, interp_cp5m_torch3) {
+/*TEST_P(DeviceTest, interp_cp5m_torch3) {
   Center5Interp interp;
   interp->to(device, dtype);
 

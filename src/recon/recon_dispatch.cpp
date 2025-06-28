@@ -18,6 +18,7 @@ void call_poly_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
 
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
     auto c = payload[0].data_ptr<scalar_t>();
@@ -26,7 +27,8 @@ void call_poly_cpu(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2, nvar);
+        interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2, stride_out,
+                                      nvar);
       }
     });
   });
@@ -44,8 +46,10 @@ void call_poly_mps(at::TensorIterator& iter, std::vector<torch::Tensor> payload,
 void call_weno3_cpu(at::TensorIterator& iter,
                     std::vector<torch::Tensor> payload, int dim, bool scale) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno3_cpu", [&] {
-    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
     auto c1 = payload[0].data_ptr<scalar_t>();
@@ -57,8 +61,8 @@ void call_weno3_cpu(at::TensorIterator& iter,
       for (int i = 0; i < n; i++) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno3_impl(out, w, c1, c2, c3, c4, stride1, stride2, nvar,
-                          scale);
+        interp_weno3_impl(out, w, c1, c2, c3, c4, stride1, stride2, stride_out,
+                          nvar, scale);
       }
     });
   });
@@ -98,6 +102,7 @@ void call_weno5_cpu(at::TensorIterator& iter,
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
 
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
     auto c1 = payload[0].data_ptr<scalar_t>();
@@ -115,7 +120,7 @@ void call_weno5_cpu(at::TensorIterator& iter,
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
         interp_weno5_impl(out, w, c1, c2, c3, c4, c5, c6, c7, c8, c9, stride1,
-                          stride2, nvar, scale);
+                          stride2, stride_out, nvar, scale);
       }
     });
   });

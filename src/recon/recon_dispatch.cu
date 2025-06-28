@@ -19,6 +19,7 @@ void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, i
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
 
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
     int ndim = iter.output().dim();
 
@@ -28,7 +29,8 @@ void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, i
         iter, dim, 1, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2], scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          interp_poly_impl<scalar_t, N>(out, w, c, dim, ndim, nvar, stride1, stride2, smem);
+          interp_poly_impl<scalar_t, N>(out, w, c, dim, ndim, nvar,
+                                        stride1, stride2, stride_out, smem);
         });
   });
 }

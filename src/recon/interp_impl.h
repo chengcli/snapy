@@ -4,7 +4,7 @@
 #include <configure.h>
 
 #define INP(j, i) (inp[(j) * stride2 + (i) * stride1])
-#define OUT(j) (out[(j) * stride2])
+#define OUT(j) (out[(j) * stride_out])
 #define SQR(x) ((x) * (x))
 
 namespace snap {
@@ -12,7 +12,7 @@ namespace snap {
 // polynomial
 template <typename T, int N>
 DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
-                                     int stride2, int nvar) {
+                                     int stride2, int stride_out, int nvar) {
   for (int j = 0; j < nvar; ++j) {
     OUT(j) = 0.;
     for (int i = 0; i < N; ++i) {
@@ -24,8 +24,8 @@ DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
 // WENO 3 interpolation
 template <typename T>
 DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *c1, T *c2, T *c3,
-                                      T *c4, int stride1, int stride2, int nvar,
-                                      double scale) {
+                                      T *c4, int stride1, int stride2,
+                                      int stride_out, int nvar, double scale) {
   for (int j = 0; j < nvar; ++j) {
     auto phim1 = INP(j, 0);
     auto phi = INP(j, 1);
@@ -48,8 +48,8 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *c1, T *c2, T *c3,
 template <typename T>
 DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *c1, T *c2, T *c3,
                                       T *c4, T *c5, T *c6, T *c7, T *c8, T *c9,
-                                      int stride1, int stride2, int nvar,
-                                      double scale) {
+                                      int stride1, int stride2, int stride_out,
+                                      int nvar, double scale) {
   for (int j = 0; j < nvar; ++j) {
     auto phim2 = INP(j, 0);
     auto phim1 = INP(j, 1);
