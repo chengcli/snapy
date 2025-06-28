@@ -27,11 +27,8 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   // Load coefficient into shared memory
   T *scoeff = smem + len[idim] * nvar;
-
-  // first thread loads coefficients
-  if (idx[idim] == 0) {
-  #pragma unroll
-    for (int i = 0; i < N; ++i) scoeff[i] = coeff[i];
+  for (int i = idx[idim]; i < N; i += len[idim]) {
+    scoeff[i] = coeff[i];
   }
 
   __syncthreads();
