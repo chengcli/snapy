@@ -217,7 +217,7 @@ TEST_P(DeviceTest, interp_weno3m_torch2) {
   }
 }
 
-/*TEST_P(DeviceTest, interp_weno3m_torch3) {
+TEST_P(DeviceTest, interp_weno3m_torch3) {
   Weno3Interp interp;
   interp->to(device, dtype);
 
@@ -252,7 +252,7 @@ TEST_P(DeviceTest, interp_weno3m_torch2) {
   }
 }
 
-TEST_P(DeviceTest, interp_weno3p_torch4) {
+/*TEST_P(DeviceTest, interp_weno3p_torch4) {
   Weno3Interp interp;
   interp->to(device, dtype);
 
