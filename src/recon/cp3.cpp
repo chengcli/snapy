@@ -16,8 +16,6 @@ void Center3InterpImpl::reset() {
 }
 
 torch::Tensor Center3InterpImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
   int nghost = stencils() / 2;
   vec[dim] -= 2 * nghost;
@@ -31,34 +29,29 @@ torch::Tensor Center3InterpImpl::forward(torch::Tensor w, int dim) {
 
 void Center3InterpImpl::left(torch::Tensor w, int dim,
                              torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w, cm};
+  std::vector<torch::Tensor> args = {cm};
   at::native::call_poly3(out.device().type(), iter, args, dim);
 }
 
 void Center3InterpImpl::right(torch::Tensor w, int dim,
                               torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w, cp};
+  std::vector<torch::Tensor> args = {cp};
   at::native::call_poly3(out.device().type(), iter, args, dim);
 }
 }  // namespace snap
