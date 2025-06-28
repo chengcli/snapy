@@ -166,7 +166,7 @@ TEST_P(DeviceTest, interp_weno3m_torch1) {
   Weno3Interp interp;
   interp->to(device, dtype);
 
-  for (int i = 0; i < 1; ++i) {
+  for (int i = 0; i < 10; ++i) {
     torch::Tensor phi = torch::randn({3}, torch::device(device).dtype(dtype));
     if (dtype == torch::kFloat32) {
       auto result1 = interp_weno3(phi[0].item<float>(), phi[1].item<float>(),
@@ -184,7 +184,7 @@ TEST_P(DeviceTest, interp_weno3m_torch1) {
   }
 }
 
-/*TEST_P(DeviceTest, interp_weno3m_torch2) {
+TEST_P(DeviceTest, interp_weno3m_torch2) {
   Weno3Interp interp;
   interp->to(device, dtype);
 
@@ -217,7 +217,7 @@ TEST_P(DeviceTest, interp_weno3m_torch1) {
   }
 }
 
-TEST_P(DeviceTest, interp_weno3m_torch3) {
+/*TEST_P(DeviceTest, interp_weno3m_torch3) {
   Weno3Interp interp;
   interp->to(device, dtype);
 
