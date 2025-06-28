@@ -105,12 +105,6 @@ find_library(
 set(kintera_required_vars VAPORS_LIBRARY KINTERA_LIBRARY KINTERA_INCLUDE_DIR)
 mark_as_advanced(${kintera_required_vars})
 
-if(APPLE)
-  link_directories(${Python3_SITELIB}/kintera/.dylibs)
-else()
-  link_directories(${Python3_SITELIB}/kintera.libs)
-endif()
-
 if(KINTERA_LIBRARY)
   __kintera_determine_version()
 endif()

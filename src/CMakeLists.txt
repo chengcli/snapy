@@ -65,15 +65,15 @@ target_link_libraries(${namel}_${buildl}
     PUBLIC
     fmt::fmt
     yaml-cpp::yaml-cpp
-    -Wl,--no-as-needed
-    ${VAPORS_LIBRARY}
-    -Wl,--as-needed
-    ${KINTERA_LIBRARY}
-    ${HARP_LIBRARY}
-    ${DISORT_LIBRARY}
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}
+    ${DISORT_LIBRARY}
+    ${HARP_LIBRARY}
+    ${KINTERA_LIBRARY}
+    #-Wl,--no-as-needed
+    #${VAPORS_LIBRARY}
+    #-Wl,--as-needed
     )
 
 add_library(snapy::snap ALIAS ${namel}_${buildl})
