@@ -43,11 +43,18 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
   T phi[3];
 
   for (int j = 0; j < nvar; ++j) {
-    phi[0] = INP(j, 0);
-    phi[1] = INP(j, 1);
-    phi[2] = INP(j, 2);
+    T vscale = scale
+                   ? (fabs(INP(j, 0)) + fabs(INP(j, 1)) + fabs(INP(j, 2))) / 3.0
+                   : 1.0;
 
-    T vscale = scale ? (fabs(phi[0]) + fabs(phi[1]) + fabs(phi[2])) / 3.0 : 1.0;
+    if (vscale != 0.0) {
+      phi[0] = INP(j, 0) / vscale;
+      phi[1] = INP(j, 1) / vscale;
+      phi[2] = INP(j, 2) / vscale;
+    } else {
+      OUT(j) = 0.0;
+      continue;
+    }
 
     if (vscale != 0.0) {
       phi[0] /= vscale;
@@ -82,23 +89,32 @@ DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *coeff, int stride1,
   T *c7 = c6 + 5;
   T *c8 = c7 + 5;
   T *c9 = c8 + 5;
+
+  T phi[5];
+
   for (int j = 0; j < nvar; ++j) {
-    auto phim2 = INP(j, 0);
-    auto phim1 = INP(j, 1);
-    auto phi = INP(j, 2);
-    auto phip1 = INP(j, 3);
-    auto phip2 = INP(j, 4);
+    T vscale = scale ? (fabs(INP(j, 0)) + fabs(INP(j, 1)) + fabs(INP(j, 2)) +
+                        fabs(INP(j, 3)) + fabs(INP(j, 4))) /
+                           5.0
+                     : 1.0;
 
-    T p0 = c1[2] * phi + c1[1] * phim1 + c1[0] * phim2;
-    T p1 = c2[3] * phip1 + c2[2] * phi + c2[1] * phim1;
-    T p2 = c3[4] * phip2 + c3[3] * phip1 + c3[2] * phi;
+    if (vscale != 0.0) {
+      for (int k = 0; k < 5; ++k) phi[k] = INP(j, k);
+    } else {
+      OUT(j) = 0.0;
+      continue;
+    }
 
-    T beta0 = 13. / 12. * SQR(c4[2] * phi + c4[1] * phim1 + c4[0] * phim2) +
-              .25 * SQR(c5[2] * phi + c5[1] * phim1 + c5[0] * phim2);
-    T beta1 = 13. / 12. * SQR(c6[3] * phip1 + c6[2] * phi + c6[1] * phim1) +
-              .25 * SQR(c7[3] * phip1 + c7[1] * phim1);
-    T beta2 = 13. / 12. * SQR(c8[4] * phip2 + c8[3] * phip1 + c8[2] * phi) +
-              .25 * SQR(c9[4] * phip2 + c9[3] * phip1 + c9[2] * phi);
+    T p0 = _vvdot<5>(phi, c1);
+    T p1 = _vvdot<5>(phi, c2);
+    T p2 = _vvdot<5>(phi, c3);
+
+    T beta0 =
+        13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
+    T beta1 =
+        13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
+    T beta2 =
+        13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
 
     T alpha0 = .3 / SQR(beta0 + 1e-6);
     T alpha1 = .6 / SQR(beta1 + 1e-6);

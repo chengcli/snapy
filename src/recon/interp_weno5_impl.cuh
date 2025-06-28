@@ -46,35 +46,45 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   // calculation
   T *c1 = scoeff;
-  T *c2 = c1 + 3;
-  T *c3 = c2 + 3;
-  T *c4 = c3 + 3;
+  T *c2 = c1 + 5;
+  T *c3 = c2 + 5;
+  T *c4 = c3 + 5;
+  T *c5 = c4 + 5;
+  T *c6 = c5 + 5;
+  T *c7 = c6 + 5;
+  T *c8 = c7 + 5;
+  T *c9 = c8 + 5;
 
-  T phi[3];
+  T phi[5];
 
   for (int j = 0; j < nvar; ++j) {
     int i = idx[idim] + j * len[idim];
-    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i+1]) + fabs(sinp[i+2])) / 3.0 : 1.0;
+    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i+1]) + fabs(sinp[i+2])
+        + fabs(sinp[i+3]) + fabs(sinp[i+4])) / 5.0 : 1.0;
 
     if (vscale != 0.0) {
-      phi[0] = sinp[i] / vscale;
-      phi[1] = sinp[i+1] / vscale;
-      phi[2] = sinp[i+2] / vscale;
+      for (int k = 0; k < 5; ++k)
+        phi[k]  = sin[i + k];
     } else {
       OUT(j) = 0.0;
       continue;
     }
 
-    T p0 = _vvdot<3>(phi, c1);
-    T p1 = _vvdot<3>(phi, c2);
+    T p0 = _vvdot<5>(phi, c1);
+    T p1 = _vvdot<5>(phi, c2);
+    T p2 = _vvdot<5>(phi, c3);
 
-    T beta0 = SQR(_vvdot<3>(phi, c3));
-    T beta1 = SQR(_vvdot<3>(phi, c4));
+    T beta0 = 13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
+    T beta1 = 13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
+    T beta2 = 13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
 
-    T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
-    T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
+    T alpha0 = .3 / SQR(beta0 + 1e-6);
+    T alpha1 = .6 / SQR(beta1 + 1e-6);
+    T alpha2 = .1 / SQR(beta2 + 1e-6);
 
-    OUT(j) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
+    OUT(j) =
+        (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) / (alpha0 + alpha1 + alpha2);
+
   }
 };
 
