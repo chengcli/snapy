@@ -80,10 +80,6 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
   size_t shared = (len[3 + dim - ndim] * nvar + buffers) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
-  printf("block: %d %d %d, grid: %d %d %d\n", block.x, block.y, block.z, grid.x,
-         grid.y, grid.z);
-
-  printf("numel: %ld\n", numel);
 
   elementwise_kernel<scalar_t><<<grid, block, shared, stream>>>(
       numel, [=] __device__(int idx, scalar_t* smem) {

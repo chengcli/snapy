@@ -16,9 +16,7 @@ void Weno3InterpImpl::reset() {
                                             {0., 1., -1.}},
                                            torch::kFloat64));
 
-  std::cout << "cm = " << cm << std::endl;
   cp = register_buffer("cp", cm.flip({1}));
-  std::cout << "cp = " << cp << std::endl;
 }
 
 torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
@@ -48,7 +46,6 @@ void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
 }
 
 void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
-  std::cout << "calling right with dim = " << dim << std::endl;
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)

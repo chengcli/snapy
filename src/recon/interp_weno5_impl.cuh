@@ -14,10 +14,6 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
 
-  printf("idx: %u %u %u, len: %u %u %u\n", idx[0], idx[1], idx[2], len[0],
-         len[1], len[2]);
-  printf("block.x: %d, block.y: %d, block.z: %d\n", blockIdx.x, blockIdx.y,
-         blockIdx.z);
   int idim = 3 + dim - ndim;
 
   // Load input into shared memory

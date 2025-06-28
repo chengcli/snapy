@@ -542,7 +542,7 @@ TEST_P(DeviceTest, interp_weno5p_torch6) {
   }
 }
 
-/*TEST(weno5, interp_weno5b) {
+TEST(weno5, interp_weno5b) {
   double result = interp_weno5<double>(1, 2, 3, 4, 5);
 
   std::cout << "=== 1 pixels ===" << std::endl;
@@ -631,7 +631,7 @@ TEST_P(DeviceTest, interp_weno5p_torch6) {
 
   result = interp_weno5<double>(1, 1, -3 / 1e9, 1, 1);
   std::cout << "1) " << result << std::endl;
-}*/
+}
 
 int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
