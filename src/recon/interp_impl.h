@@ -9,6 +9,15 @@
 
 namespace snap {
 
+template <int N, typename T>
+DISPATCH_MACRO T vvdot(T *v1, T *v2) {
+  T out = 0.;
+  for (int i = 0; i < N; ++i) {
+    out += v1[i] * v2[i];
+  }
+  return out;
+}
+
 // polynomial
 template <typename T, int N>
 DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
@@ -31,24 +40,26 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
   T *c3 = c2 + 3;
   T *c4 = c3 + 3;
 
-  for (int j = 0; j < nvar; ++j) {
-    T phim1 = INP(j, 0);
-    T phi = INP(j, 1);
-    T phip1 = INP(j, 2);
+  T phi[3];
 
-    T vscale = scale ? (fabs(phim1) + fabs(phi) + fabs(phip1)) / 3.0 : 1.0;
+  for (int j = 0; j < nvar; ++j) {
+    phi[0] = INP(j, 0);
+    phi[1] = INP(j, 1);
+    phi[2] = INP(j, 2);
+
+    T vscale = scale ? (fabs(phi[0]) + fabs(phi[1]) + fabs(phi[2])) / 3.0 : 1.0;
 
     if (vscale != 0.0) {
-      phim1 /= vscale;
-      phi /= vscale;
-      phip1 /= vscale;
+      phi[0] /= vscale;
+      phi[1] /= vscale;
+      phi[2] /= vscale;
     }
 
-    T p0 = c1[2] * phip1 + c1[1] * phi + c1[0] * phim1;
-    T p1 = c2[2] * phip1 + c2[1] * phi + c2[0] * phim1;
+    T p0 = vvdot<3>(phi, c1);
+    T p1 = vvdot<3>(phi, c2);
 
-    T beta0 = SQR(c3[0] * phim1 + c3[1] * phi + c3[2] * phip1);
-    T beta1 = SQR(c4[0] * phim1 + c4[1] * phi + c4[2] * phip1);
+    T beta0 = SQR(vvdot<3>(phi, c3));
+    T beta1 = SQR(vvdot<3>(phi, c4));
 
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
