@@ -68,29 +68,27 @@ torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
 }
 
 void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w,   c1m, c2m, c3m, c4m,
-                                     c5m, c6m, c7m, c8m, c9m};
-  at::native::call_weno5(out.device().type(), iter, args, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, c1m, dim, options.scale());
 }
 
 void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
-  int len = out.size(dim);
-
   auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
                   .add_output(out)
-                  .add_owned_const_input(w.narrow(dim, 0, len))
+                  .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {w,   c1p, c2p, c3p, c4p,
-                                     c5p, c6p, c7p, c8p, c9p};
-  at::native::call_weno5(out.device().type(), iter, args, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, c1p, dim, options.scale());
 }
 
 }  // namespace snap

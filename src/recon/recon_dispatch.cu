@@ -11,7 +11,7 @@
 namespace snap {
 
 template <int N>
-void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, int dim) {
+void call_poly_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
   std::cout << "call poly == " << N << std::endl;
 
@@ -23,7 +23,7 @@ void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, i
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
     int ndim = iter.output().dim();
 
-    auto c = payload[0].data_ptr<scalar_t>();
+    auto c = coeff.data_ptr<scalar_t>();
 
     native::stencil_kernel<scalar_t, 2>(
         iter, dim, 1, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2], scalar_t *smem) {
@@ -35,7 +35,7 @@ void call_poly_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, i
   });
 }
 
-void call_weno3_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, int dim, bool scale) {
+void call_weno3_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool scale) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   /*AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno3_cuda", [&]() {
@@ -50,7 +50,7 @@ void call_weno3_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, 
   });*/
 }
 
-void call_weno5_cuda(at::TensorIterator& iter, std::vector<at::Tensor> payload, int dim, bool scale) {
+void call_weno5_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool scale) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   /*AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno5_cuda", [&]() {

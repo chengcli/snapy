@@ -23,9 +23,13 @@ DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
 
 // WENO 3 interpolation
 template <typename T>
-DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *c1, T *c2, T *c3,
-                                      T *c4, int stride1, int stride2,
-                                      int stride_out, int nvar, double scale) {
+DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
+                                      int stride2, int stride_out, int nvar,
+                                      double scale) {
+  T *c1 = coeff;
+  T *c2 = c1 + 3;
+  T *c3 = c2 + 3;
+  T *c4 = c3 + 3;
   for (int j = 0; j < nvar; ++j) {
     auto phim1 = INP(j, 0);
     auto phi = INP(j, 1);
@@ -46,10 +50,18 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *c1, T *c2, T *c3,
 
 // WENO 5 interpolation
 template <typename T>
-DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *c1, T *c2, T *c3,
-                                      T *c4, T *c5, T *c6, T *c7, T *c8, T *c9,
-                                      int stride1, int stride2, int stride_out,
-                                      int nvar, double scale) {
+DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *coeff, int stride1,
+                                      int stride2, int stride_out, int nvar,
+                                      double scale) {
+  T *c1 = coeff;
+  T *c2 = c1 + 5;
+  T *c3 = c2 + 5;
+  T *c4 = c3 + 5;
+  T *c5 = c4 + 5;
+  T *c6 = c5 + 5;
+  T *c7 = c6 + 5;
+  T *c8 = c7 + 5;
+  T *c9 = c8 + 5;
   for (int j = 0; j < nvar; ++j) {
     auto phim2 = INP(j, 0);
     auto phim1 = INP(j, 1);

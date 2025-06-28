@@ -40,8 +40,7 @@ void Center5InterpImpl::left(torch::Tensor w, int dim,
                   .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {cm};
-  at::native::call_poly5(out.device().type(), iter, args, dim);
+  at::native::call_poly5(out.device().type(), iter, cm, dim);
 }
 
 void Center5InterpImpl::right(torch::Tensor w, int dim,
@@ -54,7 +53,6 @@ void Center5InterpImpl::right(torch::Tensor w, int dim,
                   .add_input(w)
                   .build();
 
-  std::vector<torch::Tensor> args = {cp};
-  at::native::call_poly5(out.device().type(), iter, args, dim);
+  at::native::call_poly5(out.device().type(), iter, cp, dim);
 }
 }  // namespace snap
