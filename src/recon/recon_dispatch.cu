@@ -7,8 +7,6 @@
 #include <snap/loops.cuh>
 #include "recon_dispatch.hpp"
 #include "interp_impl.cuh"
-#include "interp_weno3_impl.cuh"
-#include "interp_weno5_impl.cuh"
 
 namespace snap {
 
