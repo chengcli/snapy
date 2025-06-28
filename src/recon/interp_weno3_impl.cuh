@@ -6,6 +6,15 @@
 
 namespace snap {
 
+template <int N, typename T>
+__device__ inline T _vvdot(T *v1, T *v2) {
+  T out = 0.;
+  for (int i = 0; i < N; ++i) {
+    out += v1[i] * v2[i];
+  }
+  return out;
+}
+
 // weno3
 template <typename T>
 __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
@@ -41,26 +50,28 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   auto c3 = c2 + 3;
   auto c4 = c3 + 3;
 
+  T phi[3];
+
   for (int j = 0; j < nvar; ++j) {
     int i = idx[idim] + j * len[idim];
 
-    T phim1 = sinp[i];
-    T phi = sinp[i+1];
-    T phip1 = sinp[i+2];
+    phi[0] = sinp[i];
+    phi[1] = sinp[i+1];
+    phi[2] = sinp[i+2];
 
-    T vscale = scale ? (fabs(phim1) + fabs(phi) + fabs(phip1)) / 3.0 : 1.0;
+    T vscale = scale ? (fabs(phi[0]) + fabs(phi[1]) + fabs(phi[2])) / 3.0 : 1.0;
 
     if (vscale != 0.0) {
-      phim1 /= vscale;
-      phi /= vscale;
-      phip1 /= vscale;
+      phi[0] /= vscale;
+      phi[1] /= vscale;
+      phi[2] /= vscale;
     }
 
-    T p0 = c1[2] * phip1 + c1[1] * phi + c1[0] * phim1;
-    T p1 = c2[2] * phip1 + c2[1] * phi + c2[0] * phim1;
+    T p0 = _vvdot<3>(phi, c1);
+    T p1 = _vvdot<3>(phi, c2);
 
-    T beta0 = SQR(c3[0] * phim1 + c3[1] * phi + c3[2] * phip1);
-    T beta1 = SQR(c4[0] * phim1 + c4[1] * phi + c4[2] * phip1);
+    T beta0 = SQR(_vvdot<3>(phi, c3));
+    T beta1 = SQR(_vvdot<3>(phi, c4));
 
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);

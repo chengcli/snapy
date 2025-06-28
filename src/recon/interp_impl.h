@@ -10,7 +10,7 @@
 namespace snap {
 
 template <int N, typename T>
-DISPATCH_MACRO T vvdot(T *v1, T *v2) {
+DISPATCH_MACRO inline T _vvdot(T *v1, T *v2) {
   T out = 0.;
   for (int i = 0; i < N; ++i) {
     out += v1[i] * v2[i];
@@ -55,11 +55,11 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
       phi[2] /= vscale;
     }
 
-    T p0 = vvdot<3>(phi, c1);
-    T p1 = vvdot<3>(phi, c2);
+    T p0 = _vvdot<3>(phi, c1);
+    T p1 = _vvdot<3>(phi, c2);
 
-    T beta0 = SQR(vvdot<3>(phi, c3));
-    T beta1 = SQR(vvdot<3>(phi, c4));
+    T beta0 = SQR(_vvdot<3>(phi, c3));
+    T beta1 = SQR(_vvdot<3>(phi, c4));
 
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
