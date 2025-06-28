@@ -32,9 +32,17 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
   T *c4 = c3 + 3;
 
   for (int j = 0; j < nvar; ++j) {
-    auto phim1 = INP(j, 0);
-    auto phi = INP(j, 1);
-    auto phip1 = INP(j, 2);
+    T phim1 = INP(j, 0);
+    T phi = INP(j, 1);
+    T phip1 = INP(j, 2);
+
+    T vscale = scale ? (fabs(phim1) + fabs(phi) + fabs(phip1)) / 3.0 : 1.0;
+
+    if (vscale != 0.0) {
+      phim1 /= vscale;
+      phi /= vscale;
+      phip1 /= vscale;
+    }
 
     T p0 = c1[2] * phip1 + c1[1] * phi + c1[0] * phim1;
     T p1 = c2[2] * phip1 + c2[1] * phi + c2[0] * phim1;
@@ -45,7 +53,7 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
 
-    OUT(j) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1);
+    OUT(j) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
   }
 };
 
