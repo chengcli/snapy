@@ -34,7 +34,7 @@ species:
 const char *coord_config = R"(
 type: cartesian
 bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 20, nx2: 20, nx3: 1, nghost: 1}
+cells: {nx1: 10, nx2: 10, nx3: 1, nghost: 1}
 )";
 
 using namespace snap;
@@ -53,18 +53,11 @@ TEST_P(DeviceTest, moist_mixture) {
   cons[Index::IDN].abs_();
   cons[Index::IPR].abs_();
 
-  auto start = std::chrono::high_resolution_clock::now();
-
   auto prim = peos->forward(cons);
   auto cons2 = peos->compute("W->U", {prim});
 
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Time taken by test body: " << elapsed.count() << " seconds"
-            << std::endl;
-
-  std::cout << (cons - cons2).min() << std::endl;
-  std::cout << (cons - cons2).max() << std::endl;
+  std::cout << cons << std::endl;
+  std::cout << cons2 << std::endl;
 
   if (dtype == torch::kFloat32) {
     EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-4, 1.E-4));
