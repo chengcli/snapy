@@ -56,11 +56,11 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
       phip1 /= vscale;
     }
 
-    T p0 = c1[1] * phi + c1[0] * phim1;
-    T p1 = c2[2] * phip1 + c2[1] * phi;
+    T p0 = c1[2] * phip1 + c1[1] * phi + c1[0] * phim1;
+    T p1 = c2[2] * phip1 + c2[1] * phi + c2[0] * phim1;
 
-    T beta0 = SQR(c3[0] * phim1 + c3[1] * phi);
-    T beta1 = SQR(c4[1] * phi + c4[2] * phip1);
+    T beta0 = SQR(c3[0] * phim1 + c3[1] * phi + c3[2] * phip1);
+    T beta1 = SQR(c4[0] * phim1 + c4[1] * phi + c4[2] * phip1);
 
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
