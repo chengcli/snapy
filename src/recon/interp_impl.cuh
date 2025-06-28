@@ -9,11 +9,14 @@ namespace snap {
 // polynomial
 template <typename T, int N>
 __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
-                                 int nvar, int stride1, int stride2, int stride_out,
-                                 T *smem) {
+                                 int nvar, int stride1, int stride2, int stride_out, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
 
+  printf("idx: %u %u %u, len: %u %u %u\n", idx[0], idx[1], idx[2],
+         len[0], len[1], len[2]);
+  printf("block.x: %d, block.y: %d, block.z: %d\n",
+         blockIdx.x, blockIdx.y, blockIdx.z);
   int idim = 3 + dim - ndim;
 
   // Load input into shared memory

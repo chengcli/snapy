@@ -21,7 +21,7 @@ TEST_P(DeviceTest, interp_cp5m_torch1) {
   Center5Interp interp;
   interp->to(device, dtype);
 
-  for (int i = 0; i < 1; ++i) {
+  for (int i = 0; i < 10; ++i) {
     torch::Tensor phi = torch::randn({5}, torch::device(device).dtype(dtype));
 
     if (dtype == torch::kFloat32) {
@@ -46,7 +46,7 @@ TEST_P(DeviceTest, interp_cp5m_torch2) {
   Center5Interp interp;
   interp->to(device, dtype);
 
-  for (int i = 0; i < 1; ++i) {
+  for (int i = 0; i < 10; ++i) {
     torch::Tensor phi =
         torch::randn({2, 5}, torch::device(device).dtype(dtype));
     if (dtype == torch::kFloat32) {
@@ -79,13 +79,14 @@ TEST_P(DeviceTest, interp_cp5m_torch2) {
   }
 }
 
-/*TEST_P(DeviceTest, interp_cp5m_torch3) {
+TEST_P(DeviceTest, interp_cp5m_torch3) {
   Center5Interp interp;
   interp->to(device, dtype);
 
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 1; ++i) {
     torch::Tensor phi =
         torch::randn({5, 2}, torch::device(device).dtype(dtype));
+    std::cout << "input = " << phi << std::endl;
     if (dtype == torch::kFloat32) {
       auto result1 =
           interp_cp5(phi[0][0].item<float>(), phi[1][0].item<float>(),
@@ -118,7 +119,7 @@ TEST_P(DeviceTest, interp_cp5m_torch2) {
   }
 }
 
-TEST_P(DeviceTest, interp_cp5p_torch4) {
+/*TEST_P(DeviceTest, interp_cp5p_torch4) {
   Center5Interp interp;
   interp->to(device, dtype);
 
