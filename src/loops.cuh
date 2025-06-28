@@ -52,7 +52,7 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t
   }
 
   auto offset_calc = ::make_offset_calculator<Arity>(iter);
-  int64_t numel = iter.numel();
+  int64_t numel = iter.input().numel();
 
   TORCH_INTERNAL_ASSERT(numel >= 0 && numel <= std::numeric_limits<int32_t>::max());
   if (numel == 0) {
@@ -61,26 +61,30 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t
 
   ////// prepare to launch elementwise kernel  /////
   int len[3] = {1, 1, 1};
-  auto ndim = iter.output().dim();
-  len[3 + dim - ndim] = at::native::ensure_nonempty_size(iter.output(), dim);
+  auto ndim = iter.input().dim();
+  len[3 + dim - ndim] = at::native::ensure_nonempty_size(iter.input(), dim);
 
   dim3 block(len[2], len[1], len[0]);
 
   // get dimensions
   for (int i = 1; i < ndim; ++i)
-    len[i - 1] = at::native::ensure_nonempty_size(iter.output(), i);
+    len[i - 1] = at::native::ensure_nonempty_size(iter.input(), i);
 
   // get stencil size
-  int stencil = at::native::ensure_nonempty_size(iter.input(), dim)
-    - len[3 + dim - ndim] + 1;
+  int stencil = len[3 + dim - ndim] + 1 -
+    at::native::ensure_nonempty_size(iter.output(), dim);
 
   // number of variables
-  int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
+  int nvar = at::native::ensure_nonempty_size(iter.input(), 0);
 
   dim3 grid(len[2] / block.x, len[1] / block.y, len[0] / block.z);
   size_t shared = (len[3 + dim - ndim] * nvar + buffers * stencil) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
+  printf("block: %d %d %d, grid: %d %d %d\n",
+      block.x, block.y, block.z, grid.x, grid.y, grid.z);
+
+  printf("numel: %ld\n", numel);
 
   elementwise_kernel<scalar_t><<<grid, block, shared, stream>>>(numel,
       [=] __device__ (int idx, scalar_t *smem) {

@@ -1,28 +1,34 @@
 #include <cuda_runtime.h>
 
-#define INP(n) (inp[(n) * vstride])
-#define OUT(n) (out[(n) * vstride])
+#define INP(j, i) (inp[(j) * stride2 + (i) * stride1])
+#define OUT(j) (out[(j) * stride2])
 #define SQR(x) ((x) * (x))
 
 namespace snap {
 
 // polynomial
 template <typename T, int N>
-__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim,
-                                 int vstride, int nvar, T *smem) {
+__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
+                                 int nvar, int stride1, int stride2, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
   unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
+
+  int idim = 3 + dim - ndim;
 
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
-    sinp[idx[dim-1] + j * len[dim-1]] = INP(j);
+    sinp[idx[idim] + j * len[idim]] = INP(j, idx[idim]);
   }
 
   // Load coefficient into shared memory
-  T *scoeff = smem + len[dim-1] * nvar;
-#pragma unroll
-  for (int i = 0; i < N; ++i) scoeff[i] = coeff[i];
+  T *scoeff = smem + len[idim] * nvar;
+
+  // first thread loads coefficients
+  if (idx[idim] == 0) {
+  #pragma unroll
+    for (int i = 0; i < N; ++i) scoeff[i] = coeff[i];
+  }
 
   __syncthreads();
 
