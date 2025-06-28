@@ -8,6 +8,7 @@
 #include "recon_dispatch.hpp"
 #include "interp_impl.cuh"
 #include "interp_weno3_impl.cuh"
+#include "interp_weno5_impl.cuh"
 
 namespace snap {
 
@@ -63,19 +64,25 @@ void call_weno3_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool s
 void call_weno5_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool scale) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  /*AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno5_cuda", [&]() {
-    at::native::gpu_kernel(
-        iter,
-        [scale] GPU_LAMBDA(scalar_t in1, scalar_t in2, scalar_t in3,
-                           scalar_t in4, scalar_t in5) -> scalar_t {
-          auto s = scale ? (fabs(in1) + fabs(in2) + fabs(in3) + fabs(in4) +
-                            fabs(in5)) /
-                                   5. +
-                               1.e-10
-                         : 1.0;
-          return s * interp_weno5(in1 / s, in2 / s, in3 / s, in4 / s, in5 / s);
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno5_cuda", [&]() {
+    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
+    int ndim = iter.output().dim();
+
+    auto c = coeff.data_ptr<scalar_t>();
+
+    native::stencil_kernel<scalar_t, 2>(
+        iter, dim, coeff.numel(),
+        [=] __device__ (char* const data[2], unsigned int strides[2], scalar_t *smem) {
+          auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          interp_weno5_impl<scalar_t>(out, w, c, dim, ndim, nvar,
+                                      stride1, stride2, stride_out, scale, smem);
         });
-  });*/
+  });
 }
 }  // namespace snap
 

@@ -6,18 +6,9 @@
 
 namespace snap {
 
-template <int N, typename T>
-__device__ inline T _vvdot(T *v1, T *v2) {
-  T out = 0.;
-  for (int i = 0; i < N; ++i) {
-    out += v1[i] * v2[i];
-  }
-  return out;
-}
-
-// weno3
+// weno5
 template <typename T>
-__device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
+__device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
                                  int nvar, int stride1, int stride2, int stride_out,
                                  bool scale, T *smem) {
   unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
@@ -37,7 +28,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
   // Load coefficient into shared memory
   T *scoeff = smem + len[idim] * nvar;
-  constexpr int N = 12; // Number of coefficients for WENO3
+  constexpr int N = 45; // Number of coefficients for WENO5
   for (int i = idx[idim]; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
@@ -64,7 +55,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
     if (vscale != 0.0) {
       for (int k = 0; k < 5; ++k)
-        phi[k]  = sin[i + k];
+        phi[k]  = sinp[i + k];
     } else {
       OUT(j) = 0.0;
       continue;

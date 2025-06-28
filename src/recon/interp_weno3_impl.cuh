@@ -7,7 +7,7 @@
 namespace snap {
 
 template <int N, typename T>
-__device__ inline T _vvdot(T *v1, T *v2) {
+inline __device__ T _vvdot(T *v1, T *v2) {
   T out = 0.;
   for (int i = 0; i < N; ++i) {
     out += v1[i] * v2[i];
