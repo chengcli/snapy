@@ -147,8 +147,7 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
                         public InterpImpl {
  public:
   //! data
-  torch::Tensor c1m, c2m, c3m, c4m;
-  torch::Tensor c1p, c2p, c3p, c4p;
+  torch::Tensor cm, cp;
 
   //! Constructor to initialize the layer
   Weno3InterpImpl() {
@@ -212,8 +211,7 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
                         public InterpImpl {
  public:
   //! data
-  torch::Tensor c1m, c2m, c3m, c4m, c5m, c6m, c7m, c8m, c9m;
-  torch::Tensor c1p, c2p, c3p, c4p, c5p, c6p, c7p, c8p, c9p;
+  torch::Tensor cm, cp;
 
   //! Constructor to initialize the layer
   Weno5InterpImpl() {

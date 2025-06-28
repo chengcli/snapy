@@ -2,7 +2,6 @@
 
 #define INP(j, i) (inp[(j) * stride2 + (i) * stride1])
 #define OUT(j) (out[(j) * stride_out])
-#define SQR(x) ((x) * (x))
 
 namespace snap {
 
@@ -50,6 +49,5 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
 
 } // namespace snap
 
-#undef SQR
 #undef INP
 #undef OUT

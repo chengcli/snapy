@@ -10,44 +10,19 @@
 namespace snap {
 
 void Weno5InterpImpl::reset() {
-  c1m = register_buffer(
-      "c1m",
-      torch::tensor({-1. / 6., 5. / 6., 1. / 3., 0., 0.}, torch::kFloat64));
-  c1p = register_buffer("c1p", c1m.flip({0}));
+  cm = register_buffer("cm",
+                       torch::tensor({{-1. / 6., 5. / 6., 1. / 3., 0., 0.},
+                                      {0., 1. / 3., 5. / 6., -1. / 6., 0.},
+                                      {0., 0., 11. / 6., -7. / 6., 1. / 3.},
+                                      {1., -2., 1., 0., 0.},
+                                      {1., -4., 3., 0., 0.},
+                                      {0., 1., -2., 1., 0.},
+                                      {0., -1., 0., 1., 0.},
+                                      {0., 0., 1., -2., 1.},
+                                      {0., 0., 3., -4., 1.}},
+                                     torch::kFloat64));
 
-  c2m = register_buffer(
-      "c2m",
-      torch::tensor({0., 1. / 3., 5. / 6., -1. / 6., 0.}, torch::kFloat64));
-  c2p = register_buffer("c2p", c2m.flip({0}));
-
-  c3m = register_buffer(
-      "c3m",
-      torch::tensor({0., 0., 11. / 6., -7. / 6., 1. / 3.}, torch::kFloat64));
-  c3p = register_buffer("c3p", c3m.flip({0}));
-
-  c4m = register_buffer("c4m",
-                        torch::tensor({1., -2., 1., 0., 0.}, torch::kFloat64));
-  c4p = register_buffer("c4p", c4m.flip({0}));
-
-  c5m = register_buffer("c5m",
-                        torch::tensor({1., -4., 3., 0., 0.}, torch::kFloat64));
-  c5p = register_buffer("c5p", c5m.flip({0}));
-
-  c6m = register_buffer("c6m",
-                        torch::tensor({0., 1., -2., 1., 0.}, torch::kFloat64));
-  c6p = register_buffer("c6p", c6m.flip({0}));
-
-  c7m = register_buffer("c7m",
-                        torch::tensor({0., -1., 0., 1., 0.}, torch::kFloat64));
-  c7p = register_buffer("c7p", c7m.flip({0}));
-
-  c8m = register_buffer("c8m",
-                        torch::tensor({0., 0., 1., -2., 1.}, torch::kFloat64));
-  c8p = register_buffer("c8p", c8m.flip({0}));
-
-  c9m = register_buffer("c9m",
-                        torch::tensor({0., 0., 3., -4., 1.}, torch::kFloat64));
-  c9p = register_buffer("c9p", c9m.flip({0}));
+  cp = register_buffer("cp", cm.flip({1}));
 }
 
 torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
@@ -76,7 +51,7 @@ void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_input(w)
                   .build();
 
-  at::native::call_weno5(out.device().type(), iter, c1m, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, cm, dim, options.scale());
 }
 
 void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
@@ -88,7 +63,7 @@ void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
                   .add_input(w)
                   .build();
 
-  at::native::call_weno5(out.device().type(), iter, c1p, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, cp, dim, options.scale());
 }
 
 }  // namespace snap

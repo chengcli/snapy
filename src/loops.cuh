@@ -70,15 +70,11 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers, const func_t
   for (int i = 1; i < ndim; ++i)
     len[3 + i - ndim] = at::native::ensure_nonempty_size(iter.input(), i);
 
-  // get stencil size
-  int stencil = len[3 + dim - ndim] + 1 -
-    at::native::ensure_nonempty_size(iter.output(), dim);
-
   // number of variables
   int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
 
   dim3 grid(len[2] / block.x, len[1] / block.y, len[0] / block.z);
-  size_t shared = (len[3 + dim - ndim] * nvar + buffers * stencil) * sizeof(scalar_t);
+  size_t shared = (len[3 + dim - ndim] * nvar + buffers) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
   printf("block: %d %d %d, grid: %d %d %d\n",
