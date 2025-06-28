@@ -46,10 +46,14 @@ TEST_P(DeviceTest, moist_mixture) {
   op.thermo() = kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
 
   auto peos = MoistMixture(op);
+  peos->to(device, dtype);
 
   std::cout << "molecular weight = " << 1. / peos->pthermo->inv_mu << std::endl;
 
   auto const &cons = peos->get_buffer("U");
+
+  EXPECT_EQ(cons.sizes(), std::vector<int64_t>({5, 1, 6, 6}));
+
   cons.uniform_(0., 1.);
 
   cons[Index::IDN].abs_();
@@ -59,11 +63,12 @@ TEST_P(DeviceTest, moist_mixture) {
   auto prim = peos->forward(cons);
   auto cons2 = peos->compute("W->U", {prim});
 
-  std::cout << "prim = " << prim << std::endl;
-  std::cout << "cons = " << cons << std::endl;
-  std::cout << "cons2 = " << cons2 << std::endl;
-
   EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-6, 1.E-6));
+
+  auto gamma = peos->compute("W->A", {prim});
+
+  EXPECT_EQ(gamma.sizes(), std::vector<int64_t>({1, 6, 6}));
+  EXPECT_TRUE(gamma.allclose(torch::ones_like(gamma) * 1.4, 1.E-6, 1.E-6));
 }
 
 /*TEST_P(DeviceTest, cons2prim_hydro_ideal_ncloud5) {
