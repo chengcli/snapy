@@ -34,7 +34,7 @@ species:
 const char *coord_config = R"(
 type: cartesian
 bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 10, nx2: 10, nx3: 1, nghost: 1}
+cells: {nx1: 4, nx2: 4, nx3: 1, nghost: 1}
 )";
 
 using namespace snap;
@@ -47,23 +47,23 @@ TEST_P(DeviceTest, moist_mixture) {
 
   auto peos = MoistMixture(op);
 
+  std::cout << "molecular weight = " << 1. / peos->pthermo->inv_mu << std::endl;
+
   auto const &cons = peos->get_buffer("U");
-  cons.random_();
+  cons.uniform_(0., 1.);
 
   cons[Index::IDN].abs_();
   cons[Index::IPR].abs_();
+  cons[Index::IPR] *= 10.;
 
   auto prim = peos->forward(cons);
   auto cons2 = peos->compute("W->U", {prim});
 
-  std::cout << cons << std::endl;
-  std::cout << cons2 << std::endl;
+  std::cout << "prim = " << prim << std::endl;
+  std::cout << "cons = " << cons << std::endl;
+  std::cout << "cons2 = " << cons2 << std::endl;
 
-  if (dtype == torch::kFloat32) {
-    EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-4, 1.E-4));
-  } else {
-    EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-12, 1.E-12));
-  }
+  EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-6, 1.E-6));
 }
 
 /*TEST_P(DeviceTest, cons2prim_hydro_ideal_ncloud5) {

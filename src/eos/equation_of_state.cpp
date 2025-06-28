@@ -34,7 +34,7 @@ torch::Tensor EquationOfStateImpl::get_buffer(std::string) const {
 torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
                                            torch::optional<torch::Tensor> out) {
   auto prim = out.value_or(torch::empty_like(cons));
-  return compute("cons->prim", {cons, prim});
+  return compute("U->W", {cons, prim});
 }
 
 void EquationOfStateImpl::_apply_conserved_limiter_(torch::Tensor& cons) const {

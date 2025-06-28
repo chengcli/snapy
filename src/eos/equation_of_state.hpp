@@ -97,7 +97,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
   using EquationOfStateImpl::forward;
 
   int nvar() const override {
-    return 5 + pthermo->options.vapor_ids().size() +
+    return 4 + pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size();
   }
 
