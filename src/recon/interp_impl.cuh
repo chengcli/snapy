@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cuda_runtime.h>
 
 #define INP(j, i) (inp[(j) * stride2 + (i) * stride1])

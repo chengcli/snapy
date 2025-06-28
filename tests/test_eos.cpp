@@ -6,7 +6,9 @@
 #include <torch/torch.h>
 
 // snapy
-#include <snapy/eos/equation_of_state.hpp>
+#include <snap/snap.h>
+
+#include <snap/eos/equation_of_state.hpp>
 
 // tests
 #include "device_testing.hpp"
@@ -35,24 +37,26 @@ bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
 cells: {nx1: 20, nx2: 20, nx3: 1, nghost: 1}
 )";
 
-using namespace snapy;
+using namespace snap;
 
 TEST_P(DeviceTest, moist_mixture) {
-  auto op = EquationOfState::from_yaml(YAML::Load(eos_config));
+  auto op = EquationOfStateOptions::from_yaml(YAML::Load(eos_config));
 
   op.coord() = CoordinateOptions::from_yaml(YAML::Load(coord_config));
-  op.thermo() = Kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
+  op.thermo() = kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
 
   auto peos = MoistMixture(op);
 
-  auto const &conc = peos->get_buffer("U");
-  conc.randn_();
+  auto const &cons = peos->get_buffer("U");
+  cons.random_();
+
+  cons[Index::IDN].abs_();
+  cons[Index::IPR].abs_();
 
   auto start = std::chrono::high_resolution_clock::now();
 
   auto prim = peos->forward(cons);
-  auto cons2 = torch::empty_like(prim);
-  peos->prim2cons(cons2, prim);
+  auto cons2 = peos->compute("W->U", {prim});
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = end - start;
