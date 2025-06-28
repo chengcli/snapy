@@ -120,8 +120,8 @@ DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *coeff, int stride1,
     T alpha1 = .6 / SQR(beta1 + 1e-6);
     T alpha2 = .1 / SQR(beta2 + 1e-6);
 
-    OUT(j) =
-        (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) / (alpha0 + alpha1 + alpha2);
+    OUT(j) = vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
+             (alpha0 + alpha1 + alpha2);
   }
 };
 

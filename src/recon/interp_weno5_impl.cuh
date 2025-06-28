@@ -73,7 +73,7 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
     T alpha1 = .6 / SQR(beta1 + 1e-6);
     T alpha2 = .1 / SQR(beta2 + 1e-6);
 
-    OUT(j) =
+    OUT(j) = vscale *
         (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) / (alpha0 + alpha1 + alpha2);
 
   }
