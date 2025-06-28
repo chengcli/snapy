@@ -442,7 +442,7 @@ TEST_P(DeviceTest, interp_weno5m_torch3) {
   }
 }
 
-/*TEST_P(DeviceTest, interp_weno5p_torch4) {
+TEST_P(DeviceTest, interp_weno5p_torch4) {
   Weno5Interp interp;
   interp->to(device, dtype);
 
@@ -542,7 +542,7 @@ TEST_P(DeviceTest, interp_weno5p_torch6) {
   }
 }
 
-TEST(weno5, interp_weno5b) {
+/*TEST(weno5, interp_weno5b) {
   double result = interp_weno5<double>(1, 2, 3, 4, 5);
 
   std::cout << "=== 1 pixels ===" << std::endl;
