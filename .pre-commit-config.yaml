@@ -13,7 +13,7 @@ repos:
   - repo: local
     hooks:
       - id: clang-format
-        name: Fix *.c,*.cc,*.cpp,*.h,*.hpp
+        name: Fix *.c,*.cc,*.cpp,*.h,*.hpp,*.cuh
         entry: clang-format
         language: system
         files: ^(src|python|tools|tests|examples)/.*\.(c|cc|cpp|h|hpp)$
