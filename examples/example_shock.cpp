@@ -7,33 +7,8 @@
 using namespace snap;
 
 int main(int argc, char** argv) {
-  int nx1 = 256;
-  int nx2 = 256;
-  int nx3 = 1;
-  int nghost = 3;
-
-  auto op_coord = CoordinateOptions();
-  op_coord.nx1(nx1).nx2(nx2);
-  op_coord.x1min(-0.5).x1max(0.5);
-  op_coord.x2min(-0.5).x2max(0.5);
-  op_coord.x3min(-0.5).x3max(0.5);
-
-  auto op_recon =
-      ReconstructOptions().interp(InterpOptions("weno5")).shock(true);
-  auto op_eos = EquationOfStateOptions();
-  auto op_riemann = RiemannSolverOptions().type("hllc");
-  auto op_intg = IntegratorOptions().type("rk3").cfl(0.9);
-
-  auto op_hydro =
-      HydroOptions().eos(op_eos).coord(op_coord).riemann(op_riemann);
-  op_hydro.recon1(op_recon).recon23(op_recon);
-
-  auto op_block = MeshBlockOptions().intg(op_intg).hydro(op_hydro);
-
-  for (int i = 0; i < 4; ++i)
-    op_block.bfuncs().push_back(get_bc_func()["outflow_inner"]);
-
-  auto block = MeshBlock(op_block);
+  auto op = MeshBlockOptions::from_yaml("example_shock.yaml");
+  auto block = MeshBlock(op);
 
   // block->to(torch::kCUDA);
 
@@ -45,10 +20,11 @@ int main(int argc, char** argv) {
   auto x2v = pcoord->x2v.view({1, -1, 1});
   auto x3v = pcoord->x3v.view({-1, 1, 1});
 
-  auto const& w = torch::zeros_like(block->phydro->peos->get_buffer("W"));
+  auto const& w = block->phydro->peos->get_buffer("W");
+  w.zero_();
+
   w[Index::IDN] = torch::where(x1v < 0, 1.0, 0.125);
   w[Index::IPR] = torch::where(x1v < 0, 1.0, 0.1);
-  w[Index::IVX] = w[Index::IVY] = w[Index::IVZ] = 0.0;
 
   block->initialize(w);
 

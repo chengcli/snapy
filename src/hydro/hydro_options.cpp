@@ -19,24 +19,27 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   // project primitive variables
   op.proj() = PrimitiveProjectorOptions::from_yaml(config);
 
+  if (!config["dynamics"]) return op;
+
+  auto dyn = config["dynamics"];
+
   // equation of state
-  if (config["equation-of-state"]) {
-    op.eos() = EquationOfStateOptions::from_yaml(config["equation-of-state"]);
+  if (dyn["equation-of-state"]) {
+    op.eos() = EquationOfStateOptions::from_yaml(dyn["equation-of-state"]);
   }
   op.eos().coord() = op.coord();
   op.eos().thermo() = op.thermo();
 
   // reconstruction
-  if (config["reconstrct"]) {
-    op.recon1() =
-        ReconstructOptions::from_yaml(config["reconstruct"], "vertical");
+  if (dyn["reconstrct"]) {
+    op.recon1() = ReconstructOptions::from_yaml(dyn["reconstruct"], "vertical");
     op.recon23() =
-        ReconstructOptions::from_yaml(config["reconstruct"], "horizontal");
+        ReconstructOptions::from_yaml(dyn["reconstruct"], "horizontal");
   }
 
   // riemann solver
-  if (config["riemann"]) {
-    op.riemann() = RiemannSolverOptions::from_yaml(config["riemann"]);
+  if (dyn["riemann-solver"]) {
+    op.riemann() = RiemannSolverOptions::from_yaml(dyn["riemann-solver"]);
   }
   op.riemann().eos() = op.eos();
 

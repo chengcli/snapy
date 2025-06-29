@@ -6,15 +6,16 @@
 #include "intg_dispatch.hpp"
 
 namespace snap {
+
 IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   IntegratorOptions op;
 
   auto config = YAML::LoadFile(filename);
-  if (config["integrator"]) {
-    auto intg = config["integrator"];
-    op.type() = intg["type"].as<std::string>("rk3");
-    op.cfl() = intg["dt"].as<double>(0.9);
-  }
+  if (!config["dynamics"]) return op;
+  if (!config["dynamics"]["integrator"]) return op;
+
+  op.type() = config["dynamics"]["integrator"]["type"].as<std::string>("rk3");
+  op.cfl() = config["dynamics"]["integrator"]["cfl"].as<double>(0.9);
 
   return op;
 }

@@ -65,6 +65,8 @@ target_link_libraries(${namel}_${buildl}
     PUBLIC
     fmt::fmt
     yaml-cpp::yaml-cpp
+    ${NETCDF_LIBRARIES}
+    ${PNETCDF_LIBRARIES}
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}
