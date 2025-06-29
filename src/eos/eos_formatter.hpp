@@ -1,7 +1,10 @@
 #pragma once
 
-// snap
+// kintera
 #include <kintera/thermo/thermo_formatter.hpp>
+
+// snap
+#include <snap/coord/coord_formatter.hpp>
 
 #include "equation_of_state.hpp"
 
@@ -11,7 +14,7 @@ struct fmt::formatter<snap::EquationOfStateOptions> {
 
   template <typename FormatContext>
   auto format(const snap::EquationOfStateOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "(type = {}; thermo = {})", p.type(),
-                          p.thermo());
+    return fmt::format_to(ctx.out(), "(type = {}; coord = {}; thermo = {})",
+                          p.type(), p.coord(), p.thermo());
   }
 };

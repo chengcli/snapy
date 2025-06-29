@@ -16,8 +16,16 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
 
   auto config = YAML::LoadFile(input_file);
 
-  if (!config["boundary-condition"]) return op;
-  if (!config["boundary-condition"]["external"]) return op;
+  if (!config["boundary-condition"]) {
+    TORCH_WARN("no boundary condition specified, using default hydro model");
+    return op;
+  }
+
+  if (!config["boundary-condition"]["external"]) {
+    TORCH_WARN(
+        "no external boundary condition specified, using default hydro model");
+    return op;
+  }
 
   auto external_bc = config["boundary-condition"]["external"];
 

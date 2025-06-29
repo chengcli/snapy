@@ -32,9 +32,12 @@ int main(int argc, char** argv) {
 
   block->initialize(w);
 
+  std::cout << "w shape = " << w.sizes() << std::endl;
+
   // internal boundary
   auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
   auto solid = torch::where(r1 < 0.1, 1, 0);
+  solid.to(torch::kBool);
 
   // output
   auto out =
@@ -45,9 +48,9 @@ int main(int argc, char** argv) {
   out.combine_blocks();
 
   for (int n = 0; n < 200; ++n) {
-    auto dt = block->max_time_step(solid);
+    auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
-      block->forward(dt, stage, solid);
+      block->forward(dt, stage);
 
     current_time += dt;
     if ((n + 1) % 10 == 0) {

@@ -7,7 +7,7 @@ species:
     composition: {O: 0.42, N: 1.56, Ar: 0.01}
     cv_R: 2.5
 
-geomtry:
+geometry:
   type: cartesian
   bounds: {x1min: -0.5, x1max: 0.5, x2min: -0.5, x2max: 0.5, x3min: -0.5, x3max: 0.5}
   cells: {nx1: 256, nx2: 256, nx3: 1, nghost: 3}
