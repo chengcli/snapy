@@ -157,13 +157,13 @@ void MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor ivol,
                                                torch::Tensor &out) const {
   int nvapor = pthermo->options.vapor_ids().size();
   auto conc_gas = (ivol * pthermo->inv_mu).narrow(-1, 0, nvapor);
-
   auto cz = kintera::eval_czh(temp, conc_gas, pthermo->options);
   auto cz_ddC = kintera::eval_czh_ddC(temp, conc_gas, pthermo->options);
 
-  torch::addcmul_out(out, cz.unsqueeze(-1), cz_ddC, conc_gas);
-  out *= conc_gas;
-  out.sum(-1);
+  auto result = torch::addcmul(cz, cz_ddC, conc_gas);
+  result *= conc_gas;
+
+  out.set_(result.sum(-1));
   out *= kintera::constants::Rgas * temp / dens;
   out.sqrt_();
 }

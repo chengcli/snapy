@@ -39,6 +39,9 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
     scoeff[i] = coeff[i];
   }
 
+  // drop last few threads
+  if (idx[idim] > len[idim] - N) return;
+
   __syncthreads();
 
   // calculation
@@ -78,6 +81,9 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   for (int i = idx[idim]; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
+
+  // drop last few threads
+  if (idx[idim] > len[idim] - 3) return;
 
   __syncthreads();
 
@@ -139,6 +145,9 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
   for (int i = idx[idim]; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
+
+  // drop last few threads
+  if (idx[idim] > len[idim] - 5) return;
 
   __syncthreads();
 
