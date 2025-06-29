@@ -39,13 +39,13 @@ void MeshBlockImpl::reset() {
 
   // set up hydro buffer
   auto const& hydro_u = phydro->peos->get_buffer("U");
-  _hydro_u0 = register_buffer("HU0", torch::zeros_like(hydro_u));
-  _hydro_u1 = register_buffer("HU1", torch::zeros_like(hydro_u));
+  _hydro_u0 = register_buffer("U0", torch::zeros_like(hydro_u));
+  _hydro_u1 = register_buffer("U1", torch::zeros_like(hydro_u));
 
   // set up scalar buffer
   auto const& scalar_v = pscalar->get_buffer("V");
-  _scalar_v0 = register_buffer("SV0", torch::zeros_like(scalar_v));
-  _scalar_v1 = register_buffer("SV0", torch::zeros_like(scalar_v));
+  _scalar_v0 = register_buffer("V0", torch::zeros_like(scalar_v));
+  _scalar_v1 = register_buffer("V1", torch::zeros_like(scalar_v));
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(

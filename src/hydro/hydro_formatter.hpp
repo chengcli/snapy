@@ -1,8 +1,5 @@
 #pragma once
 
-// kintera
-#include <kintera/thermo/thermo_formatter.hpp>
-
 // snap
 #include <snap/eos/eos_formatter.hpp>
 #include <snap/recon/recon_formatter.hpp>

@@ -1,8 +1,5 @@
 #pragma once
 
-// spdlog
-#include <fmt/format.h>
-
 // snap
 #include <kintera/thermo/thermo_formatter.hpp>
 

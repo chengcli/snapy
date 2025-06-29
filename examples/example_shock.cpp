@@ -1,6 +1,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
@@ -9,6 +10,9 @@ using namespace snap;
 int main(int argc, char** argv) {
   auto op = MeshBlockOptions::from_yaml("example_shock.yaml");
   auto block = MeshBlock(op);
+
+  std::cout << fmt::format("MeshBlock Options: {}", block->options)
+            << std::endl;
 
   // block->to(torch::kCUDA);
 
