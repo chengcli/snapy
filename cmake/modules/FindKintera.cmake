@@ -1,11 +1,11 @@
 # Find the kintera includes and library
 #
 # KINTERA_INCLUDE_DIR:  Where to find reaction.hpp
-
+#
 # KINTERA_LIBRARY:      Link these libraries when using KINTERA
-
+#
 # VAPORS_LIBRARY:       Link these libraries when using KINTERA
-
+#
 # KINTERA_FOUND:        True if kintera found
 #
 # Normal usage would be:
@@ -92,6 +92,17 @@ find_library(
         $ENV{KINTERA_ROOT}/lib)
 
 find_library(
+  KINTERA_CUDA_LIBRARY kintera_cuda_release
+  HINTS ${kintera_lib_dir}
+        /opt/homebrew/lib
+        /usr/lib/x86_64-linux-gnu/
+        KINTERA_DIR/lib
+        KINTERA_LIB
+        $ENV{KINTERA_LIB}
+        $ENV{KINTERA_DIR}/lib
+        $ENV{KINTERA_ROOT}/lib)
+
+find_library(
   VAPORS_LIBRARY vapors_release
   HINTS ${kintera_lib_dir}
         /opt/homebrew/lib
@@ -102,7 +113,13 @@ find_library(
         $ENV{KINTERA_DIR}/lib
         $ENV{KINTERA_ROOT}/lib)
 
-set(kintera_required_vars VAPORS_LIBRARY KINTERA_LIBRARY KINTERA_INCLUDE_DIR)
+if(${CUDAToolKit_FOUND})
+  set(kintera_required_vars VAPORS_LIBRARY KINTERA_LIBRARY KINTERA_CUDA_LIBRARY
+                            KINTERA_INCLUDE_DIR)
+else()
+  set(kintera_required_vars VAPORS_LIBRARY KINTERA_LIBRARY KINTERA_INCLUDE_DIR)
+endif()
+
 mark_as_advanced(${kintera_required_vars})
 
 if(KINTERA_LIBRARY)

@@ -4,6 +4,7 @@
 
 enable_testing()
 
+setup_test(test_eos)
 setup_test(test_weno)
 
 #setup_problem(test_yaml_parse)
