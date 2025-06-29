@@ -1,5 +1,5 @@
 reference-state:
-  Tref: 300.
+  Tref: 0.
   Pref: 1.e5
 
 species:

@@ -27,11 +27,12 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto gammal = peos->compute("W->A", {wl});
   auto cl = peos->compute("WA->L", {wl, gammal});
 
-  auto er = peos->compute("W->I", {wl});
+  auto er = peos->compute("W->I", {wr});
   auto gammar = peos->compute("W->A", {wr});
   auto cr = peos->compute("WA->L", {wr, gammar});
 
   peos->pcoord->prim2local_(wl);
+  peos->pcoord->prim2local_(wr);
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)

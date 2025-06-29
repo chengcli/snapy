@@ -30,6 +30,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto gammar = peos->compute("W->A", {wr});
 
   peos->pcoord->prim2local_(wl);
+  peos->pcoord->prim2local_(wr);
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
