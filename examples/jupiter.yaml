@@ -146,20 +146,20 @@ dynamics:
   riemann-solver:
     type: hllc
 
-  boundary-condition:
-    internal: {solid-density: 1.e3, solid-pressure: 1.9, max-iter: 5}
-    external:
-      x1-inner: reflecting
-      x1-outer: reflecting
-      x2-inner: reflecting
-      x2-outer: reflecting
-      x3-inner: reflecting
-      x3-outer: reflecting
-
   integrator:
     type: rk3
     cfl: 0.9
     implicit-scheme: 1
+
+boundary-condition:
+  internal: {solid-density: 1.e3, solid-pressure: 1.9, max-iter: 5}
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
 
 forcing:
   const-gravity:
