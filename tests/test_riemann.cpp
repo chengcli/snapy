@@ -1,3 +1,6 @@
+// C/C++
+#include <regex>
+
 // external
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
@@ -37,7 +40,7 @@ species:
 const char *coord_config = R"(
 type: cartesian
 bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 10, nx2: 1, nx3: 1, nghost: 3}
+cells: {nx1: 200, nx2: 200, nx3: 200, nghost: 3}
 )";
 
 const char *recon_config = R"(
@@ -80,7 +83,48 @@ TEST_P(DeviceTest, test_lmars) {
           .abs();
 
   std::cout << "w.sizes(): " << w.sizes() << std::endl;
-  std::cout << "w = " << w << std::endl;
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  auto wlr = precon->forward(w, DIM1);
+
+  auto flux = prsolver->forward(wlr[0], wlr[1], DIM1);
+  std::cout << "flux.sizes(): " << flux.sizes() << std::endl;
+
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end - start;
+  std::cout << "Time taken by test body: " << elapsed.count() << " seconds"
+            << std::endl;
+}
+
+TEST_P(DeviceTest, test_hllc) {
+  auto config = std::regex_replace(riemann_config, std::regex("lmars"), "hllc");
+  auto op_riemann = RiemannSolverOptions::from_yaml(YAML::Load(config));
+
+  op_riemann.eos() = EquationOfStateOptions::from_yaml(YAML::Load(eos_config));
+  op_riemann.eos().coord() =
+      CoordinateOptions::from_yaml(YAML::Load(coord_config));
+  op_riemann.eos().thermo() =
+      kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
+
+  HLLCSolver prsolver(op_riemann);
+  prsolver->to(device, dtype);
+
+  auto op_recon =
+      ReconstructOptions::from_yaml(YAML::Load(recon_config), "vertical");
+
+  Reconstruct precon(op_recon);
+  precon->to(device, dtype);
+
+  auto peos = prsolver->peos;
+
+  auto w =
+      torch::randn({peos->nvar(), peos->options.coord().nc3(),
+                    peos->options.coord().nc2(), peos->options.coord().nc1()},
+                   torch::device(device).dtype(dtype))
+          .abs();
+
+  std::cout << "w.sizes(): " << w.sizes() << std::endl;
 
   auto start = std::chrono::high_resolution_clock::now();
 

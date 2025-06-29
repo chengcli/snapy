@@ -17,11 +17,11 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor dummy) {
   auto flx = torch::empty_like(wl);
 
-  wl[IDN] += peos->options.density_floor();
-  wl[IPR] += peos->options.pressure_floor();
+  wl[IDN].clamp_min_(peos->options.density_floor());
+  wl[IPR].clamp_min_(peos->options.pressure_floor());
 
-  wr[IDN] += peos->options.density_floor();
-  wr[IPR] += peos->options.pressure_floor();
+  wr[IDN].clamp_min_(peos->options.density_floor());
+  wr[IPR].clamp_min_(peos->options.pressure_floor());
 
   auto el = peos->compute("W->I", {wl}) / wl[Index::IDN];
   auto gammal = peos->compute("W->A", {wl});
@@ -30,16 +30,6 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto gammar = peos->compute("W->A", {wr});
 
   peos->pcoord->prim2local_(wl);
-
-  std::cout << "el = " << el << std::endl;
-  std::cout << "er = " << er << std::endl;
-
-  std::cout << "gammal = " << gammal << std::endl;
-  std::cout << "gammar = " << gammar << std::endl;
-
-  throw std::runtime_error(
-      "LMARS solver is not implemented yet. Please use HLLC or Roe solver "
-      "instead.");
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
