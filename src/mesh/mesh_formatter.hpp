@@ -4,8 +4,8 @@
 #include <fmt/format.h>
 
 // snap
-#include <snap/bc/bc_formatter.hpp>
 #include <snap/hydro/hydro_formatter.hpp>
+#include <snap/intg/intg_formatter.hpp>
 
 #include "meshblock.hpp"
 
@@ -17,7 +17,7 @@ struct fmt::formatter<snap::MeshBlockOptions> {
   // Define the format function for MeshBlockOptions
   template <typename FormatContext>
   auto format(const snap::MeshBlockOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "(hydro = {}; bflags = {})", p.hydro(),
-                          p.bflags());
+    return fmt::format_to(ctx.out(), "(hydro = {}; intg = {})", p.hydro(),
+                          p.intg());
   }
 };

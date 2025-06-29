@@ -14,7 +14,7 @@ macro(setup_test namel)
   target_include_directories(
     ${namel}.${buildl}
     PRIVATE ${CMAKE_BINARY_DIR} ${KINTERA_INCLUDE_DIR} ${SNAP_INCLUDE_DIR}
-            ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
+            ${NETCDF_INCLUDES} ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
 
   if(APPLE)
     target_link_libraries(

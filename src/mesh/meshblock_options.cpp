@@ -16,11 +16,18 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
 
   auto config = YAML::LoadFile(input_file);
 
-  if (!config["dynamics"]) return op;
-  if (!config["dynamics"]["boundary-condition"]) return op;
-  if (!config["dynamics"]["boundary-condition"]["external"]) return op;
+  if (!config["boundary-condition"]) {
+    TORCH_WARN("no boundary condition specified, using default hydro model");
+    return op;
+  }
 
-  auto external_bc = config["dynamics"]["boundary-condition"]["external"];
+  if (!config["boundary-condition"]["external"]) {
+    TORCH_WARN(
+        "no external boundary condition specified, using default hydro model");
+    return op;
+  }
+
+  auto external_bc = config["boundary-condition"]["external"];
 
   if (op.hydro().coord().nc1() > 1) {
     // x1-inner
@@ -36,6 +43,9 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
     TORCH_CHECK(get_bc_func().find(ox1) != get_bc_func().end(),
                 "Boundary function '", ox1, "' is not defined.");
     op.bfuncs().push_back(get_bc_func()[ox1]);
+  } else if (op.hydro().coord().nc2() > 1 || op.hydro().coord().nc3() > 1) {
+    op.bfuncs().push_back(get_bc_func()["exchange_inner"]);  // null-op
+    op.bfuncs().push_back(get_bc_func()["exchange_outer"]);  // null-op
   }
 
   if (op.hydro().coord().nc2() > 1) {
@@ -52,6 +62,9 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
     TORCH_CHECK(get_bc_func().find(ox2) != get_bc_func().end(),
                 "Boundary function '", ox2, "' is not defined.");
     op.bfuncs().push_back(get_bc_func()[ox2]);
+  } else if (op.hydro().coord().nc3() > 1) {
+    op.bfuncs().push_back(get_bc_func()["exchange_inner"]);  // null-op
+    op.bfuncs().push_back(get_bc_func()["exchange_outer"]);  // null-op
   }
 
   if (op.hydro().coord().nc3() > 1) {

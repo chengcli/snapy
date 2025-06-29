@@ -14,30 +14,46 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
     op.coord() = CoordinateOptions::from_yaml(config["geometry"]);
+  } else {
+    TORCH_WARN("no geometry specified, using default coordinate model");
   }
 
   // project primitive variables
   op.proj() = PrimitiveProjectorOptions::from_yaml(config);
 
-  // equation of state
-  if (config["equation-of-state"]) {
-    op.eos() = EquationOfStateOptions::from_yaml(config["equation-of-state"]);
+  if (!config["dynamics"]) {
+    TORCH_WARN("no dynamics specified, using default hydro model");
+    return op;
   }
+
+  auto dyn = config["dynamics"];
+
+  // equation of state
+  if (dyn["equation-of-state"]) {
+    op.eos() = EquationOfStateOptions::from_yaml(dyn["equation-of-state"]);
+  } else {
+    TORCH_WARN("no equation of state specified, using default EOS model");
+  }
+
   op.eos().coord() = op.coord();
   op.eos().thermo() = op.thermo();
 
   // reconstruction
-  if (config["reconstrct"]) {
-    op.recon1() =
-        ReconstructOptions::from_yaml(config["reconstruct"], "vertical");
+  if (dyn["reconstruct"]) {
+    op.recon1() = ReconstructOptions::from_yaml(dyn["reconstruct"], "vertical");
     op.recon23() =
-        ReconstructOptions::from_yaml(config["reconstruct"], "horizontal");
+        ReconstructOptions::from_yaml(dyn["reconstruct"], "horizontal");
+  } else {
+    TORCH_WARN("no reconstruction specified, using default recon model");
   }
 
   // riemann solver
-  if (config["riemann"]) {
-    op.riemann() = RiemannSolverOptions::from_yaml(config["riemann"]);
+  if (dyn["riemann-solver"]) {
+    op.riemann() = RiemannSolverOptions::from_yaml(dyn["riemann-solver"]);
+  } else {
+    TORCH_WARN("no riemann solver specified, using default riemann model");
   }
+
   op.riemann().eos() = op.eos();
 
   // internal boundaries

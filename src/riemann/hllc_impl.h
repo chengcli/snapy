@@ -6,10 +6,10 @@
 // snap
 #include <snap/snap.h>
 
+#define SQR(x) ((x) * (x))
+#define FLX(n) flx[(n) * stride]
 #define WL(n) wl[(n) * stride]
 #define WR(n) wr[(n) * stride]
-#define FLX(n) flx[(n) * stride]
-#define SQR(x) ((x) * (x))
 #define EL (*el)
 #define ER (*er)
 #define GAMMAL (*gammal)

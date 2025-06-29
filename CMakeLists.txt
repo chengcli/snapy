@@ -7,9 +7,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" OFF)
 option(CUDA "Enable CUDA support" OFF)
+option(NETCDF "Build with netcdf support" ON)
+option(PNETCDF "Build with pnetcdf support" OFF)
 
 project(
-  libsnap
+  snapy
   LANGUAGES CXX C
   DESCRIPTION "finite volume method library for compressible fluids")
 
@@ -81,7 +83,6 @@ message(STATUS "Include ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parameters.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/parameters.cmake)
 
 message(STATUS "${Blue}${PROJECT_NAME}-3. Setting up system libraries ...${ColorReset}")
-#include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 find_package(Torch REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Disort REQUIRED)

@@ -13,7 +13,11 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
                                                  std::string section) {
   ReconstructOptions op;
 
-  if (!node[section]) return op;
+  if (!node[section]) {
+    TORCH_WARN("no section '", section,
+               "' specified, using default reconstruction model");
+    return op;
+  }
 
   op.shock() = node[section]["shock"].as<bool>(false);
   op.interp().type() = node[section]["type"].as<std::string>("dc");
