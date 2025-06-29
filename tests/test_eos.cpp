@@ -64,14 +64,7 @@ TEST_P(DeviceTest, moist_mixture) {
   std::cout << "cons min = " << cons.min() << std::endl;
   std::cout << "cons max = " << cons.max() << std::endl;
 
-  auto start = std::chrono::high_resolution_clock::now();
   auto prim = peos->forward(cons);
-  auto end = std::chrono::high_resolution_clock::now();
-
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Time taken by eos : " << elapsed.count() << " seconds"
-            << std::endl;
-
   auto cons2 = peos->compute("W->U", {prim});
 
   EXPECT_TRUE(torch::allclose(cons, cons2, 1.E-6, 1.E-6));
