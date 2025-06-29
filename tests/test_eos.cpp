@@ -52,13 +52,17 @@ TEST_P(DeviceTest, moist_mixture) {
 
   auto const &cons = peos->get_buffer("U");
 
-  // EXPECT_EQ(cons.sizes(), std::vector<int64_t>({5, 1, 6, 6}));
-
   cons.uniform_(0., 1.);
 
   cons[Index::IDN].abs_();
-  cons[Index::IPR].abs_();
-  cons[Index::IPR] *= 10.;
+  cons[Index::IDN] += 1.E-6;  // avoid division by zero
+
+  cons[Index::IPR].abs_().mul_(10.);
+  cons[Index::IPR] +=
+      0.5 * cons.narrow(0, Index::IVX, 3).pow(2).sum() / cons[Index::IDN];
+
+  std::cout << "cons min = " << cons.min() << std::endl;
+  std::cout << "cons max = " << cons.max() << std::endl;
 
   auto prim = peos->forward(cons);
   auto cons2 = peos->compute("W->U", {prim});
@@ -67,10 +71,11 @@ TEST_P(DeviceTest, moist_mixture) {
 
   auto gamma = peos->compute("W->A", {prim});
 
-  // EXPECT_EQ(gamma.sizes(), std::vector<int64_t>({1, 6, 6}));
   EXPECT_TRUE(gamma.allclose(torch::ones_like(gamma) * 1.4, 1.E-6, 1.E-6));
 
   auto cs = peos->compute("WA->L", {prim, gamma});
+  std::cout << "cs min = " << cs.min() << std::endl;
+  std::cout << "cs max = " << cs.max() << std::endl;
 }
 
 /*TEST_P(DeviceTest, cons2prim_hydro_ideal_ncloud5) {
