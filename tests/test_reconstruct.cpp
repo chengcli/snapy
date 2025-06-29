@@ -1,23 +1,16 @@
 // external
 #include <gtest/gtest.h>
-
-#include <fstream>
-#include <iostream>
-
-// application
-#include <application/application.hpp>
-
-// athena
-#include <athena/mesh/mesh.hpp>
-#include <athena/reconstruct/reconstruction.hpp>
+#include <yaml-cpp/yaml.h>
 
 // torch
 #include <torch/torch.h>
 
-// canoe
-#include <impl.hpp>
-// #include <snap/athena_arrays.hpp>
-#include <snap/reconstruct/recon.hpp>
+// snap
+#include <snap/recon/recon_formatter.hpp>
+#include <snap/recon/reconstruct.hpp>
+
+// tests
+#include "device_testing.hpp"
 
 enum {
   DIM1 = 3,
@@ -25,137 +18,62 @@ enum {
   DIM3 = 1,
 };
 
-using namespace canoe;
-
-class TestReconstruct : public testing::Test {
- protected:
-  ParameterInput *pinput;
-  Mesh *pmesh;
-  char fname[80] = "/tmp/tempfile.XXXXXX";
-
-  void CreateInputFile() {
-    const char *mesh_config = R"(
-<time>
-cfl_number  = 1
-tlim        = 0.1
-
-<mesh>
-nx1         = 100         # Number of zones in X1-direction
-x1min       = -0.5      # minimum value of X1
-x1max       = 0.5       # maximum value of X1
-ix1_bc      = outflow   # Inner-X1 boundary condition flag
-ox1_bc      = outflow   # Outer-X1 boundary condition flag
-
-nx2         = 200         # Number of zones in X2-direction
-x2min       = -0.5      # minimum value of X2
-x2max       = 0.5       # maximum value of X2
-ix2_bc      = periodic  # Inner-X2 boundary condition flag
-ox2_bc      = periodic  # Outer-X2 boundary condition flag
-
-nx3         = 200         # Number of zones in X3-direction
-x3min       = -0.5      # minimum value of X3
-x3max       = 0.5       # maximum value of X3
-ix3_bc      = periodic  # Inner-X3 boundary condition flag
-ox3_bc      = periodic  # Outer-X3 boundary condition flag
-
-<hydro>
-gamma       = 1.4
+const char *recon_config = R"(
+vertical: {type: weno5, scale: false, shock: false}
+horizontal: {type: weno5, scale: false, shock: false}
 )";
-    // write to file
-    mkstemp(fname);
-    std::ofstream outfile(fname);
-    outfile << mesh_config;
-  }
 
-  virtual void SetUp() {
-    CreateInputFile();
+using namespace snap;
+using namespace torch::indexing;
 
-    // code here will execute just before the test ensues
-    IOWrapper infile;
-    infile.Open(fname, IOWrapper::FileMode::read);
+TEST_P(DeviceTest, test_small) {
+  int nhydro = 5;
+  int nghost = 3;
+  int nc3 = 1;
+  int nc2 = 200 + 2 * nghost;
+  int nc1 = 100 + 2 * nghost;
 
-    pinput = new ParameterInput;
-    pinput->LoadFromFile(infile);
-    infile.Close();
+  auto w =
+      torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
-    // set up mesh
-    int restart = false;
-    int mesh_only = false;
-    pmesh = new Mesh(pinput, mesh_only);
+  auto op =
+      ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
+  // std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
 
-    // set up components
-    for (int b = 0; b < pmesh->nblocal; ++b) {
-      MeshBlock *pmb = pmesh->my_blocks(b);
-      pmb->pimpl = std::make_shared<MeshBlock::Impl>(pmb, pinput);
-    }
+  Reconstruct precon(op);
+  precon->to(device, dtype);
 
-    pmesh->Initialize(restart, pinput);
-  }
+  auto result = precon->forward(w, DIM1);
+  std::cout << result[0].sizes() << std::endl;
+  std::cout << result[1].sizes() << std::endl;
+  // std::cout << "w = " << w.index({0, 0, 0, Slice()}) << std::endl;
+  // std::cout << "wl = " << result[0].index({0, 0, 0, Slice()}) << std::endl;
+  // std::cout << "wr = " << result[1].index({0, 0, 0, Slice()}) << std::endl;
+}
 
-  virtual void TearDown() {
-    // code here will be called just after the test completes
-    // ok to through exceptions from here if need be
+TEST_P(DeviceTest, test_large) {
+  int nhydro = 5;
+  int nghost = 3;
+  int nc3 = 500 + 2 * nghost;
+  int nc2 = 200 + 2 * nghost;
+  int nc1 = 100 + 2 * nghost;
 
-    delete pinput;
-    delete pmesh;
-    std::remove(fname);
-  }
-};
+  auto w =
+      torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
-/*TEST_F(TestReconstruct, test1) {
-  auto pmb = pmesh->my_blocks(0);
-  int nc1 = pmb->ncells1;
-  int nc2 = pmb->ncells2;
-  int nc3 = pmb->ncells3;
+  auto op =
+      ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
 
-  AthenaArray<float> w(NHYDRO, nc3, nc2, nc1);
-  w.toDevice(torch::kMPS);
-  w.tensor().normal_(0, 1);
-  w.fromDevice();
+  Reconstruct precon(op);
+  precon->to(device, dtype);
 
-  std::fstream file("recon_test1.out", std::ios::out);
-
-  for (int n = 0; n < NHYDRO; ++n) {
-    for (int k = 0; k < nc3; ++k) {
-      file << "n = " << n << ", k = " << k << std::endl;
-      file << "---------" << std::endl;
-      for (int j = 0; j < nc2; ++j) {
-        for (int i = 0; i < nc1; ++i) {
-          file << w(n, k, j, i) << ", ";
-        }
-        file << std::endl;
-      }
-      file << std::endl << "---------" << std::endl;
-    }
-    file << std::endl;
-  }
-}*/
-
-TEST_F(TestReconstruct, test_x1) {
-  auto pmb = pmesh->my_blocks(0);
-
-  int nc1 = pmb->ncells1;
-  int nc2 = pmb->ncells2;
-  int nc3 = pmb->ncells3;
-
-  auto w = torch::randn({NHYDRO, nc3, nc2, nc1}, torch::kFloat32);
-  w.to(torch::kCPU);
-
-  auto start = std::chrono::high_resolution_clock::now();
-
-  if (NGHOST > 2) {
-    auto result = recon_weno5_hydro(w, IVX, DIM1);
-    result = recon_weno5_hydro(w, IVX, DIM2);
-    result = recon_weno5_hydro(w, IVX, DIM2);
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-
-  std::cout << "Time taken by test body: " << elapsed.count() << " seconds"
-            << std::endl;
+  auto result = precon->forward(w, DIM1);
+  std::cout << result[0].sizes() << std::endl;
+  std::cout << result[1].sizes() << std::endl;
 }
 
 int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
+
   return RUN_ALL_TESTS();
 }
