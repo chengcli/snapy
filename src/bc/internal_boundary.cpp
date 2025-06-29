@@ -21,7 +21,7 @@ InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
   if (!root["boundary-condition"]["internal"]) return op;
 
   auto bc = root["boundary-condition"]["internal"];
-  op.max_iter() = bc["max_iter"].as<int>(5);
+  op.max_iter() = bc["max-iter"].as<int>(5);
   op.solid_density() = bc["solid_density"].as<double>(1.e3);
   op.solid_pressure() = bc["solid_pressure"].as<double>(1.9);
 
