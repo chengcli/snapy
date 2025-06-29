@@ -128,13 +128,13 @@ void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   pcoord->vec_raise_(prim);
 
   // KE (TODO: cli, new kernel for this operation)
-  auto KE =
-      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
-  KE *= 0.5;
+  _ke.set_(
+      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0));
+  _ke *= 0.5;
 
   auto ivol = pthermo->compute(
       "DY->V", {prim[Index::IDN], prim.narrow(0, Index::ICY, ny)});
-  auto temp = pthermo->compute("VU->T", {ivol, cons[Index::IPR] - KE});
+  auto temp = pthermo->compute("VU->T", {ivol, cons[Index::IPR] - _ke});
   prim[Index::IPR] = pthermo->compute("VT->P", {ivol, temp});
 
   _apply_primitive_limiter_(prim);
