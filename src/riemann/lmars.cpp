@@ -17,10 +17,16 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor dummy) {
   auto flx = torch::empty_like(wl);
 
-  auto el = peos->compute("W->U", {wl}) / wl[Index::IDN];
+  wl[IDN].clamp_min_(peos->options.density_floor());
+  wl[IPR].clamp_min_(peos->options.pressure_floor());
+
+  wr[IDN].clamp_min_(peos->options.density_floor());
+  wr[IPR].clamp_min_(peos->options.pressure_floor());
+
+  auto el = peos->compute("W->I", {wl}) / wl[Index::IDN];
   auto gammal = peos->compute("W->A", {wl});
 
-  auto er = peos->compute("W->U", {wr}) / wr[Index::IDN];
+  auto er = peos->compute("W->I", {wr}) / wr[Index::IDN];
   auto gammar = peos->compute("W->A", {wr});
 
   peos->pcoord->prim2local_(wl);

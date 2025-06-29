@@ -28,9 +28,9 @@ struct CoordinateOptions {
   static CoordinateOptions from_yaml(const YAML::Node &node);
   CoordinateOptions() = default;
 
-  int nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
-  int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
-  int nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
+  int64_t nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
+  int64_t nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
+  int64_t nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
 
   ADD_ARG(std::string, type) = "cartesian";
 

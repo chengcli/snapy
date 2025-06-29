@@ -50,7 +50,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 
-  auto result = torch::empty(vec, w.options());
+  auto result = torch::zeros(vec, w.options());
 
   auto dim_size = w.size(dim);
   int nghost = pinterp1->stencils() / 2 + 1;

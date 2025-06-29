@@ -17,11 +17,17 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor dummy) {
   auto flx = torch::empty_like(wl);
 
-  auto el = peos->compute("W->U", {wl});
+  wl[IDN].clamp_min_(peos->options.density_floor());
+  wl[IPR].clamp_min_(peos->options.pressure_floor());
+
+  wr[IDN].clamp_min_(peos->options.density_floor());
+  wr[IPR].clamp_min_(peos->options.pressure_floor());
+
+  auto el = peos->compute("W->I", {wl});
   auto gammal = peos->compute("W->A", {wl});
   auto cl = peos->compute("WA->L", {wl, gammal});
 
-  auto er = peos->compute("W->U", {wl});
+  auto er = peos->compute("W->I", {wl});
   auto gammar = peos->compute("W->A", {wr});
   auto cr = peos->compute("WA->L", {wr, gammar});
 
