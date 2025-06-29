@@ -11,11 +11,16 @@ IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   IntegratorOptions op;
 
   auto config = YAML::LoadFile(filename);
-  if (!config["dynamics"]) return op;
-  if (!config["dynamics"]["integrator"]) return op;
+  if (!config["integration"]) {
+    TORCH_WARN(
+        "no integration options specified, using default RK3 integrator");
+    return op;
+  }
 
-  op.type() = config["dynamics"]["integrator"]["type"].as<std::string>("rk3");
-  op.cfl() = config["dynamics"]["integrator"]["cfl"].as<double>(0.9);
+  op.type() = config["integration"]["type"].as<std::string>("rk3");
+  op.cfl() = config["integration"]["cfl"].as<double>(0.9);
+  op.tlim() = config["integration"]["tlim"].as<double>(1.e9);
+  op.nlim() = config["integration"]["nlim"].as<int>(-1);
 
   return op;
 }
@@ -74,6 +79,18 @@ IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)
 }
 
 void IntegratorImpl::reset() {}
+
+bool IntegratorImpl::stop(int steps, float current_time) {
+  if (options.nlim() >= 0 && steps >= options.nlim()) {
+    return true;  // stop if number of steps exceeds nlim
+  }
+
+  if (options.tlim() >= 0 && current_time >= options.tlim()) {
+    return true;  // stop if time exceeds tlim
+  }
+
+  return false;  // otherwise, continue integration
+}
 
 torch::Tensor IntegratorImpl::forward(int s, torch::Tensor u0, torch::Tensor u1,
                                       torch::Tensor u2) {

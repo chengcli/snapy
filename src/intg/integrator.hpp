@@ -22,7 +22,10 @@ struct IntegratorWeight {
 struct IntegratorOptions {
   static IntegratorOptions from_yaml(std::string const& filename);
   ADD_ARG(std::string, type) = "rk3";
+
   ADD_ARG(double, cfl) = 0.9;
+  ADD_ARG(double, tlim) = 1.e9;
+  ADD_ARG(int, nlim) = -1;
 };
 
 class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
@@ -36,6 +39,9 @@ class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
   IntegratorImpl() = default;
   explicit IntegratorImpl(IntegratorOptions const& options);
   void reset() override;
+
+  //! \brief check if the integration should stop
+  bool stop(int steps, float current_time);
 
   //! \brief compute the average of the three input tensors
   torch::Tensor forward(int stage, torch::Tensor u0, torch::Tensor u1,

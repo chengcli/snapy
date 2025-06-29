@@ -47,14 +47,15 @@ int main(int argc, char** argv) {
   out.write_output_file(block, current_time, OctTreeOptions(), 0);
   out.combine_blocks();
 
-  for (int n = 0; n < 200; ++n) {
+  int count = 0;
+  while (!block->pintg->stop(count++, current_time)) {
     auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
       block->forward(dt, stage);
 
     current_time += dt;
-    if ((n + 1) % 10 == 0) {
-      std::cout << "time = " << current_time << std::endl;
+    if (count % 1 == 0) {
+      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
       ++out.file_number;
       out.write_output_file(block, current_time, OctTreeOptions(), 0);
       out.combine_blocks();

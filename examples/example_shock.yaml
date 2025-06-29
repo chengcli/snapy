@@ -30,11 +30,6 @@ dynamics:
   riemann-solver:
     type: hllc
 
-  integrator:
-    type: rk3
-    cfl: 0.9
-    implicit-scheme: 0
-
 boundary-condition:
   internal:
     solid-density: 1.e3
@@ -48,3 +43,10 @@ boundary-condition:
     x2-outer: outflow
     x3-inner: outflow
     x3-outer: outflow
+
+integration:
+  type: rk3
+  cfl: 0.9
+  implicit-scheme: 0
+  nlim: 10
+  tlim: 1.e9
