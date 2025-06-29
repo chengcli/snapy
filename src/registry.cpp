@@ -8,11 +8,11 @@
 namespace snap {
 EquationOfState register_module_op(torch::nn::Module *p, std::string name,
                                    EquationOfStateOptions const &op) {
-  if (op.type() == "moist_mixture") {
+  if (op.type() == "moist-mixture") {
     return p->register_module(name, MoistMixture(op));
   } else if (op.type() == "aneos") {
     // return p->register_module(name, IdealMoist(op));
-  } else if (op.type() == "shallow_water") {
+  } else if (op.type() == "shallow-water") {
     return p->register_module(name, ShallowWater(op));
   } else {
     throw std::runtime_error("register_module: unknown type " + op.type());

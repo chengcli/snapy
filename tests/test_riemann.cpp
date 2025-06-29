@@ -18,8 +18,8 @@ enum {
 
 const char *eos_config = R"(
 type: moist-mixture
-density-floor:  1.e-6
-pressure-floor: 1.e-3
+density-floor:  1.e-10
+pressure-floor: 1.e-10
 limiter: false
 )";
 
@@ -37,7 +37,7 @@ species:
 const char *coord_config = R"(
 type: cartesian
 bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 200, nx2: 200, nx3: 1, nghost: 3}
+cells: {nx1: 10, nx2: 1, nx3: 1, nghost: 3}
 )";
 
 const char *recon_config = R"(
@@ -71,15 +71,16 @@ TEST_P(DeviceTest, test_lmars) {
   Reconstruct precon(op_recon);
   precon->to(device, dtype);
 
-  auto peos = dynamic_cast<MoistMixtureImpl *>(prsolver->peos.get());
-  auto pcoord = dynamic_cast<CartesianImpl *>(peos->pcoord.get());
+  auto peos = prsolver->peos;
 
-  auto w = torch::randn({peos->nvar(), pcoord->options.nc3(),
-                         pcoord->options.nc2(), pcoord->options.nc1()},
-                        torch::device(device).dtype(dtype))
-               .abs();
+  auto w =
+      torch::randn({peos->nvar(), peos->options.coord().nc3(),
+                    peos->options.coord().nc2(), peos->options.coord().nc1()},
+                   torch::device(device).dtype(dtype))
+          .abs();
 
   std::cout << "w.sizes(): " << w.sizes() << std::endl;
+  std::cout << "w = " << w << std::endl;
 
   auto start = std::chrono::high_resolution_clock::now();
 

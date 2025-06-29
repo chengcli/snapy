@@ -25,8 +25,8 @@ struct EquationOfStateOptions {
   EquationOfStateOptions() = default;
 
   ADD_ARG(std::string, type) = "moist-mixture";
-  ADD_ARG(double, density_floor) = 1.e-6;
-  ADD_ARG(double, pressure_floor) = 1.e-3;
+  ADD_ARG(double, density_floor) = 1.e-10;
+  ADD_ARG(double, pressure_floor) = 1.e-10;
   ADD_ARG(bool, limiter) = false;
 
   //! submodules options
@@ -113,7 +113,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    * To ensure that the cache is up-to-date, the following order of calls should
    * be followed:
    *
-   * If "W->A" is needed, it should be preceded immediately by "W->U".
+   * If "W->A" is needed, it should be preceded immediately by "W->U" or "W->I".
    * if "WA->L" is needed, it should be preceded mmediately by "W->A".
    *
    * Any steps in between these calls may invalidate the cache.
@@ -123,21 +123,28 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
 
  private:
   //! cache
-  torch::Tensor _prim, _cons, _gamma, _ct, _cs, _ke;
+  torch::Tensor _prim, _cons, _gamma, _ct, _cs, _ke, _ie;
 
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
    * \param[out] out  conserved variables
    */
-  void _prim2cons(torch::Tensor prim, torch::Tensor& cons);
+  void _prim2cons(torch::Tensor prim, torch::Tensor& out);
+
+  //! \brief calculate internal energy
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  internal energy
+   */
+  void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
    * \param[in] cons  conserved variables
    * \param[ou] out   primitive variables
    */
-  void _cons2prim(torch::Tensor cons, torch::Tensor& prim);
+  void _cons2prim(torch::Tensor cons, torch::Tensor& out);
 
   //! \brief Compute the adiabatic index
   /*

@@ -15,8 +15,8 @@
 
 const char *eos_config = R"(
 type: moist-mixture
-density-floor:  1.e-6
-pressure-floor: 1.e-3
+density-floor:  1.e-10
+pressure-floor: 1.e-10
 limiter: false
 )";
 
