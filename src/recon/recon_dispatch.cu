@@ -76,11 +76,6 @@ void call_weno5_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool s
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
     auto c = coeff.data_ptr<scalar_t>();
 
-    /*std::cout << "w = " << iter.input() << std::endl;
-    printf("nvar = %d, ndim = %d, dim = %d\n", nvar, ndim, dim);
-    printf("stride1 = %d, stride2 = %d, stride_out = %d\n",
-           stride1, stride2, stride_out);*/
-
     native::stencil_kernel<scalar_t, 2>(
         iter, dim, coeff.numel(),
         [=] __device__ (char* const data[2], unsigned int strides[2],
