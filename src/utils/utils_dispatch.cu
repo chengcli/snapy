@@ -8,41 +8,35 @@
 #include <snap/loops.cuh>
 #include "utils_dispatch.hpp"
 
-#define INP1(j, i) (inp1[(j) * stride2 + (i) * stride1])
-#define INP2(j, i) (inp2[(j) * stride2 + (i) * stride1])
-#define OUT(j) (out[(j) * stride_out])
+#define INP1(j, i) (inp1[(j) * stride_in2 + (i) * stride_in1])
+#define INP2(j, i) (inp2[(j) * stride_in2 + (i) * stride_in1])
+#define OUT(j, i) (out[(j) * stride_out2 + (i) * stride_out1])
 
 namespace snap {
 
 template <typename T>
-__device__ void bdot_out_impl(T *out, T *inp1, T *inp2, int dim, int ndim,
-                              int nvar, int stride1, int stride2,
-                              int stride_out, float scale, T *smem) {
-  unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
-  unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
-
-  int idim = 3 + dim - ndim;
-  int tid = idx[idim];
-
+__device__ void bdot_out_impl(T *out, T *inp1, T *inp2, int id, int nt,
+                              int nvar, int stride_in1, int stride_in2,
+                              int stride_out1, int stride_out2, float scale, T *smem) {
   // each thread multiplies one element
   for (int j = 0; j < nvar; ++j) {
-    smem[tid + j * len[idim]] = INP1(j, tid) * INP2(j, tid);
+    smem[id + j * nt] = INP1(j, id) * INP2(j, id);
   }
 
   __syncthreads();
 
   // tree‐based reduction in shared memory
-  for (unsigned int s = len[idim]/2; s > 0; s >>= 1) {
-    if (tid < s) {
+  for (unsigned int s = nt/2; s > 0; s >>= 1) {
+    if (id < s) {
       for (int j = 0; j < nvar; ++j)
-        smem[tid + j * len[idim]] += smem[tid + s + j * len[idim]];
+        smem[id + j * nt] += smem[id + s + j * nt];
     }
     __syncthreads();
   }
 
   // write to global memory
-  for (int j = tid; j < nvar; j += len[idim]) {
-    OUT(j) = smem[j * len[idim]] * scale;
+  for (int j = id; j < nvar; j += nt) {
+    OUT(j, id) = smem[j * nt] * scale;
   }
 }
 
@@ -62,21 +56,24 @@ void bdot_out_cuda(
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "bdot_out_cuda", [&]() {
-    int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
-    int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
+    int stride_in1 = at::native::ensure_nonempty_stride(iter.input(), dim);
+    int stride_in2 = at::native::ensure_nonempty_stride(iter.input(), 0);
 
-    int stride_out = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride_out1 = at::native::ensure_nonempty_stride(iter.output(), dim);
+    int stride_out2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
-    int ndim = iter.output().dim();
 
     native::stencil_kernel<scalar_t, 3>(
         iter, dim, 0,
-        [=] __device__ (char* const data[3], unsigned int strides[3], scalar_t *smem) {
+        [=] __device__ (char* const data[3], unsigned int strides[3],
+                        int id, int nt, scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto inp1 = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           auto inp2 = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          bdot_out_impl<scalar_t>(out, inp1, inp2, dim, ndim, nvar,
-                                  stride1, stride2, stride_out, scale, smem);
+          bdot_out_impl<scalar_t>(out, inp1, inp2, dim, id, nt,
+                                  stride_in1, stride_in2, stride_out1, stride_out2,
+                                  scale, smem);
         });
   });
 }

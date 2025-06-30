@@ -13,18 +13,18 @@ __global__ void reduce_kernel(int64_t numel, func_t f) {
   int y = threadIdx.y + blockIdx.y * blockDim.y;
   int z = threadIdx.z + blockIdx.z * blockDim.z;
 
-  int tid = x + y * blockDim.x * gridDim.x +
-            z * blockDim.x * blockDim.y * gridDim.x * gridDim.y;
+  int tidx = x + y * blockDim.x * gridDim.x +
+             z * blockDim.x * blockDim.y * gridDim.x * gridDim.y;
 
-  int bid =
-      blockIdx.x + blockIdx.y * gridDim.x + blockIdx.z * gridDim.x * gridDim.y;
+  int bidx = blockIdx.x + blockIdx.y * gridDim.x +
+             blockIdx.z * gridDim.x * gridDim.y;
 
   // Shared memory allocation
   extern __shared__ unsigned char memory[];
   scalar_t* smem = reinterpret_cast<scalar_t*>(memory);
 
-  if (tid < numel) {
-    f(bid, smem);
+  if (tidx < numel) {
+    f(tidx, bidx, smem);
   }
 }
 
@@ -50,13 +50,17 @@ template <typename scalar_t, int Arity, typename func_t>
 void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
                     const func_t& f) {
   TORCH_CHECK(iter.ninputs() + iter.noutputs() == Arity);
+  TORCH_CHECK(iter.noutputs() == 1,
+              "stencil_kernel only supports one output tensor");
 
   std::array<char*, Arity> data;
   for (int i = 0; i < Arity; i++) {
     data[i] = (char*)iter.data_ptr(i);
   }
 
-  auto offset_calc = ::make_offset_calculator<Arity>(iter);
+  auto out_offset_calc = at::native::make_output_offset_calculator<1>(iter);
+  auto in_offset_calc = at::native::make_input_offset_calculator<Arity - 1>(iter);
+
   int64_t numel = iter.input().numel();
 
   TORCH_INTERNAL_ASSERT(numel >= 0 &&
@@ -85,14 +89,19 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
   auto stream = at::cuda::getCurrentCUDAStream();
 
   reduce_kernel<scalar_t><<<grid, block, shared, stream>>>(
-      numel, [=] __device__(int bid, scalar_t* smem) {
-        unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
-        unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
+      numel, [=] __device__(int tid, int bid, scalar_t* smem) {
+        auto out_offsets = out_offset_calc.get(bid);
+        auto in_offsets = in_offset_calc.get(tid);
 
-        int idim = 3 + dim - ndim;
+        unsigned int offsets[Arity];
+        offsets[0] = out_offsets[0];
+        for (int i = 1; i < Arity; ++i) {
+          offsets[i] = in_offsets[i - 1];
+        }
+        printf("tid: %d, bid: %d, offset0: %d, offset1: %d\n", tid, bid,
+               offsets[0], offsets[1]);
 
-        auto offsets = offset_calc.get(bid);
-        f(data.data(), offsets.data(), (int)idx[idim], (int)len[idim], smem);
+        f(data.data(), offsets, smem);
       });
 
   C10_CUDA_KERNEL_LAUNCH_CHECK();
