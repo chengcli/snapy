@@ -7,6 +7,22 @@
 namespace snap {
 namespace native {
 
+template <int N>
+void _left_shift(int arr[N], int k) {
+  // Normalize k to [0, N-1]
+  k %= N;
+  if (k < 0) k += N;
+  if (k == 0) return;
+
+  // Perform k single-position left rotations
+  for (int shift = 0; shift < k; ++shift) {
+    int tmp = arr[0];
+    arr[0] = arr[1];
+    arr[1] = arr[2];
+    arr[2] = tmp;
+  }
+}
+
 template <typename scalar_t, typename func_t>
 __global__ void reduce_kernel(int64_t numel, func_t f) {
   int x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -66,33 +82,36 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
   }
 
   ////// prepare to launch elementwise kernel  /////
+
   int len[3] = {1, 1, 1};
-  auto ndim = iter.input().dim();
+  int ndim = iter.input().dim();
   len[3 + dim - ndim] = at::native::ensure_nonempty_size(iter.input(), dim);
+  _left_shift<3>(len, dim + 1 - ndim);
 
   dim3 block(len[2], len[1], len[0]);
 
   // get dimensions
-  for (int i = 1; i < ndim; ++i)
+  if (ndim <= 3) {
+    len[3 - ndim] = at::native::ensure_nonempty_size(iter.input(), 0);
+  }
+
+  for (int i = 1; i < ndim; ++i) {
     len[3 + i - ndim] = at::native::ensure_nonempty_size(iter.input(), i);
+  }
+  _left_shift<3>(len, dim + 1 - ndim);
+
+  dim3 grid(len[2] / block.x, len[1] / block.y, len[0] / block.z);
 
   // number of variables
   int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
-
-  dim3 grid(len[2] / block.x, len[1] / block.y, len[0] / block.z);
   size_t shared = (len[3 + dim - ndim] * nvar + buffers) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
 
   reduce_kernel<scalar_t><<<grid, block, shared, stream>>>(
       numel, [=] __device__(int bid, scalar_t* smem) {
-        unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
-        unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
-
-        int idim = 3 + dim - ndim;
-
         auto offsets = offset_calc.get(bid);
-        f(data.data(), offsets.data(), (int)idx[idim], (int)len[idim], smem);
+        f(data.data(), offsets.data(), (int)threadIdx.x, (int)blockDim.x, smem);
       });
 
   C10_CUDA_KERNEL_LAUNCH_CHECK();

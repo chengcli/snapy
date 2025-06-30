@@ -26,6 +26,7 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
   return op;
 }
 
+// TODO(cli) remove copy
 void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
                     Interp &pinterp, torch::Tensor wlr) {
   if (il > iu) return;
