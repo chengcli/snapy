@@ -39,7 +39,7 @@ torch::Tensor Weno5InterpImpl::forward(torch::Tensor w, int dim) {
   return result;
 }
 
-void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
+void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor const& out) {
   std::vector<int64_t> squash_dim = {0};
   if (w.device().is_cuda()) {
     squash_dim.push_back(dim);
@@ -56,7 +56,8 @@ void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
   at::native::call_weno5(out.device().type(), iter, cm, dim, options.scale());
 }
 
-void Weno5InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
+void Weno5InterpImpl::right(torch::Tensor w, int dim,
+                            torch::Tensor const& out) {
   std::vector<int64_t> squash_dim = {0};
   if (w.device().is_cuda()) {
     squash_dim.push_back(dim);
