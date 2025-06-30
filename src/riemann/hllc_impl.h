@@ -40,10 +40,8 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
 
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
 
-  EL = 2.5 * WL(IPR) +
-       0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
-  ER = 2.5 * WL(IPR) +
-       0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
+  EL += 0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  ER += 0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
   auto rhoa = .5 * (WL(IDN) + WR(IDN));  // average density
   auto ca = .5 * (CL + CR);              // average sound speed
