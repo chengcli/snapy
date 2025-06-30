@@ -2,8 +2,8 @@
 
 #include <cuda_runtime.h>
 
-#define INP(j, i) (inp[(j) * stride_in2 + (i) * stride_in1])
-#define OUT(j, i) (out[(j) * stride_out2 + (i) * stride_out1])
+#define INP(j) (inp[(j) * stride_in])
+#define OUT(j, i) (out[(j) * stride2 + (i) * stride1])
 #define SQR(x) ((x) * (x))
 
 namespace snap {
@@ -19,23 +19,30 @@ inline __device__ T _vvdot(T *v1, T *v2) {
 
 // polynomial
 template <typename T, int N>
-__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                 int nvar, int stride_in1, int stride_in2,
-                                 int stride_out1, int stride_out2, T *smem) {
+__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int dim, int ndim,
+                                 int nvar, int stride1, int stride2,
+                                 int stride_in, T *smem) {
+  unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
+  unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
+
+  int idim = 3 + dim - ndim;
+  int tid = idx[idim];
+
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
-    sinp[id + j * nt] = INP(j, id);
+    sinp[tid + j * len[idim]] = INP(j);
+    printf("inp = %f\n", INP(j));
   }
 
   // Load coefficient into shared memory
-  T *scoeff = smem + nt * nvar;
-  for (int i = id; i < N; i += nt) {
+  T *scoeff = smem + len[idim] * nvar;
+  for (int i = tid; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
 
   // drop last few threads
-  if (id > nt - N) return;
+  if (tid > len[idim] - N) return;
 
   __syncthreads();
 
@@ -50,31 +57,36 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int id, int nt,
     }
 
     // copy to global memory
-    OUT(j, id) = sout;
+    OUT(j, tid) = sout;
   }
 };
 
 // weno3
 template <typename T>
-__device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                  int nvar, int stride_in1, int stride_in2,
-                                  int stride_out1, int stride_out2, bool scale,
-                                  T *smem) {
+__device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int dim, int ndim,
+                                  int nvar, int stride1, int stride2,
+                                  int stride_in, bool scale, T *smem) {
+  unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
+  unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
+
+  int idim = 3 + dim - ndim;
+  int tid = idx[idim];
+
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
-    sinp[id + j * nt] = INP(j, id);
+    sinp[tid + j * len[idim]] = INP(j);
   }
 
   // Load coefficient into shared memory
-  T *scoeff = smem + nt * nvar;
+  T *scoeff = smem + len[idim] * nvar;
   constexpr int N = 12;  // Number of coefficients for WENO3
-  for (int i = id; i < N; i += nt) {
+  for (int i = tid; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
 
   // drop last few threads
-  if (id > nt - 3) return;
+  if (tid > len[idim] - 3) return;
 
   __syncthreads();
 
@@ -87,7 +99,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
   T phi[3];
 
   for (int j = 0; j < nvar; ++j) {
-    int i = id + j * nt;
+    int i = tid + j * len[idim];
     T vscale =
         scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2])) / 3.0
               : 1.0;
@@ -97,7 +109,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
       phi[1] = sinp[i + 1] / vscale;
       phi[2] = sinp[i + 2] / vscale;
     } else {
-      OUT(j, id) = 0.0;
+      OUT(j, tid) = 0.0;
       continue;
     }
 
@@ -110,41 +122,45 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
     T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
     T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
 
-    OUT(j, id) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
+    OUT(j, tid) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
   }
 };
 
 // weno5
 template <typename T>
-__device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                  int nvar, int stride_in1, int stride_in2,
-                                  int stride_out1, int stride_out2, bool scale,
-                                  T *smem) {
+__device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int dim, int ndim,
+                                  int nvar, int stride1, int stride2,
+                                  int stride_in, bool scale, T *smem) {
+  unsigned int idx[3] = {threadIdx.z, threadIdx.y, threadIdx.x};
+  unsigned int len[3] = {blockDim.z, blockDim.y, blockDim.x};
+
+  int idim = 3 + dim - ndim;
+  int tid = idx[idim];
+
   // Load input into shared memory
   T *sinp = smem;
-  for (int j = 0; j < nvar; ++j) {
-    sinp[id + j * nt] = INP(j, id);
+  for (int j = 0; j < 1; ++j) {
+    sinp[tid + j * len[idim]] = INP(j);
   }
 
   // Load coefficient into shared memory
-  T *scoeff = smem + nt * nvar;
+  T *scoeff = smem + len[idim] * nvar;
   constexpr int N = 45;  // Number of coefficients for WENO5
-  for (int i = id; i < N; i += nt) {
+  for (int i = tid; i < N; i += len[idim]) {
     scoeff[i] = coeff[i];
   }
 
   // drop last few threads
-  if (id > nt - 5) return;
+  if (tid > len[idim] - 5) return;
 
   __syncthreads();
 
   // first thread print shared memory array
-  // if (idx[idim] == 0) {
-  // for (int i = 0; i < nvar * nt[idim] + N; ++i) {
-  //  printf("smem[%d] = %f\n", i, smem[i]);
-  //}
-  // for (int i = 0; i < nt[idim]; ++i) {
-  //}
+  if (tid == 0) {
+    for (int i = 0; i < len[idim]; ++i) {
+      printf("smem[%d] = %f\n", i, smem[i]);
+    }
+  }
 
   // calculation
   T *c1 = scoeff;
@@ -160,7 +176,7 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int id, int nt,
   T phi[5];
 
   for (int j = 0; j < nvar; ++j) {
-    int i = id + j * nt;
+    int i = tid + j * len[idim];
     T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2]) +
                         fabs(sinp[i + 3]) + fabs(sinp[i + 4])) /
                            5.0
@@ -169,7 +185,7 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int id, int nt,
     if (vscale != 0.0) {
       for (int k = 0; k < 5; ++k) phi[k] = sinp[i + k];
     } else {
-      OUT(j, id) = 0.0;
+      OUT(j, tid) = 0.0;
       continue;
     }
 
@@ -188,8 +204,8 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int id, int nt,
     T alpha1 = .6 / SQR(beta1 + 1e-6);
     T alpha2 = .1 / SQR(beta2 + 1e-6);
 
-    OUT(j, id) = vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
-                 (alpha0 + alpha1 + alpha2);
+    OUT(j, tid) = vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
+             (alpha0 + alpha1 + alpha2);
   }
 };
 

@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
-  // block->to(torch::kCUDA);
+  block->to(torch::kCUDA);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
       block->forward(dt, stage);
 
     current_time += dt;
-    if (count % 10 == 0) {
+    if (count % 1 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
       ++out.file_number;
       out.write_output_file(block, current_time, OctTreeOptions(), 0);

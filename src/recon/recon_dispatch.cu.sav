@@ -15,24 +15,22 @@ void call_poly_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_poly_cuda", [&]() {
-    int stride_in1 = at::native::ensure_nonempty_stride(iter.input(), dim);
-    int stride_in2 = at::native::ensure_nonempty_stride(iter.input(), 0);
-
-    int stride_out1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride_out2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride_in = at::native::ensure_nonempty_stride(iter.input(), 0);
 
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
+    int ndim = iter.output().dim();
+
     auto c = coeff.data_ptr<scalar_t>();
 
     native::stencil_kernel<scalar_t, 2>(
         iter, dim, coeff.numel(),
-        [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2],
-                       int id, int nt, scalar_t *smem) {
+        [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2], scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          interp_poly_impl<scalar_t, N>(out, w, c, id, nt, nvar,
-                                        stride_in1, stride_in2,
-                                        stride_out1, stride_out2, smem);
+          interp_poly_impl<scalar_t, N>(out, w, c, dim, ndim, nvar,
+                                        stride1, stride2, stride_in, smem);
         });
   });
 }
@@ -41,24 +39,22 @@ void call_weno3_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool s
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno3_cuda", [&]() {
-    int stride_in1 = at::native::ensure_nonempty_stride(iter.input(), dim);
-    int stride_in2 = at::native::ensure_nonempty_stride(iter.input(), 0);
-
-    int stride_out1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride_out2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride_in = at::native::ensure_nonempty_stride(iter.input(), 0);
 
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
+    int ndim = iter.output().dim();
+
     auto c = coeff.data_ptr<scalar_t>();
 
     native::stencil_kernel<scalar_t, 2>(
         iter, dim, coeff.numel(),
-        [=] __device__ (char* const data[2], unsigned int strides[2],
-                        int id, int nt, scalar_t *smem) {
+        [=] __device__ (char* const data[2], unsigned int strides[2], scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          interp_weno3_impl(out, w, c, id, nt, nvar,
-                            stride_in1, stride_in2,
-                            stride_out1, stride_out2, scale, smem);
+          interp_weno3_impl(out, w, c, dim, ndim, nvar,
+                            stride1, stride2, stride_in, scale, smem);
         });
   });
 }
@@ -67,29 +63,22 @@ void call_weno5_cuda(at::TensorIterator& iter, at::Tensor coeff, int dim, bool s
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_weno5_cuda", [&]() {
-    int stride_in1 = at::native::ensure_nonempty_stride(iter.input(), dim);
-    int stride_in2 = at::native::ensure_nonempty_stride(iter.input(), 0);
-
-    int stride_out1 = at::native::ensure_nonempty_stride(iter.output(), dim);
-    int stride_out2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride1 = at::native::ensure_nonempty_stride(iter.output(), dim);
+    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride_in = at::native::ensure_nonempty_stride(iter.input(), 0);
 
     int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
-    auto c = coeff.data_ptr<scalar_t>();
+    int ndim = iter.output().dim();
 
-    /*std::cout << "w = " << iter.input() << std::endl;
-    printf("nvar = %d, ndim = %d, dim = %d\n", nvar, ndim, dim);
-    printf("stride1 = %d, stride2 = %d, stride_out = %d\n",
-           stride1, stride2, stride_out);*/
+    auto c = coeff.data_ptr<scalar_t>();
 
     native::stencil_kernel<scalar_t, 2>(
         iter, dim, coeff.numel(),
-        [=] __device__ (char* const data[2], unsigned int strides[2],
-                        int id, int nt, scalar_t *smem) {
+        [=] __device__ (char* const data[2], unsigned int strides[2], scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          interp_weno5_impl(out, w, c, id, nt, nvar,
-                            stride_in1, stride_in2,
-                            stride_out1, stride_out2, scale, smem);
+          interp_weno5_impl(out, w, c, dim, ndim, nvar,
+                            stride1, stride2, stride_in, scale, smem);
         });
   });
 }

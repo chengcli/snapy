@@ -34,10 +34,16 @@ torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
 }
 
 void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
+  std::vector<int64_t> squash_dim = {0};
+  // add dim to squash dim if w in on cuda
+  if (w.device().is_cuda()) {
+    squash_dim.push_back(dim);
+  }
+
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
-                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
+                  .declare_static_shape(out.sizes(), squash_dim)
                   .add_output(out)
                   .add_input(w)
                   .build();
@@ -46,10 +52,15 @@ void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
 }
 
 void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
+  std::vector<int64_t> squash_dim = {0};
+  if (w.device().is_cuda()) {
+    squash_dim.push_back(dim);
+  }
+
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
-                  .declare_static_shape(out.sizes(), /*squash_dim=*/{0})
+                  .declare_static_shape(out.sizes(), squash_dim)
                   .add_output(out)
                   .add_input(w)
                   .build();
