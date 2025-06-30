@@ -13,8 +13,8 @@ EquationOfStateOptions EquationOfStateOptions::from_yaml(
   EquationOfStateOptions op;
 
   op.type() = node["type"].as<std::string>("moist-mixture");
-  op.density_floor() = node["density_floor"].as<double>(1.e-6);
-  op.pressure_floor() = node["pressure_floor"].as<double>(1.e-3);
+  op.density_floor() = node["density-floor"].as<double>(1.e-6);
+  op.pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
   op.limiter() = node["limiter"].as<bool>(false);
 
   return op;

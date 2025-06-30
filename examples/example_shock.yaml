@@ -1,5 +1,5 @@
 reference-state:
-  Tref: 300.
+  Tref: 0.
   Pref: 1.e5
 
 species:
@@ -48,5 +48,5 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 10
+  nlim: 200
   tlim: 1.e9

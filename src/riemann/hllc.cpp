@@ -10,28 +10,30 @@ namespace snap {
 
 void HLLCSolverImpl::reset() {
   // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  peosl = register_module_op(this, "eosl", options.eos());
+  peosr = register_module_op(this, "eosr", options.eos());
 }
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor dummy) {
   auto flx = torch::empty_like(wl);
 
-  wl[IDN].clamp_min_(peos->options.density_floor());
-  wl[IPR].clamp_min_(peos->options.pressure_floor());
+  wl[IDN].clamp_min_(options.eos().density_floor());
+  wl[IPR].clamp_min_(options.eos().pressure_floor());
 
-  wr[IDN].clamp_min_(peos->options.density_floor());
-  wr[IPR].clamp_min_(peos->options.pressure_floor());
+  wr[IDN].clamp_min_(options.eos().density_floor());
+  wr[IPR].clamp_min_(options.eos().pressure_floor());
 
-  auto el = peos->compute("W->I", {wl});
-  auto gammal = peos->compute("W->A", {wl});
-  auto cl = peos->compute("WA->L", {wl, gammal});
+  auto el = peosl->compute("W->I", {wl});
+  auto gammal = peosl->compute("W->A", {wl});
+  auto cl = peosl->compute("WA->L", {wl, gammal});
 
-  auto er = peos->compute("W->I", {wl});
-  auto gammar = peos->compute("W->A", {wr});
-  auto cr = peos->compute("WA->L", {wr, gammar});
+  auto er = peosr->compute("W->I", {wr});
+  auto gammar = peosr->compute("W->A", {wr});
+  auto cr = peosr->compute("WA->L", {wr, gammar});
 
-  peos->pcoord->prim2local_(wl);
+  peosl->pcoord->prim2local_(wl);
+  peosr->pcoord->prim2local_(wr);
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -50,7 +52,7 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   at::native::call_hllc(flx.device().type(), iter, dim);
 
-  peos->pcoord->flux2global_(flx);
+  peosl->pcoord->flux2global_(flx);
 
   return flx;
 }

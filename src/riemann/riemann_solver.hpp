@@ -85,7 +85,8 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
                         public RiemannSolverImpl {
  public:
   //! submodules
-  EquationOfState peos = nullptr;
+  EquationOfState peosl = nullptr;
+  EquationOfState peosr = nullptr;
 
   //! Constructor to initialize the layers
   LmarsSolverImpl() = default;
@@ -108,7 +109,8 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
                        public RiemannSolverImpl {
  public:
   //! submodules
-  EquationOfState peos = nullptr;
+  EquationOfState peosl = nullptr;
+  EquationOfState peosr = nullptr;
 
   //! Constructor to initialize the layers
   HLLCSolverImpl() = default;

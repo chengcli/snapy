@@ -10,26 +10,28 @@ namespace snap {
 
 void LmarsSolverImpl::reset() {
   // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  peosl = register_module_op(this, "eosl", options.eos());
+  peosr = register_module_op(this, "eosr", options.eos());
 }
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor dummy) {
   auto flx = torch::empty_like(wl);
 
-  wl[IDN].clamp_min_(peos->options.density_floor());
-  wl[IPR].clamp_min_(peos->options.pressure_floor());
+  wl[IDN].clamp_min_(options.eos().density_floor());
+  wl[IPR].clamp_min_(options.eos().pressure_floor());
 
-  wr[IDN].clamp_min_(peos->options.density_floor());
-  wr[IPR].clamp_min_(peos->options.pressure_floor());
+  wr[IDN].clamp_min_(options.eos().density_floor());
+  wr[IPR].clamp_min_(options.eos().pressure_floor());
 
-  auto el = peos->compute("W->I", {wl}) / wl[Index::IDN];
-  auto gammal = peos->compute("W->A", {wl});
+  auto el = peosl->compute("W->I", {wl}) / wl[Index::IDN];
+  auto gammal = peosl->compute("W->A", {wl});
 
-  auto er = peos->compute("W->I", {wr}) / wr[Index::IDN];
-  auto gammar = peos->compute("W->A", {wr});
+  auto er = peosr->compute("W->I", {wr}) / wr[Index::IDN];
+  auto gammar = peosr->compute("W->A", {wr});
 
-  peos->pcoord->prim2local_(wl);
+  peosl->pcoord->prim2local_(wl);
+  peosr->pcoord->prim2local_(wr);
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -46,7 +48,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   at::native::call_lmars(flx.device().type(), iter, dim);
 
-  peos->pcoord->flux2global_(flx);
+  peosl->pcoord->flux2global_(flx);
 
   return flx;
 }

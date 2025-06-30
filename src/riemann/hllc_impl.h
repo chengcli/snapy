@@ -14,8 +14,8 @@
 #define ER (*er)
 #define GAMMAL (*gammal)
 #define GAMMAR (*gammar)
-#define CL (*gammal)
-#define CR (*gammar)
+#define CL (*cl)
+#define CR (*cr)
 
 namespace snap {
 
