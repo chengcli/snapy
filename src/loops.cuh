@@ -111,7 +111,7 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
   reduce_kernel<scalar_t><<<grid, block, shared, stream>>>(
       numel, [=] __device__(int bid, scalar_t* smem) {
         auto offsets = offset_calc.get(bid);
-        f(data.data(), offsets.data(), (int)threadIdx.x, (int)blockDim.x, smem);
+        f(data.data(), offsets.data(), smem);
       });
 
   C10_CUDA_KERNEL_LAUNCH_CHECK();

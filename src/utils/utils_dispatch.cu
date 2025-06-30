@@ -15,9 +15,12 @@
 namespace snap {
 
 template <typename T>
-__device__ void bdot_out_impl(T *out, T *inp1, T *inp2, int id, int nt,
+__device__ void bdot_out_impl(T *out, T *inp1, T *inp2,
                               int nvar, int stride_in1, int stride_in2,
                               int stride_out1, int stride_out2, float scale, T *smem) {
+  int id = threadIdx.x;
+  int nt = blockDim.x;
+
   // each thread multiplies one element
   for (int j = 0; j < nvar; ++j) {
     smem[id + j * nt] = INP1(j, id) * INP2(j, id);
@@ -66,12 +69,11 @@ void bdot_out_cuda(
 
     native::stencil_kernel<scalar_t, 3>(
         iter, dim, 0,
-        [=] __device__ (char* const data[3], unsigned int strides[3],
-                        int id, int nt, scalar_t *smem) {
+        [=] __device__ (char* const data[3], unsigned int strides[3], scalar_t *smem) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto inp1 = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           auto inp2 = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          bdot_out_impl<scalar_t>(out, inp1, inp2, dim, id, nt,
+          bdot_out_impl<scalar_t>(out, inp1, inp2, dim,
                                   stride_in1, stride_in2, stride_out1, stride_out2,
                                   scale, smem);
         });

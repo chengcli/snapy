@@ -19,9 +19,12 @@ inline __device__ T _vvdot(T *v1, T *v2) {
 
 // polynomial
 template <typename T, int N>
-__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                 int nvar, int stride_in1, int stride_in2,
+__device__ void interp_poly_impl(T *out, T *inp, T *coeff, int nvar,
+                                 int stride_in1, int stride_in2,
                                  int stride_out1, int stride_out2, T *smem) {
+  int id = threadIdx.x;
+  int nt = blockDim.x;
+
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
@@ -56,10 +59,13 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int id, int nt,
 
 // weno3
 template <typename T>
-__device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                  int nvar, int stride_in1, int stride_in2,
+__device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int nvar,
+                                  int stride_in1, int stride_in2,
                                   int stride_out1, int stride_out2, bool scale,
                                   T *smem) {
+  int id = threadIdx.x;
+  int nt = blockDim.x;
+
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
@@ -116,10 +122,13 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int id, int nt,
 
 // weno5
 template <typename T>
-__device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int id, int nt,
-                                  int nvar, int stride_in1, int stride_in2,
+__device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
+                                  int stride_in1, int stride_in2,
                                   int stride_out1, int stride_out2, bool scale,
                                   T *smem) {
+  int id = threadIdx.x;
+  int nt = blockDim.x;
+
   // Load input into shared memory
   T *sinp = smem;
   for (int j = 0; j < nvar; ++j) {
