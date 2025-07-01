@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
   // initial conditions
   auto pcoord = block->phydro->pcoord;
   auto peos = block->phydro->peos;
+  auto pthermo = block->phydro->pthermo;
 
   // thermodynamics
   auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
@@ -69,6 +70,9 @@ int main(int argc, char** argv) {
       OutputOptions().file_basename("straka").fid(3).variable("uov"));
   double current_time = 0.;
 
+  pmb->user_out_var["temp"] = temp;
+  pmb->user_out_var["theta"] = temp * (p0 / w[Index::IPR]).pow(Rd / cp);
+
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
 
@@ -82,6 +86,14 @@ int main(int argc, char** argv) {
     current_time += dt;
     if ((count + 1) % 100 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
+
+      auto ivol = pthermo->compute(
+          "DY->V", {w[Index::IDN], w.slice(0, Index::ICY, w.size(0))});
+      temp = pthermo->compute("PV->T", {prim[Index::IPR], ivol});
+
+      pmb->user_out_var["temp"] = temp;
+      pmb->user_out_var["theta"] = temp * (p0 / w[Index::IPR]).pow(Rd / cp);
+
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();
