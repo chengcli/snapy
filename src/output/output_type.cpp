@@ -21,6 +21,7 @@ void OutputType::LoadOutputData(MeshBlock pmb) {
 
   loadHydroOutputData(pmb);
   loadScalarOutputData(pmb);
+  loadUserOutputData(pmb);
 
   // throw an error if output variable name not recognized
   if (num_vars_ == 0) {

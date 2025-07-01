@@ -133,6 +133,7 @@ class OutputType {
  protected:
   void loadHydroOutputData(MeshBlock pmb);
   void loadScalarOutputData(MeshBlock pmb);
+  void loadUserOutputData(MeshBlock pmb);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):

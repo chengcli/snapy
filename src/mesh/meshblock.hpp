@@ -43,6 +43,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! options with which this `MeshBlock` was constructed
   MeshBlockOptions options;
 
+  //! user output variables
+  torch::OrderedDict<std::string, torch::Tensor> user_out_var;
+
   //! submodules
   Integrator pintg = nullptr;
   Hydro phydro = nullptr;

@@ -1,8 +1,5 @@
 // snap
-#include <snap/input/parameter_input.hpp>
-
-// snap
-#include "output.hpp"
+#include "output_type.hpp"
 
 namespace snap {
 void OutputType::loadUserOutputData(MeshBlock pmb) {

@@ -1,16 +1,22 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// kintera
+#include <kintera/constants.h>
+
+#include <kintera/species.hpp>
+
 // snap
 #include <snap/snap.h>
 
+#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
 using namespace snap;
 
 int main(int argc, char** argv) {
-  auto config = YAML::LoadFile("example_straka.yaml");
+  auto config = YAML::LoadFile("straka.yaml");
 
   auto p0 = config["problem"]["p0"].as<double>();
   auto Ts = config["problem"]["Ts"].as<double>();
@@ -20,8 +26,9 @@ int main(int argc, char** argv) {
   auto zr = config["problem"]["zr"].as<double>();
   auto dT = config["problem"]["dT"].as<double>();
   auto K = config["problem"]["K"].as<double>();
+  auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
-  auto op = MeshBlockOptions::from_yaml("example_straka.yaml");
+  auto op = MeshBlockOptions::from_yaml("straka.yaml");
   auto block = MeshBlock(op);
 
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
@@ -34,18 +41,15 @@ int main(int argc, char** argv) {
   auto peos = block->phydro->peos;
 
   // thermodynamics
-  auto cp = gamma / (gamma - 1.) * Rd;
+  auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
+  auto cv = kintera::species_cref_R[0] * Rd;
+  auto cp = cv + Rd;
 
-  /*auto x1v = pcoord->x1v.view({1, 1, -1});
-  auto x2v = pcoord->x2v.view({1, -1, 1});
-  auto x3v = pcoord->x3v.view({-1, 1, 1});*/
+  auto grids = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto x1v = grids[2];
+  auto x2v = grids[1];
 
-  auto [x3v, x2v, x1v] =
-      torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  // auto x1v = result[2];
-  // auto x2v = result[1];
-
-  auto const& w = block->phydro->peos->get_buffer("W");
+  auto const& w = peos->get_buffer("W");
   w.zero_();
 
   auto L = torch::sqrt(((x1v - xc) / xr).square() + ((x2v - zc) / zr).square());
@@ -76,7 +80,7 @@ int main(int argc, char** argv) {
     }
 
     current_time += dt;
-    if ((n + 1) % 100 == 0) {
+    if ((count + 1) % 100 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);

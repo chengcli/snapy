@@ -3,7 +3,7 @@
 # =================
 
 setup_problem(example_shock)
-setup_problem(test_straka)
+setup_problem(straka)
 
 file(GLOB inputs *.yaml)
 foreach(input ${inputs})
