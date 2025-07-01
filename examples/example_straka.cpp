@@ -1,3 +1,6 @@
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // snap
 #include <snap/snap.h>
 
@@ -7,48 +10,24 @@
 using namespace snap;
 
 int main(int argc, char** argv) {
-  double p0 = 1.E5;
-  double Ts = 300.;
-  double xc = 0.;
-  double xr = 4.e3;
-  double zc = 3.e3;
-  double zr = 2.e3;
-  double dT = -15.;
-  double grav = 9.8;
-  double Rd = 287.;
-  double gamma = 1.4;
-  double K = 75.;
+  auto config = YAML::LoadFile("example_straka.yaml");
 
-  int nx1 = 80;
-  int nx2 = 160;
-  int nx3 = 160;
-  int nghost = 3;
+  auto p0 = config["problem"]["p0"].as<double>();
+  auto Ts = config["problem"]["Ts"].as<double>();
+  auto xc = config["problem"]["xc"].as<double>();
+  auto zc = config["problem"]["zc"].as<double>();
+  auto xr = config["problem"]["xr"].as<double>();
+  auto zr = config["problem"]["zr"].as<double>();
+  auto dT = config["problem"]["dT"].as<double>();
+  auto K = config["problem"]["K"].as<double>();
 
-  auto op_coord = CoordinateOptions().nx1(nx1).nx2(nx2).nx3(nx3);
-  op_coord.x1min(0).x1max(6.4e3).x2min(0).x2max(25.6e3).x3min(0).x3max(25.6e3);
+  auto op = MeshBlockOptions::from_yaml("example_straka.yaml");
+  auto block = MeshBlock(op);
 
-  auto op_recon =
-      ReconstructOptions().interp(InterpOptions("weno5")).shock(false);
-  auto op_thermo = kintera::ThermoOptions::from_yaml("xxxx.yaml");
-  auto op_eos = EquationOfStateOptions().thermo(op_thermo).type("ideal_gas");
-  auto op_riemann = RiemannSolverOptions().type("lmars");
-  auto op_grav = ConstGravityOptions().grav1(-grav);
-  auto op_proj = PrimitiveProjectorOptions().type("temperature");
-  auto op_vic = ImplicitOptions().scheme(1);
-  auto op_intg = IntegratorOptions().type("rk3").cfl(0.9);
+  std::cout << fmt::format("MeshBlock Options: {}", block->options)
+            << std::endl;
 
-  auto op_hydro =
-      HydroOptions().eos(op_eos).coord(op_coord).riemann(op_riemann);
-  op_hydro.recon1(op_recon).recon23(op_recon).grav(op_grav).proj(op_proj).vic(
-      op_vic);
-
-  auto op_block = MeshBlockOptions().intg(op_intg).hydro(op_hydro);
-
-  for (int i = 0; i < 6; ++i)
-    op_block.bfuncs().push_back(get_bc_func()["reflecting_inner"]);
-  auto block = MeshBlock(op_block);
-
-  // block->to(torch::Device(torch::kCUDA, 0));
+  block->to(torch::kCUDA);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;
@@ -61,13 +40,16 @@ int main(int argc, char** argv) {
   auto x2v = pcoord->x2v.view({1, -1, 1});
   auto x3v = pcoord->x3v.view({-1, 1, 1});*/
 
-  auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto x1v = result[2];
-  auto x2v = result[1];
+  auto [x3v, x2v, x1v] =
+      torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  // auto x1v = result[2];
+  // auto x2v = result[1];
 
-  auto const& w = torch::zeros_like(block->phydro->peos->get_buffer("W"));
+  auto const& w = block->phydro->peos->get_buffer("W");
+  w.zero_();
 
   auto L = torch::sqrt(((x1v - xc) / xr).square() + ((x2v - zc) / zr).square());
+
   auto temp = Ts - grav * x1v / cp;
 
   w[Index::IPR] = p0 * torch::pow(temp / Ts, cp / Rd);
@@ -83,15 +65,11 @@ int main(int argc, char** argv) {
       OutputOptions().file_basename("straka").fid(3).variable("uov"));
   double current_time = 0.;
 
-  // block->user_out_var.insert("temp", pthermo->get_temp(w));
-  // block->user_out_var.insert("theta", pthermo->get_theta_ref(w, p0));
-
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
 
-  // integration
-  int n = 0;
-  while (true) {
+  int count = 0;
+  while (!block->pintg->stop(count++, current_time)) {
     auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(dt, stage);
@@ -99,13 +77,10 @@ int main(int argc, char** argv) {
 
     current_time += dt;
     if ((n + 1) % 100 == 0) {
-      std::cout << "time = " << current_time << std::endl;
+      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();
     }
-
-    n++;
-    if (current_time > 900) break;
   }
 }
