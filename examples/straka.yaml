@@ -28,7 +28,7 @@ dynamics:
     horizontal: {type: weno5, scale: false, shock: true}
 
   riemann-solver:
-    type: lmars
+    type: hllc
 
 boundary-condition:
   internal:

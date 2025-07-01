@@ -39,7 +39,6 @@ int main(int argc, char** argv) {
   // initial conditions
   auto pcoord = block->phydro->pcoord;
   auto peos = block->phydro->peos;
-  auto pthermo = block->phydro->pthermo;
 
   // thermodynamics
   auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
@@ -53,7 +52,7 @@ int main(int argc, char** argv) {
   auto const& w = peos->get_buffer("W");
   w.zero_();
 
-  auto L = torch::sqrt(((x1v - xc) / xr).square() + ((x2v - zc) / zr).square());
+  auto L = torch::sqrt(((x2v - xc) / xr).square() + ((x1v - zc) / zr).square());
 
   auto temp = Ts - grav * x1v / cp;
 
@@ -70,13 +69,18 @@ int main(int argc, char** argv) {
       OutputOptions().file_basename("straka").fid(3).variable("uov"));
   double current_time = 0.;
 
-  pmb->user_out_var["temp"] = temp;
-  pmb->user_out_var["theta"] = temp * (p0 / w[Index::IPR]).pow(Rd / cp);
+  block->user_out_var.insert("temp", temp);
+  block->user_out_var.insert("theta", temp * (p0 / w[Index::IPR]).pow(Rd / cp));
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
 
+  out3.write_output_file(block, current_time, OctTreeOptions(), 0);
+  out3.combine_blocks();
+
   int count = 0;
+  auto pthermo = dynamic_cast<MoistMixtureImpl*>(peos.get())->pthermo;
+
   while (!block->pintg->stop(count++, current_time)) {
     auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
@@ -89,14 +93,18 @@ int main(int argc, char** argv) {
 
       auto ivol = pthermo->compute(
           "DY->V", {w[Index::IDN], w.slice(0, Index::ICY, w.size(0))});
-      temp = pthermo->compute("PV->T", {prim[Index::IPR], ivol});
+      temp = pthermo->compute("PV->T", {w[Index::IPR], ivol});
 
-      pmb->user_out_var["temp"] = temp;
-      pmb->user_out_var["theta"] = temp * (p0 / w[Index::IPR]).pow(Rd / cp);
+      block->user_out_var["temp"] = temp;
+      block->user_out_var["theta"] = temp * (p0 / w[Index::IPR]).pow(Rd / cp);
 
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();
+
+      ++out3.file_number;
+      out3.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out3.combine_blocks();
     }
   }
 }
