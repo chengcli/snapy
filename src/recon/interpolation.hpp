@@ -28,10 +28,32 @@ class InterpImpl {
   //! options with which this `Interp` was constructed
   InterpOptions options;
 
-  virtual std::string print_name() const { return "Unknown"; }
   virtual int stencils() const { return 1; }
-  virtual torch::Tensor forward(torch::Tensor w, int dim) {
-    throw std::runtime_error("Not implemented");
+
+  virtual std::pair<torch::Tensor, torch::Tensor> forward(
+      torch::Tensor w, int dim,
+      torch::optional<torch::Tensor> wl = torch::nullopt,
+      torch::optional<torch::Tensor> wr = torch::nullopt) {
+    auto vec = w.sizes().vec();
+    vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
+
+    auto wlv = wl.value_or(torch::empty(vec, w.options()));
+    auto wrv = wr.value_or(torch::empty(vec, w.options()));
+
+    left(w, dim, wlv);
+    right(w, dim, wrv);
+
+    wl = wlv;
+    wr = wrv;
+    return std::make_pair(wlv, wrv);
+  }
+
+  virtual void left(torch::Tensor w, int dim, torch::Tensor const& out) {
+    forward(w, dim, out, torch::nullopt);
+  }
+
+  virtual void right(torch::Tensor w, int dim, torch::Tensor const& out) {
+    forward(w, dim, torch::nullopt, out);
   }
 
  protected:
@@ -55,11 +77,13 @@ class DonorCellInterpImpl : public torch::nn::Cloneable<DonorCellInterpImpl>,
     reset();
   }
   void reset() override {}
-  std::string print_name() const override { return name(); }
-  torch::Tensor forward(torch::Tensor w, int dim) override {
-    auto vec = w.sizes().vec();
-    vec.insert(vec.begin(), 2);
-    return w.squeeze(-1).expand(vec);
+  using InterpImpl::forward;
+
+  void left(torch::Tensor w, int dim, torch::Tensor const& out) override {
+    out.copy_(w);
+  }
+  void right(torch::Tensor w, int dim, torch::Tensor const& out) override {
+    out.copy_(w);
   }
 };
 TORCH_MODULE(DonorCellInterp);
@@ -73,19 +97,13 @@ class PLMInterpImpl : public torch::nn::Cloneable<PLMInterpImpl>,
     reset();
   }
   void reset() override {}
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 3; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[Index::ILT];
-  }
-
-  void right(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[Index::IRT];
-  }
+  std::pair<torch::Tensor, torch::Tensor> forward(
+      torch::Tensor w, int dim,
+      torch::optional<torch::Tensor> wl = torch::nullopt,
+      torch::optional<torch::Tensor> wr = torch::nullopt) override;
 };
 TORCH_MODULE(PLMInterp);
 
@@ -99,19 +117,13 @@ class PPMInterpImpl : public torch::nn::Cloneable<PPMInterpImpl>,
     reset();
   }
   void reset() override {}
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 5; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[Index::ILT];
-  }
-
-  void right(torch::Tensor w, int dim, torch::Tensor out) {
-    out = forward(w, dim)[Index::IRT];
-  }
+  std::pair<torch::Tensor, torch::Tensor> forward(
+      torch::Tensor w, int dim,
+      torch::optional<torch::Tensor> wl = torch::nullopt,
+      torch::optional<torch::Tensor> wr = torch::nullopt) override;
 };
 TORCH_MODULE(PPMInterp);
 
@@ -132,14 +144,12 @@ class Center3InterpImpl : public torch::nn::Cloneable<Center3InterpImpl>,
     reset();
   }
   void reset() override;
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
+  using InterpImpl::forward;
 
   int stencils() const override { return 3; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  void right(torch::Tensor w, int dim, torch::Tensor out) const;
+  void left(torch::Tensor w, int dim, torch::Tensor const& out) override;
+  void right(torch::Tensor w, int dim, torch::Tensor const& out) override;
 };
 TORCH_MODULE(Center3Interp);
 
@@ -160,15 +170,12 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
     reset();
   }
   void reset() override;
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
+  using InterpImpl::forward;
 
   int stencils() const override { return 3; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  void right(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor right_fallback(torch::Tensor w, int dim) const;
+  void left(torch::Tensor w, int dim, torch::Tensor const& out) override;
+  void right(torch::Tensor w, int dim, torch::Tensor const& out) override;
 };
 TORCH_MODULE(Weno3Interp);
 
@@ -189,21 +196,12 @@ class Center5InterpImpl : public torch::nn::Cloneable<Center5InterpImpl>,
     reset();
   }
   void reset() override;
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
+  using InterpImpl::forward;
 
   int stencils() const override { return 5; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor left_fallback(torch::Tensor w, int dim) const {
-    return w.unfold(dim, stencils(), 1).matmul(cm);
-  }
-
-  void right(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor right_fallback(torch::Tensor w, int dim) const {
-    return w.unfold(dim, stencils(), 1).matmul(cp);
-  }
+  void left(torch::Tensor w, int dim, torch::Tensor const& out) override;
+  void right(torch::Tensor w, int dim, torch::Tensor const& out) override;
 };
 TORCH_MODULE(Center5Interp);
 
@@ -224,17 +222,12 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
     reset();
   }
   void reset() override;
-  std::string print_name() const override { return name(); }
-
-  torch::Tensor forward(torch::Tensor w, int dim) override;
+  using InterpImpl::forward;
 
   int stencils() const override { return 5; }
 
-  void left(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor left_fallback(torch::Tensor w, int dim) const;
-
-  void right(torch::Tensor w, int dim, torch::Tensor out) const;
-  torch::Tensor right_fallback(torch::Tensor w, int dim) const;
+  void left(torch::Tensor w, int dim, torch::Tensor const& out) override;
+  void right(torch::Tensor w, int dim, torch::Tensor const& out) override;
 };
 TORCH_MODULE(Weno5Interp);
 }  // namespace snap

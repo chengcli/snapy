@@ -2,8 +2,6 @@
 #include <ATen/TensorIterator.h>
 
 // snap
-#include <snap/snap.h>
-
 #include "interpolation.hpp"
 #include "recon_dispatch.hpp"
 
@@ -19,18 +17,7 @@ void Weno3InterpImpl::reset() {
   cp = register_buffer("cp", cm.flip({1}));
 }
 
-torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
-  auto vec = w.sizes().vec();
-  vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
-  vec.insert(vec.begin(), 2);
-
-  auto result = torch::empty(vec, w.options());
-  left(w, dim, result[Index::ILT]);
-  right(w, dim, result[Index::IRT]);
-  return result;
-}
-
-void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
+void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor const& out) {
   std::vector<int64_t> squash_dim = {0};
   // add dim to squash dim if w in on cuda
   if (w.device().is_cuda()) {
@@ -48,7 +35,8 @@ void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor out) const {
   at::native::call_weno3(out.device().type(), iter, cm, dim, options.scale());
 }
 
-void Weno3InterpImpl::right(torch::Tensor w, int dim, torch::Tensor out) const {
+void Weno3InterpImpl::right(torch::Tensor w, int dim,
+                            torch::Tensor const& out) {
   std::vector<int64_t> squash_dim = {0};
   if (w.device().is_cuda()) {
     squash_dim.push_back(dim);

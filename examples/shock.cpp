@@ -8,7 +8,7 @@
 using namespace snap;
 
 int main(int argc, char** argv) {
-  auto op = MeshBlockOptions::from_yaml("example_shock.yaml");
+  auto op = MeshBlockOptions::from_yaml("shock.yaml");
   auto block = MeshBlock(op);
 
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
