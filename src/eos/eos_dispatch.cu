@@ -8,27 +8,28 @@
 #include <snap/loops.cuh>
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
-#include "ideal_moist_impl.h"
+//#include "ideal_moist_impl.h"
 
 namespace snap {
 
-void call_ideal_gas_cuda(at::TensorIterator& iter) {
+void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, float gammad) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_ideal_gas_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "ideal_gas_cons2prim_cuda", [&]() {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    native::gpu_kernel<scalar_t, 3>(
-        iter, [=] GPU_LAMBDA(char* const data[3], unsigned int strides[3]) {
+    native::gpu_kernel<4>(
+        iter, [=] GPU_LAMBDA(char* const data[4], unsigned int strides[4]) {
           auto prim = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto cons = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto gammad = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          ideal_gas_cons2prim(prim, cons, gammad, stride);
+          auto ke = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto ie = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
         });
   });
 }
 
-void call_ideal_moist_cuda(at::TensorIterator& iter) {
+/*void call_ideal_moist_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_ideal_moist_cuda", [&]() {
@@ -46,13 +47,13 @@ void call_ideal_moist_cuda(at::TensorIterator& iter) {
           ideal_moist_cons2prim(prim, cons, gammad, feps, fsig, nmass, stride);
         });
   });
-}
+}*/
 
 }  // namespace snap
 
 namespace at::native {
 
-REGISTER_CUDA_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_cuda);
-REGISTER_CUDA_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cuda);
+REGISTER_CUDA_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_cuda);
+//REGISTER_CUDA_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cuda);
 
 }  // namespace at::native

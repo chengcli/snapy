@@ -3,54 +3,57 @@
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
 #include <ATen/native/cpu/Loops.h>
+#include <torch/torch.h>
 
 // snap
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
-#include "ideal_moist_impl.h"
+// #include "ideal_moist_impl.h"
 
 namespace snap {
 
-void call_ideal_gas_cpu(at::TensorIterator& iter) {
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_ideal_gas_cpu", [&] {
+void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, float gammad) {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_gas_cons2prim_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
     iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
       for (int i = 0; i < n; i++) {
         auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        auto gammad = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-        ideal_gas_cons2prim(prim, cons, gammad, stride);
+        auto ke = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+        auto ie = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
+        ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
       }
     });
   });
 }
 
-void call_ideal_gas_mps(at::TensorIterator& iter) {
+void ideal_gas_cons2prim_mps(at::TensorIterator& iter, float gammad) {
   auto prim = iter.output();
   auto cons = iter.input(0);
-  auto gammad = iter.input(1);
-
-  //_apply_conserved_limiter_inplace(cons);
+  auto ke = iter.input(1);
+  auto ie = iter.input(2);
 
   // den -> den
   prim[Index::IDN] = cons[Index::IDN];
 
   // mom -> vel
-  prim.slice(0, 1, Index::IPR) =
-      cons.slice(0, 1, Index::IPR) / prim[Index::IDN];
+  prim.narrow(0, Index::IVX, 3) =
+      cons.narrow(0, Index::IVX, 3) / prim[Index::IDN];
 
-  pcoord->vec_raise_inplace(prim);
+  // pcoord->vec_raise_(prim);
 
-  auto ke =
-      0.5 *
-      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0);
+  ke.set_(
+      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0));
+  ke *= 0.5;
+
+  torch::sub_out(ie, cons[Index::IPR], ke);
 
   // eng -> pr
-  prim[Index::IPR] = (gammad - 1.) * (cons[Index::IPR] - ke);
+  prim[Index::IPR] = (gammad - 1) * ie;
 }
 
-void call_ideal_moist_cpu(at::TensorIterator& iter) {
+/*void call_ideal_moist_cpu(at::TensorIterator& iter) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_ideal_moist_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
@@ -67,19 +70,15 @@ void call_ideal_moist_cpu(at::TensorIterator& iter) {
       }
     });
   });
-}
+}*/
 
 }  // namespace snap
 
 namespace at::native {
 
-DEFINE_DISPATCH(call_ideal_gas);
-DEFINE_DISPATCH(call_ideal_moist);
+DEFINE_DISPATCH(ideal_gas_cons2prim);
 
-REGISTER_ALL_CPU_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_cpu);
-REGISTER_ALL_CPU_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cpu);
-
-REGISTER_MPS_DISPATCH(call_ideal_gas, &snap::call_ideal_gas_mps);
-REGISTER_MPS_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_mps);
+REGISTER_ALL_CPU_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_cpu);
+REGISTER_MPS_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_mps);
 
 }  // namespace at::native

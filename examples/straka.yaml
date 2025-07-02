@@ -10,7 +10,7 @@ species:
 geometry:
   type: cartesian
   bounds: {x1min: 0., x1max: 6.4e3, x2min: 0., x2max: 25.6e3, x3min: 0., x3max: 25.6e3}
-  cells: {nx1: 64, nx2: 256, nx3: 1, nghost: 3}
+  cells: {nx1: 64, nx2: 256, nx3: 256, nghost: 3}
 
 dynamics:
   equation-of-state:
@@ -28,7 +28,7 @@ dynamics:
     horizontal: {type: weno5, scale: false, shock: true}
 
   riemann-solver:
-    type: hllc
+    type: lmars
 
 boundary-condition:
   internal:
