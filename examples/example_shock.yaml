@@ -9,8 +9,8 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 6.4e3, x2min: 0., x2max: 25.6e3, x3min: 0., x3max: 25.6e3}
-  cells: {nx1: 64, nx2: 256, nx3: 1, nghost: 3}
+  bounds: {x1min: -0.5, x1max: 0.5, x2min: -0.5, x2max: 0.5, x3min: -0.5, x3max: 0.5}
+  cells: {nx1: 256, nx2: 256, nx3: 256, nghost: 3}
 
 dynamics:
   equation-of-state:
@@ -28,7 +28,7 @@ dynamics:
     horizontal: {type: weno5, scale: false, shock: true}
 
   riemann-solver:
-    type: lmars
+    type: hllc
 
 boundary-condition:
   internal:
@@ -37,30 +37,16 @@ boundary-condition:
     max-iter: 5
 
   external:
-    x1-inner: reflecting
-    x1-outer: reflecting
-    x2-inner: reflecting
-    x2-outer: reflecting
-    x3-inner: reflecting
-    x3-outer: reflecting
+    x1-inner: outflow
+    x1-outer: outflow
+    x2-inner: outflow
+    x2-outer: outflow
+    x3-inner: outflow
+    x3-outer: outflow
 
 integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: -1
-  tlim: 900
-
-forcing:
-  const-gravity:
-    grav1: -9.8
-
-problem:
-  p0: 1.e5
-  Ts: 300.
-  xc: 0.
-  xr: 4.e3
-  zc: 3.e3
-  zr: 2.e3
-  dT: -15.
-  K: 75.
+  nlim: 200
+  tlim: 1.e9
