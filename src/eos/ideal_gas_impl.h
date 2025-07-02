@@ -8,13 +8,14 @@
 
 #define PRIM(n) prim[(n) * stride]
 #define CONS(n) cons[(n) * stride]
-#define GAMMAD (*gammad)
+#define KE (*ke)
+#define IE (*ie)
 
 namespace snap {
 
 template <typename T>
-inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* gammad,
-                                               int stride) {
+inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* ke, T* ie,
+                                               float gammad, int stride) {
   constexpr int IDN = Index::IDN;
   constexpr int IVX = Index::IVX;
   constexpr int IVY = Index::IVY;
@@ -29,15 +30,17 @@ inline DISPATCH_MACRO void ideal_gas_cons2prim(T* prim, T* cons, T* gammad,
   PRIM(IVY) = CONS(IVY) / PRIM(IDN);
   PRIM(IVZ) = CONS(IVZ) / PRIM(IDN);
 
-  auto ke = 0.5 * (PRIM(IVX) * CONS(IVX) + PRIM(IVY) * CONS(IVY) +
-                   PRIM(IVZ) * CONS(IVZ));
+  KE = 0.5 *
+       (PRIM(IVX) * CONS(IVX) + PRIM(IVY) * CONS(IVY) + PRIM(IVZ) * CONS(IVZ));
+  IE = CONS(IPR) - KE;
 
   // eng -> pr
-  PRIM(IPR) = (GAMMAD - 1.) * (CONS(IPR) - ke);
+  PRIM(IPR) = (gammad - 1.) * IE;
 }
 
 }  // namespace snap
 
 #undef PRIM
 #undef CONS
-#undef GAMMAD
+#undef KE
+#undef IE

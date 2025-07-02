@@ -6,9 +6,8 @@
 
 namespace at::native {
 
-using cons2prim_fn = void (*)(at::TensorIterator &iter);
+using ideal_gas_fn = void (*)(at::TensorIterator &iter, float gammad);
 
-DECLARE_DISPATCH(cons2prim_fn, call_ideal_gas);
-DECLARE_DISPATCH(cons2prim_fn, call_ideal_moist);
+DECLARE_DISPATCH(ideal_gas_fn, ideal_gas_cons2prim);
 
 }  // namespace at::native
