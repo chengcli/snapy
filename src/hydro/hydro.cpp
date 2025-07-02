@@ -101,6 +101,18 @@ void HydroImpl::reset() {
 
   _vic = register_buffer("I",
                          torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+
+  // initialize timers
+  timer["U->W"] = 0.0;
+  timer["W->LR1"] = 0.0;
+  timer["LR1->F1"] = 0.0;
+  timer["W->LR2"] = 0.0;
+  timer["LR2->F2"] = 0.0;
+  timer["W->LR3"] = 0.0;
+  timer["LR3->F3"] = 0.0;
+  timer["F->D"] = 0.0;
+  timer["W->R"] = 0.0;
+  timer["U->I"] = 0.0;
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
@@ -136,43 +148,90 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
                                  torch::Tensor solid) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
+  auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
   auto w = pib->mark_solid(peos->forward(u), solid);
 
+  auto time1 = std::chrono::high_resolution_clock::now();
+  timer["U->W"] +=
+      std::chrono::duration<double, std::milli>(time1 - start).count();
+
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
+  std::chrono::high_resolution_clock::time_point time2;
+
   if (u.size(DIM1) > 1) {
     auto wp = pproj->forward(w, pcoord->dx1f);
     auto wtmp = precon1->forward(wp, DIM1);
+
+    auto time2a = std::chrono::high_resolution_clock::now();
+    timer["W->LR1"] +=
+        std::chrono::duration<double, std::milli>(time2a - time1).count();
+
     pproj->restore_inplace(wtmp);
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
-    _flux1.set_(priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1));
+
+    priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, _flux1);
+
+    time2 = std::chrono::high_resolution_clock::now();
+    timer["LR1->F1"] +=
+        std::chrono::duration<double, std::milli>(time2 - time2a).count();
   }
 
   //// ------------ (3) Calculate dimension 2 flux ------------ ////
   if (u.size(DIM2) > 1) {
     auto wtmp = precon23->forward(w, DIM2);
+
+    auto time2c = std::chrono::high_resolution_clock::now();
+    timer["W->LR2"] +=
+        std::chrono::duration<double, std::milli>(time2c - time2).count();
+
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
-    _flux2.set_(priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2));
+    priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2, _flux2);
+
+    time2 = std::chrono::high_resolution_clock::now();
+    timer["LR2->F2"] +=
+        std::chrono::duration<double, std::milli>(time2 - time2c).count();
   }
 
   //// ------------ (4) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
     auto wtmp = precon23->forward(w, DIM3);
+
+    auto time2e = std::chrono::high_resolution_clock::now();
+    timer["W->LR3"] +=
+        std::chrono::duration<double, std::milli>(time2e - time2).count();
+
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
-    _flux3.set_(priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3));
+    priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3, _flux3);
+
+    time2 = std::chrono::high_resolution_clock::now();
+    timer["LR3->F3"] +=
+        std::chrono::duration<double, std::milli>(time2 - time2e).count();
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
   _div.set_(pcoord->forward(_flux1, _flux2, _flux3));
 
+  auto time3 = std::chrono::high_resolution_clock::now();
+  timer["F->D"] +=
+      std::chrono::duration<double, std::milli>(time3 - time2).count();
+
   //// ------------ (6) Calculate external forcing ------------ ////
   auto du = -dt * _div;
   for (auto& f : forcings) f.forward(du, w, dt);
+
+  auto time4 = std::chrono::high_resolution_clock::now();
+  timer["W->R"] +=
+      std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
   torch::Tensor du0 = du.clone();
   // pvic->forward(w, du, gamma - 1., dt);
   torch::sub_out(_vic, du, du0);
+
+  auto time5 = std::chrono::high_resolution_clock::now();
+  timer["U->I"] +=
+      std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return du;
 }

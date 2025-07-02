@@ -16,7 +16,7 @@ void RoeSolverImpl::reset() {
 }
 
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                     int dim, torch::Tensor dummy) {
+                                     int dim, torch::Tensor flx) {
   using Index::IDN;
   using Index::IPR;
   using Index::IVX;
@@ -77,7 +77,7 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
       wr[IDN] * wr.narrow(0, IVX, 3) - wl[IDN] * wl.narrow(0, IVX, 3);
   du[IPR] = er - el;
 
-  auto flx = 0.5 * (fl + fr);
+  flx.set_(0.5 * (fl + fr));
 
   auto vsq = wroe.narrow(0, IVX, 3).square().sum(0);
   auto q = wroe[IPR] - 0.5 * vsq;

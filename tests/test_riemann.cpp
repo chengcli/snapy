@@ -88,7 +88,8 @@ TEST_P(DeviceTest, test_lmars) {
 
   auto wlr = precon->forward(w, DIM1);
 
-  auto flux = prsolver->forward(wlr[0], wlr[1], DIM1);
+  auto flux = torch::zeros_like(wlr[0]);
+  prsolver->forward(wlr[0], wlr[1], DIM1, flux);
   std::cout << "flux.sizes(): " << flux.sizes() << std::endl;
 
   auto end = std::chrono::high_resolution_clock::now();
@@ -130,7 +131,8 @@ TEST_P(DeviceTest, test_hllc) {
 
   auto wlr = precon->forward(w, DIM1);
 
-  auto flux = prsolver->forward(wlr[0], wlr[1], DIM1);
+  auto flux = torch::zeros_like(wlr[0]);
+  prsolver->forward(wlr[0], wlr[1], DIM1, flux);
   std::cout << "flux.sizes(): " << flux.sizes() << std::endl;
 
   auto end = std::chrono::high_resolution_clock::now();

@@ -15,9 +15,7 @@ void LmarsSolverImpl::reset() {
 }
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                       int dim, torch::Tensor dummy) {
-  auto flx = torch::empty_like(wl);
-
+                                       int dim, torch::Tensor flx) {
   wl[IDN].clamp_min_(options.eos().density_floor());
   wl[IPR].clamp_min_(options.eos().pressure_floor());
 

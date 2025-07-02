@@ -20,8 +20,13 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
   }
 
   op.shock() = node[section]["shock"].as<bool>(false);
+  printf("* shock = %s\n", op.shock() ? "true" : "false");
+
   op.interp().type() = node[section]["type"].as<std::string>("dc");
+  printf("* interp.type = %s\n", op.interp().type().c_str());
+
   op.interp().scale() = node[section]["scale"].as<bool>(false);
+  printf("* interp.scale = %s\n", op.interp().scale() ? "true" : "false");
 
   return op;
 }

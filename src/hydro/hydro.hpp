@@ -66,6 +66,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   InternalBoundary pib = nullptr;
   VerticalImplicit pvic = nullptr;
 
+  std::map<std::string, double> timer;
+
   //! forcings
   std::vector<torch::nn::AnyModule> forcings;
 
@@ -82,6 +84,20 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                         torch::Tensor solid = torch::Tensor());
 
   void fix_negative_dp_inplace(torch::Tensor wlr, torch::Tensor wdc) const;
+
+  void reset_timer() {
+    for (auto& t : timer) {
+      t.second = 0.0;
+    }
+  }
+
+  void report_timer(std::ostream& stream) {
+    for (const auto& t : timer) {
+      stream << "hydro[" << t.first << "] = " << t.second << " miliseconds"
+             << std::endl;
+    }
+    reset_timer();
+  }
 
  private:
   torch::Tensor _flux1, _flux2, _flux3, _div, _vic;
