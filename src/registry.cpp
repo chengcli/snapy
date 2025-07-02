@@ -1,6 +1,9 @@
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/eos/equation_of_state.hpp>
+#include <snap/eos/ideal_gas.hpp>
+#include <snap/eos/ideal_moist.hpp>
+#include <snap/eos/moist_mixture.hpp>
+#include <snap/eos/shallow_water.hpp>
 #include <snap/input/parameter_input.hpp>
 #include <snap/recon/interpolation.hpp>
 #include <snap/riemann/riemann_solver.hpp>
@@ -12,6 +15,8 @@ EquationOfState register_module_op(torch::nn::Module *p, std::string name,
     return p->register_module(name, MoistMixture(op));
   } else if (op.type() == "ideal-gas") {
     return p->register_module(name, IdealGas(op));
+  } else if (op.type() == "ideal-moist") {
+    return p->register_module(name, IdealMoist(op));
   } else if (op.type() == "aneos") {
     // return p->register_module(name, IdealMoist(op));
   } else if (op.type() == "shallow-water") {

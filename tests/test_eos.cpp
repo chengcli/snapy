@@ -8,7 +8,7 @@
 // snapy
 #include <snap/snap.h>
 
-#include <snap/eos/equation_of_state.hpp>
+#include <snap/eos/moist_mixture.hpp>
 
 // tests
 #include "device_testing.hpp"

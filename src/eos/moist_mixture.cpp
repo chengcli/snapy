@@ -9,7 +9,7 @@
 
 #include <snap/registry.hpp>
 
-#include "equation_of_state.hpp"
+#include "moist_mixture.hpp"
 
 namespace snap {
 

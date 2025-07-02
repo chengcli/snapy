@@ -9,7 +9,7 @@
 
 #include <snap/registry.hpp>
 
-#include "equation_of_state.hpp"
+#include "ideal_gas.hpp"
 
 namespace snap {
 
