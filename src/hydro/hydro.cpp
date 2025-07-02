@@ -34,9 +34,6 @@ void HydroImpl::reset() {
   precon23 = register_module("recon23", Reconstruct(options.recon23()));
   options.recon23() = precon23->options;
 
-  // set up reconstruction-dc model
-  precon_dc = register_module("recon_dc", Reconstruct(ReconstructOptions()));
-
   // set up riemann-solver model
   priemann = register_module_op(this, "riemann", options.riemann());
   options.riemann() = priemann->options;
@@ -142,54 +139,27 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   //// ------------ (1) Calculate Primitives ------------ ////
   auto w = pib->mark_solid(peos->forward(u), solid);
 
-  auto gamma = peos->compute("W->A", {w});
-
-  // check_eos(GET_SHARED("hydro/w"), options.nghost());
-
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
     auto wp = pproj->forward(w, pcoord->dx1f);
-
-    // high-order
     auto wtmp = precon1->forward(wp, DIM1);
     pproj->restore_inplace(wtmp);
-
-    // low-order
-    auto wtmp_dc = precon_dc->forward(wp, DIM1);
-    pproj->restore_inplace(wtmp_dc);
-    fix_negative_dp_inplace(wtmp, wtmp_dc);
-
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
-    // check_recon(wlr1, options.nghost(), 1, 0, 0);
-
-    _flux1.set_(
-        priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, gamma));
+    _flux1.set_(priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1));
   }
 
   //// ------------ (3) Calculate dimension 2 flux ------------ ////
   if (u.size(DIM2) > 1) {
-    // high-order
     auto wtmp = precon23->forward(w, DIM2);
-    fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM2));
-
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
-    // check_recon(wlr2, options.nghost(), 0, 1, 0);
-
-    _flux2.set_(
-        priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2, gamma));
+    _flux2.set_(priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2));
   }
 
   //// ------------ (4) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
-    // high-order
     auto wtmp = precon23->forward(w, DIM3);
-    fix_negative_dp_inplace(wtmp, precon_dc->forward(w, DIM3));
-
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
-    // check_recon(wlr3, options.nghost(), 0, 0, 1);
-
-    _flux3.set_(
-        priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3, gamma));
+    _flux3.set_(priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3));
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
@@ -201,7 +171,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
   //// ------------ (7) Perform implicit correction ------------ ////
   torch::Tensor du0 = du.clone();
-  pvic->forward(w, du, gamma - 1., dt);
+  // pvic->forward(w, du, gamma - 1., dt);
   torch::sub_out(_vic, du, du0);
 
   return du;

@@ -104,7 +104,7 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
 
   // number of variables
   int nvar = at::native::ensure_nonempty_size(iter.output(), 0);
-  size_t shared = (len[3 + dim - ndim] * nvar + buffers) * sizeof(scalar_t);
+  size_t shared = (block.x * nvar + buffers) * sizeof(scalar_t);
 
   auto stream = at::cuda::getCurrentCUDAStream();
 
