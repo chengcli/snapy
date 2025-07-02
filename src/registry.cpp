@@ -10,6 +10,8 @@ EquationOfState register_module_op(torch::nn::Module *p, std::string name,
                                    EquationOfStateOptions const &op) {
   if (op.type() == "moist-mixture") {
     return p->register_module(name, MoistMixture(op));
+  } else if (op.type() == "ideal-gas") {
+    return p->register_module(name, IdealGas(op));
   } else if (op.type() == "aneos") {
     // return p->register_module(name, IdealMoist(op));
   } else if (op.type() == "shallow-water") {

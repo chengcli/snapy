@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
   out3.combine_blocks();
 
   int count = 0;
-  auto pthermo = dynamic_cast<MoistMixtureImpl*>(peos.get())->pthermo;
+  auto pthermo = dynamic_cast<IdealGasImpl*>(peos.get())->pthermo;
 
   while (!block->pintg->stop(count++, current_time)) {
     auto dt = block->max_time_step();

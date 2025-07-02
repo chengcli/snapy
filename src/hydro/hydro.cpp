@@ -116,7 +116,6 @@ void HydroImpl::reset() {
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
-  // should be preceeded by initialize, W->I, or W->U
   auto gamma = peos->compute("W->A", {w});
   auto cs = peos->compute("WA->L", {w, gamma});
 
