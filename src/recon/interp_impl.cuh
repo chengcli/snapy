@@ -148,11 +148,9 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
   __syncthreads();
 
   // first thread print shared memory array
-  // if (idx[idim] == 0) {
-  // for (int i = 0; i < nvar * nt[idim] + N; ++i) {
-  //  printf("smem[%d] = %f\n", i, smem[i]);
-  //}
-  // for (int i = 0; i < nt[idim]; ++i) {
+  // if (id == 0) {
+  // for (int i = 0; i < nvar * nt + N; ++i)
+  //   printf("smem[%d] = %f\n", i, smem[i]);
   //}
 
   // calculation

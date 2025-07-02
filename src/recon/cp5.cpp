@@ -17,11 +17,8 @@ void Center5InterpImpl::reset() {
 }
 
 torch::Tensor Center5InterpImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
-  int nghost = stencils() / 2;
-  vec[dim] -= 2 * nghost;
+  vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
   vec.insert(vec.begin(), 2);
 
   auto result = torch::empty(vec, w.options());

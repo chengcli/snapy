@@ -62,7 +62,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   Reconstruct precon1 = nullptr;
   Reconstruct precon23 = nullptr;
-  Reconstruct precon_dc = nullptr;
 
   InternalBoundary pib = nullptr;
   VerticalImplicit pvic = nullptr;

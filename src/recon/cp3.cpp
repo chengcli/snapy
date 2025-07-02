@@ -17,8 +17,7 @@ void Center3InterpImpl::reset() {
 
 torch::Tensor Center3InterpImpl::forward(torch::Tensor w, int dim) {
   auto vec = w.sizes().vec();
-  int nghost = stencils() / 2;
-  vec[dim] -= 2 * nghost;
+  vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
   vec.insert(vec.begin(), 2);
 
   auto result = torch::empty(vec, w.options());
