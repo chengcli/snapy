@@ -15,17 +15,6 @@ void Center3InterpImpl::reset() {
   cp = register_buffer("cp", cm.flip({0}));
 }
 
-torch::Tensor Center3InterpImpl::forward(torch::Tensor w, int dim) {
-  auto vec = w.sizes().vec();
-  vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
-  vec.insert(vec.begin(), 2);
-
-  auto result = torch::empty(vec, w.options());
-  left(w, dim, result[Index::ILT]);
-  right(w, dim, result[Index::IRT]);
-  return result;
-}
-
 void Center3InterpImpl::left(torch::Tensor w, int dim,
                              torch::Tensor const& out) {
   std::vector<int64_t> squash_dim = {0};

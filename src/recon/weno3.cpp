@@ -2,8 +2,6 @@
 #include <ATen/TensorIterator.h>
 
 // snap
-#include <snap/snap.h>
-
 #include "interpolation.hpp"
 #include "recon_dispatch.hpp"
 
@@ -17,17 +15,6 @@ void Weno3InterpImpl::reset() {
                                            torch::kFloat64));
 
   cp = register_buffer("cp", cm.flip({1}));
-}
-
-torch::Tensor Weno3InterpImpl::forward(torch::Tensor w, int dim) {
-  auto vec = w.sizes().vec();
-  vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
-  vec.insert(vec.begin(), 2);
-
-  auto result = torch::empty(vec, w.options());
-  left(w, dim, result[Index::ILT]);
-  right(w, dim, result[Index::IRT]);
-  return result;
 }
 
 void Weno3InterpImpl::left(torch::Tensor w, int dim, torch::Tensor const& out) {
