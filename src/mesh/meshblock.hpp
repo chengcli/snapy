@@ -51,6 +51,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 
+  std::map<std::string, double> timer;
+
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
   explicit MeshBlockImpl(MeshBlockOptions const& options_);
@@ -67,6 +69,20 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   double max_time_step(torch::Tensor solid = torch::Tensor());
 
   int forward(double dt, int stage, torch::Tensor solid = torch::Tensor());
+
+  void reset_timer() {
+    for (auto& t : timer) {
+      t.second = 0.0;
+    }
+  }
+
+  void report_timer(std::ostream& stream) {
+    for (const auto& t : timer) {
+      stream << "meshblock[" << t.first << "] = " << t.second << " miliseconds"
+             << std::endl;
+    }
+    reset_timer();
+  }
 
  private:
   //! stage registers

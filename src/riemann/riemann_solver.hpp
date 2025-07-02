@@ -21,7 +21,9 @@ struct RiemannSolverOptions {
   RiemannSolverOptions() = default;
 
   ADD_ARG(std::string, type) = "roe";
-  ADD_ARG(std::string, dir) = "xy";
+
+  // used in shallow water equations
+  ADD_ARG(std::string, dir) = "omni";
 
   //! submodule options
   ADD_ARG(EquationOfStateOptions, eos);
@@ -34,7 +36,7 @@ class RiemannSolverImpl {
 
   //! Solver the Riemann problem
   virtual torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                                torch::Tensor vel = torch::Tensor());
+                                torch::Tensor vel_or_flux);
 
  protected:
   //! Disable constructor
@@ -57,7 +59,7 @@ class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel = torch::Tensor()) override;
+                        torch::Tensor vel_or_flux) override;
 };
 TORCH_MODULE(UpwindSolver);
 
@@ -77,7 +79,7 @@ class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor dummy = torch::Tensor()) override;
+                        torch::Tensor out) override;
 };
 TORCH_MODULE(RoeSolver);
 
@@ -98,10 +100,7 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel = torch::Tensor()) override;
-
-  torch::Tensor forward_fallback(torch::Tensor wl, torch::Tensor wr, int dim,
-                                 torch::Tensor gammad);
+                        torch::Tensor out) override;
 };
 TORCH_MODULE(LmarsSolver);
 
@@ -122,10 +121,7 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel = torch::Tensor()) override;
-
-  torch::Tensor forward_fallback(torch::Tensor wl, torch::Tensor wr, int dim,
-                                 torch::Tensor gammad);
+                        torch::Tensor out) override;
 };
 TORCH_MODULE(HLLCSolver);
 
@@ -145,7 +141,7 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel = torch::Tensor()) override;
+                        torch::Tensor out) override;
 };
 TORCH_MODULE(ShallowRoeSolver);
 }  // namespace snap

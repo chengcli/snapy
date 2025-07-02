@@ -171,6 +171,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   auto const& hydro_u = phydro->peos->get_buffer("U");
   auto const& scalar_v = pscalar->get_buffer("V");
 
+  auto start = std::chrono::high_resolution_clock::now();
   // -------- (1) save initial state --------
   if (stage == 0) {
     if (phydro->peos->nvar() > 0) {
@@ -192,11 +193,17 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   if (phydro->peos->nvar() > 0) {
     fut_hydro_du = phydro->forward(hydro_u, dt, solid);
   }
+  auto time1 = std::chrono::high_resolution_clock::now();
+  timer["hydro"] +=
+      std::chrono::duration<double, std::milli>(time1 - start).count();
 
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
     fut_scalar_dv = pscalar->forward(scalar_v, dt);
   }
+  auto time2 = std::chrono::high_resolution_clock::now();
+  timer["scalar"] +=
+      std::chrono::duration<double, std::milli>(time2 - time1).count();
 
   // -------- (4) multi-stage averaging --------
   if (phydro->peos->nvar() > 0) {
@@ -208,6 +215,9 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     scalar_v.set_(pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
     _scalar_v1.copy_(scalar_v);
   }
+  auto time3 = std::chrono::high_resolution_clock::now();
+  timer["averaging"] +=
+      std::chrono::duration<double, std::milli>(time3 - time2).count();
 
   // -------- (5) update ghost zones --------
   BoundaryFuncOptions op;
@@ -226,6 +236,9 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     for (int i = 0; i < options.bfuncs().size(); ++i)
       options.bfuncs()[i](scalar_v, 3 - i / 2, op);
   }
+  auto time4 = std::chrono::high_resolution_clock::now();
+  timer["bc"] +=
+      std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   return 0;
 }
