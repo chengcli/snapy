@@ -31,17 +31,10 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
                     Interp &pinterp, torch::Tensor wlr) {
   if (il > iu) return;
 
-  /*auto outr = wlr[Index::ILT].slice(dim, il, iu + 2);
   auto outl = wlr[Index::IRT].slice(dim, il - 1, iu + 1);
-  pinterp->left(w, dim, outr);
-  pinterp->right(w, dim, outl);*/
-
-  auto result = pinterp->forward(w, dim);
-
-  wlr[Index::ILT].slice(dim, il, iu + 1) =
-      result[Index::IRT].narrow(dim, 0, iu - il + 1);
-  wlr[Index::IRT].slice(dim, il, iu + 1) =
-      result[Index::ILT].narrow(dim, 1, iu - il + 1);
+  auto outr = wlr[Index::ILT].slice(dim, il, iu + 2);
+  pinterp->left(w, dim, outl);
+  pinterp->right(w, dim, outr);
 }
 
 ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)

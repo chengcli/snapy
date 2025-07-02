@@ -60,7 +60,7 @@ class DonorCellInterpImpl : public torch::nn::Cloneable<DonorCellInterpImpl>,
   }
   void reset() override {}
   std::string print_name() const override { return name(); }
-  torch::Tensor forward(torch::Tensor w, int dim) {
+  torch::Tensor forward(torch::Tensor w, int dim) override {
     auto vec = w.sizes().vec();
     vec.insert(vec.begin(), 2);
     return w.squeeze(-1).expand(vec);
@@ -79,7 +79,7 @@ class PLMInterpImpl : public torch::nn::Cloneable<PLMInterpImpl>,
   void reset() override {}
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 3; }
 
@@ -105,7 +105,7 @@ class PPMInterpImpl : public torch::nn::Cloneable<PPMInterpImpl>,
   void reset() override {}
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 5; }
 
@@ -138,7 +138,7 @@ class Center3InterpImpl : public torch::nn::Cloneable<Center3InterpImpl>,
   void reset() override;
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 3; }
 
@@ -166,7 +166,7 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
   void reset() override;
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 3; }
 
@@ -194,7 +194,7 @@ class Center5InterpImpl : public torch::nn::Cloneable<Center5InterpImpl>,
   void reset() override;
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 5; }
 
@@ -222,7 +222,7 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
   void reset() override;
   std::string print_name() const override { return name(); }
 
-  torch::Tensor forward(torch::Tensor w, int dim);
+  torch::Tensor forward(torch::Tensor w, int dim) override;
 
   int stencils() const override { return 5; }
 

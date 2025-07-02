@@ -2,7 +2,7 @@
 # Examples Problems
 # =================
 
-setup_problem(example_shock)
+setup_problem(shock)
 setup_problem(straka)
 
 file(GLOB inputs *.yaml)
