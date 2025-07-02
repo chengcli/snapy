@@ -33,8 +33,8 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
 
   auto outl = wlr[Index::IRT].slice(dim, il - 1, iu + 1);
   auto outr = wlr[Index::ILT].slice(dim, il, iu + 2);
-  pinterp->left(w, dim, outl);
-  pinterp->right(w, dim, outr);
+
+  pinterp->forward(w, dim, outl, outr);
 }
 
 ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
