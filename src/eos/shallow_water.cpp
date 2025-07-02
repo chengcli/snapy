@@ -1,9 +1,9 @@
 // snap
+#include "shallow_water.hpp"
+
 #include <snap/snap.h>
 
 #include <snap/registry.hpp>
-
-#include "equation_of_state.hpp"
 
 namespace snap {
 
