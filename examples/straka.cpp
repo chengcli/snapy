@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
-  block->to(torch::kCUDA);
+  // block->to(torch::kCUDA);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     }
 
     current_time += dt;
-    if ((count + 1) % 1000 == 0) {
+    if ((count + 1) % 100 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
       block->phydro->report_timer(std::cout);
       block->report_timer(std::cout);

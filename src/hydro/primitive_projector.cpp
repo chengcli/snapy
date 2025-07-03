@@ -12,25 +12,49 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
     YAML::Node const &root) {
   PrimitiveProjectorOptions op;
 
-  if (!root["dynamics"]) return op;
+  if (!root["dynamics"]) {
+    TORCH_WARN(
+        "no section 'dynamics' specified, not using primitive projector");
+    return op;
+  }
 
   if (root["dynamics"]["vertical-projection"]) {
     op.type() =
         root["dynamics"]["vertical-projection"]["type"].as<std::string>("none");
+    printf("* type = %s\n", op.type().c_str());
+
     op.margin() =
         root["dynamics"]["vertical-projection"]["pressure-margin"].as<double>(
             1.e-6);
+    printf("* pressure-margin = %e\n", op.margin());
+  } else {
+    TORCH_WARN(
+        "no section 'dynamics.vertical-projection' specified, not using "
+        "primitive projector");
+    return op;
   }
 
   if (root["forcing"]) {
     if (root["forcing"]["const-gravity"])
       op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.);
+  } else {
+    TORCH_WARN("no section 'forcing' specified, not using primitive projector");
   }
 
-  if (!root["geometry"]) return op;
-  if (!root["geometry"]["cells"]) return op;
+  if (!root["geometry"]) {
+    TORCH_WARN(
+        "no section 'geometry' specified, using default ghost zone size");
+    return op;
+  }
+
+  if (!root["geometry"]["cells"]) {
+    TORCH_WARN(
+        "no section 'geometry.cells' specified, using default ghost zone size");
+    return op;
+  }
 
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+  printf("* nghost = %d\n", op.nghost());
 
   return op;
 }

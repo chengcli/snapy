@@ -12,17 +12,12 @@
 #include "vertical_implicit.hpp"
 
 namespace snap {
-template <int N>
-__attribute__((weak)) void vic_forward_cuda(at::TensorIterator& iter, double dt,
-                                            int il, int iu) {}
-
-template <int N>
-void vic_forward_cpu(at::TensorIterator& iter, double dt, int il, int iu) {}
 
 ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
   ImplicitOptions op;
 
   if (!root["dynamics"]) return op;
+
   if (!root["dynamics"]["integrator"]) return op;
 
   switch (root["dynamics"]["integrator"]["implicit-scheme"].as<int>(0)) {
@@ -41,15 +36,18 @@ ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
     default:
       TORCH_CHECK(false, "Unsupported implicit scheme");
   }
+  print("* implicit-scheme = %s\n", op.type().c_str());
 
   if (!root["geometry"]) return op;
   if (!root["geometry"]["cells"]) return op;
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+  print("* nghost = %d\n", op.nghost());
 
   if (!root["forcing"]) return op;
   if (!root["forcing"]["const-gravity"]) return op;
 
   op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.0);
+  print("* gravity = %e\n", op.grav());
 
   return op;
 }
@@ -88,8 +86,6 @@ torch::Tensor VerticalImplicitImpl::diffusion_matrix(torch::Tensor w,
 
 torch::Tensor VerticalImplicitImpl::forward(torch::Tensor w, torch::Tensor du,
                                             torch::Tensor gm1, double dt) {
-  torch::NoGradGuard no_grad;
-
   if (options.scheme() == 0) {  // null operation
     return du;
   }
@@ -187,20 +183,12 @@ torch::Tensor VerticalImplicitImpl::forward(torch::Tensor w, torch::Tensor du,
           .add_owned_input(corr.permute({2, 0, 1}))
           .build();
 
-  if (w.is_cpu()) {
-    if (msize == 3) {
-      vic_forward_cpu<3>(iter, dt, is, ie - 1);
-    } else {
-      vic_forward_cpu<5>(iter, dt, is, ie - 1);
-    }
-  } else if (w.is_cuda()) {
-    if (msize == 3) {
-      vic_forward_cuda<3>(iter, dt, is, ie - 1);
-    } else {
-      vic_forward_cuda<5>(iter, dt, is, ie - 1);
-    }
+  if (msize == 3) {
+    at::native::vic_forward3(du.device().type(), iter, dt, is, ie - 1);
+  } else if (msize == 5) {
+    at::native::vic_forward5(du.device().type(), iter, dt, is, ie - 1);
   } else {
-    TORCH_CHECK(false, "Unsupported device type");
+    TORCH_CHECK(false, "Unsupported matrix size");
   }
 
   return du;
