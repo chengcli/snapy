@@ -20,6 +20,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   }
 
   // project primitive variables
+  printf("- reading projector options from config\n");
   op.proj() = PrimitiveProjectorOptions::from_yaml(config);
 
   if (!config["dynamics"]) {
@@ -61,6 +62,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   op.riemann().eos() = op.eos();
 
   // internal boundaries
+  printf("- reading boundary options from config\n");
   op.ib() = InternalBoundaryOptions::from_yaml(config);
 
   // implicit options

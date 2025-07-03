@@ -6,6 +6,7 @@
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <c10/core/ScalarType.h>
 
 // snap
 #include <snap/utils/cuda_utils.h>

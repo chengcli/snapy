@@ -6,7 +6,7 @@
 
 namespace at::native {
 
-using vic_forward_fn = void (*)(at::TensorIterator &iter, float dt, int il,
+using vic_forward_fn = void (*)(at::TensorIterator &iter, double dt, int il,
                                 int iu);
 
 using alloc_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,

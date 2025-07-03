@@ -9,6 +9,7 @@
 
 #include <snap/registry.hpp>
 
+#include "implicit_dispatch.hpp"
 #include "vertical_implicit.hpp"
 
 namespace snap {
@@ -36,18 +37,18 @@ ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
     default:
       TORCH_CHECK(false, "Unsupported implicit scheme");
   }
-  print("* implicit-scheme = %s\n", op.type().c_str());
+  printf("* implicit-scheme = %s\n", op.type().c_str());
 
   if (!root["geometry"]) return op;
   if (!root["geometry"]["cells"]) return op;
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-  print("* nghost = %d\n", op.nghost());
+  printf("* nghost = %d\n", op.nghost());
 
   if (!root["forcing"]) return op;
   if (!root["forcing"]["const-gravity"]) return op;
 
   op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.0);
-  print("* gravity = %e\n", op.grav());
+  printf("* gravity = %e\n", op.grav());
 
   return op;
 }

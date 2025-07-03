@@ -73,10 +73,14 @@ void free_eigen_cpu(char *&a, char *&b, char *&c, char *&delta, char *&corr) {
 
 namespace at::native {
 
-DEFINE_DISPATCH(vic_forward);
+DEFINE_DISPATCH(vic_forward3);
+DEFINE_DISPATCH(vic_forward5);
+DEFINE_DISPATCH(alloc_eigen3);
+DEFINE_DISPATCH(alloc_eigen5);
+DEFINE_DISPATCH(free_eigen);
 
 REGISTER_ALL_CPU_DISPATCH(vic_forward3, &snap::vic_forward_cpu<3>);
-REGISTER_ALL_CPU_DISPATCH(vic_forward3, &snap::vic_forward_cpu<5>);
+REGISTER_ALL_CPU_DISPATCH(vic_forward5, &snap::vic_forward_cpu<5>);
 
 REGISTER_ALL_CPU_DISPATCH(alloc_eigen3, &snap::alloc_eigen_cpu<3>);
 REGISTER_ALL_CPU_DISPATCH(alloc_eigen5, &snap::alloc_eigen_cpu<5>);
