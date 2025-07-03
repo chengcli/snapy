@@ -1,6 +1,11 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// kintera
+#include <kintera/constants.h>
+
+#include <kintera/species.hpp>
+
 // snap
 #include <snap/snap.h>
 
@@ -12,25 +17,51 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
     YAML::Node const &root) {
   PrimitiveProjectorOptions op;
 
-  if (!root["dynamics"]) return op;
+  if (!root["dynamics"]) {
+    TORCH_WARN(
+        "no section 'dynamics' specified, not using primitive projector");
+    return op;
+  }
 
   if (root["dynamics"]["vertical-projection"]) {
     op.type() =
         root["dynamics"]["vertical-projection"]["type"].as<std::string>("none");
+
     op.margin() =
         root["dynamics"]["vertical-projection"]["pressure-margin"].as<double>(
             1.e-6);
   }
+  printf("* type = %s\n", op.type().c_str());
+  printf("* pressure-margin = %e\n", op.margin());
 
   if (root["forcing"]) {
     if (root["forcing"]["const-gravity"])
       op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.);
   }
+  printf("* grav = %e\n", op.grav());
 
-  if (!root["geometry"]) return op;
-  if (!root["geometry"]["cells"]) return op;
+  if (kintera::species_weights.size() == 0) {
+    TORCH_CHECK(false,
+                "PrimitiveProjectorOptions: species is not initialized. ",
+                "Please initialize it first.");
+  }
+
+  auto mu = kintera::species_weights[0];
+  op.Rd() = kintera::constants::Rgas / mu;
+  printf("* Rd = %e\n", op.Rd());
+
+  if (!root["geometry"]) {
+    printf("* nghost = %d\n", op.nghost());
+    return op;
+  }
+
+  if (!root["geometry"]["cells"]) {
+    printf("* nghost = %d\n", op.nghost());
+    return op;
+  }
 
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+  printf("* nghost = %d\n", op.nghost());
 
   return op;
 }

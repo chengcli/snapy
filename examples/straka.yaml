@@ -20,7 +20,7 @@ dynamics:
     limiter: false
 
   vertical-projection:
-    type: none
+    type: temperature
     pressure-margin: 1.e-6
 
   reconstruct:
