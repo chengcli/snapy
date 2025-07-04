@@ -14,7 +14,7 @@ geometry:
 
 dynamics:
   equation-of-state:
-    type: moist-mixture
+    type: ideal-gas
     density-floor:  1.e-10
     pressure-floor: 1.e-10
     limiter: false

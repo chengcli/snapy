@@ -9,9 +9,9 @@ namespace at::native {
 using vic_forward_fn = void (*)(at::TensorIterator &iter, double dt, int il,
                                 int iu);
 
-using alloc_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,
-                                char *&corr, int ncol, int nlayer,
-                                c10::ScalarType dtype);
+using alloc_eigen_fn = void (*)(c10::ScalarType dtype, char *&a, char *&b,
+                                char *&c, char *&delta, char *&corr, int ncol,
+                                int nlayer);
 
 using free_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,
                                char *&corr);
