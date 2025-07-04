@@ -1,11 +1,12 @@
 // torch
 #include <torch/extension.h>
 
+// kintera
+#include <kintera/thermo/thermo.hpp>
+
 // snap
 #include <snap/eos/eos_formatter.hpp>
 #include <snap/eos/equation_of_state.hpp>
-#include <snap/input/parameter_input.hpp>
-#include <snap/thermo/thermodynamics.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -15,7 +16,6 @@ namespace py = pybind11;
 void bind_eos(py::module &m) {
   py::class_<snap::EquationOfStateOptions>(m, "EquationOfStateOptions")
       .def(py::init<>())
-      .def(py::init<snap::ParameterInput>())
       .def("__repr__",
            [](const snap::EquationOfStateOptions &a) {
              return fmt::format("EquationOfStateOptions{}", a);
@@ -28,11 +28,14 @@ void bind_eos(py::module &m) {
                   thermo)
       .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptions, coord);
 
-  ADD_SNAP_MODULE(IdealGas, EquationOfStateOptions)
-      .def("sound_speed", &snap::IdealGasImpl::sound_speed)
-      .def("prim2cons", &snap::IdealGasImpl::prim2cons);
-
-  ADD_SNAP_MODULE(ShallowWater, EquationOfStateOptions)
-      .def("sound_speed", &snap::ShallowWaterImpl::sound_speed)
-      .def("prim2cons", &snap::ShallowWaterImpl::prim2cons);
+  py::class_<snap::EquationOfStateImpl>(m, "EquationOfState")
+      .def(py::init<>())
+      .def("__repr__",
+           [](const snap::EquationOfStateImpl &a) {
+             return fmt::format("EquationOfState{}", a.options);
+           })
+      .def("nvar", &snap::EquationOfStateImpl::nvar)
+      .def("compute", &snap::EquationOfStateImpl::compute)
+      .def("buffer", &snap::EquationOfStateImpl::get_buffer)
+      .def("forward", &snap::EquationOfStateImpl::forward);
 }

@@ -6,8 +6,8 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
+#include <snap/bc/bc.hpp>
 #include <snap/bc/bc_formatter.hpp>
-#include <snap/bc/boundary_condition.hpp>
 #include <snap/bc/internal_boundary.hpp>
 
 // python
@@ -24,17 +24,6 @@ void bind_bc(py::module &m) {
       .value("kOuterX2", snap::kOuterX2)
       .value("kInnerX3", snap::kInnerX3)
       .value("kOuterX3", snap::kOuterX3)
-      .export_values();
-
-  py::enum_<snap::BoundaryFlag>(m, "BoundaryFlag")
-      .value("kExchange", snap::BoundaryFlag::kExchange)
-      .value("kUser", snap::BoundaryFlag::kUser)
-      .value("kReflect", snap::BoundaryFlag::kReflect)
-      .value("kOutflow", snap::BoundaryFlag::kOutflow)
-      .value("kPeriodic", snap::BoundaryFlag::kPeriodic)
-      .value("kShearPeriodic", snap::BoundaryFlag::kShearPeriodic)
-      .value("kPolar", snap::BoundaryFlag::kPolar)
-      .value("kPolarWedge", snap::BoundaryFlag::kPolarWedge)
       .export_values();
 
   py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions")
@@ -58,7 +47,6 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(double, snap::InternalBoundaryOptions, solid_pressure);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
-      .def_readonly("options", &snap::InternalBoundaryImpl::options)
       .def("mark_solid", &snap::InternalBoundaryImpl::mark_solid)
       .def(
           "rectify_solid",

@@ -32,8 +32,5 @@ void bind_recon(py::module &m) {
       .ADD_OPTION(bool, snap::ReconstructOptions, shock)
       .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptions, interp);
 
-  ADD_SNAP_MODULE(Reconstruct, ReconstructOptions)
-      .def(py::init<>())
-      .def(py::init<snap::ReconstructOptions>())
-      .def("forward", &snap::ReconstructImpl::forward);
+  ADD_SNAP_MODULE(Reconstruct, ReconstructOptions);
 }

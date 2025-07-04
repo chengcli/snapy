@@ -32,6 +32,5 @@ void bind_intg(py::module &m) {
       .ADD_OPTION(double, snap::IntegratorOptions, cfl);
 
   ADD_SNAP_MODULE(Integrator, IntegratorOptions)
-      .def_readonly("options", &snap::IntegratorImpl::options)
       .def_readonly("stages", &snap::IntegratorImpl::stages);
 }
