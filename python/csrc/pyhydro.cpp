@@ -21,6 +21,7 @@ void bind_hydro(py::module &m) {
            [](const snap::HydroOptions &a) {
              return fmt::format("HydroOptions{}", a);
            })
+      .def("from_yaml", &snap::HydroOptions::from_yaml)
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptions, grav)
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptions, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptions, visc)

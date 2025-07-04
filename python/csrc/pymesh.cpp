@@ -20,6 +20,7 @@ void bind_mesh(py::module &m) {
            [](const snap::MeshBlockOptions &a) {
              return fmt::format("MeshBlockOptions{}", a);
            })
+      .def("from_yaml", &snap::MeshBlockOptions::from_yaml)
       .ADD_OPTION(int, snap::MeshBlockOptions, lx1)
       .ADD_OPTION(int, snap::MeshBlockOptions, lx2)
       .ADD_OPTION(int, snap::MeshBlockOptions, lx3)
