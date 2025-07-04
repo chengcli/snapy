@@ -51,11 +51,11 @@ void bind_bc(py::module &m) {
       .def(
           "rectify_solid",
           [](snap::InternalBoundaryImpl &self, torch::Tensor solid_in,
-             std::vector<snap::bfunc_t> const &bfuncs) {
+             std::vector<bcfunc_t> const &bfuncs) {
             int total_num_flips = 0;
             auto result = self.rectify_solid(solid_in, total_num_flips, bfuncs);
             return std::make_pair(result, total_num_flips);
           },
-          py::arg("solid"), py::arg("bfuncs") = std::vector<snap::bfunc_t>{})
+          py::arg("solid"), py::arg("bfuncs") = std::vector<bcfunc_t>{})
       .def("forward", &snap::InternalBoundaryImpl::forward);
 }

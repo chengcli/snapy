@@ -4,7 +4,6 @@
 #include <pybind11/stl.h>
 
 // snap
-#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/output/output_formatter.hpp>
@@ -66,7 +65,7 @@ void bind_output(py::module &m) {
              int wtflag) {
             py::object cpp_module = block_obj.attr("cpp_module");
             auto pmb = cpp_module.cast<std::shared_ptr<snap::MeshBlockImpl>>();
-            OctTreeOptions tree;
+            snap::OctTreeOptions tree;
             self.write_output_file(pmb, time, tree, wtflag);
           },
           py::arg("block"), py::arg("time"), py::arg("wtflag") = 0)

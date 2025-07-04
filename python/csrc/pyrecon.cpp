@@ -14,7 +14,6 @@ void bind_recon(py::module &m) {
   py::class_<snap::InterpOptions>(m, "InterpOptions")
       .def(py::init<>())
       .def(py::init<std::string>())
-      .def(py::init<snap::ParameterInput, std::string, std::string>())
       .def("__repr__",
            [](const snap::InterpOptions &a) {
              return fmt::format("InterpOptions{}", a);
@@ -24,7 +23,6 @@ void bind_recon(py::module &m) {
 
   py::class_<snap::ReconstructOptions>(m, "ReconstructOptions")
       .def(py::init<>())
-      .def(py::init<snap::ParameterInput, std::string, std::string>())
       .def("__repr__",
            [](const snap::ReconstructOptions &a) {
              return fmt::format("ReconstructOptions{}", a);

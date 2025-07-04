@@ -19,8 +19,11 @@ void bind_implicit(py::module &m) {
              return fmt::format("ImplicitOptions{}", a);
            })
       .ADD_OPTION(std::string, snap::ImplicitOptions, type)
-      .ADD_OPTION(int, snap::ImplicitOptions, batch_size)
-      .ADD_OPTION(int, snap::ImplicitOptions, scheme);
+      .ADD_OPTION(int, snap::ImplicitOptions, nghost)
+      .ADD_OPTION(double, snap::ImplicitOptions, grav)
+      .ADD_OPTION(int, snap::ImplicitOptions, scheme)
+      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptions, coord)
+      .ADD_OPTION(snap::ReconstructOptions, snap::ImplicitOptions, recon);
 
-  ADD_SNAP_MODULE(Implicit, ImplicitOptions);
+  ADD_SNAP_MODULE(VerticalImplicit, ImplicitOptions);
 }

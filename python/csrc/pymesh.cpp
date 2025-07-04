@@ -28,7 +28,7 @@ void bind_mesh(py::module &m) {
       .ADD_OPTION(snap::IntegratorOptions, snap::MeshBlockOptions, intg)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptions, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptions, scalar)
-      .ADD_OPTION(std::vector<snap::bcfunc_t>, snap::MeshBlockOptions, bfuncs);
+      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptions, bfuncs);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def(

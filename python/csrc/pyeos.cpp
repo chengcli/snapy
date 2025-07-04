@@ -24,12 +24,10 @@ void bind_eos(py::module &m) {
       .ADD_OPTION(double, snap::EquationOfStateOptions, density_floor)
       .ADD_OPTION(double, snap::EquationOfStateOptions, pressure_floor)
       .ADD_OPTION(bool, snap::EquationOfStateOptions, limiter)
-      .ADD_OPTION(snap::ThermodynamicsOptions, snap::EquationOfStateOptions,
-                  thermo)
+      .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptions, thermo)
       .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptions, coord);
 
   py::class_<snap::EquationOfStateImpl>(m, "EquationOfState")
-      .def(py::init<>())
       .def("__repr__",
            [](const snap::EquationOfStateImpl &a) {
              return fmt::format("EquationOfState{}", a.options);
