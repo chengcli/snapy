@@ -14,8 +14,9 @@
 namespace py = pybind11;
 
 void bind_output(py::module &m) {
-  py::class_<snap::OutputOptions>(m, "OutputOptions")
-      .def(py::init<>())
+  auto pyOutputOptions = py::class_<snap::OutputOptions>(m, "OutputOptions");
+
+  pyOutputOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::OutputOptions &a) {
              return fmt::format("OutputOptions{}", a);
@@ -40,8 +41,9 @@ void bind_output(py::module &m) {
       .ADD_OPTION(std::string, snap::OutputOptions, file_type)
       .ADD_OPTION(std::string, snap::OutputOptions, data_format);
 
-  py::class_<snap::OutputType>(m, "OutputType")
-      .def(py::init<>())
+  auto pyOutputType = py::class_<snap::OutputType>(m, "OutputType");
+
+  pyOutputType.def(py::init<>())
       .def(py::init<snap::OutputOptions>())
       .def("__repr__",
            [](const snap::OutputType &a) {
@@ -51,8 +53,10 @@ void bind_output(py::module &m) {
       .def("increment_file_number",
            [](snap::OutputType &a) { return ++a.file_number; });
 
-  py::class_<snap::NetcdfOutput, snap::OutputType>(m, "NetcdfOutput")
-      .def(py::init<snap::OutputOptions>())
+  auto pyNetcdfOutput =
+      py::class_<snap::NetcdfOutput, snap::OutputType>(m, "NetcdfOutput");
+
+  pyNetcdfOutput.def(py::init<snap::OutputOptions>())
       .def("__repr__",
            [](const snap::NetcdfOutput &a) {
              return fmt::format(

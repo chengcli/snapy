@@ -14,8 +14,10 @@
 namespace py = pybind11;
 
 void bind_mesh(py::module &m) {
-  py::class_<snap::MeshBlockOptions>(m, "MeshBlockOptions")
-      .def(py::init<>())
+  auto pyMeshBlockOptions =
+      py::class_<snap::MeshBlockOptions>(m, "MeshBlockOptions");
+
+  pyMeshBlockOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::MeshBlockOptions &a) {
              return fmt::format("MeshBlockOptions{}", a);
@@ -53,7 +55,7 @@ void bind_mesh(py::module &m) {
       .def("initialize", &snap::MeshBlockImpl::initialize, py::arg("hydro_w"),
            py::arg("scalar_w") = torch::Tensor())
       .def("max_time_step", &snap::MeshBlockImpl::max_time_step,
-           py::arg("solid") = torch::nullopt)
+           py::arg("solid") = torch::Tensor())
       .def("set_uov",
            [](snap::MeshBlockImpl &self, std::string name, torch::Tensor val) {
              if (self.user_out_var.contains(name)) {

@@ -41,15 +41,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .value("icy", snap::Index::ICY);
 
   bind_bc(m);
-  bind_mesh(m);
-  bind_hydro(m);
-  bind_eos(m);
   bind_coord(m);
+  bind_eos(m);
+  bind_hydro(m);
   bind_recon(m);
   bind_riemann(m);
   bind_output(m);
   bind_forcing(m);
   bind_implicit(m);
   bind_intg(m);
+  bind_mesh(m);
   // bind_scalar(m);
 }

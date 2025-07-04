@@ -12,8 +12,10 @@
 namespace py = pybind11;
 
 void bind_implicit(py::module &m) {
-  py::class_<snap::ImplicitOptions>(m, "ImplicitOptions")
-      .def(py::init<>())
+  auto pyImplicitOptions =
+      py::class_<snap::ImplicitOptions>(m, "ImplicitOptions");
+
+  pyImplicitOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ImplicitOptions &a) {
              return fmt::format("ImplicitOptions{}", a);

@@ -11,8 +11,10 @@
 namespace py = pybind11;
 
 void bind_coord(py::module &m) {
-  py::class_<snap::CoordinateOptions>(m, "CoordinateOptions")
-      .def(py::init<>())
+  auto pyCoordinateOptions =
+      py::class_<snap::CoordinateOptions>(m, "CoordinateOptions");
+
+  pyCoordinateOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoordinateOptions &a) {
              return fmt::format("CoordinateOptions{}", a);

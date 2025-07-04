@@ -12,8 +12,10 @@
 namespace py = pybind11;
 
 void bind_forcing(py::module &m) {
-  py::class_<snap::ConstGravityOptions>(m, "ConstGravityOptions")
-      .def(py::init<>())
+  auto pyConstGravityOptions =
+      py::class_<snap::ConstGravityOptions>(m, "ConstGravityOptions");
+
+  pyConstGravityOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ConstGravityOptions &a) {
              return fmt::format("ConstGravityOptions{}", a);
@@ -22,8 +24,10 @@ void bind_forcing(py::module &m) {
       .ADD_OPTION(double, snap::ConstGravityOptions, grav2)
       .ADD_OPTION(double, snap::ConstGravityOptions, grav3);
 
-  py::class_<snap::CoriolisOptions>(m, "CoriolisOptions")
-      .def(py::init<>())
+  auto pyCoriolisOptions =
+      py::class_<snap::CoriolisOptions>(m, "CoriolisOptions");
+
+  pyCoriolisOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoriolisOptions &a) {
              return fmt::format("CoriolisOptions{}", a);

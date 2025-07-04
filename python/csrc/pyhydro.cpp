@@ -15,8 +15,9 @@
 namespace py = pybind11;
 
 void bind_hydro(py::module &m) {
-  py::class_<snap::HydroOptions>(m, "HydroOptions")
-      .def(py::init<>())
+  auto pyHydroOptions = py::class_<snap::HydroOptions>(m, "HydroOptions");
+
+  pyHydroOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::HydroOptions &a) {
              return fmt::format("HydroOptions{}", a);
@@ -34,8 +35,11 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::InternalBoundaryOptions, snap::HydroOptions, ib)
       .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptions, vic);
 
-  py::class_<snap::PrimitiveProjectorOptions>(m, "PrimitiveProjectorOptions")
-      .def(py::init<>())
+  auto pyPrimitiveProjectorOptions =
+      py::class_<snap::PrimitiveProjectorOptions>(m,
+                                                  "PrimitiveProjectorOptions");
+
+  pyPrimitiveProjectorOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::PrimitiveProjectorOptions &a) {
              return fmt::format("PrimitiveProjectorOptions{}", a);

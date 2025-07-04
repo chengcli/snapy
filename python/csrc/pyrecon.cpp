@@ -11,8 +11,9 @@
 namespace py = pybind11;
 
 void bind_recon(py::module &m) {
-  py::class_<snap::InterpOptions>(m, "InterpOptions")
-      .def(py::init<>())
+  auto pyInterpOptions = py::class_<snap::InterpOptions>(m, "InterpOptions");
+
+  pyInterpOptions.def(py::init<>())
       .def(py::init<std::string>())
       .def("__repr__",
            [](const snap::InterpOptions &a) {
@@ -21,8 +22,10 @@ void bind_recon(py::module &m) {
       .ADD_OPTION(std::string, snap::InterpOptions, type)
       .ADD_OPTION(bool, snap::InterpOptions, scale);
 
-  py::class_<snap::ReconstructOptions>(m, "ReconstructOptions")
-      .def(py::init<>())
+  auto pyReconstructOptions =
+      py::class_<snap::ReconstructOptions>(m, "ReconstructOptions");
+
+  pyReconstructOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ReconstructOptions &a) {
              return fmt::format("ReconstructOptions{}", a);

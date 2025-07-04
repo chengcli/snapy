@@ -26,8 +26,10 @@ void bind_bc(py::module &m) {
       .value("kOuterX3", snap::kOuterX3)
       .export_values();
 
-  py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions")
-      .def(py::init<>())
+  auto pyBoundaryFunctionOptions =
+      py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions");
+
+  pyBoundaryFunctionOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::BoundaryFuncOptions &a) {
              return fmt::format("BoundaryFuncOptions{}", a);
@@ -35,8 +37,10 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(int, snap::BoundaryFuncOptions, type)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
-  py::class_<snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions")
-      .def(py::init<>())
+  auto pyInternalBoundaryOptions =
+      py::class_<snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
+
+  pyInternalBoundaryOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::InternalBoundaryOptions &a) {
              return fmt::format("InternalBoundaryOptions{}", a);
@@ -56,6 +60,5 @@ void bind_bc(py::module &m) {
             auto result = self.rectify_solid(solid_in, total_num_flips, bfuncs);
             return std::make_pair(result, total_num_flips);
           },
-          py::arg("solid"), py::arg("bfuncs") = std::vector<bcfunc_t>{})
-      .def("forward", &snap::InternalBoundaryImpl::forward);
+          py::arg("solid"), py::arg("bfuncs") = std::vector<bcfunc_t>{});
 }

@@ -14,8 +14,10 @@
 namespace py = pybind11;
 
 void bind_eos(py::module &m) {
-  py::class_<snap::EquationOfStateOptions>(m, "EquationOfStateOptions")
-      .def(py::init<>())
+  auto pyEquationOfStateOptions =
+      py::class_<snap::EquationOfStateOptions>(m, "EquationOfStateOptions");
+
+  pyEquationOfStateOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::EquationOfStateOptions &a) {
              return fmt::format("EquationOfStateOptions{}", a);
@@ -34,6 +36,5 @@ void bind_eos(py::module &m) {
            })
       .def("nvar", &snap::EquationOfStateImpl::nvar)
       .def("compute", &snap::EquationOfStateImpl::compute)
-      .def("buffer", &snap::EquationOfStateImpl::get_buffer)
       .def("forward", &snap::EquationOfStateImpl::forward);
 }
