@@ -41,7 +41,10 @@ void bind_hydro(py::module &m) {
              return fmt::format("PrimitiveProjectorOptions{}", a);
            })
       .ADD_OPTION(std::string, snap::PrimitiveProjectorOptions, type)
-      .ADD_OPTION(double, snap::PrimitiveProjectorOptions, margin);
+      .ADD_OPTION(double, snap::PrimitiveProjectorOptions, margin)
+      .ADD_OPTION(int, snap::PrimitiveProjectorOptions, nghost)
+      .ADD_OPTION(double, snap::PrimitiveProjectorOptions, grav)
+      .ADD_OPTION(double, snap::PrimitiveProjectorOptions, Rd);
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def("max_time_step", &snap::HydroImpl::max_time_step)
