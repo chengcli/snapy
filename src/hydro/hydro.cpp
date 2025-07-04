@@ -146,10 +146,11 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
                                  torch::Tensor solid) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
+  auto const& w = peos->get_buffer("W");
 
   auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
-  auto w = pib->mark_solid(peos->forward(u), solid);
+  w.set_(pib->mark_solid(peos->forward(u), solid));
 
   auto time1 = std::chrono::high_resolution_clock::now();
   timer["U->W"] +=

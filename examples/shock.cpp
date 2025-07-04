@@ -36,8 +36,7 @@ int main(int argc, char** argv) {
 
   // internal boundary
   auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
-  auto solid = torch::where(r1 < 0.1, 1, 0);
-  solid.to(torch::kBool);
+  auto solid = torch::where(r1 < 0.1, 1, 0).to(torch::kBool);
 
   // output
   auto out =
@@ -51,7 +50,7 @@ int main(int argc, char** argv) {
   while (!block->pintg->stop(count++, current_time)) {
     auto dt = block->max_time_step();
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
-      block->forward(dt, stage);
+      block->forward(dt, stage, solid);
 
     current_time += dt;
     if (count % 10 == 0) {
