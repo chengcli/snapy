@@ -17,8 +17,9 @@
 namespace snap {
 
 template <int N>
-void alloc_eigen_cuda(char *&a, char *&b, char *&c, char *&delta, char *&corr,
-                      int ncol, int nlayer, c10::ScalarType dtype) {
+void alloc_eigen_cuda(c10::ScalarType dtype,
+                      char *&a, char *&b, char *&c, char *&delta, char *&corr,
+                      int ncol, int nlayer) {
   AT_DISPATCH_FLOATING_TYPES(dtype, "alloc_eigen_cuda", [&]() {
     cudaMalloc(
         (void **)&a,

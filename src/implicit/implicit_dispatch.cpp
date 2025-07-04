@@ -13,8 +13,8 @@
 namespace snap {
 
 template <int N>
-void alloc_eigen_cpu(char *&a, char *&b, char *&c, char *&delta, char *&corr,
-                     int ncol, int nlayer, c10::ScalarType dtype) {
+void alloc_eigen_cpu(c10::ScalarType dtype, char *&a, char *&b, char *&c,
+                     char *&delta, char *&corr, int ncol, int nlayer) {
   AT_DISPATCH_FLOATING_TYPES(dtype, "alloc_eigen_cpu", [&] {
     a = reinterpret_cast<char *>(
         new Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>[ncol * nlayer]);
