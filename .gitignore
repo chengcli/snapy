@@ -15,3 +15,6 @@ data/example.speos
 
 # eos data
 example.speos
+
+# egg
+*.egg-info

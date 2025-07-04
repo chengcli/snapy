@@ -35,7 +35,6 @@ include_dirs = [
     f"{current_dir}/build",
     f"{current_dir}/build/_deps/fmt-src/include",
     f'{current_dir}/build/_deps/yaml-cpp-src/include',
-    f"{site_dir}/pyharp",
     f"{site_dir}/kintera",
 ]
 
