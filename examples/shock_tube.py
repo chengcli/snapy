@@ -19,7 +19,7 @@ op = MeshBlockOptions.from_yaml("shock.yaml");
 # initialize block
 block = MeshBlock(op)
 # block.to(torch.float32)
-#block.to(torch.device("cuda:0"))
+block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
