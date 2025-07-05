@@ -43,8 +43,6 @@ struct PrimitiveProjectorOptions {
   ADD_ARG(double, margin) = 1.e-6;
   ADD_ARG(int, nghost) = 1;
   ADD_ARG(double, grav) = 0.;
-
-  // FIXME: initialize this
   ADD_ARG(double, Rd) = 287.05;  // specific gas constant for dry air
 };
 

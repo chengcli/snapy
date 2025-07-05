@@ -1,7 +1,5 @@
 import torch
-from canoe import *
-
-start_logging("explosion")
+from snapy import *
 
 # set domain size
 nx1 = 80

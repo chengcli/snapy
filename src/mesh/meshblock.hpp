@@ -9,7 +9,6 @@
 // snap
 #include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/intg/integrator.hpp>
 #include <snap/scalar/scalar.hpp>
 
