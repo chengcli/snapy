@@ -19,7 +19,7 @@ op = MeshBlockOptions.from_yaml("shock.yaml");
 # initialize block
 block = MeshBlock(op)
 # block.to(torch.float32)
-block.to(torch.device("cuda:0"))
+#block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
@@ -34,9 +34,6 @@ w = block.buffer("hydro.eos.W")
 w[index.idn] = torch.where(x1v < 0.0, 1.0, 0.125)
 w[index.ipr] = torch.where(x1v < 0.0, 1.0, 0.1)
 w[index.ivx] = w[index.ivy] = w[index.ivz] = 0.0
-
-x = block.part([0,1,1])
-print("x = ", x)
 
 block.initialize(w)
 

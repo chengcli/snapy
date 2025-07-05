@@ -35,6 +35,16 @@ void bind_mesh(py::module &m) {
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def(
+          "forward",
+          [](snap::MeshBlockImpl &self, double dt, int stage,
+             py::object solid_obj) {
+            torch::Tensor solid = solid_obj.is_none()
+                                      ? torch::Tensor()
+                                      : solid_obj.cast<torch::Tensor>();
+            self.forward(dt, stage, solid);
+          },
+          py::arg("dt"), py::arg("stage"), py::arg("solid") = py::none())
+      .def(
           "part",
           [](snap::MeshBlockImpl &self, std::tuple<int, int, int> offset,
              bool exterior, int extend_x1, int extend_x2, int extend_x3) {
@@ -52,10 +62,25 @@ void bind_mesh(py::module &m) {
           py::arg("offset"), py::arg("exterior") = false,
           py::arg("extend_x1") = 0, py::arg("extend_x2") = 0,
           py::arg("extend_x3") = 0)
-      .def("initialize", &snap::MeshBlockImpl::initialize, py::arg("hydro_w"),
-           py::arg("scalar_w") = torch::Tensor())
-      .def("max_time_step", &snap::MeshBlockImpl::max_time_step,
-           py::arg("solid") = torch::Tensor())
+      .def(
+          "initialize",
+          [](snap::MeshBlockImpl &self, torch::Tensor const &hydro_w,
+             py::object scalar_w_obj) {
+            torch::Tensor scalar_w = scalar_w_obj.is_none()
+                                         ? torch::Tensor()
+                                         : scalar_w_obj.cast<torch::Tensor>();
+            self.initialize(hydro_w, scalar_w);
+          },
+          py::arg("hydro_w"), py::arg("scalar_w") = py::none())
+      .def(
+          "max_time_step",
+          [](snap::MeshBlockImpl &self, py::object solid_obj) {
+            torch::Tensor solid = solid_obj.is_none()
+                                      ? torch::Tensor()
+                                      : solid_obj.cast<torch::Tensor>();
+            return self.max_time_step(solid);
+          },
+          py::arg("solid") = torch::Tensor())
       .def("set_uov",
            [](snap::MeshBlockImpl &self, std::string name, torch::Tensor val) {
              if (self.user_out_var.contains(name)) {
