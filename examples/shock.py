@@ -7,13 +7,7 @@ from snapy import (
         NetcdfOutput
         )
 
-# set domain size
-nx1 = 512
-nx2 = 512
-nx3 = 1
-nghost = 3
-
-# set hydrodynamic options
+# set hydrodynamic model
 op = MeshBlockOptions.from_yaml("shock.yaml");
 
 # initialize block
