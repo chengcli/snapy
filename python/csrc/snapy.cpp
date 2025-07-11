@@ -24,7 +24,6 @@ void bind_recon(py::module &);
 void bind_riemann(py::module &);
 void bind_output(py::module &);
 void bind_dsmc(py::module &);
-void bind_thermo(py::module &);
 void bind_forcing(py::module &);
 void bind_implicit(py::module &);
 void bind_intg(py::module &);
@@ -32,12 +31,6 @@ void bind_intg(py::module &);
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snap";
   m.doc() = "Python bindings for snap";
-
-  py::class_<snap::ParameterInputImpl,
-             std::shared_ptr<snap::ParameterInputImpl>>(m, "ParameterInput")
-      .def(py::init<>())
-      .def("GetOrAddInteger", &snap::ParameterInputImpl::GetOrAddInteger)
-      .def("DoesParameterExist", &snap::ParameterInputImpl::DoesParameterExist);
 
   py::enum_<snap::Index>(m, "index")
       .value("idn", snap::Index::IDN)
@@ -48,16 +41,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .value("icy", snap::Index::ICY);
 
   bind_bc(m);
-  bind_mesh(m);
-  bind_hydro(m);
-  bind_eos(m);
   bind_coord(m);
+  bind_eos(m);
+  bind_hydro(m);
   bind_recon(m);
   bind_riemann(m);
   bind_output(m);
-  bind_thermo(m);
   bind_forcing(m);
   bind_implicit(m);
   bind_intg(m);
+  bind_mesh(m);
   // bind_scalar(m);
 }

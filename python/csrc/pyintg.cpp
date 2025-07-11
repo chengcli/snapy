@@ -12,8 +12,10 @@
 namespace py = pybind11;
 
 void bind_intg(py::module &m) {
-  py::class_<snap::IntegratorWeight>(m, "IntegratorWeight")
-      .def(py::init<>())
+  auto pyIntegratorWeight =
+      py::class_<snap::IntegratorWeight>(m, "IntegratorWeight");
+
+  pyIntegratorWeight.def(py::init<>())
       .def("__repr__",
            [](const snap::IntegratorWeight &a) {
              return fmt::format("IntegratorWeight{}", a);
@@ -22,8 +24,10 @@ void bind_intg(py::module &m) {
       .ADD_OPTION(double, snap::IntegratorWeight, wght1)
       .ADD_OPTION(double, snap::IntegratorWeight, wght2);
 
-  py::class_<snap::IntegratorOptions>(m, "IntegratorOptions")
-      .def(py::init<>())
+  auto pyIntegratorOptions =
+      py::class_<snap::IntegratorOptions>(m, "IntegratorOptions");
+
+  pyIntegratorOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::IntegratorOptions &a) {
              return fmt::format("IntegratorOptions{}", a);
@@ -32,6 +36,7 @@ void bind_intg(py::module &m) {
       .ADD_OPTION(double, snap::IntegratorOptions, cfl);
 
   ADD_SNAP_MODULE(Integrator, IntegratorOptions)
-      .def_readonly("options", &snap::IntegratorImpl::options)
-      .def_readonly("stages", &snap::IntegratorImpl::stages);
+      .def_readonly("stages", &snap::IntegratorImpl::stages)
+      .def("stop", &snap::IntegratorImpl::stop, py::arg("steps"),
+           py::arg("current_time"));
 }

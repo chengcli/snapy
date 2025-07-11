@@ -93,8 +93,6 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
     } else {
       TORCH_WARN("no diffusion specified, using default diffusion model");
     }
-  } else {
-    TORCH_WARN("no forcing specified, using default forcing model");
   }
 
   return op;

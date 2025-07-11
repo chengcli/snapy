@@ -6,8 +6,8 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
+#include <snap/bc/bc.hpp>
 #include <snap/bc/bc_formatter.hpp>
-#include <snap/bc/boundary_condition.hpp>
 #include <snap/bc/internal_boundary.hpp>
 
 // python
@@ -26,19 +26,10 @@ void bind_bc(py::module &m) {
       .value("kOuterX3", snap::kOuterX3)
       .export_values();
 
-  py::enum_<snap::BoundaryFlag>(m, "BoundaryFlag")
-      .value("kExchange", snap::BoundaryFlag::kExchange)
-      .value("kUser", snap::BoundaryFlag::kUser)
-      .value("kReflect", snap::BoundaryFlag::kReflect)
-      .value("kOutflow", snap::BoundaryFlag::kOutflow)
-      .value("kPeriodic", snap::BoundaryFlag::kPeriodic)
-      .value("kShearPeriodic", snap::BoundaryFlag::kShearPeriodic)
-      .value("kPolar", snap::BoundaryFlag::kPolar)
-      .value("kPolarWedge", snap::BoundaryFlag::kPolarWedge)
-      .export_values();
+  auto pyBoundaryFunctionOptions =
+      py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions");
 
-  py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions")
-      .def(py::init<>())
+  pyBoundaryFunctionOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::BoundaryFuncOptions &a) {
              return fmt::format("BoundaryFuncOptions{}", a);
@@ -46,8 +37,10 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(int, snap::BoundaryFuncOptions, type)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
-  py::class_<snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions")
-      .def(py::init<>())
+  auto pyInternalBoundaryOptions =
+      py::class_<snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
+
+  pyInternalBoundaryOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::InternalBoundaryOptions &a) {
              return fmt::format("InternalBoundaryOptions{}", a);
@@ -58,16 +51,14 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(double, snap::InternalBoundaryOptions, solid_pressure);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
-      .def_readonly("options", &snap::InternalBoundaryImpl::options)
       .def("mark_solid", &snap::InternalBoundaryImpl::mark_solid)
       .def(
           "rectify_solid",
           [](snap::InternalBoundaryImpl &self, torch::Tensor solid_in,
-             std::vector<snap::bfunc_t> const &bfuncs) {
+             std::vector<bcfunc_t> const &bfuncs) {
             int total_num_flips = 0;
             auto result = self.rectify_solid(solid_in, total_num_flips, bfuncs);
             return std::make_pair(result, total_num_flips);
           },
-          py::arg("solid"), py::arg("bfuncs") = std::vector<snap::bfunc_t>{})
-      .def("forward", &snap::InternalBoundaryImpl::forward);
+          py::arg("solid"), py::arg("bfuncs") = std::vector<bcfunc_t>{});
 }

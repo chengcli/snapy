@@ -5,7 +5,6 @@
 // snap
 #include <snap/forcing/forcing.hpp>
 #include <snap/forcing/forcing_formatter.hpp>
-#include <snap/input/parameter_input.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -13,9 +12,10 @@
 namespace py = pybind11;
 
 void bind_forcing(py::module &m) {
-  py::class_<snap::ConstGravityOptions>(m, "ConstGravityOptions")
-      .def(py::init<>())
-      .def(py::init<snap::ParameterInput>())
+  auto pyConstGravityOptions =
+      py::class_<snap::ConstGravityOptions>(m, "ConstGravityOptions");
+
+  pyConstGravityOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ConstGravityOptions &a) {
              return fmt::format("ConstGravityOptions{}", a);
@@ -24,9 +24,10 @@ void bind_forcing(py::module &m) {
       .ADD_OPTION(double, snap::ConstGravityOptions, grav2)
       .ADD_OPTION(double, snap::ConstGravityOptions, grav3);
 
-  py::class_<snap::CoriolisOptions>(m, "CoriolisOptions")
-      .def(py::init<>())
-      .def(py::init<snap::ParameterInput>())
+  auto pyCoriolisOptions =
+      py::class_<snap::CoriolisOptions>(m, "CoriolisOptions");
+
+  pyCoriolisOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoriolisOptions &a) {
              return fmt::format("CoriolisOptions{}", a);

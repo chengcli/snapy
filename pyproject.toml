@@ -1,14 +1,54 @@
 [build-system]
-requires = ["setuptools", "wheel", "cmake", "pybind11", "numpy", "torch"]
+requires = [
+  "setuptools>=61.0.0",
+  "wheel",
+  "cmake<=3.30",
+  "numpy",
+  "ninja",
+  "kintera>=0.7.3",
+  ]
 build-backend = "setuptools.build_meta"
 
-[tool.cibuildwheel]
-before-build = """
-pip install -r requirements.txt
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-"""
+[project]
+name = "snapy"
+dynamic = ["version"]
+description = "Compressible Finite Volume Solver for Atmospheric Dynamics, Chemistry and Thermodynamics"
+authors = [
+  { name="Cheng Li", email="chengcli@umich.edu" },
+]
+license = { text = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "kintera>=0.7.3",
+  "cmake<=3.30",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Programming Language :: C",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Scientific/Engineering :: Atmospheric Science",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: Scientific/Engineering :: Astronomy",
+]
 
-# Install system library
-[tool.cibuildwheel.linux]
-manylinux-x86_64-image = "manylinux2014"
+[project.urls]
+Homepage = "https://github.com/chengcli/snapy"
+Documentation = "https://snapy.readthedocs.io"
+
+[tool.setuptools.dynamic.version]
+attr = "snapy.__version__"
+
+[tool.setuptools]
+packages = ["snapy"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+"snapy" = ["snapy/**/*", "lib/*.so", "lib/*.dylib"]
