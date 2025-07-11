@@ -11,9 +11,8 @@ from snapy import (
         NetcdfOutput
         )
 
-exit()
+from torch.profiler import profile, record_function, ProfilerActivity
 
-#from torch.profiler import profile, record_function, ProfilerActivity
 # torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
 
@@ -34,7 +33,7 @@ op = MeshBlockOptions.from_yaml("straka.yaml");
 
 # initialize block
 block = MeshBlock(op)
-#block.to(torch.device("cuda:0"))
+block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
@@ -76,12 +75,13 @@ for out in [out2, out3]:
     out.write_output_file(block, current_time)
     out.combine_blocks()
 
-#activities = [ProfilerActivity.CPU]
+activities = [ProfilerActivity.CPU]
 
 # integration
 count = 0;
 start_time = time.time()
 interior = block.part((0, 0, 0))
+
 # with profile(activities=activities, record_shapes=True) as prof:
 while not block.intg.stop(count, current_time):
     dt = block.max_time_step()

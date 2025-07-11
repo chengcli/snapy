@@ -5,7 +5,6 @@ import sys
 import sysconfig
 import platform
 import glob
-import torch
 from pathlib import Path
 from setuptools import setup
 from setuptools.command.install import install
