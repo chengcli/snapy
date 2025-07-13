@@ -20,7 +20,7 @@ macro(setup_problem namel)
 
   if(APPLE)
     target_link_libraries(${namel}.${buildl}
-                          PRIVATE snapy::snapy ${VAPORS_LIBRARY} snapy::bc)
+                          PRIVATE snapy::snap ${VAPORS_LIBRARY} snapy::bc)
   else()
     target_link_libraries(
       ${namel}.${buildl}

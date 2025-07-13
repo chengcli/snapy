@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
-  block->to(torch::kCUDA);
+  // block->to(torch::kCUDA);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;
