@@ -65,6 +65,7 @@ target_link_libraries(${namel}_${buildl}
     PUBLIC
     fmt::fmt
     yaml-cpp::yaml-cpp
+    snapy::bc
     ${NETCDF_LIBRARIES}
     ${PNETCDF_LIBRARIES}
     ${TORCH_LIBRARY}
