@@ -1,7 +1,6 @@
 // kintere
 #include <kintera/constants.h>
 
-#include <kintera/thermo/eval_uhs.hpp>
 #include <kintera/thermo/thermo.hpp>
 
 // snap
@@ -49,15 +48,16 @@ void IdealGasImpl::reset() {
 torch::Tensor IdealGasImpl::compute(std::string ab,
                                     std::vector<torch::Tensor> const &args) {
   if (ab == "W->U") {
-    _prim.set_(args[0]);
     _prim2cons(_prim, _cons);
     return _cons;
   } else if (ab == "W->I") {
-    _prim.set_(args[0]);
     _prim2intEng(_prim, _ie);
     return _ie;
+  } else if (ab == "W->T") {
+    auto w = args[0];
+    auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
+    return w[Index::IPR] / (w[Index::IDN] * Rd);
   } else if (ab == "U->W") {
-    _cons.set_(args[0]);
     _cons2prim(_cons, _prim);
     return _prim;
   } else if (ab == "W->A") {
@@ -91,7 +91,7 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto out = cons.narrow(0, Index::IVX, 3);
   torch::mul_out(out, prim.narrow(0, Index::IVX, 3), prim[Index::IDN]);
 
-  pcoord->vec_lower_(cons);
+  pcoord->vec_lower_(out);
 
   // KE
   _ke.set_(

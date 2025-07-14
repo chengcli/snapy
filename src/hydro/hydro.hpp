@@ -16,6 +16,7 @@
 #include <snap/implicit/vertical_implicit.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
+#include <snap/sedimentation/sedimentation.hpp>
 
 #include "primitive_projector.hpp"
 
@@ -35,6 +36,7 @@ struct HydroOptions {
   ADD_ARG(ConstGravityOptions, grav);
   ADD_ARG(CoriolisOptions, coriolis);
   ADD_ARG(DiffusionOptions, visc);
+  ADD_ARG(FricHeatOptions, fricHeat);
 
   //! submodule options
   ADD_ARG(CoordinateOptions, coord);
@@ -47,6 +49,8 @@ struct HydroOptions {
 
   ADD_ARG(InternalBoundaryOptions, ib);
   ADD_ARG(ImplicitOptions, vic);
+
+  ADD_ARG(SedHydroOptions, sedhydro);
 };
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
@@ -65,6 +69,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   InternalBoundary pib = nullptr;
   VerticalImplicit pvic = nullptr;
+
+  SedHydro psedhydro = nullptr;
 
   std::map<std::string, double> timer;
 

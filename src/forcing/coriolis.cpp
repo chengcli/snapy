@@ -1,3 +1,6 @@
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // snap
 #include <snap/snap.h>
 
@@ -6,10 +9,20 @@
 #include "forcing.hpp"
 
 namespace snap {
-void Coriolis123Impl::reset() {}
+
+CoriolisOptions CoriolisOptions::from_yaml(YAML::Node const& node) {
+  CoriolisOptions op;
+  op.omega1() = node["omega1"].as<double>(0.);
+  op.omega2() = node["omega2"].as<double>(0.);
+  op.omega3() = node["omega3"].as<double>(0.);
+  op.omegax() = node["omegax"].as<double>(0.);
+  op.omegay() = node["omegay"].as<double>(0.);
+  op.omegaz() = node["omegaz"].as<double>(0.);
+  return op;
+}
 
 torch::Tensor Coriolis123Impl::forward(torch::Tensor du, torch::Tensor w,
-                                       double dt) {
+                                       torch::Tensor temp, double dt) {
   if (options.omega1() != 0.0 || options.omega2() != 0.0 ||
       options.omega3() != 0.0) {
     auto m1 = w[Index::IDN] * w[Index::IVX];
@@ -32,7 +45,7 @@ void CoriolisXYZImpl::reset() {
 }
 
 torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
-                                       double dt) {
+                                       torch::Tensor temp, double dt) {
   if (options.omegax() != 0.0 || options.omegay() != 0.0 ||
       options.omegaz() != 0.0) {
     auto [omega1, omega2, omega3] = pcoord->vec_from_cartesian(
@@ -42,9 +55,9 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
     auto m2 = w[Index::IDN] * w[Index::IVY];
     auto m3 = w[Index::IDN] * w[Index::IVZ];
 
-    du[Index::IVX] = 2. * dt * (omega3 * m2 - omega2 * m3);
-    du[Index::IVY] = 2. * dt * (omega1 * m3 - omega3 * m1);
-    du[Index::IVZ] = 2. * dt * (omega2 * m1 - omega1 * m2);
+    du[Index::IVX] += 2. * dt * (omega3 * m2 - omega2 * m3);
+    du[Index::IVY] += 2. * dt * (omega1 * m3 - omega3 * m1);
+    du[Index::IVZ] += 2. * dt * (omega2 * m1 - omega1 * m2);
   }
 
   return du;
