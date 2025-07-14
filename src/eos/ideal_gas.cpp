@@ -48,17 +48,17 @@ void IdealGasImpl::reset() {
 torch::Tensor IdealGasImpl::compute(std::string ab,
                                     std::vector<torch::Tensor> const &args) {
   if (ab == "W->U") {
-    _prim2cons(_prim, _cons);
+    _prim2cons(args[0], _cons);
     return _cons;
   } else if (ab == "W->I") {
-    _prim2intEng(_prim, _ie);
+    _prim2intEng(args[0], _ie);
     return _ie;
   } else if (ab == "W->T") {
     auto w = args[0];
     auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
     return w[Index::IPR] / (w[Index::IDN] * Rd);
   } else if (ab == "U->W") {
-    _cons2prim(_cons, _prim);
+    _cons2prim(args[0], _prim);
     return _prim;
   } else if (ab == "W->A") {
     auto gammad =
