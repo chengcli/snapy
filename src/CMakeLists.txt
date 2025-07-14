@@ -49,6 +49,7 @@ file(GLOB src_files
     implicit/*.cpp
     intg/*.cpp
     input/*.cpp
+    sedimentation/*.cpp
     )
 
 add_library(${namel}_${buildl}
@@ -63,8 +64,6 @@ set_target_properties(${namel}_${buildl}
 
 target_link_libraries(${namel}_${buildl}
     PUBLIC
-    fmt::fmt
-    yaml-cpp::yaml-cpp
     snapy::bc
     ${NETCDF_LIBRARIES}
     ${PNETCDF_LIBRARIES}

@@ -193,6 +193,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   if (phydro->peos->nvar() > 0) {
     fut_hydro_du = phydro->forward(hydro_u, dt, solid);
   }
+
   auto time1 = std::chrono::high_resolution_clock::now();
   timer["hydro"] +=
       std::chrono::duration<double, std::milli>(time1 - start).count();
@@ -201,6 +202,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   if (pscalar->nvar() > 0) {
     fut_scalar_dv = pscalar->forward(scalar_v, dt);
   }
+
   auto time2 = std::chrono::high_resolution_clock::now();
   timer["scalar"] +=
       std::chrono::duration<double, std::milli>(time2 - time1).count();
@@ -215,11 +217,30 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     scalar_v.set_(pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
     _scalar_v1.copy_(scalar_v);
   }
+
   auto time3 = std::chrono::high_resolution_clock::now();
   timer["averaging"] +=
       std::chrono::duration<double, std::milli>(time3 - time2).count();
 
-  // -------- (5) update ghost zones --------
+  // -------- (5) saturation adjustment --------
+  if (stage == pintg->stages.size() - 1 &&
+      (phydro->options.eos().type() == "ideal-moist" ||
+       phydro->options.eos().type() == "moist-mixture")) {
+    auto ke = phydro->peos->compute("U->K", {hydro_u});
+    auto rho = phydro->peos->get_buffer("thermo.D");
+    auto ie = hydro_u[Index::IPR] - ke;
+
+    int ny = hydro_u.size(0) - 5;  // number of species
+    auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
+
+    auto m = named_modules()["hydro.eos.thermo"];
+    auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+    pthermo->forward(rho, ie, yfrac);
+
+    hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
+  }
+
+  // -------- (6) update ghost zones --------
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
@@ -236,6 +257,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     for (int i = 0; i < options.bfuncs().size(); ++i)
       options.bfuncs()[i](scalar_v, 3 - i / 2, op);
   }
+
   auto time4 = std::chrono::high_resolution_clock::now();
   timer["bc"] +=
       std::chrono::duration<double, std::milli>(time4 - time3).count();

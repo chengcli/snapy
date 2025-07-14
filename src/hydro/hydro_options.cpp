@@ -70,6 +70,25 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   op.vic().recon() = op.recon1();
   op.vic().coord() = op.coord();
 
+  // sedimentation
+  if (config["sedimentation"]) {
+    printf("- reading sedimentation options from config\n");
+    op.sedhydro().sedvel() = SedVelOptions::from_yaml(config);
+    op.sedhydro().eos() = op.eos();
+
+    TORCH_CHECK(
+        op.sedhydro().sedvel().radius().size() ==
+            op.thermo().cloud_ids().size(),
+        "Sedimentation radius size must match the number of cloud species.");
+
+    TORCH_CHECK(
+        op.sedhydro().sedvel().density().size() ==
+            op.thermo().cloud_ids().size(),
+        "Sedimentation density size must match the number of cloud species.");
+  } else {
+    TORCH_WARN("no sedimentation specified");
+  }
+
   // forcings
   if (config["forcing"]) {
     auto forcing = config["forcing"];
@@ -77,21 +96,28 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
       printf("- reading constant gravity options from forcing\n");
       op.grav() = ConstGravityOptions::from_yaml(forcing["const-gravity"]);
     } else {
-      TORCH_WARN("no constant gravity specified, using default gravity model");
+      TORCH_WARN("no constant gravity specified, using default model");
     }
 
     if (forcing["coriolis"]) {
       printf("- reading coriolis options from forcing\n");
       op.coriolis() = CoriolisOptions::from_yaml(forcing["coriolis"]);
     } else {
-      TORCH_WARN("no coriolis specified, using default coriolis model");
+      TORCH_WARN("no coriolis specified, using default model");
     }
 
     if (forcing["diffusion"]) {
       printf("- reading diffusion options from forcing\n");
       op.visc() = DiffusionOptions::from_yaml(forcing["diffusion"]);
     } else {
-      TORCH_WARN("no diffusion specified, using default diffusion model");
+      TORCH_WARN("no diffusion specified, using default model");
+    }
+
+    if (forcing["fric-heat"]) {
+      printf("- reading frictional heating options from forcing\n");
+      op.fricHeat() = FricHeatOptions::from_yaml(config);
+    } else {
+      TORCH_WARN("no frictional heating specified, using default model");
     }
   }
 

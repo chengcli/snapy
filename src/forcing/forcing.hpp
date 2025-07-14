@@ -8,6 +8,7 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/sedimentation/sedimentation.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -17,6 +18,7 @@ class Node;
 }  // namespace YAML
 
 namespace snap {
+
 struct ConstGravityOptions {
   static ConstGravityOptions from_yaml(YAML::Node const& node);
   ConstGravityOptions() = default;
@@ -49,6 +51,14 @@ struct DiffusionOptions {
   ADD_ARG(std::string, type) = "theta";
 };
 
+struct FricHeatOptions {
+  static FricHeatOptions from_yaml(YAML::Node const& root);
+  FricHeatOptions() = default;
+
+  ADD_ARG(double, grav) = 0.;
+  ADD_ARG(SedVelOptions, sedvel);
+};
+
 class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
  public:
   //! options with which this `ConstGravity` was constructed
@@ -60,9 +70,10 @@ class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
       : options(options_) {
     reset();
   }
-  void reset() override;
+  void reset() override {}
 
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
 };
 TORCH_MODULE(ConstGravity);
 
@@ -77,9 +88,10 @@ class Coriolis123Impl : public torch::nn::Cloneable<Coriolis123Impl> {
       : options(options_) {
     reset();
   }
-  void reset() override;
+  void reset() override {}
 
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
 };
 TORCH_MODULE(Coriolis123);
 
@@ -99,7 +111,8 @@ class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
   }
   void reset() override;
 
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
 };
 TORCH_MODULE(CoriolisXYZ);
 
@@ -115,8 +128,31 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   }
   void reset() override {}
 
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, double dt);
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
 };
+TORCH_MODULE(Diffusion);
+
+class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
+ public:
+  //! submodules
+  SedVel psedvel = nullptr;
+
+  //! options with which this `FricHeat` was constructed
+  FricHeatOptions options;
+
+  // Constructor to initialize the layers
+  FricHeatImpl() = default;
+  explicit FricHeatImpl(FricHeatOptions const& options_) : options(options_) {
+    reset();
+  }
+  void reset() override;
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(FricHeat);
+
 }  // namespace snap
 
 #undef ADD_ARG

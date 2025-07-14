@@ -33,7 +33,7 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
 
  private:
   //! cache
-  torch::Tensor _prim, _cons, _gamma, _cs, _ke, _ie;
+  torch::Tensor _prim, _cons, _gamma, _cs, _ke, _ie, _ce, _rhoc;
   torch::Tensor _mu_ratio_m1, _cv_ratio_m1, _u0;
 
   //! \brief Convert primitive variables to conserved variables.
@@ -46,9 +46,23 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   //! \brief calculate internal energy
   /*
    * \param[in] prim  primitive variables
-   * \param[out] out  internal energy
+   * \param[out] out  total internal energy [J/m^3]
    */
   void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
+
+  //! \brief calculate temperature.
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  temperature
+   */
+  void _prim2temp(torch::Tensor prim, torch::Tensor& out);
+
+  //! \brief calculate cloud energy (internal + kinetic)
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  individual cloud energy
+   */
+  void _prim2cloudEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
@@ -56,6 +70,13 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
    * \param[ou] out   primitive variables
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
+
+  //! \brief Convert conserved variables to kinetic energy.
+  /*
+   * \param[in] cons    conserved variables
+   * \param[out] out    kinetic energy
+   */
+  void _cons2ke(torch::Tensor cons, torch::Tensor& out);
 
   //! \brief Inverse of the mean molecular weight
   /*!

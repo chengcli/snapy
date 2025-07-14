@@ -1,17 +1,22 @@
-// base
-#include <configure.h>
+// yaml
+#include <yaml-cpp/yaml.h>
 
 // snap
 #include <snap/snap.h>
 
 #include "forcing.hpp"
-#include "forcing_formatter.hpp"
 
 namespace snap {
-void ConstGravityImpl::reset() {}
+ConstGravityOptions ConstGravityOptions::from_yaml(YAML::Node const& node) {
+  ConstGravityOptions op;
+  op.grav1() = node["grav1"].as<double>(0.);
+  op.grav2() = node["grav2"].as<double>(0.);
+  op.grav3() = node["grav3"].as<double>(0.);
+  return op;
+}
 
 torch::Tensor ConstGravityImpl::forward(torch::Tensor du, torch::Tensor w,
-                                        double dt) {
+                                        torch::Tensor temp, double dt) {
   if (options.grav1() != 0.) {
     du[Index::IVX] += dt * w[Index::IDN] * options.grav1();
     du[Index::IPR] += dt * w[Index::IDN] * w[Index::IVX] * options.grav1();

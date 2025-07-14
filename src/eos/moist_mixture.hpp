@@ -45,7 +45,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
 
  private:
   //! cache
-  torch::Tensor _prim, _cons, _gamma, _ct, _cs, _ke, _ie;
+  torch::Tensor _prim, _cons, _gamma, _ct, _cs, _ke, _ie, _ce, _rhoc;
 
   //! \brief Convert primitive variables to conserved variables.
   /*
@@ -61,12 +61,33 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    */
   void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
 
+  //! \brief calculate temperature.
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  temperature
+   */
+  void _prim2temp(torch::Tensor prim, torch::Tensor& out);
+
+  //! \brief calculate cloud energy (internal + kinetic).
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  individual cloud energy
+   */
+  void _prim2cloudEng(torch::Tensor prim, torch::Tensor& out);
+
   //! \brief Convert conserved variables to primitive variables.
   /*
    * \param[in] cons  conserved variables
    * \param[ou] out   primitive variables
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
+
+  //! \brief Convert conserved variables to kinetic energy.
+  /*
+   * * \param[in] cons    conserved variables
+   * * \param[out] out    kinetic energy
+   */
+  void _cons2ke(torch::Tensor cons, torch::Tensor& out);
 
   //! \brief Compute the adiabatic index
   /*

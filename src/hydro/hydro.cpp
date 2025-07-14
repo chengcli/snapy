@@ -1,12 +1,9 @@
-// base
-#include <configure.h>
-
 // snap
+#include "hydro.hpp"
+
 #include <snap/snap.h>
 
 #include <snap/registry.hpp>
-
-#include "hydro.hpp"
 
 namespace snap {
 HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
@@ -46,27 +43,46 @@ void HydroImpl::reset() {
   pvic = register_module("vic", VerticalImplicit(options.vic()));
   options.vic() = pvic->options;
 
+  // set up sedimentation
+  psedhydro = register_module("sedhydro", SedHydro(options.sedhydro()));
+  options.sedhydro() = psedhydro->options;
+
   // set up forcings
+  std::vector<std::string> forcing_names;
   if (options.grav().grav1() != 0.0 || options.grav().grav2() != 0.0 ||
       options.grav().grav3() != 0.0) {
     forcings.push_back(torch::nn::AnyModule(ConstGravity(options.grav())));
+    forcing_names.push_back("const-gravity");
   }
 
   if (options.coriolis().omega1() != 0.0 ||
       options.coriolis().omega2() != 0.0 ||
       options.coriolis().omega3() != 0.0) {
     forcings.push_back(torch::nn::AnyModule(Coriolis123(options.coriolis())));
+    forcing_names.push_back("coriolis");
   }
 
   if (options.coriolis().omegax() != 0.0 ||
       options.coriolis().omegay() != 0.0 ||
       options.coriolis().omegaz() != 0.0) {
     forcings.push_back(torch::nn::AnyModule(CoriolisXYZ(options.coriolis())));
+    if (std::find(forcing_names.begin(), forcing_names.end(), "coriolis") !=
+        forcing_names.end()) {
+      TORCH_CHECK(false,
+                  "CoriolisXYZ cannot be used together with Coriolis123. "
+                  "Please choose one of them.");
+    }
+    forcing_names.push_back("coriolis");
+  }
+
+  if (options.fricHeat().grav() != 0.0) {
+    forcings.push_back(torch::nn::AnyModule(FricHeat(options.fricHeat())));
+    forcing_names.push_back("fric-heat");
   }
 
   // register all forcings
   for (auto i = 0; i < forcings.size(); i++) {
-    register_module("forcing" + std::to_string(i), forcings[i].ptr());
+    register_module(forcing_names[i], forcings[i].ptr());
   }
 
   // populate buffers
@@ -151,6 +167,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
   w.set_(pib->mark_solid(peos->forward(u), solid));
+  auto temp = peos->compute("W->T", {w});
 
   auto time1 = std::chrono::high_resolution_clock::now();
   timer["U->W"] +=
@@ -171,6 +188,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
 
     priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, _flux1);
+
+    // add sedimentation flux
+    psedhydro->forward(wlr1[Index::IRT], _flux1);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR1->F1"] +=
@@ -218,7 +238,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
   //// ------------ (6) Calculate external forcing ------------ ////
   auto du = -dt * _div;
-  for (auto& f : forcings) f.forward(du, w, dt);
+  for (auto& f : forcings) f.forward(du, w, temp, dt);
 
   auto time4 = std::chrono::high_resolution_clock::now();
   timer["W->R"] +=
