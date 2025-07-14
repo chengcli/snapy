@@ -21,8 +21,9 @@ struct SedVelOptions {
   static SedVelOptions from_yaml(YAML::Node const& config);
 
   //! radius and density of particles
-  ADD_ARG(std::vector<double>, radius) = { 10.0e-6 };
-  ADD_ARG(std::vector<double>, density) = { 1.0e3 };
+  //! if specified, must be the same size of cloud particles
+  ADD_ARG(std::vector<double>, radius) = {};
+  ADD_ARG(std::vector<double>, density) = {};
 
   //! additional constant sedimentation velocity
   ADD_ARG(std::vector<double>, const_vsed) = {};
