@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/snap.h>
+
 #include "hydro.hpp"
 
 namespace snap {
@@ -10,6 +12,15 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   HydroOptions op;
 
   op.thermo() = kintera::ThermoOptions::from_yaml(filename);
+
+  TORCH_CHECK(
+      NMASS == 0 ||
+          op.thermo().vapor_ids().size() + op.thermo().cloud_ids().size() ==
+              1 + NMASS,
+      "Athena++ style indexing is enabled (NMASS > 0), but the number of "
+      "vapor and cloud species in the thermodynamics options does not match "
+      "the expected number of vapor + cloud species = ",
+      1 + NMASS);
 
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
