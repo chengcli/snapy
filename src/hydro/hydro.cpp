@@ -11,43 +11,43 @@ HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
 }
 
 void HydroImpl::reset() {
-  // set up coordinate model
+  //// ---- (1) set up coordinate model ---- ////
   pcoord = register_module_op(this, "coord", options.coord());
   options.coord() = pcoord->options;
 
-  // set up equation-of-state model
+  //// ---- (2) set up equation-of-state model ---- ////
   peos = register_module_op(this, "eos", options.eos());
   options.eos() = peos->options;
 
-  // set up primitive projector model
+  //// ---- (3) set up primitive projector model ---- ////
   pproj = register_module("proj", PrimitiveProjector(options.proj()));
   options.proj() = pproj->options;
 
-  // set up reconstruction-x1 model
+  //// ---- (4) set up reconstruction-x1 model ---- ////
   precon1 = register_module("recon1", Reconstruct(options.recon1()));
   options.recon1() = precon1->options;
 
-  // set up reconstruction-x23 model
+  //// ---- (5) set up reconstruction-x23 model ---- ////
   precon23 = register_module("recon23", Reconstruct(options.recon23()));
   options.recon23() = precon23->options;
 
-  // set up riemann-solver model
+  //// ---- (6) set up riemann-solver model ---- ////
   priemann = register_module_op(this, "riemann", options.riemann());
   options.riemann() = priemann->options;
 
-  // set up internal boundary
+  //// ---- (7) set up internal boundary ---- ////
   pib = register_module("ib", InternalBoundary(options.ib()));
   options.ib() = pib->options;
 
-  // set up vertical implicit solver
+  //// ---- (8) set up vertical implicit solver ---- ////
   pvic = register_module("vic", VerticalImplicit(options.vic()));
   options.vic() = pvic->options;
 
-  // set up sedimentation
+  //// ---- (9) set up sedimentation ---- ////
   psedhydro = register_module("sedhydro", SedHydro(options.sedhydro()));
   options.sedhydro() = psedhydro->options;
 
-  // set up forcings
+  //// ---- (10) set up forcings ---- ////
   std::vector<std::string> forcing_names;
   if (options.grav().grav1() != 0.0 || options.grav().grav2() != 0.0 ||
       options.grav().grav3() != 0.0) {
@@ -80,12 +80,59 @@ void HydroImpl::reset() {
     forcing_names.push_back("fric-heat");
   }
 
-  // register all forcings
+  if (options.bodyHeat().dTdt() != 0.0) {
+    forcings.push_back(torch::nn::AnyModule(BodyHeat(options.bodyHeat())));
+    forcing_names.push_back("body-heat");
+  }
+
+  if (options.topCool().flux() != 0.0) {
+    forcings.push_back(torch::nn::AnyModule(TopCool(options.topCool())));
+    forcing_names.push_back("top-cool");
+  }
+
+  if (options.botHeat().flux() != 0.0) {
+    forcings.push_back(torch::nn::AnyModule(BotHeat(options.botHeat())));
+    forcing_names.push_back("bot-heat");
+  }
+
+  if (options.relaxBotComp().tau() != 0.0) {
+    forcings.push_back(
+        torch::nn::AnyModule(RelaxBotComp(options.relaxBotComp())));
+    forcing_names.push_back("relax-bot-comp");
+  }
+
+  if (options.relaxBotTemp().tau() != 0.0) {
+    forcings.push_back(
+        torch::nn::AnyModule(RelaxBotTemp(options.relaxBotTemp())));
+    forcing_names.push_back("relax-bot-temp");
+  }
+
+  if (options.relaxBotVelo().tau() != 0.0) {
+    forcings.push_back(
+        torch::nn::AnyModule(RelaxBotVelo(options.relaxBotVelo())));
+    forcing_names.push_back("relax-bot-velo");
+  }
+
+  if (options.topSpongeLyr().tau() != 0.0 &&
+      options.topSpongeLyr().width() > 0.0) {
+    forcings.push_back(
+        torch::nn::AnyModule(TopSpongeLyr(options.topSpongeLyr())));
+    forcing_names.push_back("top-sponge-lyr");
+  }
+
+  if (options.botSpongeLyr().tau() != 0.0 &&
+      options.botSpongeLyr().width() > 0.0) {
+    forcings.push_back(
+        torch::nn::AnyModule(BotSpongeLyr(options.botSpongeLyr())));
+    forcing_names.push_back("bot-sponge-lyr");
+  }
+
+  //// ---- (11) register all forcings ---- ////
   for (auto i = 0; i < forcings.size(); i++) {
     register_module(forcing_names[i], forcings[i].ptr());
   }
 
-  // populate buffers
+  //// ---- (12) populate buffers ---- ////
   int nc1 = options.coord().nc1();
   int nc2 = options.coord().nc2();
   int nc3 = options.coord().nc3();
@@ -118,7 +165,7 @@ void HydroImpl::reset() {
   _vic = register_buffer("I",
                          torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
-  // initialize timers
+  //// ---- (13) initialize timers ---- ////
   timer["U->W"] = 0.0;
   timer["W->LR1"] = 0.0;
   timer["LR1->F1"] = 0.0;

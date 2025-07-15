@@ -59,6 +59,77 @@ struct FricHeatOptions {
   ADD_ARG(SedVelOptions, sedvel);
 };
 
+struct BodyHeatOptions {
+  static BodyHeatOptions from_yaml(YAML::Node const& node);
+  BodyHeatOptions() = default;
+
+  ADD_ARG(double, dTdt) = 0.0;
+  ADD_ARG(double, pmin) = 0.0;
+  ADD_ARG(double, pmax) = 1.0;
+  ADD_ARG(kintera::ThermoOptions, thermo);
+};
+
+struct TopCoolOptions {
+  static TopCoolOptions from_yaml(YAML::Node const& node);
+  TopCoolOptions() = default;
+
+  ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(CoordinateOptions, coord);
+};
+
+struct BotHeatOptions {
+  static BotHeatOptions from_yaml(YAML::Node const& node);
+  BotHeatOptions() = default;
+
+  ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(CoordinateOptions, coord);
+};
+
+struct RelaxBotCompOptions {
+  static RelaxBotCompOptions from_yaml(YAML::Node const& node);
+  RelaxBotCompOptions() = default;
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(std::vector<std::string>, species) = {};
+  ADD_ARG(std::vector<double>, xfrac) = {};
+};
+
+struct RelaxBotTempOptions {
+  static RelaxBotTempOptions from_yaml(YAML::Node const& node);
+  RelaxBotTempOptions() = default;
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, btemp) = 300.0;
+};
+
+struct RelaxBotVeloOptions {
+  static RelaxBotVeloOptions from_yaml(YAML::Node const& node);
+  RelaxBotVeloOptions() = default;
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, bvx) = 0.0;
+  ADD_ARG(double, bvy) = 0.0;
+  ADD_ARG(double, bvz) = 0.0;
+};
+
+struct TopSpongeLyrOptions {
+  static TopSpongeLyrOptions from_yaml(YAML::Node const& node);
+  TopSpongeLyrOptions() = default;
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, width) = 0.0;
+  ADD_ARG(CoordinateOptions, coord);
+};
+
+struct BotSpongeLyrOptions {
+  static BotSpongeLyrOptions from_yaml(YAML::Node const& node);
+  BotSpongeLyrOptions() = default;
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, width) = 0.0;
+  ADD_ARG(CoordinateOptions, coord);
+};
+
 class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
  public:
   //! options with which this `ConstGravity` was constructed
@@ -152,6 +223,156 @@ class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
                         double dt);
 };
 TORCH_MODULE(FricHeat);
+
+class BodyHeatImpl : public torch::nn::Cloneable<BodyHeatImpl> {
+ public:
+  //! submodules
+  kintera::ThermoY pthermo = nullptr;
+
+  //! options with which this `BodyHeat` was constructed
+  BodyHeatOptions options;
+
+  // Constructor to initialize the layers
+  BodyHeatImpl() = default;
+  explicit BodyHeatImpl(BodyHeatOptions const& options_) : options(options_) {
+    reset();
+  }
+  void reset() override;
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(BodyHeat);
+
+class TopCoolImpl : public torch::nn::Cloneable<TopCoolImpl> {
+ public:
+  //! submodules
+  Coordinate pcoord = nullptr;
+
+  //! options with which this `TopCool` was constructed
+  TopCoolOptions options;
+
+  // Constructor to initialize the layers
+  TopCoolImpl() = default;
+  explicit TopCoolImpl(TopCoolOptions const& options_) : options(options_) {
+    reset();
+  }
+  void reset() override;
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(TopCool);
+
+class BotHeatImpl : public torch::nn::Cloneable<BotHeatImpl> {
+ public:
+  //! submodules
+  Coordinate pcoord = nullptr;
+
+  //! options with which this `BotHeat` was constructed
+  BotHeatOptions options;
+
+  // Constructor to initialize the layers
+  BotHeatImpl() = default;
+  explicit BotHeatImpl(BotHeatOptions const& options_) : options(options_) {
+    reset();
+  }
+  void reset() override;
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(BotHeat);
+
+class RelaxBotCompImpl : public torch::nn::Cloneable<RelaxBotCompImpl> {
+ public:
+  //! options with which this `RelaxBotComp` was constructed
+  RelaxBotCompOptions options;
+
+  // Constructor to initialize the layers
+  RelaxBotCompImpl() = default;
+  explicit RelaxBotCompImpl(RelaxBotCompOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(RelaxBotComp);
+
+class RelaxBotTempImpl : public torch::nn::Cloneable<RelaxBotTempImpl> {
+ public:
+  //! options with which this `RelaxBotTemp` was constructed
+  RelaxBotTempOptions options;
+
+  // Constructor to initialize the layers
+  RelaxBotTempImpl() = default;
+  explicit RelaxBotTempImpl(RelaxBotTempOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(RelaxBotTemp);
+
+class RelaxBotVeloImpl : public torch::nn::Cloneable<RelaxBotVeloImpl> {
+ public:
+  //! options with which this `RelaxBotVelo` was constructed
+  RelaxBotVeloOptions options;
+
+  // Constructor to initialize the layers
+  RelaxBotVeloImpl() = default;
+  explicit RelaxBotVeloImpl(RelaxBotVeloOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(RelaxBotVelo);
+
+class TopSpongeLyrImpl : public torch::nn::Cloneable<TopSpongeLyrImpl> {
+ public:
+  //! options with which this `TopSpongeLyr` was constructed
+  TopSpongeLyrOptions options;
+
+  // Constructor to initialize the layers
+  TopSpongeLyrImpl() = default;
+  explicit TopSpongeLyrImpl(TopSpongeLyrOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(TopSpongeLyr);
+
+class BotSpongeLyrImpl : public torch::nn::Cloneable<BotSpongeLyrImpl> {
+ public:
+  //! options with which this `BotSpongeLyr` was constructed
+  BotSpongeLyrOptions options;
+
+  // Constructor to initialize the layers
+  BotSpongeLyrImpl() = default;
+  explicit BotSpongeLyrImpl(BotSpongeLyrOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(BotSpongeLyr);
 
 }  // namespace snap
 

@@ -53,25 +53,25 @@ void IdealMoistImpl::reset() {
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
-  _mu_ratio_m1 =
-      register_buffer("mu_ratio_m1", torch::tensor({ny}, torch::kFloat64));
+  inv_mu_ratio_m1 =
+      register_buffer("inv_mu_ratio_m1", torch::tensor({ny}, torch::kFloat64));
 
   for (int i = 0; i < ny; ++i) {
-    _mu_ratio_m1[i] = pthermo->inv_mu[0] / pthermo->inv_mu[1 + i] - 1.;
+    inv_mu_ratio_m1[i] = pthermo->inv_mu[i + 1] / pthermo->inv_mu[0] - 1.;
   }
 
-  _cv_ratio_m1 =
+  cv_ratio_m1 =
       register_buffer("cv_ratio_m1", torch::tensor({ny}, torch::kFloat64));
 
   for (int i = 0; i < ny; ++i) {
-    _cv_ratio_m1[i] =
+    cv_ratio_m1[i] =
         pthermo->options.cref_R()[1 + i] / pthermo->options.cref_R()[0] - 1.;
   }
 
-  _u0 = register_buffer(
+  u0 = register_buffer(
       "u0", torch::tensor(pthermo->options.uref_R(), torch::kFloat64));
 
-  _u0 *= kintera::constants::Rgas * pthermo->inv_mu;
+  u0 *= kintera::constants::Rgas * pthermo->inv_mu;
 }
 
 torch::Tensor IdealMoistImpl::compute(std::string ab,
@@ -123,9 +123,9 @@ void IdealMoistImpl::_prim2intEng(torch::Tensor prim, torch::Tensor &ie) {
   ie = prim[Index::IPR] * _fsig(yfrac) / _feps(yfrac) / (gammad - 1);
 
   // add the internal energy offset
-  ie += prim[Index::IDN] * _u0[0];
+  ie += prim[Index::IDN] * u0[0];
   ie += prim[Index::IDN] *
-        yfrac.unfold(0, ny, 1).matmul(_u0.narrow(0, 1, ny)).squeeze(0);
+        yfrac.unfold(0, ny, 1).matmul(u0.narrow(0, 1, ny)).squeeze(0);
 }
 
 void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
@@ -185,7 +185,7 @@ void IdealMoistImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
   _rhoc.set_(prim[Index::IDN] * yfrac.narrow(0, nvapor, ncloud));
 
   auto vec = _rhoc.sizes().vec();
-  auto ie = _rhoc * (_u0.narrow(0, 1, ny) + (_cv_ratio_m1 + 1.) * cvd * temp)
+  auto ie = _rhoc * (u0.narrow(0, 1, ny) + (cv_ratio_m1 + 1.) * cvd * temp)
                         .narrow(0, nvapor, ncloud)
                         .view(vec);
 
@@ -225,9 +225,9 @@ void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 
   // subtract the internal energy offset
   auto yfrac = prim.slice(0, Index::ICY, prim.size(0));
-  _ie -= prim[Index::IDN] * _u0[0];
+  _ie -= prim[Index::IDN] * u0[0];
   _ie -= prim[Index::IDN] *
-         yfrac.unfold(0, ny, 1).matmul(_u0.narrow(0, 1, ny)).squeeze(0);
+         yfrac.unfold(0, ny, 1).matmul(u0.narrow(0, 1, ny)).squeeze(0);
 
   // eng -> pr
   auto gammad =
@@ -261,7 +261,7 @@ torch::Tensor IdealMoistImpl::_feps(torch::Tensor const &yfrac) const {
   }
 
   auto yu = yfrac.narrow(0, 0, nvapor).unfold(0, nvapor, 1);
-  return 1. + yu.matmul(_mu_ratio_m1.narrow(0, 0, nvapor)).squeeze(0) -
+  return 1. + yu.matmul(inv_mu_ratio_m1.narrow(0, 0, nvapor)).squeeze(0) -
          yfrac.narrow(0, nvapor, ncloud).sum(0);
 }
 
@@ -276,7 +276,7 @@ torch::Tensor IdealMoistImpl::_fsig(torch::Tensor const &yfrac) const {
   }
 
   auto yu = yfrac.unfold(0, ny, 1);
-  return 1. + yfrac.matmul(_cv_ratio_m1).squeeze(0);
+  return 1. + yfrac.matmul(cv_ratio_m1).squeeze(0);
 }
 
 }  // namespace snap

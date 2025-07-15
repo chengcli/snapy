@@ -119,6 +119,70 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
     } else {
       TORCH_WARN("no frictional heating specified, using default model");
     }
+
+    if (forcing["body-heat"]) {
+      printf("- reading body heating options from forcing\n");
+      op.bodyHeat() = BodyHeatOptions::from_yaml(forcing["body-heat"]);
+    } else {
+      TORCH_WARN("no body heating specified, using default model");
+    }
+
+    if (forcing["top-cool"]) {
+      printf("- reading top cooling options from forcing\n");
+      op.topCool() = TopCoolOptions::from_yaml(forcing["top-cool"]);
+    } else {
+      TORCH_WARN("no top cooling specified, using default model");
+    }
+
+    if (forcing["bot-heat"]) {
+      printf("- reading bottom heating options from forcing\n");
+      op.botHeat() = BotHeatOptions::from_yaml(forcing["bot-heat"]);
+    } else {
+      TORCH_WARN("no bottom heating specified, using default model");
+    }
+
+    if (forcing["relax-bot-comp"]) {
+      printf("- reading bottom composition relaxation options from forcing\n");
+      op.relaxBotComp() =
+          RelaxBotCompOptions::from_yaml(forcing["relax-bot-comp"]);
+    } else {
+      TORCH_WARN(
+          "no bottom composition relaxation specified, using default model");
+    }
+
+    if (forcing["relax-bot-temp"]) {
+      printf("- reading bottom temperature relaxation options from forcing\n");
+      op.relaxBotTemp() =
+          RelaxBotTempOptions::from_yaml(forcing["relax-bot-temp"]);
+    } else {
+      TORCH_WARN(
+          "no bottom temperature relaxation specified, using default model");
+    }
+
+    if (forcing["relax-bot-velo"]) {
+      printf("- reading bottom velocity relaxation options from forcing\n");
+      op.relaxBotVelo() =
+          RelaxBotVeloOptions::from_yaml(forcing["relax-bot-velo"]);
+    } else {
+      TORCH_WARN(
+          "no bottom velocity relaxation specified, using default model");
+    }
+
+    if (forcing["top-sponge-lyr"]) {
+      printf("- reading top sponge layer options from forcing\n");
+      op.topSpongeLyr() =
+          TopSpongeLyrOptions::from_yaml(forcing["top-sponge-lyr"]);
+    } else {
+      TORCH_WARN("no top sponge layer specified, using default model");
+    }
+
+    if (forcing["bot-sponge-lyr"]) {
+      printf("- reading bottom sponge layer options from forcing\n");
+      op.botSpongeLyr() =
+          BotSpongeLyrOptions::from_yaml(forcing["bot-sponge-lyr"]);
+    } else {
+      TORCH_WARN("no bottom sponge layer specified, using default model");
+    }
   }
 
   return op;

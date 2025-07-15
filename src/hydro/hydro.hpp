@@ -37,6 +37,14 @@ struct HydroOptions {
   ADD_ARG(CoriolisOptions, coriolis);
   ADD_ARG(DiffusionOptions, visc);
   ADD_ARG(FricHeatOptions, fricHeat);
+  ADD_ARG(BodyHeatOptions, bodyHeat);
+  ADD_ARG(BotHeatOptions, botHeat);
+  ADD_ARG(TopCoolOptions, topCool);
+  ADD_ARG(RelaxBotCompOptions, relaxBotComp);
+  ADD_ARG(RelaxBotTempOptions, relaxBotTemp);
+  ADD_ARG(RelaxBotVeloOptions, relaxBotVelo);
+  ADD_ARG(TopSpongeLyrOptions, topSpongeLyr);
+  ADD_ARG(BotSpongeLyrOptions, botSpongeLyr);
 
   //! submodule options
   ADD_ARG(CoordinateOptions, coord);

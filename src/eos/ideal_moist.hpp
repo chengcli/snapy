@@ -8,6 +8,9 @@ namespace snap {
 class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
                              public EquationOfStateImpl {
  public:
+  //! data
+  torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
+
   //! submodules
   kintera::ThermoY pthermo = nullptr;
 
@@ -34,7 +37,6 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
  private:
   //! cache
   torch::Tensor _prim, _cons, _gamma, _cs, _ke, _ie, _ce, _rhoc;
-  torch::Tensor _mu_ratio_m1, _cv_ratio_m1, _u0;
 
   //! \brief Convert primitive variables to conserved variables.
   /*
