@@ -6,6 +6,9 @@
 // PNetCDF output (PNETCDFOUTPUT or NO_PNETCDFOUTPUT)
 #define @PNETCDF_OPTION@
 
+// If NMASS > 0, use Athena++ indexing scheme
+#define NMASS @NMASS@
+
 #ifdef __CUDACC__
   #define DISPATCH_MACRO __host__ __device__
 #else

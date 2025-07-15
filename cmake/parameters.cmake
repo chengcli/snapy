@@ -1,5 +1,7 @@
 # define default parameters
 
+set_if_empty(NMASS 0)
+
 # netcdf options
 if(NOT NETCDF OR NOT DEFINED NETCDF)
   set(NETCDF_OPTION "NO_NETCDFOUTPUT")

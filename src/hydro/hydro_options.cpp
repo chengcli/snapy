@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/snap.h>
+
 #include "hydro.hpp"
 
 namespace snap {
@@ -10,6 +12,15 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   HydroOptions op;
 
   op.thermo() = kintera::ThermoOptions::from_yaml(filename);
+
+  TORCH_CHECK(
+      NMASS == 0 ||
+          op.thermo().vapor_ids().size() + op.thermo().cloud_ids().size() ==
+              1 + NMASS,
+      "Athena++ style indexing is enabled (NMASS > 0), but the number of "
+      "vapor and cloud species in the thermodynamics options does not match "
+      "the expected number of vapor + cloud species = ",
+      1 + NMASS);
 
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
@@ -118,6 +129,70 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
       op.fricHeat() = FricHeatOptions::from_yaml(config);
     } else {
       TORCH_WARN("no frictional heating specified, using default model");
+    }
+
+    if (forcing["body-heat"]) {
+      printf("- reading body heating options from forcing\n");
+      op.bodyHeat() = BodyHeatOptions::from_yaml(forcing["body-heat"]);
+    } else {
+      TORCH_WARN("no body heating specified, using default model");
+    }
+
+    if (forcing["top-cool"]) {
+      printf("- reading top cooling options from forcing\n");
+      op.topCool() = TopCoolOptions::from_yaml(forcing["top-cool"]);
+    } else {
+      TORCH_WARN("no top cooling specified, using default model");
+    }
+
+    if (forcing["bot-heat"]) {
+      printf("- reading bottom heating options from forcing\n");
+      op.botHeat() = BotHeatOptions::from_yaml(forcing["bot-heat"]);
+    } else {
+      TORCH_WARN("no bottom heating specified, using default model");
+    }
+
+    if (forcing["relax-bot-comp"]) {
+      printf("- reading bottom composition relaxation options from forcing\n");
+      op.relaxBotComp() =
+          RelaxBotCompOptions::from_yaml(forcing["relax-bot-comp"]);
+    } else {
+      TORCH_WARN(
+          "no bottom composition relaxation specified, using default model");
+    }
+
+    if (forcing["relax-bot-temp"]) {
+      printf("- reading bottom temperature relaxation options from forcing\n");
+      op.relaxBotTemp() =
+          RelaxBotTempOptions::from_yaml(forcing["relax-bot-temp"]);
+    } else {
+      TORCH_WARN(
+          "no bottom temperature relaxation specified, using default model");
+    }
+
+    if (forcing["relax-bot-velo"]) {
+      printf("- reading bottom velocity relaxation options from forcing\n");
+      op.relaxBotVelo() =
+          RelaxBotVeloOptions::from_yaml(forcing["relax-bot-velo"]);
+    } else {
+      TORCH_WARN(
+          "no bottom velocity relaxation specified, using default model");
+    }
+
+    if (forcing["top-sponge-lyr"]) {
+      printf("- reading top sponge layer options from forcing\n");
+      op.topSpongeLyr() =
+          TopSpongeLyrOptions::from_yaml(forcing["top-sponge-lyr"]);
+    } else {
+      TORCH_WARN("no top sponge layer specified, using default model");
+    }
+
+    if (forcing["bot-sponge-lyr"]) {
+      printf("- reading bottom sponge layer options from forcing\n");
+      op.botSpongeLyr() =
+          BotSpongeLyrOptions::from_yaml(forcing["bot-sponge-lyr"]);
+    } else {
+      TORCH_WARN("no bottom sponge layer specified, using default model");
     }
   }
 
