@@ -5,7 +5,7 @@ requires = [
   "cmake<=3.30",
   "numpy",
   "ninja",
-  "kintera>=0.7.3",
+  "kintera>=0.7.5",
   ]
 build-backend = "setuptools.build_meta"
 
@@ -21,7 +21,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
   "numpy",
-  "kintera>=0.7.3",
+  "kintera>=0.7.5",
   "cmake<=3.30",
 ]
 classifiers = [
