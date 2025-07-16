@@ -13,18 +13,18 @@ EquationOfStateOptions EquationOfStateOptions::from_yaml(
   EquationOfStateOptions op;
 
   op.type() = node["type"].as<std::string>("moist-mixture");
-  printf("* type = %s\n", op.type().c_str());
-
   op.density_floor() = node["density-floor"].as<double>(1.e-6);
-  printf("* density-floor = %e\n", op.density_floor());
-
   op.pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
-  printf("* pressure-floor = %e\n", op.pressure_floor());
-
   op.limiter() = node["limiter"].as<bool>(false);
-  printf("* limiter = %s\n", op.limiter() ? "true" : "false");
 
   return op;
+}
+
+void EquationOfStateOptions::report(std::ostream& os) const {
+  os << "* type = " << type() << "\n"
+     << "* density-floor = " << density_floor() << "\n"
+     << "* pressure-floor = " << pressure_floor() << "\n"
+     << "* limiter = " << (limiter() ? "true" : "false") << "\n";
 }
 
 torch::Tensor EquationOfStateImpl::compute(

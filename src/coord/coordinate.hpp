@@ -27,6 +27,7 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 struct CoordinateOptions {
   static CoordinateOptions from_yaml(const YAML::Node &node);
   CoordinateOptions() = default;
+  void report(std::ostream &os) const;
 
   int64_t nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
   int64_t nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }

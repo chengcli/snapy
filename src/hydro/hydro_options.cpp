@@ -45,6 +45,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   if (dyn["equation-of-state"]) {
     printf("- reading equation of state options from dynamics\n");
     op.eos() = EquationOfStateOptions::from_yaml(dyn["equation-of-state"]);
+    op.coord().eos_type() = op.eos().type();
   } else {
     TORCH_WARN("no equation of state specified, using default EOS model");
   }

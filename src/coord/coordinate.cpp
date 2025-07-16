@@ -15,7 +15,6 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   CoordinateOptions op;
 
   op.type(node["type"].as<std::string>("cartesian"));
-  printf("* type = %s\n", op.type().c_str());
 
   if (!node["bounds"]) {
     TORCH_WARN(
@@ -25,22 +24,12 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   }
 
   op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
-  printf("* x1min = %f\n", op.x1min());
-
   op.x2min() = node["bounds"]["x2min"].as<double>(0.0);
-  printf("* x2min = %f\n", op.x2min());
-
   op.x3min() = node["bounds"]["x3min"].as<double>(0.0);
-  printf("* x3min = %f\n", op.x3min());
 
   op.x1max() = node["bounds"]["x1max"].as<double>(1.0);
-  printf("* x1max = %f\n", op.x1max());
-
   op.x2max() = node["bounds"]["x2max"].as<double>(1.0);
-  printf("* x2max = %f\n", op.x2max());
-
   op.x3max() = node["bounds"]["x3max"].as<double>(1.0);
-  printf("* x3max = %f\n", op.x3max());
 
   if (!node["cells"]) {
     TORCH_WARN(
@@ -50,18 +39,26 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   }
 
   op.nx1() = node["cells"]["nx1"].as<int>(1);
-  printf("* nx1 = %d\n", op.nx1());
-
   op.nx2() = node["cells"]["nx2"].as<int>(1);
-  printf("* nx2 = %d\n", op.nx2());
-
   op.nx3() = node["cells"]["nx3"].as<int>(1);
-  printf("* nx3 = %d\n", op.nx3());
-
   op.nghost() = node["cells"]["nghost"].as<int>(1);
-  printf("* nghost = %d\n", op.nghost());
 
   return op;
+}
+
+void CoordinateOptions::report(std::ostream& os) const {
+  os << "* type = " << type() << "\n"
+     << "* eos_type = " << eos_type() << "\n"
+     << "* x1min = " << x1min() << "\n"
+     << "* x2min = " << x2min() << "\n"
+     << "* x3min = " << x3min() << "\n"
+     << "* x1max = " << x1max() << "\n"
+     << "* x2max = " << x2max() << "\n"
+     << "* x3max = " << x3max() << "\n"
+     << "* nx1 = " << nx1() << "\n"
+     << "* nx2 = " << nx2() << "\n"
+     << "* nx3 = " << nx3() << "\n"
+     << "* nghost = " << nghost() << "\n";
 }
 
 CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
