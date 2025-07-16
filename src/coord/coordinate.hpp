@@ -27,12 +27,14 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 struct CoordinateOptions {
   static CoordinateOptions from_yaml(const YAML::Node &node);
   CoordinateOptions() = default;
+  void report(std::ostream &os) const;
 
   int64_t nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
   int64_t nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
   int64_t nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
 
   ADD_ARG(std::string, type) = "cartesian";
+  ADD_ARG(std::string, eos_type) = "ideal-gas";
 
   ADD_ARG(double, x1min) = 0.;
   ADD_ARG(double, x2min) = 0.;
@@ -105,21 +107,25 @@ class CoordinateImpl {
 
   virtual torch::Tensor find_cell_index(torch::Tensor const &coords) const;
 
-  virtual torch::Tensor vec_lower(torch::Tensor prim, int dim = 0) const;
-  virtual torch::Tensor vec_raise(torch::Tensor prim, int dim = 0) const;
+  virtual std::array<double, 3> vec_from_cartesian(
+      std::array<double, 3> vec) const {
+    return {vec[0], vec[1], vec[2]};
+  }
 
-  virtual void vec_lower_(torch::Tensor &prim) const {}
-  virtual void vec_raise_(torch::Tensor &prim) const {}
+  virtual void vec_lower_(torch::Tensor &vel) const {}
+  virtual void vec_raise_(torch::Tensor &vel) const {}
 
-  virtual std::array<torch::Tensor, 3> vec_from_cartesian(
-      std::array<double, 3> vec) const;
+  virtual void prim2local1_(torch::Tensor &prim) const {}
+  virtual void prim2local2_(torch::Tensor &prim) const {}
+  virtual void prim2local3_(torch::Tensor &prim) const {}
 
-  virtual void prim2local_(torch::Tensor &prim) const {}
-  virtual void flux2global_(torch::Tensor &flux) const {}
+  virtual void flux2global1_(torch::Tensor &flux) const {}
+  virtual void flux2global2_(torch::Tensor &flux) const {}
+  virtual void flux2global3_(torch::Tensor &flux) const {}
 
   //! fluxes -> flux divergence
-  virtual torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
-                                torch::Tensor flux3);
+  virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
+                                torch::Tensor flux2, torch::Tensor flux3);
 
  protected:
   //! Disable default constructor
@@ -135,6 +141,8 @@ using Coordinate = std::shared_ptr<CoordinateImpl>;
 class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
                       public CoordinateImpl {
  public:
+  using CoordinateImpl::forward;
+
   CartesianImpl() = default;
   explicit CartesianImpl(const CoordinateOptions &options_)
       : CoordinateImpl(options_) {
@@ -147,17 +155,14 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
   }
 
   void reset_coordinates(std::vector<MeshGenerator> meshgens) override;
-
-  torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
-                        torch::Tensor flux3) override {
-    return CoordinateImpl::forward(flux1, flux2, flux3);
-  }
 };
 TORCH_MODULE(Cartesian);
 
 class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
                         public CoordinateImpl {
  public:
+  using CoordinateImpl::forward;
+
   CylindricalImpl() = default;
   explicit CylindricalImpl(const CoordinateOptions &options_)
       : CoordinateImpl(options_) {
@@ -168,17 +173,14 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);
   }
-
-  torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
-                        torch::Tensor flux3) override {
-    return CoordinateImpl::forward(flux1, flux2, flux3);
-  }
 };
 TORCH_MODULE(Cylindrical);
 
 class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
                            public CoordinateImpl {
  public:
+  using CoordinateImpl::forward;
+
   SphericalPolarImpl() = default;
   explicit SphericalPolarImpl(const CoordinateOptions &options_)
       : CoordinateImpl(options_) {
@@ -189,37 +191,59 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
     stream << "SphericalPolar coordinate:" << std::endl;
     print(stream);
   }
-
-  torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
-                        torch::Tensor flux3) override {
-    return CoordinateImpl::forward(flux1, flux2, flux3);
-  }
 };
 TORCH_MODULE(SphericalPolar);
 
-class CubedSphereImpl : public torch::nn::Cloneable<CubedSphereImpl>,
-                        public CoordinateImpl {
+class GnomonicEquiangleImpl
+    : public torch::nn::Cloneable<GnomonicEquiangleImpl>,
+      public CoordinateImpl {
  public:
-  CubedSphereImpl() = default;
-  explicit CubedSphereImpl(const CoordinateOptions &options_)
+  // geometry data
+  torch::Tensor cosine_cell_kj, sine_cell_kj;
+  torch::Tensor cosine_face2_kj, sine_face2_kj;
+  torch::Tensor cosine_face3_kj, sine_face3_kj;
+  torch::Tensor x_ov_rD_kji, y_ov_rC_kji;
+  torch::Tensor dx2f_ang_kj, dx3f_ang_kj;
+  torch::Tensor dx2f_ang_face3_kj, dx3f_ang_face2_kj;
+
+  // metric data
+  torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
+
+  GnomonicEquiangleImpl() = default;
+  explicit GnomonicEquiangleImpl(const CoordinateOptions &options_)
       : CoordinateImpl(options_) {
     reset();
   }
-  void reset() override {}
+  void reset() override;
   void pretty_print(std::ostream &stream) const override {
-    stream << "CubedSphere coordinate:" << std::endl;
+    stream << "GnomonicEquiangle coordinate:" << std::endl;
     print(stream);
   }
 
-  //! cosine of the angle between the coordinate axis
-  torch::Tensor mu1, mu2, mu3;
+  torch::Tensor face_area1() const override;
+  torch::Tensor face_area2() const override;
+  torch::Tensor face_area3() const override;
+  torch::Tensor cell_volume() const override;
 
-  torch::Tensor forward(torch::Tensor flux1, torch::Tensor flux2,
-                        torch::Tensor flux3) override {
-    return CoordinateImpl::forward(flux1, flux2, flux3);
-  }
+  void vec_lower_(torch::Tensor &vel) const override;
+  void vec_raise_(torch::Tensor &vel) const override;
+
+  // no need to ortho-normal z-direction
+  void prim2local2_(torch::Tensor &wlr) const override;
+  void prim2local3_(torch::Tensor &wlr) const override;
+
+  void flux2global1_(torch::Tensor &flux) const override;
+  void flux2global2_(torch::Tensor &flux) const override;
+  void flux2global3_(torch::Tensor &flux) const override;
+
+  torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
+                        torch::Tensor flux2, torch::Tensor flux3) override;
+
+ private:
+  void _set_face2_metric() const;
+  void _set_face3_metric() const;
 };
-TORCH_MODULE(CubedSphere);
+TORCH_MODULE(GnomonicEquiangle);
 
 IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
                         int extend_x1 = 0, int extend_x2 = 0,

@@ -4,7 +4,6 @@
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/eos/moist_mixture.hpp>
 #include <snap/eos/shallow_water.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/recon/interpolation.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 
@@ -36,7 +35,7 @@ RiemannSolver register_module_op(torch::nn::Module *p, std::string name,
     return p->register_module(name, HLLCSolver(op));
   } else if (op.type() == "upwind") {
     return p->register_module(name, UpwindSolver(op));
-  } else if (op.type() == "shallow_roe") {
+  } else if (op.type() == "shallow-roe") {
     return p->register_module(name, ShallowRoeSolver(op));
   } else {
     throw std::runtime_error("register_module: unknown type " + op.type());
@@ -49,10 +48,10 @@ Coordinate register_module_op(torch::nn::Module *p, std::string name,
     return p->register_module(name, Cartesian(op));
   } else if (op.type() == "cylindrical") {
     return p->register_module(name, Cylindrical(op));
-  } else if (op.type() == "spherical_polar") {
+  } else if (op.type() == "spherical-polar") {
     return p->register_module(name, SphericalPolar(op));
-  } else if (op.type() == "cubed_sphere") {
-    return p->register_module(name, CubedSphere(op));
+  } else if (op.type() == "cubed-sphere") {
+    return p->register_module(name, GnomonicEquiangle(op));
   } else {
     throw std::runtime_error("register_module: unknown type " + op.type());
   }

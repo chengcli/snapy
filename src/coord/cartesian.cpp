@@ -1,7 +1,6 @@
 // snap
 #include <configure.h>
 
-#include "coord_formatter.hpp"
 #include "coordinate.hpp"
 
 namespace snap {

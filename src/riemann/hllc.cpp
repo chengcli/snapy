@@ -30,8 +30,22 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto gammar = peosr->compute("W->A", {wr});
   auto cr = peosr->compute("WA->L", {wr, gammar});
 
-  peosl->pcoord->prim2local_(wl);
-  peosr->pcoord->prim2local_(wr);
+  switch (dim) {
+    case 1:
+      peosl->pcoord->prim2local3_(wl);
+      peosr->pcoord->prim2local3_(wr);
+      break;
+    case 2:
+      peosl->pcoord->prim2local2_(wl);
+      peosr->pcoord->prim2local2_(wr);
+      break;
+    case 3:
+      peosl->pcoord->prim2local1_(wl);
+      peosr->pcoord->prim2local1_(wr);
+      break;
+    default:
+      TORCH_CHECK(false, "Invalid dimension: ", dim);
+  }
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -50,7 +64,21 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   at::native::call_hllc(flx.device().type(), iter, dim);
 
-  peosl->pcoord->flux2global_(flx);
+  auto pcoord = peosl->pcoord;
+
+  switch (dim) {
+    case 1:
+      pcoord->flux2global3_(flx);
+      break;
+    case 2:
+      pcoord->flux2global2_(flx);
+      break;
+    case 3:
+      pcoord->flux2global1_(flx);
+      break;
+    default:
+      TORCH_CHECK(false, "Invalid dimension: ", dim);
+  }
 
   return flx;
 }
