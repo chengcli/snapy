@@ -7,8 +7,6 @@
 
 namespace snap {
 
-using enum Index;
-
 HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
   reset();
 }

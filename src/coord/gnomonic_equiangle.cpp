@@ -5,8 +5,6 @@
 
 namespace snap {
 
-using enum Index;
-
 void GnomonicEquiangleImpl::reset() {
   auto const &op = options;
 
