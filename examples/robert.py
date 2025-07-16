@@ -26,7 +26,7 @@ op = MeshBlockOptions.from_yaml("robert.yaml");
 
 # initialize block
 block = MeshBlock(op)
-#block.to(torch.device("cuda:0"))
+block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
@@ -75,16 +75,19 @@ for out in [out2, out3]:
 count = 0
 start_time = time.time()
 interior = block.part((0, 0, 0))
+dt_max = 0.
 
 while not block.intg.stop(count, current_time):
     dt = block.max_time_step()
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage)
+    dt_max = max(dt_max, dt)
 
     current_time += dt
     count += 1
-    if count % 10 == 0:
+    if count % 1000 == 0:
         print("time = ", current_time)
+        print("dt_max = ", dt_max)
         u = block.buffer("hydro.eos.U")
         print("mass = ", u[interior][index.idn].sum())
 

@@ -49,7 +49,7 @@ integration:
   cfl: 0.9
   implicit-scheme: 0
   nlim: -1
-  tlim: 900
+  tlim: 1080
 
 forcing:
   const-gravity:
