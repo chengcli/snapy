@@ -24,8 +24,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: cp5, scale: false, shock: true}
-    horizontal: {type: cp5, scale: false, shock: true}
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
 
   riemann-solver:
     type: lmars
