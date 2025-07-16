@@ -20,15 +20,16 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
   }
 
   op.shock() = node[section]["shock"].as<bool>(false);
-  printf("* shock = %s\n", op.shock() ? "true" : "false");
-
   op.interp().type() = node[section]["type"].as<std::string>("dc");
-  printf("* interp.type = %s\n", op.interp().type().c_str());
-
   op.interp().scale() = node[section]["scale"].as<bool>(false);
-  printf("* interp.scale = %s\n", op.interp().scale() ? "true" : "false");
 
   return op;
+}
+
+void ReconstructOptions::report(std::ostream &os) const {
+  os << "* shock = " << (shock() ? "true" : "false") << "\n"
+     << "* interp.type = " << interp().type() << "\n"
+     << "* interp.scale = " << (interp().scale() ? "true" : "false") << "\n";
 }
 
 // TODO(cli) remove copy
@@ -53,8 +54,6 @@ void ReconstructImpl::reset() {
 }
 
 torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 
