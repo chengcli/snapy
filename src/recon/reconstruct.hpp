@@ -20,6 +20,7 @@ struct ReconstructOptions {
   static ReconstructOptions from_yaml(const YAML::Node& node,
                                       std::string section);
   ReconstructOptions() = default;
+  void report(std::ostream& os) const;
 
   //! configure options
   ADD_ARG(bool, is_boundary_lower) = false;

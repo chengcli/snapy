@@ -102,4 +102,5 @@ while not block.intg.stop(count, current_time):
             out.write_output_file(block, current_time)
             out.combine_blocks()
 
+print("dt_max = ", dt_max)
 print("elapsed time = ", time.time() - start_time)
