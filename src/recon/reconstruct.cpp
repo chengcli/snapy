@@ -54,8 +54,6 @@ void ReconstructImpl::reset() {
 }
 
 torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
-  torch::NoGradGuard no_grad;
-
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 

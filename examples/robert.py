@@ -16,11 +16,6 @@ Rd = 287.0
 gamma = 1.4
 uniform_bubble = False
 
-nx1 = 300
-nx2 = 200
-nx3 = 1
-nghost = 3
-
 # set hydrodynamic options
 op = MeshBlockOptions.from_yaml("robert.yaml");
 

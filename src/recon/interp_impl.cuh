@@ -43,13 +43,12 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int nvar,
   __syncthreads();
 
   // calculation
-  int count = 0;
   for (int j = 0; j < nvar; ++j) {
+    int i = id + j * nt;
     T sout = 0.;
 
-#pragma unroll
-    for (int i = 0; i < N; ++i) {
-      sout += scoeff[i] * sinp[count++];
+    for (int k = 0; k < N; ++k) {
+      sout += scoeff[k] * sinp[i + k];
     }
 
     // copy to global memory
