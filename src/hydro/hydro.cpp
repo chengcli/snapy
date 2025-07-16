@@ -6,6 +6,9 @@
 #include <snap/registry.hpp>
 
 namespace snap {
+
+using enum Index;
+
 HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
   reset();
 }
@@ -189,17 +192,17 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
   if ((cs.size(2) > 1) && (pvic->options.scheme() == 0)) {
-    dt1 = torch::min(pcoord->center_width1() / (w[Index::IVX].abs() + cs))
+    dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
               .item<double>();
   }
 
   if (cs.size(1) > 1) {
-    dt2 = torch::min(pcoord->center_width2() / (w[Index::IVY].abs() + cs))
+    dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
               .item<double>();
   }
 
   if (cs.size(0) > 1) {
-    dt3 = torch::min(pcoord->center_width3() / (w[Index::IVZ].abs() + cs))
+    dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
               .item<double>();
   }
 
@@ -234,10 +237,10 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     pproj->restore_inplace(wtmp);
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
 
-    priemann->forward(wlr1[Index::ILT], wlr1[Index::IRT], DIM1, _flux1);
+    priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
 
     // add sedimentation flux
-    psedhydro->forward(wlr1[Index::IRT], _flux1);
+    psedhydro->forward(wlr1[IRT], _flux1);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR1->F1"] +=
@@ -253,7 +256,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
-    priemann->forward(wlr2[Index::ILT], wlr2[Index::IRT], DIM2, _flux2);
+    priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR2->F2"] +=
@@ -269,7 +272,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
-    priemann->forward(wlr3[Index::ILT], wlr3[Index::IRT], DIM3, _flux3);
+    priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR3->F3"] +=
@@ -277,7 +280,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
-  _div.set_(pcoord->forward(_flux1, _flux2, _flux3));
+  _div.set_(pcoord->forward(w, _flux1, _flux2, _flux3));
 
   auto time3 = std::chrono::high_resolution_clock::now();
   timer["F->D"] +=
@@ -305,12 +308,12 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
 void HydroImpl::fix_negative_dp_inplace(torch::Tensor wlr,
                                         torch::Tensor wdc) const {
-  auto mask = torch::logical_or(wlr.select(1, Index::IDN) < 0.,
-                                wlr.select(1, Index::IPR) < 0.);
-  wlr.select(1, Index::IDN) =
-      torch::where(mask, wdc.select(1, Index::IDN), wlr.select(1, Index::IDN));
-  wlr.select(1, Index::IPR) =
-      torch::where(mask, wdc.select(1, Index::IPR), wlr.select(1, Index::IPR));
+  auto mask =
+      torch::logical_or(wlr.select(1, IDN) < 0., wlr.select(1, IPR) < 0.);
+  wlr.select(1, IDN) =
+      torch::where(mask, wdc.select(1, IDN), wlr.select(1, IDN));
+  wlr.select(1, IPR) =
+      torch::where(mask, wdc.select(1, IPR), wlr.select(1, IPR));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
@@ -319,21 +322,21 @@ void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
       get_interior(wlr.sizes(), nghost, extend_x1, extend_x2, extend_x3);
 
   int dim = extend_x1 == 1 ? 1 : (extend_x2 == 1 ? 2 : 3);
-  TORCH_CHECK(
-      wlr.index(interior).select(1, Index::IDN).min().item<double>() > 0.,
-      "Negative density detected after reconstruction in dimension ", dim);
-  TORCH_CHECK(
-      wlr.index(interior).select(1, Index::IPR).min().item<double>() > 0.,
-      "Negative pressure detected after reconstruction in dimension ", dim);
+  TORCH_CHECK(wlr.index(interior).select(1, IDN).min().item<double>() > 0.,
+              "Negative density detected after reconstruction in dimension ",
+              dim);
+  TORCH_CHECK(wlr.index(interior).select(1, IPR).min().item<double>() > 0.,
+              "Negative pressure detected after reconstruction in dimension ",
+              dim);
 }
 
 void check_eos(torch::Tensor w, int nghost) {
   auto interior = get_interior(w.sizes(), nghost);
-  TORCH_CHECK(w.index(interior)[Index::IDN].min().item<double>() > 0.,
+  TORCH_CHECK(w.index(interior)[IDN].min().item<double>() > 0.,
               "Negative density detected after EOS. ",
               "Suggestions: 1) Reducting the CFL number;",
               " 2) Activate EOS limiter and set the density floor");
-  TORCH_CHECK(w.index(interior)[Index::IPR].min().item<double>() > 0.,
+  TORCH_CHECK(w.index(interior)[IPR].min().item<double>() > 0.,
               "Negative pressure detected after EOS. ",
               "Suggestions: 1) Reducting the CFL number; ",
               " 2) Activate EOS limiter and set the pressure floor");

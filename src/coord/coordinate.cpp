@@ -215,26 +215,9 @@ torch::Tensor CoordinateImpl::find_cell_index(
   return index;
 }
 
-torch::Tensor CoordinateImpl::vec_lower(torch::Tensor prim, int dim) const {
-  return prim.narrow(dim, Index::IVX, 3);
-}
-
-torch::Tensor CoordinateImpl::vec_raise(torch::Tensor prim, int dim) const {
-  return prim.narrow(dim, Index::IVX, 3);
-}
-
-std::array<torch::Tensor, 3> CoordinateImpl::vec_from_cartesian(
-    std::array<double, 3> vec) const {
-  auto omega1 = torch::tensor(vec[0]).expand({1, 1, 1});
-  auto omega2 = torch::tensor(vec[1]).expand({1, 1, 1});
-  auto omega3 = torch::tensor(vec[2]).expand({1, 1, 1});
-  return {omega1, omega2, omega3};
-}
-
-torch::Tensor CoordinateImpl::forward(torch::Tensor flux1, torch::Tensor flux2,
+torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
+                                      torch::Tensor flux2,
                                       torch::Tensor flux3) {
-  torch::NoGradGuard no_grad;
-
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
 
   auto vol = cell_volume().unsqueeze(0);
