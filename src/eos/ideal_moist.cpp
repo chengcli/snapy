@@ -54,14 +54,14 @@ void IdealMoistImpl::reset() {
            pthermo->options.cloud_ids().size() - 1;
 
   inv_mu_ratio_m1 =
-      register_buffer("inv_mu_ratio_m1", torch::tensor({ny}, torch::kFloat64));
+      register_buffer("inv_mu_ratio_m1", torch::zeros({ny}, torch::kFloat64));
 
   for (int i = 0; i < ny; ++i) {
     inv_mu_ratio_m1[i] = pthermo->inv_mu[i + 1] / pthermo->inv_mu[0] - 1.;
   }
 
   cv_ratio_m1 =
-      register_buffer("cv_ratio_m1", torch::tensor({ny}, torch::kFloat64));
+      register_buffer("cv_ratio_m1", torch::zeros({ny}, torch::kFloat64));
 
   for (int i = 0; i < ny; ++i) {
     cv_ratio_m1[i] =

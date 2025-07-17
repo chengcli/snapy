@@ -18,5 +18,6 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   auto op = MeshBlockOptions::from_yaml("earth_moist.yaml");
+  std::cout << fmt::format("{}", op.hydro().thermo()) << std::endl;
   auto block = MeshBlock(op);
 }
