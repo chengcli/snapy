@@ -23,7 +23,12 @@ namespace snap {
 struct EquationOfStateOptions {
   static EquationOfStateOptions from_yaml(YAML::Node const& node);
   EquationOfStateOptions() = default;
-  void report(std::ostream& os) const;
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* density_floor = " << density_floor() << "\n"
+       << "* pressure_floor = " << pressure_floor() << "\n"
+       << "* limiter = " << (limiter() ? "true" : "false") << "\n";
+  }
 
   ADD_ARG(std::string, type) = "moist-mixture";
   ADD_ARG(double, density_floor) = 1.e-10;

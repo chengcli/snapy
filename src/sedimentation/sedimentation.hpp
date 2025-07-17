@@ -7,6 +7,7 @@
 
 // snap
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -19,6 +20,17 @@ namespace snap {
 
 struct SedVelOptions {
   static SedVelOptions from_yaml(YAML::Node const& config);
+  void report(std::ostream& os) const {
+    os << "* radius = " << fmt::format("{}", radius()) << "\n"
+       << "* density = " << fmt::format("{}", density()) << "\n"
+       << "* const_vsed = " << fmt::format("{}", const_vsed()) << "\n"
+       << "* grav = " << grav() << "\n"
+       << "* a_diameter = " << a_diameter() << "\n"
+       << "* a_epsilon_LJ = " << a_epsilon_LJ() << "\n"
+       << "* a_mass = " << a_mass() << "\n"
+       << "* min_radius = " << min_radius() << "\n"
+       << "* upper_limit = " << upper_limit() << "\n";
+  }
 
   //! radius and density of particles
   //! if specified, must be the same size of cloud particles
@@ -48,6 +60,7 @@ struct SedVelOptions {
 };
 
 struct SedHydroOptions {
+  void report(std::ostream& os) const { sedvel().report(os); }
   //! submodules options
   ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(SedVelOptions, sedvel);

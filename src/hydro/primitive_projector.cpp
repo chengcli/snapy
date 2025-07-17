@@ -50,14 +50,6 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
   return op;
 }
 
-void PrimitiveProjectorOptions::report(std::ostream &os) const {
-  os << "* type = " << type() << "\n"
-     << "* pressure-margin = " << margin() << "\n"
-     << "* grav = " << grav() << "\n"
-     << "* Rd = " << Rd() << "\n"
-     << "* nghost = " << nghost() << "\n";
-}
-
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(
     PrimitiveProjectorOptions options_)
     : options(options_) {

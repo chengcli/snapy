@@ -17,6 +17,12 @@ namespace snap {
 struct ImplicitOptions {
   static ImplicitOptions from_yaml(const YAML::Node& root);
   ImplicitOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* nghost = " << nghost() << "\n"
+       << "* grav = " << grav() << "\n"
+       << "* scheme = " << scheme() << "\n";
+  }
 
   ADD_ARG(std::string, type) = "vic";
   ADD_ARG(int, nghost) = 1;

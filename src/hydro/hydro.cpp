@@ -45,8 +45,8 @@ void HydroImpl::reset() {
   options.vic() = pvic->options;
 
   //// ---- (9) set up sedimentation ---- ////
-  psedhydro = register_module("sedhydro", SedHydro(options.sedhydro()));
-  options.sedhydro() = psedhydro->options;
+  psed = register_module("sed", SedHydro(options.sed()));
+  options.sed() = psed->options;
 
   //// ---- (10) set up forcings ---- ////
   std::vector<std::string> forcing_names;
@@ -238,7 +238,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
 
     // add sedimentation flux
-    psedhydro->forward(wlr1[IRT], _flux1);
+    psed->forward(wlr1[IRT], _flux1);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR1->F1"] +=

@@ -67,17 +67,15 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
 
   // sedimentation
   if (config["sedimentation"]) {
-    op.sedhydro().sedvel() = SedVelOptions::from_yaml(config);
-    op.sedhydro().eos() = op.eos();
+    op.sed().sedvel() = SedVelOptions::from_yaml(config);
+    op.sed().eos() = op.eos();
 
     TORCH_CHECK(
-        op.sedhydro().sedvel().radius().size() ==
-            op.thermo().cloud_ids().size(),
+        op.sed().sedvel().radius().size() == op.thermo().cloud_ids().size(),
         "Sedimentation radius size must match the number of cloud species.");
 
     TORCH_CHECK(
-        op.sedhydro().sedvel().density().size() ==
-            op.thermo().cloud_ids().size(),
+        op.sed().sedvel().density().size() == op.thermo().cloud_ids().size(),
         "Sedimentation density size must match the number of cloud species.");
   }
 

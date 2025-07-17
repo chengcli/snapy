@@ -46,21 +46,6 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   return op;
 }
 
-void CoordinateOptions::report(std::ostream& os) const {
-  os << "* type = " << type() << "\n"
-     << "* eos_type = " << eos_type() << "\n"
-     << "* x1min = " << x1min() << "\n"
-     << "* x2min = " << x2min() << "\n"
-     << "* x3min = " << x3min() << "\n"
-     << "* x1max = " << x1max() << "\n"
-     << "* x2max = " << x2max() << "\n"
-     << "* x3max = " << x3max() << "\n"
-     << "* nx1 = " << nx1() << "\n"
-     << "* nx2 = " << nx2() << "\n"
-     << "* nx3 = " << nx3() << "\n"
-     << "* nghost = " << nghost() << "\n";
-}
-
 CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
     : options(options_) {
   auto const& op = options;
