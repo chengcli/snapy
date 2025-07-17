@@ -20,7 +20,9 @@ void bind_eos(py::module &m) {
   pyEquationOfStateOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::EquationOfStateOptions &a) {
-             return fmt::format("EquationOfStateOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("EquationOfStateOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::EquationOfStateOptions, type)
       .ADD_OPTION(double, snap::EquationOfStateOptions, density_floor)
@@ -32,7 +34,7 @@ void bind_eos(py::module &m) {
   py::class_<snap::EquationOfStateImpl>(m, "EquationOfState")
       .def("__repr__",
            [](const snap::EquationOfStateImpl &a) {
-             return fmt::format("EquationOfState{}", a.options);
+             return fmt::format("EquationOfState(\n{})", a.options);
            })
       .def("nvar", &snap::EquationOfStateImpl::nvar)
       .def("compute", &snap::EquationOfStateImpl::compute)

@@ -5,9 +5,11 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
+// kintera
+#include <kintera/utils/format.hpp>
+
 // snap
 #include <snap/eos/equation_of_state.hpp>
-#include <snap/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>

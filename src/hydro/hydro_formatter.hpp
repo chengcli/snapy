@@ -20,8 +20,8 @@ struct fmt::formatter<snap::HydroOptions> {
     std::stringstream ss;
     ss << "Hydro options:\n";
     p.report(ss);
-    /*ss << "Thermodynamics options:\n";
-    p.thermo().report(ss);*/
+    ss << "Thermodynamics options:\n";
+    p.thermo().report(ss);
     ss << "Const gravity forcing options:\n";
     p.grav().report(ss);
     ss << "Coriolis forcing options:\n";

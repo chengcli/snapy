@@ -6,10 +6,12 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
+// kintera
+#include <kintera/utils/format.hpp>
+
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
-#include <snap/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>

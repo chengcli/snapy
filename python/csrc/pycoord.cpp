@@ -17,7 +17,9 @@ void bind_coord(py::module &m) {
   pyCoordinateOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoordinateOptions &a) {
-             return fmt::format("CoordinateOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("CoordinateOptions(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::CoordinateOptions, x1min)
       .ADD_OPTION(double, snap::CoordinateOptions, x1max)

@@ -17,7 +17,9 @@ void bind_riemann(py::module &m) {
   pyRiemannSolverOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::RiemannSolverOptions &a) {
-             return fmt::format("RiemannSolverOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("RiemannSolverOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::RiemannSolverOptions, type);
 

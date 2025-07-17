@@ -18,7 +18,9 @@ void bind_intg(py::module &m) {
   pyIntegratorWeight.def(py::init<>())
       .def("__repr__",
            [](const snap::IntegratorWeight &a) {
-             return fmt::format("IntegratorWeight{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("IntegratorWeight(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::IntegratorWeight, wght0)
       .ADD_OPTION(double, snap::IntegratorWeight, wght1)
@@ -30,7 +32,9 @@ void bind_intg(py::module &m) {
   pyIntegratorOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::IntegratorOptions &a) {
-             return fmt::format("IntegratorOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("IntegratorOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::IntegratorOptions, type)
       .ADD_OPTION(double, snap::IntegratorOptions, cfl);
