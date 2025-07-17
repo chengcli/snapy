@@ -17,11 +17,7 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
     YAML::Node const &root) {
   PrimitiveProjectorOptions op;
 
-  if (!root["dynamics"]) {
-    TORCH_WARN(
-        "no section 'dynamics' specified, not using primitive projector");
-    return op;
-  }
+  if (!root["dynamics"]) return op;
 
   if (root["dynamics"]["vertical-projection"]) {
     op.type() =
@@ -31,14 +27,11 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
         root["dynamics"]["vertical-projection"]["pressure-margin"].as<double>(
             1.e-6);
   }
-  printf("* type = %s\n", op.type().c_str());
-  printf("* pressure-margin = %e\n", op.margin());
 
   if (root["forcing"]) {
     if (root["forcing"]["const-gravity"])
       op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.);
   }
-  printf("* grav = %e\n", op.grav());
 
   if (kintera::species_weights.size() == 0) {
     TORCH_CHECK(false,
@@ -48,22 +41,21 @@ PrimitiveProjectorOptions PrimitiveProjectorOptions::from_yaml(
 
   auto mu = kintera::species_weights[0];
   op.Rd() = kintera::constants::Rgas / mu;
-  printf("* Rd = %e\n", op.Rd());
 
-  if (!root["geometry"]) {
-    printf("* nghost = %d\n", op.nghost());
-    return op;
-  }
-
-  if (!root["geometry"]["cells"]) {
-    printf("* nghost = %d\n", op.nghost());
-    return op;
-  }
+  if (!root["geometry"]) return op;
+  if (!root["geometry"]["cells"]) return op;
 
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-  printf("* nghost = %d\n", op.nghost());
 
   return op;
+}
+
+void PrimitiveProjectorOptions::report(std::ostream &os) const {
+  os << "* type = " << type() << "\n"
+     << "* pressure-margin = " << margin() << "\n"
+     << "* grav = " << grav() << "\n"
+     << "* Rd = " << Rd() << "\n"
+     << "* nghost = " << nghost() << "\n";
 }
 
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(
