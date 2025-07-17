@@ -28,6 +28,7 @@ namespace snap {
 struct HydroOptions {
   static HydroOptions from_yaml(std::string const& filename);
   HydroOptions() = default;
+  void report(std::ostream& os) const {}
 
   //! Thermodynamics options
   ADD_ARG(kintera::ThermoOptions, thermo);

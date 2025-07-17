@@ -21,6 +21,13 @@ struct IntegratorWeight {
 
 struct IntegratorOptions {
   static IntegratorOptions from_yaml(std::string const& filename);
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* cfl = " << cfl() << "\n"
+       << "* tlim = " << tlim() << "\n"
+       << "* nlim = " << nlim() << "\n";
+  }
+
   ADD_ARG(std::string, type) = "rk3";
 
   ADD_ARG(double, cfl) = 0.9;

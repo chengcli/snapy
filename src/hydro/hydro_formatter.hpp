@@ -18,6 +18,8 @@ struct fmt::formatter<snap::HydroOptions> {
   template <typename FormatContext>
   auto format(const snap::HydroOptions& p, FormatContext& ctx) const {
     std::stringstream ss;
+    ss << "Hydro options:\n";
+    p.report(ss);
     /*ss << "Thermodynamics options:\n";
     p.thermo().report(ss);*/
     ss << "Const gravity forcing options:\n";

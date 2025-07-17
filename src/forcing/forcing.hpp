@@ -9,6 +9,7 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
+#include <snap/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -115,8 +116,8 @@ struct RelaxBotCompOptions {
   RelaxBotCompOptions() = default;
   void report(std::ostream& os) const {
     os << "* tau = " << tau() << "\n"
-       << "* species = " << species() << "\n"
-       << "* xfrac = " << xfrac() << "\n";
+       << "* species = " << fmt::format("{}", species()) << "\n"
+       << "* xfrac = " << fmt::format("{}", xfrac()) << "\n";
   }
 
   ADD_ARG(double, tau) = 0.0;

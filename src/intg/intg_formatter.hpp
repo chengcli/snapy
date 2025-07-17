@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <sstream>
+
 // fmt
 #include <fmt/format.h>
 
@@ -27,7 +30,8 @@ struct fmt::formatter<snap::IntegratorOptions> {
   // Define the format function for IntegratorOptions
   template <typename FormatContext>
   auto format(const snap::IntegratorOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "(type = {}; cfl = {})", p.type(),
-                          p.cfl());
+    std::stringstream ss;
+    p.report(ss);
+    return fmt::format_to(ctx.out(), ss.str());
   }
 };
