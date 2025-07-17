@@ -4,6 +4,7 @@
 
 setup_problem(shock)
 setup_problem(straka)
+setup_problem(earth_moist)
 
 file(GLOB inputs *.yaml *.py)
 foreach(input ${inputs})
