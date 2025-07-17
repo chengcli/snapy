@@ -4,21 +4,14 @@ import time
 import numpy as np
 from snapy import *
 
-dT = 0.5
-p0 = 1.0e5
-Ts = 303.15
-xc = 500.0
-yc = 0.0
-zc = 260.0
-s = 100.0
-a = 50.0
-grav = 9.8
-Rd = 287.0
-gamma = 1.4
-uniform_bubble = False
+torch.set_default_dtype(torch.float64)
+
+# parameters
+Ts = 300.
+Ps = 1.e5
 
 # set hydrodynamic options
-op = MeshBlockOptions.from_yaml("bryan.yaml");
+op = MeshBlockOptions.from_yaml("earth_moist.yaml");
 
 # initialize block
 block = MeshBlock(op)
@@ -29,15 +22,27 @@ coord = block.hydro.module("coord")
 eos = block.hydro.module("eos")
 thermo = eos.named_modules()["thermo"]
 
-# thermodynamics
-cp = gamma / (gamma - 1.0) * Rd
-
-# set initial condition
+# get coordinates
 x3v, x2v, x1v = torch.meshgrid(
     coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
 )
 
+# get primitive variable
 w = block.buffer("hydro.eos.W")
+
+# get dimensions
+nc3, nc2, nc1 = x1v.shape
+nspecies = thermo.options.species()
+
+exit()
+
+temp = Ts * torch.ones(nc3, nc2)
+pres = Ps * torch.ones(nc3, nc2)
+xfrac = torch.ones(nc3, nc2, 1)
+
+# half a grid to cell center
+dz = 0.;
+thermo.extrapolate_ad(temp, pres, xfrac, grav, dz);
 
 temp = Ts - grav * x1v / cp
 w[index.ipr] = p0 * torch.pow(temp / Ts, cp / Rd)
