@@ -15,13 +15,7 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   CoordinateOptions op;
 
   op.type(node["type"].as<std::string>("cartesian"));
-
-  if (!node["bounds"]) {
-    TORCH_WARN(
-        "no bounds specified, using default coordinate bounds (0, 1) in all "
-        "directions");
-    return op;
-  }
+  if (!node["bounds"]) return op;
 
   op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
   op.x2min() = node["bounds"]["x2min"].as<double>(0.0);
@@ -31,17 +25,27 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
   op.x2max() = node["bounds"]["x2max"].as<double>(1.0);
   op.x3max() = node["bounds"]["x3max"].as<double>(1.0);
 
-  if (!node["cells"]) {
-    TORCH_WARN(
-        "no cells specified, using default cell counts (1, 1, 1) in all "
-        "directions");
-    return op;
-  }
+  if (!node["cells"]) return op;
 
   op.nx1() = node["cells"]["nx1"].as<int>(1);
   op.nx2() = node["cells"]["nx2"].as<int>(1);
   op.nx3() = node["cells"]["nx3"].as<int>(1);
   op.nghost() = node["cells"]["nghost"].as<int>(1);
+
+  if (op.nx1() > 1 && op.nx1() < op.nghost()) {
+    TORCH_CHECK(false,
+                "Number of x1 grids must be greater than the ghost zone size");
+  }
+
+  if (op.nx2() > 1 && op.nx2() < op.nghost()) {
+    TORCH_CHECK(false,
+                "Number of x2 grids must be greater than the ghost zone size");
+  }
+
+  if (op.nx3() > 1 && op.nx3() < op.nghost()) {
+    TORCH_CHECK(false,
+                "Number of x3 grids must be greater than the ghost zone size");
+  }
 
   return op;
 }

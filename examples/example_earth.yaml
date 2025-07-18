@@ -69,3 +69,9 @@ reactions:
   - equation: H2O <=> H2O(l)
     type: nucleation
     rate-constant: {formula: h2o_ideal}
+
+problem:
+  Ps: 1.e5
+  Ts: 300.
+  xH2O: 0.02
+  Tmin: 200

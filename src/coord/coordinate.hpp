@@ -71,6 +71,24 @@ class CoordinateImpl {
   torch::Tensor x1v, x2v, x3v;
   torch::Tensor dx1f, dx2f, dx3f;
 
+  int is() const { return options.nx1() > 1 ? options.nghost() : 0; }
+
+  int ie() const {
+    return options.nx1() > 1 ? options.nghost() + options.nx1() - 1 : 0;
+  }
+
+  int js() const { return options.nx2() > 1 ? options.nghost() : 0; }
+
+  int je() const {
+    return options.nx2() > 1 ? options.nghost() + options.nx2() - 1 : 0;
+  }
+
+  int ks() const { return options.nx3() > 1 ? options.nghost() : 0; }
+
+  int ke() const {
+    return options.nx3() > 1 ? options.nghost() + options.nx3() - 1 : 0;
+  }
+
   void print(std::ostream &stream) const;
   virtual void reset_coordinates(std::vector<MeshGenerator> meshgens);
 
