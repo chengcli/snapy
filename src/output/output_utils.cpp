@@ -21,11 +21,12 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"vel1", "vertical velocity", "m/s", "CCC"},
       {"vel2", "horizontal velocity", "m/s", "CCC"},
       {"vel3", "horizontal velocity", "m/s", "CCC"},
-      {"vapor", "mass mixing ratio of vapor", "kg/kg", "CCC"},
       {"temp", "temperature", "K", "CCC"},
       {"theta", "potential temperature", "K", "CCC"},
       {"thetav", "virtual potential temperature", "K", "CCC"},
       {"mse", "moist static energy", "J/kg", "CCC"},
+      {"qwtol", "total water mass fraction", "kg/kg", "CCC"},
+      {"entroy", "entropy", "J/(kg.K)", "CCC"},
       // relative humidity
       {"rh1", "relative humidity 1", "1", "CCC"},
       {"rh2", "relative humidity 2", "1", "CCC"},

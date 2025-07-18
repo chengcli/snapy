@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
   int i = is;
   for (; i <= ie; ++i) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
+
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
     auto result = thermo_x->compute("X->Y", {xfrac});
@@ -102,10 +103,13 @@ int main(int argc, char** argv) {
   auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
   auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
   auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
+  auto entropy_mole = entropy_vol / conc.sum(-1);
+  auto cp_mole = cp_vol / conc.sum(-1);
 
   auto mu = (thermo_x->mu * xfrac).sum(-1);
-  auto entropy = entropy_vol / mu;
+  auto entropy = entropy_mole / mu;
   auto theta = (entropy_vol / cp_vol).exp();
+  auto qwtol = w.narrow(0, ICY, ny).sum(0);
 
   // make initial output
   auto out2 = NetcdfOutput(
@@ -117,6 +121,7 @@ int main(int argc, char** argv) {
   block->user_out_var.insert("temp", temp);
   block->user_out_var.insert("entropy", entropy);
   block->user_out_var.insert("theta", theta);
+  block->user_out_var.insert("qwtol", qwtol);
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
