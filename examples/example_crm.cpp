@@ -110,8 +110,8 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVY] += 1. * torch::rand_like(w[IVY]);
-  w[IVZ] += 1. * torch::rand_like(w[IVZ]);
+  // w[IVY] += 1. * torch::rand_like(w[IVY]);
+  // w[IVZ] += 1. * torch::rand_like(w[IVZ]);
 
   // populate the initial condition
   block->initialize(w);
@@ -199,6 +199,8 @@ int main(int argc, char** argv) {
     vec[del_conc.dim() - 1] = -1;
     auto del_rho =
         del_conc.detach() / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
+    std::cout << "del_rho max = " << del_rho.abs().max().item<double>()
+              << std::endl;
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     current_time += dt;
@@ -207,6 +209,9 @@ int main(int argc, char** argv) {
 
       block->phydro->report_timer(std::cout);
       block->report_timer(std::cout);
+
+      block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
+      block->user_out_var["temp"] = temp;
 
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);

@@ -94,7 +94,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 1
+  nlim: 100
   tlim: 1000
 
 forcing:
@@ -103,9 +103,9 @@ forcing:
 
 sedimentation:
   radius:
-    H2O(l,p): 1.0e-5
-    NH3(s,p): 1.0e-5
-    NH4SH(s,p): 1.0e-5
+    H2O(l,p): 1.0e-10
+    NH3(s,p): 1.0e-10
+    NH4SH(s,p): 1.0e-10
 
   density:
     H2O(l,p): 1000.
@@ -113,9 +113,9 @@ sedimentation:
     NH4SH(s,p): 1500.
 
   const-vsed:
-    H2O(l,p): 0.0
-    NH3(s,p): 0.0
-    NH4SH(s,p): 0.0
+    H2O(l,p): -20.0
+    NH3(s,p): -20.0
+    NH4SH(s,p): -20.0
 
 reactions:
   - equation: H2O => H2O(l)
@@ -128,7 +128,7 @@ reactions:
 
   - equation: H2O(l,p) => H2O
     type: evaporation
-    rate-constant: {formula: h2o_ideal, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0}
+    rate-constant: {formula: h2o_ideal, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0e-2}
 
   - equation: NH3 => NH3(s)
     type: nucleation
@@ -140,7 +140,7 @@ reactions:
 
   - equation: NH3(s,p) => NH3
     type: evaporation
-    rate-constant: {formula: nh3_ideal, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0}
+    rate-constant: {formula: nh3_ideal, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0e-2}
 
   - equation: NH3 + H2S <=> NH4SH(s)
     type: nucleation
@@ -152,7 +152,7 @@ reactions:
 
   - equation: NH4SH(s,p) => NH3 + H2S
     type: evaporation
-    rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0}
+    rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2, diff_T: 0., diff_P: 0., vm: 18., diamater: 1.0e-2}
 
 problem:
   Ps: 100.e5

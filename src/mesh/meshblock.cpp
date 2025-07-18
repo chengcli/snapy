@@ -235,21 +235,8 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     int ny = hydro_u.size(0) - 5;  // number of species
     auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
 
-    /*std::cout << "rho = " << rho << std::endl;
-    std::cout << "yfrac = " << yfrac << std::endl;
-    std::cout << "ke = " << ke << std::endl;
-    std::cout << "ie = " << ie << std::endl;
-
-    auto w = phydro->peos->compute("U->W", {hydro_u});
-    auto temp_a = phydro->peos->compute("W->T", {w});
-    std::cout << "temp_a = " << temp_a << std::endl;*/
-
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
-
-    /*auto ivol = pthermo->compute("DY->V", {rho, yfrac});
-    auto temp_b = pthermo->compute("VU->T", {ivol, ie});
-    std::cout << "temp_b = " << temp_b << std::endl;*/
 
     pthermo->forward(rho, ie, yfrac);
 

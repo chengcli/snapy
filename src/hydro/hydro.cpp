@@ -52,8 +52,10 @@ void HydroImpl::reset() {
   std::vector<std::string> forcing_names;
   if (options.grav().grav1() != 0.0 || options.grav().grav2() != 0.0 ||
       options.grav().grav3() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(ConstGravity(options.grav())));
-    forcing_names.push_back("const-gravity");
+    if (!options.disable_dynamics()) {
+      forcings.push_back(torch::nn::AnyModule(ConstGravity(options.grav())));
+      forcing_names.push_back("const-gravity");
+    }
   }
 
   if (options.coriolis().omega1() != 0.0 ||
