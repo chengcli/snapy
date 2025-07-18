@@ -222,7 +222,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   timer["averaging"] +=
       std::chrono::duration<double, std::milli>(time3 - time2).count();
 
-  // -------- (5) saturation adjustment --------
+  /* -------- (5) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 &&
       (phydro->options.eos().type() == "ideal-moist" ||
        phydro->options.eos().type() == "moist-mixture")) {
@@ -238,7 +238,10 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     pthermo->forward(rho, ie, yfrac);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
-  }
+  }*/
+  auto time4 = std::chrono::high_resolution_clock::now();
+  timer["saturation_adjustment"] +=
+      std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   // -------- (6) update ghost zones --------
   BoundaryFuncOptions op;
@@ -258,9 +261,9 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
       options.bfuncs()[i](scalar_v, 3 - i / 2, op);
   }
 
-  auto time4 = std::chrono::high_resolution_clock::now();
+  auto time5 = std::chrono::high_resolution_clock::now();
   timer["bc"] +=
-      std::chrono::duration<double, std::milli>(time4 - time3).count();
+      std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return 0;
 }

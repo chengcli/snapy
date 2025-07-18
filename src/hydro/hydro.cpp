@@ -215,7 +215,6 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
   auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
   w.set_(pib->mark_solid(peos->forward(u), solid));
-  std::cout << "w = " << w << std::endl;
   auto temp = peos->compute("W->T", {w});
 
   auto time1 = std::chrono::high_resolution_clock::now();
@@ -235,7 +234,6 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
     pproj->restore_inplace(wtmp);
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
-    std::cout << "wlr1 = " << wlr1 << std::endl;
 
     priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
 
