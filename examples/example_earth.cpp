@@ -15,7 +15,7 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   // read parameters
-  auto config = YAML::LoadFile("earth.yaml");
+  auto config = YAML::LoadFile("example_earth.yaml");
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
   auto Ts = config["problem"]["Ts"].as<double>(300.);
   auto xH2O = config["problem"]["xH2O"].as<double>(0.02);
@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block = MeshBlock(MeshBlockOptions::from_yaml("earth.yaml"));
+  auto block = MeshBlock(MeshBlockOptions::from_yaml("example_earth.yaml"));
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
   int nc3 = pcoord->x3v.size(0);
   int nc2 = pcoord->x2v.size(0);
   int nc1 = pcoord->x1v.size(0);
-  int nspecies = thermo_y->options.species().size();
+  int ny = thermo_y->options.species().size() - 1;
   int iH2O = thermo_y->options.vapor_ids()[1];
 
   // construct an adiabatic atmosphere
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 
   auto temp = Ts * torch::ones({nc3, nc2}, torch::kDouble);
   auto pres = Ps * torch::ones({nc3, nc2}, torch::kDouble);
-  auto xfrac = torch::zeros({nc3, nc2, nspecies}, torch::kDouble);
+  auto xfrac = torch::zeros({nc3, nc2, 1 + ny}, torch::kDouble);
   xfrac.select(2, iH2O) = xH2O;    // water vapor
   xfrac.select(2, 0) = 1. - xH2O;  // dry air
 
@@ -64,7 +64,9 @@ int main(int argc, char** argv) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
-    w.slice(0, 1, IVX).select(3, i) = thermo_x->compute("X->Y", {xfrac});
+    auto result = thermo_x->compute("X->Y", {xfrac});
+    std::cout << "result shape = " << result.sizes() << std::endl;
+    w.slice(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
 
     if ((temp < Tmin).any().item<double>()) break;
     dz = pcoord->dx1f[i].item<double>();
