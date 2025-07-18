@@ -37,7 +37,8 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
   return compute("U->W", {cons, prim});
 }
 
-void EquationOfStateImpl::_apply_conserved_limiter_(torch::Tensor& cons) const {
+void EquationOfStateImpl::apply_conserved_limiter_(
+    torch::Tensor const& cons) const {
   if (!options.limiter()) return;  // no limiter
   cons[Index::IDN].clamp_min_(options.density_floor());
 
@@ -54,7 +55,8 @@ void EquationOfStateImpl::_apply_conserved_limiter_(torch::Tensor& cons) const {
   cons.narrow(0, Index::ICY, ny).clamp_min_(0.);
 }
 
-void EquationOfStateImpl::_apply_primitive_limiter_(torch::Tensor& prim) const {
+void EquationOfStateImpl::apply_primitive_limiter_(
+    torch::Tensor const& prim) const {
   if (!options.limiter()) return;  // no limiter
 
   prim[Index::IDN].clamp_min_(options.density_floor());

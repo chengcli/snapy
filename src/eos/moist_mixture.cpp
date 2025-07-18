@@ -101,7 +101,7 @@ void MoistMixtureImpl::_prim2intEng(torch::Tensor prim, torch::Tensor &ie) {
 }
 
 void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
@@ -131,7 +131,7 @@ void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   out = cons[Index::IPR];
   torch::add_out(out, _ke, _ie);
 
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 }
 
 void MoistMixtureImpl::_prim2temp(torch::Tensor prim, torch::Tensor &out) {
@@ -163,7 +163,7 @@ void MoistMixtureImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
 }
 
 void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
@@ -195,7 +195,7 @@ void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   auto temp = pthermo->compute("VU->T", {ivol, _ie});
   prim[Index::IPR] = pthermo->compute("VT->P", {ivol, temp});
 
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 }
 
 void MoistMixtureImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
@@ -206,7 +206,7 @@ void MoistMixtureImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
 
   auto mom = cons.narrow(0, Index::IVX, 3).clone();
   pcoord->vec_raise_(mom);
-  out.set_(0.5 * cons.narrow(0, Index::IVX, 3) * mom / rho);
+  out.set_(0.5 * (cons.narrow(0, Index::IVX, 3) * mom).sum(0) / rho);
 }
 
 void MoistMixtureImpl::_adiabatic_index(torch::Tensor ivol, torch::Tensor temp,

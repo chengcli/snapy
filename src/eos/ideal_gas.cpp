@@ -82,7 +82,7 @@ void IdealGasImpl::_prim2intEng(torch::Tensor prim, torch::Tensor &ie) {
 }
 
 void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 
   // den -> den
   cons[Index::IDN] = prim[Index::IDN];
@@ -104,11 +104,11 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   out = cons[Index::IPR];
   torch::add_out(out, _ke, _ie);
 
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 }
 
 void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 
   auto gammad =
       (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
@@ -125,7 +125,7 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 
   at::native::ideal_gas_cons2prim(cons.device().type(), iter, gammad);
 
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 }
 
 }  // namespace snap

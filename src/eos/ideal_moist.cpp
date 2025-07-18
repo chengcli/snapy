@@ -123,13 +123,14 @@ void IdealMoistImpl::_prim2intEng(torch::Tensor prim, torch::Tensor &ie) {
   ie = prim[Index::IPR] * _fsig(yfrac) / _feps(yfrac) / (gammad - 1);
 
   // add the internal energy offset
-  ie += prim[Index::IDN] * u0[0];
+  auto yd = 1. - yfrac.sum(0);
+  ie += prim[Index::IDN] * yd * u0[0];
   ie += prim[Index::IDN] *
         yfrac.unfold(0, ny, 1).matmul(u0.narrow(0, 1, ny)).squeeze(0);
 }
 
 void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
@@ -159,7 +160,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   out = cons[Index::IPR];
   torch::add_out(out, _ke, _ie);
 
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 }
 
 void IdealMoistImpl::_prim2temp(torch::Tensor prim, torch::Tensor &out) {
@@ -197,7 +198,7 @@ void IdealMoistImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
 }
 
 void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
@@ -224,19 +225,22 @@ void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   torch::sub_out(_ie, cons[Index::IPR], _ke);
 
   // subtract the internal energy offset
-  auto yfrac = prim.slice(0, Index::ICY, prim.size(0));
-  _ie -= prim[Index::IDN] * u0[0];
-  _ie -= prim[Index::IDN] *
-         yfrac.unfold(0, ny, 1).matmul(u0.narrow(0, 1, ny)).squeeze(0);
+  _ie -= cons[Index::IDN] * u0[0];
+
+  std::vector<int64_t> vec(cons.dim(), 1);
+  vec[0] = -1;
+  _ie -=
+      (cons.narrow(0, Index::ICY, ny) * u0.narrow(0, 1, ny).view(vec)).sum(0);
 
   // eng -> pr
   auto gammad =
       (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
 
   // TODO(cli) iteration needed here
+  auto yfrac = prim.narrow(0, Index::ICY, ny);
   prim[Index::IPR] = (gammad - 1) * _ie * _feps(yfrac) / _fsig(yfrac);
 
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 }
 
 void IdealMoistImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
@@ -247,7 +251,7 @@ void IdealMoistImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
 
   auto mom = cons.narrow(0, Index::IVX, 3).clone();
   pcoord->vec_raise_(mom);
-  out.set_(0.5 * cons.narrow(0, Index::IVX, 3) * mom / rho);
+  out.set_(0.5 * (cons.narrow(0, Index::IVX, 3) * mom).sum(0) / rho);
 }
 
 torch::Tensor IdealMoistImpl::_feps(torch::Tensor const &yfrac) const {

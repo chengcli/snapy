@@ -222,10 +222,12 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   timer["averaging"] +=
       std::chrono::duration<double, std::milli>(time3 - time2).count();
 
-  /* -------- (5) saturation adjustment --------
+  // -------- (5) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 &&
       (phydro->options.eos().type() == "ideal-moist" ||
        phydro->options.eos().type() == "moist-mixture")) {
+    phydro->peos->apply_conserved_limiter_(hydro_u);
+
     auto ke = phydro->peos->compute("U->K", {hydro_u});
     auto rho = phydro->peos->get_buffer("thermo.D");
     auto ie = hydro_u[Index::IPR] - ke;
@@ -233,12 +235,26 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     int ny = hydro_u.size(0) - 5;  // number of species
     auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
 
+    /*std::cout << "rho = " << rho << std::endl;
+    std::cout << "yfrac = " << yfrac << std::endl;
+    std::cout << "ke = " << ke << std::endl;
+    std::cout << "ie = " << ie << std::endl;
+
+    auto w = phydro->peos->compute("U->W", {hydro_u});
+    auto temp_a = phydro->peos->compute("W->T", {w});
+    std::cout << "temp_a = " << temp_a << std::endl;*/
+
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+
+    /*auto ivol = pthermo->compute("DY->V", {rho, yfrac});
+    auto temp_b = pthermo->compute("VU->T", {ivol, ie});
+    std::cout << "temp_b = " << temp_b << std::endl;*/
+
     pthermo->forward(rho, ie, yfrac);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
-  }*/
+  }
   auto time4 = std::chrono::high_resolution_clock::now();
   timer["saturation_adjustment"] +=
       std::chrono::duration<double, std::milli>(time4 - time3).count();
