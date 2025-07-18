@@ -4,8 +4,6 @@
 // kintera
 #include <kintera/constants.h>
 
-#include <kintera/thermo/thermo.hpp>
-
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -96,6 +94,7 @@ int main(int argc, char** argv) {
   w[IVZ] += 1. * torch::randn_like(w[IVZ]);
 
   // compute output variable
+  // 2D -> 3D variables
   temp = peos->compute("W->T", {w});
   pres = w[IPR];
   xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
@@ -110,14 +109,10 @@ int main(int argc, char** argv) {
 
   // make initial output
   auto out2 = NetcdfOutput(
-      OutputOptions().file_basename("earth").fid(2).variable("prim"));
+      OutputOptions().file_basename("example_earth").fid(2).variable("prim"));
   auto out3 = NetcdfOutput(
-      OutputOptions().file_basename("earth").fid(3).variable("uov"));
+      OutputOptions().file_basename("example_earth").fid(3).variable("uov"));
   double current_time = 0.;
-
-  std::cout << "temp shape = " << temp.sizes() << std::endl;
-  std::cout << "entropy shape = " << entropy.sizes() << std::endl;
-  std::cout << "theta shape = " << theta.sizes() << std::endl;
 
   block->user_out_var.insert("temp", temp);
   block->user_out_var.insert("entropy", entropy);

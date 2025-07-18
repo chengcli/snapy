@@ -6,6 +6,19 @@
 #include "output_type.hpp"
 
 namespace snap {
+std::string get_hydro_names(MeshBlock pmb) {
+  auto m = pmb->named_modules()["hydro.eos.thermo"];
+  auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+  auto species = thermo->options.species();
+
+  std::string result = species[1];
+  for (int i = 2; i < species.size(); ++i) {
+    result += "," + species[i];
+  }
+
+  return result;
+}
+
 void OutputType::loadHydroOutputData(MeshBlock pmb) {
   OutputData* pod;
   auto peos = pmb->phydro->peos;
@@ -171,14 +184,13 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     num_vars_++;
   }
 
-  // vapor
+  // vapor + cloud
   auto ny = peos->nvar() - 5;
   if (ny > 0) {
-    if (options.variable().compare("prim") == 0 ||
-        options.variable().compare("vapor") == 0) {
+    if (options.variable().compare("prim") == 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
-      pod->name = "vapor";
+      pod->name = get_hydro_names(pmb);
       pod->data.InitFromTensor(w, 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
@@ -188,7 +200,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb) {
     if (options.variable().compare("cons") == 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
-      pod->name = "vapor";
+      pod->name = get_hydro_names(pmb);
       pod->data.InitFromTensor(u, 4, Index::ICY, ny);
 
       AppendOutputDataNode(pod);
