@@ -171,7 +171,8 @@ int main(int argc, char** argv) {
   auto op_kinet =
       kintera::KineticsOptions::from_yaml(fmt::format("{}.yaml", exp_name));
   auto kinet = kintera::Kinetics(op_kinet);
-  std::cout << fmt::format("Kinetics Options: {}", kinet->options) << std::endl;
+  std::cout << fmt::format("Kinetics Options:\n{}", kinet->options)
+            << std::endl;
 
   // time loop
   int count = 0;

@@ -93,12 +93,28 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 100
+  nlim: 1
   tlim: 1000
 
 forcing:
   const-gravity:
     grav1: -22.
+
+sedimentation:
+  radius:
+    H2O(l,p): 1.0e-2
+    NH3(s,p): 1.0e-2
+    NH4SH(s,p): 1.0e-2
+
+  density:
+    H2O(l,p): 1000.
+    NH3(s,p): 800.
+    NH4SH(s,p): 1500.
+
+  const-vsed:
+    H2O(l,p): 0.0
+    NH3(s,p): 0.0
+    NH4SH(s,p): 0.0
 
 reactions:
   - equation: H2O => H2O(l)

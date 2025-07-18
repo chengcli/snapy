@@ -141,30 +141,30 @@ void HydroImpl::reset() {
 
   if (nc1 > 1) {
     _flux1 = register_buffer(
-        "F1", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+        "F1", torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux1 = register_buffer("F1", torch::Tensor());
   }
 
   if (nc2 > 1) {
     _flux2 = register_buffer(
-        "F2", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+        "F2", torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux2 = register_buffer("F2", torch::Tensor());
   }
 
   if (nc3 > 1) {
     _flux3 = register_buffer(
-        "F3", torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+        "F3", torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux3 = register_buffer("F3", torch::Tensor());
   }
 
   _div = register_buffer("D",
-                         torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+                         torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
   _vic = register_buffer("I",
-                         torch::empty({nvar, nc3, nc2, nc1}, torch::kFloat64));
+                         torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
   //// ---- (13) initialize timers ---- ////
   timer["U->W"] = 0.0;
@@ -235,7 +235,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     pproj->restore_inplace(wtmp);
     auto wlr1 = pib->forward(wtmp, DIM1, solid);
 
-    priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
+    if (!options.disable_dynamics()) {
+      priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
+    }
 
     // add sedimentation flux
     psed->forward(wlr1[IRT], _flux1);
@@ -254,7 +256,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
     auto wlr2 = pib->forward(wtmp, DIM2, solid);
-    priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+    if (!options.disable_dynamics()) {
+      priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+    }
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR2->F2"] +=
@@ -270,7 +274,9 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
     auto wlr3 = pib->forward(wtmp, DIM3, solid);
-    priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
+    if (!options.disable_dynamics()) {
+      priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
+    }
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR3->F3"] +=

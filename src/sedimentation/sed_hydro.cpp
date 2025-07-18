@@ -14,32 +14,31 @@ void SedHydroImpl::reset() {
 
   // register buffer
   vsed = register_buffer("vsed", torch::empty({0}));
+  hydro_ids = register_buffer("hydro_ids",
+                              torch::tensor(options.hydro_ids(), torch::kLong));
 }
 
-torch::Tensor SedHydroImpl::forward(torch::Tensor hydro_w,
+torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
                                     torch::optional<torch::Tensor> out) {
-  auto flux = out.value_or(torch::zeros_like(hydro_w));
-
-  int ncloud = options.sedvel().radius().size();
-  int nvapor = hydro_w.size(0) - 5 - ncloud;  // 5 = IDN, IPR, IVX, IVY, IVZ
+  auto flux = out.value_or(torch::zeros_like(wr));
 
   // null-op
-  if (options.sedvel().grav() == 0. || ncloud == 0) {
+  if (options.sedvel().grav() == 0. || options.sedvel().species().size() == 0) {
     return flux;
   }
 
-  auto vel = hydro_w.narrow(0, IVX, 3).clone();
+  auto vel = wr.narrow(0, IVX, 3).clone();
   peos->pcoord->vec_lower_(vel);
 
-  auto temp = peos->compute("W->T", {hydro_w});
-  vsed.set_(psedvel->forward(hydro_w[Index::IDN], hydro_w[Index::IPR], temp));
+  auto temp = peos->compute("W->T", {wr});
+  vsed.set_(psedvel->forward(wr[Index::IDN], wr[Index::IPR], temp));
 
-  auto en = peos->compute("W->E", {hydro_w});
-  auto rhoc = peos->get_buffer("C");
+  auto en = peos->compute("W->E", {wr});
+  auto rhoc_vsed = peos->get_buffer("C") * vsed;
 
-  flux.narrow(0, Index::ICY + nvapor, ncloud) += rhoc * vsed;
-  flux.narrow(0, IVX, 3) += vel * (rhoc * vsed).sum(0, /*keepdim=*/true);
-  flux[Index::IPR] += (rhoc * vsed * en).sum(0);
+  flux.index_add_(0, hydro_ids, rhoc_vsed);
+  flux.narrow(0, IVX, 3) += vel * rhoc_vsed.sum(0, /*keepdim=*/true);
+  flux[Index::IPR] += (rhoc_vsed * en).sum(0);
 
   return flux;
 }

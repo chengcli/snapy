@@ -1,3 +1,6 @@
+// C/C++
+#include <algorithm>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -34,6 +37,8 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
 
   auto dyn = config["dynamics"];
 
+  op.disable_dynamics() = dyn["disable"].as<bool>(false);
+
   // equation of state
   if (dyn["equation-of-state"]) {
     op.eos() = EquationOfStateOptions::from_yaml(dyn["equation-of-state"]);
@@ -69,13 +74,22 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
     op.sed().sedvel() = SedVelOptions::from_yaml(config);
     op.sed().eos() = op.eos();
 
-    TORCH_CHECK(
-        op.sed().sedvel().radius().size() == op.thermo().cloud_ids().size(),
-        "Sedimentation radius size must match the number of cloud species.");
+    // check all precipitating particles are in the clouds
+    std::unordered_set<int> cloud_set(op.thermo().cloud_ids().begin(),
+                                      op.thermo().cloud_ids().end());
+    auto particle_ids = op.sed().sedvel().particle_ids();
+    auto pass = std::all_of(particle_ids.begin(), particle_ids.end(),
+                            [&](int x) { return cloud_set.count(x); });
 
-    TORCH_CHECK(
-        op.sed().sedvel().density().size() == op.thermo().cloud_ids().size(),
-        "Sedimentation density size must match the number of cloud species.");
+    TORCH_CHECK(pass, "Missing sedimentation particles in the clouds.");
+
+    // setup hydro ids
+    auto hydro_species = op.thermo().species();
+    for (auto const& p : op.sed().sedvel().species()) {
+      auto it = std::find(hydro_species.begin(), hydro_species.end(), p);
+      op.sed().hydro_ids().push_back(Index::ICY - 1 + it -
+                                     hydro_species.begin());
+    }
   }
 
   // forcings

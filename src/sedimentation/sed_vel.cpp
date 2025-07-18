@@ -14,12 +14,11 @@ void SedVelImpl::reset() {
         "Sedimentation: radius and density must have the same size");
   }
 
-  radius = register_parameter(
-      "radius",
-      torch::clamp(torch::tensor(options.radius()), options.min_radius()));
+  radius = register_parameter("radius",
+                              torch::tensor(options.radius(), torch::kFloat64));
 
   density = register_parameter(
-      "density", torch::clamp(torch::tensor(options.density()), 0.));
+      "density", torch::tensor(options.density(), torch::kFloat64));
 }
 
 torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
@@ -27,6 +26,9 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   const auto d = options.a_diameter();
   const auto epsilon_LJ = options.a_epsilon_LJ();
   const auto m = options.a_mass();
+
+  std::vector<int64_t> vec(temp.dim(), 1);
+  vec[0] = -1;
 
   // cope with float precision
   auto eta = (5.0 / 16.0) * std::sqrt(M_PI * constants::kBoltz) * std::sqrt(m) *
@@ -39,25 +41,19 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
                 (pres * std::sqrt(2.0 * m));
 
   // Calculate Knudsen number, Kn
-  auto Kn = lambda / radius.view({-1, 1, 1, 1});
+  auto Kn = lambda / radius.view(vec);
 
   // Calculate Cunningham slip factor, beta
   auto beta = 1.0 + Kn * (1.256 + 0.4 * torch::exp(-1.1 / Kn));
 
   // Calculate vsed
   auto vel = beta / (9.0 * eta) *
-             (2.0 * sqr(radius.view({-1, 1, 1, 1})) * options.grav() *
-              (density.view({-1, 1, 1, 1}) - dens));
+             (2.0 * sqr(radius.view(vec)) * options.grav() *
+              (density.view(vec) - dens));
 
-  // Set velocity to zero for particles with radius less than min_radius
+  // add a constant sedimentation velocity
   for (int i = 0; i < options.radius().size(); ++i) {
-    if (options.radius()[i] < options.min_radius()) {
-      vel[i] = torch::zeros_like(vel[i]);
-    }
-
-    if (options.const_vsed().size() > i) {
-      vel[i] += options.const_vsed()[i];
-    }
+    vel[i] += options.const_vsed()[i];
   }
 
   return torch::clamp(vel, -options.upper_limit(), options.upper_limit());
