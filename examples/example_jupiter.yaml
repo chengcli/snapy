@@ -93,7 +93,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 1
+  nlim: 100
   tlim: 1000
 
 forcing:
@@ -107,7 +107,7 @@ reactions:
 
   - equation: H2O(l) => H2O(l,p)
     type: coagulation
-    rate-constant: {A: 0.001, b: 0, Ea_R: 0.}
+    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
 
   - equation: H2O(l,p) => H2O
     type: evaporation
@@ -119,7 +119,7 @@ reactions:
 
   - equation: NH3(s) => NH3(s,p)
     type: coagulation
-    rate-constant: {A: 0.001, b: 0, Ea_R: 2.}
+    rate-constant: {A: 0.01, b: 0, Ea_R: 2.}
 
   - equation: NH3(s,p) => NH3
     type: evaporation
@@ -131,7 +131,7 @@ reactions:
 
   - equation: NH4SH(s) => NH4SH(s,p)
     type: coagulation
-    rate-constant: {A: 0.001, b: 0, Ea_R: 0.}
+    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
 
   - equation: NH4SH(s,p) => NH3 + H2S
     type: evaporation

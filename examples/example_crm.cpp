@@ -183,24 +183,22 @@ int main(int argc, char** argv) {
       block->forward(dt, stage);
     }
 
-    /* evolve kinetics
+    // evolve kinetics
     temp = peos->compute("W->T", {w});
     pres = w[IPR];
     xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
     conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
     cp_vol = thermo_x->compute("TV->cp", {temp, conc});
 
-    std::cout << "#### a1" << std::endl;
-
     auto conc_kinet = kinet->options.narrow_copy(conc, thermo_y->options);
     auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
     auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
     auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
-    auto del_rho = del_conc / thermo_y->inv_mu;
-
-    std::cout << "del_rho size = " << del_rho.sizes() << std::endl;
-    u.narrow(0, ICY, ny) += del_rho;
-    */
+    std::vector<int64_t> vec(del_conc.dim(), 1);
+    vec[del_conc.dim() - 1] = -1;
+    auto del_rho =
+        del_conc.detach() / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
+    u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     current_time += dt;
     if ((count + 1) % 1 == 0) {
