@@ -6,6 +6,9 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
+// kintera
+#include <kintera/utils/format.hpp>
+
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
@@ -22,6 +25,11 @@ namespace snap {
 struct ConstGravityOptions {
   static ConstGravityOptions from_yaml(YAML::Node const& node);
   ConstGravityOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* grav1 = " << grav1() << "\n"
+       << "* grav2 = " << grav2() << "\n"
+       << "* grav3 = " << grav3() << "\n";
+  }
 
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
@@ -31,6 +39,14 @@ struct ConstGravityOptions {
 struct CoriolisOptions {
   static CoriolisOptions from_yaml(YAML::Node const& node);
   CoriolisOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* omega1 = " << omega1() << "\n"
+       << "* omega2 = " << omega2() << "\n"
+       << "* omega3 = " << omega3() << "\n"
+       << "* omegax = " << omegax() << "\n"
+       << "* omegay = " << omegay() << "\n"
+       << "* omegaz = " << omegaz() << "\n";
+  }
 
   ADD_ARG(double, omega1) = 0.;
   ADD_ARG(double, omega2) = 0.;
@@ -46,6 +62,10 @@ struct CoriolisOptions {
 struct DiffusionOptions {
   static DiffusionOptions from_yaml(YAML::Node const& node);
   DiffusionOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* K = " << K() << "\n"
+       << "* type = " << type() << "\n";
+  }
 
   ADD_ARG(double, K) = 0.;
   ADD_ARG(std::string, type) = "theta";
@@ -54,6 +74,7 @@ struct DiffusionOptions {
 struct FricHeatOptions {
   static FricHeatOptions from_yaml(YAML::Node const& root);
   FricHeatOptions() = default;
+  void report(std::ostream& os) const { os << "* grav = " << grav() << "\n"; }
 
   ADD_ARG(double, grav) = 0.;
   ADD_ARG(SedVelOptions, sedvel);
@@ -62,6 +83,11 @@ struct FricHeatOptions {
 struct BodyHeatOptions {
   static BodyHeatOptions from_yaml(YAML::Node const& node);
   BodyHeatOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* dTdt = " << dTdt() << "\n"
+       << "* pmin = " << pmin() << "\n"
+       << "* pmax = " << pmax() << "\n";
+  }
 
   ADD_ARG(double, dTdt) = 0.0;
   ADD_ARG(double, pmin) = 0.0;
@@ -72,6 +98,7 @@ struct BodyHeatOptions {
 struct TopCoolOptions {
   static TopCoolOptions from_yaml(YAML::Node const& node);
   TopCoolOptions() = default;
+  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
 
   ADD_ARG(double, flux) = 0.0;
   ADD_ARG(CoordinateOptions, coord);
@@ -80,6 +107,7 @@ struct TopCoolOptions {
 struct BotHeatOptions {
   static BotHeatOptions from_yaml(YAML::Node const& node);
   BotHeatOptions() = default;
+  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
 
   ADD_ARG(double, flux) = 0.0;
   ADD_ARG(CoordinateOptions, coord);
@@ -88,6 +116,11 @@ struct BotHeatOptions {
 struct RelaxBotCompOptions {
   static RelaxBotCompOptions from_yaml(YAML::Node const& node);
   RelaxBotCompOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* species = " << fmt::format("{}", species()) << "\n"
+       << "* xfrac = " << fmt::format("{}", xfrac()) << "\n";
+  }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(std::vector<std::string>, species) = {};
@@ -97,6 +130,10 @@ struct RelaxBotCompOptions {
 struct RelaxBotTempOptions {
   static RelaxBotTempOptions from_yaml(YAML::Node const& node);
   RelaxBotTempOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* btemp = " << btemp() << "\n";
+  }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(double, btemp) = 300.0;
@@ -105,6 +142,12 @@ struct RelaxBotTempOptions {
 struct RelaxBotVeloOptions {
   static RelaxBotVeloOptions from_yaml(YAML::Node const& node);
   RelaxBotVeloOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* bvx = " << bvx() << "\n"
+       << "* bvy = " << bvy() << "\n"
+       << "* bvz = " << bvz() << "\n";
+  }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(double, bvx) = 0.0;
@@ -115,6 +158,10 @@ struct RelaxBotVeloOptions {
 struct TopSpongeLyrOptions {
   static TopSpongeLyrOptions from_yaml(YAML::Node const& node);
   TopSpongeLyrOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* width = " << width() << "\n";
+  }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(double, width) = 0.0;
@@ -124,6 +171,10 @@ struct TopSpongeLyrOptions {
 struct BotSpongeLyrOptions {
   static BotSpongeLyrOptions from_yaml(YAML::Node const& node);
   BotSpongeLyrOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* width = " << width() << "\n";
+  }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(double, width) = 0.0;

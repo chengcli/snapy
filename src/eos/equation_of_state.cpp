@@ -20,13 +20,6 @@ EquationOfStateOptions EquationOfStateOptions::from_yaml(
   return op;
 }
 
-void EquationOfStateOptions::report(std::ostream& os) const {
-  os << "* type = " << type() << "\n"
-     << "* density-floor = " << density_floor() << "\n"
-     << "* pressure-floor = " << pressure_floor() << "\n"
-     << "* limiter = " << (limiter() ? "true" : "false") << "\n";
-}
-
 torch::Tensor EquationOfStateImpl::compute(
     std::string ab, std::vector<torch::Tensor> const& args) {
   TORCH_CHECK(false, "EquationOfStateImpl::compute() is not implemented.",

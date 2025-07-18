@@ -24,6 +24,11 @@ enum BoundaryFace {
 };
 
 struct BoundaryFuncOptions {
+  void report(std::ostream &os) const {
+    os << "* type: " << type() << "\n"
+       << "* nghost: " << nghost() << "\n";
+  }
+
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, nghost) = 1;
 };

@@ -20,7 +20,14 @@ struct ReconstructOptions {
   static ReconstructOptions from_yaml(const YAML::Node& node,
                                       std::string section);
   ReconstructOptions() = default;
-  void report(std::ostream& os) const;
+  void report(std::ostream& os) const {
+    interp().report(os);
+    os << "* is_boundary_lower = " << (is_boundary_lower() ? "true" : "false")
+       << "\n"
+       << "* is_boundary_upper = " << (is_boundary_upper() ? "true" : "false")
+       << "\n"
+       << "* shock = " << (shock() ? "true" : "false") << "\n";
+  }
 
   //! configure options
   ADD_ARG(bool, is_boundary_lower) = false;

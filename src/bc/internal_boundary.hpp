@@ -23,6 +23,13 @@ struct InternalBoundaryOptions {
 
   static InternalBoundaryOptions from_yaml(const YAML::Node &root);
   InternalBoundaryOptions() = default;
+  void report(std::ostream &os) const {
+    os << "* MAXRUN = " << MAXRUN << "\n"
+       << "* nghost = " << nghost() << "\n"
+       << "* max_iter = " << max_iter() << "\n"
+       << "* solid_density = " << solid_density() << "\n"
+       << "* solid_pressure = " << solid_pressure() << "\n";
+  }
 
   ADD_ARG(int, nghost) = 1;
   ADD_ARG(int, max_iter) = 5;

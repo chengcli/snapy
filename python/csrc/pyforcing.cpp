@@ -18,7 +18,9 @@ void bind_forcing(py::module &m) {
   pyConstGravityOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ConstGravityOptions &a) {
-             return fmt::format("ConstGravityOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("ConstGravityOptions(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::ConstGravityOptions, grav1)
       .ADD_OPTION(double, snap::ConstGravityOptions, grav2)
@@ -30,7 +32,9 @@ void bind_forcing(py::module &m) {
   pyCoriolisOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoriolisOptions &a) {
-             return fmt::format("CoriolisOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("CoriolisOptions(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::CoriolisOptions, omega1)
       .ADD_OPTION(double, snap::CoriolisOptions, omega2)

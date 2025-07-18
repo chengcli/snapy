@@ -37,6 +37,13 @@ torch::Tensor calc_nonhydrostatic_pressure(torch::Tensor pres,
 struct PrimitiveProjectorOptions {
   static PrimitiveProjectorOptions from_yaml(YAML::Node const &node);
   PrimitiveProjectorOptions() = default;
+  void report(std::ostream &os) const {
+    os << "* type = " << type() << "\n"
+       << "* pressure-margin = " << margin() << "\n"
+       << "* grav = " << grav() << "\n"
+       << "* Rd = " << Rd() << "\n"
+       << "* nghost = " << nghost() << "\n";
+  }
 
   //! choose from ["none", "temperature"]
   ADD_ARG(std::string, type) = "none";

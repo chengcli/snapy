@@ -19,6 +19,10 @@ namespace snap {
 struct RiemannSolverOptions {
   static RiemannSolverOptions from_yaml(YAML::Node const& node);
   RiemannSolverOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* dir = " << dir() << "\n";
+  }
 
   ADD_ARG(std::string, type) = "roe";
 

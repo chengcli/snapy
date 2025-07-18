@@ -17,7 +17,11 @@ struct fmt::formatter<snap::MeshBlockOptions> {
   // Define the format function for MeshBlockOptions
   template <typename FormatContext>
   auto format(const snap::MeshBlockOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "(hydro = {}; intg = {})", p.hydro(),
-                          p.intg());
+    std::stringstream ss;
+    ss << "MeshBlock options:\n";
+    p.report(ss);
+    ss << "Integrator options:\n";
+    p.intg().report(ss);
+    return fmt::format_to(ctx.out(), "{}\n{}", ss.str(), p.hydro());
   }
 };

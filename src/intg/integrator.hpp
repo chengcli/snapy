@@ -14,6 +14,11 @@
 
 namespace snap {
 struct IntegratorWeight {
+  void report(std::ostream& os) const {
+    os << "* wght0 = " << wght0() << "\n"
+       << "* wght1 = " << wght1() << "\n"
+       << "* wght2 = " << wght2() << "\n";
+  }
   ADD_ARG(double, wght0) = 0.0;
   ADD_ARG(double, wght1) = 0.0;
   ADD_ARG(double, wght2) = 0.0;
@@ -21,6 +26,13 @@ struct IntegratorWeight {
 
 struct IntegratorOptions {
   static IntegratorOptions from_yaml(std::string const& filename);
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* cfl = " << cfl() << "\n"
+       << "* tlim = " << tlim() << "\n"
+       << "* nlim = " << nlim() << "\n";
+  }
+
   ADD_ARG(std::string, type) = "rk3";
 
   ADD_ARG(double, cfl) = 0.9;

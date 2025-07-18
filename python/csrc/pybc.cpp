@@ -32,7 +32,9 @@ void bind_bc(py::module &m) {
   pyBoundaryFunctionOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::BoundaryFuncOptions &a) {
-             return fmt::format("BoundaryFuncOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("BoundaryFuncOptions(\n{})", ss.str());
            })
       .ADD_OPTION(int, snap::BoundaryFuncOptions, type)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
@@ -43,7 +45,9 @@ void bind_bc(py::module &m) {
   pyInternalBoundaryOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::InternalBoundaryOptions &a) {
-             return fmt::format("InternalBoundaryOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("InternalBoundaryOptions(\n{})", ss.str());
            })
       .ADD_OPTION(int, snap::InternalBoundaryOptions, nghost)
       .ADD_OPTION(int, snap::InternalBoundaryOptions, max_iter)

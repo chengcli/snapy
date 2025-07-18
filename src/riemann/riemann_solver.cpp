@@ -12,10 +12,7 @@ RiemannSolverOptions RiemannSolverOptions::from_yaml(YAML::Node const& node) {
   RiemannSolverOptions op;
 
   op.type() = node["type"].as<std::string>("roe");
-  printf("* type = %s\n", op.type().c_str());
-
   op.dir() = node["dir"].as<std::string>("omni");
-  printf("* dir = %s\n", op.dir().c_str());
   return op;
 }
 

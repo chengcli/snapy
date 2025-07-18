@@ -16,7 +16,6 @@ InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
   if (!root["geometry"]["cells"]) return op;
 
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-  printf("* nghost = %d\n", op.nghost());
 
   if (!root["boundary-condition"]) return op;
   if (!root["boundary-condition"]["internal"]) return op;
@@ -24,13 +23,8 @@ InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
   auto bc = root["boundary-condition"]["internal"];
 
   op.max_iter() = bc["max-iter"].as<int>(5);
-  printf("* max-iter = %d\n", op.max_iter());
-
   op.solid_density() = bc["solid_density"].as<double>(1.e3);
-  printf("* solid_density = %e\n", op.solid_density());
-
   op.solid_pressure() = bc["solid_pressure"].as<double>(1.9);
-  printf("* solid_pressure = %e\n", op.solid_pressure());
 
   return op;
 }

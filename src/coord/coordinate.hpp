@@ -27,7 +27,20 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 struct CoordinateOptions {
   static CoordinateOptions from_yaml(const YAML::Node &node);
   CoordinateOptions() = default;
-  void report(std::ostream &os) const;
+  void report(std::ostream &os) const {
+    os << "* type = " << type() << "\n"
+       << "* eos_type = " << eos_type() << "\n"
+       << "* x1min = " << x1min() << "\n"
+       << "* x2min = " << x2min() << "\n"
+       << "* x3min = " << x3min() << "\n"
+       << "* x1max = " << x1max() << "\n"
+       << "* x2max = " << x2max() << "\n"
+       << "* x3max = " << x3max() << "\n"
+       << "* nx1 = " << nx1() << "\n"
+       << "* nx2 = " << nx2() << "\n"
+       << "* nx3 = " << nx3() << "\n"
+       << "* nghost = " << nghost() << "\n";
+  }
 
   int64_t nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
   int64_t nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
@@ -57,6 +70,24 @@ class CoordinateImpl {
   torch::Tensor x1f, x2f, x3f;
   torch::Tensor x1v, x2v, x3v;
   torch::Tensor dx1f, dx2f, dx3f;
+
+  int is() const { return options.nx1() > 1 ? options.nghost() : 0; }
+
+  int ie() const {
+    return options.nx1() > 1 ? options.nghost() + options.nx1() - 1 : 0;
+  }
+
+  int js() const { return options.nx2() > 1 ? options.nghost() : 0; }
+
+  int je() const {
+    return options.nx2() > 1 ? options.nghost() + options.nx2() - 1 : 0;
+  }
+
+  int ks() const { return options.nx3() > 1 ? options.nghost() : 0; }
+
+  int ke() const {
+    return options.nx3() > 1 ? options.nghost() + options.nx3() - 1 : 0;
+  }
 
   void print(std::ostream &stream) const;
   virtual void reset_coordinates(std::vector<MeshGenerator> meshgens);

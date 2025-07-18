@@ -18,6 +18,10 @@ namespace snap {
 struct InterpOptions {
   InterpOptions() = default;
   explicit InterpOptions(std::string name) { type(name); }
+  void report(std::ostream& os) const {
+    os << "* type = " << type() << "\n"
+       << "* scale = " << (scale() ? "true" : "false") << "\n";
+  }
 
   ADD_ARG(std::string, type) = "dc";
   ADD_ARG(bool, scale) = false;

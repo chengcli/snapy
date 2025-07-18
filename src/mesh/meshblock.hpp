@@ -20,6 +20,13 @@ namespace snap {
 struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file);
   MeshBlockOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* lx1 = " << lx1() << "\n"
+       << "* lx2 = " << lx2() << "\n"
+       << "* lx3 = " << lx3() << "\n"
+       << "* level = " << level() << "\n"
+       << "* gid = " << gid() << "\n";
+  }
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);

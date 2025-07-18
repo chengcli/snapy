@@ -28,6 +28,7 @@ namespace snap {
 struct HydroOptions {
   static HydroOptions from_yaml(std::string const& filename);
   HydroOptions() = default;
+  void report(std::ostream& os) const {}
 
   //! Thermodynamics options
   ADD_ARG(kintera::ThermoOptions, thermo);
@@ -58,7 +59,7 @@ struct HydroOptions {
   ADD_ARG(InternalBoundaryOptions, ib);
   ADD_ARG(ImplicitOptions, vic);
 
-  ADD_ARG(SedHydroOptions, sedhydro);
+  ADD_ARG(SedHydroOptions, sed);
 };
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
@@ -78,7 +79,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   InternalBoundary pib = nullptr;
   VerticalImplicit pvic = nullptr;
 
-  SedHydro psedhydro = nullptr;
+  SedHydro psed = nullptr;
 
   std::map<std::string, double> timer;
 

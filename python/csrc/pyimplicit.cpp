@@ -18,7 +18,9 @@ void bind_implicit(py::module &m) {
   pyImplicitOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ImplicitOptions &a) {
-             return fmt::format("ImplicitOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("ImplicitOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::ImplicitOptions, type)
       .ADD_OPTION(int, snap::ImplicitOptions, nghost)

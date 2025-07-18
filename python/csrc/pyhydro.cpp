@@ -20,7 +20,9 @@ void bind_hydro(py::module &m) {
   pyHydroOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::HydroOptions &a) {
-             return fmt::format("HydroOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("HydroOptions(\n{})", ss.str());
            })
       .def("from_yaml", &snap::HydroOptions::from_yaml)
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptions, grav)
@@ -42,7 +44,9 @@ void bind_hydro(py::module &m) {
   pyPrimitiveProjectorOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::PrimitiveProjectorOptions &a) {
-             return fmt::format("PrimitiveProjectorOptions{}", a);
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("PrimitiveProjectorOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::PrimitiveProjectorOptions, type)
       .ADD_OPTION(double, snap::PrimitiveProjectorOptions, margin)

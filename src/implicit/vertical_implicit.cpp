@@ -37,18 +37,15 @@ ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
     default:
       TORCH_CHECK(false, "Unsupported implicit scheme");
   }
-  printf("* implicit-scheme = %s\n", op.type().c_str());
 
   if (!root["geometry"]) return op;
   if (!root["geometry"]["cells"]) return op;
   op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-  printf("* nghost = %d\n", op.nghost());
 
   if (!root["forcing"]) return op;
   if (!root["forcing"]["const-gravity"]) return op;
 
   op.grav() = root["forcing"]["const-gravity"]["grav1"].as<double>(0.0);
-  printf("* gravity = %e\n", op.grav());
 
   return op;
 }

@@ -26,13 +26,6 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
   return op;
 }
 
-void ReconstructOptions::report(std::ostream &os) const {
-  os << "* shock = " << (shock() ? "true" : "false") << "\n"
-     << "* interp.type = " << interp().type() << "\n"
-     << "* interp.scale = " << (interp().scale() ? "true" : "false") << "\n";
-}
-
-// TODO(cli) remove copy
 void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
                     Interp &pinterp, torch::Tensor wlr) {
   if (il > iu) return;

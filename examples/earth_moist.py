@@ -2,42 +2,56 @@ import torch
 import math
 import time
 import numpy as np
-from snapy import *
+from snapy import (
+        MeshBlockOptions,
+        MeshBlock
+        )
+from kintera import ThermoX
 
-dT = 0.5
-p0 = 1.0e5
-Ts = 303.15
-xc = 500.0
-yc = 0.0
-zc = 260.0
-s = 100.0
-a = 50.0
-grav = 9.8
-Rd = 287.0
-gamma = 1.4
-uniform_bubble = False
+torch.set_default_dtype(torch.float64)
+
+# parameters
+Ts = 300.
+Ps = 1.e5
 
 # set hydrodynamic options
-op = MeshBlockOptions.from_yaml("bryan.yaml");
+op = MeshBlockOptions.from_yaml("earth_moist.yaml");
 
 # initialize block
 block = MeshBlock(op)
-block.to(torch.device("cuda:0"))
+#block.to(torch.device("cuda:0"))
 
 # get handles to modules
 coord = block.hydro.module("coord")
 eos = block.hydro.module("eos")
-thermo = eos.named_modules()["thermo"]
+thermo_y = eos.named_modules()["thermo"]
 
-# thermodynamics
-cp = gamma / (gamma - 1.0) * Rd
-
-# set initial condition
+# get coordinates
 x3v, x2v, x1v = torch.meshgrid(
     coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
 )
 
+# get primitive variable
 w = block.buffer("hydro.eos.W")
+
+# get dimensions
+nc3, nc2, nc1 = x1v.shape
+nspecies = thermo_y.options.species()
+
+temp = Ts * torch.ones(nc3, nc2)
+pres = Ps * torch.ones(nc3, nc2)
+xfrac = torch.ones(nc3, nc2, 1)
+xfrac /= xfrac.sum(-1, keepdim=True)
+print(xfrac)
+
+# half a grid to cell center
+dz = 0.;
+grav = 9.8
+
+thermo_x = ThermoX(thermo_y.options)
+thermo_x.extrapolate_ad(temp, pres, xfrac, grav, dz);
+
+exit()
 
 temp = Ts - grav * x1v / cp
 w[index.ipr] = p0 * torch.pow(temp / Ts, cp / Rd)
@@ -59,6 +73,8 @@ current_time = 0.0
 block.set_uov("temp", temp)
 block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
 block.set_entropy("entropy", w[index.ipr], w[index.idn])
+
+exit()
 
 for out in [out2, out3]:
     out.write_output_file(block, current_time)
