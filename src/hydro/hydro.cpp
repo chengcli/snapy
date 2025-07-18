@@ -242,7 +242,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     }
 
     // add sedimentation flux
-    psed->forward(wlr1[IRT], _flux1);
+    psed->forward(w, _flux1);
 
     time2 = std::chrono::high_resolution_clock::now();
     timer["LR1->F1"] +=

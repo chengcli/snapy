@@ -199,8 +199,6 @@ int main(int argc, char** argv) {
     vec[del_conc.dim() - 1] = -1;
     auto del_rho =
         del_conc.detach() / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
-    std::cout << "del_rho max = " << del_rho.abs().max().item<double>()
-              << std::endl;
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     current_time += dt;
