@@ -65,8 +65,7 @@ int main(int argc, char** argv) {
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
     auto result = thermo_x->compute("X->Y", {xfrac});
-    std::cout << "result shape = " << result.sizes() << std::endl;
-    w.slice(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
+    w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
 
     if ((temp < Tmin).any().item<double>()) break;
     dz = pcoord->dx1f[i].item<double>();
@@ -81,7 +80,7 @@ int main(int argc, char** argv) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
-    w.slice(0, 1, IVX).select(3, i) = thermo_x->compute("X->Y", {xfrac});
+    w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
   }
 
   // populate ghost zones
@@ -96,7 +95,11 @@ int main(int argc, char** argv) {
   w[IVY] += 1. * torch::randn_like(w[IVY]);
   w[IVZ] += 1. * torch::randn_like(w[IVZ]);
 
-  // compute entropy and theta
+  // compute output variable
+  temp = peos->compute("W->T", {w});
+  pres = w[IPR];
+  xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+
   auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
   auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
   auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
@@ -111,6 +114,10 @@ int main(int argc, char** argv) {
   auto out3 = NetcdfOutput(
       OutputOptions().file_basename("earth").fid(3).variable("uov"));
   double current_time = 0.;
+
+  std::cout << "temp shape = " << temp.sizes() << std::endl;
+  std::cout << "entropy shape = " << entropy.sizes() << std::endl;
+  std::cout << "theta shape = " << theta.sizes() << std::endl;
 
   block->user_out_var.insert("temp", temp);
   block->user_out_var.insert("entropy", entropy);
