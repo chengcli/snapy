@@ -13,7 +13,7 @@ void SedHydroImpl::reset() {
   psedvel = register_module("sedvel", SedVel(options.sedvel()));
 
   // register buffer
-  vsed = register_buffer("vsed", torch::empty({0}));
+  vsed = register_buffer("vsed", torch::empty({0}, torch::kFloat64));
   hydro_ids = register_buffer("hydro_ids",
                               torch::tensor(options.hydro_ids(), torch::kLong));
 }
@@ -30,8 +30,12 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   auto vel = wr.narrow(0, IVX, 3).clone();
   peos->pcoord->vec_lower_(vel);
 
+  std::cout << "wr = " << wr << std::endl;
+
   auto temp = peos->compute("W->T", {wr});
   vsed.set_(psedvel->forward(wr[Index::IDN], wr[Index::IPR], temp));
+
+  std::cout << "vsed = " << vsed << std::endl;
 
   auto en = peos->compute("W->E", {wr});
   auto rhoc_vsed = peos->get_buffer("C") * vsed;

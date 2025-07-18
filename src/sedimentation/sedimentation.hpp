@@ -85,7 +85,7 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
   //! particle radius and density
   //! 1D tensor of number of particles
   //! radius and density must have the same size
-  torch::Tensor radius, density;
+  torch::Tensor radius, density, const_vsed;
 
   //! options with which this `SedVel` was constructed
   SedVelOptions options;

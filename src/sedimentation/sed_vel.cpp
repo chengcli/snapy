@@ -19,6 +19,9 @@ void SedVelImpl::reset() {
 
   density = register_parameter(
       "density", torch::tensor(options.density(), torch::kFloat64));
+
+  const_vsed = register_parameter(
+      "const_vsed", torch::tensor(options.const_vsed(), torch::kFloat64));
 }
 
 torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
@@ -52,11 +55,9 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
               (density.view(vec) - dens));
 
   // add a constant sedimentation velocity
-  for (int i = 0; i < options.radius().size(); ++i) {
-    vel[i] += options.const_vsed()[i];
-  }
+  vel += const_vsed.view(vec);
 
-  return torch::clamp(vel, -options.upper_limit(), options.upper_limit());
+  return vel.clamp(-options.upper_limit(), options.upper_limit());
 }
 
 }  // namespace snap
