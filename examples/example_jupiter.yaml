@@ -54,8 +54,8 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 1200.e3, x3min: -0.5, x3max: 0.5}
-  cells: {nx1: 100, nx2: 1, nx3: 1, nghost: 3}
+  bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 600.e3, x3min: -0.5, x3max: 0.5}
+  cells: {nx1: 100, nx2: 200, nx3: 1, nghost: 3}
 
 dynamics:
   equation-of-state:
@@ -93,7 +93,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 10
+  nlim: 100
   tlim: 1000
 
 forcing:
