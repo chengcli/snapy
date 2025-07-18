@@ -7,6 +7,10 @@
 // kintera
 #include <kintera/constants.h>
 
+#include <kintera/kinetics/evolve_implicit.hpp>
+#include <kintera/kinetics/kinetics.hpp>
+#include <kintera/kinetics/kinetics_formatter.hpp>
+
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -159,4 +163,20 @@ int main(int argc, char** argv) {
 
   out3.write_output_file(block, current_time, OctTreeOptions(), 0);
   out3.combine_blocks();
+
+  // create kinetics model
+  auto op_kinet =
+      kintera::KineticsOptions::from_yaml(fmt::format("{}.yaml", exp_name));
+  auto kinet = kintera::Kinetics(op_kinet);
+  std::cout << fmt::format("Kinetics Options: {}", kinet->options) << std::endl;
+
+  auto conc_kinet = kinet->options.narrow_copy(conc, thermo_x->options);
+  auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
+  auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
+
+  double dt = 1.e3;  // time step in seconds
+  auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
+
+  std::cout << "conc = " << conc;
+  std::cout << "del_conc = " << del_conc;
 }
