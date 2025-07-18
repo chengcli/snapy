@@ -9,19 +9,26 @@
 #include "reconstruct.hpp"
 
 namespace snap {
-ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &node,
+ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &dyn,
                                                  std::string section) {
   ReconstructOptions op;
 
-  if (!node[section]) {
-    TORCH_WARN("no section '", section,
-               "' specified, using default reconstruction model");
-    return op;
-  }
+  if (!dyn["reconstruct"]) return op;
+
+  auto node = dyn["reconstruct"];
+  if (!node[section]) return op;
 
   op.shock() = node[section]["shock"].as<bool>(false);
   op.interp().type() = node[section]["type"].as<std::string>("dc");
   op.interp().scale() = node[section]["scale"].as<bool>(false);
+
+  if (dyn["equation-of-state"]) {
+    op.density_floor() =
+        dyn["equation-of-state"]["density-floor"].as<double>(1.e-10);
+    op.pressure_floor() =
+        dyn["equation-of-state"]["pressure-floor"].as<double>(1.e-10);
+    op.limiter() = dyn["equation-of-state"]["limiter"].as<bool>(false);
+  }
 
   return op;
 }
@@ -92,15 +99,24 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, Index::IDN, 1), pinterp1,
                  result.narrow(1, Index::IDN, 1));
+  if (options.limiter()) {
+    result.select(1, Index::IDN).clamp_min_(options.density_floor());
+  }
 
   // velocity/pressure
   _apply_inplace(dim, il, iu, w.narrow(0, Index::IVX, 4), pinterp2,
                  result.narrow(1, Index::IVX, 4));
+  if (options.limiter()) {
+    result.select(1, Index::IPR).clamp_min_(options.pressure_floor());
+  }
 
   // others
   int ny = w.size(0) - 5;
   _apply_inplace(dim, il, iu, w.narrow(0, Index::ICY, ny), pinterp1,
                  result.narrow(1, Index::ICY, ny));
+  if (options.limiter()) {
+    result.narrow(1, Index::ICY, ny).clamp_min_(0.);
+  }
 
   return result;
 }

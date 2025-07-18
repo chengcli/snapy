@@ -20,11 +20,6 @@ namespace snap {
 template <typename T>
 void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
                                T *gammar, int dim, int ny, int stride) {
-  constexpr int ICY = Index::ICY;
-  constexpr int IDN = Index::IDN;
-  constexpr int IPR = Index::IPR;
-  constexpr int IVX = Index::IVX;
-
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;

@@ -110,8 +110,11 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVY] += 1. * torch::randn_like(w[IVY]);
-  w[IVZ] += 1. * torch::randn_like(w[IVZ]);
+  w[IVY] += 1. * torch::rand_like(w[IVY]);
+  w[IVZ] += 1. * torch::rand_like(w[IVZ]);
+
+  // populate the initial condition
+  block->initialize(w);
 
   // compute output variable
   // 2D -> 3D variables
@@ -170,13 +173,49 @@ int main(int argc, char** argv) {
   auto kinet = kintera::Kinetics(op_kinet);
   std::cout << fmt::format("Kinetics Options: {}", kinet->options) << std::endl;
 
-  auto conc_kinet = kinet->options.narrow_copy(conc, thermo_x->options);
-  auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
-  auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
+  // time loop
+  int count = 0;
+  auto u = peos->get_buffer("U");
 
-  double dt = 1.e3;  // time step in seconds
-  auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
+  while (!block->pintg->stop(count++, current_time)) {
+    auto dt = block->max_time_step();
+    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+      block->forward(dt, stage);
+    }
 
-  std::cout << "conc = " << conc;
-  std::cout << "del_conc = " << del_conc;
+    /* evolve kinetics
+    temp = peos->compute("W->T", {w});
+    pres = w[IPR];
+    xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+    conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
+    cp_vol = thermo_x->compute("TV->cp", {temp, conc});
+
+    std::cout << "#### a1" << std::endl;
+
+    auto conc_kinet = kinet->options.narrow_copy(conc, thermo_y->options);
+    auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
+    auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
+    auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
+    auto del_rho = del_conc / thermo_y->inv_mu;
+
+    std::cout << "del_rho size = " << del_rho.sizes() << std::endl;
+    u.narrow(0, ICY, ny) += del_rho;
+    */
+
+    current_time += dt;
+    if ((count + 1) % 1 == 0) {
+      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
+
+      block->phydro->report_timer(std::cout);
+      block->report_timer(std::cout);
+
+      ++out2.file_number;
+      out2.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out2.combine_blocks();
+
+      ++out3.file_number;
+      out3.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out3.combine_blocks();
+    }
+  }
 }

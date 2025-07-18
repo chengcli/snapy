@@ -45,9 +45,8 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
 
   // reconstruction
   if (dyn["reconstruct"]) {
-    op.recon1() = ReconstructOptions::from_yaml(dyn["reconstruct"], "vertical");
-    op.recon23() =
-        ReconstructOptions::from_yaml(dyn["reconstruct"], "horizontal");
+    op.recon1() = ReconstructOptions::from_yaml(dyn, "vertical");
+    op.recon23() = ReconstructOptions::from_yaml(dyn, "horizontal");
   }
 
   // riemann solver

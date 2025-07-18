@@ -276,7 +276,7 @@ torch::Tensor IdealMoistImpl::_fsig(torch::Tensor const &yfrac) const {
   }
 
   auto yu = yfrac.unfold(0, ny, 1);
-  return 1. + yfrac.matmul(cv_ratio_m1).squeeze(0);
+  return 1. + yu.matmul(cv_ratio_m1).squeeze(0);
 }
 
 }  // namespace snap

@@ -16,12 +16,6 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
-  wl[IDN].clamp_min_(options.eos().density_floor());
-  wl[IPR].clamp_min_(options.eos().pressure_floor());
-
-  wr[IDN].clamp_min_(options.eos().density_floor());
-  wr[IPR].clamp_min_(options.eos().pressure_floor());
-
   auto el = peosl->compute("W->I", {wl}) / wl[Index::IDN];
   auto gammal = peosl->compute("W->A", {wl});
 

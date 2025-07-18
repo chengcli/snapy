@@ -39,6 +39,14 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 
 void EquationOfStateImpl::_apply_conserved_limiter_(torch::Tensor& cons) const {
   if (!options.limiter()) return;  // no limiter
+  cons[Index::IDN].clamp_min_(options.density_floor());
+
+  auto mom = cons.narrow(0, Index::IVX, 3).clone();
+  pcoord->vec_raise_(mom);
+
+  auto ke =
+      0.5 * (mom * cons.narrow(0, Index::IVX, 3)).sum(0) / cons[Index::IDN];
+  cons[Index::IPR].clamp_min_(ke);
 
   cons.narrow(0, Index::IVX, 3)
       .masked_fill_(torch::isnan(cons.narrow(0, Index::IVX, 3)), 0.);
