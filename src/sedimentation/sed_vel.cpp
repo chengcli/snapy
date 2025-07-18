@@ -14,13 +14,13 @@ void SedVelImpl::reset() {
         "Sedimentation: radius and density must have the same size");
   }
 
-  radius = register_parameter("radius",
-                              torch::tensor(options.radius(), torch::kFloat64));
+  radius = register_buffer("radius",
+                           torch::tensor(options.radius(), torch::kFloat64));
 
-  density = register_parameter(
-      "density", torch::tensor(options.density(), torch::kFloat64));
+  density = register_buffer("density",
+                            torch::tensor(options.density(), torch::kFloat64));
 
-  const_vsed = register_parameter(
+  const_vsed = register_buffer(
       "const_vsed", torch::tensor(options.const_vsed(), torch::kFloat64));
 }
 
@@ -30,7 +30,7 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   const auto epsilon_LJ = options.a_epsilon_LJ();
   const auto m = options.a_mass();
 
-  std::vector<int64_t> vec(temp.dim(), 1);
+  std::vector<int64_t> vec(temp.dim() + 1, 1);
   vec[0] = -1;
 
   // cope with float precision

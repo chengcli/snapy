@@ -30,19 +30,17 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   auto vel = wr.narrow(0, IVX, 3).clone();
   peos->pcoord->vec_lower_(vel);
 
-  std::cout << "wr = " << wr << std::endl;
-
   auto temp = peos->compute("W->T", {wr});
   vsed.set_(psedvel->forward(wr[Index::IDN], wr[Index::IPR], temp));
 
-  std::cout << "vsed = " << vsed << std::endl;
-
-  auto en = peos->compute("W->E", {wr});
-  auto rhoc_vsed = peos->get_buffer("C") * vsed;
+  // 5 is number of hydro variables
+  auto en = peos->compute("W->E", {wr}).index_select(0, hydro_ids - 5);
+  auto rhoc = peos->get_buffer("C").index_select(0, hydro_ids - 5);
+  auto rhoc_vsed = rhoc * vsed;
 
   flux.index_add_(0, hydro_ids, rhoc_vsed);
   flux.narrow(0, IVX, 3) += vel * rhoc_vsed.sum(0, /*keepdim=*/true);
-  flux[Index::IPR] += (rhoc_vsed * en).sum(0);
+  flux[Index::IPR] += (vsed * en).sum(0);
 
   return flux;
 }
