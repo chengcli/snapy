@@ -202,7 +202,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
   // count total variables (vector variables are expanded into flat scalars)
   int total_vars = 0;
   while (pdata != nullptr) {
-    auto names = Vectorize<std::string>(pdata->name.c_str(), ",");
+    auto names = Vectorize<std::string>(pdata->name.c_str(), ";");
     std::string grid = pmeta->GetGridType(names[0]);
     int nvar = get_num_variables(grid, pdata->data);
 
@@ -220,7 +220,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
 
   pdata = pfirst_data_;
   while (pdata != nullptr) {
-    auto names = Vectorize<std::string>(pdata->name.c_str(), ",");
+    auto names = Vectorize<std::string>(pdata->name.c_str(), ";");
     std::string grid = pmeta->GetGridType(names[0]);
     int nvar = get_num_variables(grid, pdata->data);
 

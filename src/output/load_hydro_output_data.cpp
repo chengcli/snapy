@@ -13,7 +13,7 @@ std::string get_hydro_names(MeshBlock pmb) {
 
   std::string result = species[1];
   for (int i = 2; i < species.size(); ++i) {
-    result += "," + species[i];
+    result += ";" + species[i];
   }
 
   return result;

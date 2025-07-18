@@ -1,6 +1,9 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// fmt
+#include <fmt/format.h>
+
 // kintera
 #include <kintera/constants.h>
 
@@ -13,15 +16,17 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   // read parameters
-  auto config = YAML::LoadFile("example_earth.yaml");
+  std::string exp_name = "example_jupiter";
+
+  auto config = YAML::LoadFile(fmt::format("{}.yaml", exp_name));
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
   auto Ts = config["problem"]["Ts"].as<double>(300.);
-  auto xH2O = config["problem"]["xH2O"].as<double>(0.02);
   auto Tmin = config["problem"]["Tmin"].as<double>(200.);
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block = MeshBlock(MeshBlockOptions::from_yaml("example_earth.yaml"));
+  auto block =
+      MeshBlock(MeshBlockOptions::from_yaml(fmt::format("{}.yaml", exp_name)));
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
@@ -37,7 +42,6 @@ int main(int argc, char** argv) {
   int nc2 = pcoord->x2v.size(0);
   int nc1 = pcoord->x1v.size(0);
   int ny = thermo_y->options.species().size() - 1;
-  int iH2O = thermo_y->options.vapor_ids()[1];
 
   // construct an adiabatic atmosphere
   kintera::ThermoX thermo_x(thermo_y->options);
@@ -45,8 +49,19 @@ int main(int argc, char** argv) {
   auto temp = Ts * torch::ones({nc3, nc2}, torch::kDouble);
   auto pres = Ps * torch::ones({nc3, nc2}, torch::kDouble);
   auto xfrac = torch::zeros({nc3, nc2, 1 + ny}, torch::kDouble);
-  xfrac.select(2, iH2O) = xH2O;    // water vapor
-  xfrac.select(2, 0) = 1. - xH2O;  // dry air
+
+  // read in compositions
+  for (int i = 1; i <= ny; ++i) {
+    auto name = thermo_y->options.species()[i];
+    auto xmixr = config["problem"]["x" + name].as<double>(0.);
+    xfrac.select(2, i) = xmixr;
+  }
+  // dry air mole fraction
+  xfrac.select(2, 0) = 1. - xfrac.narrow(-1, 1, ny).sum(-1);
+
+  TORCH_CHECK(
+      xfrac.sum(-1).allclose(torch::ones({nc3, nc2}, torch::kDouble), 1.e-6),
+      "xfrac does not sum to 1");
 
   // set up initial conditions
   auto w = peos->get_buffer("W");
@@ -100,28 +115,44 @@ int main(int argc, char** argv) {
   pres = w[IPR];
   xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
 
+  // mole concentration [mol/m^3]
   auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
+
+  // volumetric entropy [J/(m^3 K)]
   auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
+
+  // volumetric heat capacity [J/(m^3 K)]
   auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
+
+  // molar entropy [J/(mol K)]
   auto entropy_mole = entropy_vol / conc.sum(-1);
+
+  // molar heat capacity [J/(mol K)]
   auto cp_mole = cp_vol / conc.sum(-1);
 
+  // mean molecular weight [kg/mol]
   auto mu = (thermo_x->mu * xfrac).sum(-1);
+
+  // specific entropy [J/(kg K)]
   auto entropy = entropy_mole / mu;
+
+  // potential temperature [K]
   auto theta = (entropy_vol / cp_vol).exp();
-  auto qwtol = w.narrow(0, ICY, ny).sum(0);
+
+  // total precipitable mass fraction [kg/kg]
+  auto qtol = w.narrow(0, ICY, ny).sum(0);
 
   // make initial output
   auto out2 = NetcdfOutput(
-      OutputOptions().file_basename("example_earth").fid(2).variable("prim"));
+      OutputOptions().file_basename(exp_name).fid(2).variable("prim"));
   auto out3 = NetcdfOutput(
-      OutputOptions().file_basename("example_earth").fid(3).variable("uov"));
+      OutputOptions().file_basename(exp_name).fid(3).variable("uov"));
   double current_time = 0.;
 
   block->user_out_var.insert("temp", temp);
   block->user_out_var.insert("entropy", entropy);
   block->user_out_var.insert("theta", theta);
-  block->user_out_var.insert("qwtol", qwtol);
+  block->user_out_var.insert("qtol", qtol);
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
