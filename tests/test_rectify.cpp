@@ -88,7 +88,6 @@ int test1(int argc, char *argv[]) {
 
 void test2() {
   int flips = 0;
-  torch::Tensor solid;
   auto solid = torch::zeros({8, 8, 8}, torch::kInt32);
   if (torch::cuda::is_available()) solid = solid.to(torch::kCUDA);
 
