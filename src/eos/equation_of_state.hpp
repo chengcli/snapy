@@ -74,17 +74,17 @@ class EquationOfStateImpl {
   torch::Tensor forward(torch::Tensor cons,
                         torch::optional<torch::Tensor> out = torch::nullopt);
 
+  //! \brief Apply the conserved variable limiter in place.
+  virtual void apply_conserved_limiter_(torch::Tensor const& cons) const;
+
+  //! \brief Apply the primitive variable limiter in place.
+  virtual void apply_primitive_limiter_(torch::Tensor const& prim) const;
+
  protected:
   //! Disable constructor, to be used only by derived classes.
   EquationOfStateImpl() = default;
   explicit EquationOfStateImpl(EquationOfStateOptions const& options_)
       : options(options_) {}
-
-  //! \brief Apply the conserved variable limiter in place.
-  virtual void _apply_conserved_limiter_(torch::Tensor& cons) const;
-
-  //! \brief Apply the primitive variable limiter in place.
-  virtual void _apply_primitive_limiter_(torch::Tensor& prim) const;
 };
 
 using EquationOfState = std::shared_ptr<EquationOfStateImpl>;

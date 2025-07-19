@@ -270,6 +270,9 @@ class AthenaArray {
   void InitFromTensor(torch::Tensor const &tensor, int dim, int index,
                       int nvar);
 
+  //! \brief copy data from torch::Tensor
+  void CopyFromTensor(torch::Tensor const &tensor);
+
  private:
   T *pdata_;
   int nx1_, nx2_, nx3_, nx4_, nx5_, nx6_;
@@ -282,6 +285,9 @@ class AthenaArray {
 
   //! \brief interface to 4D torch::Tensor
   void initFromTensor4D(torch::Tensor const &tensor, int index, int nvar);
+
+  //! \brief copy from 3D torch::Tensor
+  void copyFromTensor3D(torch::Tensor const &tensor);
 };
 
 // destructor

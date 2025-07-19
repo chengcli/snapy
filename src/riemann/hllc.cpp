@@ -16,12 +16,6 @@ void HLLCSolverImpl::reset() {
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor flx) {
-  wl[IDN].clamp_min_(options.eos().density_floor());
-  wl[IPR].clamp_min_(options.eos().pressure_floor());
-
-  wr[IDN].clamp_min_(options.eos().density_floor());
-  wr[IPR].clamp_min_(options.eos().pressure_floor());
-
   auto el = peosl->compute("W->I", {wl});
   auto gammal = peosl->compute("W->A", {wl});
   auto cl = peosl->compute("WA->L", {wl, gammal});

@@ -17,7 +17,7 @@ class Node;
 
 namespace snap {
 struct ReconstructOptions {
-  static ReconstructOptions from_yaml(const YAML::Node& node,
+  static ReconstructOptions from_yaml(const YAML::Node& dyn,
                                       std::string section);
   ReconstructOptions() = default;
   void report(std::ostream& os) const {
@@ -26,13 +26,19 @@ struct ReconstructOptions {
        << "\n"
        << "* is_boundary_upper = " << (is_boundary_upper() ? "true" : "false")
        << "\n"
-       << "* shock = " << (shock() ? "true" : "false") << "\n";
+       << "* shock = " << (shock() ? "true" : "false") << "\n"
+       << "* density_floor = " << density_floor() << "\n"
+       << "* pressure_floor = " << pressure_floor() << "\n"
+       << "* limiter = " << (limiter() ? "true" : "false") << "\n";
   }
 
   //! configure options
   ADD_ARG(bool, is_boundary_lower) = false;
   ADD_ARG(bool, is_boundary_upper) = false;
   ADD_ARG(bool, shock) = true;
+  ADD_ARG(double, density_floor) = 1.e-10;
+  ADD_ARG(double, pressure_floor) = 1.e-10;
+  ADD_ARG(bool, limiter) = false;
 
   //! abstract submodules
   ADD_ARG(InterpOptions, interp);

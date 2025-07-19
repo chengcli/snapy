@@ -20,6 +20,7 @@ void OutputType::LoadOutputData(MeshBlock pmb) {
   OutputData *pod;
 
   loadHydroOutputData(pmb);
+  loadDiagOutputData(pmb);
   loadScalarOutputData(pmb);
   loadUserOutputData(pmb);
 

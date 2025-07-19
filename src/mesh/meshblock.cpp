@@ -222,25 +222,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   timer["averaging"] +=
       std::chrono::duration<double, std::milli>(time3 - time2).count();
 
-  // -------- (5) saturation adjustment --------
-  if (stage == pintg->stages.size() - 1 &&
-      (phydro->options.eos().type() == "ideal-moist" ||
-       phydro->options.eos().type() == "moist-mixture")) {
-    auto ke = phydro->peos->compute("U->K", {hydro_u});
-    auto rho = phydro->peos->get_buffer("thermo.D");
-    auto ie = hydro_u[Index::IPR] - ke;
-
-    int ny = hydro_u.size(0) - 5;  // number of species
-    auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
-
-    auto m = named_modules()["hydro.eos.thermo"];
-    auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
-    pthermo->forward(rho, ie, yfrac);
-
-    hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
-  }
-
-  // -------- (6) update ghost zones --------
+  // -------- (5) update ghost zones --------
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
@@ -261,6 +243,30 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   auto time4 = std::chrono::high_resolution_clock::now();
   timer["bc"] +=
       std::chrono::duration<double, std::milli>(time4 - time3).count();
+
+  // -------- (6) saturation adjustment --------
+  if (stage == pintg->stages.size() - 1 &&
+      (phydro->options.eos().type() == "ideal-moist" ||
+       phydro->options.eos().type() == "moist-mixture")) {
+    phydro->peos->apply_conserved_limiter_(hydro_u);
+
+    auto ke = phydro->peos->compute("U->K", {hydro_u});
+    auto rho = phydro->peos->get_buffer("thermo.D");
+    auto ie = hydro_u[Index::IPR] - ke;
+
+    int ny = hydro_u.size(0) - 5;  // number of species
+    auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
+
+    auto m = named_modules()["hydro.eos.thermo"];
+    auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+
+    pthermo->forward(rho, ie, yfrac);
+
+    hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
+  }
+  auto time5 = std::chrono::high_resolution_clock::now();
+  timer["saturation_adjustment"] +=
+      std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return 0;
 }

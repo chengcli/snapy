@@ -23,19 +23,24 @@ namespace snap {
 struct SedVelOptions {
   static SedVelOptions from_yaml(YAML::Node const& config);
   void report(std::ostream& os) const {
-    os << "* radius = " << fmt::format("{}", radius()) << "\n"
+    os << "* particle_ids = " << fmt::format("{}", particle_ids()) << "\n"
+       << "* radius = " << fmt::format("{}", radius()) << "\n"
        << "* density = " << fmt::format("{}", density()) << "\n"
        << "* const_vsed = " << fmt::format("{}", const_vsed()) << "\n"
        << "* grav = " << grav() << "\n"
        << "* a_diameter = " << a_diameter() << "\n"
        << "* a_epsilon_LJ = " << a_epsilon_LJ() << "\n"
        << "* a_mass = " << a_mass() << "\n"
-       << "* min_radius = " << min_radius() << "\n"
        << "* upper_limit = " << upper_limit() << "\n";
   }
+  //! \return species names
+  std::vector<std::string> species() const;
+
+  //! id of precipitating particles
+  ADD_ARG(std::vector<int>, particle_ids) = {};
 
   //! radius and density of particles
-  //! if specified, must be the same size of cloud particles
+  //! if specified, must be the same size of cloud particles in thermo
   ADD_ARG(std::vector<double>, radius) = {};
   ADD_ARG(std::vector<double>, density) = {};
 
@@ -54,15 +59,19 @@ struct SedVelOptions {
   //! molecular mass of background atmosphere, default to H2 [kg]
   ADD_ARG(double, a_mass) = 3.34e-27;
 
-  //! minimum radius of particles subject to sedimentation [m]
-  ADD_ARG(double, min_radius) = 1.e-6;
-
   //! upper limit of sedimentation velocity [m/s]
   ADD_ARG(double, upper_limit) = 5.e3;
 };
 
 struct SedHydroOptions {
-  void report(std::ostream& os) const { sedvel().report(os); }
+  void report(std::ostream& os) const {
+    os << "* hydro_ids = " << fmt::format("{}", hydro_ids()) << "\n";
+    sedvel().report(os);
+  }
+
+  //! id of precipitating particles in hydro
+  ADD_ARG(std::vector<int>, hydro_ids) = {};
+
   //! submodules options
   ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(SedVelOptions, sedvel);
@@ -73,7 +82,7 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
   //! particle radius and density
   //! 1D tensor of number of particles
   //! radius and density must have the same size
-  torch::Tensor radius, density;
+  torch::Tensor radius, density, const_vsed;
 
   //! options with which this `SedVel` was constructed
   SedVelOptions options;
@@ -102,6 +111,9 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
   //! cache
   torch::Tensor vsed;
 
+  //! particle indices in hydro
+  torch::Tensor hydro_ids;
+
   //! submodules
   EquationOfState peos = nullptr;
   SedVel psedvel = nullptr;
@@ -117,11 +129,11 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
 
   //! Calculate sedimentation velocites
   /*!
-   * \param hydro_w   hydro primitive variables
+   * \param wr        hydro primitive variables at the right interface
    * \param out       optional output tensor to store the result
    * \return          4D tensor of sedimentation flux (mass, momentum, energy).
    */
-  torch::Tensor forward(torch::Tensor hydro_w,
+  torch::Tensor forward(torch::Tensor wr,
                         torch::optional<torch::Tensor> out = torch::nullopt);
 };
 TORCH_MODULE(SedHydro);

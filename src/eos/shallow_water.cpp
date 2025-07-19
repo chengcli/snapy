@@ -52,7 +52,7 @@ torch::Tensor ShallowWaterImpl::compute(
 }
 
 void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 
   prim[Index::IDN] = cons[Index::IDN];
 
@@ -62,11 +62,11 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 
   pcoord->vec_raise_(prim);
 
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 }
 
 void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  _apply_primitive_limiter_(prim);
+  apply_primitive_limiter_(prim);
 
   cons[Index::IDN] = prim[Index::IDN];
 
@@ -76,7 +76,7 @@ void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
   pcoord->vec_lower_(cons);
 
-  _apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons);
 }
 
 void ShallowWaterImpl::_gravity_wave_speed(torch::Tensor prim,

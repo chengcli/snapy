@@ -7,6 +7,11 @@
 // kintera
 #include <kintera/constants.h>
 
+#include <kintera/kinetics/evolve_implicit.hpp>
+#include <kintera/kinetics/kinetics.hpp>
+#include <kintera/kinetics/kinetics_formatter.hpp>
+#include <kintera/thermo/relative_humidity.hpp>
+
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -106,38 +111,11 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVY] += 1. * torch::randn_like(w[IVY]);
-  w[IVZ] += 1. * torch::randn_like(w[IVZ]);
+  w[IVX] += 1. * torch::rand_like(w[IVZ]);
+  w[IVY] += 1. * torch::rand_like(w[IVY]);
 
-  // compute output variable
-  // 2D -> 3D variables
-  temp = peos->compute("W->T", {w});
-  pres = w[IPR];
-  xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
-
-  // mole concentration [mol/m^3]
-  auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
-
-  // volumetric entropy [J/(m^3 K)]
-  auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
-
-  // volumetric heat capacity [J/(m^3 K)]
-  auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
-
-  // molar entropy [J/(mol K)]
-  auto entropy_mole = entropy_vol / conc.sum(-1);
-
-  // molar heat capacity [J/(mol K)]
-  auto cp_mole = cp_vol / conc.sum(-1);
-
-  // mean molecular weight [kg/mol]
-  auto mu = (thermo_x->mu * xfrac).sum(-1);
-
-  // specific entropy [J/(kg K)]
-  auto entropy = entropy_mole / mu;
-
-  // potential temperature [K]
-  auto theta = (entropy_vol / cp_vol).exp();
+  // populate the initial condition
+  block->initialize(w);
 
   // total precipitable mass fraction [kg/kg]
   auto qtol = w.narrow(0, ICY, ny).sum(0);
@@ -147,11 +125,10 @@ int main(int argc, char** argv) {
       OutputOptions().file_basename(exp_name).fid(2).variable("prim"));
   auto out3 = NetcdfOutput(
       OutputOptions().file_basename(exp_name).fid(3).variable("uov"));
+  auto out4 = NetcdfOutput(
+      OutputOptions().file_basename(exp_name).fid(4).variable("diag"));
   double current_time = 0.;
 
-  block->user_out_var.insert("temp", temp);
-  block->user_out_var.insert("entropy", entropy);
-  block->user_out_var.insert("theta", theta);
   block->user_out_var.insert("qtol", qtol);
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
@@ -159,4 +136,63 @@ int main(int argc, char** argv) {
 
   out3.write_output_file(block, current_time, OctTreeOptions(), 0);
   out3.combine_blocks();
+
+  out4.write_output_file(block, current_time, OctTreeOptions(), 0);
+  out4.combine_blocks();
+
+  // create kinetics model
+  auto op_kinet =
+      kintera::KineticsOptions::from_yaml(fmt::format("{}.yaml", exp_name));
+  auto kinet = kintera::Kinetics(op_kinet);
+  std::cout << fmt::format("Kinetics Options:\n{}", kinet->options)
+            << std::endl;
+
+  // time loop
+  int count = 0;
+  auto u = peos->get_buffer("U");
+
+  while (!block->pintg->stop(count++, current_time)) {
+    auto dt = block->max_time_step();
+    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+      block->forward(dt, stage);
+    }
+
+    // evolve kinetics
+    auto temp = peos->compute("W->T", {w});
+    auto pres = w[IPR];
+    auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+    auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
+    auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
+
+    auto conc_kinet = kinet->options.narrow_copy(conc, thermo_y->options);
+    auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
+    auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
+    auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
+    std::vector<int64_t> vec(del_conc.dim(), 1);
+    vec[del_conc.dim() - 1] = -1;
+    auto del_rho =
+        del_conc.detach() / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
+    u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
+
+    current_time += dt;
+    if ((count + 1) % 10 == 0) {
+      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
+
+      block->report_timer(std::cout);
+
+      block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
+
+      ++out2.file_number;
+      out2.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out2.combine_blocks();
+
+      ++out3.file_number;
+      out3.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out3.combine_blocks();
+
+      ++out4.file_number;
+      out4.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out4.combine_blocks();
+    }
+  }
 }
