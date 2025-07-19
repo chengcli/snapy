@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     current_time += dt;
-    if ((count + 1) % 1 == 0) {
+    if ((count + 1) % 10 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);

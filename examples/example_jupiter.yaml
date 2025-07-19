@@ -93,7 +93,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 100
+  nlim: -1
   tlim: 1000
 
 forcing:

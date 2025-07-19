@@ -33,6 +33,11 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   auto temp = peos->compute("W->T", {wr});
   vsed.set_(psedvel->forward(wr[Index::IDN], wr[Index::IPR], temp));
 
+  // seal top boundary
+  int ie = peos->pcoord->ie();
+  int ng = vsed.size(-1) - (ie + 1);
+  vsed.narrow(-1, ie + 1, ng).fill_(0.);
+
   // 5 is number of hydro variables
   auto en = peos->compute("W->E", {wr}).index_select(0, hydro_ids - 5);
   auto rhoc = peos->get_buffer("C").index_select(0, hydro_ids - 5);
