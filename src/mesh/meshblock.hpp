@@ -83,6 +83,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   }
 
   void report_timer(std::ostream& stream) {
+    phydro->report_timer(std::cout);
     for (const auto& t : timer) {
       stream << "meshblock[" << t.first << "] = " << t.second << " miliseconds"
              << std::endl;

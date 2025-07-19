@@ -132,6 +132,7 @@ class OutputType {
 
  protected:
   void loadHydroOutputData(MeshBlock pmb);
+  void loadDiagOutputData(MeshBlock pmb);
   void loadScalarOutputData(MeshBlock pmb);
   void loadUserOutputData(MeshBlock pmb);
 
