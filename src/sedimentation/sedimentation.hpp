@@ -59,9 +59,6 @@ struct SedVelOptions {
   //! molecular mass of background atmosphere, default to H2 [kg]
   ADD_ARG(double, a_mass) = 3.34e-27;
 
-  //! minimum radius of particles subject to sedimentation [m]
-  ADD_ARG(double, min_radius) = 1.e-6;
-
   //! upper limit of sedimentation velocity [m/s]
   ADD_ARG(double, upper_limit) = 5.e3;
 };

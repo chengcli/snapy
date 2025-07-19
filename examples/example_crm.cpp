@@ -10,6 +10,7 @@
 #include <kintera/kinetics/evolve_implicit.hpp>
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/kinetics/kinetics_formatter.hpp>
+#include <kintera/thermo/relative_humidity.hpp>
 
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
@@ -20,7 +21,7 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   // read parameters
-  std::string exp_name = "example_jupiter";
+  std::string exp_name = "example_earth";
 
   auto config = YAML::LoadFile(fmt::format("{}.yaml", exp_name));
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
@@ -110,8 +111,8 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  // w[IVY] += 1. * torch::rand_like(w[IVY]);
-  // w[IVZ] += 1. * torch::rand_like(w[IVZ]);
+  w[IVX] += 1. * torch::rand_like(w[IVZ]);
+  w[IVY] += 1. * torch::rand_like(w[IVY]);
 
   // populate the initial condition
   block->initialize(w);
@@ -149,6 +150,11 @@ int main(int argc, char** argv) {
   // total precipitable mass fraction [kg/kg]
   auto qtol = w.narrow(0, ICY, ny).sum(0);
 
+  // relative humidity
+  auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
+                                       thermo_x->options.nucleation());
+  std::cout << "rh sizes = " << rh.sizes() << std::endl;
+
   // make initial output
   auto out2 = NetcdfOutput(
       OutputOptions().file_basename(exp_name).fid(2).variable("prim"));
@@ -160,6 +166,10 @@ int main(int argc, char** argv) {
   block->user_out_var.insert("entropy", entropy);
   block->user_out_var.insert("theta", theta);
   block->user_out_var.insert("qtol", qtol);
+  for (int i = 0; i < thermo_x->options.reactions().size(); ++i) {
+    auto name = thermo_x->options.reactions()[i].products().begin()->first;
+    block->user_out_var.insert(fmt::format("rh_{}", name), rh.select(-1, i));
+  }
 
   out2.write_output_file(block, current_time, OctTreeOptions(), 0);
   out2.combine_blocks();
@@ -208,8 +218,23 @@ int main(int argc, char** argv) {
       block->phydro->report_timer(std::cout);
       block->report_timer(std::cout);
 
+      entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
+      entropy_mole = entropy_vol / conc.sum(-1);
+      cp_mole = cp_vol / conc.sum(-1);
+      mu = (thermo_x->mu * xfrac).sum(-1);
+
       block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
       block->user_out_var["temp"] = temp;
+      block->user_out_var["entropy"] = entropy_mole / mu;
+      block->user_out_var["theta"] = (entropy_vol / cp_vol).exp();
+
+      rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
+                                      thermo_x->options.nucleation());
+
+      for (int i = 0; i < thermo_x->options.reactions().size(); ++i) {
+        auto name = thermo_x->options.reactions()[i].products().begin()->first;
+        block->user_out_var[fmt::format("rh_{}", name)] = rh.select(-1, i);
+      }
 
       ++out2.file_number;
       out2.write_output_file(block, current_time, OctTreeOptions(), 0);

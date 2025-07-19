@@ -222,7 +222,29 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   timer["averaging"] +=
       std::chrono::duration<double, std::milli>(time3 - time2).count();
 
-  // -------- (5) saturation adjustment --------
+  // -------- (5) update ghost zones --------
+  BoundaryFuncOptions op;
+  op.nghost(options.hydro().coord().nghost());
+
+  // (5.1) apply hydro boundary
+  if (phydro->peos->nvar() > 0) {
+    op.type(kConserved);
+    for (int i = 0; i < options.bfuncs().size(); ++i)
+      options.bfuncs()[i](hydro_u, 3 - i / 2, op);
+  }
+
+  // (5.2) apply scalar boundary
+  if (pscalar->nvar() > 0) {
+    op.type(kScalar);
+    for (int i = 0; i < options.bfuncs().size(); ++i)
+      options.bfuncs()[i](scalar_v, 3 - i / 2, op);
+  }
+
+  auto time4 = std::chrono::high_resolution_clock::now();
+  timer["bc"] +=
+      std::chrono::duration<double, std::milli>(time4 - time3).count();
+
+  // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 &&
       (phydro->options.eos().type() == "ideal-moist" ||
        phydro->options.eos().type() == "moist-mixture")) {
@@ -242,30 +264,8 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }
-  auto time4 = std::chrono::high_resolution_clock::now();
-  timer["saturation_adjustment"] +=
-      std::chrono::duration<double, std::milli>(time4 - time3).count();
-
-  // -------- (6) update ghost zones --------
-  BoundaryFuncOptions op;
-  op.nghost(options.hydro().coord().nghost());
-
-  // (5.1) apply hydro boundary
-  if (phydro->peos->nvar() > 0) {
-    op.type(kConserved);
-    for (int i = 0; i < options.bfuncs().size(); ++i)
-      options.bfuncs()[i](hydro_u, 3 - i / 2, op);
-  }
-
-  // (5.2) apply scalar boundary
-  if (pscalar->nvar() > 0) {
-    op.type(kScalar);
-    for (int i = 0; i < options.bfuncs().size(); ++i)
-      options.bfuncs()[i](scalar_v, 3 - i / 2, op);
-  }
-
   auto time5 = std::chrono::high_resolution_clock::now();
-  timer["bc"] +=
+  timer["saturation_adjustment"] +=
       std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return 0;
