@@ -81,7 +81,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   Reconstruct precon23 = nullptr;
 
   InternalBoundary pib = nullptr;
-  VerticalCorrection pimplicit = nullptr;
+  ImplicitCorrection pimp = nullptr;
 
   SedHydro psed = nullptr;
 
@@ -119,7 +119,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   }
 
  private:
-  torch::Tensor _flux1, _flux2, _flux3, _div, _vic;
+  torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 
 /// A `ModuleHolder` subclass for `HydroImpl`.

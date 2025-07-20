@@ -2,7 +2,10 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/snap.h>
+
 #include "implicit.hpp"
+#include "implicit_dispatch.hpp"
 
 namespace snap {
 
@@ -12,33 +15,34 @@ ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions options_)
 }
 
 void ImplicitCorrectionImpl::reset() {
-  pihc = register_module("vic", ImplicitHydro(options));
+  pvic = register_module("vic", ImplicitHydro(options));
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
-                                              torch::Tensor wlr[3], double dt) {
+                                              torch::TensorList wlr3,
+                                              double dt) {
   if (options.scheme() == 0) {  // null operation
-    return du;
+    return torch::zeros_like(du);
   }
 
   //// -------- Vertical direction --------- ////
-  auto [a, b, c] = pihc->forward(w, wlr[2], 3);
+  auto [a, b, c, corr] = pvic->forward(w, wlr3[2], 3);
   auto delta = torch::zeros_like(a.select(-1, 0));
 
-  int m = option.size();
+  int m = options.size();
   auto Dt = torch::eye(m, w.options()) / dt;
   auto Phi = torch::zeros({m, m}, w.options());
 
-  Phi[IVX][IDN] = options.grav();
-  Phi[m - 1][IVX] = options.grav();
+  Phi[Index::IVX][Index::IDN] = options.grav();
+  Phi[m - 1][Index::IVX] = options.grav();
 
   auto Bnd = torch::eye(m, w.options());
-  Bnd[IVX][IVX] = -1.;
+  Bnd[Index::IVX][Index::IVX] = -1.;
 
-  int is = pihc->peos->pcoord->is();
-  int ie = pihc->peos->pcoord->ie();
+  int is = pvic->peos->pcoord->is();
+  int ie = pvic->peos->pcoord->ie();
 
-  a.slice(d, is, ie) += Dt - Phi;
+  a.slice(2, is, ie) += Dt - Phi;
 
   //// --------- Fix boundary condition ---------- ////
   a.select(2, is) += b.select(2, is).matmul(Bnd);

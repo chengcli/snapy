@@ -14,7 +14,7 @@
 namespace snap {
 
 void call_roe_average_cpu(at::TensorIterator &iter) {
-  AT_DISPATCH_FLOATING_TYPES(dtype, "call_roe_average_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_roe_average_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
@@ -27,12 +27,12 @@ void call_roe_average_cpu(at::TensorIterator &iter) {
         auto elr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
         roe_average_impl(wroe, wl, wr, *elr, *(elr + stride), ny, stride);
       }
-    }
+    });
   });
 }
 
 void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
-  AT_DISPATCH_FLOATING_TYPES(dtype, "call_eigen_system_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_eigen_system_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
     iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
@@ -45,12 +45,12 @@ void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
         auto croe = reinterpret_cast<scalar_t *>(data[5] + i * strides[5]);
         eigen_system_impl(Rmat, Rimat, EV, wroe, *ie, *croe, dim, stride);
       }
-    }
+    });
   });
 }
 
 void call_flux_jacobian_cpu(at::TensorIterator &iter, int dim) {
-  AT_DISPATCH_FLOATING_TYPES(dtype, "call_flux_jacobian_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_flux_jacobian_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
     iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
@@ -58,10 +58,9 @@ void call_flux_jacobian_cpu(at::TensorIterator &iter, int dim) {
         auto dfdq = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
         auto wroe = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
         auto gamma = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
-        auto cs = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
-        eigen_system_impl(dfdq, wroe, *gamma, *cs, dim, stride);
+        flux_jacobian_impl(dfdq, wroe, *gamma, dim, stride);
       }
-    }
+    });
   });
 }
 
@@ -132,6 +131,7 @@ DEFINE_DISPATCH(call_flux_jacobian);
 
 DEFINE_DISPATCH(vic_solve3);
 DEFINE_DISPATCH(vic_solve5);
+
 DEFINE_DISPATCH(alloc_eigen3);
 DEFINE_DISPATCH(alloc_eigen5);
 DEFINE_DISPATCH(free_eigen);

@@ -29,10 +29,6 @@ ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
       TORCH_CHECK(false, "Unsupported implicit scheme");
   }
 
-  if (!root["geometry"]) return op;
-  if (!root["geometry"]["cells"]) return op;
-  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-
   if (!root["forcing"]) return op;
   if (!root["forcing"]["const-gravity"]) return op;
 

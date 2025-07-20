@@ -19,8 +19,8 @@ using alloc_eigen_fn = void (*)(c10::ScalarType dtype, char *&a, char *&b,
 using free_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,
                                char *&corr);
 
-DECLARE_DISPATCH(iterator_fn, call_eigen_system);
-DECLARE_DISPATCH(dim_iterator_fn, call_roe_average);
+DECLARE_DISPATCH(iterator_fn, call_roe_average);
+DECLARE_DISPATCH(dim_iterator_fn, call_eigen_system);
 DECLARE_DISPATCH(dim_iterator_fn, call_flux_jacobian);
 
 DECLARE_DISPATCH(vic_solve_fn, vic_solve3);

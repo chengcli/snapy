@@ -25,11 +25,11 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor flx) {
   elr[ILT] = peos->compute("W->I", {wl});
   glr[ILT] = peos->compute("W->A", {wl});
-  clr[ILT] = peos->compute("WA->L", {wl, gammal});
+  clr[ILT] = peos->compute("WA->L", {wl, glr[ILT]});
 
   elr[IRT] = peos->compute("W->I", {wr});
   glr[IRT] = peos->compute("W->A", {wr});
-  clr[IRT] = peos->compute("WA->L", {wr, gammar});
+  clr[IRT] = peos->compute("WA->L", {wr, glr[IRT]});
 
   auto pcoord = peos->pcoord;
 

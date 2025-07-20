@@ -23,13 +23,13 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
-  elr[ILT] = peosl->compute("W->I", {wl}) / wl[Index::IDN];
-  glr[ILT] = peosl->compute("W->A", {wl});
+  elr[ILT] = peos->compute("W->I", {wl}) / wl[Index::IDN];
+  glr[ILT] = peos->compute("W->A", {wl});
 
-  elr[IRT] = peosr->compute("W->I", {wr}) / wr[Index::IDN];
-  glr[IRT] = peosr->compute("W->A", {wr});
+  elr[IRT] = peos->compute("W->I", {wr}) / wr[Index::IDN];
+  glr[IRT] = peos->compute("W->A", {wr});
 
-  auto pcoord = peosl->pcoord;
+  auto pcoord = peos->pcoord;
 
   switch (dim) {
     case 1:

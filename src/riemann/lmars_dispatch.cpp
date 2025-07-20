@@ -27,7 +27,7 @@ void call_lmars_cpu(at::TensorIterator& iter, int dim) {
         auto wl = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
         auto wr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
         auto elr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-        auto glr = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
+        auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
         lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr, *(glr + stride),
                    dim, ny, stride);
       }
@@ -48,9 +48,9 @@ void call_lmars_mps(at::TensorIterator& iter, int dim) {
   auto glr = iter.input(3);
 
   auto hl = hlr[ILT].clone();
-  auto hr = hlr[IRT].clone()
+  auto hr = hlr[IRT].clone();
 
-                auto gammal = glr[ILT];
+  auto gammal = glr[ILT];
   auto gammar = glr[IRT];
 
   int ny = wl.size(0) - 5;

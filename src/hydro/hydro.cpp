@@ -191,17 +191,17 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
-  if ((cs.size(2) > 1) && (pimp->options.scheme() & 1)) {
+  if ((cs.size(2) > 1) && (!(pimp->options.scheme() & 1))) {
     dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
               .item<double>();
   }
 
-  if ((cs.size(1) > 1) && ((pimp->options.scheme() >> 1) & 1) {
+  if ((cs.size(1) > 1) && (!((pimp->options.scheme() >> 1) & 1))) {
     dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
               .item<double>();
   }
 
-  if ((cs.size(0) > 1) && ((pimp->options.scheme() >> 2) & 1)) {
+  if ((cs.size(0) > 1) && (!((pimp->options.scheme() >> 2) & 1))) {
     dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
               .item<double>();
   }
@@ -302,7 +302,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  _imp.set_(pimpl->forward(du, w, gamma, cs, {wlr3, wlr2, wlr1}, dt));
+  _imp.set_(pimp->forward(du, w, {wlr3, wlr2, wlr1}, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
   timer["U->M"] +=

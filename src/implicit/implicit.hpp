@@ -23,7 +23,7 @@ struct ImplicitOptions {
   }
 
   int size() const {
-    if ((options.scheme() >> 3) & 1) {  // full
+    if ((scheme() >> 3) & 1) {  // full
       return 5;
     } else {
       return 3;
@@ -70,7 +70,7 @@ class ImplicitCorrectionImpl
   ImplicitOptions options;
 
   //! submodules
-  ImplicitHydro pihc = nullptr;
+  ImplicitHydro pvic = nullptr;
 
   //! Constructor to initialize the layer
   ImplicitCorrectionImpl() = default;
@@ -78,8 +78,8 @@ class ImplicitCorrectionImpl
   void reset() override;
 
   //! corrector for the implicit hydro
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
-                        torch::Tensor cs, torch::Tensor wlr[3], double dt);
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w,
+                        torch::TensorList wlr3, double dt);
 };
 TORCH_MODULE(ImplicitCorrection);
 

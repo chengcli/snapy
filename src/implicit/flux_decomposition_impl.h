@@ -12,6 +12,8 @@
 
 #define SQR(x) ((x) * (x))
 #define PRIM(i) prim[(i) * stride]
+#define WL(i) wl[(i) * stride]
+#define WR(i) wr[(i) * stride]
 
 namespace snap {
 
@@ -21,7 +23,7 @@ constexpr int COLS = 5;
 template <typename T>
 DISPATCH_MACRO void init_matrix5(T *mat, ...) {
   va_list args;
-  va_start(args, cols);
+  va_start(args, mat);
   for (int i = 0; i < ROWS * COLS; ++i) {
     mat[i] = va_arg(args, T);
   }
@@ -66,7 +68,8 @@ DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
   auto w = PRIM(ivz);
   auto p = PRIM(IPR);
 
-  auto ke = 0.5 * (SQR(u) + SQR(v) + SQR(w)) auto hp = (ie + p) / r;
+  auto ke = 0.5 * (SQR(u) + SQR(v) + SQR(w));
+  auto hp = (ie + p) / r;
   auto h = hp + ke;
 
   init_matrix5(left,                       //
@@ -125,3 +128,5 @@ DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
 
 #undef PRIM
 #undef SQR
+#undef WL
+#undef WR

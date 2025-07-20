@@ -31,18 +31,18 @@ void ImplicitHydroImpl::reset() {
 
 torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
                                                   torch::Tensor elr, int dim) {
-  auto iter = at::TensorIteratorConfig()
-                  .resize_outputs(false)
-                  .check_all_same_dtype(true)
-                  .declare_static_shape(wroe.sizes(), /*squash_dims=*/0)
-                  .add_output(wroe)
-                  .add_input(wlr[ILT])
-                  .add_input(wlr[IRT])
-                  .add_input(elr)
-                  .build();
+  auto iter1 = at::TensorIteratorConfig()
+                   .resize_outputs(false)
+                   .check_all_same_dtype(true)
+                   .declare_static_shape(wroe.sizes(), /*squash_dims=*/0)
+                   .add_output(wroe)
+                   .add_owned_input(wlr[ILT])
+                   .add_owned_input(wlr[IRT])
+                   .add_input(elr)
+                   .build();
 
   // IPR index is specific enthalpy + ke
-  at::native::call_roe_average(wroe.device().type(), iter);
+  at::native::call_roe_average(wroe.device().type(), iter1);
 
   auto vec = groe.sizes().vec();
   vec.push_back(options.size());
@@ -61,22 +61,24 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
   auto ie = peos->compute("W->I", {wroe});
 
   vec = {2, 3, 4, 0, 1};
-  iter = at::TensorIteratorConfig()
-             .resize_outputs(false)
-             .check_all_same_dtype(true)
-             .declare_static_shape(Rmat.sizes(),
-                                   /*squash_dims=*/{wroe.dim(), wroe.dim() + 1})
-             .add_output(Rmat)
-             .add_output(Rimat)
-             .add_output(EV)
-             .add_owned_input(wroe.unsqueeze(0).permute(vec))
-             .add_owned_input(ie.unsqueeze(0).unsqueeze(0).permute(vec))
-             .add_owned_input(croe.unsqueeze(0).unsqueeze(0).permute(vec));
+  auto iter2 =
+      at::TensorIteratorConfig()
+          .resize_outputs(false)
+          .check_all_same_dtype(true)
+          .declare_static_shape(Rmat.sizes(),
+                                /*squash_dims=*/{wroe.dim(), wroe.dim() + 1})
+          .add_output(Rmat)
+          .add_output(Rimat)
+          .add_output(EV)
+          .add_owned_input(wroe.unsqueeze(0).permute(vec))
+          .add_owned_input(ie.unsqueeze(0).unsqueeze(0).permute(vec))
+          .add_owned_input(croe.unsqueeze(0).unsqueeze(0).permute(vec))
+          .build();
 
-  at::native::call_eigen_system(wroe.device().type(), iter, dim);
+  at::native::call_eigen_system(wroe.device().type(), iter2, dim);
   auto result = Rmat.matmul(EV.abs()).matmul(Rimat);
 
-  if ((options.scheme() >>> 3) & 1) {  // full matrix
+  if ((options.scheme() >> 3) & 1) {  // full matrix
     return result;
   } else {  // partial matrix
     auto sub = torch::tensor(
@@ -85,13 +87,14 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
   }
 }
 
-torch::Tensor ImplictHydro::flux_jacobian(torch::Tensor w, torch::Tensor gamma,
-                                          torch::Tensor cs, int dim) {
+torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w, int dim) {
+  auto gamma = peos->compute("W->A", {w});
+
   auto vec = gamma.sizes().vec();
   vec.push_back(options.size());
   vec.push_back(options.size());
 
-  auto dfdq = torch::empty(vec, torch::kFloat64);
+  auto dfdq = torch::empty(vec, w.options());
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -99,12 +102,12 @@ torch::Tensor ImplictHydro::flux_jacobian(torch::Tensor w, torch::Tensor gamma,
                   .add_output(dfdq)
                   .add_input(w)
                   .add_input(gamma)
-                  .add_input(cs);
+                  .build();
 
   // calculate flux jacobian
   at::native::call_flux_jacobian(dfdq.device().type(), iter, dim);
 
-  if ((options.scheme() >>> 3) & 1) {  // full matrix
+  if ((options.scheme() >> 3) & 1) {  // full matrix
     return dfdq;
   } else {  // partial matrix
     auto sub = torch::tensor({IDN, IVX, IPR},
