@@ -6,7 +6,7 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/eos/equation_of_state.hpp>
+#include <snap/coord/coordinate.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -35,7 +35,7 @@ struct ImplicitOptions {
   ADD_ARG(int, scheme) = 0;
 
   //! submodules options
-  ADD_ARG(EquationOfStateOptions, eos);
+  ADD_ARG(CoordinateOptions, coord);
 };
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
@@ -47,19 +47,20 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   ImplicitOptions options;
 
   //! submodules
-  EquationOfState peos = nullptr;
+  Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layer
   ImplicitHydroImpl() = default;
   explicit ImplicitHydroImpl(ImplicitOptions options);
   void reset() override;
 
-  torch::Tensor diffusion_matrix(torch::Tensor wlr, torch::Tensor elr, int dim);
-  torch::Tensor flux_jacobian(torch::Tensor w, int dim);
+  torch::Tensor diffusion_matrix(torch::Tensor wlr, torch::Tensor gamma,
+                                 int dim);
+  torch::Tensor flux_jacobian(torch::Tensor w, torch::Tensor gamma, int dim);
 
   //! assemble diffusion matrix and flux jacobian
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-  forward(torch::Tensor w, torch::Tensor wlr, int dim);
+  forward(torch::Tensor w, torch::Tensor wlr, torch::Tensor gamma, int dim);
 };
 TORCH_MODULE(ImplicitHydro);
 
@@ -78,7 +79,7 @@ class ImplicitCorrectionImpl
   void reset() override;
 
   //! corrector for the implicit hydro
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w,
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
                         torch::TensorList wlr3, double dt);
 };
 TORCH_MODULE(ImplicitCorrection);

@@ -66,7 +66,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
 
   // implicit options
   op.imp() = ImplicitOptions::from_yaml(config);
-  op.imp().eos() = op.eos();
+  op.imp().coord() = op.coord();
 
   // sedimentation
   if (config["sedimentation"]) {

@@ -20,17 +20,19 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions options_)
 }
 
 void ImplicitHydroImpl::reset() {
-  // set up equation of state
-  peos = register_module_op(this, "eos", options.eos());
-
-  // register buffers
-  wroe = register_buffer("wroe", torch::empty_like(peos->get_buffer("W")));
-  groe = register_buffer("groe", torch::empty_like(wroe[IDN]));
-  croe = register_buffer("croe", torch::empty_like(wroe[IDN]));
+  // set up coordinate
+  pcoord = register_module_op(this, "coord", options.coord());
 }
 
 torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
-                                                  torch::Tensor elr, int dim) {
+                                                  torch::Tensor gamma,
+                                                  int dim) {
+  int nc1 = pcoord->options.nc1();
+  int nc2 = pcoord->options.nc2();
+  int nc3 = pcoord->options.nc3();
+
+  auto wroe = torch::empty({5, nc3, nc2, nc1}, wlr.options());
+
   auto iter1 = at::TensorIteratorConfig()
                    .resize_outputs(false)
                    .check_all_same_dtype(true)
@@ -38,33 +40,19 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
                    .add_output(wroe)
                    .add_owned_input(wlr[ILT])
                    .add_owned_input(wlr[IRT])
-                   .add_input(elr)
+                   .add_owned_input(gamma.unsqueeze(0))
                    .build();
 
   // IPR index is specific enthalpy + ke
   at::native::call_roe_average(wroe.device().type(), iter1);
 
-  auto vec = groe.sizes().vec();
-  vec.push_back(wroe.size(0));
-  vec.push_back(wroe.size(0));
-
-  auto Rmat = torch::empty(vec, torch::kFloat64);
-  auto Rimat = torch::empty(vec, torch::kFloat64);
-  auto EV = torch::empty(vec, torch::kFloat64);
-
-  groe = peos->compute("W->A", {wroe});
-  auto ke =
-      0.5 * wroe[IDN] *
-      (wroe[IVX] * wroe[IVX] + wroe[IVY] * wroe[IVY] + wroe[IVZ] * wroe[IVZ]);
-
-  // specific enthalpy + ke -> pressure
-  wroe[IPR] = (wroe[IPR] * wroe[IDN] - ke) * groe / (groe + 1.);
-  croe = peos->compute("WA->L", {wroe, groe});
-  auto ie = peos->compute("W->I", {wroe});
+  auto Rmat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
+  auto Rimat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
+  auto EV = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
 
   std::cout << "Rmat sizes = " << Rmat.sizes() << std::endl;
 
-  vec = {2, 3, 4, 0, 1};
+  std::vector<int64_t> vec = {2, 3, 4, 0, 1};
   auto iter2 =
       at::TensorIteratorConfig()
           .resize_outputs(false)
@@ -75,8 +63,7 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
           .add_output(Rimat)
           .add_output(EV)
           .add_owned_input(wroe.unsqueeze(0).permute(vec))
-          .add_owned_input(ie.unsqueeze(0).unsqueeze(0).permute(vec))
-          .add_owned_input(croe.unsqueeze(0).unsqueeze(0).permute(vec))
+          .add_owned_input(gamma.unsqueeze(0).unsqueeze(0).permute(vec))
           .build();
 
   at::native::call_eigen_system(wroe.device().type(), iter2, dim);
@@ -91,26 +78,29 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
   }
 }
 
-torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w, int dim) {
-  auto gamma = peos->compute("W->A", {w});
+torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w,
+                                               torch::Tensor gamma, int dim) {
+  int nc1 = pcoord->options.nc1();
+  int nc2 = pcoord->options.nc2();
+  int nc3 = pcoord->options.nc3();
 
-  auto vec = gamma.sizes().vec();
-  vec.push_back(w.size(0));
-  vec.push_back(w.size(0));
+  auto dfdq = torch::empty({nc3, nc2, nc1, 25}, w.options());
 
-  auto dfdq = torch::empty(vec, w.options());
-
-  vec = {2, 3, 4, 0, 1};
+  std::vector<int64_t> vec = {1, 2, 3, 0};
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
+                  .declare_static_shape(dfdq.sizes(), /*squash_dims=*/3)
                   .add_output(dfdq)
-                  .add_owned_input(w.unsqueeze(0).permute(vec))
-                  .add_owned_input(gamma.unsqueeze(0).unsqueeze(0).permute(vec))
+                  .add_owned_input(w.permute(vec))
+                  .add_owned_input(gamma.unsqueeze(0).permute(vec))
                   .build();
 
   // calculate flux jacobian
   at::native::call_flux_jacobian(dfdq.device().type(), iter, dim);
+
+  // resize 25 -> 5x5
+  dfdq = dfdq.view({nc3, nc2, nc1, 5, 5});
 
   if ((options.scheme() >> 3) & 1) {  // full matrix
     return dfdq;
@@ -122,19 +112,12 @@ torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w, int dim) {
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor wlr, int dim) {
-  auto vec = w.sizes().vec();
-  vec[0] = 2;
-
-  auto elr = torch::empty(vec, w.options());
-  elr[ILT] = peos->compute("W->I", {wlr[ILT]});
-  elr[IRT] = peos->compute("W->I", {wlr[IRT]});
-
-  auto A = diffusion_matrix(wlr, elr, dim);
-  auto B = flux_jacobian(w, dim);
+ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
+                           torch::Tensor wlr, int dim) {
+  auto A = diffusion_matrix(wlr, gamma, dim);
+  auto B = flux_jacobian(w, gamma, dim);
 
   //// ------------ Assemble tridiagonal system ------------ ////
-  auto pcoord = peos->pcoord;
   int xs, xe;
 
   torch::Tensor aleft, aright, vol;

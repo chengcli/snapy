@@ -19,6 +19,7 @@ void ImplicitCorrectionImpl::reset() {
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
+                                              torch::Tensor gamma,
                                               torch::TensorList wlr3,
                                               double dt) {
   if (options.scheme() == 0) {  // null operation
@@ -26,12 +27,7 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   }
 
   //// -------- Vertical direction --------- ////
-  auto [a, b, c, corr] = pvic->forward(w, wlr3[2], 3);
-
-  std::cout << "a sizes = " << a.sizes() << std::endl;
-  std::cout << "b sizes = " << b.sizes() << std::endl;
-  std::cout << "c sizes = " << c.sizes() << std::endl;
-  std::cout << "corr sizes = " << corr.sizes() << std::endl;
+  auto [a, b, c, corr] = pvic->forward(w, gamma, wlr3[2], 3);
 
   auto delta = torch::zeros_like(corr);
 
@@ -45,8 +41,8 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto Bnd = torch::eye(m, w.options());
   Bnd[Index::IVX][Index::IVX] = -1.;
 
-  int is = pvic->peos->pcoord->is();
-  int ie = pvic->peos->pcoord->ie();
+  int is = pvic->pcoord->is();
+  int ie = pvic->pcoord->ie();
 
   a.slice(2, is, ie) += Dt - Phi;
 
@@ -80,9 +76,6 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
     at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
   }
 
-  throw std::runtime_error(
-      "ImplicitCorrectionImpl::forward: "
-      "Vertical direction correction is not implemented yet.");
   return du - du0;
 }
 

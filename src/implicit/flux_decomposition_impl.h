@@ -35,8 +35,8 @@ DISPATCH_MACRO inline void init_matrix(T *mat, const double (&values)[N]) {
  * sqrt(rho(i+1)))
  */
 template <typename T>
-DISPATCH_MACRO void roe_average_impl(T *prim, T const *wl, T const *wr, T el,
-                                     T er, int ny, int stride) {
+DISPATCH_MACRO void roe_average_impl(T *prim, T const *wl, T const *wr, T gamma,
+                                     int stride) {
   auto sqrtdl = sqrt(WL(IDN));
   auto sqrtdr = sqrt(WR(IDN));
   auto isdlpdr = 1.0 / (sqrtdl + sqrtdr);
@@ -46,16 +46,26 @@ DISPATCH_MACRO void roe_average_impl(T *prim, T const *wl, T const *wr, T el,
   PRIM(IVY) = (sqrtdl * WL(IVY) + sqrtdr * WR(IVY)) * isdlpdr;
   PRIM(IVZ) = (sqrtdl * WL(IVZ) + sqrtdr * WR(IVZ)) * isdlpdr;
 
-  el += 0.5 * WL(IDN) * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)));
-  er += 0.5 * WR(IDN) * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)));
+  auto gm1 = gamma - 1;
+
+  auto el = WL(IPR) / gm1 +
+            0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+
+  auto er = WR(IPR) / gm1 +
+            0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
   // enthalpy divided by the density.
-  PRIM(IPR) = ((el + WL(IPR)) / sqrtdl + (er + WR(IPR)) / sqrtdr) * isdlpdr;
+  auto hbar = ((el + WL(IPR)) / sqrtdl + (er + WR(IPR)) / sqrtdr) * isdlpdr;
+
+  // Roe averaged pressure
+  PRIM(IPR) =
+      (hbar - 0.5 * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)))) * gm1 /
+      (gm1 + 1.) * PRIM(IDN);
 }
 
 template <typename T>
 DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
-                                      T ie, T cs, int dim, int stride) {
+                                      T gamma, int dim, int stride) {
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
@@ -66,9 +76,12 @@ DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
   auto w = PRIM(ivz);
   auto p = PRIM(IPR);
 
+  auto gm1 = gamma - 1.;
   auto ke = 0.5 * (SQR(u) + SQR(v) + SQR(w));
-  auto hp = (ie + p) / r;
+  auto hp = (gm1 + 1.) / gm1 * p / r;
   auto h = hp + ke;
+
+  auto cs = sqrt(gamma * p / r);  // sound speed
 
   double arr1[] = {1.,         1., 1.,         0., 0.,  //
                    u - cs,     u,  u + cs,     0., 0.,  //
@@ -131,15 +144,15 @@ DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
   auto s2 = SQR(v1) + SQR(v2) + SQR(v3);
   auto gm1 = gamma - 1;
 
-  auto c1 = ((gm1 - 1) * s2 / 2 - (gm1 + 1) / gm1 * pres / rho) * v1;
-  auto c2 = (gm1 + 1) / gm1 * pres / rho + s2 / 2 - gm1 * v1 * v1;
+  auto c1 = ((gm1 - 1.) * s2 / 2. - (gm1 + 1.) / gm1 * pres / rho) * v1;
+  auto c2 = (gm1 + 1.) / gm1 * pres / rho + s2 / 2. - gm1 * v1 * v1;
 
   double arr[] = {0,
                   1.,
                   0.,
                   0.,
                   0.,  //
-                  gm1 * s2 / 2 - v1 * v1,
+                  gm1 * s2 / 2. - v1 * v1,
                   (2. - gm1) * v1,
                   -gm1 * v2,
                   -gm1 * v3,
@@ -158,7 +171,7 @@ DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
                   c2,
                   -gm1 * v2 * v1,
                   -gm1 * v3 * v1,
-                  (gm1 + 1) * v1};
+                  (gm1 + 1.) * v1};
 
   init_matrix(dfdq, arr);
 }

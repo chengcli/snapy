@@ -15,17 +15,15 @@ namespace snap {
 
 void call_roe_average_cpu(at::TensorIterator &iter) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_roe_average_cpu", [&] {
-    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ny = nhydro - Index::ICY;
 
     iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
       for (int i = 0; i < n; i++) {
         auto wroe = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
         auto wl = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
         auto wr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
-        auto elr = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
-        roe_average_impl(wroe, wl, wr, *elr, *(elr + stride), ny, stride);
+        auto gamma = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
+        roe_average_impl(wroe, wl, wr, *gamma, stride);
       }
     });
   });
@@ -33,7 +31,7 @@ void call_roe_average_cpu(at::TensorIterator &iter) {
 
 void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_eigen_system_cpu", [&] {
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
 
     iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
       for (int i = 0; i < n; i++) {
@@ -41,9 +39,8 @@ void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
         auto Rimat = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
         auto EV = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
         auto wroe = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
-        auto ie = reinterpret_cast<scalar_t *>(data[4] + i * strides[4]);
-        auto croe = reinterpret_cast<scalar_t *>(data[5] + i * strides[5]);
-        eigen_system_impl(Rmat, Rimat, EV, wroe, *ie, *croe, dim, stride);
+        auto gamma = reinterpret_cast<scalar_t *>(data[4] + i * strides[4]);
+        eigen_system_impl(Rmat, Rimat, EV, wroe, *gamma, dim, stride);
       }
     });
   });
@@ -51,7 +48,7 @@ void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
 
 void call_flux_jacobian_cpu(at::TensorIterator &iter, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_flux_jacobian_cpu", [&] {
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
 
     iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
       for (int i = 0; i < n; i++) {

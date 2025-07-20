@@ -191,7 +191,8 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
-  if ((cs.size(2) > 1) && (!(pimp->options.scheme() & 1))) {
+  if ((cs.size(2) > 1) &&
+      (!(pimp->options.scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
     dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
               .item<double>();
   }
@@ -302,7 +303,8 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  _imp.set_(pimp->forward(du, w, {wlr3, wlr2, wlr1}, dt));
+  auto gamma = peos->get_buffer("A");
+  _imp.set_(pimp->forward(du, w, gamma, {wlr3, wlr2, wlr1}, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
   timer["U->M"] +=
