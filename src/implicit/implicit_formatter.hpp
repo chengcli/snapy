@@ -14,9 +14,8 @@ struct fmt::formatter<snap::ImplicitOptions> {
 
   template <typename FormatContext>
   auto format(const snap::ImplicitOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(
-        ctx.out(),
-        "(type = {}; nghost = {}; grav = {}; scheme = {}; coord = {})",
-        p.type(), p.nghost(), p.grav(), p.scheme(), p.coord());
+    std::stringstream ss;
+    p.report(ss);
+    return fmt::format_to(ctx.out(), "{}", ss.str());
   }
 };

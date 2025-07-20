@@ -21,20 +21,13 @@ DISPATCH_MACRO void forward_sweep_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *a,
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *b,
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *c, Eigen::Vector<T, N> *delta,
-    Eigen::Vector<T, N> *corr, T *du, double dt, int nhydro, int stride, int il,
+    Eigen::Vector<T, N> *corr, T *du, double dt, int ny, int stride, int il,
     int iu) {
-  constexpr int IDN = Index::IDN;
-  constexpr int IVX = Index::IVX;
-  constexpr int IVY = Index::IVY;
-  constexpr int IVZ = Index::IVZ;
-  constexpr int IPR = Index::IPR;
-  constexpr int ICY = Index::ICY;
-
   Eigen::Vector<T, N> rhs;
 
   rhs(0) = DU(IDN, il);
-  for (int n = ICY; n < nhydro; ++n) {
-    rhs(0) += DU(n, il);
+  for (int n = 0; n < ny; ++n) {
+    rhs(0) += DU(ICY + n, il);
   }
   rhs(0) /= dt;
   rhs(1) = DU(IVX, il) / dt;
@@ -63,8 +56,8 @@ DISPATCH_MACRO void forward_sweep_impl(
 
   for (int i = il + 1; i <= iu; ++i) {
     rhs(0) = DU(IDN, i);
-    for (int n = ICY; n < nhydro; ++n) {
-      rhs(0) += DU(n, i);
+    for (int n = 0; n < ny; ++n) {
+      rhs(0) += DU(ICY + n, i);
     }
     rhs(0) /= dt;
     rhs(1) = DU(IVX, i) / dt;
@@ -94,14 +87,7 @@ DISPATCH_MACRO void forward_sweep_impl(
 template <typename T, int N>
 DISPATCH_MACRO void backward_substitution_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *a, Eigen::Vector<T, N> *delta,
-    T *w, T *du, int nhydro, int stride, int il, int iu) {
-  constexpr int IDN = Index::IDN;
-  constexpr int IVX = Index::IVX;
-  constexpr int IVY = Index::IVY;
-  constexpr int IVZ = Index::IVZ;
-  constexpr int IPR = Index::IPR;
-  constexpr int ICY = Index::ICY;
-
+    T *w, T *du, int ny, int stride, int il, int iu) {
   // update solutions, i=iu
   for (int i = iu - 1; i >= il; --i) {
     delta[i] -= a[i] * delta[i + 1];
@@ -110,14 +96,14 @@ DISPATCH_MACRO void backward_substitution_impl(
   for (int i = il; i <= iu; ++i) {
     auto dens = DU(IDN, i);
 
-    for (int n = IVY; n < nhydro; ++n) {
-      dens += DU(n, i);
+    for (int n = 0; n < ny; ++n) {
+      dens += DU(ICY + n, i);
     }
     dens = delta[i](0) - dens;
 
     DU(IDN, i) = delta[i](0);
-    for (int n = ICY; n < nhydro; ++n) {
-      DU(n, i) += dens * W(n, i);
+    for (int n = 0; n < ny; ++n) {
+      DU(n, i) += dens * W(ICY + n, i);
     }
     DU(IVX, i) = delta[i](1);
     DU(IPR, i) = delta[i](N - 1);
@@ -127,8 +113,8 @@ DISPATCH_MACRO void backward_substitution_impl(
       DU(IVZ, i) = delta[i](3);
     }
 
-    for (int n = ICY; n < nhydro; ++n) {
-      DU(IDN, i) -= DU(n, i);
+    for (int n = 0; n < ny; ++n) {
+      DU(IDN, i) -= DU(ICY + n, i);
     }
   }
 }

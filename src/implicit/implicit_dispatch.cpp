@@ -73,6 +73,9 @@ void free_eigen_cpu(char *&a, char *&b, char *&c, char *&delta, char *&corr) {
 
 namespace at::native {
 
+DEFINE_DISPATCH(eigen_vecotr_left);
+DEFINE_DISPATCH(eigen_vecotr_right);
+
 DEFINE_DISPATCH(vic_forward3);
 DEFINE_DISPATCH(vic_forward5);
 DEFINE_DISPATCH(alloc_eigen3);

@@ -16,6 +16,12 @@ using alloc_eigen_fn = void (*)(c10::ScalarType dtype, char *&a, char *&b,
 using free_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,
                                char *&corr);
 
+using eigen_vector_fn = torch::Tensor (*)(torch::Tensor prim, torch::Tensor gm1,
+                                          torch::Tensor cs);
+
+DECLARE_DISPATCH(eigen_vector_fn, eigen_vecotr_left);
+DECLARE_DISPATCH(eigen_vector_fn, eigen_vecotr_right);
+
 DECLARE_DISPATCH(vic_forward_fn, vic_forward3);
 DECLARE_DISPATCH(vic_forward_fn, vic_forward5);
 DECLARE_DISPATCH(alloc_eigen_fn, alloc_eigen3);
