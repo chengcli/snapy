@@ -21,7 +21,7 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   // read parameters
-  std::string exp_name = "example_earth";
+  std::string exp_name = "example_jupiter";
 
   auto config = YAML::LoadFile(fmt::format("{}.yaml", exp_name));
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);

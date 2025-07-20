@@ -43,7 +43,6 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
                    .add_owned_input(gamma.unsqueeze(0))
                    .build();
 
-  // IPR index is specific enthalpy + ke
   at::native::call_roe_average(wroe.device().type(), iter1);
 
   auto Rmat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());

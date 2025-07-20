@@ -95,26 +95,22 @@ DISPATCH_MACRO void backward_substitution_impl(
 
   for (int i = il; i <= iu; ++i) {
     auto dens = DU(IDN, i);
-
     for (int n = 0; n < ny; ++n) {
       dens += DU(ICY + n, i);
     }
     dens = delta[i](0) - dens;
 
     DU(IDN, i) = delta[i](0);
-    for (int n = 0; n < ny; ++n) {
-      DU(n, i) += dens * W(ICY + n, i);
-    }
     DU(IVX, i) = delta[i](1);
     DU(IPR, i) = delta[i](N - 1);
+    for (int n = 0; n < ny; ++n) {
+      DU(ICY + n, i) += dens * W(ICY + n, i);
+      DU(IDN, i) -= dens * W(ICY + n, i);
+    }
 
     if (N == 5) {  // full matrix
       DU(IVY, i) = delta[i](2);
       DU(IVZ, i) = delta[i](3);
-    }
-
-    for (int n = 0; n < ny; ++n) {
-      DU(IDN, i) -= DU(ICY + n, i);
     }
   }
 }
