@@ -35,7 +35,7 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptions, recon23)
       .ADD_OPTION(snap::RiemannSolverOptions, snap::HydroOptions, riemann)
       .ADD_OPTION(snap::InternalBoundaryOptions, snap::HydroOptions, ib)
-      .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptions, vic);
+      .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptions, imp);
 
   auto pyPrimitiveProjectorOptions =
       py::class_<snap::PrimitiveProjectorOptions>(m,

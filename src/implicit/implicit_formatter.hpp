@@ -1,12 +1,15 @@
 #pragma once
 
+// C/C++
+#include <sstream>
+
 // fmt
 #include <fmt/format.h>
 
 // snap
 #include <snap/coord/coord_formatter.hpp>
 
-#include "vertical_implicit.hpp"
+#include "implicit.hpp"
 
 template <>
 struct fmt::formatter<snap::ImplicitOptions> {

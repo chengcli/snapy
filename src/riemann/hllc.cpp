@@ -35,16 +35,16 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   switch (dim) {
     case 1:
-      peos->pcoord->prim2local3_(wl);
-      peos->pcoord->prim2local3_(wr);
+      pcoord->prim2local3_(wl);
+      pcoord->prim2local3_(wr);
       break;
     case 2:
-      peos->pcoord->prim2local2_(wl);
-      peos->pcoord->prim2local2_(wr);
+      pcoord->prim2local2_(wl);
+      pcoord->prim2local2_(wr);
       break;
     case 3:
-      peos->pcoord->prim2local1_(wl);
-      peos->pcoord->prim2local1_(wr);
+      pcoord->prim2local1_(wl);
+      pcoord->prim2local1_(wr);
       break;
     default:
       TORCH_CHECK(false, "Invalid dimension: ", dim);
