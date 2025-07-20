@@ -23,8 +23,8 @@ void call_roe_average_cpu(at::TensorIterator &iter) {
       for (int i = 0; i < n; i++) {
         auto wroe = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
         auto wl = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
-        auto wr = reinterpret_cast<scalar_t *>(data[2] + i * strides[3]);
-        auto elr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
+        auto wr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
+        auto elr = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
         roe_average_impl(wroe, wl, wr, *elr, *(elr + stride), ny, stride);
       }
     });
@@ -66,7 +66,7 @@ void call_flux_jacobian_cpu(at::TensorIterator &iter, int dim) {
 
 template <int N>
 void vic_solve_cpu(at::TensorIterator &iter, double dt, int il, int iu) {
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_forward_cpu", [&] {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;

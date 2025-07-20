@@ -27,7 +27,13 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
 
   //// -------- Vertical direction --------- ////
   auto [a, b, c, corr] = pvic->forward(w, wlr3[2], 3);
-  auto delta = torch::zeros_like(a.select(-1, 0));
+
+  std::cout << "a sizes = " << a.sizes() << std::endl;
+  std::cout << "b sizes = " << b.sizes() << std::endl;
+  std::cout << "c sizes = " << c.sizes() << std::endl;
+  std::cout << "corr sizes = " << corr.sizes() << std::endl;
+
+  auto delta = torch::zeros_like(corr);
 
   int m = options.size();
   auto Dt = torch::eye(m, w.options()) / dt;
@@ -49,27 +55,34 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   a.select(2, ie) += c.select(2, ie).matmul(Bnd);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
+  auto vec1 = a.sizes().vec();
+  vec1.pop_back();
+  vec1.back() = -1;
+
   auto du0 = du.clone();
-  std::vector<int64_t> vec = {3, 0, 1, 2};
+  std::vector<int64_t> vec2 = {3, 0, 1, 2};
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .declare_static_shape(du.sizes(), /*squash_dims=*/{0, 3})
                   .add_output(du)
                   .add_input(w)
-                  .add_owned_input(a.permute(vec))
-                  .add_owned_input(b.permute(vec))
-                  .add_owned_input(c.permute(vec))
-                  .add_owned_input(delta.permute(vec))
+                  .add_owned_input(a.view(vec1).permute(vec2))
+                  .add_owned_input(b.view(vec1).permute(vec2))
+                  .add_owned_input(c.view(vec1).permute(vec2))
+                  .add_owned_input(delta.view(vec1).permute(vec2))
+                  .add_owned_input(corr.view(vec1).permute(vec2))
                   .build();
 
-  if (options.scheme() == 1) {
-    at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
-  } else if (options.scheme() == 9) {
+  if ((options.scheme() >> 3) & 1) {  // full
     at::native::vic_solve5(du.device().type(), iter, dt, is, ie);
-  } else {
-    TORCH_CHECK(false, "Unknown implicit scheme");
+  } else {  // partial
+    at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
   }
+
+  throw std::runtime_error(
+      "ImplicitCorrectionImpl::forward: "
+      "Vertical direction correction is not implemented yet.");
   return du - du0;
 }
 

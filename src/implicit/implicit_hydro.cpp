@@ -45,20 +45,24 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
   at::native::call_roe_average(wroe.device().type(), iter1);
 
   auto vec = groe.sizes().vec();
-  vec.push_back(options.size());
-  vec.push_back(options.size());
+  vec.push_back(wroe.size(0));
+  vec.push_back(wroe.size(0));
 
   auto Rmat = torch::empty(vec, torch::kFloat64);
   auto Rimat = torch::empty(vec, torch::kFloat64);
   auto EV = torch::empty(vec, torch::kFloat64);
 
   groe = peos->compute("W->A", {wroe});
-  auto ke = peos->compute("W->K", {wroe});
+  auto ke =
+      0.5 * wroe[IDN] *
+      (wroe[IVX] * wroe[IVX] + wroe[IVY] * wroe[IVY] + wroe[IVZ] * wroe[IVZ]);
 
   // specific enthalpy + ke -> pressure
   wroe[IPR] = (wroe[IPR] * wroe[IDN] - ke) * groe / (groe + 1.);
   croe = peos->compute("WA->L", {wroe, groe});
   auto ie = peos->compute("W->I", {wroe});
+
+  std::cout << "Rmat sizes = " << Rmat.sizes() << std::endl;
 
   vec = {2, 3, 4, 0, 1};
   auto iter2 =
@@ -66,7 +70,7 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
           .resize_outputs(false)
           .check_all_same_dtype(true)
           .declare_static_shape(Rmat.sizes(),
-                                /*squash_dims=*/{wroe.dim(), wroe.dim() + 1})
+                                /*squash_dims=*/{wroe.dim() - 1, wroe.dim()})
           .add_output(Rmat)
           .add_output(Rimat)
           .add_output(EV)
@@ -91,17 +95,18 @@ torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w, int dim) {
   auto gamma = peos->compute("W->A", {w});
 
   auto vec = gamma.sizes().vec();
-  vec.push_back(options.size());
-  vec.push_back(options.size());
+  vec.push_back(w.size(0));
+  vec.push_back(w.size(0));
 
   auto dfdq = torch::empty(vec, w.options());
 
+  vec = {2, 3, 4, 0, 1};
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .add_output(dfdq)
-                  .add_input(w)
-                  .add_input(gamma)
+                  .add_owned_input(w.unsqueeze(0).permute(vec))
+                  .add_owned_input(gamma.unsqueeze(0).unsqueeze(0).permute(vec))
                   .build();
 
   // calculate flux jacobian

@@ -20,14 +20,12 @@ namespace snap {
 constexpr int ROWS = 5;
 constexpr int COLS = 5;
 
-template <typename T>
-DISPATCH_MACRO void init_matrix5(T *mat, ...) {
-  va_list args;
-  va_start(args, mat);
-  for (int i = 0; i < ROWS * COLS; ++i) {
-    mat[i] = va_arg(args, T);
+template <typename T, int N>
+DISPATCH_MACRO inline void init_matrix(T *mat, const double (&values)[N]) {
+#pragma unroll
+  for (int i = 0; i < N; ++i) {
+    mat[i] = values[i];
   }
-  va_end(args);
 }
 
 //! Roe average scheme
@@ -72,29 +70,49 @@ DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
   auto hp = (ie + p) / r;
   auto h = hp + ke;
 
-  init_matrix5(left,                       //
-               1., 1., 1., 0., 0.,         //
-               u - cs, u, u + cs, 0., 0.,  //
-               v, v, v, 1., 0.,            //
-               w, w, w, 0., 1.,            //
-               h - u * cs, ke, h + u * cs, v, w);
+  double arr1[] = {1.,         1., 1.,         0., 0.,  //
+                   u - cs,     u,  u + cs,     0., 0.,  //
+                   v,          v,  v,          1., 0.,  //
+                   w,          w,  w,          0., 1.,  //
+                   h - u * cs, ke, h + u * cs, v,  w};
 
-  init_matrix5(
-      right,  //
-      (cs * ke + u * hp) / (2. * cs * hp), (-hp - cs * u) / (2. * cs * hp),
-      -v / (2. * hp), -w / (2. * hp), 1. / (2. * hp),    //
-      (hp - ke) / hp, u / hp, v / hp, w / hp, -1. / hp,  //
-      (cs * ke - u * hp) / (2. * cs * hp), (hp - cs * u) / (2. * cs * hp),
-      -v / (2. * hp), -w / (2. * hp), 1. / (2. * hp),  //
-      -v, 0., 1., 0., 0.,                              //
-      -w, 0., 0., 1., 0.);
+  init_matrix(left, arr1);
 
-  init_matrix5(val,                     //
-               u - cs, 0., 0., 0., 0.,  //
-               0., u, 0., 0., 0.,       //
-               0., 0., u + cs, 0., 0.,  //
-               0., 0., 0., u, 0.,       //
-               0., 0., 0., 0., u);
+  double arr2[] = {(cs * ke + u * hp) / (2. * cs * hp),
+                   (-hp - cs * u) / (2. * cs * hp),
+                   -v / (2. * hp),
+                   -w / (2. * hp),
+                   1. / (2. * hp),  //
+                   (hp - ke) / hp,
+                   u / hp,
+                   v / hp,
+                   w / hp,
+                   -1. / hp,  //
+                   (cs * ke - u * hp) / (2. * cs * hp),
+                   (hp - cs * u) / (2. * cs * hp),
+                   -v / (2. * hp),
+                   -w / (2. * hp),
+                   1. / (2. * hp),  //
+                   -v,
+                   0.,
+                   1.,
+                   0.,
+                   0.,  //
+                   -w,
+                   0.,
+                   0.,
+                   1.,
+                   0.};
+
+  init_matrix(right, arr2);
+
+  double arr3[] = {u - cs, 0., 0.,     0., 0.,  //
+                   0.,     u,  0.,     0., 0.,  //
+                   0.,     0., u + cs, 0., 0.,  //
+                   0.,     0., 0.,     u,  0.,  //
+                   0.,     0., 0.,     0., u};
+
+  init_matrix(val, arr3);
 }
 
 template <typename T>
@@ -116,12 +134,33 @@ DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
   auto c1 = ((gm1 - 1) * s2 / 2 - (gm1 + 1) / gm1 * pres / rho) * v1;
   auto c2 = (gm1 + 1) / gm1 * pres / rho + s2 / 2 - gm1 * v1 * v1;
 
-  init_matrix5(dfdq, 0, 1., 0., 0., 0.,  //
-               gm1 * s2 / 2 - v1 * v1, (2. - gm1) * v1, -gm1 * v2, -gm1 * v3,
-               gm1,                       //
-               -v1 * v2, v2, v1, 0., 0.,  //
-               -v1 * v3, v3, 0., v1, 0.,  //
-               c1, c2, -gm1 * v2 * v1, -gm1 * v3 * v1, (gm1 + 1) * v1);
+  double arr[] = {0,
+                  1.,
+                  0.,
+                  0.,
+                  0.,  //
+                  gm1 * s2 / 2 - v1 * v1,
+                  (2. - gm1) * v1,
+                  -gm1 * v2,
+                  -gm1 * v3,
+                  gm1,  //
+                  -v1 * v2,
+                  v2,
+                  v1,
+                  0.,
+                  0.,  //
+                  -v1 * v3,
+                  v3,
+                  0.,
+                  v1,
+                  0.,  //
+                  c1,
+                  c2,
+                  -gm1 * v2 * v1,
+                  -gm1 * v3 * v1,
+                  (gm1 + 1) * v1};
+
+  init_matrix(dfdq, arr);
 }
 
 }  // namespace snap

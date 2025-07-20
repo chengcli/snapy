@@ -9,10 +9,9 @@ namespace snap {
 ImplicitOptions ImplicitOptions::from_yaml(const YAML::Node& root) {
   ImplicitOptions op;
 
-  if (!root["dynamics"]) return op;
-  if (!root["dynamics"]["integrator"]) return op;
+  if (!root["integration"]) return op;
 
-  switch (root["dynamics"]["integrator"]["implicit-scheme"].as<int>(0)) {
+  switch (root["integration"]["implicit-scheme"].as<int>(0)) {
     case 0:
       op.type() = "none";
       op.scheme() = 0;
