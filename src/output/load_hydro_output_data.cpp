@@ -4,20 +4,9 @@
 #include <snap/hydro/hydro.hpp>
 
 #include "output_type.hpp"
+#include "output_utils.hpp"
 
 namespace snap {
-std::string get_hydro_names(MeshBlock pmb) {
-  auto m = pmb->named_modules()["hydro.eos.thermo"];
-  auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
-  auto species = thermo->options.species();
-
-  std::string result = species[1];
-  for (int i = 2; i < species.size(); ++i) {
-    result += ";" + species[i];
-  }
-
-  return result;
-}
 
 void OutputType::loadHydroOutputData(MeshBlock pmb) {
   OutputData* pod;

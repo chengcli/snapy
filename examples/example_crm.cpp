@@ -11,27 +11,53 @@
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/kinetics/kinetics_formatter.hpp>
 #include <kintera/thermo/relative_humidity.hpp>
+#include <kintera/vapors/vapor_functions.cpp>
 
 // snap
+#include <snap/input/command_line.hpp>
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
 using namespace snap;
 
+// H2S vapor function
+// T3: 187.63, P3: 23300., beta: 11.89, delta: 5.04, minT: 100.
+// double check for solid phase later
+VAPOR_FUNCTION(h2s_ideal, T) {
+  double betal = 11.89, gammal = 5.04, betas = 11.89, gammas = 5.04,
+         tr = 187.63, pr = 23300.0;
+  return (T > tr ? logsvp_ideal(T / tr, betal, gammal)
+                 : logsvp_ideal(T / tr, betas, gammas)) +
+         log(pr);
+}
+
+VAPOR_FUNCTION(h2s_ideal_ddT, T) {
+  double betal = 11.89, gammal = 5.04, betas = 11.89, gammas = 5.04,
+         tr = 187.63;
+  return (T > tr ? logsvp_ideal_ddT(T / tr, betal, gammal)
+                 : logsvp_ideal_ddT(T / tr, betas, gammas)) /
+         tr;
+}
+
 int main(int argc, char** argv) {
   // read parameters
-  std::string exp_name = "example_jupiter";
+  auto cli = CommandLine::ParseArguments(argc, argv);
 
-  auto config = YAML::LoadFile(fmt::format("{}.yaml", exp_name));
+  // input file
+  auto infile = std::string(cli->input_filename);
+
+  // experiment name is before "."
+  auto exp_name = infile.substr(0, infile.find('.'));
+
+  auto config = YAML::LoadFile(infile);
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
   auto Ts = config["problem"]["Ts"].as<double>(300.);
   auto Tmin = config["problem"]["Tmin"].as<double>(200.);
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block =
-      MeshBlock(MeshBlockOptions::from_yaml(fmt::format("{}.yaml", exp_name)));
+  auto block = MeshBlock(MeshBlockOptions::from_yaml(infile));
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
@@ -141,8 +167,7 @@ int main(int argc, char** argv) {
   out4.combine_blocks();
 
   // create kinetics model
-  auto op_kinet =
-      kintera::KineticsOptions::from_yaml(fmt::format("{}.yaml", exp_name));
+  auto op_kinet = kintera::KineticsOptions::from_yaml(infile);
   auto kinet = kintera::Kinetics(op_kinet);
   std::cout << fmt::format("Kinetics Options:\n{}", kinet->options)
             << std::endl;
@@ -195,4 +220,6 @@ int main(int argc, char** argv) {
       out4.combine_blocks();
     }
   }
+
+  CommandLine::Destroy();
 }
