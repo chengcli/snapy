@@ -50,8 +50,6 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
   auto Rimat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
   auto EV = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
 
-  std::cout << "Rmat sizes = " << Rmat.sizes() << std::endl;
-
   std::vector<int64_t> vec = {2, 3, 4, 0, 1};
   auto iter2 =
       at::TensorIteratorConfig()
@@ -67,6 +65,7 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
           .build();
 
   at::native::call_eigen_system(wroe.device().type(), iter2, dim);
+
   auto result = Rmat.matmul(EV.abs()).matmul(Rimat);
 
   if ((options.scheme() >> 3) & 1) {  // full matrix
@@ -125,7 +124,7 @@ ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
   switch (dim) {
     case 3:
       xs = pcoord->is();
-      xe = pcoord->ie();
+      xe = pcoord->ie() + 1;
 
       aleft = pcoord->face_area1(xs, xe).unsqueeze(-1).unsqueeze(-1);
       aright = pcoord->face_area1(xs + 1, xe + 1).unsqueeze(-1).unsqueeze(-1);
@@ -133,7 +132,7 @@ ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
       break;
     case 2:
       xs = pcoord->js();
-      xe = pcoord->je();
+      xe = pcoord->je() + 1;
 
       aleft = pcoord->face_area2(xs, xe).unsqueeze(-1).unsqueeze(-1);
       aright = pcoord->face_area2(xs + 1, xe + 1).unsqueeze(-1).unsqueeze(-1);
@@ -141,7 +140,7 @@ ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
       break;
     case 1:
       xs = pcoord->ks();
-      xe = pcoord->ke();
+      xe = pcoord->ke() + 1;
 
       aleft = pcoord->face_area3(xs, xe).unsqueeze(-1).unsqueeze(-1);
       aright = pcoord->face_area3(xs + 1, xe + 1).unsqueeze(-1).unsqueeze(-1);

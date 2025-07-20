@@ -44,16 +44,18 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   int is = pvic->pcoord->is();
   int ie = pvic->pcoord->ie();
 
-  a.slice(2, is, ie) += Dt - Phi;
+  a.slice(2, is, ie + 1) += Dt - Phi;
 
   //// --------- Fix boundary condition ---------- ////
   a.select(2, is) += b.select(2, is).matmul(Bnd);
   a.select(2, ie) += c.select(2, ie).matmul(Bnd);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  auto vec1 = a.sizes().vec();
-  vec1.pop_back();
-  vec1.back() = -1;
+  int nc1 = pvic->pcoord->options.nc1();
+  int nc2 = pvic->pcoord->options.nc2();
+  int nc3 = pvic->pcoord->options.nc3();
+
+  std::vector<int64_t> vec1 = {nc3, nc2, nc1, -1};
 
   auto du0 = du.clone();
   std::vector<int64_t> vec2 = {3, 0, 1, 2};
