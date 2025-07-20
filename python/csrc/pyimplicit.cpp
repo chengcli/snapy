@@ -3,8 +3,8 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
+#include <snap/implicit/implicit.hpp>
 #include <snap/implicit/implicit_formatter.hpp>
-#include <snap/implicit/vertical_implicit.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -23,11 +23,10 @@ void bind_implicit(py::module &m) {
              return fmt::format("ImplicitOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::ImplicitOptions, type)
-      .ADD_OPTION(int, snap::ImplicitOptions, nghost)
       .ADD_OPTION(double, snap::ImplicitOptions, grav)
       .ADD_OPTION(int, snap::ImplicitOptions, scheme)
-      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptions, coord)
-      .ADD_OPTION(snap::ReconstructOptions, snap::ImplicitOptions, recon);
+      .ADD_OPTION(snap::EquationOfStateOptions, snap::ImplicitOptions, eos);
 
-  ADD_SNAP_MODULE(VerticalImplicit, ImplicitOptions);
+  ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions);
+  ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions);
 }

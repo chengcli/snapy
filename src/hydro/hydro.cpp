@@ -40,9 +40,9 @@ void HydroImpl::reset() {
   pib = register_module("ib", InternalBoundary(options.ib()));
   options.ib() = pib->options;
 
-  //// ---- (8) set up vertical implicit solver ---- ////
-  pvic = register_module("vic", VerticalImplicit(options.vic()));
-  options.vic() = pvic->options;
+  //// ---- (8) set up implicit solver ---- ////
+  pimp = register_module("imp", ImplicitCorrection(options.imp()));
+  options.imp() = pimp->options;
 
   //// ---- (9) set up sedimentation ---- ////
   psed = register_module("sed", SedHydro(options.sed()));
@@ -165,7 +165,7 @@ void HydroImpl::reset() {
   _div = register_buffer("D",
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
-  _vic = register_buffer("I",
+  _imp = register_buffer("M",
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 
   //// ---- (13) initialize timers ---- ////
@@ -178,7 +178,7 @@ void HydroImpl::reset() {
   timer["LR3->F3"] = 0.0;
   timer["F->D"] = 0.0;
   timer["W->R"] = 0.0;
-  timer["U->I"] = 0.0;
+  timer["U->M"] = 0.0;
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
@@ -191,17 +191,18 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
-  if ((cs.size(2) > 1) && (pvic->options.scheme() == 0)) {
+  if ((cs.size(2) > 1) &&
+      (!(pimp->options.scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
     dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
               .item<double>();
   }
 
-  if (cs.size(1) > 1) {
+  if ((cs.size(1) > 1) && (!((pimp->options.scheme() >> 1) & 1))) {
     dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
               .item<double>();
   }
 
-  if (cs.size(0) > 1) {
+  if ((cs.size(0) > 1) && (!((pimp->options.scheme() >> 2) & 1))) {
     dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
               .item<double>();
   }
@@ -225,6 +226,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   std::chrono::high_resolution_clock::time_point time2;
+  torch::Tensor wlr1, wlr2, wlr3;
 
   if (u.size(DIM1) > 1) {
     auto wp = pproj->forward(w, pcoord->dx1f);
@@ -235,7 +237,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2a - time1).count();
 
     pproj->restore_inplace(wtmp);
-    auto wlr1 = pib->forward(wtmp, DIM1, solid);
+    wlr1 = pib->forward(wtmp, DIM1, solid);
 
     if (!options.disable_dynamics()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
@@ -257,7 +259,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR2"] +=
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
-    auto wlr2 = pib->forward(wtmp, DIM2, solid);
+    wlr2 = pib->forward(wtmp, DIM2, solid);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
     }
@@ -275,7 +277,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR3"] +=
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
-    auto wlr3 = pib->forward(wtmp, DIM3, solid);
+    wlr3 = pib->forward(wtmp, DIM3, solid);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
     }
@@ -301,12 +303,11 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  torch::Tensor du0 = du.clone();
-  // pvic->forward(w, du, gamma - 1., dt);
-  torch::sub_out(_vic, du, du0);
+  auto gamma = peos->get_buffer("A");
+  _imp.set_(pimp->forward(du, w, gamma, {wlr3, wlr2, wlr1}, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
-  timer["U->I"] +=
+  timer["U->M"] +=
       std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return du;

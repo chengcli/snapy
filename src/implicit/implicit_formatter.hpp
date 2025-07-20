@@ -1,12 +1,15 @@
 #pragma once
 
+// C/C++
+#include <sstream>
+
 // fmt
 #include <fmt/format.h>
 
 // snap
 #include <snap/coord/coord_formatter.hpp>
 
-#include "vertical_implicit.hpp"
+#include "implicit.hpp"
 
 template <>
 struct fmt::formatter<snap::ImplicitOptions> {
@@ -14,9 +17,8 @@ struct fmt::formatter<snap::ImplicitOptions> {
 
   template <typename FormatContext>
   auto format(const snap::ImplicitOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(
-        ctx.out(),
-        "(type = {}; nghost = {}; grav = {}; scheme = {}; coord = {})",
-        p.type(), p.nghost(), p.grav(), p.scheme(), p.coord());
+    std::stringstream ss;
+    p.report(ss);
+    return fmt::format_to(ctx.out(), "{}", ss.str());
   }
 };

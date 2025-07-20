@@ -74,7 +74,7 @@ TEST_P(DeviceTest, test_lmars) {
   Reconstruct precon(op_recon);
   precon->to(device, dtype);
 
-  auto peos = prsolver->peosl;
+  auto peos = prsolver->peos;
 
   auto w =
       torch::randn({peos->nvar(), peos->options.coord().nc3(),
@@ -117,7 +117,7 @@ TEST_P(DeviceTest, test_hllc) {
   Reconstruct precon(op_recon);
   precon->to(device, dtype);
 
-  auto peos = prsolver->peosl;
+  auto peos = prsolver->peos;
 
   auto w =
       torch::randn({peos->nvar(), peos->options.coord().nc3(),

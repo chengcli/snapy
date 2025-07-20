@@ -10,18 +10,12 @@
 #define FLX(n) flx[(n) * stride]
 #define WL(n) wl[(n) * stride]
 #define WR(n) wr[(n) * stride]
-#define EL (*el)
-#define ER (*er)
-#define GAMMAL (*gammal)
-#define GAMMAR (*gammar)
-#define CL (*cl)
-#define CR (*cr)
 
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
-                              T *gammar, T *cl, T *cr, int dim, int ny,
+void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
+                              T gammar, T cl, T cr, int dim, int ny,
                               int stride) {
   constexpr int ICY = Index::ICY;
   constexpr int IDN = Index::IDN;
@@ -40,27 +34,27 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
 
   //--- Step 2.  Compute middle state estimates with PVRS (Toro 10.5.2)
 
-  EL += 0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
-  ER += 0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
+  el += 0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  er += 0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
   auto rhoa = .5 * (WL(IDN) + WR(IDN));  // average density
-  auto ca = .5 * (CL + CR);              // average sound speed
+  auto ca = .5 * (cl + cr);              // average sound speed
   auto pmid = .5 * (WL(IPR) + WR(IPR) + (WL(ivx) - WR(ivx)) * rhoa * ca);
   auto umid = .5 * (WL(ivx) + WR(ivx) + (WL(IPR) - WR(IPR)) / (rhoa * ca));
 
   //--- Step 3.  Compute sound speed in L,R
 
   auto ql = (pmid <= WL(IPR)) ? 1.0
-                              : std::sqrt(1.0 + (GAMMAL + 1) / (2 * GAMMAL) *
+                              : std::sqrt(1.0 + (gammal + 1) / (2 * gammal) *
                                                     (pmid / WL(IPR) - 1.0));
   auto qr = (pmid <= WR(IPR)) ? 1.0
-                              : std::sqrt(1.0 + (GAMMAR + 1) / (2 * GAMMAR) *
+                              : std::sqrt(1.0 + (gammar + 1) / (2 * gammar) *
                                                     (pmid / WR(IPR) - 1.0));
 
   //--- Step 4.  Compute the max/min wave speeds based on L/R
 
-  auto al = WL(ivx) - CL * ql;
-  auto ar = WR(ivx) + CR * qr;
+  auto al = WL(ivx) - cl * ql;
+  auto ar = WR(ivx) + cr * qr;
 
   auto bp = ar > 0.0 ? ar : (TINY_NUMBER);
   auto bm = al < 0.0 ? al : -(TINY_NUMBER);
@@ -101,8 +95,8 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
   fl[ivz] = WL(IDN) * WL(ivz) * vxl;
   fr[ivz] = WR(IDN) * WR(ivz) * vxr;
 
-  fl[IPR] = EL * vxl + WL(IPR) * WL(ivx);
-  fr[IPR] = ER * vxr + WR(IPR) * WR(ivx);
+  fl[IPR] = el * vxl + WL(IPR) * WL(ivx);
+  fr[IPR] = er * vxr + WR(IPR) * WR(ivx);
 
   //--- Step 8. Compute flux weights or scales
 
@@ -134,9 +128,3 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T *el, T *er, T *gammal,
 #undef WR
 #undef FLX
 #undef SQR
-#undef EL
-#undef ER
-#undef GAMMAL
-#undef GAMMAR
-#undef CL
-#undef CR

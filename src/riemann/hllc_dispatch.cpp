@@ -26,13 +26,11 @@ void call_hllc_cpu(at::TensorIterator& iter, int dim) {
         auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
         auto wl = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
         auto wr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-        auto el = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-        auto er = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
-        auto gammal = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
-        auto gammar = reinterpret_cast<scalar_t*>(data[6] + i * strides[6]);
-        auto cl = reinterpret_cast<scalar_t*>(data[7] + i * strides[7]);
-        auto cr = reinterpret_cast<scalar_t*>(data[8] + i * strides[8]);
-        hllc_impl(out, wl, wr, el, er, gammal, gammar, cl, cr, dim, ny, stride);
+        auto elr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
+        auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
+        auto clr = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
+        hllc_impl(out, wl, wr, *elr, *(elr + stride), *glr, *(glr + stride),
+                  *clr, *(clr + stride), dim, ny, stride);
       }
     });
   });
@@ -48,12 +46,18 @@ void call_hllc_mps(at::TensorIterator& iter, int dim) {
   auto flx = iter.output(0);
   auto wl = iter.input(0);
   auto wr = iter.input(1);
-  auto el = iter.input(2);
-  auto er = iter.input(3);
-  auto gammal = iter.input(4);
-  auto gammar = iter.input(5);
-  auto cl = iter.input(6);
-  auto cr = iter.input(7);
+  auto elr = iter.input(2);
+  auto glr = iter.input(3);
+  auto clr = iter.input(4);
+
+  auto el = elr[ILT].clone();
+  auto er = elr[IRT].clone();
+
+  auto gammal = glr[ILT];
+  auto gammar = glr[IRT];
+
+  auto cl = clr[ILT];
+  auto cr = clr[IRT];
 
   // dim, ivx, ivy, ivz
   // 3, IVX, IVY, iVZ

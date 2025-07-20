@@ -20,16 +20,15 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
 
-    native::gpu_kernel<7>(
+    native::gpu_kernel<5>(
         iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           auto wr = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto el = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto er = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto gammal = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
-          auto gammar = reinterpret_cast<scalar_t*>(data[6] + strides[6]);
-          lmars_impl(out, wl, wr, el, er, gammal, gammar, dim, ny, stride);
+          auto elr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto glr = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          lmars_impl(out, wl, wr, *elr, *(elr + stride),
+                     *glr, *(glr + stride), dim, ny, stride);
         });
   });
 }
@@ -47,13 +46,12 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           auto wr = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto el = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto er = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto gammal = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
-          auto gammar = reinterpret_cast<scalar_t*>(data[6] + strides[6]);
-          auto cl = reinterpret_cast<scalar_t*>(data[7] + strides[7]);
-          auto cr = reinterpret_cast<scalar_t*>(data[8] + strides[8]);
-          hllc_impl(out, wl, wr, el, er, gammal, gammar, cl, cr, dim, ny, stride);
+          auto elr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto glr = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto clr = reinterpret_cast<scalar_t*>(data[7] + strides[7]);
+          hllc_impl(out, wl, wr, *elr, *(elr + stride),
+                    *glr, *(glr + stride), *clr, *(clr + stride),
+                    dim, ny, stride);
         });
   });
 }

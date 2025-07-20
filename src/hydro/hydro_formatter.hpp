@@ -61,7 +61,7 @@ struct fmt::formatter<snap::HydroOptions> {
     ss << "Internal boundary options:\n";
     p.ib().report(ss);
     ss << "Implicit options:\n";
-    p.vic().report(ss);
+    p.imp().report(ss);
     ss << "Sedimentation options:\n";
     p.sed().report(ss);
 
