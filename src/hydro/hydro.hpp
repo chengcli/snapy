@@ -13,7 +13,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
-#include <snap/implicit/vertical_implicit.hpp>
+#include <snap/implicit/implicit.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
@@ -61,7 +61,7 @@ struct HydroOptions {
   ADD_ARG(RiemannSolverOptions, riemann);
 
   ADD_ARG(InternalBoundaryOptions, ib);
-  ADD_ARG(ImplicitOptions, vic);
+  ADD_ARG(ImplicitOptions, imp);
 
   ADD_ARG(SedHydroOptions, sed);
 };
@@ -81,7 +81,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   Reconstruct precon23 = nullptr;
 
   InternalBoundary pib = nullptr;
-  VerticalImplicit pvic = nullptr;
+  VerticalCorrection pimplicit = nullptr;
 
   SedHydro psed = nullptr;
 

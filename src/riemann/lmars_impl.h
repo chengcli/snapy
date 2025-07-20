@@ -10,16 +10,12 @@
 #define WR(n) (wr[(n) * stride])
 #define FLX(n) (flx[(n) * stride])
 #define SQR(x) ((x) * (x))
-#define HL (*hl)
-#define HR (*hr)
-#define GAMMAL (*gammal)
-#define GAMMAR (*gammar)
 
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
-                               T *gammar, int dim, int ny, int stride) {
+void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
+                               T gammar, int dim, int ny, int stride) {
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
@@ -28,14 +24,14 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
   T wri[5] = {WR(IDN), WR(ivx), WR(ivy), WR(ivz), WR(IPR)};
 
   // Enthalpies
-  HL += 0.5 * (SQR(wli[IVX]) + SQR(wli[IVY]) + SQR(wli[IVZ])) +
+  hl += 0.5 * (SQR(wli[IVX]) + SQR(wli[IVY]) + SQR(wli[IVZ])) +
         wli[IPR] / wli[IDN];
-  HR += 0.5 * (SQR(wri[IVX]) + SQR(wri[IVY]) + SQR(wri[IVZ])) +
+  hr += 0.5 * (SQR(wri[IVX]) + SQR(wri[IVY]) + SQR(wri[IVZ])) +
         wri[IPR] / wri[IDN];
 
   // Average density, average sound speed, pressure, velocity
   auto rhobar = 0.5 * (wli[IDN] + wri[IDN]);
-  auto gamma_bar = 0.5 * (GAMMAL + GAMMAR);
+  auto gamma_bar = 0.5 * (gammal + gammar);
   auto cbar = sqrt(0.5 * gamma_bar * (wli[IPR] + wri[IPR]) / rhobar);
 
   auto pbar = 0.5 * (wli[IPR] + wri[IPR]) +
@@ -60,7 +56,7 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
     FLX(ivx) = ubar * wli[IDN] * wli[IVX] + pbar;
     FLX(ivy) = ubar * wli[IDN] * wli[IVY];
     FLX(ivz) = ubar * wli[IDN] * wli[IVZ];
-    FLX(IPR) = ubar * wli[IDN] * HL;
+    FLX(IPR) = ubar * wli[IDN] * hl;
   } else {
     // Right side flux
     for (int n = 0; n < ny; n++) {
@@ -75,7 +71,7 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
     FLX(ivx) = ubar * wri[IDN] * wri[IVX] + pbar;
     FLX(ivy) = ubar * wri[IDN] * wri[IVY];
     FLX(ivz) = ubar * wri[IDN] * wri[IVZ];
-    FLX(IPR) = ubar * wri[IDN] * HR;
+    FLX(IPR) = ubar * wri[IDN] * hr;
   }
 }
 
@@ -85,7 +81,3 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T *hl, T *hr, T *gammal,
 #undef WR
 #undef FLX
 #undef SQR
-#undef HL
-#undef HR
-#undef GAMMAL
-#undef GAMMAR

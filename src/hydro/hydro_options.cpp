@@ -65,9 +65,8 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   op.ib() = InternalBoundaryOptions::from_yaml(config);
 
   // implicit options
-  op.vic() = ImplicitOptions::from_yaml(config);
-  op.vic().recon() = op.recon1();
-  op.vic().coord() = op.coord();
+  op.imp() = ImplicitOptions::from_yaml(config);
+  op.imp().eos() = op.eos();
 
   // sedimentation
   if (config["sedimentation"]) {

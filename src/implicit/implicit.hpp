@@ -23,16 +23,14 @@ struct ImplicitOptions {
   }
 
   int size() const {
-    if (options.scheme() == 1) {  // partial
-      return 3;
-    } else if (options.scheme() == 9) {  // full
+    if ((options.scheme() >> 3) & 1) {  // full
       return 5;
     } else {
-      TORCH_CHECK(false, "Unsupported scheme");
+      return 3;
     }
   }
 
-  ADD_ARG(std::string, type) = "vic";
+  ADD_ARG(std::string, type) = "none";
   ADD_ARG(double, grav) = 0.;
   ADD_ARG(int, scheme) = 0;
 
@@ -57,31 +55,31 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   void reset() override;
 
   torch::Tensor diffusion_matrix(torch::Tensor wlr, torch::Tensor elr, int dim);
-
   torch::Tensor flux_jacobian(torch::Tensor w, int dim);
 
   //! assemble diffusion matrix and flux jacobian
-  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward(
-      torch::Tensor w, torch::Tensor wlr, torch::Tensor elr, int dim);
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+  forward(torch::Tensor w, torch::Tensor wlr, int dim);
 };
 TORCH_MODULE(ImplicitHydro);
 
 class ImplicitCorrectionImpl
     : public torch::nn::Cloneable<ImplicitCorrectionImpl> {
  public:
-  //! options with which this `ImplicitHydro` was constructed
+  //! options with which this `ImplicitCorrection` was constructed
   ImplicitOptions options;
 
   //! submodules
-  ImplicitHydro pvic = nullptr;
+  ImplicitHydro pihc = nullptr;
 
   //! Constructor to initialize the layer
   ImplicitCorrectionImpl() = default;
   explicit ImplicitCorrectionImpl(ImplicitOptions options);
   void reset() override;
 
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor wlr[3],
-                        torch::Tensor elr[3], double dt);
+  //! corrector for the implicit hydro
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
+                        torch::Tensor cs, torch::Tensor wlr[3], double dt);
 };
 TORCH_MODULE(ImplicitCorrection);
 

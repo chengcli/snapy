@@ -10,32 +10,41 @@ namespace snap {
 
 void HLLCSolverImpl::reset() {
   // set up equation-of-state model
-  peosl = register_module_op(this, "eosl", options.eos());
-  peosr = register_module_op(this, "eosr", options.eos());
+  peos = register_module_op(this, "eos", options.eos());
+
+  // register buffers
+  auto vec = peos->get_buffer("W").sizes().vec();
+  vec[0] = 2;
+
+  elr = register_buffer("elr", torch::empty(vec, torch::kFloat64));
+  clr = register_buffer("clr", torch::empty(vec, torch::kFloat64));
+  glr = register_buffer("glr", torch::empty(vec, torch::kFloat64));
 }
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor flx) {
-  auto el = peosl->compute("W->I", {wl});
-  auto gammal = peosl->compute("W->A", {wl});
-  auto cl = peosl->compute("WA->L", {wl, gammal});
+  elr[ILT] = peos->compute("W->I", {wl});
+  glr[ILT] = peos->compute("W->A", {wl});
+  clr[ILT] = peos->compute("WA->L", {wl, gammal});
 
-  auto er = peosr->compute("W->I", {wr});
-  auto gammar = peosr->compute("W->A", {wr});
-  auto cr = peosr->compute("WA->L", {wr, gammar});
+  elr[IRT] = peos->compute("W->I", {wr});
+  glr[IRT] = peos->compute("W->A", {wr});
+  clr[IRT] = peos->compute("WA->L", {wr, gammar});
+
+  auto pcoord = peos->pcoord;
 
   switch (dim) {
     case 1:
-      peosl->pcoord->prim2local3_(wl);
-      peosr->pcoord->prim2local3_(wr);
+      peos->pcoord->prim2local3_(wl);
+      peos->pcoord->prim2local3_(wr);
       break;
     case 2:
-      peosl->pcoord->prim2local2_(wl);
-      peosr->pcoord->prim2local2_(wr);
+      peos->pcoord->prim2local2_(wl);
+      peos->pcoord->prim2local2_(wr);
       break;
     case 3:
-      peosl->pcoord->prim2local1_(wl);
-      peosr->pcoord->prim2local1_(wr);
+      peos->pcoord->prim2local1_(wl);
+      peos->pcoord->prim2local1_(wr);
       break;
     default:
       TORCH_CHECK(false, "Invalid dimension: ", dim);
@@ -48,17 +57,12 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                   .add_output(flx)
                   .add_input(wl)
                   .add_input(wr)
-                  .add_owned_input(el.unsqueeze(0))
-                  .add_owned_input(er.unsqueeze(0))
-                  .add_owned_const_input(gammal.unsqueeze(0))
-                  .add_owned_const_input(gammar.unsqueeze(0))
-                  .add_owned_const_input(cl.unsqueeze(0))
-                  .add_owned_const_input(cr.unsqueeze(0))
+                  .add_input(elr)
+                  .add_input(glr)
+                  .add_input(clr)
                   .build();
 
   at::native::call_hllc(flx.device().type(), iter, dim);
-
-  auto pcoord = peosl->pcoord;
 
   switch (dim) {
     case 1:

@@ -12,18 +12,17 @@ ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions options_)
 }
 
 void ImplicitCorrectionImpl::reset() {
-  pvic = register_module("vic", ImplicitHydro(options));
+  pihc = register_module("vic", ImplicitHydro(options));
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
-                                              torch::Tensor wlr[3],
-                                              torch::Tensor elr[3], double dt) {
+                                              torch::Tensor wlr[3], double dt) {
   if (options.scheme() == 0) {  // null operation
     return du;
   }
 
   //// -------- Vertical direction --------- ////
-  auto [a, b, c] = pvic->forward(w, wlr[2], elr[2], 3);
+  auto [a, b, c] = pihc->forward(w, wlr[2], 3);
   auto delta = torch::zeros_like(a.select(-1, 0));
 
   int m = option.size();
@@ -36,8 +35,8 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto Bnd = torch::eye(m, w.options());
   Bnd[IVX][IVX] = -1.;
 
-  int is = pvic->peos->pcoord->is();
-  int ie = pvic->peos->pcoord->ie();
+  int is = pihc->peos->pcoord->is();
+  int ie = pihc->peos->pcoord->ie();
 
   a.slice(d, is, ie) += Dt - Phi;
 
@@ -60,7 +59,13 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
                   .add_owned_input(delta.permute(vec))
                   .build();
 
-  at::native::call_vic_solve(du.device().type(), iter, dt, is, ie);
+  if (options.scheme() == 1) {
+    at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
+  } else if (options.scheme() == 9) {
+    at::native::vic_solve5(du.device().type(), iter, dt, is, ie);
+  } else {
+    TORCH_CHECK(false, "Unknown implicit scheme");
+  }
   return du - du0;
 }
 

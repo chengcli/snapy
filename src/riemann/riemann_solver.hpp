@@ -35,6 +35,9 @@ struct RiemannSolverOptions {
 
 class RiemannSolverImpl {
  public:
+  //! data
+  torch::Tensor elr, clr, glr;
+
   //! options with which this `RiemannSolver` was constructed
   RiemannSolverOptions options;
 
@@ -91,8 +94,7 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
                         public RiemannSolverImpl {
  public:
   //! submodules
-  EquationOfState peosl = nullptr;
-  EquationOfState peosr = nullptr;
+  EquationOfState peos = nullptr;
 
   //! Constructor to initialize the layers
   LmarsSolverImpl() = default;
@@ -112,8 +114,7 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
                        public RiemannSolverImpl {
  public:
   //! submodules
-  EquationOfState peosl = nullptr;
-  EquationOfState peosr = nullptr;
+  EquationOfState peos = nullptr;
 
   //! Constructor to initialize the layers
   HLLCSolverImpl() = default;

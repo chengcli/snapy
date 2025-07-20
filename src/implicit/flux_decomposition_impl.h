@@ -10,6 +10,7 @@
 // snap
 #include <snap/snap.h>
 
+#define SQR(x) ((x) * (x))
 #define PRIM(i) prim[(i) * stride]
 
 namespace snap {
@@ -27,17 +28,6 @@ DISPATCH_MACRO void init_matrix5(T *mat, ...) {
   va_end(args);
 }
 
-template <typename T>
-inline DISPATCH_MACRO T _norm2(T *v, T *cos_theta) {
-  T out = 0.;
-  for (int i = 0; i < 3; ++i) {
-    out += v[i] * v[i];
-  }
-  out += 2. * (v[1] * v[2] * cos_theta[0] + v[0] * v[2] * cos_theta[1] +
-               v[0] * v[1] * cos_theta[2]);
-  return out;
-}
-
 //! Roe average scheme
 /*
  * Flux in the interface between i-th and i+1-th cells:
@@ -45,9 +35,8 @@ inline DISPATCH_MACRO T _norm2(T *v, T *cos_theta) {
  * sqrt(rho(i+1)))
  */
 template <typename T>
-DISPATCH_MACRO void roe_average(T *prim, T const *wl, T const *wr, T el,
-                                T er, /*T const *cos_theta,*/
-                                int ny, int stride) {
+DISPATCH_MACRO void roe_average_impl(T *prim, T const *wl, T const *wr, T el,
+                                     T er, int ny, int stride) {
   auto sqrtdl = sqrt(WL(IDN));
   auto sqrtdr = sqrt(WR(IDN));
   auto isdlpdr = 1.0 / (sqrtdl + sqrtdr);
@@ -57,32 +46,27 @@ DISPATCH_MACRO void roe_average(T *prim, T const *wl, T const *wr, T el,
   PRIM(IVY) = (sqrtdl * WL(IVY) + sqrtdr * WR(IVY)) * isdlpdr;
   PRIM(IVZ) = (sqrtdl * WL(IVZ) + sqrtdr * WR(IVZ)) * isdlpdr;
 
-  auto vel[3] = {WL(IVX), WL(IVY), WL(IVZ)};
-  auto ver[3] = {WR(IVX), WR(IVY), WR(IVZ)};
-
-  T cos_theta[3] = {0., 0., 0.};
-  el += 0.5 * WL(IDN) * _norm2(vel, cos_theta);
-  er += 0.5 * WR(IDN) * _norm2(ver, cos_theta);
+  el += 0.5 * WL(IDN) * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)));
+  er += 0.5 * WR(IDN) * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)));
 
   // enthalpy divided by the density.
   PRIM(IPR) = ((el + WL(IPR)) / sqrtdl + (er + WR(IPR)) / sqrtdr) * isdlpdr;
 }
 
 template <typename T>
-DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val,
-                                      T const *prim, /*T const *cos_theta,*/
-                                      T ie, T cs, int dir, int stride) {
+DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
+                                      T ie, T cs, int dim, int stride) {
+  auto ivx = IPR - dim;
+  auto ivy = IVX + ((ivx - IVX) + 1) % 3;
+  auto ivz = IVX + ((ivx - IVX) + 2) % 3;
+
   auto r = PRIM(IDN);
-  auto u = PRIM(IVX + dir);
-  auto v = PRIM(IVX + (IVY - IVX + dir) % 3);
-  auto w = PRIM(IVX + (IVZ - IVX + dir) % 3);
+  auto u = PRIM(ivx);
+  auto v = PRIM(ivy);
+  auto w = PRIM(ivz);
   auto p = PRIM(IPR);
 
-  T cos_theta[3] = {0., 0., 0.};
-  T vel[3] = {u, v, w};
-
-  auto ke = 0.5 * _norm2(vel, cos_theta);
-  auto hp = (ie + p) / r;
+  auto ke = 0.5 * (SQR(u) + SQR(v) + SQR(w)) auto hp = (ie + p) / r;
   auto h = hp + ke;
 
   init_matrix5(left,                       //
@@ -111,19 +95,19 @@ DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val,
 }
 
 template <typename T>
-DISPATCH_MACRO void flux_jacobian_impl(T *dfdq,
-                                       T const *prim, /*T const* cos_theta,*/
-                                       T gamma, int dir, int stride) {
-  auto v1 = PRIM(IVX + dir);
-  auto v2 = PRIM(IVX + (IVY - IVX + dir) % 3]);
-  auto v3 = PRIM(IVX + (IVZ - IVX + dir) % 3]);
+DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
+                                       int stride) {
+  auto ivx = IPR - dim;
+  auto ivy = IVX + ((ivx - IVX) + 1) % 3;
+  auto ivz = IVX + ((ivx - IVX) + 2) % 3;
+
   auto rho = PRIM(IDN);
+  auto v1 = PRIM(ivx);
+  auto v2 = PRIM(ivy);
+  auto v3 = PRIM(ivz);
   auto pres = PRIM(IPR);
 
-  T cos_theta[3] = {0., 0., 0.};
-  T vel[3] = {v1, v2, v3};
-  auto s2 = _norm2(vel, cos_theta);
-
+  auto s2 = SQR(v1) + SQR(v2) + SQR(v3);
   auto gm1 = gamma - 1;
 
   auto c1 = ((gm1 - 1) * s2 / 2 - (gm1 + 1) / gm1 * pres / rho) * v1;
@@ -140,3 +124,4 @@ DISPATCH_MACRO void flux_jacobian_impl(T *dfdq,
 }  // namespace snap
 
 #undef PRIM
+#undef SQR

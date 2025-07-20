@@ -6,8 +6,11 @@
 
 namespace at::native {
 
-using vic_forward_fn = void (*)(at::TensorIterator &iter, double dt, int il,
-                                int iu);
+using iterator_fn = void (*)(at::TensorIterator &iter);
+using dim_iterator_fn = void (*)(at::TensorIterator &iter, int dim);
+
+using vic_solve_fn = void (*)(at::TensorIterator &iter, double dt, int il,
+                              int iu);
 
 using alloc_eigen_fn = void (*)(c10::ScalarType dtype, char *&a, char *&b,
                                 char *&c, char *&delta, char *&corr, int ncol,
@@ -16,14 +19,13 @@ using alloc_eigen_fn = void (*)(c10::ScalarType dtype, char *&a, char *&b,
 using free_eigen_fn = void (*)(char *&a, char *&b, char *&c, char *&delta,
                                char *&corr);
 
-using eigen_vector_fn = torch::Tensor (*)(torch::Tensor prim, torch::Tensor gm1,
-                                          torch::Tensor cs);
+DECLARE_DISPATCH(iterator_fn, call_eigen_system);
+DECLARE_DISPATCH(dim_iterator_fn, call_roe_average);
+DECLARE_DISPATCH(dim_iterator_fn, call_flux_jacobian);
 
-DECLARE_DISPATCH(eigen_vector_fn, eigen_vecotr_left);
-DECLARE_DISPATCH(eigen_vector_fn, eigen_vecotr_right);
+DECLARE_DISPATCH(vic_solve_fn, vic_solve3);
+DECLARE_DISPATCH(vic_solve_fn, vic_solve5);
 
-DECLARE_DISPATCH(vic_forward_fn, vic_forward3);
-DECLARE_DISPATCH(vic_forward_fn, vic_forward5);
 DECLARE_DISPATCH(alloc_eigen_fn, alloc_eigen3);
 DECLARE_DISPATCH(alloc_eigen_fn, alloc_eigen5);
 DECLARE_DISPATCH(free_eigen_fn, free_eigen);
