@@ -40,9 +40,6 @@ struct ImplicitOptions {
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
  public:
-  //! cache
-  torch::Tensor wroe, groe, croe;
-
   //! options with which this `ImplicitHydro` was constructed
   ImplicitOptions options;
 
@@ -80,7 +77,7 @@ class ImplicitCorrectionImpl
 
   //! corrector for the implicit hydro
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
-                        torch::TensorList wlr3, double dt);
+                        double dt);
 };
 TORCH_MODULE(ImplicitCorrection);
 

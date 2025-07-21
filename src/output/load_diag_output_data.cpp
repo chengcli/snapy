@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include "output_type.hpp"
+#include "output_utils.hpp"
 
 namespace snap {
 
@@ -89,6 +90,49 @@ void OutputType::loadDiagOutputData(MeshBlock pmb) {
 
       AppendOutputDataNode(pod);
       num_vars_ += 1;
+    }
+
+    // implicit corrrection
+    if (pmb->phydro->options.imp().scheme() > 0) {
+      auto const& du = pmb->phydro->named_buffers()["M"];
+
+      // density
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "ic_dry";
+      pod->data.InitFromTensor(du, 4, Index::IDN, 1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+
+      // momentum
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = "ic_mom";
+      pod->data.InitFromTensor(du, 4, Index::IVX, 3);
+
+      AppendOutputDataNode(pod);
+      num_vars_ += 3;
+
+      // total energy
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "ic_etot";
+      pod->data.InitFromTensor(du, 4, Index::IPR, 1);
+
+      AppendOutputDataNode(pod);
+      num_vars_++;
+
+      // vapor + cloud
+      auto ny = peos->nvar() - 5;
+      if (ny > 0) {
+        pod = new OutputData;
+        pod->type = "VECTORS";
+        pod->name = get_hydro_names(pmb, "ic_");
+        pod->data.InitFromTensor(du, 4, Index::ICY, ny);
+
+        AppendOutputDataNode(pod);
+        num_vars_ += ny;
+      }
     }
   }
 }

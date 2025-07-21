@@ -19,15 +19,23 @@ void ImplicitCorrectionImpl::reset() {
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
-                                              torch::Tensor gamma,
-                                              torch::TensorList wlr3,
-                                              double dt) {
+                                              torch::Tensor gammar, double dt) {
   if (options.scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
 
+  auto vec = du.sizes().vec();
+  vec.insert(vec.begin(), 2);
+
   //// -------- Vertical direction --------- ////
-  auto [a, b, c, corr] = pvic->forward(w, gamma, wlr3[2], 3);
+  auto wlr = torch::empty(vec, w.options());
+  wlr[ILT] = w;
+  wlr[IRT] = w.roll(-1, 3);
+
+  auto gammal = gammar.roll(-1, 2);
+  auto gamma = 0.5 * (gammar + gammal);
+
+  auto [a, b, c, corr] = pvic->forward(w, gamma, wlr, 3);
 
   auto delta = torch::zeros_like(corr);
 

@@ -1,7 +1,9 @@
 // C/C++
 #include <mutex>
 
-// outputs
+// snap
+#include <snap/mesh/meshblock.hpp>
+
 #include "output_utils.hpp"
 
 namespace snap {
@@ -222,4 +224,18 @@ std::string MetadataTable::GetLongName(std::string name) const {
 }
 
 MetadataTable* MetadataTable::myptr_ = nullptr;
+
+std::string get_hydro_names(MeshBlock pmb, std::string prepend) {
+  auto m = pmb->named_modules()["hydro.eos.thermo"];
+  auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+  auto species = thermo->options.species();
+
+  std::string result = prepend + species[1];
+  for (int i = 2; i < species.size(); ++i) {
+    result += ";" + species[i];
+  }
+
+  return result;
+}
+
 }  // namespace snap

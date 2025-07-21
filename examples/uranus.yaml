@@ -52,9 +52,19 @@ species:
     cv_R: 9.0
     u0_R: -1.2e4
 
+  - name: H2S(l)
+    composition: {H: 2, S: 1}
+    cv_R: 5.5
+    u0_R: -1284.6
+
+  - name: H2S(l,p)
+    composition: {H: 2, S: 1}
+    cv_R: 5.5
+    u0_R: -1284.6
+
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 1200.e3, x3min: -0.5, x3max: 0.5}
+  bounds: {x1min: 0., x1max: 350.e3, x2min: 0., x2max: 1440.e3, x3min: -0.5, x3max: 0.5}
   cells: {nx1: 100, nx2: 200, nx3: 1, nghost: 3}
 
 dynamics:
@@ -94,71 +104,39 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.9
-  implicit-scheme: 9
+  implicit-scheme: 1
   nlim: -1
   tlim: 1.e5
 
 forcing:
   const-gravity:
-    grav1: -22.
+    grav1: -9.01
 
 sedimentation:
   radius:
-    H2O(l,p): 1.0e-10
-    NH3(s,p): 1.0e-10
-    NH4SH(s,p): 1.0e-10
+    H2S(l,p): 1.0e-10
 
   density:
-    H2O(l,p): 1000.
-    NH3(s,p): 800.
-    NH4SH(s,p): 1500.
+    H2S(l,p): 1000.
 
   const-vsed:
-    H2O(l,p): -200.0
-    NH3(s,p): -200.0
-    NH4SH(s,p): -200.0
+    H2S(l,p): -200.0
 
 reactions:
-  - equation: H2O => H2O(l)
+  - equation: H2S => H2S(l)
     type: nucleation
-    rate-constant: {formula: h2o_ideal}
+    rate-constant: {formula: h2s_ideal}
 
-  - equation: H2O(l) => H2O(l,p)
+  - equation: H2S(l) => H2S(l,p)
     type: coagulation
     rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
 
-  - equation: H2O(l,p) => H2O
+  - equation: H2S(l,p) => H2S
     type: evaporation
-    rate-constant: {formula: h2o_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
-
-  - equation: NH3 => NH3(s)
-    type: nucleation
-    rate-constant: {formula: nh3_ideal}
-
-  - equation: NH3(s) => NH3(s,p)
-    type: coagulation
-    rate-constant: {A: 0.01, b: 0, Ea_R: 2.}
-
-  - equation: NH3(s,p) => NH3
-    type: evaporation
-    rate-constant: {formula: nh3_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
-
-  - equation: NH3 + H2S <=> NH4SH(s)
-    type: nucleation
-    rate-constant: {formula: nh3_h2s_lewis}
-
-  - equation: NH4SH(s) => NH4SH(s,p)
-    type: coagulation
-    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
-
-  - equation: NH4SH(s,p) => NH3 + H2S
-    type: evaporation
-    rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+    rate-constant: {formula: h2s_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
 
 problem:
-  Ps: 100.e5
-  Ts: 600.
-  Tmin: 110.
-  xH2O: 3.e-3
-  xNH3: 3.2e-4
-  xH2S: 1.e-5
+  Ps: 50.e5
+  Ts: 250.
+  Tmin: 52.
+  xH2S: 8.e-4

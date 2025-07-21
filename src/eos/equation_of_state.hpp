@@ -33,6 +33,7 @@ struct EquationOfStateOptions {
   ADD_ARG(std::string, type) = "moist-mixture";
   ADD_ARG(double, density_floor) = 1.e-10;
   ADD_ARG(double, pressure_floor) = 1.e-10;
+  ADD_ARG(double, temperature_floor) = 20.;
   ADD_ARG(bool, limiter) = false;
 
   //! submodules options
@@ -75,10 +76,10 @@ class EquationOfStateImpl {
                         torch::optional<torch::Tensor> out = torch::nullopt);
 
   //! \brief Apply the conserved variable limiter in place.
-  virtual void apply_conserved_limiter_(torch::Tensor const& cons) const;
+  virtual void apply_conserved_limiter_(torch::Tensor const& cons);
 
   //! \brief Apply the primitive variable limiter in place.
-  virtual void apply_primitive_limiter_(torch::Tensor const& prim) const;
+  virtual void apply_primitive_limiter_(torch::Tensor const& prim);
 
  protected:
   //! Disable constructor, to be used only by derived classes.

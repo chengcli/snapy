@@ -84,10 +84,18 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
 
   //! \brief Convert conserved variables to kinetic energy.
   /*
-   * * \param[in] cons    conserved variables
-   * * \param[out] out    kinetic energy
+   * \param[in] cons    conserved variables
+   * \param[out] out    kinetic energy
    */
   void _cons2ke(torch::Tensor cons, torch::Tensor& out);
+
+  //! \brief Convert temperature to kinetic energy.
+  /*
+   * \param[in] cons    conserved variables
+   * \param[in] temp    temperature
+   * \param[out] out    internal energy
+   */
+  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
 
   //! \brief Compute the adiabatic index
   /*

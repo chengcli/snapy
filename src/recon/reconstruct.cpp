@@ -33,14 +33,30 @@ ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &dyn,
   return op;
 }
 
+/*
+ * |<---- nghost --->|<--- interior -->|<---- nghost --->|
+ * |-----|-----|-----|-----|-----|-----|-----|-----|-----|
+ * |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |
+ * |-----|-----|-----|-----|-----|-----|-----|-----|-----|
+ *                      ^           ^
+ *                      |           |
+ *                      il          iu
+ */
 void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
                     Interp &pinterp, torch::Tensor wlr) {
   if (il > iu) return;
 
-  auto outl = wlr[Index::IRT].slice(dim, il - 1, iu + 1);
-  auto outr = wlr[Index::ILT].slice(dim, il, iu + 2);
+  auto outl = wlr[IRT].slice(dim, il - 1, iu + 1);
+  auto outr = wlr[ILT].slice(dim, il, iu + 2);
 
   pinterp->forward(w, dim, outl, outr);
+
+  // populate dummy regions
+  wlr[IRT].slice(dim, 0, il) = wlr[IRT].select(dim, il).unsqueeze(dim);
+  wlr[IRT].slice(dim, iu + 1) = wlr[IRT].select(dim, iu).unsqueeze(dim);
+
+  wlr[ILT].slice(dim, 0, il) = wlr[ILT].select(dim, il).unsqueeze(dim);
+  wlr[ILT].slice(dim, iu + 1) = wlr[ILT].select(dim, iu).unsqueeze(dim);
 }
 
 ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
@@ -97,25 +113,25 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   _apply_inplace(dim, il, iu, w_, pinterp2, wlr_);*/
 
   // density
-  _apply_inplace(dim, il, iu, w.narrow(0, Index::IDN, 1), pinterp1,
-                 result.narrow(1, Index::IDN, 1));
+  _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
+                 result.narrow(1, IDN, 1));
   if (options.limiter()) {
-    result.select(1, Index::IDN).clamp_min_(options.density_floor());
+    result.select(1, IDN).clamp_min_(options.density_floor());
   }
 
   // velocity/pressure
-  _apply_inplace(dim, il, iu, w.narrow(0, Index::IVX, 4), pinterp2,
-                 result.narrow(1, Index::IVX, 4));
+  _apply_inplace(dim, il, iu, w.narrow(0, IVX, 4), pinterp2,
+                 result.narrow(1, IVX, 4));
   if (options.limiter()) {
-    result.select(1, Index::IPR).clamp_min_(options.pressure_floor());
+    result.select(1, IPR).clamp_min_(options.pressure_floor());
   }
 
   // others
   int ny = w.size(0) - 5;
-  _apply_inplace(dim, il, iu, w.narrow(0, Index::ICY, ny), pinterp1,
-                 result.narrow(1, Index::ICY, ny));
+  _apply_inplace(dim, il, iu, w.narrow(0, ICY, ny), pinterp1,
+                 result.narrow(1, ICY, ny));
   if (options.limiter()) {
-    result.narrow(1, Index::ICY, ny).clamp_min_(0.);
+    result.narrow(1, ICY, ny).clamp_min_(0.);
   }
 
   return result;

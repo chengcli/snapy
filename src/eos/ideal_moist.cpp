@@ -95,6 +95,9 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
   } else if (ab == "U->K") {
     _cons2ke(args[0], _ke);
     return _ke;
+  } else if (ab == "UT->I") {
+    _temp2intEng(args[0], args[1], _ie);
+    return _ie;
   } else if (ab == "W->A") {
     auto gammad =
         (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
@@ -199,6 +202,7 @@ void IdealMoistImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
 
 void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
+
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
 
@@ -252,6 +256,15 @@ void IdealMoistImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
   auto mom = cons.narrow(0, Index::IVX, 3).clone();
   pcoord->vec_raise_(mom);
   out.set_(0.5 * (cons.narrow(0, Index::IVX, 3) * mom).sum(0) / rho);
+}
+
+void IdealMoistImpl::_temp2intEng(torch::Tensor cons, torch::Tensor temp,
+                                  torch::Tensor &out) {
+  auto ivol = get_buffer("thermo.V");
+  /*ivol[IDN] = cons[IDN];
+  int ny = ivol.size(-1) - 1;
+  ivol.narrow(-1, 1, ny) = cons.narrow(0, ICY, ny).permute({1, 2, 3, 0});
+  out.set_(pthermo->compute("VT->U", {ivol, temp}));*/
 }
 
 torch::Tensor IdealMoistImpl::_feps(torch::Tensor const &yfrac) const {
