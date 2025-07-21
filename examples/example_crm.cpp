@@ -201,6 +201,7 @@ int main(int argc, char** argv) {
 
     current_time += dt;
     if ((count + 1) % 10 == 0) {
+      w = peos->compute("U->W", {u});
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);

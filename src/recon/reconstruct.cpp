@@ -52,11 +52,11 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
   pinterp->forward(w, dim, outl, outr);
 
   // populate dummy regions
-  wlr[IRT].slice(dim, 0, il - 1) = wlr[IRT].select(dim, il - 1).unsqueeze(dim);
+  wlr[IRT].slice(dim, 0, il) = wlr[IRT].select(dim, il).unsqueeze(dim);
   wlr[IRT].slice(dim, iu + 1) = wlr[IRT].select(dim, iu).unsqueeze(dim);
 
   wlr[ILT].slice(dim, 0, il) = wlr[ILT].select(dim, il).unsqueeze(dim);
-  wlr[ILT].slice(dim, iu + 2) = wlr[ILT].select(dim, iu + 1).unsqueeze(dim);
+  wlr[ILT].slice(dim, iu + 1) = wlr[ILT].select(dim, iu).unsqueeze(dim);
 }
 
 ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)

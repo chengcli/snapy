@@ -74,14 +74,17 @@ torch::Tensor MoistMixtureImpl::compute(
   } else if (ab == "U->K") {
     _cons2ke(args[0], _ke);
     return _ke;
+  } else if (ab == "UT->I") {
+    _temp2intEng(args[0], args[1], _ie);
+    return _ie;
   } else if (ab == "W->A") {
-    auto ivol = pthermo->named_buffers()["V"];
-    auto temp = pthermo->named_buffers()["T"];
+    auto ivol = get_buffer("thermo.V");
+    auto temp = get_buffer("thermo.T");
     _adiabatic_index(ivol, temp, _gamma);
     return _gamma;
   } else if (ab == "WA->L") {
-    auto ivol = pthermo->named_buffers()["V"];
-    auto temp = pthermo->named_buffers()["T"];
+    auto ivol = get_buffer("thermo.V");
+    auto temp = get_buffer("thermo.T");
     _isothermal_sound_speed(ivol, temp, args[0][IDN], _ct);
     torch::mul_out(_cs, args[1].sqrt(), _ct);
     return _cs;
@@ -203,6 +206,15 @@ void MoistMixtureImpl::_cons2ke(torch::Tensor cons, torch::Tensor &out) {
   auto mom = cons.narrow(0, IVX, 3).clone();
   pcoord->vec_raise_(mom);
   out.set_(0.5 * (cons.narrow(0, IVX, 3) * mom).sum(0) / rho);
+}
+
+void MoistMixtureImpl::_temp2intEng(torch::Tensor cons, torch::Tensor temp,
+                                    torch::Tensor &out) {
+  auto ivol = get_buffer("thermo.V");
+  ivol.select(-1, IDN) = cons[IDN];
+  int ny = ivol.size(-1) - 1;
+  ivol.narrow(-1, 1, ny) = cons.narrow(0, ICY, ny).permute({1, 2, 3, 0});
+  out.set_(pthermo->compute("VT->U", {ivol, temp}));
 }
 
 void MoistMixtureImpl::_adiabatic_index(torch::Tensor ivol, torch::Tensor temp,

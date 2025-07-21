@@ -40,9 +40,6 @@ struct ImplicitOptions {
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
  public:
-  //! cache
-  torch::Tensor wroe, groe, croe;
-
   //! options with which this `ImplicitHydro` was constructed
   ImplicitOptions options;
 

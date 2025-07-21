@@ -80,6 +80,14 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
    */
   void _cons2ke(torch::Tensor cons, torch::Tensor& out);
 
+  //! \brief Convert temperature to kinetic energy.
+  /*
+   * \param[in] cons    conserved variables
+   * \param[in] temp    temperature
+   * \param[out] out    internal energy
+   */
+  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
+
   //! \brief Inverse of the mean molecular weight
   /*!
    *! Eq.16 in Li2019
