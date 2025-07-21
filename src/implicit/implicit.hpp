@@ -80,7 +80,7 @@ class ImplicitCorrectionImpl
 
   //! corrector for the implicit hydro
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
-                        torch::TensorList wlr3, double dt);
+                        double dt);
 };
 TORCH_MODULE(ImplicitCorrection);
 

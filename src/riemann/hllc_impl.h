@@ -17,13 +17,6 @@ template <typename T>
 void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
                               T gammar, T cl, T cr, int dim, int ny,
                               int stride) {
-  constexpr int ICY = Index::ICY;
-  constexpr int IDN = Index::IDN;
-  constexpr int IPR = Index::IPR;
-  constexpr int IVX = Index::IVX;
-  constexpr int IVY = Index::IVY;
-  constexpr int IVZ = Index::IVZ;
-
   auto TINY_NUMBER = 1.0e-10;
 
   auto ivx = IPR - dim;
@@ -81,10 +74,16 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
   vxl = WL(ivx) - bm;
   vxr = WR(ivx) - bp;
 
+  T rdl = 1., rdr = 1.;
+  for (int n = 0; n < ny; ++n) {
+    rdl -= WL(ICY + n);
+    rdr -= WR(ICY + n);
+  }
+
   T fl[ICY], fr[ICY];
 
-  fl[IDN] = WL(IDN) * vxl;
-  fr[IDN] = WR(IDN) * vxr;
+  fl[IDN] = WL(IDN) * vxl * rdl;
+  fr[IDN] = WR(IDN) * vxr * rdr;
 
   fl[ivx] = WL(IDN) * WL(ivx) * vxl + WL(IPR);
   fr[ivx] = WR(IDN) * WR(ivx) * vxr + WR(IPR);
@@ -120,6 +119,12 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
   FLX(ivy) = sl * fl[ivy] + sr * fr[ivy];
   FLX(ivz) = sl * fl[ivz] + sr * fr[ivz];
   FLX(IPR) = sl * fl[IPR] + sr * fr[IPR] + sm * cp * am;
+
+  for (int n = 0; n < ny; ++n) {
+    auto fln = WL(IDN) * WL(ICY + n) * vxl;
+    auto frn = WR(IDN) * WR(ICY + n) * vxr;
+    FLX(ICY + n) = sl * fln + sr * frn;
+  }
 }
 
 }  // namespace snap

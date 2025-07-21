@@ -226,7 +226,6 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   std::chrono::high_resolution_clock::time_point time2;
-  torch::Tensor wlr1, wlr2, wlr3;
 
   if (u.size(DIM1) > 1) {
     auto wp = pproj->forward(w, pcoord->dx1f);
@@ -237,7 +236,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2a - time1).count();
 
     pproj->restore_inplace(wtmp);
-    wlr1 = pib->forward(wtmp, DIM1, solid);
+    auto wlr1 = pib->forward(wtmp, DIM1, solid);
 
     if (!options.disable_dynamics()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
@@ -259,7 +258,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR2"] +=
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
-    wlr2 = pib->forward(wtmp, DIM2, solid);
+    auto wlr2 = pib->forward(wtmp, DIM2, solid);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
     }
@@ -277,7 +276,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR3"] +=
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
-    wlr3 = pib->forward(wtmp, DIM3, solid);
+    auto wlr3 = pib->forward(wtmp, DIM3, solid);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
     }
@@ -304,7 +303,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
 
   //// ------------ (7) Perform implicit correction ------------ ////
   auto gamma = peos->get_buffer("A");
-  _imp.set_(pimp->forward(du, w, gamma, {wlr3, wlr2, wlr1}, dt));
+  _imp.set_(pimp->forward(du, w, gamma, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
   timer["U->M"] +=
