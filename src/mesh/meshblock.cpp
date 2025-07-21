@@ -245,11 +245,11 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   // -------- (6) saturation adjustment --------
-  phydro->peos->apply_conserved_limiter_(hydro_u);
-
   if (stage == pintg->stages.size() - 1 &&
       (phydro->options.eos().type() == "ideal-moist" ||
        phydro->options.eos().type() == "moist-mixture")) {
+    phydro->peos->apply_conserved_limiter_(hydro_u);
+
     auto ke = phydro->peos->compute("U->K", {hydro_u});
     auto rho = phydro->peos->get_buffer("thermo.D");
     auto ie = hydro_u[Index::IPR] - ke;
