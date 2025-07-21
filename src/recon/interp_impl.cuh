@@ -173,7 +173,9 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
                      : 1.0;
 
     if (vscale != 0.0) {
-      for (int k = 0; k < 5; ++k) phi[k] = sinp[i + k];
+      for (int k = 0; k < 5; ++k) {
+        phi[k] = sinp[i + k] / vscale;
+      }
     } else {
       OUT(j, id) = 0.0;
       continue;
