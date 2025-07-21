@@ -27,7 +27,12 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   }
 
   //// -------- Vertical direction --------- ////
-  auto [a, b, c, corr] = pvic->forward(w, gamma, wlr3[2], 3);
+  auto vec = du.sizes().vec();
+  vec.insert(vec.begin(), 2);
+  auto wlr = torch::empty(vec, w.options());
+  wlr[ILT] = w;
+  wlr[IRT] = w.roll(-1, 3);
+  auto [a, b, c, corr] = pvic->forward(w, gamma, wlr, 3);
 
   auto delta = torch::zeros_like(corr);
 
