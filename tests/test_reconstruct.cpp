@@ -38,7 +38,7 @@ TEST_P(DeviceTest, test_small) {
 
   auto op =
       ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
-  // std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
+  std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
 
   Reconstruct precon(op);
   precon->to(device, dtype);

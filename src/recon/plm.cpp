@@ -27,8 +27,8 @@ std::pair<torch::Tensor, torch::Tensor> PLMInterpImpl::forward(
   // auto dw2i = (dw2 <= 0).to(torch::kInt);
   // dwm = dw2i * torch::zeros_like(dwm) + (1 - dw2i) * dwm;
 
-  wl = w.narrow(dim, 1, size - 2) - 0.5 * dwm;
-  wr = w.narrow(dim, 1, size - 2) + 0.5 * dwm;
+  wl = w.narrow(dim, 0, size - 2) - 0.5 * dwm;
+  wr = w.narrow(dim, 0, size - 2) + 0.5 * dwm;
 
   return std::make_pair(wl.value(), wr.value());
 }

@@ -84,10 +84,10 @@ class DonorCellInterpImpl : public torch::nn::Cloneable<DonorCellInterpImpl>,
   using InterpImpl::forward;
 
   void left(torch::Tensor w, int dim, torch::Tensor const& out) override {
-    out.copy_(w);
+    out.copy_(w.slice(dim, 0, w.size(dim)));
   }
   void right(torch::Tensor w, int dim, torch::Tensor const& out) override {
-    out.copy_(w);
+    out.copy_(w.slice(dim, 1, w.size(dim) + 1));
   }
 };
 TORCH_MODULE(DonorCellInterp);
