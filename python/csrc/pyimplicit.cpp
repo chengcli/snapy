@@ -1,3 +1,6 @@
+// C/C++
+#include <sstream>
+
 // torch
 #include <torch/extension.h>
 #include <torch/nn/modules/container/any.h>
@@ -25,7 +28,7 @@ void bind_implicit(py::module &m) {
       .ADD_OPTION(std::string, snap::ImplicitOptions, type)
       .ADD_OPTION(double, snap::ImplicitOptions, grav)
       .ADD_OPTION(int, snap::ImplicitOptions, scheme)
-      .ADD_OPTION(snap::EquationOfStateOptions, snap::ImplicitOptions, eos);
+      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptions, coord);
 
   ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions);
   ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions);
