@@ -13,18 +13,22 @@
 namespace snap {
 
 void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, float gammad) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_gas_cons2prim_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-        auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        auto ke = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-        auto ie = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-        ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
-      }
-    });
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            auto ke = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+            auto ie = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
+            ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
+          }
+        },
+        grain_size);
   });
 }
 

@@ -13,6 +13,8 @@ namespace snap {
 
 template <int N>
 void call_poly_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_poly_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
@@ -22,14 +24,16 @@ void call_poly_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim) {
 
     auto c = coeff.data_ptr<scalar_t>();
 
-    iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-        auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2, stride_out,
-                                      nvar);
-      }
-    });
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            interp_poly_impl<scalar_t, N>(out, w, c, stride1, stride2,
+                                          stride_out, nvar);
+          }
+        },
+        grain_size);
   });
 }
 
@@ -42,6 +46,8 @@ void call_poly_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim) {
 
 void call_weno3_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
                     bool scale) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno3_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
@@ -51,13 +57,16 @@ void call_weno3_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
 
     auto c = coeff.data_ptr<scalar_t>();
 
-    iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-        auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno3_impl(out, w, c, stride1, stride2, stride_out, nvar, scale);
-      }
-    });
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            interp_weno3_impl(out, w, c, stride1, stride2, stride_out, nvar,
+                              scale);
+          }
+        },
+        grain_size);
   });
 }
 
@@ -91,6 +100,8 @@ void call_weno3_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim,
 
 void call_weno5_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
                     bool scale) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_weno5_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.input(), dim);
     int stride2 = at::native::ensure_nonempty_stride(iter.input(), 0);
@@ -100,13 +111,16 @@ void call_weno5_cpu(at::TensorIterator& iter, torch::Tensor coeff, int dim,
 
     auto c = coeff.data_ptr<scalar_t>();
 
-    iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-        auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        interp_weno5_impl(out, w, c, stride1, stride2, stride_out, nvar, scale);
-      }
-    });
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            interp_weno5_impl(out, w, c, stride1, stride2, stride_out, nvar,
+                              scale);
+          }
+        },
+        grain_size);
   });
 }
 

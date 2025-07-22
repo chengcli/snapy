@@ -4,6 +4,9 @@
 #include <memory>
 #include <mutex>
 
+// torch
+#include <torch/torch.h>
+
 // snap
 #include "command_line.hpp"
 
@@ -94,6 +97,11 @@ CommandLine* CommandLine::ParseArguments(int argc, char** argv) {
           // ShowConfig();
           return mycli_;
           break;
+        case 'p':
+          mycli_->nthreads = std::stoi(argv[++i]);
+          at::set_num_threads(mycli_->nthreads);
+          at::set_num_interop_threads(mycli_->nthreads);
+          break;
         case 'h':
         default:
           std::cout << "Usage: " << argv[0]
@@ -104,6 +112,7 @@ CommandLine* CommandLine::ParseArguments(int argc, char** argv) {
           std::cout << "  -d <directory>  specify run dir [current dir]\n";
           std::cout << "  -c              show configuration and quit\n";
           std::cout << "  -t hh:mm:ss     wall time limit for final output\n";
+          std::cout << "  -p <nthreads>   set number of threads to use\n";
           std::cout << "  -h              this help\n";
           // ShowConfig();
           return mycli_;

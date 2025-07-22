@@ -5,6 +5,7 @@
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
+#include <torch/torch.h>
 
 // snap
 #include "flux_decomposition_impl.h"
@@ -14,82 +15,99 @@
 namespace snap {
 
 void call_roe_average_cpu(at::TensorIterator &iter) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_roe_average_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto wroe = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
-        auto wl = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
-        auto wr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
-        auto gamma = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
-        roe_average_impl(wroe, wl, wr, *gamma, stride);
-      }
-    });
+    iter.for_each(
+        [&](char **data, const int64_t *strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto wroe = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
+            auto wl = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
+            auto wr = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
+            auto gamma = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
+            roe_average_impl(wroe, wl, wr, *gamma, stride);
+          }
+        },
+        grain_size);
   });
 }
 
 void call_eigen_system_cpu(at::TensorIterator &iter, int dim) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_eigen_system_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
 
-    iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto Rmat = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
-        auto Rimat = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
-        auto EV = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
-        auto wroe = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
-        auto gamma = reinterpret_cast<scalar_t *>(data[4] + i * strides[4]);
-        eigen_system_impl(Rmat, Rimat, EV, wroe, *gamma, dim, stride);
-      }
-    });
+    iter.for_each(
+        [&](char **data, const int64_t *strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto Rmat = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
+            auto Rimat = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
+            auto EV = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
+            auto wroe = reinterpret_cast<scalar_t *>(data[3] + i * strides[3]);
+            auto gamma = reinterpret_cast<scalar_t *>(data[4] + i * strides[4]);
+            eigen_system_impl(Rmat, Rimat, EV, wroe, *gamma, dim, stride);
+          }
+        },
+        grain_size);
   });
 }
 
 void call_flux_jacobian_cpu(at::TensorIterator &iter, int dim) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_flux_jacobian_cpu", [&] {
     auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
 
-    iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto dfdq = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
-        auto wroe = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
-        auto gamma = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
-        flux_jacobian_impl(dfdq, wroe, *gamma, dim, stride);
-      }
-    });
+    iter.for_each(
+        [&](char **data, const int64_t *strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto dfdq = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
+            auto wroe = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
+            auto gamma = reinterpret_cast<scalar_t *>(data[2] + i * strides[2]);
+            flux_jacobian_impl(dfdq, wroe, *gamma, dim, stride);
+          }
+        },
+        grain_size);
   });
 }
 
 template <int N>
 void vic_solve_cpu(at::TensorIterator &iter, double dt, int il, int iu) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
 
-    iter.for_each([&](char **data, const int64_t *strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto du = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
-        auto w = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
-        auto a =
-            reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
+    iter.for_each(
+        [&](char **data, const int64_t *strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto du = reinterpret_cast<scalar_t *>(data[0] + i * strides[0]);
+            auto w = reinterpret_cast<scalar_t *>(data[1] + i * strides[1]);
+            auto a = reinterpret_cast<
+                Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
                 data[2] + i * strides[2]);
-        auto b =
-            reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
+            auto b = reinterpret_cast<
+                Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
                 data[3] + i * strides[3]);
-        auto c =
-            reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
+            auto c = reinterpret_cast<
+                Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor> *>(
                 data[4] + i * strides[4]);
-        auto delta = reinterpret_cast<Eigen::Vector<scalar_t, N> *>(
-            data[5] + i * strides[5]);
-        auto corr = reinterpret_cast<Eigen::Vector<scalar_t, N> *>(
-            data[6] + i * strides[6]);
+            auto delta = reinterpret_cast<Eigen::Vector<scalar_t, N> *>(
+                data[5] + i * strides[5]);
+            auto corr = reinterpret_cast<Eigen::Vector<scalar_t, N> *>(
+                data[6] + i * strides[6]);
 
-        forward_sweep_impl(a, b, c, delta, corr, du, dt, ny, stride, il, iu);
-        backward_substitution_impl(a, delta, w, du, ny, stride, il, iu);
-      }
-    });
+            forward_sweep_impl(a, b, c, delta, corr, du, dt, ny, stride, il,
+                               iu);
+            backward_substitution_impl(a, delta, w, du, ny, stride, il, iu);
+          }
+        },
+        grain_size);
   });
 }
 

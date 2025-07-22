@@ -21,3 +21,6 @@ example.speos
 
 # dist
 dist/
+
+# data
+data/
