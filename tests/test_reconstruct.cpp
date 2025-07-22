@@ -26,6 +26,46 @@ horizontal: {type: weno5, scale: false, shock: false}
 using namespace snap;
 using namespace torch::indexing;
 
+TEST_P(DeviceTest, test_dc) {
+  int nhydro = 1;
+  int nc3 = 1;
+  int nc2 = 1;
+  int nc1 = 10;
+  auto w =
+      torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  auto op = ReconstructOptions();
+  op.interp().type("dc");
+
+  Reconstruct precon(op);
+  precon->to(device, dtype);
+
+  std::cout << "w = " << w << std::endl;
+  auto result = precon->forward(w, DIM1);
+  std::cout << "wl = " << result[0] << std::endl;
+  std::cout << "wr = " << result[1] << std::endl;
+}
+
+TEST_P(DeviceTest, test_plm) {
+  int nhydro = 1;
+  int nc3 = 1;
+  int nc2 = 1;
+  int nc1 = 10;
+  auto w =
+      torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  auto op = ReconstructOptions();
+  op.interp().type("plm");
+
+  Reconstruct precon(op);
+  precon->to(device, dtype);
+
+  std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
+
+  std::cout << "w = " << w << std::endl;
+  auto result = precon->forward(w, DIM1);
+  std::cout << "wl = " << result[0] << std::endl;
+  std::cout << "wr = " << result[1] << std::endl;
+}
+
 TEST_P(DeviceTest, test_small) {
   int nhydro = 5;
   int nghost = 3;
@@ -38,7 +78,7 @@ TEST_P(DeviceTest, test_small) {
 
   auto op =
       ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
-  // std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
+  std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
 
   Reconstruct precon(op);
   precon->to(device, dtype);

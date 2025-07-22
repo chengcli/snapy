@@ -17,6 +17,9 @@ std::pair<torch::Tensor, torch::Tensor> PLMInterpImpl::forward(
   auto vec = w.sizes().vec();
   vec[dim] -= stencils() - 1;  // reduce size by stencils - 1
 
+  auto wlv = wl.value_or(torch::empty(vec, w.options()));
+  auto wrv = wr.value_or(torch::empty(vec, w.options()));
+
   auto size = w.size(dim);
   auto dw = w.narrow(dim, 1, size - 1) - w.narrow(dim, 0, size - 1);
   auto dw2 = dw.narrow(dim, 0, size - 2) * dw.narrow(dim, 1, size - 2);
@@ -27,9 +30,9 @@ std::pair<torch::Tensor, torch::Tensor> PLMInterpImpl::forward(
   // auto dw2i = (dw2 <= 0).to(torch::kInt);
   // dwm = dw2i * torch::zeros_like(dwm) + (1 - dw2i) * dwm;
 
-  wl = w.narrow(dim, 1, size - 2) - 0.5 * dwm;
-  wr = w.narrow(dim, 1, size - 2) + 0.5 * dwm;
+  wlv.copy_(w.narrow(dim, 1, size - 2) - 0.5 * dwm);
+  wrv.copy_(w.narrow(dim, 1, size - 2) + 0.5 * dwm);
 
-  return std::make_pair(wl.value(), wr.value());
+  return std::make_pair(wlv, wrv);
 }
 }  // namespace snap
