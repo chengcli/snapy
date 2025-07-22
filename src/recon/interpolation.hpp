@@ -87,7 +87,7 @@ class DonorCellInterpImpl : public torch::nn::Cloneable<DonorCellInterpImpl>,
     out.copy_(w.slice(dim, 0, w.size(dim)));
   }
   void right(torch::Tensor w, int dim, torch::Tensor const& out) override {
-    out.copy_(w.slice(dim, 1, w.size(dim) + 1));
+    out.copy_(w.slice(dim, 0, w.size(dim) - 1));
   }
 };
 TORCH_MODULE(DonorCellInterp);
