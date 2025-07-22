@@ -108,4 +108,81 @@ torch::Tensor pull_neighbors3(const torch::Tensor& input) {
   return X;
 }
 
+// Batched 3D: fix negatives with local, value‑weighted redistribution,
+// including the center in the 3×3×3 mean, zero‑padding, per‑volume.
+torch::Tensor pull_neighbors4(const torch::Tensor& input) {
+  TORCH_CHECK(input.dim() == 4, "Expected 4D input [B,D,H,W]");
+  TORCH_CHECK(input.is_floating_point(), "Must be float/double tensor");
+
+  // singular case
+  if (input.size(0) <= 0) {
+    return input;  // return empty tensor
+  }
+
+  // Work in a [B,1,D,H,W] shape so we can use conv3d
+  auto Xc = input.unsqueeze(1).clone();  // [B,1,D,H,W]
+  auto opts = input.options();
+
+  // 3×3×3 mean‑kernel (all ones): sum = 27
+  auto meanK = torch::ones({1, 1, 3, 3, 3}, opts);
+  const float meanNorm = 27.0f;
+
+  // 3×3×3 dist‑kernel (ones but zero at center): sum = 26
+  auto distK = torch::ones({1, 1, 3, 3, 3}, opts);
+  distK[0][0][1][1][1] = 0.0f;
+
+  // zero‑pad of 1 on all six faces
+  auto pad3d = torch::nn::ZeroPad3d(torch::nn::ZeroPad3dOptions(1.));
+
+  const double eps = 1e-10;
+
+  // iterate until no negatives remain anywhere in the batch
+  while ((Xc < 0).any().item<bool>()) {
+    // 1) compute 3×3×3 mean including center
+    auto Xp = pad3d->forward(Xc);  // [B,1,D+2,H+2,W+2]
+    auto sum27 = at::conv3d(Xp, meanK,
+                            /*bias=*/c10::nullopt,
+                            /*stride=*/{1, 1, 1},
+                            /*padding=*/{0, 0, 0},
+                            /*dilation=*/{1, 1, 1},
+                            /*groups=*/1);  // [B,1,D,H,W]
+    auto m27 = sum27 / meanNorm;            // [B,1,D,H,W]
+
+    // 2) excess only at originally negative voxels
+    auto zero = torch::zeros_like(Xc);
+    auto D = torch::where(Xc < 0, m27 - Xc, zero);  // [B,1,D,H,W]
+
+    // 3) fill negatives
+    auto F = Xc + D;  // now ≥0 everywhere
+
+    // 4) sum of 26 neighbors for weighting
+    auto Fp = pad3d->forward(F);  // [B,1,D+2,H+2,W+2]
+    auto nsum = at::conv3d(Fp, distK,
+                           /*bias=*/c10::nullopt,
+                           /*stride=*/{1, 1, 1},
+                           /*padding=*/{0, 0, 0},
+                           /*dilation=*/{1, 1, 1},
+                           /*groups=*/1)
+                    .squeeze(1);    // [B,D,H,W]
+    auto inv = 1.0 / (nsum + eps);  // [B,D,H,W]
+
+    // 5) build pull‑map: conv3d of (D * inv) over same dist‑kernel
+    //    note: expand inv back into channel dim
+    auto Dw = (D.squeeze(1) * inv).unsqueeze(1);  // [B,1,D,H,W]
+    auto Dp = pad3d->forward(Dw);
+    auto pull = at::conv3d(Dp, distK,
+                           /*bias=*/c10::nullopt,
+                           /*stride=*/{1, 1, 1},
+                           /*padding=*/{0, 0, 0},
+                           /*dilation=*/{1, 1, 1},
+                           /*groups=*/1);  // [B,1,D,H,W]
+
+    // 6) subtract weighted pull from filled
+    Xc = F - (F * pull);  // [B,1,D,H,W]
+  }
+
+  // drop the channel dim and return shape [B,D,H,W]
+  return Xc.squeeze(1);
+}
+
 }  // namespace snap

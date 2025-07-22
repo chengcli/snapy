@@ -49,8 +49,11 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   auto interior = get_interior(cons.sizes(), nghost);
   int nvapor = options.thermo().vapor_ids().size() - 1;
   int ncloud = options.thermo().cloud_ids().size();
-  for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
-    cons.index(interior)[i] = pull_neighbors3(cons.index(interior)[i]);
+  // for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
+  //   cons.index(interior)[i] = pull_neighbors3(cons.index(interior)[i]);
+  //  batched
+  cons.index(interior).narrow(0, Index::ICY, nvapor) =
+      pull_neighbors4(cons.index(interior).narrow(0, Index::ICY, nvapor));
   cons.narrow(0, Index::ICY + nvapor, ncloud).clamp_min_(0.);
 
   auto mom = cons.narrow(0, Index::IVX, 3).clone();
@@ -72,8 +75,11 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   auto interior = get_interior(prim.sizes(), nghost);
   int nvapor = options.thermo().vapor_ids().size() - 1;
   int ncloud = options.thermo().cloud_ids().size();
-  for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
-    prim.index(interior)[i] = pull_neighbors3(prim.index(interior)[i]);
+  // for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
+  //   prim.index(interior)[i] = pull_neighbors3(prim.index(interior)[i]);
+  //  batched
+  prim.index(interior).narrow(0, Index::ICY, nvapor) =
+      pull_neighbors4(prim.index(interior).narrow(0, Index::ICY, nvapor));
   prim.narrow(0, Index::ICY + nvapor, ncloud).clamp_min_(0.);
 
   prim[Index::IPR].clamp_min_(options.pressure_floor());
