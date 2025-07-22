@@ -11,11 +11,15 @@ namespace snap {
 
 void call_average3_cpu(at::TensorIterator& iter, double w1, double w2,
                        double w3) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_averag3_cpu", [&] {
     at::native::cpu_kernel(
-        iter, [&](scalar_t in1, scalar_t in2, scalar_t in3) -> scalar_t {
+        iter,
+        [&](scalar_t in1, scalar_t in2, scalar_t in3) -> scalar_t {
           return w1 * in1 + w2 * in2 + w3 * in3;
-        });
+        },
+        grain_size);
   });
 }
 

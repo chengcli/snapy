@@ -8,9 +8,9 @@ set(CMAKE_CUDA_FLAGS
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   set(CMAKE_CXX_FLAGS_RELEASE
-      "-g -O3 -fsanitize=address -funroll-loops -funroll-all-loops -fstrict-aliasing")
+      "-O3 -funroll-loops -funroll-all-loops -fstrict-aliasing")
   set(CMAKE_C_FLAGS_RELEASE
-      "-g -O3 -fsanitize=address -funroll-loops -funroll-all-loops -fstrict-aliasing")
+      "-O3 -funroll-loops -funroll-all-loops -fstrict-aliasing")
 
   set(CMAKE_CXX_FLAGS_DEBUG "-g3 -fsanitize=address,undefined")
   set(CMAKE_C_FLAGS_DEBUG "-g3 -fsanitize=address,undefined")
@@ -19,8 +19,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -fsanitize=address -funroll-loops -fstrict-aliasing")
-  set(CMAKE_C_FLAGS_RELEASE "-g -O3 -fsanitize=address -funroll-loops -fstrict-aliasing")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -funroll-loops -fstrict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O3 -funroll-loops -fstrict-aliasing")
 
   set(CMAKE_CXX_FLAGS_DEBUG "-g3 -fsanitize=address,undefined")
   set(CMAKE_C_FLAGS_DEBUG "-g3 -fsanitize=address,undefined")

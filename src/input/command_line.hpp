@@ -16,6 +16,7 @@ class CommandLine {
   int mesh_flag;
   int wtlim;
   int argc;
+  int nthreads;
   char **argv;
 
   static CommandLine *ParseArguments(int argc, char **argv);

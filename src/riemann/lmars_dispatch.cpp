@@ -16,31 +16,30 @@
 namespace snap {
 
 void call_lmars_cpu(at::TensorIterator& iter, int dim) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_lmars_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
 
-    iter.for_each([&](char** data, const int64_t* strides, int64_t n) {
-      for (int i = 0; i < n; i++) {
-        auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-        auto wl = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-        auto wr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-        auto elr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-        auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
-        lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr, *(glr + stride),
-                   dim, ny, stride);
-      }
-    });
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto wl = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            auto wr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+            auto elr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
+            auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
+            lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr,
+                       *(glr + stride), dim, ny, stride);
+          }
+        },
+        grain_size);
   });
 }
 
 void call_lmars_mps(at::TensorIterator& iter, int dim) {
-  using Index::ICY;
-  using Index::IDN;
-  using Index::IPR;
-  using Index::IVX;
-
   auto flx = iter.output(0);
   auto wl = iter.input(0);
   auto wr = iter.input(1);
