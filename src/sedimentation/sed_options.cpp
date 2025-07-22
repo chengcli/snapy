@@ -42,6 +42,10 @@ SedVelOptions SedVelOptions::from_yaml(YAML::Node const& root) {
   for (auto& name : particle_names) {
     auto it = std::find(kintera::species_names.begin(),
                         kintera::species_names.end(), name);
+    if (it == kintera::species_names.end()) {
+      TORCH_CHECK(false, "Sedimentation particle '", name,
+                  "' is not a valid species.");
+    }
     int id = it - kintera::species_names.begin();
     op.particle_ids().push_back(id);
   }
@@ -51,28 +55,29 @@ SedVelOptions SedVelOptions::from_yaml(YAML::Node const& root) {
   op.const_vsed().resize(op.particle_ids().size(), 0.);
 
   // read particle radius
+  auto species = op.species();
   for (auto r : config["radius"]) {
     auto name = r.first.as<std::string>();
-    auto it = std::find(op.species().begin(), op.species().end(), name);
+    auto it = std::find(species.begin(), species.end(), name);
     auto radius = r.second.as<double>();
     TORCH_CHECK(radius > 0., "Sedimentation radius must be positive.");
-    op.radius()[it - op.species().begin()] = radius;
+    op.radius()[it - species.begin()] = radius;
   }
 
   // read particle density
   for (auto r : config["density"]) {
     auto name = r.first.as<std::string>();
-    auto it = std::find(op.species().begin(), op.species().end(), name);
+    auto it = std::find(species.begin(), species.end(), name);
     auto density = r.second.as<double>();
     TORCH_CHECK(density > 0., "Sedimentation density must be positive.");
-    op.density()[it - op.species().begin()] = density;
+    op.density()[it - species.begin()] = density;
   }
 
   // read particle constant sedimentation velocity
   for (auto r : config["const-vsed"]) {
     auto name = r.first.as<std::string>();
-    auto it = std::find(op.species().begin(), op.species().end(), name);
-    op.const_vsed()[it - op.species().begin()] = r.second.as<double>();
+    auto it = std::find(species.begin(), species.end(), name);
+    op.const_vsed()[it - species.begin()] = r.second.as<double>();
   }
 
   op.a_diameter() = config["a-diameter"].as<double>(2.827e-10);

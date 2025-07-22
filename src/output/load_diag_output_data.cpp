@@ -94,7 +94,7 @@ void OutputType::loadDiagOutputData(MeshBlock pmb) {
 
     // implicit corrrection
     if (pmb->phydro->options.imp().scheme() > 0) {
-      auto const& du = pmb->phydro->named_buffers()["M"];
+      auto du = pmb->phydro->named_buffers()["M"];
 
       // density
       pod = new OutputData;
