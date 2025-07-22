@@ -232,7 +232,7 @@ std::string get_hydro_names(MeshBlock pmb, std::string prepend) {
 
   std::string result = prepend + species[1];
   for (int i = 2; i < species.size(); ++i) {
-    result += ";" + species[i];
+    result += ";" + prepend + species[i];
   }
 
   return result;

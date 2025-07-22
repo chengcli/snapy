@@ -62,8 +62,9 @@ dynamics:
     type: moist-mixture
     density-floor:  1.e-10
     pressure-floor: 1.e-10
+    tracer-floor: 1.e-10
     limiter: true
-    max-iter: 5
+    max-iter: 10
     ftol: 1.e-6
 
   vertical-projection:
@@ -75,7 +76,7 @@ dynamics:
     horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
-    type: lmars
+    type: hllc
 
 boundary-condition:
   internal:
