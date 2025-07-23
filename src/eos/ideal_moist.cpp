@@ -44,14 +44,13 @@ void IdealMoistImpl::reset() {
 
   _ie = register_buffer("I", torch::empty({nc3, nc2, nc1}, torch::kFloat64));
 
-  int ncloud = pthermo->options.cloud_ids().size();
-  _ce = register_buffer("E",
-                        torch::empty({ncloud, nc3, nc2, nc1}, torch::kFloat64));
-  _rhoc = register_buffer(
-      "C", torch::empty({ncloud, nc3, nc2, nc1}, torch::kFloat64));
-
   int ny = pthermo->options.vapor_ids().size() +
            pthermo->options.cloud_ids().size() - 1;
+
+  _ce =
+      register_buffer("E", torch::empty({ny, nc3, nc2, nc1}, torch::kFloat64));
+  _rhoc =
+      register_buffer("C", torch::empty({ny, nc3, nc2, nc1}, torch::kFloat64));
 
   inv_mu_ratio_m1 =
       register_buffer("inv_mu_ratio_m1", torch::zeros({ny}, torch::kFloat64));
@@ -90,7 +89,7 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
     _prim2temp(args[0], temp);
     return temp;
   } else if (ab == "W->E") {
-    _prim2cloudEng(args[0], _ce);
+    _prim2speciesEng(args[0], _ce);
     return _ce;
   } else if (ab == "U->W") {
     _cons2prim(args[0], _prim);
@@ -175,10 +174,9 @@ void IdealMoistImpl::_prim2temp(torch::Tensor prim, torch::Tensor &out) {
   out.set_(prim[IPR] / (prim[IDN] * Rd * _feps(yfrac)));
 }
 
-void IdealMoistImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
-  int nvapor = pthermo->options.vapor_ids().size() - 1;
-  int ncloud = pthermo->options.cloud_ids().size();
-  int ny = nvapor + ncloud;
+void IdealMoistImpl::_prim2speciesEng(torch::Tensor prim, torch::Tensor &out) {
+  int ny = pthermo->options.vapor_ids().size() +
+           pthermo->options.cloud_ids().size() - 1;
 
   auto mud = kintera::species_weights[0];
   auto Rd = kintera::constants::Rgas / mud;
@@ -187,12 +185,11 @@ void IdealMoistImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
   auto yfrac = prim.narrow(0, ICY, ny);
   auto temp = prim[IPR] / (prim[IDN] * Rd * _feps(yfrac));
 
-  _rhoc.set_(prim[IDN] * yfrac.narrow(0, nvapor, ncloud));
+  _rhoc.set_(prim[IDN] * yfrac);
 
-  auto vec = _rhoc.sizes().vec();
-  auto ie = _rhoc * (u0.narrow(0, 1, ny) + (cv_ratio_m1 + 1.) * cvd * temp)
-                        .narrow(0, nvapor, ncloud)
-                        .view(vec);
+  std::vector<int64_t> vec = {ny, 1, 1, 1};
+  auto ie = _rhoc * (u0.narrow(0, 1, ny).view(vec) +
+                     (cv_ratio_m1.view(vec) + 1.) * cvd * temp);
 
   auto vel = prim.narrow(0, IVX, 3).clone();
   pcoord->vec_lower_(vel);

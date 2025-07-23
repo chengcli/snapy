@@ -66,7 +66,7 @@ torch::Tensor MoistMixtureImpl::compute(
     _prim2temp(args[0], temp);
     return temp;
   } else if (ab == "W->E") {
-    _prim2cloudEng(args[0], _ce);
+    _prim2speciesEng(args[0], _ce);
     return _ce;
   } else if (ab == "U->W") {
     _cons2prim(args[0], _prim);
@@ -142,10 +142,10 @@ void MoistMixtureImpl::_prim2temp(torch::Tensor prim, torch::Tensor &out) {
   out.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
 }
 
-void MoistMixtureImpl::_prim2cloudEng(torch::Tensor prim, torch::Tensor &out) {
-  int nvapor = pthermo->options.vapor_ids().size() - 1;
-  int ncloud = pthermo->options.cloud_ids().size();
-  int ny = nvapor + ncloud;
+void MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim,
+                                        torch::Tensor &out) {
+  int ny = pthermo->options.vapor_ids().size() +
+           pthermo->options.cloud_ids().size() - 1;
 
   auto yfrac = prim.narrow(0, ICY, ny);
   auto ivol = pthermo->compute("DY->V", {prim[IDN], yfrac});
