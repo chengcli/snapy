@@ -68,12 +68,12 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    */
   void _prim2temp(torch::Tensor prim, torch::Tensor& out);
 
-  //! \brief calculate cloud energy (internal + kinetic).
+  //! \brief calculate species energy (internal + kinetic).
   /*
    * \param[in] prim  primitive variables
-   * \param[out] out  individual cloud energy
+   * \param[out] out  individual species energy
    */
-  void _prim2cloudEng(torch::Tensor prim, torch::Tensor& out);
+  void _prim2speciesEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
