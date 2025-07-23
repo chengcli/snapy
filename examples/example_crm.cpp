@@ -43,6 +43,7 @@ VAPOR_FUNCTION(h2s_ideal_ddT, T) {
 int main(int argc, char** argv) {
   // read parameters
   auto cli = CommandLine::ParseArguments(argc, argv);
+  if (!cli) return 0;
 
   // input file
   auto infile = std::string(cli->input_filename);
@@ -58,8 +59,7 @@ int main(int argc, char** argv) {
 
   // initialize the block
   auto block = MeshBlock(MeshBlockOptions::from_yaml(infile));
-  std::cout << fmt::format("MeshBlock Options: {}", block->options)
-            << std::endl;
+  std::cout << fmt::format("{}", block->options) << std::endl;
 
   // useful modules
   auto phydro = block->phydro;
@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVX] += 1. * torch::rand_like(w[IVZ]);
+  w[IVX] += 1. * torch::rand_like(w[IVX]);
   w[IVY] += 1. * torch::rand_like(w[IVY]);
 
   // populate the initial condition

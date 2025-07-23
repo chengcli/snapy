@@ -7,9 +7,9 @@ class CommandLine {
   CommandLine(int argc, char **argv);
 
  public:
-  char *input_filename;
-  char *restart_filename;
-  char *prundir;
+  char *input_filename = nullptr;
+  char *restart_filename = nullptr;
+  char *prundir = nullptr;
   int res_flag;
   int narg_flag;
   int iarg_flag;
