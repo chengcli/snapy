@@ -43,6 +43,8 @@ if platform.system() == 'Darwin':
     lib_dirs.extend(['/opt/homebrew/lib'])
 else:
     lib_dirs.extend(['/lib64/', '/usr/lib/x86_64-linux-gnu/'])
+nc_home = os.environ.get("NC_HOME")
+lib_dirs.append(f"{nc_home}/lib")
 
 libraries = parse_library_names(f"{current_dir}/build/lib")
 
@@ -63,15 +65,27 @@ else:
         "-Wl,-rpath,$ORIGIN/../kintera/lib",
     ]
 
-ext_module = cpp_extension.CppExtension(
-    name='snapy.snapy',
-    sources=glob.glob('python/csrc/*.cpp'),
-    include_dirs=include_dirs,
-    library_dirs=lib_dirs,
-    libraries=libraries,
-    extra_compile_args=['-Wno-attributes'],
-    extra_link_args=extra_link_args,
+if torch.cuda.is_available():
+    ext_module = cpp_extension.CUDAExtension(
+        name='snapy.snapy',
+        sources=glob.glob('python/csrc/*.cpp'),
+        include_dirs=include_dirs,
+        library_dirs=lib_dirs,
+        libraries=libraries,
+        extra_compile_args={'nvcc': ['--extended-lambda'],
+                            'cc': ["-Wno-attributes"]},
+        extra_link_args=extra_link_args,
     )
+else:
+    ext_module = cpp_extension.CppExtension(
+        name='snapy.snapy',
+        sources=glob.glob('python/csrc/*.cpp'),
+        include_dirs=include_dirs,
+        library_dirs=lib_dirs,
+        libraries=libraries,
+        extra_compile_args=['-Wno-attributes'],
+        extra_link_args=extra_link_args,
+        )
 
 setup(
     package_dir={"snapy": "python"},
