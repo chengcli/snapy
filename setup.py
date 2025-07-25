@@ -1,14 +1,13 @@
-"""Setup configuration for Python packaging."""
-# pylint: disable = deprecated-module, exec-used
+#!/usr/bin/env python
 import os
 import sys
-import sysconfig
-import platform
 import glob
+import torch
+import platform
 from pathlib import Path
 from setuptools import setup
-from setuptools.command.install import install
 from torch.utils import cpp_extension
+import sysconfig
 
 def parse_library_names(libdir):
     library_names = []
@@ -65,27 +64,15 @@ else:
         "-Wl,-rpath,$ORIGIN/../kintera/lib",
     ]
 
-if torch.cuda.is_available():
-    ext_module = cpp_extension.CUDAExtension(
-        name='snapy.snapy',
-        sources=glob.glob('python/csrc/*.cpp'),
-        include_dirs=include_dirs,
-        library_dirs=lib_dirs,
-        libraries=libraries,
-        extra_compile_args={'nvcc': ['--extended-lambda'],
-                            'cc': ["-Wno-attributes"]},
-        extra_link_args=extra_link_args,
+ext_module = cpp_extension.CppExtension(
+    name='snapy.snapy',
+    sources=glob.glob('python/csrc/*.cpp'),
+    include_dirs=include_dirs,
+    library_dirs=lib_dirs,
+    libraries=libraries,
+    extra_compile_args=['-Wno-attributes'],
+    extra_link_args=extra_link_args,
     )
-else:
-    ext_module = cpp_extension.CppExtension(
-        name='snapy.snapy',
-        sources=glob.glob('python/csrc/*.cpp'),
-        include_dirs=include_dirs,
-        library_dirs=lib_dirs,
-        libraries=libraries,
-        extra_compile_args=['-Wno-attributes'],
-        extra_link_args=extra_link_args,
-        )
 
 setup(
     package_dir={"snapy": "python"},

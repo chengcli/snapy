@@ -5,6 +5,7 @@ requires = [
   "build",
   "numpy",
   "torch",
+  "kintera",
   "ninja",
   ]
 build-backend = "setuptools.build_meta"
@@ -20,7 +21,6 @@ license = { text = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-  "torch",
   "numpy",
   "kintera>=0.8.3",
 ]
