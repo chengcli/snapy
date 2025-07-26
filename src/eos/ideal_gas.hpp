@@ -52,6 +52,14 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
    * \param[ou] out   primitive variables
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
+
+  //! \brief Convert temperature to kinetic energy.
+  /*
+   * \param[in] cons    conserved variables
+   * \param[in] temp    temperature
+   * \param[out] out    internal energy
+   */
+  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
 };
 TORCH_MODULE(IdealGas);
 

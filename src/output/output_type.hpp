@@ -25,7 +25,7 @@ struct OctTreeOptions {
 //! \brief  container for parameters read from `<output>` block in the input
 struct OutputOptions {
   ADD_ARG(int, fid) = 0;
-  ADD_ARG(float, dt) = 0.;
+  ADD_ARG(double, dt) = 0.;
   ADD_ARG(int, dcycle) = 1;
 
   ADD_ARG(bool, output_slicex1) = false;
@@ -39,9 +39,9 @@ struct OutputOptions {
   ADD_ARG(bool, include_ghost_zones) = false;
   ADD_ARG(bool, cartesian_vector) = false;
 
-  ADD_ARG(float, x1_slice) = 0.0;
-  ADD_ARG(float, x2_slice) = 0.0;
-  ADD_ARG(float, x3_slice) = 0.0;
+  ADD_ARG(double, x1_slice) = 0.0;
+  ADD_ARG(double, x2_slice) = 0.0;
+  ADD_ARG(double, x3_slice) = 0.0;
 
   ADD_ARG(std::string, block_name);
   ADD_ARG(std::string, file_basename);
@@ -126,7 +126,7 @@ class OutputType {
                                 Coordinate pco);
   bool ContainVariable(const std::string &haystack, const std::string &needle);
   // following pure virtual function must be implemented in all derived classes
-  virtual void write_output_file(MeshBlock pmb, float time,
+  virtual void write_output_file(MeshBlock pmb, double time,
                                  OctTreeOptions const &tree, bool flag) {}
   virtual void combine_blocks() {}
 
