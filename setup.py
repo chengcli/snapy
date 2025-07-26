@@ -1,14 +1,13 @@
-"""Setup configuration for Python packaging."""
-# pylint: disable = deprecated-module, exec-used
+#!/usr/bin/env python
 import os
 import sys
-import sysconfig
-import platform
 import glob
+import torch
+import platform
 from pathlib import Path
 from setuptools import setup
-from setuptools.command.install import install
 from torch.utils import cpp_extension
+import sysconfig
 
 def parse_library_names(libdir):
     library_names = []
@@ -43,6 +42,8 @@ if platform.system() == 'Darwin':
     lib_dirs.extend(['/opt/homebrew/lib'])
 else:
     lib_dirs.extend(['/lib64/', '/usr/lib/x86_64-linux-gnu/'])
+nc_home = os.environ.get("NC_HOME")
+lib_dirs.append(f"{nc_home}/lib")
 
 libraries = parse_library_names(f"{current_dir}/build/lib")
 

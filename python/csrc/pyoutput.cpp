@@ -22,7 +22,7 @@ void bind_output(py::module &m) {
              return fmt::format("OutputOptions{}", a);
            })
       .ADD_OPTION(int, snap::OutputOptions, fid)
-      .ADD_OPTION(float, snap::OutputOptions, dt)
+      .ADD_OPTION(double, snap::OutputOptions, dt)
       .ADD_OPTION(int, snap::OutputOptions, dcycle)
       .ADD_OPTION(bool, snap::OutputOptions, output_slicex1)
       .ADD_OPTION(bool, snap::OutputOptions, output_slicex2)
@@ -32,9 +32,9 @@ void bind_output(py::module &m) {
       .ADD_OPTION(bool, snap::OutputOptions, output_sumx3)
       .ADD_OPTION(bool, snap::OutputOptions, include_ghost_zones)
       .ADD_OPTION(bool, snap::OutputOptions, cartesian_vector)
-      .ADD_OPTION(float, snap::OutputOptions, x1_slice)
-      .ADD_OPTION(float, snap::OutputOptions, x2_slice)
-      .ADD_OPTION(float, snap::OutputOptions, x3_slice)
+      .ADD_OPTION(double, snap::OutputOptions, x1_slice)
+      .ADD_OPTION(double, snap::OutputOptions, x2_slice)
+      .ADD_OPTION(double, snap::OutputOptions, x3_slice)
       .ADD_OPTION(std::string, snap::OutputOptions, block_name)
       .ADD_OPTION(std::string, snap::OutputOptions, file_basename)
       .ADD_OPTION(std::string, snap::OutputOptions, variable)
@@ -65,7 +65,7 @@ void bind_output(py::module &m) {
            })
       .def(
           "write_output_file",
-          [](snap::NetcdfOutput &self, py::object block_obj, float time,
+          [](snap::NetcdfOutput &self, py::object block_obj, double time,
              int wtflag) {
             py::object cpp_module = block_obj.attr("cpp_module");
             auto pmb = cpp_module.cast<std::shared_ptr<snap::MeshBlockImpl>>();

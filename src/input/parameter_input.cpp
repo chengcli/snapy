@@ -56,6 +56,7 @@
 #include <omp.h>
 #endif
 
+// snap
 #include <snap/snap.h>
 
 #include "parameter_input.hpp"

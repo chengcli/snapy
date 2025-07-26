@@ -2,10 +2,11 @@
 requires = [
   "setuptools>=61.0.0",
   "wheel",
-  "cmake<=3.30",
+  "build",
   "numpy",
+  "torch",
   "ninja",
-  "kintera>=0.8.3",
+  "kintera>=0.8.5",
   ]
 build-backend = "setuptools.build_meta"
 
@@ -22,7 +23,6 @@ requires-python = ">=3.9"
 dependencies = [
   "numpy",
   "kintera>=0.8.3",
-  "cmake<=3.30",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

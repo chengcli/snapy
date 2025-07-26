@@ -60,6 +60,9 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
   } else if (ab == "U->W") {
     _cons2prim(args[0], _prim);
     return _prim;
+  } else if (ab == "UT->I") {
+    _temp2intEng(args[0], args[1], _ie);
+    return _ie;
   } else if (ab == "W->A") {
     auto gammad =
         (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
@@ -126,6 +129,14 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   at::native::ideal_gas_cons2prim(cons.device().type(), iter, gammad);
 
   apply_primitive_limiter_(prim);
+}
+
+void IdealGasImpl::_temp2intEng(torch::Tensor cons, torch::Tensor temp,
+                                torch::Tensor &out) {
+  auto mud = kintera::species_weights[0];
+  auto Rd = kintera::constants::Rgas / mud;
+  auto cvd = kintera::species_cref_R[0] * Rd;
+  out.set_(cons[IDN] * cvd * temp);
 }
 
 }  // namespace snap

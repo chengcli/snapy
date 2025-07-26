@@ -42,7 +42,7 @@ class HDF5Output : public OutputType {
  public:
   // Function declarations
   explicit HDF5Output(OutputOptions const& options_);
-  void write_output_file(MeshBlock pm, float time, OctTreeOptions const& tree,
+  void write_output_file(MeshBlock pm, double time, OctTreeOptions const& tree,
                          bool flag) override;
   void MakeXDMF();
 
@@ -53,7 +53,7 @@ class HDF5Output : public OutputType {
 
   // Metadata
   std::string filename;   // name of athdf file
-  float code_time;        // time in code unit for XDMF
+  double code_time;       // time in code unit for XDMF
   int num_blocks_global;  // number of MeshBlocks in simulation
   int nx1, nx2, nx3;      // sizes of MeshBlocks
   int num_datasets;       // count of datasets to output
@@ -79,7 +79,7 @@ class NetcdfOutput : public OutputType {
 
   ///  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
   ///         one MeshBlock per file
-  void write_output_file(MeshBlock pmb, float time, OctTreeOptions const& tree,
+  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
                          bool flag) override;
 
   void combine_blocks() override;
@@ -89,7 +89,7 @@ class PnetcdfOutput : public OutputType {
  public:
   explicit PnetcdfOutput(OutputOptions const& options_);
   ~PnetcdfOutput() {}
-  void write_output_file(MeshBlock pmb, float time, OctTreeOptions const& tree,
+  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
                          bool flag) override;
 };
 
@@ -97,7 +97,7 @@ class FITSOutput : public OutputType {
  public:
   explicit FITSOutput(OutputOptions const& options_);
   ~FITSOutput() {}
-  void write_output_file(MeshBlock pmb, float time, OctTreeOptions const& tree,
+  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
                          bool flag) override;
 };
 }  // namespace snap

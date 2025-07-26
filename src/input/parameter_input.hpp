@@ -6,9 +6,6 @@
 #include <ostream>  // ostream
 #include <string>   // string
 
-// torch
-#include <torch/nn/module.h>
-
 // snap
 #include <configure.h>
 

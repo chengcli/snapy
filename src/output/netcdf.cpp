@@ -32,7 +32,7 @@ namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
+void NetcdfOutput::write_output_file(MeshBlock pmb, double current_time,
                                      OctTreeOptions const &tree, bool flag) {
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();
@@ -297,7 +297,8 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, float current_time,
   size_t count2[4] = {1, (size_t)ncells1, (size_t)nfaces2, (size_t)ncells3};
   size_t count3[4] = {1, (size_t)ncells1, (size_t)ncells2, (size_t)nfaces3};
 
-  nc_put_vara_float(ifile, ivt, start, count, &current_time);
+  float timef = current_time;
+  nc_put_vara_float(ifile, ivt, start, count, &timef);
 
   for (int i = out_is; i <= out_ie; ++i)
     data[i - out_is] = phydro->pcoord->x1v[i].item<float>();
