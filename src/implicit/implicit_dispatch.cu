@@ -11,10 +11,62 @@
 // snap
 #include <snap/utils/cuda_utils.h>
 #include <snap/loops.cuh>
+#include "flux_decomposition_impl.h"
 #include "tridiag_thomas_impl.h"
 #include "implicit_dispatch.hpp"
 
 namespace snap {
+
+void call_roe_average_cuda(at::TensorIterator &iter) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_roe_average_cuda", [&] {
+    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+
+    native::gpu_kernel<4>(iter, [=] GPU_LAMBDA(
+        char * const data[4], unsigned int strides[4]) {
+          auto wroe = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
+          auto wl = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
+          auto wr = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
+          auto gamma = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
+          roe_average_impl(wroe, wl, wr, *gamma, stride);
+        });
+  });
+}
+
+void call_eigen_system_cuda(at::TensorIterator &iter, int dim) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_eigen_system_cuda", [&] {
+    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    native::gpu_kernel<5>(iter, [=] GPU_LAMBDA(
+        char * const data[5], unsigned int strides[5]) {
+          auto Rmat = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
+          auto Rimat = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
+          auto EV = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
+          auto wroe = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
+          auto gamma = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
+          eigen_system_impl(Rmat, Rimat, EV, wroe, *gamma, dim, stride);
+        });
+  });
+}
+
+void call_flux_jacobian_cuda(at::TensorIterator &iter, int dim) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_flux_jacobian_cuda", [&] {
+    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
+
+    native::gpu_kernel<3>(iter, [=] GPU_LAMBDA(
+        char * const data[3], unsigned int strides[3]) {
+          auto dfdq = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
+          auto wroe = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
+          auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
+          flux_jacobian_impl(dfdq, wroe, *gamma, dim, stride);
+        });
+  });
+}
 
 template <int N>
 void vic_solve_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
@@ -96,6 +148,10 @@ void free_eigen_cuda(char *&a, char *&b, char *&c, char *&delta, char *&corr) {
 }  // namespace snap
 
 namespace at::native {
+
+REGISTER_CUDA_DISPATCH(call_roe_average, &snap::call_roe_average_cuda);
+REGISTER_CUDA_DISPATCH(call_eigen_system, &snap::call_eigen_system_cuda);
+REGISTER_CUDA_DISPATCH(call_flux_jacobian, &snap::call_flux_jacobian_cuda);
 
 REGISTER_CUDA_DISPATCH(vic_solve3, &snap::vic_solve_cuda<3>);
 REGISTER_CUDA_DISPATCH(vic_solve5, &snap::vic_solve_cuda<5>);
