@@ -75,6 +75,7 @@ void vic_solve_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto ny = nhydro - Index::ICY;
 
     native::gpu_kernel<7>(iter, [=] GPU_LAMBDA(
                                               char* const data[7],
@@ -95,8 +96,8 @@ void vic_solve_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
       auto corr =
           reinterpret_cast<Eigen::Vector<scalar_t, N>*>(data[6] + strides[6]);
 
-      forward_sweep_impl(a, b, c, delta, corr, du, dt, nhydro, stride, il, iu);
-      backward_substitution_impl(a, delta, w, du, nhydro, stride, il, iu);
+      forward_sweep_impl(a, b, c, delta, corr, du, dt, ny, stride, il, iu);
+      backward_substitution_impl(a, delta, w, du, ny, stride, il, iu);
     });
   });
 }
