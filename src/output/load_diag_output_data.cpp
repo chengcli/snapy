@@ -21,6 +21,7 @@ void OutputType::loadDiagOutputData(MeshBlock pmb) {
   auto m = pmb->named_modules()["hydro.eos.thermo"];
   auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
   kintera::ThermoX thermo_x(thermo_y->options);
+  thermo_x->to(w.device());
 
   int ny = thermo_y->options.species().size() - 1;
   auto temp = peos->compute("W->T", {w});

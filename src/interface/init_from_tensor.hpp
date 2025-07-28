@@ -56,7 +56,8 @@ void AthenaArray<T>::initFromTensor4D(torch::Tensor const& tensor, int index,
     torch::Tensor tmp = torch::from_blob(pdata_, {nvar, nx3_, nx2_, nx1_},
                                          {str4, str3, str2, str1}, nullptr,
                                          torch::dtype(tensor.dtype()));
-    tmp.copy_(tensor.slice(0, index, index + nvar));
+    auto tmp1 = tensor.slice(0, index, index + nvar).to(torch::kCPU);
+    tmp.copy_(tmp1);
     state_ = DataStatus::allocated;
   }
 }
@@ -83,7 +84,8 @@ void AthenaArray<T>::copyFromTensor3D(torch::Tensor const& tensor) {
   torch::Tensor tmp =
       torch::from_blob(pdata_, {nx3_, nx2_, nx1_}, {str3, str2, str1}, nullptr,
                        torch::dtype(tensor.dtype()));
-  tmp.copy_(tensor);
+  auto tmp1 = tensor.to(torch::kCPU);
+  tmp.copy_(tmp1);
   state_ = DataStatus::allocated;
 }
 }  // namespace snap
