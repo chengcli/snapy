@@ -1,3 +1,6 @@
+// C/C++
+#include <random>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -20,6 +23,12 @@
 #include <snap/output/output_formats.hpp>
 
 using namespace snap;
+
+torch::Tensor gaussian_func(torch::Tensor x, torch::Tensor y, double x0,
+                            double y0, double sigma) {
+  return torch::exp(-((x - x0) * (x - x0) + (y - y0) * (y - y0)) /
+                    (2 * sigma * sigma));
+}
 
 int main(int argc, char** argv) {
   // read parameters
@@ -57,6 +66,34 @@ int main(int argc, char** argv) {
   int nc2 = pcoord->x2v.size(0);
   int nc1 = pcoord->x1v.size(0);
   int ny = thermo_y->options.species().size() - 1;
+
+  // add bottom topography
+  auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x3v}, "ij");
+  auto x3v = result[0];
+  auto x2v = result[1];
+  auto x1v = result[2];
+
+  std::random_device rd;   // Seed source
+  std::mt19937 gen(rd());  // Mersenne Twister engine
+  std::uniform_real_distribution<> dist(0.0, 1.0);
+
+  auto topo = torch::zeros_like(x1v);
+
+  for (int n = 0; n < 10; ++n) {
+    auto x0 = dist(gen) * 1.e3;
+    auto y0 = dist(gen) * 1.e3;
+    auto sigma = 100. + dist(gen) * 400.;
+    auto height = 500. + dist(gen) * 1500.;
+    topo += height * gaussian_func(x2v, x3v, x0, y0, sigma);
+  }
+
+  std::cout << "topo = " << topo.min() << ", " << topo.max() << std::endl;
+
+  auto solid = torch::where(x1v < topo, 1, 0);
+  int flips;
+  solid = phydro->pib->rectify_solid(solid, flips, block->options.bfuncs());
+  std::cout << "total number of flips = " << flips << std::endl;
+  solid = torch::where(solid > 0, true, false);
 
   // construct an adiabatic atmosphere
   kintera::ThermoX thermo_x(thermo_y->options);
@@ -132,6 +169,7 @@ int main(int argc, char** argv) {
   w[IVY] += 1. * torch::rand_like(w[IVY]);
 
   // populate the initial condition
+  w = phydro->pib->mark_solid(w, solid);
   block->initialize(w);
 
   // user output variables
@@ -159,7 +197,7 @@ int main(int argc, char** argv) {
   double current_time = 0.;
 
   while (!block->pintg->stop(count++, current_time)) {
-    auto dt = block->max_time_step();
+    auto dt = block->max_time_step(solid);
 
     // make output
     if (count % 10 == 0) {
@@ -184,7 +222,7 @@ int main(int argc, char** argv) {
 
     // evolve dynamics
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(dt, stage);
+      block->forward(dt, stage, solid);
     }
 
     // evolve kinetics
