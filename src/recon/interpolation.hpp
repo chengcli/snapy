@@ -64,9 +64,6 @@ class InterpImpl {
   //! Disable constructor
   InterpImpl() = default;
   explicit InterpImpl(InterpOptions const& options) : options(options) {}
-
- private:
-  std::string name_() const { return "snap::InterpImpl"; }
 };
 
 using Interp = std::shared_ptr<InterpImpl>;
