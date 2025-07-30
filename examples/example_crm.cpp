@@ -95,11 +95,20 @@ int main(int argc, char** argv) {
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
+  int nvapor = thermo_x->options.vapor_ids().size();
+  int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
+
+    // remove clouds
+    auto cloud_frac =
+        xfrac.narrow(-1, nvapor, ncloud).sum(-1, /*keepdim=*/true);
+    xfrac.narrow(-1, nvapor, ncloud) = 0.;
+    xfrac /= (1. - cloud_frac);
+
     auto result = thermo_x->compute("X->Y", {xfrac});
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
 
@@ -158,11 +167,11 @@ int main(int argc, char** argv) {
   auto u = peos->get_buffer("U");
   double current_time = 0.;
 
-  while (!block->pintg->stop(count++, current_time)) {
+  while (!block->pintg->stop(count, current_time)) {
     auto dt = block->max_time_step();
 
     // make output
-    if (count % 100 == 0) {
+    if (count % 20 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);
@@ -203,6 +212,7 @@ int main(int argc, char** argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
+    count++;
     current_time += dt;
   }
 
