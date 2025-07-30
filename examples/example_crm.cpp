@@ -212,6 +212,10 @@ int main(int argc, char** argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
+    // remove condensate at the first grid (and ghost zones)
+    // u[ICY + 1].select(-1, is) = 0.;
+    // u[ICY + 1].select(-1, is - 1) = 0.;
+
     count++;
     current_time += dt;
   }
