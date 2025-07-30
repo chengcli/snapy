@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
     auto dt = block->max_time_step();
 
     // make output
-    if (count % 10 == 0) {
+    if (count % 100 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);

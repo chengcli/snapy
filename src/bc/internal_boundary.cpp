@@ -24,7 +24,7 @@ InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
 
   op.max_iter() = bc["max-iter"].as<int>(5);
   op.solid_density() = bc["solid_density"].as<double>(1.e3);
-  op.solid_pressure() = bc["solid_pressure"].as<double>(1.9);
+  op.solid_pressure() = bc["solid_pressure"].as<double>(1.e9);
 
   return op;
 }

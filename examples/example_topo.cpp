@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
   int ny = thermo_y->options.species().size() - 1;
 
   // add bottom topography
-  auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x3v}, "ij");
+  auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
   auto x3v = result[0];
   auto x2v = result[1];
   auto x1v = result[2];
@@ -169,6 +169,7 @@ int main(int argc, char** argv) {
   w[IVY] += 1. * torch::rand_like(w[IVY]);
 
   // populate the initial condition
+  std::cout << "solid sizes = " << solid.sizes() << std::endl;
   w = phydro->pib->mark_solid(w, solid);
   block->initialize(w);
 
