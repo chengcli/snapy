@@ -82,10 +82,9 @@ int main(int argc, char** argv) {
 
   for (int n = 0; n < 10; ++n) {
     auto x0 = dist(gen) * 10.e3;
-    // auto y0 = dist(gen) * 1.e3;
-    auto y0 = 10.e3;
+    auto y0 = dist(gen) * 20.e3;
     auto sigma = 500. + dist(gen) * 1000.;
-    auto height = 100. + dist(gen) * 300.;
+    auto height = 500. + dist(gen) * 500.;
     topo += height * gaussian_func(x2v, x3v, x0, y0, sigma);
   }
 
@@ -137,10 +136,10 @@ int main(int argc, char** argv) {
   int nvapor = thermo_x->options.vapor_ids().size();
   int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
-    /* remove clouds
+    // remove clouds
     auto cloud_frac = xfrac.narrow(-1, nvapor, ncloud).sum(-1, true);
     xfrac.narrow(-1, nvapor, ncloud) = 0.;
-    xfrac /= (1. - cloud_frac);*/
+    xfrac /= (1. - cloud_frac);
 
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
@@ -211,7 +210,7 @@ int main(int argc, char** argv) {
     auto dt = block->max_time_step(solid);
 
     // make output
-    if (count % 1 == 0) {
+    if (count % 10 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);
