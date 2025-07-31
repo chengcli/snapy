@@ -78,12 +78,14 @@ int main(int argc, char** argv) {
   std::uniform_real_distribution<> dist(0.0, 1.0);
 
   auto topo = torch::zeros_like(x1v);
+  std::cout << "topo shape = " << topo.sizes() << std::endl;
 
   for (int n = 0; n < 10; ++n) {
-    auto x0 = dist(gen) * 1.e3;
-    auto y0 = dist(gen) * 1.e3;
-    auto sigma = 100. + dist(gen) * 400.;
-    auto height = 500. + dist(gen) * 1500.;
+    auto x0 = dist(gen) * 10.e3;
+    // auto y0 = dist(gen) * 1.e3;
+    auto y0 = 10.e3;
+    auto sigma = 500. + dist(gen) * 1000.;
+    auto height = 100. + dist(gen) * 300.;
     topo += height * gaussian_func(x2v, x3v, x0, y0, sigma);
   }
 
@@ -132,11 +134,19 @@ int main(int argc, char** argv) {
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
+  int nvapor = thermo_x->options.vapor_ids().size();
+  int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
+    // remove clouds
+    auto cloud_frac = xfrac.narrow(-1, nvapor, ncloud).sum(-1, true);
+    xfrac.narrow(-1, nvapor, ncloud) = 0.;
+    xfrac /= (1. - cloud_frac);
+
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
+
     auto result = thermo_x->compute("X->Y", {xfrac});
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
 
@@ -165,12 +175,12 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVX] += 1. * torch::rand_like(w[IVX]);
-  w[IVY] += 1. * torch::rand_like(w[IVY]);
+  w[IVX] += 0.01 * torch::rand_like(w[IVX]);
+  w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
   // populate the initial condition
   std::cout << "solid sizes = " << solid.sizes() << std::endl;
-  w = phydro->pib->mark_solid(w, solid);
+  w.set_(phydro->pib->mark_solid(w, solid));
   block->initialize(w);
 
   // user output variables
@@ -197,11 +207,11 @@ int main(int argc, char** argv) {
   auto u = peos->get_buffer("U");
   double current_time = 0.;
 
-  while (!block->pintg->stop(count++, current_time)) {
+  while (!block->pintg->stop(count, current_time)) {
     auto dt = block->max_time_step(solid);
 
     // make output
-    if (count % 10 == 0) {
+    if (count % 1 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);
@@ -242,6 +252,7 @@ int main(int argc, char** argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
+    count++;
     current_time += dt;
   }
 

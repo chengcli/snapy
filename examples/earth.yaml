@@ -25,13 +25,14 @@ species:
 geometry:
   type: cartesian
   bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 10.e3, x3min: 0., x3max: 20.e3}
-  cells: {nx1: 50, nx2: 50, nx3: 100, nghost: 3}
+  cells: {nx1: 100, nx2: 100, nx3: 1, nghost: 3}
 
 dynamics:
   equation-of-state:
     type: ideal-moist
     density-floor:  1.e-10
     pressure-floor: 1.e-10
+    tracer-floor: 1.e-10
     limiter: true
     max-iter: 10
     ftol: 1.e-6
@@ -41,8 +42,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: weno5, scale: false, shock: false}
-    horizontal: {type: weno5, scale: false, shock: false}
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
     type: hllc
@@ -99,4 +100,4 @@ problem:
   Ps: 1.e5
   Ts: 300.
   Tmin: 110.
-  xH2O: 1.e-3
+  xH2O: 1.e-2

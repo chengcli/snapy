@@ -38,6 +38,10 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   int ng = vsed.size(-1) - (ie + 1);
   vsed.narrow(-1, ie + 1, ng).fill_(0.);
 
+  // seal bottom
+  int is = peos->pcoord->is();
+  vsed.slice(-1, 0, is + 1).fill_(0.);
+
   // 5 is number of hydro variables
   auto en = peos->compute("W->E", {wr}).index_select(0, hydro_ids - 5);
   auto rhoc = peos->get_buffer("C").index_select(0, hydro_ids - 5);

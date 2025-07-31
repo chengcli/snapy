@@ -98,16 +98,15 @@ int main(int argc, char** argv) {
   int nvapor = thermo_x->options.vapor_ids().size();
   int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
+    // remove clouds
+    auto cloud_frac = xfrac.narrow(-1, nvapor, ncloud).sum(-1, true);
+    xfrac.narrow(-1, nvapor, ncloud) = 0.;
+    xfrac /= (1. - cloud_frac);
+
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
-
-    // remove clouds
-    auto cloud_frac =
-        xfrac.narrow(-1, nvapor, ncloud).sum(-1, /*keepdim=*/true);
-    xfrac.narrow(-1, nvapor, ncloud) = 0.;
-    xfrac /= (1. - cloud_frac);
 
     auto result = thermo_x->compute("X->Y", {xfrac});
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
@@ -137,8 +136,8 @@ int main(int argc, char** argv) {
   }
 
   // add noise
-  w[IVX] += 1. * torch::rand_like(w[IVX]);
-  w[IVY] += 1. * torch::rand_like(w[IVY]);
+  w[IVX] += 0.01 * torch::rand_like(w[IVX]);
+  w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
   // populate the initial condition
   block->initialize(w);
@@ -211,10 +210,6 @@ int main(int argc, char** argv) {
     vec[del_conc.dim() - 1] = -1;
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
-
-    // remove condensate at the first grid (and ghost zones)
-    // u[ICY + 1].select(-1, is) = 0.;
-    // u[ICY + 1].select(-1, is - 1) = 0.;
 
     count++;
     current_time += dt;
