@@ -137,10 +137,10 @@ int main(int argc, char** argv) {
   int nvapor = thermo_x->options.vapor_ids().size();
   int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
-    // remove clouds
+    /* remove clouds
     auto cloud_frac = xfrac.narrow(-1, nvapor, ncloud).sum(-1, true);
     xfrac.narrow(-1, nvapor, ncloud) = 0.;
-    xfrac /= (1. - cloud_frac);
+    xfrac /= (1. - cloud_frac);*/
 
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
