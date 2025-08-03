@@ -12,19 +12,17 @@
 
 namespace snap {
 
-void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, float gammad) {
+void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, double gammad) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "ideal_gas_cons2prim_cuda", [&]() {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    native::gpu_kernel<4>(
-        iter, [=] GPU_LAMBDA(char* const data[4], unsigned int strides[4]) {
+    native::gpu_kernel<2>(
+        iter, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
           auto prim = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto cons = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto ke = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto ie = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
+          ideal_gas_cons2prim(prim, cons, gammad, stride);
         });
   });
 }

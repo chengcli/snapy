@@ -29,22 +29,12 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
                         std::vector<torch::Tensor> const& args) override;
 
  private:
-  //! cache
-  torch::Tensor _prim, _cons, _gamma, _cs, _ke, _ie;
-
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
    * \param[out] out  conserved variables
    */
   void _prim2cons(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate internal energy
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  internal energy
-   */
-  void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
@@ -53,13 +43,20 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
 
+  //! \brief calculate internal energy
+  /*
+   * \param[in] prim  primitive variables
+   * \return          internal energy
+   */
+  torch::Tensor _prim2intEng(torch::Tensor prim);
+
   //! \brief Convert temperature to kinetic energy.
   /*
    * \param[in] cons    conserved variables
    * \param[in] temp    temperature
-   * \param[out] out    internal energy
+   * \return            internal energy
    */
-  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
+  torch::Tensor _temp2intEng(torch::Tensor cons, torch::Tensor temp);
 };
 TORCH_MODULE(IdealGas);
 

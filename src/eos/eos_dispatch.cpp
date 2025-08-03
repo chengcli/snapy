@@ -12,7 +12,7 @@
 
 namespace snap {
 
-void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, float gammad) {
+void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, double gammad) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "ideal_gas_cons2prim_cpu", [&] {
@@ -23,8 +23,6 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, float gammad) {
           for (int i = 0; i < n; i++) {
             auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            auto ke = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-            auto ie = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
             ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
           }
         },
@@ -32,29 +30,24 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, float gammad) {
   });
 }
 
-void ideal_gas_cons2prim_mps(at::TensorIterator& iter, float gammad) {
+void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   auto prim = iter.output();
   auto cons = iter.input(0);
   auto ke = iter.input(1);
   auto ie = iter.input(2);
 
   // den -> den
-  prim[Index::IDN] = cons[Index::IDN];
+  prim[IDN] = cons[IDN];
 
   // mom -> vel
-  prim.narrow(0, Index::IVX, 3) =
-      cons.narrow(0, Index::IVX, 3) / prim[Index::IDN];
+  prim.narrow(0, IVX, 3) = cons.narrow(0, IVX, 3) / prim[IDN];
 
   // pcoord->vec_raise_(prim);
 
-  ke.set_(
-      (prim.narrow(0, Index::IVX, 3) * cons.narrow(0, Index::IVX, 3)).sum(0));
-  ke *= 0.5;
-
-  torch::sub_out(ie, cons[Index::IPR], ke);
+  auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
 
   // eng -> pr
-  prim[Index::IPR] = (gammad - 1) * ie;
+  prim[IPR] = (gammad - 1) * (cons[IPR] - ke);
 }
 
 /*void call_ideal_moist_cpu(at::TensorIterator& iter) {
