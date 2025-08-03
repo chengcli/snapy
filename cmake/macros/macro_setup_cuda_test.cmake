@@ -21,21 +21,8 @@ macro(setup_cuda_test namel)
             ${TORCH_API_INCLUDE_DIR}
             ${EIGEN3_INCLUDE_DIR})
 
-  if(APPLE)
-    target_link_libraries(
-      ${namel}.${buildl} PRIVATE snapy::snapy snapy::bc
-                                 gtest_main)
-  else()
-    target_link_libraries(
-      ${namel}.${buildl}
-      PRIVATE snapy::snap
-              -Wl,--no-as-needed
-              ${KINTERA_CUDA_LIBRARY}
-              snapy::bc
-              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
-              -Wl,--as-needed
-              gtest_main)
-  endif()
+  target_link_libraries(
+    ${namel}.${buildl} PRIVATE snapy::snap snapy::snap_cu gtest_main)
 
   add_test(NAME ${namel}.${buildl} COMMAND ${namel}.${buildl})
 endmacro()

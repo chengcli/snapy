@@ -14,7 +14,6 @@
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/kinetics/kinetics_formatter.hpp>
 #include <kintera/thermo/relative_humidity.hpp>
-#include <kintera/vapors/vapor_functions.cpp>
 
 // snap
 #include <snap/input/command_line.hpp>

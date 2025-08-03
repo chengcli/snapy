@@ -8,7 +8,7 @@ file(GLOB src_files
   )
 
 add_library(${namel}_${buildl}
-    SHARED
+    OBJECT
     ${src_files}
     )
 
