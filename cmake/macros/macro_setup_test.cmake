@@ -16,22 +16,10 @@ macro(setup_test namel)
     PRIVATE ${CMAKE_BINARY_DIR} ${KINTERA_INCLUDE_DIR} ${SNAP_INCLUDE_DIR}
             ${NETCDF_INCLUDES} ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
 
-  if(APPLE)
-    target_link_libraries(
-      ${namel}.${buildl} PRIVATE snapy::snap ${VAPORS_LIBRARY} snapy::bc
-                                 gtest_main)
-  else()
-    target_link_libraries(
-      ${namel}.${buildl}
-      PRIVATE snapy::snap
-              -Wl,--no-as-needed
-              ${VAPORS_LIBRARY}
-              snapy::bc
-              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,${KINTERA_CUDA_LIBRARY},>
-              $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
-              -Wl,--as-needed
-              gtest_main)
-  endif()
+  target_link_libraries(${namel}.${buildl} 
+    PRIVATE snapy::snap
+            $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
+            gtest_main)
 
   add_test(NAME ${namel}.${buildl} COMMAND ${namel}.${buildl})
 endmacro()

@@ -71,6 +71,8 @@ class CoordinateImpl {
   torch::Tensor x1v, x2v, x3v;
   torch::Tensor dx1f, dx2f, dx3f;
 
+  virtual ~CoordinateImpl() = default;
+
   int is() const { return options.nx1() > 1 ? options.nghost() : 0; }
 
   int ie() const {

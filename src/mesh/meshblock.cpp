@@ -226,6 +226,8 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
+  hydro_u.set_(phydro->pib->mark_solid(hydro_u, solid));
+
   // (5.1) apply hydro boundary
   if (phydro->peos->nvar() > 0) {
     op.type(kConserved);
@@ -260,7 +262,7 @@ int MeshBlockImpl::forward(double dt, int stage, torch::Tensor solid) {
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
-    pthermo->forward(rho, ie, yfrac);
+    pthermo->forward(rho, ie, yfrac, solid);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }

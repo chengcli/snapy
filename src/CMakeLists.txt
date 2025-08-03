@@ -8,12 +8,11 @@
 #   SNAP_INCLUDE_DIR
 #   snapy::snap
 #   snapy::snap_cu
-#   snapy::bc
 #
 # Normal usage would be:
 #
 #   include_directories(${SNAP_INCLUDE_DIR})
-#   target_link_libraries(snapy::snap snapy::snap_cu snapy::bc)
+#   target_link_libraries(snapy::snap snapy::snap_cu)
 
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/.."
@@ -72,9 +71,6 @@ target_link_libraries(${namel}_${buildl}
     ${DISORT_LIBRARY}
     ${HARP_LIBRARY}
     ${KINTERA_LIBRARY}
-    #-Wl,--no-as-needed
-    #${VAPORS_LIBRARY}
-    #-Wl,--as-needed
     )
 
 add_library(snapy::snap ALIAS ${namel}_${buildl})
@@ -107,6 +103,7 @@ if (CUDAToolkit_FOUND)
       CUDA::cudart_static
       ${TORCH_CUDA_LIBRARY}
       ${C10_CUDA_LIBRARY}
+      ${KINTERA_CUDA_LIBRARY}
       )
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})

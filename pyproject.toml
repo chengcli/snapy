@@ -6,7 +6,7 @@ requires = [
   "numpy",
   "torch",
   "ninja",
-  "kintera>=0.8.5",
+  "kintera>=0.9.1",
   ]
 build-backend = "setuptools.build_meta"
 
@@ -22,7 +22,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
   "numpy",
-  "kintera>=0.8.3",
+  "kintera>=0.9.1",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
