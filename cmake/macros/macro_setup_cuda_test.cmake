@@ -23,14 +23,13 @@ macro(setup_cuda_test namel)
 
   if(APPLE)
     target_link_libraries(
-      ${namel}.${buildl} PRIVATE snapy::snapy ${VAPORS_LIBRARY} snapy::bc
+      ${namel}.${buildl} PRIVATE snapy::snapy snapy::bc
                                  gtest_main)
   else()
     target_link_libraries(
       ${namel}.${buildl}
       PRIVATE snapy::snap
               -Wl,--no-as-needed
-              ${VAPORS_LIBRARY}
               ${KINTERA_CUDA_LIBRARY}
               snapy::bc
               $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>

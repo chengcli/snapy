@@ -56,7 +56,7 @@ boundary-condition:
 
   external:
     x1-inner: reflecting
-    x1-outer: reflecting
+    x1-outer: outflow
     x2-inner: periodic
     x2-outer: periodic
     x3-inner: periodic

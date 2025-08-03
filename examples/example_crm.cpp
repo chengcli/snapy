@@ -28,8 +28,8 @@ int main(int argc, char** argv) {
 
   // input file
   auto infile = std::string(cli->input_filename);
-  // auto device = torch::kCUDA;
-  auto device = torch::kCPU;
+  auto device = torch::kCUDA;
+  // auto device = torch::kCPU;
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));
@@ -92,9 +92,10 @@ int main(int argc, char** argv) {
   int is = pcoord->is();
   int ie = pcoord->ie();
   auto dz = pcoord->dx1f[is].item<double>();
+  std::cout << fmt::format("{}\n", Func1Registrar::list_names()) << std::endl;
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
-  int i = is;
+  /*int i = is;
   int nvapor = thermo_x->options.vapor_ids().size();
   int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
@@ -125,7 +126,7 @@ int main(int argc, char** argv) {
     w[IPR].select(2, i) = pres;
     w[IDN].select(2, i) = thermo_x->compute("V->D", {conc});
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
-  }
+  }*/
 
   // populate ghost zones
   snap::BoundaryFuncOptions op;

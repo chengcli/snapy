@@ -37,8 +37,8 @@ int main(int argc, char** argv) {
 
   // input file
   auto infile = std::string(cli->input_filename);
-  // auto device = torch::kCUDA;
-  auto device = torch::kCPU;
+  auto device = torch::kCUDA;
+  // auto device = torch::kCPU;
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));
