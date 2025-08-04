@@ -52,8 +52,8 @@ int main(int argc, char** argv) {
   // output
   auto out =
       NetcdfOutput(OutputOptions().file_basename("sod").variable("prim"));
-  double current_time = 0.;
 
+  double current_time = 0.;
   int count = 0;
   while (!block->pintg->stop(count, current_time)) {
     auto dt = block->max_time_step(vars);

@@ -24,8 +24,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: weno5, scale: false, shock: true}
-    horizontal: {type: weno5, scale: false, shock: true}
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
 
   riemann-solver:
     type: lmars
@@ -33,7 +33,7 @@ dynamics:
 boundary-condition:
   internal:
     solid-density: 1.e3
-    solid-pressure: 1.9
+    solid-pressure: 1.e9
     max-iter: 5
 
   external:
