@@ -148,6 +148,13 @@ void MeshBlockImpl::initialize(Variables& vars) {
   auto& hydro_w = vars["hydro_w"];
   auto& scalar_x = vars["scalar_x"];
 
+  // solid
+  if (vars["solid"].defined()) {
+    vars.insert("fill_solid_hydro_w",
+                torch::where(vars["solid"].unsqueeze(0).expand_as(hydro_w),
+                             hydro_w, 0.));
+  }
+
   // hydro
   if (phydro->peos->nvar() > 0) {
     hydro_w.set_(phydro->pib->mark_solid(hydro_w, vars["solid"]));

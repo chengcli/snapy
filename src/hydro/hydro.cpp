@@ -305,8 +305,17 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  auto gamma = peos->compute("W->A", {w});
-  _imp.set_(pimp->forward(du, w, gamma, dt));
+  torch::Tensor wi;
+  if (other["solid"].defined()) {
+    wi = torch::where(other["solid"].unsqueeze(0).expand_as(w),
+                      other["fill_solid_hydro_w"], w);
+    du.masked_fill_(other["solid"].unsqueeze(0).expand_as(du), 0.0);
+  } else {
+    wi = w;
+  }
+
+  auto gamma = peos->compute("W->A", {wi});
+  _imp.set_(pimp->forward(du, wi, gamma, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
   timer["U->M"] +=
