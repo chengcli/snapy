@@ -284,17 +284,22 @@ Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
        phydro->options.eos().type() == "moist-mixture")) {
     phydro->peos->apply_conserved_limiter_(hydro_u);
 
+    int ny = hydro_u.size(0) - 5;  // number of species
+
     auto ke = phydro->peos->compute("U->K", {hydro_u});
-    auto rho = phydro->peos->get_buffer("thermo.D");
+    auto rho = hydro_u[IDN] + hydro_u.narrow(0, ICY, ny).sum(0);
     auto ie = hydro_u[Index::IPR] - ke;
 
-    int ny = hydro_u.size(0) - 5;  // number of species
     auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
 
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
-    pthermo->forward(rho, ie, yfrac, vars["solid"]);
+    if (vars["solid"].defined()) {
+      pthermo->forward(rho, ie, yfrac, vars["solid"]);
+    } else {
+      pthermo->forward(rho, ie, yfrac);
+    }
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }

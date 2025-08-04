@@ -10,7 +10,6 @@ namespace snap {
 
 void HLLCSolverImpl::reset() {
   // set up equation-of-state model
-  printf("*** HLLC eos name = %s\n", options.eos().type().c_str());
   peos = register_module_op(this, "eos", options.eos());
 
   // register buffers

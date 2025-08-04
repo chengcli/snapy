@@ -155,7 +155,7 @@ void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   auto ie = cons[IPR] - ke;
 
   // subtract the internal energy offset
-  ie = cons[IDN] * u0[0];
+  ie -= cons[IDN] * u0[0];
 
   std::vector<int64_t> vec(cons.dim(), 1);
   vec[0] = -1;
