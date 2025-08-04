@@ -10,11 +10,12 @@ using namespace snap;
 int main(int argc, char** argv) {
   auto op = MeshBlockOptions::from_yaml("shock.yaml");
   auto block = MeshBlock(op);
+  auto device = torch::kCPU;
 
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
 
-  // block->to(torch::kCUDA);
+  block->to(device);
 
   // initial conditions
   auto pcoord = block->phydro->pcoord;
@@ -24,8 +25,14 @@ int main(int argc, char** argv) {
   auto x2v = pcoord->x2v.view({1, -1, 1});
   auto x3v = pcoord->x3v.view({-1, 1, 1});
 
-  auto const& w = block->phydro->peos->get_buffer("W");
-  w.zero_();
+  int nc1 = pcoord->options.nc1();
+  int nc2 = pcoord->options.nc2();
+  int nc3 = pcoord->options.nc3();
+  int nvar = peos->nvar();
+
+  auto w = torch::zeros(
+      {nvar, nc3, nc2, nc1},
+      torch::TensorOptions().dtype(torch::kFloat64).device(device));
 
   w[IDN] = torch::where(x1v < 0, 1.0, 0.125);
   w[IPR] = torch::where(x1v < 0, 1.0, 0.1);
