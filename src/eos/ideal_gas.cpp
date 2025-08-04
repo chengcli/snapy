@@ -30,13 +30,13 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
                                     std::vector<torch::Tensor> const &args) {
   if (ab == "W->U") {
     auto w = args[0];
-    auto u = torch::empty_like(W);
-    _prim2cons(args[0], u);
+    auto u = torch::empty_like(w);
+    _prim2cons(w, u);
     return u;
   } else if (ab == "U->W") {
     auto u = args[0];
     auto w = torch::empty_like(u);
-    _cons2prim(args[0], w);
+    _cons2prim(u, w);
     return w;
   } else if (ab == "W->I") {
     auto w = args[0];
@@ -48,7 +48,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
   } else if (ab == "UT->I") {
     auto w = args[0];
     auto temp = args[1];
-    return _temp2intEng(w, temp, ie);
+    return _temp2intEng(w, temp);
   } else if (ab == "W->A") {
     auto w = args[0];
     auto gammad =

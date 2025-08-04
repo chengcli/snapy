@@ -124,7 +124,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
 
   // IE
-  cons[IPR] = _prim2intEng(prim, ie);
+  cons[IPR] = _prim2intEng(prim);
   cons[IPR] += ke;
 
   apply_conserved_limiter_(cons);

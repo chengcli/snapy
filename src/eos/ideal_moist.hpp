@@ -35,9 +35,6 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
                         std::vector<torch::Tensor> const& args) override;
 
  private:
-  //! \cache
-  torch::Tensor _ivol, _temp;
-
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables

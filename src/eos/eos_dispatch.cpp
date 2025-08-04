@@ -23,7 +23,7 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, double gammad) {
           for (int i = 0; i < n; i++) {
             auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            ideal_gas_cons2prim(prim, cons, ke, ie, gammad, stride);
+            ideal_gas_cons2prim(prim, cons, gammad, stride);
           }
         },
         grain_size);
@@ -33,8 +33,6 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, double gammad) {
 void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   auto prim = iter.output();
   auto cons = iter.input(0);
-  auto ke = iter.input(1);
-  auto ie = iter.input(2);
 
   // den -> den
   prim[IDN] = cons[IDN];

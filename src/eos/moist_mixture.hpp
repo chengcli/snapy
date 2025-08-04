@@ -8,6 +8,9 @@ namespace snap {
 class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                                public EquationOfStateImpl {
  public:
+  //! \cache
+  torch::Tensor ivol, temp, w1;
+
   //! submodules
   kintera::ThermoY pthermo = nullptr;
 
@@ -51,6 +54,13 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    */
   void _prim2cons(torch::Tensor prim, torch::Tensor& out);
 
+  //! \brief Convert conserved variables to primitive variables.
+  /*
+   * \param[in] cons  conserved variables
+   * \param[ou] out   primitive variables
+   */
+  void _cons2prim(torch::Tensor cons, torch::Tensor& out);
+
   //! \brief calculate internal energy
   /*
    * \param[in] prim  primitive variables
@@ -71,13 +81,6 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    * \return          individual species energy
    */
   torch::Tensor _prim2speciesEng(torch::Tensor prim);
-
-  //! \brief Convert conserved variables to primitive variables.
-  /*
-   * \param[in] cons  conserved variables
-   * \return          primitive variables
-   */
-  torch::Tensor _cons2prim(torch::Tensor cons);
 
   //! \brief Convert conserved variables to kinetic energy.
   /*
@@ -100,7 +103,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    * \param[in] temp  temperature
    * \return          adiabatic index
    */
-  torch::Tensor _adiabatic_index(torch::Tensor ivol, torch::Tensor temp) const;
+  torch::Tensor _adiabatic_index(torch::Tensor ivol, torch::Tensor temp);
 
   //! \brief Compute the isothermal sound speed
   /*
@@ -110,7 +113,10 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    * \return          isothermal sound speed
    */
   torch::Tensor _isothermal_sound_speed(torch::Tensor ivol, torch::Tensor temp,
-                                        torch::Tensor dens) const;
+                                        torch::Tensor dens);
+
+  //! \brief Check if the primitive variables are cached.
+  bool _check_copy(torch::Tensor prim, torch::Tensor prim_cache) const;
 };
 TORCH_MODULE(MoistMixture);
 
