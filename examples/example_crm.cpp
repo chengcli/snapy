@@ -27,8 +27,11 @@ int main(int argc, char **argv) {
 
   // input file
   auto infile = std::string(cli->input_filename);
-  // auto device = torch::kCUDA;
   auto device = torch::kCPU;
+  if (torch::cuda::is_available()) {
+    std::cout << "Running on CUDA" << std::endl;
+    device = torch::kCUDA;
+  }
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));
@@ -86,6 +89,7 @@ int main(int argc, char **argv) {
     auto xmixr = config["problem"]["x" + name].as<double>(0.);
     xfrac.select(2, i) = xmixr;
   }
+
   // dry air mole fraction
   xfrac.select(2, 0) = 1. - xfrac.narrow(-1, 1, ny).sum(-1);
 

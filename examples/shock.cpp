@@ -10,7 +10,12 @@ using namespace snap;
 int main(int argc, char** argv) {
   auto op = MeshBlockOptions::from_yaml("shock.yaml");
   auto block = MeshBlock(op);
+  
   auto device = torch::kCPU;
+  if (torch::cuda::is_available()) {
+    std::cout << "Running on CUDA" << std::endl;
+    device = torch::kCUDA;
+  }
 
   std::cout << fmt::format("MeshBlock Options: {}", block->options)
             << std::endl;
