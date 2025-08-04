@@ -8,12 +8,12 @@
 
 namespace snap {
 
-void OutputType::loadHydroOutputData(MeshBlock pmb) {
+void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
-  auto peos = pmb->phydro->peos;
 
-  auto const& w = peos->get_buffer("W");
-  auto const& u = peos->get_buffer("U");
+  auto peos = pmb->phydro->peos;
+  auto const& w = vars["hydro_w"];
+  auto const& u = vars["hydro_u"];
 
   // (lab-frame) density
   if (ContainVariable(options.variable(), "D") ||

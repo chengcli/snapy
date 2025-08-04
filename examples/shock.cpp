@@ -27,37 +27,42 @@ int main(int argc, char** argv) {
   auto const& w = block->phydro->peos->get_buffer("W");
   w.zero_();
 
-  w[Index::IDN] = torch::where(x1v < 0, 1.0, 0.125);
-  w[Index::IPR] = torch::where(x1v < 0, 1.0, 0.1);
-
-  block->initialize(w);
+  w[IDN] = torch::where(x1v < 0, 1.0, 0.125);
+  w[IPR] = torch::where(x1v < 0, 1.0, 0.1);
 
   std::cout << "w shape = " << w.sizes() << std::endl;
+
+  torch::OrderedDict<std::string, torch::Tensor> vars;
 
   // internal boundary
   auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
   auto solid = torch::where(r1 < 0.1, 1, 0).to(torch::kBool);
 
+  vars.insert("hydro_w", w);
+  vars.insert("solid", solid);
+  block->initialize(vars);
+
   // output
   auto out =
       NetcdfOutput(OutputOptions().file_basename("sod").variable("prim"));
-  float current_time = 0.;
-
-  out.write_output_file(block, current_time, OctTreeOptions(), 0);
-  out.combine_blocks();
+  double current_time = 0.;
 
   int count = 0;
-  while (!block->pintg->stop(count++, current_time)) {
-    auto dt = block->max_time_step();
-    for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
-      block->forward(dt, stage, solid);
+  while (!block->pintg->stop(count, current_time)) {
+    auto dt = block->max_time_step(vars);
 
-    current_time += dt;
     if (count % 10 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-      ++out.file_number;
-      out.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out.combine_blocks();
+      out.file_number++;
     }
+
+    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+      block->forward(dt, stage, vars);
+    }
+
+    count++;
+    current_time += dt;
   }
 }

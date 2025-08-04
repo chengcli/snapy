@@ -32,7 +32,8 @@ namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlock pmb, double current_time,
+void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
+                                     double current_time,
                                      OctTreeOptions const &tree, bool flag) {
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();
@@ -71,7 +72,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, double current_time,
   }
 
   // set ptrs to data in OutputData linked list, then slice/sum as needed
-  LoadOutputData(pmb);
+  LoadOutputData(pmb, vars);
 
   // create filename: "file_basename"+
   // "."+"blockid"+"."+"fileid"+"."+XXXXX+".nc", where XXXXX = 5-digit

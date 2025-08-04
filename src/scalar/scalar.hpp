@@ -36,6 +36,8 @@ struct ScalarOptions {
 
 class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
  public:
+  using Variables = torch::OrderedDict<std::string, torch::Tensor>;
+
   //! options with which this `Scalar` was constructed
   ScalarOptions options;
 
@@ -60,7 +62,8 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   }
 
   //! Advance the conserved variables by one time step.
-  torch::Tensor forward(torch::Tensor scalar_u, double dt);
+  torch::Tensor forward(double dt, torch::Tensor scalar_u,
+                        Variables const& other);
 
  private:
   //! cache

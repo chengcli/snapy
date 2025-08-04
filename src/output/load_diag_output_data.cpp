@@ -12,11 +12,11 @@
 
 namespace snap {
 
-void OutputType::loadDiagOutputData(MeshBlock pmb) {
+void OutputType::loadDiagOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
   auto peos = pmb->phydro->peos;
 
-  auto const& w = peos->get_buffer("W");
+  auto const& w = vars["hydro_w"];
 
   auto m = pmb->named_modules()["hydro.eos.thermo"];
   auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);

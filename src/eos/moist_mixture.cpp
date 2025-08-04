@@ -167,7 +167,7 @@ torch::Tensor MoistMixtureImpl::_prim2temp(torch::Tensor prim) {
     temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
   }
 
-  return temp.clone();
+  return temp;
 }
 
 torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {

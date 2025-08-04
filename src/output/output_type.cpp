@@ -15,14 +15,14 @@ OutputType::OutputType(OutputOptions const &options_)
       plast_data_() {  // Initialize tail node to nullptr
 }
 
-void OutputType::LoadOutputData(MeshBlock pmb) {
+void OutputType::LoadOutputData(MeshBlock pmb, Variables const &vars) {
   num_vars_ = 0;
   OutputData *pod;
 
-  loadHydroOutputData(pmb);
-  loadDiagOutputData(pmb);
-  loadScalarOutputData(pmb);
-  loadUserOutputData(pmb);
+  loadHydroOutputData(pmb, vars);
+  loadDiagOutputData(pmb, vars);
+  loadScalarOutputData(pmb, vars);
+  loadUserOutputData(pmb, vars);
 
   // throw an error if output variable name not recognized
   if (num_vars_ == 0) {

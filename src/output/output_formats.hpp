@@ -42,8 +42,8 @@ class HDF5Output : public OutputType {
  public:
   // Function declarations
   explicit HDF5Output(OutputOptions const& options_);
-  void write_output_file(MeshBlock pm, double time, OctTreeOptions const& tree,
-                         bool flag) override;
+  void write_output_file(MeshBlock pm, Variables const& var, double time,
+                         OctTreeOptions const& tree, bool flag) override;
   void MakeXDMF();
 
  private:
@@ -79,8 +79,8 @@ class NetcdfOutput : public OutputType {
 
   ///  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
   ///         one MeshBlock per file
-  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
-                         bool flag) override;
+  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+                         OctTreeOptions const& tree, bool flag) override;
 
   void combine_blocks() override;
 };
@@ -89,15 +89,15 @@ class PnetcdfOutput : public OutputType {
  public:
   explicit PnetcdfOutput(OutputOptions const& options_);
   ~PnetcdfOutput() {}
-  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
-                         bool flag) override;
+  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+                         OctTreeOptions const& tree, bool flag) override;
 };
 
 class FITSOutput : public OutputType {
  public:
   explicit FITSOutput(OutputOptions const& options_);
   ~FITSOutput() {}
-  void write_output_file(MeshBlock pmb, double time, OctTreeOptions const& tree,
-                         bool flag) override;
+  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+                         OctTreeOptions const& tree, bool flag) override;
 };
 }  // namespace snap
