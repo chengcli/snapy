@@ -6,6 +6,7 @@
 #include <torch/torch.h>
 
 // snap
+#include "bc_dispatch.hpp"
 #include "flip_zero_impl.h"
 
 namespace snap {
@@ -47,3 +48,11 @@ int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir) {
 }
 
 }  // namespace snap
+
+namespace at::native {
+
+DEFINE_DISPATCH(flip_zero);
+
+REGISTER_ALL_CPU_DISPATCH(flip_zero, &snap::flip_zero_cpu);
+
+}  // namespace at::native

@@ -33,7 +33,8 @@ string(TOUPPER ${namel} nameu)
 
 file(GLOB src_files
     *.cpp
-		coord/*.cpp
+    bc/*.cpp
+    coord/*.cpp
     eos/*.cpp
     hydro/*.cpp
     riemann/*.cpp
@@ -62,7 +63,6 @@ set_target_properties(${namel}_${buildl}
 
 target_link_libraries(${namel}_${buildl}
     PUBLIC
-    snapy::bc
     ${NETCDF_LIBRARIES}
     ${PNETCDF_LIBRARIES}
     ${TORCH_LIBRARY}
@@ -71,6 +71,8 @@ target_link_libraries(${namel}_${buildl}
     ${DISORT_LIBRARY}
     ${HARP_LIBRARY}
     ${KINTERA_LIBRARY}
+    fmt::fmt
+    yaml-cpp::yaml-cpp
     )
 
 add_library(snapy::snap ALIAS ${namel}_${buildl})
@@ -112,5 +114,3 @@ endif()
 set(SNAP_INCLUDE_DIR
   "${CMAKE_CURRENT_SOURCE_DIR}/.."
   CACHE INTERNAL "snap include directory")
-
-add_subdirectory(bc)

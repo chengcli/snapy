@@ -4,16 +4,11 @@
 
 // snap
 #include "bc.hpp"
+#include "bc_dispatch.hpp"
 #include "internal_boundary.hpp"
 
 namespace snap {
 enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };
-
-int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir);
-__attribute__((weak)) int flip_zero_cuda(at::TensorIterator& iter, int dim,
-                                         int dir) {
-  return 0;
-}
 
 // run dimension 1
 int run_flip_dim1(torch::Tensor& solid, int dir) {
@@ -42,14 +37,7 @@ int run_flip_dim1(torch::Tensor& solid, int dir) {
           .add_input(usedFlip)
           .build();
 
-  int num_flips = 0;
-
-  if (solid.is_cpu()) {
-    num_flips = flip_zero_cpu(iter, DIM1, dir);
-  } else if (solid.is_cuda()) {
-    num_flips = flip_zero_cuda(iter, DIM1, dir);
-  }
-
+  int num_flips = at::native::flip_zero(solid.device().type(), iter, DIM1, dir);
   return num_flips;
 }
 
@@ -80,14 +68,7 @@ int run_flip_dim2(torch::Tensor& solid, int dir) {
           .add_input(usedFlip)
           .build();
 
-  int num_flips = 0;
-
-  if (solid.is_cpu()) {
-    num_flips += flip_zero_cpu(iter, DIM2, dir);
-  } else if (solid.is_cuda()) {
-    num_flips += flip_zero_cuda(iter, DIM2, dir);
-  }
-
+  int num_flips = at::native::flip_zero(solid.device().type(), iter, DIM2, dir);
   return num_flips;
 }
 
@@ -118,14 +99,7 @@ int run_flip_dim3(torch::Tensor& solid, int dir) {
           .add_input(usedFlip)
           .build();
 
-  int num_flips = 0;
-
-  if (solid.is_cpu()) {
-    num_flips += flip_zero_cpu(iter, DIM3, dir);
-  } else if (solid.is_cuda()) {
-    num_flips += flip_zero_cuda(iter, DIM3, dir);
-  }
-
+  int num_flips = at::native::flip_zero(solid.device().type(), iter, DIM3, dir);
   return num_flips;
 }
 
@@ -184,7 +158,7 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
 
   ///-----  set proper boundary conditions  -----///
   for (int i = 0; i < bfuncs.size(); ++i) {
-    bfuncs[i](solid, 2 - i / 2, op);
+    bfuncs[i](solid, 3 - i / 2, op);
   }
 
   return solid;

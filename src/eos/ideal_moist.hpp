@@ -35,36 +35,12 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
                         std::vector<torch::Tensor> const& args) override;
 
  private:
-  //! cache
-  torch::Tensor _prim, _cons, _gamma, _cs, _ke, _ie, _ce, _rhoc;
-
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
    * \param[out] out  conserved variables
    */
   void _prim2cons(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate internal energy
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  total internal energy [J/m^3]
-   */
-  void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate temperature.
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  temperature
-   */
-  void _prim2temp(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate species energy (internal + kinetic)
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  individual species energy
-   */
-  void _prim2speciesEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
@@ -73,20 +49,41 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
 
+  //! \brief calculate internal energy
+  /*
+   * \param[in] prim  primitive variables
+   * \return          total internal energy [J/m^3]
+   */
+  torch::Tensor _prim2intEng(torch::Tensor prim);
+
+  //! \brief calculate temperature.
+  /*
+   * \param[in] prim  primitive variables
+   * \return          temperature
+   */
+  torch::Tensor _prim2temp(torch::Tensor prim);
+
+  //! \brief calculate species energy (internal + kinetic)
+  /*
+   * \param[in] prim  primitive variables
+   * \return          individual species energy (ie + ke)
+   */
+  torch::Tensor _prim2speciesEng(torch::Tensor prim);
+
   //! \brief Convert conserved variables to kinetic energy.
   /*
    * \param[in] cons    conserved variables
-   * \param[out] out    kinetic energy
+   * \return            kinetic energy
    */
-  void _cons2ke(torch::Tensor cons, torch::Tensor& out);
+  torch::Tensor _cons2ke(torch::Tensor cons);
 
   //! \brief Convert temperature to kinetic energy.
   /*
    * \param[in] cons    conserved variables
    * \param[in] temp    temperature
-   * \param[out] out    internal energy
+   * \return            internal energy
    */
-  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
+  torch::Tensor _temp2intEng(torch::Tensor cons, torch::Tensor temp);
 
   //! \brief Inverse of the mean molecular weight
   /*!

@@ -13,12 +13,16 @@ void LmarsSolverImpl::reset() {
   peos = register_module_op(this, "eos", options.eos());
 
   // register buffers
-  auto vec = peos->get_buffer("W").sizes().vec();
-  vec[0] = 2;
+  auto nc1 = peos->pcoord->options.nc1();
+  auto nc2 = peos->pcoord->options.nc2();
+  auto nc3 = peos->pcoord->options.nc3();
 
-  elr = register_buffer("elr", torch::empty(vec, torch::kFloat64));
-  clr = register_buffer("clr", torch::empty(vec, torch::kFloat64));
-  glr = register_buffer("glr", torch::empty(vec, torch::kFloat64));
+  elr =
+      register_buffer("elr", torch::empty({2, nc3, nc2, nc1}, torch::kFloat64));
+  clr =
+      register_buffer("clr", torch::empty({2, nc3, nc2, nc1}, torch::kFloat64));
+  glr =
+      register_buffer("glr", torch::empty({2, nc3, nc2, nc1}, torch::kFloat64));
 }
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,

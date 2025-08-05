@@ -3,6 +3,9 @@
 // C/C++
 #include <memory>
 
+// torch
+#include <torch/torch.h>
+
 // base
 #include <configure.h>
 
@@ -107,7 +110,7 @@ class OutputType {
   // functions
   //! \brief Create doubly linked list of OutputData's containing requested
   //! variables
-  void LoadOutputData(MeshBlock pmb);
+  void LoadOutputData(MeshBlock pmb, Variables const &vars);
 
   void AppendOutputDataNode(OutputData *pdata);
   void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
@@ -126,15 +129,16 @@ class OutputType {
                                 Coordinate pco);
   bool ContainVariable(const std::string &haystack, const std::string &needle);
   // following pure virtual function must be implemented in all derived classes
-  virtual void write_output_file(MeshBlock pmb, double time,
-                                 OctTreeOptions const &tree, bool flag) {}
+  virtual void write_output_file(MeshBlock pmb, Variables const &vars,
+                                 double time, OctTreeOptions const &tree,
+                                 bool flag) {}
   virtual void combine_blocks() {}
 
  protected:
-  void loadHydroOutputData(MeshBlock pmb);
-  void loadDiagOutputData(MeshBlock pmb);
-  void loadScalarOutputData(MeshBlock pmb);
-  void loadUserOutputData(MeshBlock pmb);
+  void loadHydroOutputData(MeshBlock pmb, Variables const &vars);
+  void loadDiagOutputData(MeshBlock pmb, Variables const &vars);
+  void loadScalarOutputData(MeshBlock pmb, Variables const &vars);
+  void loadUserOutputData(MeshBlock pmb, Variables const &vars);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):

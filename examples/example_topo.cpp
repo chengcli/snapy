@@ -29,15 +29,18 @@ torch::Tensor gaussian_func(torch::Tensor x, torch::Tensor y, double x0,
                     (2 * sigma * sigma));
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   // read parameters
   auto cli = CommandLine::ParseArguments(argc, argv);
   if (!cli) return 0;
 
   // input file
   auto infile = std::string(cli->input_filename);
-  auto device = torch::kCUDA;
-  // auto device = torch::kCPU;
+  auto device = torch::kCPU;
+  if (torch::cuda::is_available()) {
+    std::cout << "Running on CUDA" << std::endl;
+    device = torch::kCUDA;
+  }
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));
@@ -65,6 +68,7 @@ int main(int argc, char** argv) {
   int nc2 = pcoord->x2v.size(0);
   int nc1 = pcoord->x1v.size(0);
   int ny = thermo_y->options.species().size() - 1;
+  int nvar = peos->nvar();
 
   // add bottom topography
   auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
@@ -113,6 +117,10 @@ int main(int argc, char** argv) {
       torch::zeros({nc3, nc2, 1 + ny},
                    torch::TensorOptions().dtype(torch::kDouble).device(device));
 
+  auto w = torch::zeros(
+      {nvar, nc3, nc2, nc1},
+      torch::TensorOptions().dtype(torch::kFloat64).device(device));
+
   // read in compositions
   for (int i = 1; i <= ny; ++i) {
     auto name = thermo_y->options.species()[i];
@@ -121,9 +129,6 @@ int main(int argc, char** argv) {
   }
   // dry air mole fraction
   xfrac.select(2, 0) = 1. - xfrac.narrow(-1, 1, ny).sum(-1);
-
-  // set up initial conditions
-  auto w = peos->get_buffer("W");
 
   // adiabatic extrapolate half a grid to cell center
   int is = pcoord->is();
@@ -164,22 +169,15 @@ int main(int argc, char** argv) {
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
   }
 
-  // populate ghost zones
-  snap::BoundaryFuncOptions op;
-  op.nghost(pcoord->options.nghost());
-  op.type(kPrimitive);
-  for (int i = 0; i < block->options.bfuncs().size(); ++i) {
-    block->options.bfuncs()[i](w, 3 - i / 2, op);
-  }
-
   // add noise
   w[IVX] += 0.01 * torch::rand_like(w[IVX]);
   w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
-  // populate the initial condition
-  std::cout << "solid sizes = " << solid.sizes() << std::endl;
-  w.set_(phydro->pib->mark_solid(w, solid));
-  block->initialize(w);
+  // initialize
+  torch::OrderedDict<std::string, torch::Tensor> vars;
+  vars.insert("hydro_w", w);
+  vars.insert("solid", solid);
+  block->initialize(vars);
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
@@ -202,11 +200,9 @@ int main(int argc, char** argv) {
 
   // time loop
   int count = 0;
-  auto u = peos->get_buffer("U");
   double current_time = 0.;
-
   while (!block->pintg->stop(count, current_time)) {
-    auto dt = block->max_time_step(solid);
+    auto dt = block->max_time_step(vars);
 
     // make output
     if (count % 10 == 0) {
@@ -216,28 +212,31 @@ int main(int argc, char** argv) {
 
       block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
 
-      out2.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();
-      ++out2.file_number;
+      out2.file_number++;
 
-      out3.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out3.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out3.combine_blocks();
-      ++out3.file_number;
+      out3.file_number++;
 
-      out4.write_output_file(block, current_time, OctTreeOptions(), 0);
+      out4.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out4.combine_blocks();
-      ++out4.file_number;
+      out4.file_number++;
     }
 
     // evolve dynamics
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(dt, stage, solid);
+      block->forward(dt, stage, vars);
     }
 
     // evolve kinetics
-    auto temp = peos->compute("W->T", {w});
-    auto pres = w[IPR];
-    auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+    auto &hydro_u = vars["hydro_u"];
+    auto &hydro_w = vars["hydro_w"];
+
+    auto temp = peos->compute("W->T", {hydro_w});
+    auto pres = hydro_w[IPR];
+    auto xfrac = thermo_y->compute("Y->X", {hydro_w.narrow(0, ICY, ny)});
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
     auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
 
@@ -248,7 +247,7 @@ int main(int argc, char** argv) {
     std::vector<int64_t> vec(del_conc.dim(), 1);
     vec[del_conc.dim() - 1] = -1;
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
-    u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
+    hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     count++;
     current_time += dt;

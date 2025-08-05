@@ -4,9 +4,10 @@
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
 
-// fmv
+// snap
 #include <snap/loops.cuh>
 #include "flip_zero_impl.h"
+#include "bc_dispatch.hpp"
 
 namespace snap {
 
@@ -48,3 +49,9 @@ int flip_zero_cuda(at::TensorIterator& iter, int dim, int dir) {
 }
 
 }  // namespace snap
+
+namespace at::native {
+
+REGISTER_CUDA_DISPATCH(flip_zero_fn, &snap::flip_zero_cuda);
+
+}  // namespace at::native

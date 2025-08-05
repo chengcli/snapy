@@ -210,14 +210,17 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   return std::min({dt1, dt2, dt3});
 }
 
-torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
-                                 torch::Tensor solid) {
+torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
+                                 Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
-  auto const& w = peos->get_buffer("W");
 
   auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
-  w.set_(pib->mark_solid(peos->forward(u), solid));
+  auto& w = other["hydro_w"];
+
+  peos->forward(u, w);
+  w.set_(pib->mark_solid(w, other["solid"]));
+
   auto temp = peos->compute("W->T", {w});
 
   auto time1 = std::chrono::high_resolution_clock::now();
@@ -236,7 +239,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
         std::chrono::duration<double, std::milli>(time2a - time1).count();
 
     pproj->restore_inplace(wtmp);
-    auto wlr1 = pib->forward(wtmp, DIM1, solid);
+    auto wlr1 = pib->forward(wtmp, DIM1, other["solid"]);
 
     if (!options.disable_dynamics()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
@@ -258,7 +261,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR2"] +=
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
-    auto wlr2 = pib->forward(wtmp, DIM2, solid);
+    auto wlr2 = pib->forward(wtmp, DIM2, other["solid"]);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
     }
@@ -276,7 +279,7 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
     timer["W->LR3"] +=
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
-    auto wlr3 = pib->forward(wtmp, DIM3, solid);
+    auto wlr3 = pib->forward(wtmp, DIM3, other["solid"]);
     if (!options.disable_dynamics()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
     }
@@ -302,24 +305,23 @@ torch::Tensor HydroImpl::forward(torch::Tensor u, double dt,
       std::chrono::duration<double, std::milli>(time4 - time3).count();
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  auto gamma = peos->get_buffer("A");
-  _imp.set_(pimp->forward(du, w, gamma, dt));
+  torch::Tensor wi;
+  if (other["solid"].defined()) {
+    wi = torch::where(other["solid"].unsqueeze(0).expand_as(w),
+                      other["fill_solid_hydro_w"], w);
+    du.masked_fill_(other["solid"].unsqueeze(0).expand_as(du), 0.0);
+  } else {
+    wi = w;
+  }
+
+  auto gamma = peos->compute("W->A", {wi});
+  _imp.set_(pimp->forward(du, wi, gamma, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();
   timer["U->M"] +=
       std::chrono::duration<double, std::milli>(time5 - time4).count();
 
   return du;
-}
-
-void HydroImpl::fix_negative_dp_inplace(torch::Tensor wlr,
-                                        torch::Tensor wdc) const {
-  auto mask =
-      torch::logical_or(wlr.select(1, IDN) < 0., wlr.select(1, IPR) < 0.);
-  wlr.select(1, IDN) =
-      torch::where(mask, wdc.select(1, IDN), wlr.select(1, IDN));
-  wlr.select(1, IPR) =
-      torch::where(mask, wdc.select(1, IPR), wlr.select(1, IPR));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,

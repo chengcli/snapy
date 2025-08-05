@@ -8,6 +8,9 @@ namespace snap {
 class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                                public EquationOfStateImpl {
  public:
+  //! \cache
+  torch::Tensor ivol, temp, w1;
+
   //! submodules
   kintera::ThermoY pthermo = nullptr;
 
@@ -44,36 +47,12 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                         std::vector<torch::Tensor> const& args) override;
 
  private:
-  //! cache
-  torch::Tensor _prim, _cons, _gamma, _ct, _cs, _ke, _ie, _ce, _rhoc;
-
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
    * \param[out] out  conserved variables
    */
   void _prim2cons(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate internal energy
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  internal energy
-   */
-  void _prim2intEng(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate temperature.
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  temperature
-   */
-  void _prim2temp(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief calculate species energy (internal + kinetic).
-  /*
-   * \param[in] prim  primitive variables
-   * \param[out] out  individual species energy
-   */
-  void _prim2speciesEng(torch::Tensor prim, torch::Tensor& out);
 
   //! \brief Convert conserved variables to primitive variables.
   /*
@@ -82,39 +61,62 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    */
   void _cons2prim(torch::Tensor cons, torch::Tensor& out);
 
+  //! \brief calculate internal energy
+  /*
+   * \param[in] prim  primitive variables
+   * \param[out] out  internal energy
+   */
+  torch::Tensor _prim2intEng(torch::Tensor prim);
+
+  //! \brief calculate temperature.
+  /*
+   * \param[in] prim  primitive variables
+   * \return          temperature
+   */
+  torch::Tensor _prim2temp(torch::Tensor prim);
+
+  //! \brief calculate species energy (internal + kinetic).
+  /*
+   * \param[in] prim  primitive variables
+   * \return          individual species energy
+   */
+  torch::Tensor _prim2speciesEng(torch::Tensor prim);
+
   //! \brief Convert conserved variables to kinetic energy.
   /*
    * \param[in] cons    conserved variables
-   * \param[out] out    kinetic energy
+   * \return            kinetic energy
    */
-  void _cons2ke(torch::Tensor cons, torch::Tensor& out);
+  torch::Tensor _cons2ke(torch::Tensor cons);
 
   //! \brief Convert temperature to kinetic energy.
   /*
    * \param[in] cons    conserved variables
    * \param[in] temp    temperature
-   * \param[out] out    internal energy
+   * \return            internal energy
    */
-  void _temp2intEng(torch::Tensor cons, torch::Tensor temp, torch::Tensor& out);
+  torch::Tensor _temp2intEng(torch::Tensor cons, torch::Tensor temp);
 
   //! \brief Compute the adiabatic index
   /*
    * \param[in] ivol  inverse specific volume
    * \param[in] temp  temperature
-   * \param[out] out  adiabatic index
+   * \return          adiabatic index
    */
-  void _adiabatic_index(torch::Tensor ivol, torch::Tensor temp,
-                        torch::Tensor& out) const;
+  torch::Tensor _adiabatic_index(torch::Tensor ivol, torch::Tensor temp);
 
   //! \brief Compute the isothermal sound speed
   /*
    * \param[in] temp  temperature
    * \param[in] ivol  inverse specific volume
    * \param[in] dens  total density
-   * \param[out] out  isothermal sound speed
+   * \return          isothermal sound speed
    */
-  void _isothermal_sound_speed(torch::Tensor ivol, torch::Tensor temp,
-                               torch::Tensor dens, torch::Tensor& out) const;
+  torch::Tensor _isothermal_sound_speed(torch::Tensor ivol, torch::Tensor temp,
+                                        torch::Tensor dens);
+
+  //! \brief Check if the primitive variables are cached.
+  bool _check_copy(torch::Tensor prim, torch::Tensor prim_cache) const;
 };
 TORCH_MODULE(MoistMixture);
 

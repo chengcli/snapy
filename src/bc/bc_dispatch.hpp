@@ -6,8 +6,8 @@
 
 namespace at::native {
 
-using ideal_gas_fn = void (*)(at::TensorIterator &iter, double gammad);
+using flip_zero_fn = int (*)(at::TensorIterator& iter, int dim, int dir);
 
-DECLARE_DISPATCH(ideal_gas_fn, ideal_gas_cons2prim);
+DECLARE_DISPATCH(flip_zero_fn, flip_zero);
 
 }  // namespace at::native

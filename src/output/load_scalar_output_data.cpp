@@ -6,11 +6,11 @@
 #include "output_type.hpp"
 
 namespace snap {
-void OutputType::loadScalarOutputData(MeshBlock pmb) {
+void OutputType::loadScalarOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
 
-  auto const& x = pmb->pscalar->get_buffer("X");
-  auto const& v = pmb->pscalar->get_buffer("V");
+  auto const& x = vars["scalar_x"];
+  auto const& v = vars["scalar_v"];
 
   std::string root_name_cons = "s";
   std::string root_name_prim = "r";

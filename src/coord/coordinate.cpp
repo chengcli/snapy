@@ -1,6 +1,3 @@
-// fmt
-#include <fmt/format.h>
-
 // yaml
 #include <yaml-cpp/yaml.h>
 

@@ -44,13 +44,15 @@ struct MeshBlockOptions {
   ADD_ARG(int, gid) = 0;
 };
 
+using Variables = torch::OrderedDict<std::string, torch::Tensor>;
+
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
   //! options with which this `MeshBlock` was constructed
   MeshBlockOptions options;
 
   //! user output variables
-  torch::OrderedDict<std::string, torch::Tensor> user_out_var;
+  Variables user_out_var;
 
   //! submodules
   Integrator pintg = nullptr;
@@ -69,12 +71,11 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
       std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
       int extend_x2 = 0, int extend_x3 = 0) const;
 
-  void initialize(torch::Tensor const& hydro_w,
-                  torch::Tensor const& scalar_x = torch::Tensor());
+  void initialize(Variables& vars);
 
-  double max_time_step(torch::Tensor solid = torch::Tensor());
+  double max_time_step(Variables const& vars);
 
-  int forward(double dt, int stage, torch::Tensor solid = torch::Tensor());
+  Variables forward(double dt, int stage, Variables const& vars);
 
   void reset_timer() {
     for (auto& t : timer) {

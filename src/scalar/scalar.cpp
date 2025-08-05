@@ -41,7 +41,8 @@ void ScalarImpl::reset() {
                        torch::empty({nvar(), nc3, nc2, nc1}, torch::kFloat64));
 }
 
-torch::Tensor ScalarImpl::forward(torch::Tensor u, double dt) {
+torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
+                                  Variables const& other) {
   // TODO
   return u;
 }

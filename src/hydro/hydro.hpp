@@ -68,6 +68,8 @@ struct HydroOptions {
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
  public:
+  using Variables = torch::OrderedDict<std::string, torch::Tensor>;
+
   //! options with which this `Hydro` was constructed
   HydroOptions options;
 
@@ -99,10 +101,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                                torch::Tensor solid = torch::Tensor()) const;
 
   //! Advance the conserved variables by one time step.
-  torch::Tensor forward(torch::Tensor hydro_u, double dt,
-                        torch::Tensor solid = torch::Tensor());
-
-  void fix_negative_dp_inplace(torch::Tensor wlr, torch::Tensor wdc) const;
+  torch::Tensor forward(double dt, torch::Tensor hydro_u,
+                        Variables const& other);
 
   void reset_timer() {
     for (auto& t : timer) {

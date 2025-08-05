@@ -2,7 +2,7 @@
 #include "output_type.hpp"
 
 namespace snap {
-void OutputType::loadUserOutputData(MeshBlock pmb) {
+void OutputType::loadUserOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
 
   bool output_all_uov = ContainVariable(options.variable(), "uov") ||
