@@ -34,6 +34,22 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   torch::Tensor compute(std::string ab,
                         std::vector<torch::Tensor> const& args) override;
 
+  //! \brief Inverse of the mean molecular weight
+  /*!
+   *! Eq.16 in Li2019
+   *! $ \frac{R}{R_d} = \frac{\mu_d}{\mu}$
+   *! \return $1/\mu$
+   */
+  torch::Tensor f_eps(torch::Tensor const& yfrac) const;
+
+  //! \brief Correction to specific heat capacity at constant volume
+  /*!
+   *! Eq.17 in Li2019
+   *! $ f_\sigma = 1 + \sum_i (\frac{c_{v,i}}{c_{v,d}} - 1.) y_i$
+   *! \return $f_\sigma$
+   */
+  torch::Tensor f_sig(torch::Tensor const& yfrac) const;
+
  private:
   //! \brief Convert primitive variables to conserved variables.
   /*
@@ -84,16 +100,6 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
    * \return            internal energy
    */
   torch::Tensor _temp2intEng(torch::Tensor cons, torch::Tensor temp);
-
-  //! \brief Inverse of the mean molecular weight
-  /*!
-   *! Eq.16 in Li2019
-   *! $ \frac{R}{R_d} = \frac{\mu_d}{\mu}$
-   *! \return $1/\mu$
-   */
-  torch::Tensor _feps(torch::Tensor const& yfrac) const;
-
-  torch::Tensor _fsig(torch::Tensor const& yfrac) const;
 };
 TORCH_MODULE(IdealMoist);
 
