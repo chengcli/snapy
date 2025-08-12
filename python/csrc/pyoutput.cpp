@@ -65,13 +65,14 @@ void bind_output(py::module &m) {
            })
       .def(
           "write_output_file",
-          [](snap::NetcdfOutput &self, py::object block_obj, double time,
-             int wtflag) {
+          [](snap::NetcdfOutput &self, py::object block_obj,
+             snap::Variables const &var, double time, int wtflag) {
             py::object cpp_module = block_obj.attr("cpp_module");
             auto pmb = cpp_module.cast<std::shared_ptr<snap::MeshBlockImpl>>();
             snap::OctTreeOptions tree;
-            self.write_output_file(pmb, time, tree, wtflag);
+            self.write_output_file(pmb, var, time, tree, wtflag);
           },
-          py::arg("block"), py::arg("time"), py::arg("wtflag") = 0)
+          py::arg("block"), py::arg("vars"), py::arg("time"),
+          py::arg("wtflag") = 0)
       .def("combine_blocks", &snap::NetcdfOutput::combine_blocks);
 }
