@@ -16,7 +16,7 @@ macro(setup_test namel)
     PRIVATE ${CMAKE_BINARY_DIR} ${KINTERA_INCLUDE_DIR} ${SNAP_INCLUDE_DIR}
             ${NETCDF_INCLUDES} ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
 
-  target_link_libraries(${namel}.${buildl} 
+  target_link_libraries(${namel}.${buildl}
     PRIVATE snapy::snap
             $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
             gtest_main)

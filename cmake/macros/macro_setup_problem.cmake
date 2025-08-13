@@ -20,6 +20,6 @@ macro(setup_problem namel)
 
   target_link_libraries(
     ${namel}.${buildl}
-    PRIVATE snapy::snap 
+    PRIVATE snapy::snap
             $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
 endmacro()
