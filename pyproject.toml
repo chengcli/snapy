@@ -4,7 +4,7 @@ requires = [
   "wheel",
   "build",
   "numpy",
-  "torch",
+  "torch>=2.7.0,<=2.7.1",
   "ninja",
   "kintera>=0.9.1",
   ]
