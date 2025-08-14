@@ -49,11 +49,18 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
 
   //! Mark the solid cells
   /*!
-   * \param w primitive states
-   * \param solid internal solid boundary in [0, 1]
-   * \return primitive states with solid cells marked
+   * \param w       primitive states
+   * \param solid   internal solid boundary in [0, 1]
    */
-  torch::Tensor mark_solid(torch::Tensor w, torch::Tensor solid);
+  void mark_prim_solid_(torch::Tensor w, torch::Tensor solid);
+
+  //! Mark the solid cells
+  /*!
+   * \param u       conserved states
+   * \param solid   internal solid boundary in [0, 1]
+   */
+  void fill_cons_solid_(torch::Tensor u, torch::Tensor solid,
+                        torch::Tensor fill);
 
   //! Rectify the solid cells
   /*!

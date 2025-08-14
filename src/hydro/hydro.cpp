@@ -219,7 +219,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   auto& w = other["hydro_w"];
 
   peos->forward(u, w);
-  w.set_(pib->mark_solid(w, other["solid"]));
+  pib->mark_prim_solid_(w, other["solid"]);
 
   auto temp = peos->compute("W->T", {w});
 

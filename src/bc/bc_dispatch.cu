@@ -52,6 +52,6 @@ int flip_zero_cuda(at::TensorIterator& iter, int dim, int dir) {
 
 namespace at::native {
 
-REGISTER_CUDA_DISPATCH(flip_zero_fn, &snap::flip_zero_cuda);
+REGISTER_CUDA_DISPATCH(flip_zero, &snap::flip_zero_cuda);
 
 }  // namespace at::native

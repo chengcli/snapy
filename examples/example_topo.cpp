@@ -37,10 +37,10 @@ int main(int argc, char **argv) {
   // input file
   auto infile = std::string(cli->input_filename);
   auto device = torch::kCPU;
-  if (torch::cuda::is_available()) {
+  /*if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
     device = torch::kCUDA;
-  }
+  }*/
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));

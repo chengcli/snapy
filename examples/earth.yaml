@@ -56,11 +56,11 @@ boundary-condition:
 
   external:
     x1-inner: reflecting
-    x1-outer: outflow
-    x2-inner: periodic
-    x2-outer: periodic
-    x3-inner: periodic
-    x3-outer: periodic
+    x1-outer: reflecting
+    x2-inner: outflow
+    x2-outer: outflow
+    x3-inner: outflow
+    x3-outer: outflow
 
 integration:
   type: rk3

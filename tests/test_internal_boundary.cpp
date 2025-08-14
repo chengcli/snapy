@@ -33,12 +33,11 @@ TEST_P(DeviceTest, mark_solid) {
 
   solid = solid.to(torch::kBool);
 
-  auto w1 = pib->mark_solid(w, solid);
+  pib->mark_prim_solid_(w, solid);
   wlr = pib->forward(wlr, 3, solid);
 
-  // std::cout << w << std::endl;
+  std::cout << w << std::endl;
   std::cout << solid << std::endl;
-  std::cout << w1 << std::endl;
   std::cout << wlr << std::endl;
 }
 

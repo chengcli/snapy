@@ -43,46 +43,38 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   if (!options.limiter()) return;  // no limiter
   cons.masked_fill_(torch::isnan(cons), 0.);
-  cons[Index::IDN].clamp_min_(options.density_floor());
+  cons[IDN].clamp_min_(options.density_floor());
 
   auto nghost = pcoord->options.nghost();
   auto interior = get_interior(cons.sizes(), nghost);
   int nvapor = options.thermo().vapor_ids().size() - 1;
   int ncloud = options.thermo().cloud_ids().size();
-  // for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
+  // for (int i = ICY; i < ICY + nvapor; ++i)
   //   cons.index(interior)[i] = pull_neighbors3(cons.index(interior)[i]);
   //  batched
-  cons.index(interior).narrow(0, Index::ICY, nvapor) =
-      pull_neighbors4(cons.index(interior).narrow(0, Index::ICY, nvapor));
-  cons.narrow(0, Index::ICY + nvapor, ncloud).clamp_min_(0.);
+  cons.index(interior).narrow(0, ICY, nvapor) =
+      pull_neighbors4(cons.index(interior).narrow(0, ICY, nvapor));
+  cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
 
-  auto mom = cons.narrow(0, Index::IVX, 3).clone();
+  auto mom = cons.narrow(0, IVX, 3).clone();
   pcoord->vec_raise_(mom);
 
-  auto ke =
-      0.5 * (mom * cons.narrow(0, Index::IVX, 3)).sum(0) / cons[Index::IDN];
+  auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / cons[IDN];
   auto min_temp = options.temperature_floor() * torch::ones_like(ke);
   auto min_ie = compute("UT->I", {cons, min_temp});
-  cons[Index::IPR].clamp_min_(ke + min_ie);
+  cons[IPR].clamp_min_(ke + min_ie);
 }
 
 void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   if (!options.limiter()) return;  // no limiter
   prim.masked_fill_(torch::isnan(prim), 0.);
-  prim[Index::IDN].clamp_min_(options.density_floor());
+  prim[IDN].clamp_min_(options.density_floor());
 
-  auto nghost = pcoord->options.nghost();
-  auto interior = get_interior(prim.sizes(), nghost);
-  int nvapor = options.thermo().vapor_ids().size() - 1;
-  int ncloud = options.thermo().cloud_ids().size();
-  // for (int i = Index::ICY; i < Index::ICY + nvapor; ++i)
-  //   prim.index(interior)[i] = pull_neighbors3(prim.index(interior)[i]);
-  //  batched
-  prim.index(interior).narrow(0, Index::ICY, nvapor) =
-      pull_neighbors4(prim.index(interior).narrow(0, Index::ICY, nvapor));
-  prim.narrow(0, Index::ICY + nvapor, ncloud).clamp_min_(0.);
+  int ny = options.thermo().vapor_ids().size() +
+           options.thermo().cloud_ids().size() - 1;
+  prim.narrow(0, ICY, ny).clamp_min_(0.);
 
-  prim[Index::IPR].clamp_min_(options.pressure_floor());
+  prim[IPR].clamp_min_(options.pressure_floor());
 }
 
 }  // namespace snap
