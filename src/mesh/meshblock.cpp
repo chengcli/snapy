@@ -148,16 +148,8 @@ void MeshBlockImpl::initialize(Variables& vars) {
   auto& hydro_w = vars["hydro_w"];
   auto& scalar_x = vars["scalar_x"];
 
-  // solid
-  if (vars["solid"].defined()) {
-    vars.insert("fill_solid_hydro_w",
-                torch::where(vars["solid"].unsqueeze(0).expand_as(hydro_w),
-                             hydro_w, 0.));
-  }
-
   // hydro
   if (phydro->peos->nvar() > 0) {
-    hydro_w.set_(phydro->pib->mark_solid(hydro_w, vars["solid"]));
     vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
 
     op.type(kConserved);
@@ -181,6 +173,21 @@ void MeshBlockImpl::initialize(Variables& vars) {
 
     // FIXME: scalar should have an eos as well
     // scalar_x.set_(pscalar->pthermo->compute("V->X", {scalar_v}));
+  }
+
+  // solid
+  if (vars["solid"].defined()) {
+    vars.insert("fill_solid_hydro_w",
+                torch::where(vars["solid"].unsqueeze(0).expand_as(hydro_w),
+                             hydro_w, 0.));
+    vars["fill_solid_hydro_w"].narrow(0, IVX, 3).zero_();
+    phydro->pib->mark_prim_solid_(hydro_w, vars["solid"]);
+
+    vars.insert(
+        "fill_solid_hydro_u",
+        torch::where(vars["solid"].unsqueeze(0).expand_as(vars["hydro_u"]),
+                     vars["hydro_u"], 0.));
+    vars["fill_solid_hydro_u"].narrow(0, IVX, 3).zero_();
   }
 }
 
@@ -258,7 +265,8 @@ Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
-  hydro_u.set_(phydro->pib->mark_solid(hydro_u, vars["solid"]));
+  phydro->pib->fill_cons_solid_(hydro_u, vars["solid"],
+                                vars["fill_solid_hydro_u"]);
 
   // (5.1) apply hydro boundary
   if (phydro->peos->nvar() > 0) {

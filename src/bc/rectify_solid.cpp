@@ -158,7 +158,7 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
 
   ///-----  set proper boundary conditions  -----///
   for (int i = 0; i < bfuncs.size(); ++i) {
-    bfuncs[i](solid, 3 - i / 2, op);
+    bfuncs[i](solid, 2 - i / 2, op);
   }
 
   return solid;
