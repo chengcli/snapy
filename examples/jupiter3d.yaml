@@ -55,7 +55,7 @@ species:
 geometry:
   type: cartesian
   bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 1200.e3, x3min: 0., x3max: 1200.e3}
-  cells: {nx1: 50, nx2: 100, nx3: 100, nghost: 3}
+  cells: {nx1: 100, nx2: 100, nx3: 100, nghost: 3}
 
 dynamics:
   equation-of-state:

@@ -37,10 +37,10 @@ int main(int argc, char **argv) {
   // input file
   auto infile = std::string(cli->input_filename);
   auto device = torch::kCPU;
-  /*if (torch::cuda::is_available()) {
+  if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
     device = torch::kCUDA;
-  }*/
+  }
 
   // experiment name is before "."
   auto exp_name = infile.substr(0, infile.find('.'));
@@ -240,7 +240,8 @@ int main(int argc, char **argv) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
     auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
 
-    auto conc_kinet = kinet->options.narrow_copy(conc, thermo_y->options);
+    // auto conc_kinet = kinet->options.narrow_copy(conc, thermo_y->options);
+    auto conc_kinet = conc.slice(-1, 1, conc.size(-1));
     auto [rate, rc_ddC, rc_ddT] = kinet->forward(temp, pres, conc_kinet);
     auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT);
     auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
