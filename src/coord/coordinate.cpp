@@ -203,54 +203,32 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
                                       torch::Tensor flux3) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
 
-  auto vol = cell_volume().unsqueeze(0);
+  auto vol = cell_volume();
   auto dflx = torch::zeros_like(flux1);
 
-  int is, ie, js, je, ks, ke;
+  int si = is();
+  int ei = ie() + 1;
+  int sj = js();
+  int ej = je() + 1;
+  int sk = ks();
+  int ek = ke() + 1;
 
-  if (vol.size(DIM1) > 1) {
-    is = 1;
-    ie = vol.size(DIM1) - 1;
-  } else {
-    is = 0;
-    ie = 1;
+  if (flux1.defined() > 0) {
+    dflx.slice(DIM1, si, ei) +=
+        face_area1(si + 1, ei + 1) * flux1.slice(DIM1, si + 1, ei + 1) -
+        face_area1(si, ei) * flux1.slice(DIM1, si, ei);
   }
 
-  if (vol.size(DIM2) > 1) {
-    js = 1;
-    je = vol.size(DIM2) - 1;
-  } else {
-    js = 0;
-    je = 1;
+  if (flux2.defined() > 0) {
+    dflx.slice(DIM2, sj, ej) +=
+        face_area2(sj + 1, ej + 1) * flux2.slice(DIM2, sj + 1, ej + 1) -
+        face_area2(sj, ej) * flux2.slice(DIM2, sj, ej);
   }
 
-  if (vol.size(DIM3) > 1) {
-    ks = 1;
-    ke = vol.size(DIM3) - 1;
-  } else {
-    ks = 0;
-    ke = 1;
-  }
-
-  if (flux1.numel() > 0) {
-    dflx.slice(DIM1, is, ie) +=
-        face_area1(is + 1, ie + 1).unsqueeze(0) *
-            flux1.slice(DIM1, is + 1, ie + 1) -
-        face_area1(is, ie).unsqueeze(0) * flux1.slice(DIM1, is, ie);
-  }
-
-  if (flux2.numel() > 0) {
-    dflx.slice(DIM2, js, je) +=
-        face_area2(js + 1, je + 1).unsqueeze(0) *
-            flux2.slice(DIM2, js + 1, je + 1) -
-        face_area2(js, je).unsqueeze(0) * flux2.slice(DIM2, js, je);
-  }
-
-  if (flux3.numel() > 0) {
-    dflx.slice(DIM3, ks, ke) +=
-        face_area3(ks + 1, ke + 1).unsqueeze(0) *
-            flux3.slice(DIM3, ks + 1, ke + 1) -
-        face_area3(ks, ke).unsqueeze(0) * flux3.slice(DIM3, ks, ke);
+  if (flux3.defined() > 0) {
+    dflx.slice(DIM3, sk, ek) +=
+        face_area3(sk + 1, ek + 1) * flux3.slice(DIM3, sk + 1, ek + 1) -
+        face_area3(sk, ek) * flux3.slice(DIM3, sk, ek);
   }
 
   return dflx / vol;

@@ -45,25 +45,28 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
 
   at::native::call_roe_average(wroe.device().type(), iter1);
 
-  auto Rmat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
-  auto Rimat = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
-  auto EV = torch::empty({nc3, nc2, nc1, 5, 5}, wlr.options());
+  auto Rmat = torch::empty({nc3, nc2, nc1, 25}, wlr.options());
+  auto Rimat = torch::empty({nc3, nc2, nc1, 25}, wlr.options());
+  auto EV = torch::empty({nc3, nc2, nc1, 25}, wlr.options());
 
-  std::vector<int64_t> vec = {2, 3, 4, 0, 1};
-  auto iter2 =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(true)
-          .declare_static_shape(Rmat.sizes(),
-                                /*squash_dims=*/{wroe.dim() - 1, wroe.dim()})
-          .add_output(Rmat)
-          .add_output(Rimat)
-          .add_output(EV)
-          .add_owned_input(wroe.unsqueeze(0).permute(vec))
-          .add_owned_input(gamma.unsqueeze(0).unsqueeze(0).permute(vec))
-          .build();
+  std::vector<int64_t> vec = {3, 0, 1, 2};
+  auto iter2 = at::TensorIteratorConfig()
+                   .resize_outputs(false)
+                   .check_all_same_dtype(true)
+                   .declare_static_shape(wroe.sizes(), /*squash_dims=*/0)
+                   .add_owned_output(Rmat.permute(vec))
+                   .add_owned_output(Rimat.permute(vec))
+                   .add_owned_output(EV.permute(vec))
+                   .add_input(wroe)
+                   .add_owned_input(gamma.unsqueeze(-1))
+                   .build();
 
   at::native::call_eigen_system(wroe.device().type(), iter2, dim);
+
+  // resize 25 -> 5x5
+  Rmat = Rmat.view({nc3, nc2, nc1, 5, 5});
+  Rimat = Rimat.view({nc3, nc2, nc1, 5, 5});
+  EV = EV.view({nc3, nc2, nc1, 5, 5});
 
   auto result = Rmat.matmul(EV.abs()).matmul(Rimat);
 
