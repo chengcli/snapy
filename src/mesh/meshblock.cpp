@@ -188,6 +188,9 @@ void MeshBlockImpl::initialize(Variables& vars) {
         torch::where(vars["solid"].unsqueeze(0).expand_as(vars["hydro_u"]),
                      vars["hydro_u"], 0.));
     vars["fill_solid_hydro_u"].narrow(0, IVX, 3).zero_();
+  } else {
+    vars.insert("fill_solid_hydro_w", hydro_w);
+    vars.insert("fill_solid_hydro_u", vars["hydro_u"]);
   }
 }
 
@@ -303,11 +306,7 @@ Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
-    if (vars["solid"].defined()) {
-      pthermo->forward(rho, ie, yfrac, vars["solid"]);
-    } else {
-      pthermo->forward(rho, ie, yfrac);
-    }
+    pthermo->forward(rho, ie, yfrac);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }

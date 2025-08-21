@@ -55,7 +55,8 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(double, snap::InternalBoundaryOptions, solid_pressure);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
-      .def("mark_solid", &snap::InternalBoundaryImpl::mark_solid)
+      .def("mark_prim_solid_", &snap::InternalBoundaryImpl::mark_prim_solid_)
+      .def("fill_cons_solid_", &snap::InternalBoundaryImpl::fill_cons_solid_)
       .def(
           "rectify_solid",
           [](snap::InternalBoundaryImpl &self, torch::Tensor solid_in,
