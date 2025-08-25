@@ -7,6 +7,9 @@
 // fmt
 #include <fmt/format.h>
 
+// torch
+#include <torch/script.h>
+
 // kintera
 #include <kintera/constants.h>
 
@@ -29,7 +32,26 @@ torch::Tensor gaussian_func(torch::Tensor x, torch::Tensor y, double x0,
                     (2 * sigma * sigma));
 }
 
-int main(int argc, char **argv) {
+std::map<std::string, torch::Tensor> load_tensors(const std::string& filename) {
+  std::map<std::string, torch::Tensor> tensor_map;
+
+  // Load scripted module
+  torch::jit::script::Module module = torch::jit::load(filename);
+
+  // Get all named buffers
+  for (const auto& p : module.named_buffers(/*recurse=*/false)) {
+    tensor_map[p.name] = p.value;
+  }
+
+  // Optionally, also load parameters (if register_parameter was used)
+  for (const auto& p : module.named_parameters(/*recurse=*/false)) {
+    tensor_map[p.name] = p.value;
+  }
+
+  return tensor_map;
+}
+
+int main(int argc, char** argv) {
   // read parameters
   auto cli = CommandLine::ParseArguments(argc, argv);
   if (!cli) return 0;
@@ -70,7 +92,7 @@ int main(int argc, char **argv) {
   int ny = thermo_y->options.species().size() - 1;
   int nvar = peos->nvar();
 
-  // add bottom topography
+  /* add bottom topography
   auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
   auto x3v = result[0];
   auto x2v = result[1];
@@ -89,11 +111,14 @@ int main(int argc, char **argv) {
     auto sigma = 500. + dist(gen) * 1000.;
     auto height = 500. + dist(gen) * 500.;
     topo += height * gaussian_func(x2v, x3v, x0, y0, sigma);
-  }
+  }*/
+  // std::cout << "topo = " << topo.min() << ", " << topo.max() << std::endl;
+  // auto solid = torch::where(x1v < topo, 1, 0);
 
-  std::cout << "topo = " << topo.min() << ", " << topo.max() << std::endl;
+  auto data =
+      load_tensors("topo_20kmx10km_32.7719_32.9881_-106.5098_-106.3802.pt");
+  auto solid = data["solid_80m"].to(device);
 
-  auto solid = torch::where(x1v < topo, 1, 0);
   int flips;
   solid = phydro->pib->rectify_solid(solid, flips, block->options.bfuncs());
   std::cout << "total number of flips = " << flips << std::endl;
@@ -174,14 +199,14 @@ int main(int argc, char **argv) {
   w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
   // initialize
-  torch::OrderedDict<std::string, torch::Tensor> vars;
-  vars.insert("hydro_w", w);
-  vars.insert("solid", solid);
+  std::map<std::string, torch::Tensor> vars;
+  vars["hydro_w"] = w;
+  vars["solid"] = solid;
   block->initialize(vars);
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
-  block->user_out_var.insert("qtol", torch::Tensor());
+  block->user_out_var["qtol"] = torch::Tensor();
 
   // output fields
   auto out2 = NetcdfOutput(
@@ -210,7 +235,7 @@ int main(int argc, char **argv) {
 
       block->report_timer(std::cout);
 
-      block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
+      block->user_out_var.at("qtol") = w.narrow(0, ICY, ny).sum(0);
 
       out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();
@@ -231,8 +256,8 @@ int main(int argc, char **argv) {
     }
 
     // evolve kinetics
-    auto &hydro_u = vars["hydro_u"];
-    auto &hydro_w = vars["hydro_w"];
+    auto& hydro_u = vars["hydro_u"];
+    auto& hydro_w = vars["hydro_w"];
 
     auto temp = peos->compute("W->T", {hydro_w});
     auto pres = hydro_w[IPR];

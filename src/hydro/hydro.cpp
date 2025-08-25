@@ -216,10 +216,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   auto start = std::chrono::high_resolution_clock::now();
   //// ------------ (1) Calculate Primitives ------------ ////
-  auto& w = other["hydro_w"];
+  auto const& w = other.at("hydro_w");
 
   peos->forward(u, w);
-  pib->mark_prim_solid_(w, other["solid"]);
+  pib->mark_prim_solid_(w, other.at("solid"));
 
   auto temp = peos->compute("W->T", {w});
 
@@ -239,7 +239,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         std::chrono::duration<double, std::milli>(time2a - time1).count();
 
     pproj->restore_inplace(wtmp);
-    auto wlr1 = pib->forward(wtmp, DIM1, other["solid"]);
+    auto wlr1 = pib->forward(wtmp, DIM1, other.at("solid"));
 
     if (!options.disable_dynamics()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
@@ -261,7 +261,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     timer["W->LR2"] +=
         std::chrono::duration<double, std::milli>(time2c - time2).count();
 
-    auto wlr2 = pib->forward(wtmp, DIM2, other["solid"]);
+    auto wlr2 = pib->forward(wtmp, DIM2, other.at("solid"));
     if (!options.disable_dynamics()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
     }
@@ -279,7 +279,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     timer["W->LR3"] +=
         std::chrono::duration<double, std::milli>(time2e - time2).count();
 
-    auto wlr3 = pib->forward(wtmp, DIM3, other["solid"]);
+    auto wlr3 = pib->forward(wtmp, DIM3, other.at("solid"));
     if (!options.disable_dynamics()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
     }
@@ -306,10 +306,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (7) Perform implicit correction ------------ ////
   torch::Tensor wi;
-  if (other["solid"].defined()) {
-    wi = torch::where(other["solid"].unsqueeze(0).expand_as(w),
-                      other["fill_solid_hydro_w"], w);
-    du.masked_fill_(other["solid"].unsqueeze(0).expand_as(du), 0.0);
+  if (other.at("solid").defined()) {
+    wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
+                      other.at("fill_solid_hydro_w"), w);
+    du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
   } else {
     wi = w;
   }

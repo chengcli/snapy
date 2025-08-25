@@ -31,7 +31,8 @@ void bind_eos(py::module &m) {
       .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptions, thermo)
       .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptions, coord);
 
-  py::class_<snap::EquationOfStateImpl>(m, "EquationOfState")
+  py::class_<snap::EquationOfStateImpl,
+             std::shared_ptr<snap::EquationOfStateImpl>>(m, "EquationOfState")
       .def("__repr__",
            [](const snap::EquationOfStateImpl &a) {
              return fmt::format("EquationOfState(\n{})", a.options);

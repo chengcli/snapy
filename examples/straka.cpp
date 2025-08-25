@@ -73,8 +73,8 @@ int main(int argc, char** argv) {
   w[IDN] = w[IPR] / (Rd * temp);
 
   // initialize
-  torch::OrderedDict<std::string, torch::Tensor> vars;
-  vars.insert("hydro_w", w);
+  std::map<std::string, torch::Tensor> vars;
+  vars["hydro_w"] = w;
   block->initialize(vars);
 
   // output
@@ -83,8 +83,8 @@ int main(int argc, char** argv) {
   auto out3 = NetcdfOutput(
       OutputOptions().file_basename("straka").fid(3).variable("uov"));
 
-  block->user_out_var.insert("temp", temp);
-  block->user_out_var.insert("theta", temp * (p0 / w[IPR]).pow(Rd / cp));
+  block->user_out_var["temp"] = temp;
+  block->user_out_var["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
 
   auto m = block->named_modules()["hydro.eos.thermo"];
   auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
@@ -102,8 +102,8 @@ int main(int argc, char** argv) {
           thermo_y->compute("DY->V", {w[IDN], w.slice(0, ICY, w.size(0))});
       temp = thermo_y->compute("PV->T", {w[IPR], ivol});
 
-      block->user_out_var["temp"] = temp;
-      block->user_out_var["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
+      block->user_out_var.at("temp") = temp;
+      block->user_out_var.at("theta") = temp * (p0 / w[IPR]).pow(Rd / cp);
 
       out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();

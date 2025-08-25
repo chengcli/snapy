@@ -125,28 +125,28 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-void MeshBlockImpl::initialize(Variables& vars) {
+Variables& MeshBlockImpl::initialize(Variables& vars) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
-  if (!vars.contains("hydro_u")) {
-    vars.insert("hydro_u", torch::Tensor());
+  if (!vars.count("hydro_u")) {
+    vars["hydro_u"] = torch::Tensor();
   }
 
-  if (!vars.contains("scalar_v")) {
-    vars.insert("scalar_v", torch::Tensor());
+  if (!vars.count("scalar_v")) {
+    vars["scalar_v"] = torch::Tensor();
   }
 
-  if (!vars.contains("scalar_x")) {
-    vars.insert("scalar_x", torch::Tensor());
+  if (!vars.count("scalar_x")) {
+    vars["scalar_x"] = torch::Tensor();
   }
 
-  if (!vars.contains("solid")) {
-    vars.insert("solid", torch::Tensor());
+  if (!vars.count("solid")) {
+    vars["solid"] = torch::Tensor();
   }
 
-  auto& hydro_w = vars["hydro_w"];
-  auto& scalar_x = vars["scalar_x"];
+  auto& hydro_w = vars.at("hydro_w");
+  auto& scalar_x = vars.at("scalar_x");
 
   // hydro
   if (phydro->peos->nvar() > 0) {
@@ -154,21 +154,21 @@ void MeshBlockImpl::initialize(Variables& vars) {
 
     op.type(kConserved);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
-      options.bfuncs()[i](vars["hydro_u"], 3 - i / 2, op);
+      options.bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, op);
     }
 
-    phydro->peos->forward(vars["hydro_u"], /*out=*/hydro_w);
+    phydro->peos->forward(vars.at("hydro_u"), /*out=*/hydro_w);
   }
 
   // scalar
   if (pscalar->nvar() > 0) {
     auto temp = phydro->peos->compute("W->T", {hydro_w});
-    vars["scalar_v"] = pscalar->pthermo->compute(
+    vars.at("scalar_v") = pscalar->pthermo->compute(
         "TPX->V", {temp, hydro_w[Index::IPR], scalar_x});
 
     op.type(kScalar);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
-      options.bfuncs()[i](vars["scalar_v"], 3 - i / 2, op);
+      options.bfuncs()[i](vars.at("scalar_v"), 3 - i / 2, op);
     }
 
     // FIXME: scalar should have an eos as well
@@ -177,41 +177,41 @@ void MeshBlockImpl::initialize(Variables& vars) {
 
   // solid
   if (vars["solid"].defined()) {
-    vars.insert("fill_solid_hydro_w",
-                torch::where(vars["solid"].unsqueeze(0).expand_as(hydro_w),
-                             hydro_w, 0.));
+    vars["fill_solid_hydro_w"] = torch::where(
+        vars.at("solid").unsqueeze(0).expand_as(hydro_w), hydro_w, 0.);
     vars["fill_solid_hydro_w"].narrow(0, IVX, 3).zero_();
-    phydro->pib->mark_prim_solid_(hydro_w, vars["solid"]);
+    phydro->pib->mark_prim_solid_(hydro_w, vars.at("solid"));
 
-    vars.insert(
-        "fill_solid_hydro_u",
-        torch::where(vars["solid"].unsqueeze(0).expand_as(vars["hydro_u"]),
-                     vars["hydro_u"], 0.));
+    vars["fill_solid_hydro_u"] = torch::where(
+        vars.at("solid").unsqueeze(0).expand_as(vars.at("hydro_u")),
+        vars.at("hydro_u"), 0.);
     vars["fill_solid_hydro_u"].narrow(0, IVX, 3).zero_();
   } else {
-    vars.insert("fill_solid_hydro_w", hydro_w);
-    vars.insert("fill_solid_hydro_u", vars["hydro_u"]);
+    vars["fill_solid_hydro_w"] = hydro_w;
+    vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
+
+  return vars;
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
   double dt = 1.e9;
 
-  auto w = vars["hydro_w"];
+  auto const& w = vars.at("hydro_w");
 
   if (phydro->peos->nvar() > 0) {
-    dt = std::min(dt, phydro->max_time_step(w, vars["solid"]));
+    dt = std::min(dt, phydro->max_time_step(w, vars.at("solid")));
   }
 
   return pintg->options.cfl() * dt;
 }
 
-Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
+Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
-  auto& hydro_u = vars["hydro_u"];
-  auto& scalar_v = vars["scalar_v"];
+  auto& hydro_u = vars.at("hydro_u");
+  auto& scalar_v = vars.at("scalar_v");
 
   auto start = std::chrono::high_resolution_clock::now();
   // -------- (1) save initial state --------
@@ -268,8 +268,8 @@ Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 
-  phydro->pib->fill_cons_solid_(hydro_u, vars["solid"],
-                                vars["fill_solid_hydro_u"]);
+  phydro->pib->fill_cons_solid_(hydro_u, vars.at("solid"),
+                                vars.at("fill_solid_hydro_u"));
 
   // (5.1) apply hydro boundary
   if (phydro->peos->nvar() > 0) {
@@ -306,7 +306,7 @@ Variables MeshBlockImpl::forward(double dt, int stage, Variables const& vars) {
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
-    pthermo->forward(rho, ie, yfrac);
+    pthermo->forward(rho, ie, yfrac, /*warm_start=*/true);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }

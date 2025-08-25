@@ -12,8 +12,8 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
 
   auto peos = pmb->phydro->peos;
-  auto const& w = vars["hydro_w"];
-  auto const& u = vars["hydro_u"];
+  auto const& w = vars.at("hydro_w");
+  auto const& u = vars.at("hydro_u");
 
   // (lab-frame) density
   if (ContainVariable(options.variable(), "D") ||

@@ -66,11 +66,22 @@ void bind_output(py::module &m) {
       .def(
           "write_output_file",
           [](snap::NetcdfOutput &self, py::object block_obj,
-             snap::Variables const &var, double time, int wtflag) {
+             py::dict const &vars, double time, int wtflag) {
             py::object cpp_module = block_obj.attr("cpp_module");
             auto pmb = cpp_module.cast<std::shared_ptr<snap::MeshBlockImpl>>();
             snap::OctTreeOptions tree;
-            self.write_output_file(pmb, var, time, tree, wtflag);
+
+            std::map<std::string, torch::Tensor> native;
+            for (auto &kv : vars) {
+              std::string key = py::cast<std::string>(kv.first);
+              if (!kv.second.is_none()) {
+                native[key] = py::cast<torch::Tensor>(kv.second);
+              } else {
+                native[key] = torch::Tensor();
+              }
+            }
+
+            self.write_output_file(pmb, native, time, tree, wtflag);
           },
           py::arg("block"), py::arg("vars"), py::arg("time"),
           py::arg("wtflag") = 0)

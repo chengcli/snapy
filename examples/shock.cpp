@@ -44,14 +44,14 @@ int main(int argc, char** argv) {
 
   std::cout << "w shape = " << w.sizes() << std::endl;
 
-  torch::OrderedDict<std::string, torch::Tensor> vars;
+  std::map<std::string, torch::Tensor> vars;
 
   // internal boundary
   auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
   auto solid = torch::where(r1 < 0.1, 1, 0).to(torch::kBool);
 
-  vars.insert("hydro_w", w);
-  vars.insert("solid", solid);
+  vars["hydro_w"] = w;
+  vars["solid"] = solid;
   block->initialize(vars);
 
   // output

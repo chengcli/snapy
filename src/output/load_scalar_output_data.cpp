@@ -9,8 +9,8 @@ namespace snap {
 void OutputType::loadScalarOutputData(MeshBlock pmb, Variables const& vars) {
   OutputData* pod;
 
-  auto const& x = vars["scalar_x"];
-  auto const& v = vars["scalar_v"];
+  auto const& x = vars.at("scalar_x");
+  auto const& v = vars.at("scalar_v");
 
   std::string root_name_cons = "s";
   std::string root_name_prim = "r";

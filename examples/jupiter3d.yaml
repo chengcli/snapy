@@ -76,7 +76,7 @@ dynamics:
     horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
-    type: lmars
+    type: hllc
 
 boundary-condition:
   internal:
@@ -95,7 +95,7 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.45
-  implicit-scheme: 1
+  implicit-scheme: 9
   nlim: -1
   tlim: 1.e5
 

@@ -44,7 +44,7 @@ struct MeshBlockOptions {
   ADD_ARG(int, gid) = 0;
 };
 
-using Variables = torch::OrderedDict<std::string, torch::Tensor>;
+using Variables = std::map<std::string, torch::Tensor>;
 
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
@@ -71,11 +71,11 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
       std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
       int extend_x2 = 0, int extend_x3 = 0) const;
 
-  void initialize(Variables& vars);
+  Variables& initialize(Variables& vars);
 
   double max_time_step(Variables const& vars);
 
-  Variables forward(double dt, int stage, Variables const& vars);
+  Variables& forward(double dt, int stage, Variables& vars);
 
   void reset_timer() {
     for (auto& t : timer) {
