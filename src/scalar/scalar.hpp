@@ -34,10 +34,10 @@ struct ScalarOptions {
   ADD_ARG(RiemannSolverOptions, riemann);
 };
 
+using Variables = std::map<std::string, torch::Tensor>;
+
 class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
  public:
-  using Variables = torch::OrderedDict<std::string, torch::Tensor>;
-
   //! options with which this `Scalar` was constructed
   ScalarOptions options;
 

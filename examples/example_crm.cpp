@@ -133,13 +133,13 @@ int main(int argc, char **argv) {
   w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
   // initialize
-  torch::OrderedDict<std::string, torch::Tensor> vars;
-  vars.insert("hydro_w", w);
+  std::map<std::string, torch::Tensor> vars;
+  vars["hydro_w"] = w;
   block->initialize(vars);
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
-  block->user_out_var.insert("qtol", torch::Tensor());
+  block->user_out_var["qtol"] = torch::Tensor();
 
   // output fields
   auto out2 = NetcdfOutput(
@@ -163,12 +163,12 @@ int main(int argc, char **argv) {
     auto dt = block->max_time_step(vars);
 
     // make output
-    if (count % 20 == 0) {
+    if (count % 100 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
 
       block->report_timer(std::cout);
 
-      block->user_out_var["qtol"] = w.narrow(0, ICY, ny).sum(0);
+      block->user_out_var.at("qtol") = w.narrow(0, ICY, ny).sum(0);
 
       out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
       out2.combine_blocks();

@@ -23,9 +23,15 @@ std::map<std::string, torch::Tensor> load_tensors(const std::string& filename) {
 
 void test1() {
   // read topo_20m.pt
-  auto data = load_tensors("topo_20m_new.pt");
+  auto data =
+      load_tensors("topo_20kmx10km_32.7719_32.9881_-106.5098_-106.3802.pt");
 
-  std::cout << "solid = " << data["solid_20m"].sizes() << std::endl;
+  std::cout << "solid10 = " << data["solid_10m"].sizes() << std::endl;
+  std::cout << "solid20 = " << data["solid_20m"].sizes() << std::endl;
+  std::cout << "solid40 = " << data["solid_40m"].sizes() << std::endl;
+  std::cout << "solid80 = " << data["solid_80m"].sizes() << std::endl;
+  std::cout << "solid160 = " << data["solid_160m"].sizes() << std::endl;
+  // std::cout << data["solid_160m"] << std::endl;
 }
 
 int main(int argc, char* argv[]) { test1(); }

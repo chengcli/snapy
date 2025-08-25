@@ -66,10 +66,10 @@ struct HydroOptions {
   ADD_ARG(SedHydroOptions, sed);
 };
 
+using Variables = std::map<std::string, torch::Tensor>;
+
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
  public:
-  using Variables = torch::OrderedDict<std::string, torch::Tensor>;
-
   //! options with which this `Hydro` was constructed
   HydroOptions options;
 

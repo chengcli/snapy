@@ -24,8 +24,8 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 10.e3, x3min: 0., x3max: 20.e3}
-  cells: {nx1: 100, nx2: 100, nx3: 200, nghost: 3}
+  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 20.e3, x3min: 0., x3max: 10.e3}
+  cells: {nx1: 119, nx2: 286, nx3: 168, nghost: 3}
 
 dynamics:
   equation-of-state:
