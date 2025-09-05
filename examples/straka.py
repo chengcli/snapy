@@ -13,6 +13,8 @@ from snapy import (
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
+torch.set_default_dtype(torch.float64)
+
 # torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
 
@@ -28,18 +30,20 @@ Rd = 287.0
 gamma = 1.4
 K = 75.0
 
+# device
+device = torch.device("cuda:0")
+
 # set hydrodynamic options
 op = MeshBlockOptions.from_yaml("straka.yaml");
 
 # initialize block
 block = MeshBlock(op)
-block.to(torch.device("cuda:0"))
+block.to(device)
 
 # get handles to modules
 coord = block.hydro.module("coord")
+thermo = block.hydro.module("eos.thermo")
 eos = block.hydro.module("eos")
-thermo = eos.named_modules()["thermo"]
-
 
 # thermodynamics
 Rd = kintera.constants.Rgas / kintera.species_weights()[0];
@@ -51,7 +55,13 @@ x3v, x2v, x1v = torch.meshgrid(
     coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
 )
 
-w = block.buffer("hydro.eos.W")
+# dimensions
+nc3 = coord.buffer("x3v").shape[0]
+nc2 = coord.buffer("x2v").shape[0]
+nc1 = coord.buffer("x1v").shape[0]
+nvar = 5
+
+w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
 
 L = torch.sqrt(((x2v - xc) / xr) ** 2 + ((x1v - zc) / zr) ** 2)
 temp = Ts - grav * x1v / cp
@@ -60,20 +70,16 @@ w[index.ipr] = p0 * torch.pow(temp / Ts, cp / Rd)
 temp += torch.where(L <= 1, dT * (torch.cos(L * math.pi) + 1.0) / 2.0, 0)
 w[index.idn] = w[index.ipr] / (Rd * temp)
 
-
-block.initialize(w)
+block_vars = {}
+block_vars["hydro_w"] = w
+block_vars = block.initialize(block_vars)
 
 # make output
 out2 = NetcdfOutput(OutputOptions().file_basename("straka").fid(2).variable("prim"))
 out3 = NetcdfOutput(OutputOptions().file_basename("straka").fid(3).variable("uov"))
-current_time = 0.0
 
 block.set_uov("temp", temp)
 block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
-
-for out in [out2, out3]:
-    out.write_output_file(block, current_time)
-    out.combine_blocks()
 
 activities = [ProfilerActivity.CPU]
 
@@ -81,18 +87,15 @@ activities = [ProfilerActivity.CPU]
 count = 0;
 start_time = time.time()
 interior = block.part((0, 0, 0))
+current_time = 0.0
 
 # with profile(activities=activities, record_shapes=True) as prof:
 while not block.intg.stop(count, current_time):
-    dt = block.max_time_step()
-    for stage in range(len(block.intg.stages)):
-        block.forward(dt, stage)
+    dt = block.max_time_step(block_vars)
 
-    current_time += dt
-    count += 1
     if count % 100 == 0:
-        print("time = ", current_time)
-        u = block.buffer("hydro.eos.U")
+        print(f"count = {count}, dt = {dt}, time = {current_time}")
+        u = block_vars["hydro_u"]
         print("mass = ", u[interior][index.idn].sum())
 
         ivol = thermo.compute("DY->V", (w[index.idn], w[index.icy:]))
@@ -103,8 +106,14 @@ while not block.intg.stop(count, current_time):
 
         for out in [out2, out3]:
             out.increment_file_number()
-            out.write_output_file(block, current_time)
+            out.write_output_file(block, block_vars, current_time)
             out.combine_blocks()
+
+    for stage in range(len(block.intg.stages)):
+        block.forward(dt, stage, block_vars)
+
+    count += 1
+    current_time += dt
 
 print("elapsed time = ", time.time() - start_time)
 # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))

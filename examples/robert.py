@@ -1,7 +1,15 @@
 import torch
 import math
 import time
-from snapy import *
+from snapy import (
+    index,
+    MeshBlockOptions,
+    MeshBlock,
+    OutputOptions,
+    NetcdfOutput
+)
+
+torch.set_default_dtype(torch.float64)
 
 dT = 0.5
 p0 = 1.0e5
@@ -16,17 +24,17 @@ Rd = 287.0
 gamma = 1.4
 uniform_bubble = False
 
+# device
+device = torch.device("cuda:0")
+
 # set hydrodynamic options
 op = MeshBlockOptions.from_yaml("robert.yaml");
-
-# initialize block
 block = MeshBlock(op)
-block.to(torch.device("cuda:0"))
+block.to(device)
 
 # get handles to modules
 coord = block.hydro.module("coord")
-eos = block.hydro.module("eos")
-thermo = eos.named_modules()["thermo"]
+thermo = block.hydro.module("eos.thermo")
 
 # thermodynamics
 cp = gamma / (gamma - 1.0) * Rd
@@ -36,7 +44,13 @@ x3v, x2v, x1v = torch.meshgrid(
     coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
 )
 
-w = block.buffer("hydro.eos.W")
+# dimensions
+nc3 = coord.buffer("x3v").shape[0]
+nc2 = coord.buffer("x2v").shape[0]
+nc1 = coord.buffer("x1v").shape[0]
+nvar = 5
+
+w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
 
 temp = Ts - grav * x1v / cp
 w[index.ipr] = p0 * torch.pow(temp / Ts, cp / Rd)
@@ -51,39 +65,26 @@ if not uniform_bubble:
     )
 w[index.idn] = w[index.ipr] / (Rd * temp)
 
-block.initialize(w)
+block_vars = {}
+block_vars["hydro_w"] = w
+block_vars = block.initialize(block_vars)
 
 # make output
 # out1 = AsciiOutput(OutputOptions().file_basename("robert").fid(1).variable("hst"))
 out2 = NetcdfOutput(OutputOptions().file_basename("robert").fid(2).variable("prim"))
 out3 = NetcdfOutput(OutputOptions().file_basename("robert").fid(3).variable("uov"))
-current_time = 0.0
-
-block.set_uov("temp", temp)
-block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
-
-for out in [out2, out3]:
-    out.write_output_file(block, current_time)
-    out.combine_blocks()
 
 # integration
 count = 0
 start_time = time.time()
 interior = block.part((0, 0, 0))
-dt_max = 0.
-
+current_time = 0.
 while not block.intg.stop(count, current_time):
-    dt = block.max_time_step()
-    for stage in range(len(block.intg.stages)):
-        block.forward(dt, stage)
-    dt_max = max(dt_max, dt)
+    dt = block.max_time_step(block_vars)
 
-    current_time += dt
-    count += 1
     if count % 1000 == 0:
-        print("time = ", current_time)
-        print("dt_max = ", dt_max)
-        u = block.buffer("hydro.eos.U")
+        print(f"count = {count}, dt = {dt}, time = {current_time}")
+        u = block_vars["hydro_u"]
         print("mass = ", u[interior][index.idn].sum())
 
         ivol = thermo.compute("DY->V", (w[index.idn], w[index.icy:]))
@@ -94,8 +95,13 @@ while not block.intg.stop(count, current_time):
 
         for out in [out2, out3]:
             out.increment_file_number()
-            out.write_output_file(block, current_time)
+            out.write_output_file(block, block_vars, current_time)
             out.combine_blocks()
 
-print("dt_max = ", dt_max)
+    for stage in range(len(block.intg.stages)):
+        block.forward(dt, stage, block_vars)
+
+    count += 1
+    current_time += dt
+
 print("elapsed time = ", time.time() - start_time)
