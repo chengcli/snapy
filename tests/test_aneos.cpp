@@ -15,7 +15,7 @@ using namespace snap;
 using namespace torch::indexing;
 
 TEST(TestANEOSThermo, cpu) {
-  ANEOSThermo thermo("example.speos");
+  ANEOSThermo thermo("example.aneos");
 
   thermo->pretty_print(std::cout);
 
@@ -58,7 +58,7 @@ TEST(TestANEOSThermo, cuda) {
     GTEST_SKIP() << "CUDA is not available, skipping test.";
   }
 
-  ANEOSThermo thermo("example.speos");
+  ANEOSThermo thermo("example.aneos");
 
   thermo->pretty_print(std::cout);
   thermo->to(torch::kCUDA);

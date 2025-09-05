@@ -16,7 +16,7 @@ geometry:
 dynamics:
   equation-of-state:
     type: aneos
-    eos-file: example.speos
+    eos-file: example.aneos
     density-floor:  1.e-6
     pressure-floor: 100.
     limiter: false
