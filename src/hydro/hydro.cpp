@@ -182,8 +182,14 @@ void HydroImpl::reset() {
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
-  auto gamma = peos->compute("W->A", {w});
-  auto cs = peos->compute("WA->L", {w, gamma});
+  // should be preceeded by initialize, W->I, or W->U
+  torch::Tensor cs;
+  if (options.eos().type() == "aneos") {
+    cs = peos->compute("W->L", {w});
+  } else {
+    auto gamma = peos->compute("W->A", {w});
+    cs = peos->compute("WA->L", {w, gamma});
+  }
 
   if (solid.defined()) {
     cs = torch::where(solid, 1.e-8, cs);
@@ -314,7 +320,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     wi = w;
   }
 
-  auto gamma = peos->compute("W->A", {wi});
+  torch::Tensor gamma;
+  if (options.eos().type() == "aneos") {
+    auto cs = peos->compute("W->L", {w});
+    gamma = peos->compute("WL->A", {w, cs});
+  } else {
+    gamma = peos->compute("W->A", {wi});
+  }
   _imp.set_(pimp->forward(du, wi, gamma, dt));
 
   auto time5 = std::chrono::high_resolution_clock::now();

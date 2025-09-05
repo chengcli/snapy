@@ -35,6 +35,7 @@ struct EquationOfStateOptions {
   ADD_ARG(double, pressure_floor) = 1.e-10;
   ADD_ARG(double, temperature_floor) = 20.;
   ADD_ARG(bool, limiter) = false;
+  ADD_ARG(std::string, eos_file) = "";
 
   //! submodules options
   ADD_ARG(kintera::ThermoOptions, thermo);

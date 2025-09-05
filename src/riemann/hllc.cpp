@@ -27,15 +27,27 @@ void HLLCSolverImpl::reset() {
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor flx) {
+  auto pcoord = peos->pcoord;
+
   elr[ILT] = peos->compute("W->I", {wl});
-  glr[ILT] = peos->compute("W->A", {wl});
-  clr[ILT] = peos->compute("WA->L", {wl, glr[ILT]});
+
+  if (options.eos().type() == "aneos") {
+    clr[ILT] = peos->compute("W->L", {wl});
+    glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
+  } else {
+    glr[ILT] = peos->compute("W->A", {wl});
+    clr[ILT] = peos->compute("WA->L", {wl, glr[ILT]});
+  }
 
   elr[IRT] = peos->compute("W->I", {wr});
-  glr[IRT] = peos->compute("W->A", {wr});
-  clr[IRT] = peos->compute("WA->L", {wr, glr[IRT]});
 
-  auto pcoord = peos->pcoord;
+  if (options.eos().type() == "aneos") {
+    clr[IRT] = peos->compute("W->L", {wr});
+    glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
+  } else {
+    glr[IRT] = peos->compute("W->A", {wr});
+    clr[IRT] = peos->compute("WA->L", {wr, glr[IRT]});
+  }
 
   switch (dim) {
     case 1:
