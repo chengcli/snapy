@@ -13,6 +13,12 @@
 namespace snap {
 
 void OutputType::loadDiagOutputData(MeshBlock pmb, Variables const& vars) {
+  if (!(pmb->phydro->options.eos().type() == "ideal-moist" ||
+        pmb->phydro->options.eos().type() == "moist-mixture")) {
+    // skip if not using kintera thermo
+    return;
+  }
+
   OutputData* pod;
   auto peos = pmb->phydro->peos;
 

@@ -36,6 +36,7 @@ file(GLOB src_files
     bc/*.cpp
     coord/*.cpp
     eos/*.cpp
+    eos/aneos/*.cpp
     hydro/*.cpp
     riemann/*.cpp
     recon/*.cpp
@@ -82,6 +83,7 @@ if (CUDAToolkit_FOUND)
   file(GLOB cu_src_files
       bc/*.cu
       eos/*.cu
+      eos/aneos/*.cu
       intg/*.cu
       recon/*.cu
       riemann/*.cu

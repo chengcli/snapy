@@ -1,5 +1,6 @@
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/eos/aneos.hpp>
 #include <snap/eos/ideal_gas.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/eos/moist_mixture.hpp>
@@ -17,7 +18,7 @@ EquationOfState register_module_op(torch::nn::Module *p, std::string name,
   } else if (op.type() == "ideal-moist") {
     return p->register_module(name, IdealMoist(op));
   } else if (op.type() == "aneos") {
-    // return p->register_module(name, IdealMoist(op));
+    return p->register_module(name, ANEOS(op));
   } else if (op.type() == "shallow-water") {
     return p->register_module(name, ShallowWater(op));
   } else {

@@ -27,13 +27,25 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
+  auto pcoord = peos->pcoord;
+
   elr[ILT] = peos->compute("W->I", {wl}) / wl[Index::IDN];
-  glr[ILT] = peos->compute("W->A", {wl});
+
+  if (options.eos().type() == "aneos") {
+    clr[ILT] = peos->compute("W->L", {wl});
+    glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
+  } else {
+    glr[ILT] = peos->compute("W->A", {wl});
+  }
 
   elr[IRT] = peos->compute("W->I", {wr}) / wr[Index::IDN];
-  glr[IRT] = peos->compute("W->A", {wr});
 
-  auto pcoord = peos->pcoord;
+  if (options.eos().type() == "aneos") {
+    clr = peos->compute("W->L", {wr});
+    glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
+  } else {
+    glr[IRT] = peos->compute("W->A", {wr});
+  }
 
   switch (dim) {
     case 1:

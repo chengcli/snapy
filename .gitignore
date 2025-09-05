@@ -13,7 +13,7 @@ data/example.speos
 # mac
 .DS_Store
 
-# eos data
+# eos file
 example.speos
 
 # egg

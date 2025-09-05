@@ -15,7 +15,7 @@ namespace snap {
 void call_lmars_cuda(at::TensorIterator& iter, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "lmars_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_lmars_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;
@@ -36,7 +36,7 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
 void call_hllc_cuda(at::TensorIterator& iter, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "hllc_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_hllc_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto ny = nhydro - Index::ICY;

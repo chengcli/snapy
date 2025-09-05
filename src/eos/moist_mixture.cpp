@@ -1,4 +1,4 @@
-// kintere
+// kintera
 #include <kintera/constants.h>
 
 #include <kintera/thermo/eval_uhs.hpp>
