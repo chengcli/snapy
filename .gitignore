@@ -4,17 +4,11 @@ build*/
 # cache
 .cache
 
-# data
-data/example.speos
-
 # nc
 *.nc
 
 # mac
 .DS_Store
-
-# eos file
-example.speos
 
 # egg
 *.egg-info
