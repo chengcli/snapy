@@ -22,40 +22,21 @@ from kintera import (
 
 torch.set_default_dtype(torch.float64)
 
-if __name__ == "__main__":
-    infile = "jupiter3d.yaml"
-    config = yaml.safe_load(open(infile, "r"))
-
-    Ps = float(config["problem"]["Ps"])
-    Ts = float(config["problem"]["Ts"])
+def setup_moist_adiabatic_profile(config, coord, thermo_x,
+                                  device=torch.device("cpu")):
     Tmin = float(config["problem"]["Tmin"])
     grav = - float(config["forcing"]["const-gravity"]["grav1"])
-
-    # device
-    device = torch.device("cuda:0")
-
-    # set hydrodynamic options
-    op = MeshBlockOptions.from_yaml(infile);
-    block = MeshBlock(op)
-    block.to(device)
-
-    # get handles to modules
-    coord = block.hydro.module("coord")
-    thermo_y = block.hydro.module("eos.thermo")
-    eos = block.hydro.get_eos()
+    Ps = float(config["problem"]["Ps"])
+    Ts = float(config["problem"]["Ts"])
 
     # dimensions
     nc3 = coord.buffer("x3v").shape[0]
     nc2 = coord.buffer("x2v").shape[0]
     nc1 = coord.buffer("x1v").shape[0]
-    ny = len(thermo_y.options.species()) - 1
+    ny = len(thermo_x.options.species()) - 1
     nvar = eos.nvar()
     print("ny = ", ny)
     print("nvar = ", nvar)
-
-    # set initial conditions
-    thermo_x = ThermoX(thermo_y.options)
-    thermo_x.to(device)
 
     temp = Ts * torch.ones((nc3, nc2), device=device)
     pres = Ps * torch.ones((nc3, nc2), device=device)
@@ -63,7 +44,7 @@ if __name__ == "__main__":
 
     # read in compositions
     for i in range(1, 1 + ny):
-        name = 'x' + thermo_y.options.species()[i]
+        name = 'x' + thermo_x.options.species()[i]
         if name in config["problem"]:
             xfrac[:, :, i] = float(config["problem"][name])
 
@@ -108,9 +89,65 @@ if __name__ == "__main__":
     w[index.ivx] += 0.01 * torch.rand_like(w[index.ivx])
     w[index.ivy] += 0.01 * torch.rand_like(w[index.ivy])
 
-    # initialize
+    return w;
+
+def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
+    # evolve kinetics
+    hydro_u = block_vars["hydro_u"]
+    hydro_w = block_vars["hydro_w"]
+
+    temp = eos.compute("W->T", [hydro_w])
+    pres = hydro_w[index.ipr]
+    xfrac = thermo_y.compute("Y->X", [hydro_w[index.icy:, :, :, :]])
+    conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
+    cp_vol = thermo_x.compute("TV->cp", [temp, conc])
+
+    conc_kinet = conc[:, :, :, 1:]
+    rate, rc_ddC, rc_ddT = kinet.forward_nogil(temp, pres, conc_kinet)
+    jac = kinet.jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT)
+    del_conc = evolve_implicit(rate, kinet.buffer("stoich"), jac, dt)
+    del_rho = del_conc / thermo_y.buffer("inv_mu")[1:].view(1, 1, 1, -1)
+    hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
+
+if __name__ == "__main__":
+    infile = "jupiter3d.yaml"
+    config = yaml.safe_load(open(infile, "r"))
+
+    # device
+    device = torch.device("cuda:0")
+
+    # set hydrodynamic options
+    op = MeshBlockOptions.from_yaml(infile)
+    block = MeshBlock(op)
+    block.to(device)
+
+    # get handles to modules
+    coord = block.hydro.module("coord")
+    thermo_y = block.hydro.module("eos.thermo")
+    eos = block.hydro.get_eos()
+
+    thermo_x = ThermoX(thermo_y.options)
+    thermo_x.to(device)
+
     block_vars = {}
-    block_vars["hydro_w"] = w
+    interior = block.part((0, 0, 0))
+
+    if config["problem"]["init_cond"]:
+        nc3 = coord.buffer("x3v").shape[0]
+        nc2 = coord.buffer("x2v").shape[0]
+        nc1 = coord.buffer("x1v").shape[0]
+        nvar = eos.nvar()
+        block_vars["hydro_w"] = torch.zeros((nvar, nc3, nc2, nc1),
+                                            device=device)
+
+        module = torch.jit.load(config["problem"]["init_cond"])
+        data = {name: param for name, param in module.named_buffers()}
+        block_vars["hydro_w"][interior] = data["hydro_w"].to(device)
+    else:
+        block_vars["hydro_w"] = setup_moist_adiabatic_profile(
+                config, coord, eos, thermo_y, device=device)
+
+    # initialize
     block_vars = block.initialize(block_vars)
 
     out2 = NetcdfOutput(OutputOptions().file_basename("jupiter3d").fid(2).variable("prim"))
@@ -123,18 +160,15 @@ if __name__ == "__main__":
     kinet.to(device)
 
     # integration
-    count = 0
-    start_time = time.time()
-    interior = block.part((0, 0, 0))
-    current_time = 0.
+    count, current_time, start_time = 0, 0, time.time()
     while not block.intg.stop(count, current_time):
         dt = block.max_time_step(block_vars)
 
         # make output
         if count % 100 == 0:
             print(f"count = {count}, dt = {dt}, time = {current_time}")
-            #u = block_vars["hydro_u"]
-            #print("mass = ", u[interior][index.idn].sum())
+            u = block_vars["hydro_u"]
+            print("mass = ", u[interior][index.idn].sum())
 
             qtol = block_vars["hydro_w"][index.icy:, :, :, :].sum(dim=0)
             block.set_uov("qtol", qtol)
@@ -148,22 +182,7 @@ if __name__ == "__main__":
         for stage in range(len(block.intg.stages)):
             block.forward(dt, stage, block_vars)
 
-        # evolve kinetics
-        hydro_u = block_vars["hydro_u"]
-        hydro_w = block_vars["hydro_w"]
-
-        temp = eos.compute("W->T", [hydro_w])
-        pres = hydro_w[index.ipr]
-        xfrac = thermo_y.compute("Y->X", [hydro_w[index.icy:, :, :, :]])
-        conc = thermo_x.compute("TPX->V", [temp, pres, xfrac])
-        cp_vol = thermo_x.compute("TV->cp", [temp, conc])
-
-        conc_kinet = conc[:, :, :, 1:]
-        rate, rc_ddC, rc_ddT = kinet.forward_nogil(temp, pres, conc_kinet)
-        jac = kinet.jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT)
-        del_conc = evolve_implicit(rate, kinet.buffer("stoich"), jac, dt)
-        del_rho = del_conc / thermo_y.buffer("inv_mu")[1:].view(1, 1, 1, -1)
-        hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
+        evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt)
 
         count += 1
         current_time += dt
