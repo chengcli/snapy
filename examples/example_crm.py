@@ -22,7 +22,7 @@ from kintera import (
 
 torch.set_default_dtype(torch.float64)
 
-def setup_moist_adiabatic_profile(config, coord, thermo_x,
+def setup_moist_adiabatic_profile(config, coord, eos, thermo_x,
                                   device=torch.device("cpu")):
     Tmin = float(config["problem"]["Tmin"])
     grav = - float(config["forcing"]["const-gravity"]["grav1"])
@@ -35,8 +35,6 @@ def setup_moist_adiabatic_profile(config, coord, thermo_x,
     nc1 = coord.buffer("x1v").shape[0]
     ny = len(thermo_x.options.species()) - 1
     nvar = eos.nvar()
-    print("ny = ", ny)
-    print("nvar = ", nvar)
 
     temp = Ts * torch.ones((nc3, nc2), device=device)
     pres = Ps * torch.ones((nc3, nc2), device=device)
@@ -115,6 +113,7 @@ if __name__ == "__main__":
 
     # device
     device = torch.device("cuda:0")
+    #device = torch.device("cpu")
 
     # set hydrodynamic options
     op = MeshBlockOptions.from_yaml(infile)
@@ -125,6 +124,7 @@ if __name__ == "__main__":
     coord = block.hydro.module("coord")
     thermo_y = block.hydro.module("eos.thermo")
     eos = block.hydro.get_eos()
+    #thermo_y.options.max_iter(100)
 
     thermo_x = ThermoX(thermo_y.options)
     thermo_x.to(device)
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     block_vars = {}
     interior = block.part((0, 0, 0))
 
-    if config["problem"]["init_cond"]:
+    if "init_cond" in config["problem"]:
         nc3 = coord.buffer("x3v").shape[0]
         nc2 = coord.buffer("x2v").shape[0]
         nc1 = coord.buffer("x1v").shape[0]
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         block_vars["hydro_w"][interior] = data["hydro_w"].to(device)
     else:
         block_vars["hydro_w"] = setup_moist_adiabatic_profile(
-                config, coord, eos, thermo_y, device=device)
+                config, coord, eos, thermo_x, device=device)
 
     # initialize
     block_vars = block.initialize(block_vars)
@@ -166,9 +166,9 @@ if __name__ == "__main__":
 
         # make output
         if count % 100 == 0:
-            print(f"count = {count}, dt = {dt}, time = {current_time}")
+            print(f"count = {count}, dt = {dt}, time = {current_time}", flush=True)
             u = block_vars["hydro_u"]
-            print("mass = ", u[interior][index.idn].sum())
+            print("mass = ", u[interior][index.idn].sum(), flush=True)
 
             qtol = block_vars["hydro_w"][index.icy:, :, :, :].sum(dim=0)
             block.set_uov("qtol", qtol)

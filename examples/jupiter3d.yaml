@@ -72,8 +72,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: weno5, scale: true, shock: true}
-    horizontal: {type: weno5, scale: true, shock: true}
+    vertical: {type: weno5, scale: true, shock: false}
+    horizontal: {type: weno5, scale: true, shock: false}
 
   riemann-solver:
     type: hllc

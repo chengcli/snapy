@@ -44,6 +44,8 @@ def read_hydro(ymlfile, inpfile):
         for s in op.species()[1:]:
             var = nc.variables[s]
             x = var[:].filled(np.nan).astype(np.float64)
+            if (x < 0).any() or (x > 1).any():
+                raise ValueError(f'Species fraction {s} out of bounds [0, 1]')
             xfrac.append(x)
 
     ntime, nx1, nx2, nx3 = rho.shape
