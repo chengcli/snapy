@@ -19,9 +19,7 @@ EquationOfStateOptions EquationOfStateOptions::from_yaml(
   op.pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
   op.temperature_floor() = node["temperature-floor"].as<double>(20.);
   op.limiter() = node["limiter"].as<bool>(false);
-
   op.eos_file() = node["eos-file"].as<std::string>("");
-  printf("* eos-file = %s\n", op.eos_file().c_str());
 
   return op;
 }
