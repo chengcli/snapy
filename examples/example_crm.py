@@ -165,7 +165,7 @@ if __name__ == "__main__":
         dt = block.max_time_step(block_vars)
 
         # make output
-        if count % 100 == 0:
+        if count % 1000 == 0:
             print(f"count = {count}, dt = {dt}, time = {current_time}", flush=True)
             u = block_vars["hydro_u"]
             print("mass = ", u[interior][index.idn].sum(), flush=True)
