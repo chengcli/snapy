@@ -52,10 +52,10 @@ void MeshBlockImpl::reset() {
       torch::zeros({phydro->peos->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
   // set up scalar buffer
-  _scalar_v0 = register_buffer(
-      "v0", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
-  _scalar_v1 = register_buffer(
-      "v1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
+  _scalar_s0 = register_buffer(
+      "s0", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
+  _scalar_s1 = register_buffer(
+      "s1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
@@ -133,12 +133,12 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
     vars["hydro_u"] = torch::Tensor();
   }
 
-  if (!vars.count("scalar_v")) {
-    vars["scalar_v"] = torch::Tensor();
+  if (!vars.count("scalar_s")) {
+    vars["scalar_s"] = torch::Tensor();
   }
 
-  if (!vars.count("scalar_x")) {
-    vars["scalar_x"] = torch::Tensor();
+  if (!vars.count("scalar_r")) {
+    vars["scalar_r"] = torch::Tensor();
   }
 
   if (!vars.count("solid")) {
@@ -146,7 +146,7 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
   }
 
   auto& hydro_w = vars.at("hydro_w");
-  auto& scalar_x = vars.at("scalar_x");
+  auto& scalar_r = vars.at("scalar_r");
 
   // hydro
   if (phydro->peos->nvar() > 0) {
@@ -163,16 +163,16 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
   // scalar
   if (pscalar->nvar() > 0) {
     auto temp = phydro->peos->compute("W->T", {hydro_w});
-    vars.at("scalar_v") = pscalar->pthermo->compute(
-        "TPX->V", {temp, hydro_w[Index::IPR], scalar_x});
+    vars.at("scalar_s") = pscalar->pthermo->compute(
+        "TPX->V", {temp, hydro_w[Index::IPR], scalar_r});
 
     op.type(kScalar);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
-      options.bfuncs()[i](vars.at("scalar_v"), 3 - i / 2, op);
+      options.bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, op);
     }
 
     // FIXME: scalar should have an eos as well
-    // scalar_x.set_(pscalar->pthermo->compute("V->X", {scalar_v}));
+    // scalar_r.set_(pscalar->pthermo->compute("V->X", {scalar_s}));
   }
 
   // solid
@@ -211,7 +211,7 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
               "Invalid stage: ", stage);
 
   auto& hydro_u = vars.at("hydro_u");
-  auto& scalar_v = vars.at("scalar_v");
+  auto& scalar_s = vars.at("scalar_s");
 
   auto start = std::chrono::high_resolution_clock::now();
   // -------- (1) save initial state --------
@@ -222,13 +222,13 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
     }
 
     if (pscalar->nvar() > 0) {
-      _scalar_v0.copy_(scalar_v);
-      _scalar_v1.copy_(scalar_v);
+      _scalar_s0.copy_(scalar_s);
+      _scalar_s1.copy_(scalar_s);
     }
   }
 
   // -------- (2) set containers for future results --------
-  torch::Tensor fut_hydro_du, fut_scalar_dv;
+  torch::Tensor fut_hydro_du, fut_scalar_ds;
 
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
@@ -242,7 +242,7 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
 
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
-    fut_scalar_dv = pscalar->forward(dt, scalar_v, vars);
+    fut_scalar_ds = pscalar->forward(dt, scalar_s, vars);
   }
 
   auto time2 = std::chrono::high_resolution_clock::now();
@@ -256,8 +256,8 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
   }
 
   if (pscalar->nvar() > 0) {
-    scalar_v.set_(pintg->forward(stage, _scalar_v0, _scalar_v1, fut_scalar_dv));
-    _scalar_v1.copy_(scalar_v);
+    scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
+    _scalar_s1.copy_(scalar_s);
   }
 
   auto time3 = std::chrono::high_resolution_clock::now();
@@ -282,7 +282,7 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
   if (pscalar->nvar() > 0) {
     op.type(kScalar);
     for (int i = 0; i < options.bfuncs().size(); ++i)
-      options.bfuncs()[i](scalar_v, 3 - i / 2, op);
+      options.bfuncs()[i](scalar_s, 3 - i / 2, op);
   }
 
   auto time4 = std::chrono::high_resolution_clock::now();

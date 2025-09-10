@@ -18,3 +18,6 @@ dist/
 
 # data
 data/
+
+# pt file
+*.pt

@@ -162,7 +162,6 @@ torch::Tensor pull_neighbors4(const torch::Tensor& input) {
   // iterate until no negatives remain anywhere in the batch
   while ((Xc < 0).any().item<bool>() && max_iter-- > 0) {
     std::cout << "pull_neighbors4: Iteration " << (10 - max_iter) << std::endl;
-    std::cout << "xc shape = " << Xc.sizes() << std::endl;
     std::cout << "xc min = " << Xc.min().item<double>()
               << ", max = " << Xc.max().item<double>() << std::endl;
 

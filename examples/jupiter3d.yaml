@@ -72,8 +72,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: weno5, scale: true, shock: true}
-    horizontal: {type: weno5, scale: true, shock: true}
+    vertical: {type: weno5, scale: true, shock: false}
+    horizontal: {type: weno5, scale: true, shock: false}
 
   riemann-solver:
     type: hllc
@@ -163,3 +163,4 @@ problem:
   xH2O: 3.e-3
   xNH3: 3.2e-4
   xH2S: 1.e-5
+  #init_cond: jupiter3d_init.pt
