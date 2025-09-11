@@ -6,6 +6,7 @@ import yaml
 import torch
 import snapy
 import kintera
+import argparse
 from snapy import (
         index,
         MeshBlockOptions,
@@ -107,16 +108,11 @@ def evolve_kinetics(block_vars, eos, thermo_x, thermo_y, kinet, dt):
     del_rho = del_conc / thermo_y.buffer("inv_mu")[1:].view(1, 1, 1, -1)
     hydro_u[index.icy:, :, :, :] += del_rho.permute(3, 0, 1, 2)
 
-if __name__ == "__main__":
-    infile = "jupiter3d.yaml"
-    config = yaml.safe_load(open(infile, "r"))
-
-    # device
-    device = torch.device("cuda:0")
-    #device = torch.device("cpu")
+def main(args, rank, device):
+    config = yaml.safe_load(open(args.input, "r"))
 
     # set hydrodynamic options
-    op = MeshBlockOptions.from_yaml(infile)
+    op = MeshBlockOptions.from_yaml(args.input)
     block = MeshBlock(op)
     block.to(device)
 
@@ -155,17 +151,18 @@ if __name__ == "__main__":
     out4 = NetcdfOutput(OutputOptions().file_basename("jupiter3d").fid(4).variable("diag"))
 
     # kinetics model
-    op_kinet = KineticsOptions.from_yaml(infile)
+    op_kinet = KineticsOptions.from_yaml(args.input)
     kinet = Kinetics(op_kinet)
     kinet.to(device)
 
     # integration
     count, current_time, start_time = 0, 0, time.time()
     while not block.intg.stop(count, current_time):
+        exchange_halos(block_vars)
         dt = block.max_time_step(block_vars)
 
         # make output
-        if count % 1000 == 0:
+        if rank == 0 and count % args.print_every == 0:
             print(f"count = {count}, dt = {dt}, time = {current_time}", flush=True)
             u = block_vars["hydro_u"]
             print("mass = ", u[interior][index.idn].sum(), flush=True)
@@ -186,3 +183,43 @@ if __name__ == "__main__":
 
         count += 1
         current_time += dt
+
+    # done
+    dist.destroy_process_group()
+
+if __name__ == "__main__":
+    os.environ.setdefault("NCCL_DEBUG", "WARN")
+    os.environ.setdefault("NCCL_IB_DISABLE", "0")
+    torch.backends.cudnn.benchmark = True
+
+    p = argparse.ArgumentParser()
+
+    p.add_argument("-i", "--input", type=str,
+                    help="path to input file", required=True)
+    p.add_argument("-r", "--restart", type=str,
+                    help="path to restart file")
+    p.add_argument("-d", "--device", type=str, default="cuda",
+                    choices=["cpu", "cuda"],
+                    help="run and output dir")
+    p.add_argument("--px", type=int, default=0,
+                    help="ranks in x (cols); 0=auto")
+    p.add_argument("--py", type=int, default=0,
+                    help="ranks in y (rows); 0=auto")
+    p.add_argument("--print_every", type=int, default=1,
+                    help="print diagnostic message every XX cycle")
+    args = p.parse_args()
+
+    if args.device == "cuda":
+        rank, world_size, device = init_cuda_dist()
+
+    # Pick (py, px)
+    if args.px > 0 and args.py > 0:
+        px, py = args.px, args.py
+        assert px * py == world_size, f"px*py ({px}*{py}) != world_size ({world_size})"
+    else:
+        py, px = best_2d_factors(world_size)
+
+    ry, rx = cart_coords(rank, px, py)
+    up, down, left, right = neighbors_2d(rank, px, py)
+
+    main(args, rank, device)
