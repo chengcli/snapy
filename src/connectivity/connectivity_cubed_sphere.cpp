@@ -1,32 +1,32 @@
-/* cubedsphere_zorder.h
- *
- * Z-order (Morton) helpers (2D/3D) + per-face Z-order distribution
- * + cubed-sphere connectivity on 6 faces with editable edge orientations.
- *
- * Build example:
- *   cc -O3 -std=c99 test_cs.c -o test_cs
- *
+/*
  * Notes on connectivity:
  * - We model only the surface (six 2D faces).
- * - Each face holds a px-by-py processor grid (px==py required by you; code
- * allows px,py).
+ * - Each face holds a px-by-py processor grid (px==py required by the cubed
+ * grid; however code allows px,py).
  * - Global rank = face_major * (py*px) + zorder_rank_within_face.
  *
  * Orientation model across an edge:
  *   From (face f, side s ∈ {L,R,B,T}) we land on (nface, nside),
  *   and the along-edge index is either preserved or reversed.
- *   No "transpose" is required if you define nside correctly:
+ *   No "transpose" is required if nside is defined correctly:
  *     - neighbor side L/R varies along neighbor Y (rows)
  *     - neighbor side B/T varies along neighbor X (cols)
  *   This matches p4est's face orientation idea at coarse level.
  *
- * If your geometry requires a different convention (e.g., local axes on faces),
+ * If the geometry requires a different convention (e.g., local axes on faces),
  * just edit the table `CS_FACE_EDGES[6][4]`.
+ *
+ * WRONG
+ * Demo cubed-sphere Z-order connectivity px=2 face=4 (rx,ry)=(0,1)
+ * self=18 L=14 R=19 D=16 U=11 UL=18
+ * Demo cubed-sphere Z-order connectivity px=2 face=5 (rx,ry)=(0,1)
+ * self=22 L=13 R=23 D=20 U=0 UL=15
  */
 
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+// C/C++
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 #include "connectivity.hpp"
 
@@ -60,32 +60,30 @@ static const CSEdge CS_FACE_EDGES[6][4] = {
            /* R */ {1, SIDE_L, 0},
            /* B */ {5, SIDE_T, 0},
            /* T */ {4, SIDE_B, 0}},
-    /* face 1: neighbors 0(L),2(R),5(B),4(T) -- flips on vertical glue common in
-       many nets */
+    /* face 1: neighbors 0(L),2(R),5(B),4(T) */
     [1] = {/* L */ {0, SIDE_R, 0},
            /* R */ {2, SIDE_L, 0},
            /* B */ {5, SIDE_R, 1},
-           /* T */ {4, SIDE_R, 1}},
+           /* T */ {4, SIDE_R, 0}},
     /* face 2: neighbors 1(L),3(R),5(B),4(T) */
     [2] = {/* L */ {1, SIDE_R, 0},
            /* R */ {3, SIDE_L, 0},
-           /* B */ {5, SIDE_B, 0},
-           /* T */ {4, SIDE_T, 0}},
-    /* face 3: neighbors 2(L),0(R),5(B),4(T) -- flips on vertical glue */
+           /* B */ {5, SIDE_B, 1},
+           /* T */ {4, SIDE_T, 1}},
+    /* face 3: neighbors 2(L),0(R),5(B),4(T) */
     [3] = {/* L */ {2, SIDE_R, 0},
            /* R */ {0, SIDE_L, 0},
-           /* B */ {5, SIDE_L, 1},
+           /* B */ {5, SIDE_L, 0},
            /* T */ {4, SIDE_L, 1}},
-    /* face 4: neighbors 3(L),1(R),0(B),2(T) -- many conventions reverse on L/R
-     */
+    /* face 4: neighbors 3(L),1(R),0(B),2(T) */
     [4] = {/* L */ {3, SIDE_T, 1},
-           /* R */ {1, SIDE_T, 1},
+           /* R */ {1, SIDE_T, 0},
            /* B */ {0, SIDE_T, 0},
-           /* T */ {2, SIDE_T, 0}},
+           /* T */ {2, SIDE_T, 1}},
     /* face 5: neighbors 3(L),1(R),2(B),0(T) */
-    [5] = {/* L */ {3, SIDE_B, 1},
+    [5] = {/* L */ {3, SIDE_B, 0},
            /* R */ {1, SIDE_B, 1},
-           /* B */ {2, SIDE_B, 0},
+           /* B */ {2, SIDE_B, 1},
            /* T */ {0, SIDE_B, 0}}};
 /* If your corner order tests fail, adjust the `rev` flags above:
    setting rev=1 flips the along-edge index mapping. */
@@ -93,12 +91,12 @@ static const CSEdge CS_FACE_EDGES[6][4] = {
 /* --------------------------
  * Per-face Z-order layout
  * -------------------------- */
-typedef struct {
+struct CSZOrder {
   uint32_t px, py;    /* processors per face in x (cols) and y (rows) */
   size_t P;           /* px*py */
   Coord2 *coords6[6]; /* coords per face: length P each */
   int *rankof6[6];    /* inverse map per face: length P each */
-} CSZOrder;
+};
 
 static inline void cs_zorder_init(CSZOrder *cs, uint32_t px, uint32_t py) {
   cs->px = px;
@@ -241,16 +239,20 @@ static inline void cs_step_one(const CSZOrder *cs, int face, uint32_t rx,
   /* Finally step one cell inward on neighbor, following (dx,dy) sense */
   /* Convert (dx,dy) to neighbor's inward direction based on nside we landed on
    */
-  switch (emap.nside) {
+  cs_clamp_inside(px, py, (int *)out_rx, (int *)out_ry);
+
+  /*switch (emap.nside) {
     case SIDE_L:
-      if (dx < 0) { /* came from left */
+      printf("In SIDE_L, dx = %d, dy = %d\n", dx, dy);
+      if (dx < 0) {
       }
       *out_rx += 0;
       if (dx > 0) {
       };
       if (dy != 0) {
         int t = (int)(*out_ry) + dy;
-        *out_ry = (uint32_t)t;
+        out_ry = (uint32_t)t;
+        printf("After dy step, out_ry=%u\n", *out_ry);
         cs_clamp_inside(px, py, (int *)out_rx, (int *)out_ry);
       }
       break;
@@ -284,7 +286,7 @@ static inline void cs_step_one(const CSZOrder *cs, int face, uint32_t rx,
         cs_clamp_inside(px, py, (int *)out_rx, (int *)out_ry);
       }
       break;
-  }
+  }*/
 }
 
 /* Public: get neighbor GLOBAL rank for (dx,dy) in {-1,0,1}^2 (incl. corners) */
@@ -310,9 +312,17 @@ static inline long cs_neighbor_global_rank(const CSZOrder *cs, int face,
   int f1;
   uint32_t x1, y1;
   cs_step_one(cs, face, rx, ry, dx, 0, &f1, &x1, &y1);
+  int rloc1 = cs_face_local_rank(cs, f1, x1, y1);
+  long r1 = cs_global_rank_from_face_local(cs, f1, rloc1);
+  printf(" After first hop, f=%d (x,y)=(%u,%u) r=%ld\n", f1, x1, y1, r1);
+
   int f2;
   uint32_t x2, y2;
   cs_step_one(cs, f1, x1, y1, 0, dy, &f2, &x2, &y2);
+  int rloc2 = cs_face_local_rank(cs, f2, x2, y2);
+  long r2 = cs_global_rank_from_face_local(cs, f2, rloc2);
+  printf(" After first hop, f=%d (x,y)=(%u,%u) r=%ld\n", f2, x2, y2, r2);
+
   int rloc = cs_face_local_rank(cs, f2, x2, y2);
   return (long)cs_global_rank_from_face_local(cs, f2, rloc);
 }
@@ -338,9 +348,20 @@ void run_demo(int face, uint32_t px, uint32_t rx, uint32_t ry) {
 }
 
 int main(void) {
-  run_demo(0, 2, 0, 0);
-  run_demo(0, 2, 0, 1);
-  run_demo(0, 2, 1, 0);
-  run_demo(0, 2, 1, 1);
+  /*for (int n = 0; n < 6; ++n) {
+    printf("\nface %d tests:\n", n);
+    run_demo(n, 2, 0, 0);
+    run_demo(n, 2, 0, 1);
+    run_demo(n, 2, 1, 0);
+    run_demo(n, 2, 1, 1);
+  }*/
+
+  // UL corner tests
+  printf("\ncorner UL tests:\n");
+  // run_demo(1, 2, 0, 1);
+  // run_demo(2, 2, 0, 1);
+  // run_demo(3, 2, 0, 1);
+  run_demo(4, 2, 0, 1);
+  run_demo(5, 2, 0, 1);
   return 0;
 }
