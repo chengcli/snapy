@@ -101,3 +101,35 @@ void build_rank_of2(uint32_t px, uint32_t py, const Coord2 *coords,
 /* rank_of3: array length pz*py*px, filled with rank at (z,y,x) */
 void build_rank_of3(uint32_t px, uint32_t py, uint32_t pz, const Coord3 *coords,
                     int *rank_of_out);
+
+/* Return logical location of a tile on a face in (-1,0,1) coding.
+ *   (-1,0) = left edge, (1,0) = right edge, (0,-1) = bottom edge, (0,1) = top
+ * edge
+ *   (-1,-1) = bottom-left corner, etc.
+ *   (0,0) = interior (not on any edge).
+ */
+static inline void cs_logical_loc2(uint32_t rx, uint32_t ry, uint32_t px,
+                                   uint32_t py, int *lx, int *ly) {
+  *lx = 0;
+  *ly = 0;
+
+  if (rx == 0)
+    *lx = -1;
+  else if (rx == px - 1)
+    *lx = 1;
+
+  if (ry == 0)
+    *ly = -1;
+  else if (ry == py - 1)
+    *ly = 1;
+}
+
+/* Boolean: is this tile on any edge? */
+static inline int cs_is_edge_loc(int lx, int ly) {
+  return (lx != 0 || ly != 0);
+}
+
+/* Boolean: is this tile specifically a corner? */
+static inline int cs_is_corner_loc(int lx, int ly) {
+  return (lx != 0 && ly != 0);
+}

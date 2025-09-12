@@ -308,26 +308,48 @@ static inline long cs_neighbor_global_rank(const CSZOrder *cs, int face,
     return (long)cs_global_rank_from_face_local(cs, f1, rloc);
   }
 
-  /* corner: do two hops (dx,0) then (0,dy) */
-  int f1;
-  uint32_t x1, y1;
-  cs_step_one(cs, face, rx, ry, dx, 0, &f1, &x1, &y1);
-  int rloc1 = cs_face_local_rank(cs, f1, x1, y1);
-  long r1 = cs_global_rank_from_face_local(cs, f1, rloc1);
-  printf(" After first hop, f=%d (x,y)=(%u,%u) r=%ld\n", f1, x1, y1, r1);
+  /* corners: at least crossing one edge, maybe two */
+  // find the current block's logical location
+  int lx, ly;
+  cs_logical_loc2(rx, ry, cs->px, cs->py, &lx, &ly);
 
-  int f2;
-  uint32_t x2, y2;
-  cs_step_one(cs, f1, x1, y1, 0, dy, &f2, &x2, &y2);
-  int rloc2 = cs_face_local_rank(cs, f2, x2, y2);
-  long r2 = cs_global_rank_from_face_local(cs, f2, rloc2);
-  printf(" After first hop, f=%d (x,y)=(%u,%u) r=%ld\n", f2, x2, y2, r2);
+  if ((dx + lx <= 1) && (dx + lx >= -1)) {
+    // do (dx,0) and then (0,dy)
+    // printf("lx = %d, ly = %d, dx = %d, dy = %d\n", lx, ly, dx, dy);
+    int f1;
+    uint32_t x1, y1;
+    cs_step_one(cs, face, rx, ry, dx, 0, &f1, &x1, &y1);
 
-  int rloc = cs_face_local_rank(cs, f2, x2, y2);
-  return (long)cs_global_rank_from_face_local(cs, f2, rloc);
+    int f2;
+    uint32_t x2, y2;
+    cs_step_one(cs, f1, x1, y1, 0, dy, &f2, &x2, &y2);
+    int rloc = cs_face_local_rank(cs, f2, x2, y2);
+    return (long)cs_global_rank_from_face_local(cs, f2, rloc);
+  } else if ((dy + ly <= 1) && (dy + ly >= -1)) {
+    // do (0, dy) and then (dx, 0)
+    int f1;
+    uint32_t x1, y1;
+    cs_step_one(cs, face, rx, ry, 0, dy, &f1, &x1, &y1);
+
+    int f2;
+    uint32_t x2, y2;
+    cs_step_one(cs, f1, x1, y1, dx, 0, &f2, &x2, &y2);
+    int rloc = cs_face_local_rank(cs, f2, x2, y2);
+    return (long)cs_global_rank_from_face_local(cs, f2, rloc);
+  } else {  // crossing two edges
+    int f1;
+    uint32_t x1, y1;
+    cs_step_one(cs, face, rx, ry, dx, 0, &f1, &x1, &y1);
+    int rloc = cs_face_local_rank(cs, f1, x1, y1);
+    return (long)cs_global_rank_from_face_local(cs, f1, rloc);
+  }
 }
 
 void run_demo(int face, uint32_t px, uint32_t rx, uint32_t ry) {
+  printf(
+      "Demo cubed-sphere Z-order connectivity px=%u face=%d (rx,ry)=(%u,%u)\n",
+      px, face, rx, ry);
+
   CSZOrder cs;
   cs_zorder_init(&cs, /*px=*/px, /*py=*/px);
 
@@ -337,31 +359,21 @@ void run_demo(int face, uint32_t px, uint32_t rx, uint32_t ry) {
   long g_down = cs_neighbor_global_rank(&cs, face, rx, ry, 0, -1);
   long g_up = cs_neighbor_global_rank(&cs, face, rx, ry, 0, 1);
   long g_ul = cs_neighbor_global_rank(&cs, face, rx, ry, -1, 1); /* corner */
+  long g_dr = cs_neighbor_global_rank(&cs, face, rx, ry, 1, -1); /* corner */
 
-  printf(
-      "Demo cubed-sphere Z-order connectivity px=%u face=%d (rx,ry)=(%u,%u)\n",
-      px, face, rx, ry);
-  printf("self=%ld L=%ld R=%ld D=%ld U=%ld UL=%ld\n", g_self, g_left, g_right,
-         g_down, g_up, g_ul);
+  printf("self=%ld L=%ld R=%ld D=%ld U=%ld UL=%ld DR=%ld\n", g_self, g_left,
+         g_right, g_down, g_up, g_ul, g_dr);
 
   cs_zorder_destroy(&cs);
 }
 
 int main(void) {
-  /*for (int n = 0; n < 6; ++n) {
+  for (int n = 0; n < 6; ++n) {
     printf("\nface %d tests:\n", n);
     run_demo(n, 2, 0, 0);
     run_demo(n, 2, 0, 1);
     run_demo(n, 2, 1, 0);
     run_demo(n, 2, 1, 1);
-  }*/
-
-  // UL corner tests
-  printf("\ncorner UL tests:\n");
-  // run_demo(1, 2, 0, 1);
-  // run_demo(2, 2, 0, 1);
-  // run_demo(3, 2, 0, 1);
-  run_demo(4, 2, 0, 1);
-  run_demo(5, 2, 0, 1);
+  }
   return 0;
 }
