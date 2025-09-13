@@ -1,6 +1,7 @@
 #pragma once
 
 // C/C++
+#include <cstdint>
 #include <cstdlib>
 
 namespace canoe {
