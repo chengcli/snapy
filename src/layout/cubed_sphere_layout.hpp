@@ -1,6 +1,9 @@
 #pragma once
 
+// canoe
 #include "connectivity.hpp"
+
+namespace canoe {
 
 /* --------------------------
  * Per-face Z-order layout
@@ -24,24 +27,30 @@ class CubedSphereLayout {
     }
   }
 
-  int get_pxy() const { return _pxy; }
+  int get_procs() const { return _pxy; }
+
+  int rank_of(int face, int rx, int ry) const {
+    if (face < 0 || face >= 6) return -1;
+    if (rx < 0 || rx >= _pxy || ry < 0 || ry >= _pxy) return -1;
+    return _rankof6[face][ry * _pxy + rx];
+  }
 
   /* Global rank layout: face-major, Z-order within face */
-  size_t global_rank_from_face_local(int face, int r_local) const {
+  int global_rank_from_face_local(int face, int r_local) const {
     int P = _pxy * _pxy;
-    return (size_t)face * P + (size_t)r_local;
+    return face * P + r_local;
   }
 
   /* Reverse: get (face, r_local) from global rank */
-  void global_rank_to_face_local(size_t grank, int *face, int *r_local) const {
+  void global_rank_to_face_local(int grank, int *face, int *r_local) const {
     int P = _pxy * _pxy;
-    *face = (int)(grank / P);
-    *r_local = (int)(grank % P);
+    *face = grank / P;
+    *r_local = grank % P;
   }
 
-  /* --------------------------
+  /* ==========================
    * Edge stepping helper
-   * --------------------------
+   * ==========================
    * Move off the face by one tile in (dx,dy) ∈ {-1,0,1}^2.
    * Returns neighbor (nface, nrank) or (-1, -1) on error (should not happen on
    * a closed cube).
@@ -49,11 +58,13 @@ class CubedSphereLayout {
    * Logic:
    * - If inside same face: trivial offset of (rx,ry).
    * - If crossing a single edge (|dx|+|dy|==1): use edge table to decide
-   * neighbor face & side, compute the along-edge index (pos), reverse if
-   * needed, and place at neighbor border.
-   * - If crossing a corner (|dx|==1 && |dy|==1): do it in two hops (dx,0) then
-   * (0,dy) through the intermediate face. This mirrors typical ghost-corner
-   * exchange.
+   *    neighbor face & side, compute the along-edge index (pos), reverse if
+   *    needed, and place at neighbor border.
+   * - If crossing a corner (|dx|==1 && |dy|==1): do it in two hops.
+   *    (dx,0) and (0,dy) through the intermediate face.
+   *    If across a panel boundary, do first step inside the panel
+   *    and second step outside. This mirrors typical ghost-corner
+   *    exchange.
    */
   int face_local_rank(int face, int rx, int ry) const {
     int P = _pxy * _pxy;
@@ -64,10 +75,18 @@ class CubedSphereLayout {
   void step_one(int face, int rx, int ry, int dx, int dy, int *out_face,
                 int *out_rx, int *out_ry) const;
 
-  size_t neighbor_global_rank(int face, int rx, int ry, int dx, int dy) const;
+  /* ============================
+   * Neighbor → Z-order rank (2D)
+   * ============================
+   * dx,dy ∈ {-1,0,1}. periodic flags control wrap; otherwise off-domain → -1.
+   * (rx,ry) are THIS rank's coords in the process grid (not Morton code).
+   */
+  int neighbor_rank(int face, int rx, int ry, int dx, int dy) const;
 
  private:
   int _pxy;            /* processors per face */
   Coord2 *_coords6[6]; /* coords per face: length P each */
   int *_rankof6[6];    /* inverse map per face: length P each */
 };
+
+}  // namespace canoe

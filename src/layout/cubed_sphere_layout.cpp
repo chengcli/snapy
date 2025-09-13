@@ -24,11 +24,14 @@
  */
 
 // C/C++
-#include "connectivity_cubed_sphere.hpp"
-
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+
+// canoe
+#include "cubed_sphere_layout.hpp"
+
+namespace canoe {
 
 /* --------------------------
  * Cubed-sphere connectivity
@@ -167,9 +170,9 @@ void CubedSphereLayout::step_one(int face, int rx, int ry, int dx, int dy,
   // cs_clamp_inside(pxy, out_rx, out_ry);
 }
 
-/* Public: get neighbor GLOBAL rank for (dx,dy) in {-1,0,1}^2 (incl. corners) */
-size_t CubedSphereLayout::neighbor_global_rank(int face, int rx, int ry, int dx,
-                                               int dy) const {
+/* get neighbor GLOBAL rank for (dx,dy) in {-1,0,1}^2 (incl. corners) */
+int CubedSphereLayout::neighbor_rank(int face, int rx, int ry, int dx,
+                                     int dy) const {
   if (dx == 0 && dy == 0) {
     /* self */
     int rloc = face_local_rank(face, rx, ry);
@@ -216,33 +219,4 @@ size_t CubedSphereLayout::neighbor_global_rank(int face, int rx, int ry, int dx,
   }
 }
 
-void run_demo(CubedSphereLayout const &cs, int face, int rx, int ry) {
-  printf(
-      "Demo cubed-sphere Z-order connectivity pxy=%u face=%d (rx,ry)=(%u,%u)\n",
-      cs.get_pxy(), face, rx, ry);
-
-  long g_self = cs.neighbor_global_rank(face, rx, ry, 0, 0);
-  long g_left = cs.neighbor_global_rank(face, rx, ry, -1, 0);
-  long g_right = cs.neighbor_global_rank(face, rx, ry, 1, 0);
-  long g_down = cs.neighbor_global_rank(face, rx, ry, 0, -1);
-  long g_up = cs.neighbor_global_rank(face, rx, ry, 0, 1);
-  long g_ul = cs.neighbor_global_rank(face, rx, ry, -1, 1); /* corner */
-  long g_dr = cs.neighbor_global_rank(face, rx, ry, 1, -1); /* corner */
-
-  printf("self=%ld L=%ld R=%ld D=%ld U=%ld UL=%ld DR=%ld\n", g_self, g_left,
-         g_right, g_down, g_up, g_ul, g_dr);
-}
-
-int main(void) {
-  int pxy = 2;
-  CubedSphereLayout cs(pxy);
-
-  for (int n = 0; n < 6; ++n) {
-    printf("\nface %d tests:\n", n);
-    run_demo(cs, n, 0, 0);
-    run_demo(cs, n, 0, 1);
-    run_demo(cs, n, 1, 0);
-    run_demo(cs, n, 1, 1);
-  }
-  return 0;
-}
+}  // namespace canoe

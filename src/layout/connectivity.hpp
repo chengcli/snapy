@@ -3,6 +3,8 @@
 // C/C++
 #include <cstdlib>
 
+namespace canoe {
+
 /* ===========================
  * Bit de-interleaving helpers
  * ===========================
@@ -124,3 +126,5 @@ static inline int is_edge_loc(int lx, int ly) { return (lx != 0 || ly != 0); }
 
 /* Boolean: is this tile specifically a corner? */
 static inline int is_corner_loc(int lx, int ly) { return (lx != 0 && ly != 0); }
+
+}  // namespace canoe
