@@ -1,7 +1,7 @@
 // C/C++
 #include <cstdio>
 
-// canoe
+// snap
 #include <snap/layout/cubed_layout.hpp>
 
 int main(void) {
@@ -15,7 +15,7 @@ int main(void) {
   printf("3D demo %ux%u×%u (periodic=%d,%d,%d)\n", px, py, pz, periodic_x,
          periodic_y, periodic_z);
 
-  canoe::CubedLayout cl(px, py, pz, periodic_x, periodic_y, periodic_z);
+  snap::CubedLayout cl(px, py, pz, periodic_x, periodic_y, periodic_z);
 
   for (int rx = 0; rx < px; ++rx)
     for (int ry = 0; ry < py; ++ry)

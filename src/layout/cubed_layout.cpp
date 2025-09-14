@@ -7,10 +7,10 @@
 // fmt
 #include <fmt/format.h>
 
-// canoe
+// snap
 #include "cubed_layout.hpp"
 
-namespace canoe {
+namespace snap {
 
 void CubedLayout::report(std::ostream &os) const {
   os << "px=" << _px << " py=" << _py << " pz=" << _pz
@@ -60,4 +60,4 @@ int CubedLayout::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
   return _rankof[linear_index3(_px, _py, nz, ny, nx)];
 }
 
-}  // namespace canoe
+}  // namespace snap

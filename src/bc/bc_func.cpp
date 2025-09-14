@@ -1,8 +1,8 @@
 // snap
 #include "bc_func.hpp"
 
-BC_FUNCTION(exchange_inner, var, dim, op) {}
-BC_FUNCTION(exchange_outer, var, dim, op) {}
+BC_FUNCTION(custom_inner, var, dim, op) {}
+BC_FUNCTION(custom_outer, var, dim, op) {}
 
 BC_FUNCTION(reflecting_inner, var, dim, op) {
   if (var.size(dim) == 1) return;

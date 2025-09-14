@@ -18,15 +18,10 @@
 namespace snap {
 
 struct MeshBlockOptions {
-  static MeshBlockOptions from_yaml(std::string input_file);
+  static MeshBlockOptions from_yaml(std::string input_file,
+                                    DistributeInfo _dist = DistributeInfo());
   MeshBlockOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* lx1 = " << lx1() << "\n"
-       << "* lx2 = " << lx2() << "\n"
-       << "* lx3 = " << lx3() << "\n"
-       << "* level = " << level() << "\n"
-       << "* gid = " << gid() << "\n";
-  }
+  void report(std::ostream& os) const {}
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);
@@ -37,14 +32,7 @@ struct MeshBlockOptions {
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
 
   //! distributed meshblock info
-  ADD_ARG(int, lx1) = 0;
-  ADD_ARG(int, lx2) = 0;
-  ADD_ARG(int, lx3) = 0;
-  ADD_ARG(int, level) = 0;
-  ADD_ARG(int, gid) = 0;
-  ADD_ARG(int, nb1) = 1;
-  ADD_ARG(int, nb2) = 1;
-  ADD_ARG(int, nb3) = 1;
+  ADD_ARG(DistributeInfo, dist);
 };
 
 using Variables = std::map<std::string, torch::Tensor>;

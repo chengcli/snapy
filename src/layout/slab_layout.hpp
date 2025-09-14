@@ -4,10 +4,10 @@
 #include <sstream>
 #include <utility>
 
-// canoe
+// snap
 #include "connectivity.hpp"
 
-namespace canoe {
+namespace snap {
 
 class SlabLayout {
  public:
@@ -54,4 +54,4 @@ class SlabLayout {
   int *_rankof;
 };
 
-}  // namespace canoe
+}  // namespace snap

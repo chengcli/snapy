@@ -24,8 +24,10 @@ class Args:
     layout = 'slab'
 
 args = Args()
-layout, ranks, device = init_dist(args, periodic_x1=False, periodic_x2=False,
-                                  periodic_x3=False)
+layout, ranks, device, info = init_dist(args,
+                                        periodic_x1=False,
+                                        periodic_x2=False,
+                                        periodic_x3=False)
 my_rank = ranks[0]
 
 if my_rank == 0:

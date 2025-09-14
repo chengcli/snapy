@@ -32,9 +32,8 @@ class Args:
     layout = 'slab'
 
 args = Args()
-layout, ranks, device = exchange.init_dist(args,
-                                           periodic_x1=False, periodic_x2=False,
-                                           periodic_x3=False)
+layout, ranks, device, info = exchange.init_dist(
+        args, periodic_x1=False, periodic_x2=False, periodic_x3=False)
 my_rank = ranks[0]
 
 
@@ -51,7 +50,7 @@ gamma = 1.4
 K = 75.0
 
 # set hydrodynamic options
-op = MeshBlockOptions.from_yaml("straka.yaml");
+op = MeshBlockOptions.from_yaml("straka.yaml", dist=info);
 
 # initialize block
 block = MeshBlock(op)

@@ -1,7 +1,7 @@
-// canoe
+// snap
 #include "connectivity.hpp"
 
-namespace canoe {
+namespace snap {
 
 void build_rank_of2(int px, int py, const Coord2 *coords, int *rank_of_out) {
   const size_t total = (size_t)px * (size_t)py;
@@ -60,4 +60,4 @@ size_t build_zorder_coords3(int px, int py, int pz, Coord3 *coords) {
   return count; /* == need */
 }
 
-}  // namespace canoe
+}  // namespace snap

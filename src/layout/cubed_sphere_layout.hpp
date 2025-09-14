@@ -4,10 +4,10 @@
 #include <sstream>
 #include <tuple>
 
-// canoe
+// snap
 #include "connectivity.hpp"
 
-namespace canoe {
+namespace snap {
 
 /* --------------------------
  * Per-face Z-order layout
@@ -103,4 +103,4 @@ class CubedSphereLayout {
   int *_rankof6[6];    /* inverse map per face: length P each */
 };
 
-}  // namespace canoe
+}  // namespace snap

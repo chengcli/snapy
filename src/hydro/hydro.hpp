@@ -26,7 +26,8 @@
 namespace snap {
 
 struct HydroOptions {
-  static HydroOptions from_yaml(std::string const& filename);
+  static HydroOptions from_yaml(std::string const& filename,
+                                DistributeInfo dist = DistributeInfo());
   HydroOptions() = default;
   void report(std::ostream& os) const {
     os << "* disable_dynamics = " << disable_dynamics() << "\n";

@@ -7,10 +7,10 @@
 // fmt
 #include <fmt/format.h>
 
-// canoe
+// snap
 #include "slab_layout.hpp"
 
-namespace canoe {
+namespace snap {
 
 void SlabLayout::report(std::ostream &os) const {
   os << "px=" << _px << " py=" << _py << " periodic_x=" << _periodic_x
@@ -48,4 +48,4 @@ int SlabLayout::neighbor_rank(int rx, int ry, int dx, int dy) const {
   return _rankof[linear_index2(_px, _py, ny, nx)];
 }
 
-}  // namespace canoe
+}  // namespace snap

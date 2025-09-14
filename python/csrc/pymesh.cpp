@@ -24,7 +24,8 @@ void bind_mesh(py::module &m) {
              a.report(ss);
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
            })
-      .def("from_yaml", &snap::MeshBlockOptions::from_yaml)
+      .def("from_yaml", &snap::MeshBlockOptions::from_yaml, py::arg("filename"),
+           py::arg("dist") = snap::DistributeInfo())
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,
@@ -75,14 +76,7 @@ void bind_mesh(py::module &m) {
             }
           },
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
-      .ADD_OPTION(int, snap::MeshBlockOptions, lx1)
-      .ADD_OPTION(int, snap::MeshBlockOptions, lx2)
-      .ADD_OPTION(int, snap::MeshBlockOptions, lx3)
-      .ADD_OPTION(int, snap::MeshBlockOptions, nb1)
-      .ADD_OPTION(int, snap::MeshBlockOptions, nb2)
-      .ADD_OPTION(int, snap::MeshBlockOptions, nb3)
-      .ADD_OPTION(int, snap::MeshBlockOptions, level)
-      .ADD_OPTION(int, snap::MeshBlockOptions, gid)
+      .ADD_OPTION(snap::DistributeInfo, snap::MeshBlockOptions, dist)
       .ADD_OPTION(snap::IntegratorOptions, snap::MeshBlockOptions, intg)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptions, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptions, scalar)

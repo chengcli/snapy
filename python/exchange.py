@@ -4,10 +4,8 @@ import torch.distributed as dist
 import numpy as np
 from typing import List, Optional
 
-def get_buffer_2d(dx: int, dy: int, dz: int = 0):
-    return dx % 3 + (dy % 3) * 3
-
-def get_buffer_3d(dx: int, dy: int, dz: int):
+@torch.compile
+def get_buffer_id(dx: int, dy: int, dz: int=0):
     return dx % 3 + (dy % 3) * 3 + (dz % 3) * 9
 
 def init_dist(args,
@@ -36,15 +34,40 @@ def init_dist(args,
         assert pz == 1, "px1 must be 1 for slab layout"
         assert px * py == world_size, f"px2*px3 ({px}*{py}) != world_size ({world_size})"
         layout = snapy.SlabLayout(px, py, periodic_x3, periodic_x2)
+        loc = layout.loc_of(rank)
+
+        info = snapy.DistributeInfo()
+        info.nb3(px)
+        info.nb2(py)
+        info.lx3(loc[0])
+        info.lx2(loc[1])
     elif args.layout == "cubed":
         assert px * py * pz == world_size, f"px1*px2*px3 ({px}*{py}*{pz}) != world_size ({world_size})"
         layout = snapy.CubedLayout(px, py, pz, periodic_x3, periodic_x2, periodic_x1)
+        loc = layout.loc_of(rank)
+
+        info = snapy.DistributeInfo()
+        info.nb3(px)
+        info.nb2(py)
+        info.nb1(pz)
+        info.lx3(loc[0])
+        info.lx2(loc[1])
+        info.lx1(loc[2])
     else: # cubed_sphere
         assert pz == 1, "px1 must be 1 for cubed_sphere layout"
         assert px == py, "px2 must equal px3 for cubed_sphere layout"
         assert 6 * px * py == world_size, f"6*px2*px3 ({px}*{py}) != world_size ({6*world_size})"
         layout = snapy.CubedSphereLayout(px)
+        loc = layout.loc_of(rank)
 
+        info = snapy.DistributeInfo()
+        info.nb3(px)
+        inof.nb2(py)
+        info.face(loc[0])
+        info.lx3(loc[1])
+        info.lx2(loc[2])
+
+    info.gid(rank)
     if args.layout == "cubed":  # 3D decomposition
         ranks = np.zeros(27, dtype=int)
         for dx in [-1, 0, 1]:
@@ -62,12 +85,12 @@ def init_dist(args,
             for dy in [-1, 0, 1]:
                 if dx != 0 or dy != 0:
                     offset = (dx, dy, 0)
-                    bid = get_buffer_2d(*offset)
+                    bid = get_buffer_id(*offset)
                     ranks[bid] = layout.neighbor_rank(*layout.loc_of(rank), *offset)
         # my rank
-        ranks[get_buffer_2d(0, 0, 0)] = rank
+        ranks[get_buffer_id(0, 0, 0)] = rank
 
-    return layout, ranks, device
+    return layout, ranks, device, info
 
 def init_buffers_2d(layout, rank,
                     block: snapy.MeshBlock,
@@ -75,32 +98,21 @@ def init_buffers_2d(layout, rank,
     send_bufs = [None] * 9
     recv_bufs = [None] * 9
 
-    procs = layout.get_procs()
-    loc = layout.loc_of(rank)
-
-    block.options.nb3(procs[0])
-    block.options.nb2(procs[1])
-
-    block.options.lx3(loc[0])
-    block.options.lx2(loc[1])
-
-    block.options.gid(rank)
-
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
             if x3_offset == 0 and x2_offset == 0: continue # skip self
             offset = (x3_offset, x2_offset, 0)
+            loc = layout.loc_of(rank)
             nb = layout.neighbor_rank(*loc, *offset)
             if nb == -1: continue # no neighbor
 
             # invalidate block neighbor
             block.options.set_bfunc(*offset, None)
 
-            bid = get_buffer_2d(*offset)
+            bid = get_buffer_id(*offset)
             part = block.part(offset)
             nhydro, *dims = block_vars["hydro_u"][part].shape
-            num_vars = nhydro # increment this if more variables are added
-            send_bufs[bid] = torch.empty((num_vars, *dims),
+            send_bufs[bid] = torch.empty((nhydro, *dims),
                                          device=block_vars["hydro_u"].device,
                                          dtype=block_vars["hydro_u"].dtype)
             recv_bufs[bid] = torch.empty_like(send_bufs[bid])
@@ -115,7 +127,7 @@ def serialize_2d(block: snapy.MeshBlock,
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
             offset = (x3_offset, x2_offset, 0)
-            bid = get_buffer_2d(*offset)
+            bid = get_buffer_id(*offset)
             if send_bufs[bid] is not None:
                 part = block.part(offset)
                 send_bufs[bid][:nhydro,:].copy_(block_vars["hydro_u"][part])
@@ -129,7 +141,7 @@ def deserialize_2d(block: snapy.MeshBlock,
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
             offset = (x3_offset, x2_offset, 0)
-            bid = get_buffer_2d(*offset)
+            bid = get_buffer_id(*offset)
             if recv_bufs[bid] is not None:
                 part = block.part(offset, exterior=True)
                 block_vars["hydro_u"][part].copy_(recv_bufs[bid][:nhydro,:])

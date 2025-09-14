@@ -1,10 +1,10 @@
 // C/C++
 #include <cstdio>
 
-// canoe
+// snap
 #include <snap/layout/cubed_sphere_layout.hpp>
 
-void run_demo(canoe::CubedSphereLayout const &cs, int face, int rx, int ry) {
+void run_demo(snap::CubedSphereLayout const &cs, int face, int rx, int ry) {
   printf(
       "Demo cubed-sphere Z-order connectivity pxy=%u face=%d (rx,ry)=(%u,%u)\n",
       cs.get_procs(), face, rx, ry);
@@ -23,7 +23,7 @@ void run_demo(canoe::CubedSphereLayout const &cs, int face, int rx, int ry) {
 
 int main(void) {
   int pxy = 4;
-  canoe::CubedSphereLayout cs(pxy);
+  snap::CubedSphereLayout cs(pxy);
 
   for (int n = 0; n < 6; ++n) {
     printf("\nface %d tests:\n", n);

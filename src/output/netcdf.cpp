@@ -80,7 +80,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
 
   fname.assign(options.file_basename());
   fname.append(".");
@@ -125,8 +125,8 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
 
   // 3. define variables
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f, imu, iphi;
-  int loc[4] = {pmb->options.lx1(), pmb->options.lx2(), pmb->options.lx3(),
-                pmb->options.level()};
+  int loc[4] = {pmb->options.dist().lx1(), pmb->options.dist().lx2(),
+                pmb->options.dist().lx3(), pmb->options.dist().level()};
   int pos[4];
 
   nc_def_var(ifile, "time", NC_FLOAT, 1, &idt, &ivt);
@@ -140,7 +140,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx1, "long_name", 27, "Z-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells1 * pmb->options.nb1();
+  pos[1] = ncells1 * pmb->options.dist().nb1();
   pos[2] = ncells1 * loc[0] + 1;
   pos[3] = ncells1 * (loc[0] + 1);
   nc_put_att_int(ifile, ivx1, "domain_decomposition", NC_INT, 4, pos);
@@ -160,7 +160,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx2, "long_name", 27, "Y-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells2 * pmb->options.nb2();
+  pos[1] = ncells2 * pmb->options.dist().nb2();
   pos[2] = ncells2 * loc[1] + 1;
   pos[3] = ncells2 * (loc[1] + 1);
   nc_put_att_int(ifile, ivx2, "domain_decomposition", NC_INT, 4, pos);
@@ -180,7 +180,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx3, "long_name", 27, "X-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells3 * pmb->options.nb3();
+  pos[1] = ncells3 * pmb->options.dist().nb3();
   pos[2] = ncells3 * loc[2] + 1;
   pos[3] = ncells3 * (loc[2] + 1);
   nc_put_att_int(ifile, ivx3, "domain_decomposition", NC_INT, 4, pos);
@@ -194,7 +194,8 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
     nc_put_att_int(ifile, ivx3f, "domain_decomposition", NC_INT, 4, pos);
   }
 
-  int nbtotal = pmb->options.nb1() * pmb->options.nb2() * pmb->options.nb3();
+  int nbtotal = pmb->options.dist().nb1() * pmb->options.dist().nb2() *
+                pmb->options.dist().nb3();
   nc_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT, 1, &nbtotal);
 
   OutputData *pdata = pfirst_data_;

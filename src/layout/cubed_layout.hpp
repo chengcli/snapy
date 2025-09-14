@@ -4,10 +4,10 @@
 #include <sstream>
 #include <tuple>
 
-// canoe
+// snap
 #include "connectivity.hpp"
 
-namespace canoe {
+namespace snap {
 
 class CubedLayout {
  public:
@@ -62,4 +62,4 @@ class CubedLayout {
   int *_rankof;
 };
 
-}  // namespace canoe
+}  // namespace snap

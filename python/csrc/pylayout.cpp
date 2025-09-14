@@ -8,9 +8,10 @@
 #include <torch/extension.h>
 #include <torch/nn/modules/container/any.h>
 
-// canoe
+// snap
 #include <snap/layout/cubed_layout.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
+#include <snap/layout/distribute_info.hpp>
 #include <snap/layout/slab_layout.hpp>
 
 // python
@@ -19,64 +20,83 @@
 namespace py = pybind11;
 
 void bind_layout(py::module &m) {
-  auto pySlabLayout = py::class_<canoe::SlabLayout>(m, "SlabLayout");
+  auto pyDistributeInfo = py::class_<snap::DistributeInfo>(m, "DistributeInfo");
+
+  pyDistributeInfo.def(py::init<>())
+      .def("__repr__",
+           [](const snap::DistributeInfo &a) {
+             std::stringstream ss;
+             a.report(ss);
+             return fmt::format("DistributeInfo(\n{})", ss.str());
+           })
+      .ADD_OPTION(int, snap::DistributeInfo, face)
+      .ADD_OPTION(int, snap::DistributeInfo, level)
+      .ADD_OPTION(int, snap::DistributeInfo, gid)
+      .ADD_OPTION(int, snap::DistributeInfo, lx1)
+      .ADD_OPTION(int, snap::DistributeInfo, lx2)
+      .ADD_OPTION(int, snap::DistributeInfo, lx3)
+      .ADD_OPTION(int, snap::DistributeInfo, nb1)
+      .ADD_OPTION(int, snap::DistributeInfo, nb2)
+      .ADD_OPTION(int, snap::DistributeInfo, nb3);
+
+  auto pySlabLayout = py::class_<snap::SlabLayout>(m, "SlabLayout");
 
   pySlabLayout
       .def(py::init<int, int, bool, bool>(), py::arg("px"), py::arg("py"),
            py::arg("periodic_x") = false, py::arg("periodic_y") = false)
       .def("__repr__",
-           [](const canoe::SlabLayout &a) {
+           [](const snap::SlabLayout &a) {
              std::stringstream ss;
              a.report(ss);
              return fmt::format("SlabLayout(\n{})", ss.str());
            })
-      .def("get_procs", &canoe::SlabLayout::get_procs)
-      .def("rank_of", &canoe::SlabLayout::rank_of, py::arg("rx"), py::arg("ry"))
-      .def("loc_of", &canoe::SlabLayout::loc_of, py::arg("rank"))
+      .def("get_procs", &snap::SlabLayout::get_procs)
+      .def("rank_of", &snap::SlabLayout::rank_of, py::arg("rx"), py::arg("ry"))
+      .def("loc_of", &snap::SlabLayout::loc_of, py::arg("rank"))
       .def(
           "neighbor_rank",
-          [](const canoe::SlabLayout &self, int rx, int ry, int dx, int dy,
+          [](const snap::SlabLayout &self, int rx, int ry, int dx, int dy,
              int dz) { return self.neighbor_rank(rx, ry, dx, dy); },
           py::arg("rx"), py::arg("ry"), py::arg("dx"), py::arg("dy"),
           py::arg("dz") = 0);
 
-  auto pyCubedLayout = py::class_<canoe::CubedLayout>(m, "CubedLayout");
+  auto pyCubedLayout = py::class_<snap::CubedLayout>(m, "CubedLayout");
 
   pyCubedLayout
       .def(py::init<int, int, int, bool, bool, bool>(), py::arg("px"),
            py::arg("py"), py::arg("pz"), py::arg("periodic_x") = false,
            py::arg("periodic_y") = false, py::arg("periodic_z") = false)
       .def("__repr__",
-           [](const canoe::CubedLayout &a) {
+           [](const snap::CubedLayout &a) {
              std::stringstream ss;
              a.report(ss);
              return fmt::format("CubedLayout(\n{})", ss.str());
            })
-      .def("get_procs", &canoe::CubedLayout::get_procs)
-      .def("rank_of", &canoe::CubedLayout::rank_of, py::arg("rx"),
-           py::arg("ry"), py::arg("rz"))
-      .def("loc_of", &canoe::CubedLayout::loc_of, py::arg("rank"))
-      .def("neighbor_rank", &canoe::CubedLayout::neighbor_rank, py::arg("rx"),
+      .def("get_procs", &snap::CubedLayout::get_procs)
+      .def("rank_of", &snap::CubedLayout::rank_of, py::arg("rx"), py::arg("ry"),
+           py::arg("rz"))
+      .def("loc_of", &snap::CubedLayout::loc_of, py::arg("rank"))
+      .def("neighbor_rank", &snap::CubedLayout::neighbor_rank, py::arg("rx"),
            py::arg("ry"), py::arg("rz"), py::arg("dx"), py::arg("dy"),
            py::arg("dz"));
 
   auto pyCubedSphereLayout =
-      py::class_<canoe::CubedSphereLayout>(m, "CubedSphereLayout");
+      py::class_<snap::CubedSphereLayout>(m, "CubedSphereLayout");
 
   pyCubedSphereLayout.def(py::init<int>(), py::arg("pxy"))
       .def("__repr__",
-           [](const canoe::CubedSphereLayout &a) {
+           [](const snap::CubedSphereLayout &a) {
              std::stringstream ss;
              a.report(ss);
              return fmt::format("CubedSphereLayout(\n{})", ss.str());
            })
-      .def("get_procs", &canoe::CubedSphereLayout::get_procs)
-      .def("rank_of", &canoe::CubedSphereLayout::rank_of, py::arg("face"),
+      .def("get_procs", &snap::CubedSphereLayout::get_procs)
+      .def("rank_of", &snap::CubedSphereLayout::rank_of, py::arg("face"),
            py::arg("rx"), py::arg("ry"))
-      .def("loc_of", &canoe::CubedSphereLayout::loc_of, py::arg("rank"))
+      .def("loc_of", &snap::CubedSphereLayout::loc_of, py::arg("rank"))
       .def(
           "neighbor_rank",
-          [](const canoe::CubedSphereLayout &self, int face, int rx, int ry,
+          [](const snap::CubedSphereLayout &self, int face, int rx, int ry,
              int dx, int dy,
              int dz) { return self.neighbor_rank(face, rx, ry, dx, dy); },
           py::arg("face"), py::arg("rx"), py::arg("ry"), py::arg("dx"),

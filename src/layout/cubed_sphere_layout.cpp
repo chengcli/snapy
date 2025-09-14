@@ -31,10 +31,10 @@
 // fmt
 #include <fmt/format.h>
 
-// canoe
+// snap
 #include "cubed_sphere_layout.hpp"
 
-namespace canoe {
+namespace snap {
 
 /* --------------------------
  * Cubed-sphere connectivity
@@ -235,4 +235,4 @@ int CubedSphereLayout::neighbor_rank(int face, int rx, int ry, int dx,
   }
 }
 
-}  // namespace canoe
+}  // namespace snap
