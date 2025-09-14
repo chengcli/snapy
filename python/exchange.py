@@ -1,6 +1,7 @@
 import torch
 import snapy
 import torch.distributed as dist
+import numpy as np
 from typing import List
 
 def get_buffer_2d(dx: int, dy: int, dz: int = 0):
@@ -45,7 +46,7 @@ def init_dist(args,
         layout = snapy.CubedSphereLayout(px)
 
     if args.layout == "cubed":  # 3D decomposition
-        ranks = [] * 27
+        ranks = np.zeros(27, dtype=int)
         for dx in [-1, 0, 1]:
             for dy in [-1, 0, 1]:
                 for dz in [-1, 0, 1]:
@@ -56,66 +57,77 @@ def init_dist(args,
         # my rank
         ranks[get_buffer_3d(0, 0, 0)] = rank
     else:  # 2D decomposition
-        neighbor_ranks = [] * 9
+        ranks = np.zeros(9, dtype=int)
         for dx in [-1, 0, 1]:
             for dy in [-1, 0, 1]:
                 if dx != 0 or dy != 0:
                     offset = (dx, dy, 0)
                     bid = get_buffer_2d(*offset)
-                    neighbor_ranks[bid] = layout.neighbor_rank(*layout.loc_of(rank), *offset)
+                    ranks[bid] = layout.neighbor_rank(*layout.loc_of(rank), *offset)
         # my rank
         ranks[get_buffer_2d(0, 0, 0)] = rank
 
-    return ranks, device
+    return layout, ranks, device
 
-def init_buffers_2d(block_vars: dict[str, torch.Tensor]):
-    send_bufs = [{}] * 9
-    recv_bufs = [{}] * 9
+def init_buffers_2d(layout, rank,
+                    block: snapy.MeshBlock,
+                    block_vars: dict[str, torch.Tensor]):
+    send_bufs = [None] * 9
+    recv_bufs = [None] * 9
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
-            if x3_offset == 0 and x2_offset == 0: continue
+            if x3_offset == 0 and x2_offset == 0: continue # skip self
             offset = (x3_offset, x2_offset, 0)
+            nb = layout.neighbor_rank(*layout.loc_of(rank), *offset)
+            if nb == -1: continue # no neighbor
+
             bid = get_buffer_2d(*offset)
             part = block.part(offset)
+            send_bufs[bid] = {}
             send_bufs[bid]["hydro_u"] = torch.empty_like(block_vars["hydro_u"][part])
+            recv_bufs[bid] = {}
             recv_bufs[bid]["hydro_u"] = torch.empty_like(block_vars["hydro_u"][part])
     return send_bufs, recv_bufs
 
-def serialize_2d(send_bufs: List[dict[str, torch.Tensor]],
-                 block_vars: dict[str, torch.Tensor]):
+def serialize_2d(block: snapy.MeshBlock,
+                 block_vars: dict[str, torch.Tensor],
+                 send_bufs: List[dict[str, torch.Tensor]]):
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
-            if x3_offset == 0 and x2_offset == 0: continue
             offset = (x3_offset, x2_offset, 0)
             bid = get_buffer_2d(*offset)
-            part = block.part(offset)
-            send_bufs[bid]["hydro_u"].copy_(block_vars["hydro_u"][part])
+            if send_bufs[bid] is not None:
+                part = block.part(offset)
+                #part = block.part(tuple([-x for x in offset]))
+                send_bufs[bid]["hydro_u"].copy_(block_vars["hydro_u"][part])
 
-def deserialize_2d(block_vars: dict[str, torch.Tensor],
+def deserialize_2d(block: snapy.MeshBlock,
+                   block_vars: dict[str, torch.Tensor],
                    recv_bufs: List[dict[str, torch.Tensor]]):
     for x3_offset in [-1, 0, 1]:
         for x2_offset in [-1, 0, 1]:
-            if x3_offset == 0 and x2_offset == 0: continue
             offset = (x3_offset, x2_offset, 0)
-            bid = get_buffer_id(*offset)
-            part = block.part(tuple([-x for x in offset]), exterior=True)
-            block_vars["hydro_u"][part].copy_(recv_bufs[bid]["hydro_u"])
+            bid = get_buffer_2d(*offset)
+            if recv_bufs[bid] is not None:
+                part = block.part(offset, exterior=True)
+                block_vars["hydro_u"][part].copy_(recv_bufs[bid]["hydro_u"])
 
-def slab_exchange(block_vars: dict[str, torch.Tensor],
+def slab_exchange(block: snapy.MeshBlock,
+                  block_vars: dict[str, torch.Tensor],
                   ranks: List[int],
                   send_bufs: List[dict[str, torch.Tensor]],
                   recv_bufs: List[dict[str, torch.Tensor]]):
     ops = []
-    serialize_2d(send_bufs, block_vars)
-    keys = send_bufs[1].keys()
+    serialize_2d(block, block_vars, send_bufs)
 
     for r in range(1, len(ranks)):
-        for key in keys:
-            ops.append(dist.P2POp(dist.isend, send_bufs[r][key], ranks[r]))
-            ops.append(dist.P2POp(dist.irecv, recv_bufs[r][key], ranks[r]))
+        if send_bufs[r] is not None:
+            for key in send_bufs[r].keys():
+                ops.append(dist.P2POp(dist.isend, send_bufs[r][key], ranks[r]))
+                ops.append(dist.P2POp(dist.irecv, recv_bufs[r][key], ranks[r]))
 
     if ops:
         reqs = dist.batch_isend_irecv(ops)
         for r in reqs: r.wait()
 
-    deserialize_2d(block_vars, recv_bufs)
+    deserialize_2d(block, block_vars, recv_bufs)

@@ -22,7 +22,7 @@ void run_demo(canoe::CubedSphereLayout const &cs, int face, int rx, int ry) {
 }
 
 int main(void) {
-  int pxy = 2;
+  int pxy = 4;
   canoe::CubedSphereLayout cs(pxy);
 
   for (int n = 0; n < 6; ++n) {

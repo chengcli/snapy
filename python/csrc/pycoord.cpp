@@ -29,7 +29,8 @@ void bind_coord(py::module &m) {
       .ADD_OPTION(double, snap::CoordinateOptions, x3max)
       .ADD_OPTION(int, snap::CoordinateOptions, nx1)
       .ADD_OPTION(int, snap::CoordinateOptions, nx2)
-      .ADD_OPTION(int, snap::CoordinateOptions, nx3);
+      .ADD_OPTION(int, snap::CoordinateOptions, nx3)
+      .ADD_OPTION(int, snap::CoordinateOptions, nghost);
 
   // temporary solution
 
