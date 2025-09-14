@@ -154,6 +154,7 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
 
     op.type(kConserved);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
+      if (options.bfuncs()[i] == nullptr) continue;
       options.bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, op);
     }
 
@@ -168,6 +169,7 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
 
     op.type(kScalar);
     for (int i = 0; i < options.bfuncs().size(); ++i) {
+      if (options.bfuncs()[i] == nullptr) continue;
       options.bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, op);
     }
 
@@ -274,15 +276,19 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
   // (5.1) apply hydro boundary
   if (phydro->peos->nvar() > 0) {
     op.type(kConserved);
-    for (int i = 0; i < options.bfuncs().size(); ++i)
+    for (int i = 0; i < options.bfuncs().size(); ++i) {
+      if (options.bfuncs()[i] == nullptr) continue;
       options.bfuncs()[i](hydro_u, 3 - i / 2, op);
+    }
   }
 
   // (5.2) apply scalar boundary
   if (pscalar->nvar() > 0) {
     op.type(kScalar);
-    for (int i = 0; i < options.bfuncs().size(); ++i)
+    for (int i = 0; i < options.bfuncs().size(); ++i) {
+      if (options.bfuncs()[i] == nullptr) continue;
       options.bfuncs()[i](scalar_s, 3 - i / 2, op);
+    }
   }
 
   auto time4 = std::chrono::high_resolution_clock::now();

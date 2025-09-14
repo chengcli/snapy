@@ -24,7 +24,12 @@ void bind_hydro(py::module &m) {
              a.report(ss);
              return fmt::format("HydroOptions(\n{})", ss.str());
            })
-      .def("from_yaml", &snap::HydroOptions::from_yaml)
+      .def_static(
+          "from_yaml",
+          [](const std::string &filename, const snap::DistributeInfo &dist) {
+            return snap::HydroOptions::from_yaml(filename, dist);
+          },
+          py::arg("filename"), py::arg("dist") = snap::DistributeInfo())
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptions, grav)
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptions, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptions, visc)

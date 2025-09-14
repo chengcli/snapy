@@ -237,15 +237,15 @@ int main(int argc, char** argv) {
 
       block->user_out_var.at("qtol") = w.narrow(0, ICY, ny).sum(0);
 
-      out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out2.write_output_file(block, vars, current_time, 0);
       out2.combine_blocks();
       out2.file_number++;
 
-      out3.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out3.write_output_file(block, vars, current_time, 0);
       out3.combine_blocks();
       out3.file_number++;
 
-      out4.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out4.write_output_file(block, vars, current_time, 0);
       out4.combine_blocks();
       out4.file_number++;
     }

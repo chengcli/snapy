@@ -8,25 +8,62 @@
 
 namespace snap {
 
-CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node) {
+CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node,
+                                               DistributeInfo dist) {
   CoordinateOptions op;
 
   op.type(node["type"].as<std::string>("cartesian"));
   if (!node["bounds"]) return op;
 
-  op.x1min() = node["bounds"]["x1min"].as<double>(0.0);
-  op.x2min() = node["bounds"]["x2min"].as<double>(0.0);
-  op.x3min() = node["bounds"]["x3min"].as<double>(0.0);
+  auto x1min = node["bounds"]["x1min"].as<double>(0.0);
+  auto x2min = node["bounds"]["x2min"].as<double>(0.0);
+  auto x3min = node["bounds"]["x3min"].as<double>(0.0);
 
-  op.x1max() = node["bounds"]["x1max"].as<double>(1.0);
-  op.x2max() = node["bounds"]["x2max"].as<double>(1.0);
-  op.x3max() = node["bounds"]["x3max"].as<double>(1.0);
+  auto x1max = node["bounds"]["x1max"].as<double>(1.0);
+  auto x2max = node["bounds"]["x2max"].as<double>(1.0);
+  auto x3max = node["bounds"]["x3max"].as<double>(1.0);
+
+  op.x1min() = x1min + dist.lx1() * (x1max - x1min) / dist.nb1();
+  op.x1max() = op.x1min() + (x1max - x1min) / dist.nb1();
+
+  op.x2min() = x2min + dist.lx2() * (x2max - x2min) / dist.nb2();
+  op.x2max() = op.x2min() + (x2max - x2min) / dist.nb2();
+
+  op.x3min() = x3min + dist.lx3() * (x3max - x3min) / dist.nb3();
+  op.x3max() = op.x3min() + (x3max - x3min) / dist.nb3();
 
   if (!node["cells"]) return op;
 
   op.nx1() = node["cells"]["nx1"].as<int>(1);
+  if (op.nx1() % dist.nb1() != 0) {
+    TORCH_CHECK(
+        false,
+        "Number of total x1 grids must be divisible by the number of mesh "
+        "blocks in x1 direction");
+  } else {
+    op.nx1() /= dist.nb1();
+  }
+
   op.nx2() = node["cells"]["nx2"].as<int>(1);
+  if (op.nx2() % dist.nb2() != 0) {
+    TORCH_CHECK(
+        false,
+        "Number of total x2 grids must be divisible by the number of mesh "
+        "blocks in x2 direction");
+  } else {
+    op.nx2() /= dist.nb2();
+  }
+
   op.nx3() = node["cells"]["nx3"].as<int>(1);
+  if (op.nx3() % dist.nb3() != 0) {
+    TORCH_CHECK(
+        false,
+        "Number of totla x3 grids must be divisible by the number of mesh "
+        "blocks in x3 direction");
+  } else {
+    op.nx3() /= dist.nb3();
+  }
+
   op.nghost() = node["cells"]["nghost"].as<int>(1);
 
   if (op.nx1() > 1 && op.nx1() < op.nghost()) {

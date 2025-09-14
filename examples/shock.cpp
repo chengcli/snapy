@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
 
     if (count % 10 == 0) {
       printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-      out.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out.write_output_file(block, vars, current_time, 0);
       out.combine_blocks();
       out.file_number++;
     }

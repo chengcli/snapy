@@ -69,7 +69,6 @@ void bind_output(py::module &m) {
              py::dict const &vars, double time, int wtflag) {
             py::object cpp_module = block_obj.attr("cpp_module");
             auto pmb = cpp_module.cast<std::shared_ptr<snap::MeshBlockImpl>>();
-            snap::OctTreeOptions tree;
 
             std::map<std::string, torch::Tensor> native;
             for (auto &kv : vars) {
@@ -81,7 +80,7 @@ void bind_output(py::module &m) {
               }
             }
 
-            self.write_output_file(pmb, native, time, tree, wtflag);
+            self.write_output_file(pmb, native, time, wtflag);
           },
           py::arg("block"), py::arg("vars"), py::arg("time"),
           py::arg("wtflag") = 0)

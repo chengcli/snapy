@@ -50,6 +50,7 @@ file(GLOB src_files
     intg/*.cpp
     input/*.cpp
     sedimentation/*.cpp
+    layout/*.cpp
     )
 
 add_library(${namel}_${buildl}
