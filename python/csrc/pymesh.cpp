@@ -24,8 +24,12 @@ void bind_mesh(py::module &m) {
              a.report(ss);
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
            })
-      .def("from_yaml", &snap::MeshBlockOptions::from_yaml, py::arg("filename"),
-           py::arg("dist") = snap::DistributeInfo())
+      .def_static(
+          "from_yaml",
+          [](const std::string &filename, const snap::DistributeInfo &dist) {
+            return snap::MeshBlockOptions::from_yaml(filename, dist);
+          },
+          py::arg("filename"), py::arg("dist") = snap::DistributeInfo())
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,

@@ -15,7 +15,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 torch.set_default_dtype(torch.float64)
 
-torch.set_num_threads(1)
+# torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
 
 p0 = 1.0e5

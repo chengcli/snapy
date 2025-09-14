@@ -41,6 +41,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .value("ipr", snap::Index::IPR)
       .value("icy", snap::Index::ICY);
 
+  bind_layout(m);
   bind_bc(m);
   bind_coord(m);
   bind_eos(m);
@@ -52,6 +53,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   bind_implicit(m);
   bind_intg(m);
   bind_mesh(m);
-  bind_layout(m);
   // bind_scalar(m);
 }
