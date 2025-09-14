@@ -28,6 +28,9 @@
 #include <cstdio>
 #include <cstdlib>
 
+// fmt
+#include <fmt/format.h>
+
 // canoe
 #include "cubed_sphere_layout.hpp"
 
@@ -131,6 +134,19 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
       *out_rx = 0;
       *out_ry = 0;
       break;
+  }
+}
+
+void CubedSphereLayout::report(std::ostream &os) const {
+  os << "pxy=" << _pxy << "\n";
+  for (int f = 0; f < 6; ++f) {
+    os << " Face " << f << "\n";
+    os << " Rank | (rx,ry)\n";
+    os << "----------------\n";
+    for (int r = 0; r < _pxy * _pxy; ++r) {
+      os << fmt::format(" {:>3} | ({:>2},{:>2})\n", _rankof6[f][r],
+                        _coords6[f][r].x, _coords6[f][r].y);
+    }
   }
 }
 

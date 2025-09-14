@@ -27,6 +27,7 @@ void bind_dsmc(py::module &);
 void bind_forcing(py::module &);
 void bind_implicit(py::module &);
 void bind_intg(py::module &);
+void bind_layout(py::module &);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snap";
@@ -51,5 +52,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   bind_implicit(m);
   bind_intg(m);
   bind_mesh(m);
+  bind_layout(m);
   // bind_scalar(m);
 }

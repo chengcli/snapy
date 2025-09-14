@@ -7,6 +7,7 @@ import torch
 import snapy
 import kintera
 import argparse
+from typing import List
 from snapy import (
         index,
         MeshBlockOptions,
@@ -21,7 +22,10 @@ from kintera import (
         evolve_implicit
         )
 
+os.environ.setdefault("NCCL_DEBUG", "WARN")
+os.environ.setdefault("NCCL_IB_DISABLE", "0")
 torch.set_default_dtype(torch.float64)
+torch.backends.cudnn.benchmark = True
 
 def setup_moist_adiabatic_profile(config, coord, eos, thermo_x,
                                   device=torch.device("cpu")):
@@ -184,42 +188,33 @@ def main(args, rank, device):
         count += 1
         current_time += dt
 
-    # done
-    dist.destroy_process_group()
-
 if __name__ == "__main__":
-    os.environ.setdefault("NCCL_DEBUG", "WARN")
-    os.environ.setdefault("NCCL_IB_DISABLE", "0")
-    torch.backends.cudnn.benchmark = True
-
     p = argparse.ArgumentParser()
 
     p.add_argument("-i", "--input", type=str,
                     help="path to input file", required=True)
     p.add_argument("-r", "--restart", type=str,
                     help="path to restart file")
-    p.add_argument("-d", "--device", type=str, default="cuda",
+    p.add_argument("-d", "--device", type=str, default="cpu",
                     choices=["cpu", "cuda"],
                     help="run and output dir")
-    p.add_argument("--px", type=int, default=0,
-                    help="ranks in x (cols); 0=auto")
-    p.add_argument("--py", type=int, default=0,
-                    help="ranks in y (rows); 0=auto")
+    p.add_argument("--px1", type=int, default=1,
+                    help="number of processes in x1")
+    p.add_argument("--px2", type=int, default=1,
+                    help="number of processes in x2")
+    p.add_argument("--px3", type=int, default=1,
+                    help="number of processes in x3")
+    p.add_argument("--layout", type=str, default="slab",
+                    choices=["slab", "cubed", "cubed_sphere"],
+                    help="domain decomposition layout")
     p.add_argument("--print_every", type=int, default=1,
-                    help="print diagnostic message every XX cycle")
+                    help="print running message every XX cycle")
     args = p.parse_args()
 
-    if args.device == "cuda":
-        rank, world_size, device = init_cuda_dist()
+    ranks, device = init_dist(args)
 
-    # Pick (py, px)
-    if args.px > 0 and args.py > 0:
-        px, py = args.px, args.py
-        assert px * py == world_size, f"px*py ({px}*{py}) != world_size ({world_size})"
-    else:
-        py, px = best_2d_factors(world_size)
+    #ry, rx = cart_coords(rank, px, py)
+    #up, down, left, right = neighbors_2d(rank, px, py)
+    #main(args, rank, device)
 
-    ry, rx = cart_coords(rank, px, py)
-    up, down, left, right = neighbors_2d(rank, px, py)
-
-    main(args, rank, device)
+    dist.destroy_process_group()

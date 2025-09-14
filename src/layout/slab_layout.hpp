@@ -1,8 +1,10 @@
 #pragma once
 
 // C/C++
+#include <sstream>
 #include <utility>
 
+// canoe
 #include "connectivity.hpp"
 
 namespace canoe {
@@ -23,11 +25,18 @@ class SlabLayout {
     delete[] _rankof;
   }
 
+  void report(std::ostream &os) const;
+
   std::pair<int, int> get_procs() const { return {_px, _py}; }
 
   int rank_of(int rx, int ry) const {
     if (rx < 0 || rx >= _px || ry < 0 || ry >= _py) return -1;
     return _rankof[ry * _px + rx];
+  }
+
+  std::pair<int, int> loc_of(int rank) const {
+    if (rank < 0 || rank >= _px * _py) return {-1, -1};
+    return {_coords[rank].x, _coords[rank].y};
   }
 
   /* ============================
@@ -36,7 +45,7 @@ class SlabLayout {
    * dx,dy ∈ {-1,0,1}. periodic flags control wrap; otherwise off-domain → -1.
    * (rx,ry) are THIS rank's coords in the process grid (not Morton code).
    */
-  int neighbor_rank(int rx, int ry, int dx, int dy);
+  int neighbor_rank(int rx, int ry, int dx, int dy) const;
 
  private:
   int _px, _py; /* processors per dimension */

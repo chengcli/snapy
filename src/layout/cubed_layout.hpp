@@ -1,8 +1,10 @@
 #pragma once
 
 // C/C++
+#include <sstream>
 #include <tuple>
 
+// canoe
 #include "connectivity.hpp"
 
 namespace canoe {
@@ -29,12 +31,19 @@ class CubedLayout {
     delete[] _rankof;
   }
 
+  void report(std::ostream &os) const;
+
   std::tuple<int, int, int> get_procs() const { return {_px, _py, _pz}; }
 
   int rank_of(int rx, int ry, int rz) const {
     if (rx < 0 || rx >= _px || ry < 0 || ry >= _py || rz < 0 || rz >= _pz)
       return -1;
     return _rankof[rz * (_px * _py) + ry * _px + rx];
+  }
+
+  std::tuple<int, int, int> loc_of(int rank) const {
+    if (rank < 0 || rank >= _px * _py * _pz) return {-1, -1, -1};
+    return {_coords[rank].x, _coords[rank].y, _coords[rank].z};
   }
 
   /* ============================
@@ -44,7 +53,7 @@ class CubedLayout {
    * -1. (rx,ry,rz) are THIS rank's coords in the process grid (not Morton
    * code).
    */
-  int neighbor_rank(int rx, int ry, int rz, int dx, int dy, int dz);
+  int neighbor_rank(int rx, int ry, int rz, int dx, int dy, int dz) const;
 
  private:
   int _px, _py, _pz; /* processors per dimension */

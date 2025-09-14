@@ -1,5 +1,9 @@
 #pragma once
 
+// C/C++
+#include <sstream>
+#include <tuple>
+
 // canoe
 #include "connectivity.hpp"
 
@@ -27,12 +31,23 @@ class CubedSphereLayout {
     }
   }
 
+  void report(std::ostream &os) const;
+
   int get_procs() const { return _pxy; }
 
   int rank_of(int face, int rx, int ry) const {
     if (face < 0 || face >= 6) return -1;
     if (rx < 0 || rx >= _pxy || ry < 0 || ry >= _pxy) return -1;
     return _rankof6[face][ry * _pxy + rx];
+  }
+
+  std::tuple<int, int, int> loc_of(int global_rank) const {
+    if (global_rank < 0 || global_rank >= 6 * _pxy * _pxy) return {-1, -1, -1};
+    int face, r_local;
+    global_rank_to_face_local(global_rank, &face, &r_local);
+    int rx = _coords6[face][r_local].x;
+    int ry = _coords6[face][r_local].y;
+    return {face, rx, ry};
   }
 
   /* Global rank layout: face-major, Z-order within face */
@@ -67,7 +82,6 @@ class CubedSphereLayout {
    *    exchange.
    */
   int face_local_rank(int face, int rx, int ry) const {
-    int P = _pxy * _pxy;
     /* map local (rx,ry) to per-face Z-order rank */
     return _rankof6[face][linear_index2(_pxy, _pxy, ry, rx)];
   }

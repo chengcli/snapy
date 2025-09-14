@@ -77,7 +77,7 @@ def get_neighbor_rank_2d(nblock3: int, nblock2: int,
         pass
 
     rank_x3 = rank_x2 + x3_offset * nblock2
-    if periodic_x3: 
+    if periodic_x3:
         rank_x3 = (rank_x3 + nblock3) % nblock3
     return rank_x3
 
@@ -132,7 +132,6 @@ def exchange_halos(block_vars: dict[str, torch.Tensor],
     if left != -1 or right != -1:
         write_column_ghosts_to_u()
 
-@torch.inference_mode()
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--N", type=int, default=4096, help="global rows (y)")
@@ -141,8 +140,8 @@ def main():
     p.add_argument("--tol", type=float, default=1e-4)
     p.add_argument("--check_every", type=int, default=10)
     p.add_argument("--print_every", type=int, default=20)
-    p.add_argument("--px", type=int, default=0, help="ranks in x (cols); 0=auto")
-    p.add_argument("--py", type=int, default=0, help="ranks in y (rows); 0=auto")
+    p.add_argument("--px", type=int, default=0, help="processes in x (cols); 0=auto")
+    p.add_argument("--py", type=int, default=0, help="processes in y (rows); 0=auto")
     args = p.parse_args()
 
     rank, world_size, device = init_dist()

@@ -1,14 +1,31 @@
 // C/C++
-#include "cubed_layout.hpp"
-
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
+// fmt
+#include <fmt/format.h>
+
+// canoe
+#include "cubed_layout.hpp"
+
 namespace canoe {
 
-int CubedLayout::neighbor_rank(int rx, int ry, int rz, int dx, int dy, int dz) {
+void CubedLayout::report(std::ostream &os) const {
+  os << "px=" << _px << " py=" << _py << " pz=" << _pz
+     << " periodic_x=" << _periodic_x << " periodic_y=" << _periodic_y
+     << " periodic_z=" << _periodic_z << "\n";
+  os << " Rank | (rx,ry,rz)\n";
+  os << "-------------------\n";
+  for (int r = 0; r < _px * _py * _pz; ++r) {
+    os << fmt::format(" {:>3} | ({:>2},{:>2},{:>2})\n", r, _coords[r].x,
+                      _coords[r].y, _coords[r].z);
+  }
+}
+
+int CubedLayout::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
+                               int dz) const {
   int nx = rx + dx;
   int ny = ry + dy;
   int nz = rz + dz;
