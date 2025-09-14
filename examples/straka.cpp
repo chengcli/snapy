@@ -105,11 +105,11 @@ int main(int argc, char** argv) {
       block->user_out_var.at("temp") = temp;
       block->user_out_var.at("theta") = temp * (p0 / w[IPR]).pow(Rd / cp);
 
-      out2.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out2.write_output_file(block, vars, current_time, 0);
       out2.combine_blocks();
       out2.file_number++;
 
-      out3.write_output_file(block, vars, current_time, OctTreeOptions(), 0);
+      out3.write_output_file(block, vars, current_time, 0);
       out3.combine_blocks();
       out3.file_number++;
     }

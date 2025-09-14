@@ -1,4 +1,5 @@
 import torch
+import torch.distributed as dist
 from snapy import (
         CoordinateOptions,
         HydroOptions,
@@ -61,20 +62,21 @@ send_bufs, recv_bufs = init_buffers_2d(layout, my_rank, block, block_vars)
 if my_rank == 0:
     for i, s in enumerate(send_bufs):
         if s is not None:
-            print(f"send_buf[{i}] shape = ", s["hydro_u"].shape)
+            print(f"send_buf[{i}] shape = ", s[0].shape)
 
     for i, s in enumerate(recv_bufs):
         if s is not None:
-            print(f"recv_buf[{i}] shape = ", s["hydro_u"].shape)
+            print(f"recv_buf[{i}] shape = ", s[0].shape)
 
-#serialize_2d(block, block_vars, send_bufs)
-
-if my_rank == 3:
+if my_rank == 0:
     print("before exchange")
     print(block_vars["hydro_u"][:,:,:,0])
 
 slab_exchange(block, block_vars, ranks, send_bufs, recv_bufs)
 
-if my_rank == 3:
+if my_rank == 0:
     print("after exchange")
     print(block_vars["hydro_u"][:,:,:,0])
+    for b in block.options.bfuncs(): print(b)
+
+dist.destroy_process_group()

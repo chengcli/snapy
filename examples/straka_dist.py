@@ -1,10 +1,13 @@
 import torch
+import torch.distributed as dist
 import math
 import time
 import kintera
 import snapy
+import os
 from snapy import (
         index,
+        exchange,
         MeshBlockOptions,
         MeshBlock,
         OutputOptions,
@@ -13,10 +16,27 @@ from snapy import (
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
+os.environ.setdefault("NCCL_DEBUG", "WARN")
+os.environ.setdefault("NCCL_IB_DISABLE", "0")
 torch.set_default_dtype(torch.float64)
+torch.backends.cudnn.benchmark = True
 
-torch.set_num_threads(1)
+# torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
+
+class Args:
+    device = 'cpu'
+    px1 = 1
+    px2 = 4
+    px3 = 1
+    layout = 'slab'
+
+args = Args()
+layout, ranks, device = exchange.init_dist(args,
+                                           periodic_x1=False, periodic_x2=False,
+                                           periodic_x3=False)
+my_rank = ranks[0]
+
 
 p0 = 1.0e5
 Ts = 300.0
@@ -29,10 +49,6 @@ grav = 9.8
 Rd = 287.0
 gamma = 1.4
 K = 75.0
-
-# device
-#device = torch.device("cuda:0")
-device = torch.device("cpu")
 
 # set hydrodynamic options
 op = MeshBlockOptions.from_yaml("straka.yaml");
@@ -75,6 +91,9 @@ block_vars = {}
 block_vars["hydro_w"] = w
 block_vars = block.initialize(block_vars)
 
+send_bufs, recv_bufs = exchange.init_buffers_2d(layout, my_rank, block, block_vars)
+exchange.slab_exchange(block, block_vars, ranks, send_bufs, recv_bufs)
+
 # make output
 out2 = NetcdfOutput(OutputOptions().file_basename("straka").fid(2).variable("prim"))
 out3 = NetcdfOutput(OutputOptions().file_basename("straka").fid(3).variable("uov"))
@@ -93,11 +112,22 @@ current_time = 0.0
 # with profile(activities=activities, record_shapes=True) as prof:
 while not block.intg.stop(count, current_time):
     dt = block.max_time_step(block_vars)
+    dt_min = torch.tensor(dt, device=device)
+
+    # gather minimum dt across ranks
+    dist.all_reduce(dt_min, op=dist.ReduceOp.MIN)
+    dt = dt_min.item()
 
     if count % 100 == 0:
-        print(f"count = {count}, dt = {dt}, time = {current_time}")
+        if my_rank == 0:
+            print(f"count = {count}, dt = {dt}, time = {current_time}")
         u = block_vars["hydro_u"]
-        print("mass = ", u[interior][index.idn].sum())
+        # sum over all ranks
+        total_mass = u[interior][index.idn].sum()
+        dist.all_reduce(total_mass, op=dist.ReduceOp.SUM)
+
+        if my_rank == 0:
+            print("mass = ", total_mass)
 
         ivol = thermo.compute("DY->V", (w[index.idn], w[index.icy:]))
         temp = thermo.compute("PV->T", (w[index.ipr], ivol))
@@ -106,16 +136,21 @@ while not block.intg.stop(count, current_time):
         block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
 
         for out in [out2, out3]:
-            out.increment_file_number()
             out.write_output_file(block, block_vars, current_time)
-            out.combine_blocks()
+            if my_rank == 0:
+                out.combine_blocks()
+            out.increment_file_number()
 
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage, block_vars)
+        exchange.slab_exchange(block, block_vars, ranks, send_bufs, recv_bufs)
 
     count += 1
     current_time += dt
 
-print("elapsed time = ", time.time() - start_time)
+if my_rank == 0:
+    print("elapsed time = ", time.time() - start_time)
 # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+
+dist.destroy_process_group()

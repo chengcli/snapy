@@ -36,12 +36,15 @@ struct MeshBlockOptions {
   //! boundary functions
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
 
-  //! meshblock id
+  //! distributed meshblock info
   ADD_ARG(int, lx1) = 0;
   ADD_ARG(int, lx2) = 0;
   ADD_ARG(int, lx3) = 0;
   ADD_ARG(int, level) = 0;
   ADD_ARG(int, gid) = 0;
+  ADD_ARG(int, nb1) = 1;
+  ADD_ARG(int, nb2) = 1;
+  ADD_ARG(int, nb3) = 1;
 };
 
 using Variables = std::map<std::string, torch::Tensor>;

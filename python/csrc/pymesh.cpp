@@ -25,9 +25,62 @@ void bind_mesh(py::module &m) {
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
            })
       .def("from_yaml", &snap::MeshBlockOptions::from_yaml)
+      .def(
+          "set_bfunc",
+          [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,
+              py::object func_obj) {
+            bcfunc_t func;
+            if (func_obj.is_none()) {
+              func = nullptr;
+            } else {
+              py::function f = py::cast<py::function>(func_obj);
+              func = [f](torch::Tensor const &var, int id,
+                         snap::BoundaryFuncOptions op) {
+                py::gil_scoped_acquire gil;
+                f(var, id, op);
+              };
+            }
+
+            if (self.bfuncs().empty()) {
+              throw std::runtime_error(
+                  "Cannot set boundary function when bfuncs is empty.");
+            } else if (self.bfuncs().size() == 2) {
+              if (dx3 != 0 || dx2 != 0) {
+                throw std::runtime_error(
+                    "Only dx1 can be non-zero when bfuncs has size 2.");
+              }
+            } else if (self.bfuncs().size() == 4) {
+              if (dx3 != 0) {
+                throw std::runtime_error(
+                    "Only dx1 and dx2 can be non-zero when bfuncs has size 4.");
+              }
+            } else if (self.bfuncs().size() != 6) {
+              throw std::runtime_error(
+                  "bfuncs must have size 2, 4, or 6 to set boundary "
+                  "functions.");
+            }
+
+            if (dx3 == 0 && dx2 == 0 && dx1 == -1) {
+              self.bfuncs()[0] = func;
+            } else if (dx3 == 0 && dx2 == 0 && dx1 == 1) {
+              self.bfuncs()[1] = func;
+            } else if (dx3 == 0 && dx2 == -1 && dx1 == 0) {
+              self.bfuncs()[2] = func;
+            } else if (dx3 == 0 && dx2 == 1 && dx1 == 0) {
+              self.bfuncs()[3] = func;
+            } else if (dx3 == -1 && dx2 == 0 && dx1 == 0) {
+              self.bfuncs()[4] = func;
+            } else if (dx3 == 1 && dx2 == 0 && dx1 == 0) {
+              self.bfuncs()[5] = func;
+            }
+          },
+          py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
       .ADD_OPTION(int, snap::MeshBlockOptions, lx1)
       .ADD_OPTION(int, snap::MeshBlockOptions, lx2)
       .ADD_OPTION(int, snap::MeshBlockOptions, lx3)
+      .ADD_OPTION(int, snap::MeshBlockOptions, nb1)
+      .ADD_OPTION(int, snap::MeshBlockOptions, nb2)
+      .ADD_OPTION(int, snap::MeshBlockOptions, nb3)
       .ADD_OPTION(int, snap::MeshBlockOptions, level)
       .ADD_OPTION(int, snap::MeshBlockOptions, gid)
       .ADD_OPTION(snap::IntegratorOptions, snap::MeshBlockOptions, intg)

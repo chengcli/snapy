@@ -33,8 +33,7 @@ NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
 void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
-                                     double current_time,
-                                     OctTreeOptions const &tree, bool flag) {
+                                     double current_time, bool flag) {
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;
@@ -141,7 +140,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx1, "long_name", 27, "Z-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells1 * tree.nb1();
+  pos[1] = ncells1 * pmb->options.nb1();
   pos[2] = ncells1 * loc[0] + 1;
   pos[3] = ncells1 * (loc[0] + 1);
   nc_put_att_int(ifile, ivx1, "domain_decomposition", NC_INT, 4, pos);
@@ -161,7 +160,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx2, "long_name", 27, "Y-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells2 * tree.nb2();
+  pos[1] = ncells2 * pmb->options.nb2();
   pos[2] = ncells2 * loc[1] + 1;
   pos[3] = ncells2 * (loc[1] + 1);
   nc_put_att_int(ifile, ivx2, "domain_decomposition", NC_INT, 4, pos);
@@ -181,7 +180,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   nc_put_att_text(ifile, ivx3, "long_name", 27, "X-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells3 * tree.nb3();
+  pos[1] = ncells3 * pmb->options.nb3();
   pos[2] = ncells3 * loc[2] + 1;
   pos[3] = ncells3 * (loc[2] + 1);
   nc_put_att_int(ifile, ivx3, "domain_decomposition", NC_INT, 4, pos);
@@ -195,7 +194,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
     nc_put_att_int(ifile, ivx3f, "domain_decomposition", NC_INT, 4, pos);
   }
 
-  int nbtotal = tree.nb1() * tree.nb2() * tree.nb3();
+  int nbtotal = pmb->options.nb1() * pmb->options.nb2() * pmb->options.nb3();
   nc_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT, 1, &nbtotal);
 
   OutputData *pdata = pfirst_data_;
