@@ -89,6 +89,7 @@ def init_buffers_2d(layout, rank,
             recv_bufs[bid]["hydro_u"] = torch.empty_like(block_vars["hydro_u"][part])
     return send_bufs, recv_bufs
 
+@torch.compile
 def serialize_2d(block: snapy.MeshBlock,
                  block_vars: dict[str, torch.Tensor],
                  send_bufs: List[dict[str, torch.Tensor]]):
@@ -101,6 +102,7 @@ def serialize_2d(block: snapy.MeshBlock,
                 #part = block.part(tuple([-x for x in offset]))
                 send_bufs[bid]["hydro_u"].copy_(block_vars["hydro_u"][part])
 
+@torch.compile
 def deserialize_2d(block: snapy.MeshBlock,
                    block_vars: dict[str, torch.Tensor],
                    recv_bufs: List[dict[str, torch.Tensor]]):
@@ -112,6 +114,7 @@ def deserialize_2d(block: snapy.MeshBlock,
                 part = block.part(offset, exterior=True)
                 block_vars["hydro_u"][part].copy_(recv_bufs[bid]["hydro_u"])
 
+@torch.compile
 def slab_exchange(block: snapy.MeshBlock,
                   block_vars: dict[str, torch.Tensor],
                   ranks: List[int],
