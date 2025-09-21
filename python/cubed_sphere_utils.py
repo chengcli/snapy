@@ -84,7 +84,7 @@ def scatter_on_face(ax, alpha, beta, face="+X", view_dir=np.array([1,0,0]),
     ax.scatter(u[vis], v[vis], zorder=np.max(depth[vis]), **kwargs)
 
 def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
-                    view_dir = np.array([1,0,0]),
+                    view_dir=np.array([1,0,0]),
                     color='C0', linestyle='--', linewidth=0.8,
                     facecolor='none'):
     """
@@ -107,12 +107,16 @@ def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
 
     # alpha = const lines
     for i, alpha in zip(idx, alphas):
+        # skip the first and the last lines
+        if i == idx[0] or i == idx[-1]: continue
         plot_on_face(ax, np.full_like(s, alpha), s, face=face,
                      view_dir=view_dir,
                      linewidth=linewidth, linestyle=linestyle, color=color)
 
     # beta = const lines
     for j, beta in zip(idx, alphas):
+        # skip the first and the last lines
+        if j == idx[0] or j == idx[-1]: continue
         plot_on_face(ax, s, np.full_like(s, beta), face=face,
                      view_dir=view_dir,
                      linewidth=linewidth, linestyle=linestyle, color=color)
@@ -127,18 +131,14 @@ def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
     for alpha in [-np.pi/4, np.pi/4]:
         plot_on_face(ax, np.full_like(s, alpha), s, face=face,
                      view_dir=view_dir,
-                     linewidth=2.0, color=color)
+                     linestyle="-.", linewidth=1.6, color=color)
     for beta in [-np.pi/4, np.pi/4]:
         plot_on_face(ax, s, np.full_like(s, beta), face=face,
                      view_dir=view_dir,
-                     linewidth=2.0, color=color)
+                     linestyle="-.", linewidth=1.6, color=color)
 
 def draw_single_panel(ax, face="+X", N=8, nghost=3, color='C0',
                       view_dir=np.array([1,0,0])):
-    # plot visible hemisphere
-    #theta = np.linspace(0, 2*np.pi, 720)
-    #ax.plot(np.cos(theta), np.sin(theta), linewidth=1, alpha=0.5)
-
     # all grid lines including ghosts
     draw_panel_grid(ax, face=face, N=N, nghost=nghost, color=color,
                     view_dir=view_dir)
@@ -147,3 +147,23 @@ def draw_single_panel(ax, face="+X", N=8, nghost=3, color='C0',
     draw_panel_grid(ax, face=face, N=N, nghost=0, view_dir=view_dir,
                     linestyle='-', linewidth=1.2,
                     facecolor=color, color=color)
+
+def draw_panel_seam(ax, N=8, nghost=3):
+    # Use view along bisector of +X and +Y directions, i.e. (1,1,0).
+    view_dir = np.array([1.0,1.0,0.0])
+
+    draw_single_panel(ax, "+X", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C0')
+    draw_single_panel(ax, "+Y", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C1')
+
+def draw_panel_corner(ax, N=8, nghost=3):
+    # View along the cube-space diagonal to center the +X/+Y/+Z corner
+    view_dir = np.array([1.0,1.0,1.0])
+
+    draw_single_panel(ax, "+X", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C0')
+    draw_single_panel(ax, "+Y", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C1')
+    draw_single_panel(ax, "+Z", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C2')
