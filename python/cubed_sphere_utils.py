@@ -249,10 +249,7 @@ def draw_single_panel(ax, face="+X", N=8, nghost=3, color='C0',
                     linestyle='-', linewidth=1.2,
                     facecolor=color, color=color)
 
-def draw_panel_seam(ax, N=8, nghost=3):
-    # Use view along bisector of +X and +Y directions, i.e. (1,1,0).
-    view_dir = np.array([1.0,1.0,0.0])
-
+def draw_panel_seam(ax, N=8, nghost=3, view_dir=np.array([1.0,1.0,0.0])):
     draw_single_panel(ax, "+X", N=N, nghost=nghost,
                       view_dir=view_dir, color='C0')
     draw_single_panel(ax, "+Y", N=N, nghost=nghost,
@@ -269,10 +266,7 @@ def draw_panel_seam(ax, N=8, nghost=3):
                            linewidth=1.2)
     ax.add_patch(poly)
 
-def draw_panel_corner(ax, N=8, nghost=3):
-    # View along the cube-space diagonal to center the +X/+Y/+Z corner
-    view_dir = np.array([1.0,1.0,1.0])
-
+def draw_panel_corner(ax, N=8, nghost=3, view_dir=np.array([1.0,1.0,1.0])):
     draw_single_panel(ax, "+X", N=N, nghost=nghost,
                       view_dir=view_dir, color='C0')
     draw_single_panel(ax, "+Y", N=N, nghost=nghost,
