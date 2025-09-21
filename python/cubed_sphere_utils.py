@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Tuple
 
 def normalize(v):
     return v / np.linalg.norm(v)
@@ -35,7 +36,6 @@ def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
 
 def orthographic_project(face_xyz, view_dir=np.array([1,0,0])):
     """Orthographic projection onto the plane normal to view_dir."""
-    x, y, z = face_xyz
     V = normalize(np.array(view_dir))
     # Construct orthonormal basis (e1,e2) spanning plane perpendicular to V
     # Choose arbitrary "up" vector not parallel to V
@@ -82,6 +82,104 @@ def scatter_on_face(ax, alpha, beta, face="+X", view_dir=np.array([1,0,0]),
     vis = depth > 0 # front hemisphere
     u,v = orthographic_project((x,y,z), view_dir=view_dir)
     ax.scatter(u[vis], v[vis], zorder=np.max(depth[vis]), **kwargs)
+
+def ab_limits(dxy, N, nghost, exterior=True) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    """
+    Return ((a_min, b_min), (a_max, b_max)) in equiangular gnomonic coords (radians)
+    for a single cubed-sphere panel.
+
+    Panel interior spans α,β ∈ [-π/4, +π/4]. Each cell has angular size
+    dθ = (π/2) / N. Ghost zones extend outward by 'nghost' cells.
+
+    Offsets (dx, dy) ∈ {-1, 0, 1} select a slab/corner in each dimension:
+      - dx = -1: left   slab
+      - dx =  0: center (interior if exterior=False; ghost if exterior=True)
+      - dx = +1: right  slab
+      (analogous for dy: bottom/center/top)
+
+    exterior=True:
+      - (0, 0) returns FULL exterior limits including ghost zones
+      - (-1, 0) returns the LEFT ghost region only (width = nghost * dθ), etc.
+
+    exterior=False:
+      - (0, 0) returns interior limits ONLY
+      - (-1, 0) returns the interior boundary slab adjacent to the left edge,
+        with the SAME thickness as the ghost zone (nghost * dθ) but inside.
+        (Analogous for other offsets and for dy.)
+
+    Returns:
+      ((a_min, b_min), (a_max, b_max))
+    """
+    dx, dy = dxy
+    if dx not in (-1, 0, 1) or dy not in (-1, 0, 1):
+        raise ValueError("dx, dy must be in {-1, 0, 1}")
+    if N <= 0 or nghost < 0:
+        raise ValueError("N must be > 0 and nghost >= 0")
+
+    dtheta = (np.pi / 2.0) / N
+    aL_int, aR_int = -np.pi/4, +np.pi/4
+    bB_int, bT_int = -np.pi/4, +np.pi/4
+
+    # External (interior + ghosts) bounds along each dimension
+    aL_ext = aL_int - nghost * dtheta
+    aR_ext = aR_int + nghost * dtheta
+    bB_ext = bB_int - nghost * dtheta
+    bT_ext = bT_int + nghost * dtheta
+
+    def one_dim_limits(offset: int, L_int: float, R_int: float, L_ext: float, R_ext: float):
+        if offset == 0:      # full span incl. ghosts
+            return (L_int, R_int)
+        if exterior:
+            if offset == -1:   # left ghost slab
+                return (L_ext, L_int)
+            else:                # +1: right ghost slab
+                return (R_int, R_ext)
+        else:
+            if offset == -1:   # interior boundary slab (left), same thickness as ghosts
+                return (L_int, L_int + nghost * dtheta)
+            else:                # +1: interior boundary slab (right)
+                return (R_int - nghost * dtheta, R_int)
+
+    a_min, a_max = one_dim_limits(dx, aL_int, aR_int, aL_ext, aR_ext)
+    b_min, b_max = one_dim_limits(dy, bB_int, bT_int, bB_ext, bT_ext)
+
+    # set to whole domain
+    if dx == 0 and dy == 0 and exterior:
+        a_min, a_max = aL_ext, aR_ext
+        b_min, b_max = bB_ext, bT_ext
+
+    # Ensure (lower-left, upper-right) ordering
+    a0, a1 = (min(a_min, a_max), max(a_min, a_max))
+    b0, b1 = (min(b_min, b_max), max(b_min, b_max))
+    return (a0, b0), (a1, b1)
+
+def sample_edge(a0, b0, a1, b1, n_pts=64):
+    t = np.linspace(0.0, 1.0, n_pts)
+    return (a0 + (a1-a0)*t), (b0 + (b1-b0)*t)
+
+def make_poly_patch(verts_ab, face="+X", view_dir=(1,0,0),
+                    n_pts=64, **kwargs):
+    # Sample each edge, map to sphere, cull back hemisphere
+    boundary_u, boundary_v, boundary_d = [], [], []
+    for (a0,b0),(a1,b1) in zip(verts_ab, verts_ab[1:]+verts_ab[:1]):
+        aa, bb = sample_edge(a0,b0,a1,b1,n_pts=n_pts)
+        xyz = gnomonic_equiangular_to_xyz(aa, bb, face=face)
+        u,v = orthographic_project(xyz, view_dir=view_dir)
+        d = (xyz[0]*view_dir[0] + xyz[1]*view_dir[1] + xyz[2]*view_dir[2])
+        mask = d > 0
+        boundary_u.append(u[mask])
+        boundary_v.append(v[mask])
+        boundary_d.append(d[mask])
+
+    if not any(len(u) for u in boundary_u):
+        return None  # fully occluded
+
+    U = np.concatenate(boundary_u)
+    V = np.concatenate(boundary_v)
+    D = np.concatenate(boundary_d) if any(len(d) for d in boundary_d) else np.array([0.0])
+
+    poly = Polygon(np.c_[U, V], closed=True, zorder=float(np.max(D)), **kwargs)
+    return poly
 
 def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
                     view_dir=np.array([1,0,0]),
