@@ -1,25 +1,27 @@
+import numpy as np
 import matplotlib.pyplot as plt
-from cubed_sphere_utils import plot_single_panel_grid
+from cubed_sphere_utils import draw_single_panel
 
-# Example: 8 interior cells per direction, 3 ghost cells beyond each edge.
-fig, ax = plt.subplots(figsize=(8, 8))
+def draw_panel_seam(ax, N=8, nghost=3):
+    # Use view along bisector of +X and +Y directions, i.e. (1,1,0).
+    view_dir = np.array([1.0,1.0,0.0])
 
-# plot visible hemisphere
-#theta = np.linspace(0, 2*np.pi, 720)
-#ax.plot(np.cos(theta), np.sin(theta), linewidth=1, alpha=0.5)
+    ax.set_aspect('equal')
 
-# all grid lines including ghosts
-plot_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800)
+    draw_single_panel(ax, "+X", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C0')
+    draw_single_panel(ax, "+Y", N=N, nghost=nghost,
+                      view_dir=view_dir, color='C1')
 
-# interior grid lines only
-plot_single_panel_grid(ax, face="+X", N=8, nghost=0, n_pts=800,
-                       linestyle='-', linewidth=1.2,
-                       facecolor='C0', color='C0')
+if __name__ == "__main__":
+    fig, ax = plt.subplots(figsize=(8, 8))
 
-ax.set_aspect('equal')
-ax.set_xlabel("X (orthographic)")
-ax.set_ylabel("Y (orthographic)")
-ax.set_xlim(-1.1, 1.1)
-ax.set_ylim(-1.1, 1.1)
+    draw_single_panel(ax, view_dir=[1,1,0])
+    #draw_panel_seam(ax)
 
-plt.show()
+    ax.set_aspect('equal')
+    ax.set_xlabel("X (orthographic)")
+    ax.set_ylabel("Y (orthographic)")
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(-1.1, 1.1)
+    plt.show()

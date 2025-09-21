@@ -1,5 +1,8 @@
 import numpy as np
 
+def normalize(v):
+    return v / np.linalg.norm(v)
+
 def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
     """
     Map equiangular gnomonic coordinates (alpha, beta) in radians to
@@ -30,7 +33,7 @@ def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
     inv_norm = 1.0 / np.sqrt(X*X + Y*Y + Z*Z)
     return X*inv_norm, Y*inv_norm, Z*inv_norm
 
-def orthographic_project(face_xyz, view_dir=np.array([1,1,0])):
+def orthographic_project(face_xyz, view_dir=np.array([1,0,0])):
     """Orthographic projection onto the plane normal to view_dir."""
     x, y, z = face_xyz
     V = normalize(np.array(view_dir))
@@ -44,10 +47,46 @@ def orthographic_project(face_xyz, view_dir=np.array([1,1,0])):
     W = x*e2[0] + y*e2[1] + z*e2[2]
     return U, W
 
-def draw_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
-                           view_dir = np.array([1,1,0]),
-                           color='C0', linestyle='--', linewidth=0.8,
-                           facecolor='none'):
+def visible_segments(u, v, depth, vis_mask):
+    segs = []
+    start = None
+    for i in range(len(u)):
+        if vis_mask[i] and start is None:
+            start = i
+        elif (not vis_mask[i]) and (start is not None):
+            segs.append((u[start:i], v[start:i], depth[start:i]))
+            start = None
+    if start is not None:
+        segs.append((u[start:], v[start:], depth[start:]))
+    return segs
+
+def plot_on_face(ax, alpha, beta, face="+X", view_dir=np.array([1,0,0]),
+                 **kwargs):
+    x,y,z = gnomonic_equiangular_to_xyz(alpha, beta, face=face)
+    # r·V (nearness for ortho)
+    depth = x*view_dir[0] + y*view_dir[1] + z*view_dir[2]
+
+    vis = depth > 0 # front hemisphere
+    u,v = orthographic_project((x,y,z), view_dir=view_dir)
+    segs = visible_segments(u, v, depth, vis)
+    segs.sort(key=lambda seg: np.max(seg[2]) if seg[2].size else -1)
+    for uu, vv, dd in segs:
+        ax.plot(uu, vv, zorder=np.max(dd) if dd.size else 0, **kwargs)
+
+def scatter_on_face(ax, alpha, beta, face="+X", view_dir=np.array([1,0,0]),
+                    **kwargs):
+    x,y,z = gnomonic_equiangular_to_xyz(alpha, beta, face=face)
+    # r·V (nearness for ortho)
+    depth = x*view_dir[0] + y*view_dir[1] + z*view_dir[2]
+
+    vis = depth > 0 # front hemisphere
+    u,v = orthographic_project((x,y,z), view_dir=view_dir)
+    ax.scatter(u[vis], v[vis], zorder=np.max(depth[vis]), **kwargs)
+
+def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
+                    view_dir = np.array([1,0,0]),
+                    color='C0', linestyle='--', linewidth=0.8,
+                    facecolor='none'):
     """
     Plot an equiangular gnomonic grid for a single cubed-sphere panel with ghost zones.
       - N: number of interior cells per direction (there are N+1 interior grid lines).
@@ -65,37 +104,46 @@ def draw_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
     # Limit plotting domain to a slightly larger band so dashed ghost lines are visible
     s = np.linspace(-np.pi/4 - nghost*dtheta, np.pi/4 + nghost*dtheta, n_pts)
 
-    # Helper to check if a line index is interior or ghost
-    def is_interior(i):
-        return (-halfN) <= i <= (halfN)
 
     # alpha = const lines
     for i, alpha in zip(idx, alphas):
-        xyz = gnomonic_equiangular_to_xyz(np.full_like(s, alpha), s, face=face)
-        u, v = orthographic_project(xyz, view_dir=view_dir)
-        #ax.plot(u, v, linewidth=0.9, linestyle='-' if is_interior(i) else '--')
-        ax.plot(u, v, linewidth=linewidth, linestyle=linestyle, color=color)
+        plot_on_face(ax, np.full_like(s, alpha), s, face=face,
+                     view_dir=view_dir,
+                     linewidth=linewidth, linestyle=linestyle, color=color)
 
     # beta = const lines
     for j, beta in zip(idx, alphas):
-        xyz = gnomonic_equiangular_to_xyz(s, np.full_like(s, beta), face=face)
-        u, v = orthographic_project(xyz, view_dir=view_dir)
-        #ax.plot(u, v, linewidth=0.9, linestyle='-' if is_interior(j) else '--')
-        ax.plot(u, v, linewidth=linewidth, linestyle=linestyle, color=color)
+        plot_on_face(ax, s, np.full_like(s, beta), face=face,
+                     view_dir=view_dir,
+                     linewidth=linewidth, linestyle=linestyle, color=color)
 
     # cell centers (solid dots)
     center_a, center_b = np.meshgrid(centers, centers)
-    xyz = gnomonic_equiangular_to_xyz(center_a, center_b, face=face)
-    u, v = orthographic_project(xyz, view_axis=face)
-    ax.scatter(u, v, s=10, facecolors=facecolor,
-               edgecolors=color, zorder=3)
+    scatter_on_face(ax, center_a.flatten(), center_b.flatten(),
+                    face=face, view_dir=view_dir,
+                    s=10, facecolors=facecolor, edgecolors=color)
 
     # Interior panel boundary (bold): |alpha|=pi/4 and |beta|=pi/4
     for alpha in [-np.pi/4, np.pi/4]:
-        xyz = gnomonic_equiangular_to_xyz(np.full_like(s, alpha), s, face=face)
-        u, v = orthographic_project(xyz, view_dir=view_dir)
-        ax.plot(u, v, linewidth=2.0, color=color)
+        plot_on_face(ax, np.full_like(s, alpha), s, face=face,
+                     view_dir=view_dir,
+                     linewidth=2.0, color=color)
     for beta in [-np.pi/4, np.pi/4]:
-        xyz = gnomonic_equiangular_to_xyz(s, np.full_like(s, beta), face=face)
-        u, v = orthographic_project(xyz, view_dir=view_dir)
-        ax.plot(u, v, linewidth=2.0, color=color)
+        plot_on_face(ax, s, np.full_like(s, beta), face=face,
+                     view_dir=view_dir,
+                     linewidth=2.0, color=color)
+
+def draw_single_panel(ax, face="+X", N=8, nghost=3, color='C0',
+                      view_dir=np.array([1,0,0])):
+    # plot visible hemisphere
+    #theta = np.linspace(0, 2*np.pi, 720)
+    #ax.plot(np.cos(theta), np.sin(theta), linewidth=1, alpha=0.5)
+
+    # all grid lines including ghosts
+    draw_panel_grid(ax, face=face, N=N, nghost=nghost, color=color,
+                    view_dir=view_dir)
+
+    # interior grid lines only
+    draw_panel_grid(ax, face=face, N=N, nghost=0, view_dir=view_dir,
+                    linestyle='-', linewidth=1.2,
+                    facecolor=color, color=color)
