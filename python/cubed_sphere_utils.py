@@ -85,7 +85,7 @@ def scatter_on_face(ax, alpha, beta, face="+X", view_dir=np.array([1,0,0]),
     u,v = orthographic_project((x,y,z), view_dir=view_dir)
     ax.scatter(u[vis], v[vis], zorder=np.max(depth[vis]), **kwargs)
 
-def ab_limits(dxy, N, nghost, exterior=True) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+def panel_ab_limits(dxy, N, nghost, exterior=True) -> Tuple[Tuple[float, float], Tuple[float, float]]:
     """
     Return ((a_min, b_min), (a_max, b_max)) in equiangular gnomonic coords (radians)
     for a single cubed-sphere panel.
@@ -94,9 +94,9 @@ def ab_limits(dxy, N, nghost, exterior=True) -> Tuple[Tuple[float, float], Tuple
     dθ = (π/2) / N. Ghost zones extend outward by 'nghost' cells.
 
     Offsets (dx, dy) ∈ {-1, 0, 1} select a slab/corner in each dimension:
-      - dx = -1: left   slab
-      - dx =  0: center (interior if exterior=False; ghost if exterior=True)
-      - dx = +1: right  slab
+      - dx = -1: left
+      - dx =  0: center
+      - dx = +1: right
       (analogous for dy: bottom/center/top)
 
     exterior=True:
@@ -259,7 +259,7 @@ def draw_panel_seam(ax, N=8, nghost=3):
                       view_dir=view_dir, color='C1')
 
     # ghost zone patches
-    (a0, b0), (a1, b1) = ab_limits((1, 0), N=N, nghost=nghost, exterior=True)
+    (a0, b0), (a1, b1) = panel_ab_limits((1, 0), N=N, nghost=nghost, exterior=True)
     verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
     poly = make_poly_patch(verts_box, face="+X",
                            view_dir=view_dir,
@@ -281,7 +281,7 @@ def draw_panel_corner(ax, N=8, nghost=3):
                       view_dir=view_dir, color='C2')
 
     # ghost zone patches
-    (a0, b0), (a1, b1) = ab_limits((1, 1), N=N, nghost=nghost, exterior=True)
+    (a0, b0), (a1, b1) = panel_ab_limits((1, 1), N=N, nghost=nghost, exterior=True)
     verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
     poly = make_poly_patch(verts_box, face="+X",
                            view_dir=view_dir,
