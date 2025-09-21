@@ -1,14 +1,14 @@
 // C/C++
 #include <cmath>
 
+// snap
+#include <snap/layout/cubed_sphere_layout.hpp>
+
+#include "cubed_sphere_utils.hpp"
+
 namespace snap {
 
-/* ------------- 1) Equiangular centers & ghost centers -------------- */
-static inline double cs_equ_center(int N, int i) {
-  /* cell centers: [-pi/4, pi/4], Δ = pi/(2N), center i in [0..N-1] */
-  double d = M_PI / (2.0 * (double)N);
-  return -M_PI / 4.0 + ((double)i + 0.5) * d;
-}
+extern const CSEdge CS_FACE_EDGES[6][4];
 
 /* Ghost cell centers just outside the panel.
  * side: SIDE_L,SIDE_R,SIDE_B,SIDE_T (left/right/bottom/top)
@@ -129,27 +129,9 @@ static inline double cs_angle_to_center_u(double angle, int N) {
   return (angle + M_PI / 4.0) / d - 0.5;
 }
 
-/* ------------- 3) Main: map target ghost -> source 1-D coordinate ----
- * Inputs:
- *   face_t:  target face id
- *   side_t:  target side (SIDE_L/R/B/T)
- *   N:       cells per dim (px==py==N)
- *   j_along: target along-edge index in [0..N-1]
- *   depth_o: ghost depth (1..nghost)
- * Outputs:
- *   *face_s, *side_s: source face and side (from CS_FACE_EDGES)
- *   *u_src:  fractional index along the source edge line (for 1-D interp)
- *   *xi_s, *eta_s: source angles of the mapped ghost point (optional debug)
- *
- * Usage: sample your source data along the edge-aligned interior line
- *        (the row/col adjacent to side_s) at position u_src with 1-D
- * interpolation.
- */
-static inline void cs_target_ghost_to_source_u(int face_t, int side_t, int N,
-                                               int j_along, int depth_o,
-                                               int *face_s, int *side_s,
-                                               double *u_src, double *xi_s,
-                                               double *eta_s) {
+void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
+                                 int depth_o, int *face_s, int *side_s,
+                                 double *u_src, double *xi_s, double *eta_s) {
   /* 1) Get which neighbor face/side we land on from your connectivity */
   const CSEdge emap = CS_FACE_EDGES[face_t][side_t];
   *face_s = emap.nface;

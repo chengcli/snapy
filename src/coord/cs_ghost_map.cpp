@@ -1,18 +1,7 @@
-#include "cs_ghost_points.hpp"
+// snap
+#include "cubed_sphere_utils.hpp"
 
 namespace snap {
-
-/* One ghost cell mapping (target ghost -> source 1-D location) */
-struct CSGhostMap {
-  int face_s;  /* source face id */
-  int side_s;  /* source side id (SIDE_L/R/B/T) */
-  int j_along; /* along-edge index on target (0..N-1) */
-  int depth;   /* ghost depth (1..nghost) */
-
-  double u_src; /* fractional index along the *source* edge interior line */
-  double xi_s;  /* optional: source face angle xi (debug/validation) */
-  double eta_s; /* optional: source face angle eta (debug/validation) */
-} CSGhostMap;
 
 /* Indexing: [face][side][depth-1][j], where:
    face ∈ [0..5], side ∈ {SIDE_L..SIDE_T} (4 sides),
@@ -25,20 +14,8 @@ static inline size_t cs_gmap_index(int face, int side, int depth, int j, int N,
          ((size_t)(depth - 1) * (size_t)N) + (size_t)j;
 }
 
-/* Build full ghost->source interpolation table for all faces & edges.
- * Inputs:
- *   N       : cells per dimension on each face (px==py==N)
- *   nghost  : number of ghost layers to fill (>=1)
- *   apply_rev_flag : if nonzero, apply CS_FACE_EDGES[...].rev to flip u_src
- * index
- *
- * Output:
- *   gmap : caller-provided array with length 6 * 4 * nghost * N
- *          (use cs_gmap_index(...) to access)
- */
-static inline void cs_build_ghost_map_table(int N, int nghost,
-                                            int apply_rev_flag,
-                                            CSGhostMap *gmap) {
+void cs_build_ghost_map_table(int N, int nghost, int apply_rev_flag,
+                              CSGhostMap *gmap) {
   for (int face_t = 0; face_t < 6; ++face_t) {
     for (int side_t = SIDE_L; side_t <= SIDE_T; ++side_t) {
       const CSEdge emap =
@@ -80,10 +57,10 @@ static inline void cs_build_ghost_map_table(int N, int nghost,
           /* 6) Write out */
           size_t idx = cs_gmap_index(face_t, side_t, depth, j, N, nghost);
           CSGhostMap *e = &gmap[idx];
-          e->face_s = emap.nface;
-          e->side_s = emap.nside;
-          e->j_along = j;
-          e->depth = depth;
+          e->face_s = (int64_t)emap.nface;
+          e->side_s = (int64_t)emap.nside;
+          e->j_along = (int64_t)j;
+          e->depth = (int64_t)depth;
           e->u_src = u_src;
           e->xi_s = xi_s;
           e->eta_s = eta_s;

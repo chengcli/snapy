@@ -52,13 +52,6 @@ namespace snap {
  * IMPORTANT: Different codes choose different local face axes.
  * If your tests show flipped corner order, toggle `rev` for that edge.
  */
-enum { SIDE_L = 0, SIDE_R = 1, SIDE_B = 2, SIDE_T = 3 };
-
-struct CSEdge {
-  int nface; /* neighbor face id [0..5] */
-  int nside; /* neighbor side id (LEFT/RIGHT/BOTTOM/TOP) */
-  int rev;   /* 0: preserve along-edge index, 1: reverse */
-};
 
 static const CSEdge CS_FACE_EDGES[6][4] = {
     /* face 0: neighbors 3(L),1(R),5(B),4(T) */
