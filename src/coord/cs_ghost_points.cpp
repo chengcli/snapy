@@ -10,16 +10,8 @@ namespace snap {
 
 extern const CSEdge CS_FACE_EDGES[6][4];
 
-/* Ghost cell centers just outside the panel.
- * side: SIDE_L,SIDE_R,SIDE_B,SIDE_T (left/right/bottom/top)
- * N: cells per dim (px==py==N)
- * j_along: along-edge index (0..N-1) (varies in y for L/R, in x for B/T)
- * o_depth: ghost depth (1..nghost)
- * Out: (xi_t, eta_t) on the target face (ghost location angles)
- */
-static inline void cs_equ_ghost_center(int side, int N, int j_along,
-                                       int o_depth, double *xi_t,
-                                       double *eta_t) {
+void cs_equ_ghost_center(int side, int N, int j_along, int o_depth,
+                         double *xi_t, double *eta_t) {
   double d = M_PI / (2.0 * (double)N);
   switch (side) {
     case SIDE_L: /* xi just outside left */
@@ -47,21 +39,13 @@ static inline void cs_equ_ghost_center(int side, int N, int j_along,
 /* ---------- 2) Face <-> sphere transforms (equiangular gnomonic) --- */
 /* We number faces: 0:+X, 1:+Y, 2:-X, 3:-Y, 4:+Z, 5:-Z (edit to match yours) */
 
-typedef struct {
-  double x, y, z;
-} Vec3;
-
 static inline Vec3 vnorm3(double x, double y, double z) {
   double n = sqrt(x * x + y * y + z * z);
   Vec3 v = {x / n, y / n, z / n};
   return v;
 }
 
-/* From local (xi,eta) to unit vector on S^2 for a given face.
- * Equiangular gnomonic: a = tan(xi), b = tan(eta).
- * For +X face: (X,Y,Z) ∝ (1, a, b); normalize.
- */
-static inline Vec3 cs_face_to_vec(int face, double xi, double eta) {
+Vec3 cs_face_to_vec(int face, double xi, double eta) {
   double a = tan(xi), b = tan(eta);
   switch (face) {
     case 0: /* +X */
@@ -81,12 +65,7 @@ static inline Vec3 cs_face_to_vec(int face, double xi, double eta) {
   }
 }
 
-/* Project unit vector to (xi,eta) on a chosen face (no face selection).
- * Inverse of the above patterns: for +X, a=Y/X, b=Z/X, then xi=atan(a), etc.
- * Assumes the vector is visible on that face (denominator sign consistent).
- */
-static inline void cs_vec_to_face_coords(int face, Vec3 v, double *xi,
-                                         double *eta) {
+void cs_vec_to_face_coords(int face, Vec3 v, double *xi, double *eta) {
   switch (face) {
     case 0: /* +X */
       *xi = atan2(v.y, v.x);
@@ -117,16 +96,6 @@ static inline void cs_vec_to_face_coords(int face, Vec3 v, double *xi,
       *eta = 0.0;
       break;
   }
-}
-
-/* Convert angle on a face to a fractional center index (for 1-D interp).
- * If the line varies in Y (L/R sides): use eta. If varies in X (B/T): use xi.
- * Returns u in "cell-center units": 0.0 ~ center 0, 1.0 ~ center 1, ... (N-1)
- */
-static inline double cs_angle_to_center_u(double angle, int N) {
-  double d = M_PI / (2.0 * (double)N);
-  /* centers: angle = -pi/4 + (i+0.5)*d  => i = (angle + pi/4)/d - 0.5 */
-  return (angle + M_PI / 4.0) / d - 0.5;
 }
 
 void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,

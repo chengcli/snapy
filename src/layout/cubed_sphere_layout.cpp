@@ -53,7 +53,7 @@ namespace snap {
  * If your tests show flipped corner order, toggle `rev` for that edge.
  */
 
-static const CSEdge CS_FACE_EDGES[6][4] = {
+extern const CSEdge CS_FACE_EDGES[6][4] = {
     /* face 0: neighbors 3(L),1(R),5(B),4(T) */
     [0] = {/* L */ {3, SIDE_R, 0},
            /* R */ {1, SIDE_L, 0},
@@ -96,11 +96,11 @@ static inline void cs_clamp_inside(int pxy, int *nx, int *ny) {
     *ny = pxy - 1;
 }
 
+/* Map along-edge index into neighbor face border, with optional reversal. */
 static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
                                              int pos /*0..k-1*/,
                                              const CSEdge *emap, int *out_rx,
                                              int *out_ry) {
-  /* Map along-edge index into neighbor face border, with optional reversal. */
   int pos2 = pos;
   if (emap->rev) {
     pos2 = pxy - 1 - pos;

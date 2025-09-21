@@ -1,7 +1,11 @@
 // snap
+#include <snap/layout/cubed_sphere_layout.hpp>
+
 #include "cubed_sphere_utils.hpp"
 
 namespace snap {
+
+extern const CSEdge CS_FACE_EDGES[6][4];
 
 /* Indexing: [face][side][depth-1][j], where:
    face ∈ [0..5], side ∈ {SIDE_L..SIDE_T} (4 sides),
@@ -56,7 +60,7 @@ void cs_build_ghost_map_table(int N, int nghost, int apply_rev_flag,
 
           /* 6) Write out */
           size_t idx = cs_gmap_index(face_t, side_t, depth, j, N, nghost);
-          CSGhostMap *e = &gmap[idx];
+          CSGhostMap *e = gmap + idx;
           e->face_s = (int64_t)emap.nface;
           e->side_s = (int64_t)emap.nside;
           e->j_along = (int64_t)j;
