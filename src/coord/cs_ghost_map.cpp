@@ -1,3 +1,5 @@
+#include "cs_ghost_points.hpp"
+
 namespace snap {
 
 /* One ghost cell mapping (target ghost -> source 1-D location) */
