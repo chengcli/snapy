@@ -22,12 +22,28 @@ void run_demo(snap::CubedSphereLayout const &cs, int face, int rx, int ry) {
          g_down, g_up, g_ul, g_dr);
 }
 
-void run_ghost(int face_t, int side_t, int N, int j_along, int depth_o) {
-  int face_s, side_s;
-  double u_src, xi_s, eta_s;
+void run_ghost(int nxy, int nghost) {
+  auto gmap = snap::cs_build_ghost_map(nxy, nghost, false);
 
-  snap::cs_target_ghost_to_source_u(face_t, side_t, N, j_along, depth_o,
-                                    &face_s, &side_s, &u_src, &xi_s, &eta_s);
+  for (int face = 0; face < 6; ++face) {
+    printf("\nface %d ghost map:\n", face);
+    for (int side = snap::SIDE_L; side <= snap::SIDE_T; ++side) {
+      const char *sname = (side == snap::SIDE_L)   ? "L"
+                          : (side == snap::SIDE_R) ? "R"
+                          : (side == snap::SIDE_B) ? "B"
+                          : (side == snap::SIDE_T) ? "T"
+                                                   : "?";
+      printf(" side %s:\n", sname);
+      for (int depth = 1; depth <= nghost; ++depth) {
+        for (int j = 0; j < nxy; ++j) {
+          size_t idx = snap::cs_gmap_index(face, side, depth, j, nxy, nghost);
+          auto gm = gmap[idx];
+          printf("  d=%d j=%2d: u_src=%7.3f (xi_s=%7.3f eta_s=%7.3f)\n", depth,
+                 j, gm.u_src, gm.xi_s, gm.eta_s);
+        }
+      }
+    }
+  }
 }
 
 int main(void) {
@@ -41,5 +57,7 @@ int main(void) {
     run_demo(cs, n, 1, 0);
     run_demo(cs, n, 1, 1);
   }
+
+  run_ghost(4, 2);
   return 0;
 }

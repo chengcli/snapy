@@ -2,6 +2,11 @@
 
 // C/C++
 #include <cmath>
+#include <cstdint>
+#include <vector>
+
+// snap
+#include <snap/layout/cubed_sphere_layout.hpp>
 
 namespace snap {
 
@@ -11,11 +16,6 @@ struct Vec3 {
 
 /* One ghost cell mapping (target ghost -> source 1-D location) */
 struct CSGhostMap {
-  int64_t face_s;  /* source face id */
-  int64_t side_s;  /* source side id (SIDE_L/R/B/T) */
-  int64_t j_along; /* along-edge index on target (0..N-1) */
-  int64_t depth;   /* ghost depth (1..nghost) */
-
   double u_src; /* fractional index along the *source* edge interior line */
   double xi_s;  /* optional: source face angle xi (debug/validation) */
   double eta_s; /* optional: source face angle eta (debug/validation) */
@@ -37,6 +37,17 @@ inline double cs_angle_to_center_u(double angle, int N) {
   double d = M_PI / (2.0 * (double)N);
   /* centers: angle = -pi/4 + (i+0.5)*d  => i = (angle + pi/4)/d - 0.5 */
   return (angle + M_PI / 4.0) / d - 0.5;
+}
+
+/* Indexing: [face][side][depth-1][j], where:
+   face ∈ [0..5], side ∈ {SIDE_L..SIDE_T} (4 sides),
+   depth ∈ [1..nghost], j ∈ [0..N-1] */
+inline size_t cs_gmap_index(int face, int side, int depth, int j, int N,
+                            int nghost) {
+  const size_t S = 4; /* L,R,B,T */
+  return ((size_t)face * S * (size_t)nghost * (size_t)N) +
+         ((size_t)(side - SIDE_L) * (size_t)nghost * (size_t)N) +
+         ((size_t)(depth - 1) * (size_t)N) + (size_t)j;
 }
 
 /* Project unit vector to (xi,eta) on a chosen face (no face selection).
@@ -68,31 +79,32 @@ Vec3 cs_face_to_vec(int face, double xi, double eta);
  *   N:       cells per dim (px==py==N)
  *   j_along: target along-edge index in [0..N-1]
  *   depth_o: ghost depth (1..nghost)
+ *
  * Outputs:
  *   *face_s, *side_s: source face and side (from CS_FACE_EDGES)
- *   *u_src:  fractional index along the source edge line (for 1-D interp)
  *   *xi_s, *eta_s: source angles of the mapped ghost point (optional debug)
+ *
+ * Return:
+ *   u_src:  fractional index along the source edge line (for 1-D interp)
  *
  * Usage: sample your source data along the edge-aligned interior line
  *        (the row/col adjacent to side_s) at position u_src with 1-D
  * interpolation.
  */
-void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
-                                 int depth_o, int *face_s, int *side_s,
-                                 double *u_src, double *xi_s, double *eta_s);
+double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
+                                   int depth_o, int *face_s, int *side_s,
+                                   double *xi_s, double *eta_s);
 
 /* Build full ghost->source interpolation table for all faces & edges.
  * Inputs:
  *   N       : cells per dimension on each face (px==py==N)
  *   nghost  : number of ghost layers to fill (>=1)
- *   apply_rev_flag : if nonzero, apply CS_FACE_EDGES[...].rev to flip u_src
- * index
  *
- * Output:
- *   gmap : caller-provided array with length 6 * 4 * nghost * N
+ * Return:
+ *   gmap : vector with length 6 * 4 * nghost * N elements
  *          (use cs_gmap_index(...) to access)
  */
-void cs_build_ghost_map_table(int N, int nghost, int apply_rev_flag,
-                              CSGhostMap *gmap);
+std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
+                                           int apply_rev_flag);
 
 }  // namespace snap

@@ -2,8 +2,6 @@
 #include <cmath>
 
 // snap
-#include <snap/layout/cubed_sphere_layout.hpp>
-
 #include "cubed_sphere_utils.hpp"
 
 namespace snap {
@@ -98,9 +96,11 @@ void cs_vec_to_face_coords(int face, Vec3 v, double *xi, double *eta) {
   }
 }
 
-void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
-                                 int depth_o, int *face_s, int *side_s,
-                                 double *u_src, double *xi_s, double *eta_s) {
+double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
+                                   int depth_o, int *face_s, int *side_s,
+                                   double *xi_s, double *eta_s) {
+  double u_src;
+
   /* 1) Get which neighbor face/side we land on from your connectivity */
   const CSEdge emap = CS_FACE_EDGES[face_t][side_t];
   *face_s = emap.nface;
@@ -124,14 +124,14 @@ void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
   switch (*side_s) {
     case SIDE_L:
     case SIDE_R:
-      *u_src = cs_angle_to_center_u(*eta_s, N); /* varies in Y */
+      u_src = cs_angle_to_center_u(*eta_s, N); /* varies in Y */
       break;
     case SIDE_B:
     case SIDE_T:
-      *u_src = cs_angle_to_center_u(*xi_s, N); /* varies in X */
+      u_src = cs_angle_to_center_u(*xi_s, N); /* varies in X */
       break;
     default:
-      *u_src = 0.0;
+      u_src = 0.0;
   }
 
   /* Optional: if you want to explicitly enforce the orientation flag (emap.rev)
@@ -144,6 +144,63 @@ void cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
    * In many setups the geometric transform already encodes the "flip".
    * Keep this off unless your validation shows a reversed ordering.
    */
+  return u_src;
+}
+
+std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
+                                           int apply_rev_flag) {
+  std::vector<CSGhostMap> gmap(6 * 4 * nghost * N);
+
+  for (int face_t = 0; face_t < 6; ++face_t) {
+    for (int side_t = SIDE_L; side_t <= SIDE_T; ++side_t) {
+      const CSEdge emap =
+          CS_FACE_EDGES[face_t][side_t]; /* neighbor face/side + rev flag */
+      for (int depth = 1; depth <= nghost; ++depth) {
+        for (int j = 0; j < N; ++j) {
+          /* 1) Target ghost center angles on target face */
+          double xi_t, eta_t;
+          cs_equ_ghost_center(side_t, N, j, depth, &xi_t, &eta_t);
+
+          /* 2) Map to the sphere */
+          Vec3 v = cs_face_to_vec(face_t, xi_t, eta_t);
+
+          /* 3) Re-express on the source face from connectivity */
+          double xi_s, eta_s;
+          cs_vec_to_face_coords(emap.nface, v, &xi_s, &eta_s);
+
+          /* 4) Build 1-D fractional index along the source edge interior line
+           */
+          double u_src;
+          switch (emap.nside) {
+            case SIDE_L:
+            case SIDE_R:
+              u_src = cs_angle_to_center_u(eta_s, N); /* varies along Y */
+              break;
+            case SIDE_B:
+            case SIDE_T:
+              u_src = cs_angle_to_center_u(xi_s, N); /* varies along X */
+              break;
+            default:
+              u_src = 0.0; /* should not happen */
+          }
+
+          /* 5) Optional index-based reversal (discrete orientation) */
+          if (apply_rev_flag && emap.rev) {
+            u_src = (double)(N - 1) - u_src;
+          }
+
+          /* 6) Write out */
+          size_t idx = cs_gmap_index(face_t, side_t, depth, j, N, nghost);
+          CSGhostMap &e = gmap[idx];
+          e.u_src = u_src;
+          e.xi_s = xi_s;
+          e.eta_s = eta_s;
+        }
+      }
+    }
+  }
+
+  return gmap;
 }
 
 }  // namespace snap
