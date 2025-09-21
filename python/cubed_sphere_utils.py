@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib.patches import Polygon
 from typing import Tuple
 
 def normalize(v):
@@ -36,6 +37,7 @@ def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
 
 def orthographic_project(face_xyz, view_dir=np.array([1,0,0])):
     """Orthographic projection onto the plane normal to view_dir."""
+    x, y, z = face_xyz
     V = normalize(np.array(view_dir))
     # Construct orthonormal basis (e1,e2) spanning plane perpendicular to V
     # Choose arbitrary "up" vector not parallel to V
@@ -165,7 +167,7 @@ def make_poly_patch(verts_ab, face="+X", view_dir=(1,0,0),
         aa, bb = sample_edge(a0,b0,a1,b1,n_pts=n_pts)
         xyz = gnomonic_equiangular_to_xyz(aa, bb, face=face)
         u,v = orthographic_project(xyz, view_dir=view_dir)
-        d = (xyz[0]*view_dir[0] + xyz[1]*view_dir[1] + xyz[2]*view_dir[2])
+        d = xyz[0]*view_dir[0] + xyz[1]*view_dir[1] + xyz[2]*view_dir[2]
         mask = d > 0
         boundary_u.append(u[mask])
         boundary_v.append(v[mask])
@@ -178,7 +180,8 @@ def make_poly_patch(verts_ab, face="+X", view_dir=(1,0,0),
     V = np.concatenate(boundary_v)
     D = np.concatenate(boundary_d) if any(len(d) for d in boundary_d) else np.array([0.0])
 
-    poly = Polygon(np.c_[U, V], closed=True, zorder=float(np.max(D)), **kwargs)
+    poly = Polygon(np.c_[U, V], closed=True,
+                   zorder=1+float(np.max(D)), **kwargs)
     return poly
 
 def draw_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=800,
@@ -255,6 +258,17 @@ def draw_panel_seam(ax, N=8, nghost=3):
     draw_single_panel(ax, "+Y", N=N, nghost=nghost,
                       view_dir=view_dir, color='C1')
 
+    # ghost zone patches
+    (a0, b0), (a1, b1) = ab_limits((1, 0), N=8, nghost=3, exterior=True)
+    verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
+    poly = make_poly_patch(verts_box, face="+X",
+                           view_dir=view_dir,
+                           edgecolor='k',
+                           # grey with some transparency
+                           facecolor=(0.5,0.5,0.5,0.3),
+                           linewidth=1.2)
+    ax.add_patch(poly)
+
 def draw_panel_corner(ax, N=8, nghost=3):
     # View along the cube-space diagonal to center the +X/+Y/+Z corner
     view_dir = np.array([1.0,1.0,1.0])
@@ -265,3 +279,14 @@ def draw_panel_corner(ax, N=8, nghost=3):
                       view_dir=view_dir, color='C1')
     draw_single_panel(ax, "+Z", N=N, nghost=nghost,
                       view_dir=view_dir, color='C2')
+
+    # ghost zone patches
+    (a0, b0), (a1, b1) = ab_limits((1, 1), N=8, nghost=3, exterior=True)
+    verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
+    poly = make_poly_patch(verts_box, face="+X",
+                           view_dir=view_dir,
+                           edgecolor='k',
+                           # grey with some transparency
+                           facecolor=(0.5,0.5,0.5,0.3),
+                           linewidth=1.2)
+    ax.add_patch(poly)
