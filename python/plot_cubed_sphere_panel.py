@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     #draw_single_panel(ax, N=8, nghost=3)
     #draw_panel_seam(ax, N=8, nghost=3)
-    draw_panel_corner(ax, N=16, nghost=3)
+    draw_panel_corner(ax, N=8, nghost=3)
 
     ax.set_aspect('equal')
     ax.set_xlabel("X (orthographic)")

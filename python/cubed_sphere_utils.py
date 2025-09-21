@@ -259,7 +259,7 @@ def draw_panel_seam(ax, N=8, nghost=3):
                       view_dir=view_dir, color='C1')
 
     # ghost zone patches
-    (a0, b0), (a1, b1) = ab_limits((1, 0), N=8, nghost=3, exterior=True)
+    (a0, b0), (a1, b1) = ab_limits((1, 0), N=N, nghost=nghost, exterior=True)
     verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
     poly = make_poly_patch(verts_box, face="+X",
                            view_dir=view_dir,
@@ -281,7 +281,7 @@ def draw_panel_corner(ax, N=8, nghost=3):
                       view_dir=view_dir, color='C2')
 
     # ghost zone patches
-    (a0, b0), (a1, b1) = ab_limits((1, 1), N=8, nghost=3, exterior=True)
+    (a0, b0), (a1, b1) = ab_limits((1, 1), N=N, nghost=nghost, exterior=True)
     verts_box = [(a0,b0),(a1,b0),(a1,b1),(a0,b1)]
     poly = make_poly_patch(verts_box, face="+X",
                            view_dir=view_dir,
