@@ -2,6 +2,7 @@
 #include <cstdio>
 
 // snap
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 
 void run_demo(snap::CubedSphereLayout const &cs, int face, int rx, int ry) {
@@ -19,6 +20,14 @@ void run_demo(snap::CubedSphereLayout const &cs, int face, int rx, int ry) {
 
   printf("self=%d L=%d R=%d D=%d U=%d UL=%d DR=%d\n", g_self, g_left, g_right,
          g_down, g_up, g_ul, g_dr);
+}
+
+void run_ghost(int face_t, int side_t, int N, int j_along, int depth_o) {
+  int face_s, side_s;
+  double u_src, xi_s, eta_s;
+
+  snap::cs_target_ghost_to_source_u(face_t, side_t, N, j_along, depth_o,
+                                    &face_s, &side_s, &u_src, &xi_s, &eta_s);
 }
 
 int main(void) {
