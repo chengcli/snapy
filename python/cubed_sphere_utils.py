@@ -30,18 +30,21 @@ def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
     inv_norm = 1.0 / np.sqrt(X*X + Y*Y + Z*Z)
     return X*inv_norm, Y*inv_norm, Z*inv_norm
 
-def orthographic_project(face_xyz, view_axis="+X"):
-    """Orthographic projection onto the plane normal to view_axis."""
+def orthographic_project(face_xyz, view_dir=np.array([1,1,0])):
+    """Orthographic projection onto the plane normal to view_dir."""
     x, y, z = face_xyz
-    if view_axis in ("+X", "-X"):
-        return y, z
-    if view_axis in ("+Y", "-Y"):
-        return x, z
-    if view_axis in ("+Z", "-Z"):
-        return x, y
-    raise ValueError("Invalid view axis")
+    V = normalize(np.array(view_dir))
+    # Construct orthonormal basis (e1,e2) spanning plane perpendicular to V
+    # Choose arbitrary "up" vector not parallel to V
+    up_guess = np.array([0,0,1]) if abs(V[2])<0.9 else np.array([0,1,0])
+    e1 = normalize(np.cross(up_guess, V))
+    e2 = np.cross(V, e1)
+    # Project coordinates
+    U = x*e1[0] + y*e1[1] + z*e1[2]
+    W = x*e2[0] + y*e2[1] + z*e2[2]
+    return U, W
 
-def plot_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
+def draw_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
                            view_dir = np.array([1,1,0]),
                            color='C0', linestyle='--', linewidth=0.8,
                            facecolor='none'):
@@ -69,14 +72,14 @@ def plot_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
     # alpha = const lines
     for i, alpha in zip(idx, alphas):
         xyz = gnomonic_equiangular_to_xyz(np.full_like(s, alpha), s, face=face)
-        u, v = orthographic_project(xyz, view_axis=face)
+        u, v = orthographic_project(xyz, view_dir=view_dir)
         #ax.plot(u, v, linewidth=0.9, linestyle='-' if is_interior(i) else '--')
         ax.plot(u, v, linewidth=linewidth, linestyle=linestyle, color=color)
 
     # beta = const lines
     for j, beta in zip(idx, alphas):
         xyz = gnomonic_equiangular_to_xyz(s, np.full_like(s, beta), face=face)
-        u, v = orthographic_project(xyz, view_axis=face)
+        u, v = orthographic_project(xyz, view_dir=view_dir)
         #ax.plot(u, v, linewidth=0.9, linestyle='-' if is_interior(j) else '--')
         ax.plot(u, v, linewidth=linewidth, linestyle=linestyle, color=color)
 
@@ -90,9 +93,9 @@ def plot_single_panel_grid(ax, face="+X", N=8, nghost=3, n_pts=600,
     # Interior panel boundary (bold): |alpha|=pi/4 and |beta|=pi/4
     for alpha in [-np.pi/4, np.pi/4]:
         xyz = gnomonic_equiangular_to_xyz(np.full_like(s, alpha), s, face=face)
-        u, v = orthographic_project(xyz, view_axis=face)
+        u, v = orthographic_project(xyz, view_dir=view_dir)
         ax.plot(u, v, linewidth=2.0, color=color)
     for beta in [-np.pi/4, np.pi/4]:
         xyz = gnomonic_equiangular_to_xyz(s, np.full_like(s, beta), face=face)
-        u, v = orthographic_project(xyz, view_axis=face)
+        u, v = orthographic_project(xyz, view_dir=view_dir)
         ax.plot(u, v, linewidth=2.0, color=color)
