@@ -16,9 +16,9 @@ struct Vec3 {
 
 /* One ghost cell mapping (target ghost -> source 1-D location) */
 struct CSGhostMap {
-  double u_src; /* fractional index along the *source* edge interior line */
-  double xi_s;  /* optional: source face angle xi (debug/validation) */
-  double eta_s; /* optional: source face angle eta (debug/validation) */
+  double u_src;   /* fractional index along the *source* edge interior line */
+  double alpha_s; /* optional: source face angle alpha (debug/validation) */
+  double beta_s;  /* optional: source face angle beta (debug/validation) */
 };
 
 /* Equiangular centers & ghost centers
@@ -30,8 +30,9 @@ inline double cs_equ_center(int N, int i) {
 }
 
 /* Convert angle on a face to a fractional center index (for 1-D interp).
- * If the line varies in Y (L/R sides): use eta. If varies in X (B/T): use xi.
- * Returns u in "cell-center units": 0.0 ~ center 0, 1.0 ~ center 1, ... (N-1)
+ * If the line varies in Y (L/R sides): use beta. If varies in X (B/T): use
+ * alpha. Returns u in "cell-center units": 0.0 ~ center 0, 1.0 ~ center 1, ...
+ * (N-1)
  */
 inline double cs_angle_to_center_u(double angle, int N) {
   double d = M_PI / (2.0 * (double)N);
@@ -50,27 +51,27 @@ inline size_t cs_gmap_index(int face, int side, int depth, int j, int N,
          ((size_t)(depth - 1) * (size_t)N) + (size_t)j;
 }
 
-/* Project unit vector to (xi,eta) on a chosen face (no face selection).
- * Inverse of the above patterns: for +X, a=Y/X, b=Z/X, then xi=atan(a), etc.
+/* Project unit vector to (alpha,bea) on a chosen face (no face selection).
+ * Inverse of the above patterns: for +X, a=Y/X, b=Z/X, then alpha=atan(a), etc.
  * Assumes the vector is visible on that face (denominator sign consistent).
  */
-void cs_vec_to_face_coords(int face, Vec3 v, double *xi, double *eta);
+void cs_xyz_to_ab(char const *face, Vec3 v, double *alpha, double *beta);
+
+/* From local (alpha,beta) to unit vector on S^2 for a given face.
+ * Equiangular gnomonic: a = tan(alpha), b = tan(beta).
+ * For +X face: (X,Y,Z) ∝ (1, a, b); normalize.
+ */
+Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta);
 
 /* Ghost cell centers just outside the panel.
  * side: SIDE_L,SIDE_R,SIDE_B,SIDE_T (left/right/bottom/top)
  * N: cells per dim (px==py==N)
  * j_along: along-edge index (0..N-1) (varies in y for L/R, in x for B/T)
  * o_depth: ghost depth (1..nghost)
- * Out: (xi_t, eta_t) on the target face (ghost location angles)
+ * Out: (alpha_t, beta_t) on the target face (ghost location angles)
  */
 void cs_equ_ghost_center(int side, int N, int j_along, int o_depth,
-                         double *xi_t, double *eta_t);
-
-/* From local (xi,eta) to unit vector on S^2 for a given face.
- * Equiangular gnomonic: a = tan(xi), b = tan(eta).
- * For +X face: (X,Y,Z) ∝ (1, a, b); normalize.
- */
-Vec3 cs_face_to_vec(int face, double xi, double eta);
+                         double *alpha_t, double *beta_t);
 
 /* map target ghost -> source 1-D coordinate
  * Inputs:
@@ -82,7 +83,7 @@ Vec3 cs_face_to_vec(int face, double xi, double eta);
  *
  * Outputs:
  *   *face_s, *side_s: source face and side (from CS_FACE_EDGES)
- *   *xi_s, *eta_s: source angles of the mapped ghost point (optional debug)
+ *   *alpha_s, *beta_s: source angles of the mapped ghost point (optional debug)
  *
  * Return:
  *   u_src:  fractional index along the source edge line (for 1-D interp)
@@ -93,7 +94,7 @@ Vec3 cs_face_to_vec(int face, double xi, double eta);
  */
 double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
                                    int depth_o, int *face_s, int *side_s,
-                                   double *xi_s, double *eta_s);
+                                   double *alpha_s, double *beta_s);
 
 /* Build full ghost->source interpolation table for all faces & edges.
  * Inputs:

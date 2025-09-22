@@ -53,6 +53,14 @@ namespace snap {
  * If your tests show flipped corner order, toggle `rev` for that edge.
  */
 
+extern const char face_names[6][3] = {
+    /* 0 */ "+X",
+    /* 1 */ "+Y",
+    /* 2 */ "-X",
+    /* 3 */ "-Y",
+    /* 4 */ "+Z",
+    /* 5 */ "-Z"};
+
 extern const CSEdge CS_FACE_EDGES[6][4] = {
     /* face 0: neighbors 3(L),1(R),5(B),4(T) */
     [0] = {/* L */ {3, SIDE_R, 0},

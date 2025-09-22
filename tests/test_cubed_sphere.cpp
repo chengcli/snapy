@@ -38,8 +38,8 @@ void run_ghost(int nxy, int nghost) {
         for (int j = 0; j < nxy; ++j) {
           size_t idx = snap::cs_gmap_index(face, side, depth, j, nxy, nghost);
           auto gm = gmap[idx];
-          printf("  d=%d j=%2d: u_src=%7.3f (xi_s=%7.3f eta_s=%7.3f)\n", depth,
-                 j, gm.u_src, gm.xi_s, gm.eta_s);
+          printf("  d=%d j=%2d: u_src=%7.3f (alpha_s=%7.3f beta_s=%7.3f)\n",
+                 depth, j, gm.u_src, gm.alpha_s, gm.beta_s);
         }
       }
     }
