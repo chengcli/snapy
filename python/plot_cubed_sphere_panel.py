@@ -10,9 +10,9 @@ from cubed_sphere_utils import (
 if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    #draw_single_panel(ax, N=8, nghost=3)
-    #draw_panel_seam(ax, N=8, nghost=3)
-    draw_panel_corner(ax, N=8, nghost=3)
+    #draw_single_panel(ax, N=6, nghost=3)
+    draw_panel_seam(ax, N=6, nghost=2)
+    #draw_panel_corner(ax, N=8, nghost=3)
 
     ax.set_aspect('equal')
     ax.set_xlabel("X (orthographic)")

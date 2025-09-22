@@ -58,6 +58,6 @@ int main(void) {
     run_demo(cs, n, 1, 1);
   }
 
-  run_ghost(4, 2);
+  run_ghost(6, 3);
   return 0;
 }

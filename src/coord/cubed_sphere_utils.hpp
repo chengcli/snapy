@@ -106,6 +106,6 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
  *          (use cs_gmap_index(...) to access)
  */
 std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
-                                           int apply_rev_flag);
+                                           int apply_rev_flag = false);
 
 }  // namespace snap
