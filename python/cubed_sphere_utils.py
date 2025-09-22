@@ -26,9 +26,9 @@ def gnomonic_equiangular_to_xyz(alpha, beta, face="+X"):
     elif face == "-Y":
         X, Y, Z = t, -np.ones_like(t), u
     elif face == "+Z":
-        X, Y, Z = -t, u, np.ones_like(t)
+        X, Y, Z = -u, t, np.ones_like(t)
     elif face == "-Z":
-        X, Y, Z = -t, -u, -np.ones_like(t)
+        X, Y, Z = u, t, -np.ones_like(t)
     else:
         raise ValueError("Invalid face specifier")
 

@@ -57,9 +57,9 @@ Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta) {
   else if (strcmp(face, "-Y") == 0)
     return vnorm3(a, -1.0, b);
   else if (strcmp(face, "+Z") == 0)
-    return vnorm3(-a, b, 1.0);
+    return vnorm3(-b, a, 1.0);
   else if (strcmp(face, "-Z") == 0)
-    return vnorm3(-a, -b, -1.0);
+    return vnorm3(b, a, -1.0);
   else
     throw std::runtime_error("cs_ab_to_xyz: invalid face name");
 }
@@ -78,11 +78,11 @@ void cs_xyz_to_ab(char const *face, Vec3 v, double *alpha, double *beta) {
     *alpha = atan2(v.x, -v.y);
     *beta = atan2(v.z, -v.y);
   } else if (strcmp(face, "+Z") == 0) {
-    *alpha = atan2(-v.x, v.z);
-    *beta = atan2(v.y, v.z);
+    *alpha = atan2(v.y, v.z);
+    *beta = atan2(-v.x, v.z);
   } else if (strcmp(face, "-Z") == 0) {
-    *alpha = atan2(-v.x, -v.z);
-    *beta = atan2(-v.y, -v.z);
+    *alpha = atan2(v.y, -v.z);
+    *beta = atan2(v.x, -v.z);
   } else {
     throw std::runtime_error("cs_xyz_to_ab: invalid face name");
   }
