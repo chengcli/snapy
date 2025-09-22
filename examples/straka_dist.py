@@ -7,12 +7,12 @@ import snapy
 import os
 from snapy import (
         index,
-        exchange,
         MeshBlockOptions,
         MeshBlock,
         OutputOptions,
         NetcdfOutput
         )
+from snapy.exchange import SlabExchange
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -23,19 +23,6 @@ torch.backends.cudnn.benchmark = True
 
 # torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
-
-class Args:
-    device = 'cpu'
-    px1 = 1
-    px2 = 4
-    px3 = 1
-    layout = 'slab'
-
-args = Args()
-layout, ranks, device, info = exchange.init_dist(
-        args, periodic_x1=False, periodic_x2=False, periodic_x3=False)
-my_rank = ranks[0]
-
 
 p0 = 1.0e5
 Ts = 300.0
@@ -49,12 +36,16 @@ Rd = 287.0
 gamma = 1.4
 K = 75.0
 
+ex = SlabExchange(px1=1, px2=4, px3=1,
+                  periodic_x1=False, periodic_x2=False, periodic_x3=False,
+                  device_name="cpu")
+
 # set hydrodynamic options
-op = MeshBlockOptions.from_yaml("straka.yaml", dist=info);
+op = MeshBlockOptions.from_yaml("straka.yaml", dist=ex.info)
 
 # initialize block
 block = MeshBlock(op)
-block.to(device)
+block.to(ex.device)
 
 # get handles to modules
 coord = block.hydro.module("coord")
@@ -77,7 +68,7 @@ nc2 = coord.buffer("x2v").shape[0]
 nc1 = coord.buffer("x1v").shape[0]
 nvar = 5
 
-w = torch.zeros((nvar, nc3, nc2, nc1), device=device)
+w = torch.zeros((nvar, nc3, nc2, nc1), device=ex.device)
 
 L = torch.sqrt(((x2v - xc) / xr) ** 2 + ((x1v - zc) / zr) ** 2)
 temp = Ts - grav * x1v / cp
@@ -90,8 +81,8 @@ block_vars = {}
 block_vars["hydro_w"] = w
 block_vars = block.initialize(block_vars)
 
-send_bufs, recv_bufs = exchange.init_buffers_2d(layout, my_rank, block, block_vars)
-exchange.slab_exchange(block, block_vars, ranks, send_bufs, recv_bufs)
+ex.init_buffers(block, block_vars)
+ex.forward(block_vars)
 
 # make output
 out2 = NetcdfOutput(OutputOptions().file_basename("straka").fid(2).variable("prim"))
@@ -111,7 +102,7 @@ current_time = 0.0
 # with profile(activities=activities, record_shapes=True) as prof:
 while not block.intg.stop(count, current_time):
     dt = block.max_time_step(block_vars)
-    dt_min = torch.tensor(dt, device=device)
+    dt_min = torch.tensor(dt, device=ex.device)
 
     # gather minimum dt across ranks
     dist.all_reduce(dt_min, op=dist.ReduceOp.MIN)
@@ -142,7 +133,7 @@ while not block.intg.stop(count, current_time):
 
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage, block_vars)
-        exchange.slab_exchange(block, block_vars, ranks, send_bufs, recv_bufs)
+        ex.forward(block_vars)
 
     count += 1
     current_time += dt
@@ -151,5 +142,3 @@ if my_rank == 0:
     print("elapsed time = ", time.time() - start_time)
 # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-
-dist.destroy_process_group()

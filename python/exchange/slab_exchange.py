@@ -15,7 +15,7 @@ class SlabExchange(MeshBlockExchange):
                 f"px2*px3 ({self.px}*{self.py}) != world_size ({world_size})"
 
         self.layout = snapy.SlabLayout(self.px, self.py,
-                                       self.periodic_x3, self.periodic_x2)
+                                       self.periodic_x, self.periodic_y)
         self.loc = self.layout.loc_of(myrank)
 
         self.info = snapy.DistributeInfo()
@@ -24,10 +24,13 @@ class SlabExchange(MeshBlockExchange):
         self.info.lx3(self.loc[0])
         self.info.lx2(self.loc[1])
         self.info.gid(myrank)
+        self.info.ranks(populate_ranks_2d(self.layout, myrank))
 
-        self.ranks = populate_ranks_2d(self.layout, myrank)
+    def init_buffers(self,
+                     block: snapy.MeshBlock,
+                     block_vars: dict[str, torch.Tensor]):
+        self.block = block
 
-    def init_buffers(self, block_vars: dict[str, torch.Tensor]):
         self.send_bufs = [None] * 9
         self.recv_bufs = [None] * 9
 
@@ -78,10 +81,10 @@ class SlabExchange(MeshBlockExchange):
         ops = []
         self.serialize(block_vars, self.send_bufs)
 
-        for r in range(1, len(ranks)):
+        for r in range(1, len(self.info.ranks)):
             if send_bufs[r] is not None:
-                ops.append(dist.P2POp(dist.isend, self.send_bufs[r], self.ranks[r]))
-                ops.append(dist.P2POp(dist.irecv, self.recv_bufs[r], self.ranks[r]))
+                ops.append(dist.P2POp(dist.isend, self.send_bufs[r], self.info.ranks[r]))
+                ops.append(dist.P2POp(dist.irecv, self.recv_bufs[r], self.info.ranks[r]))
 
         if ops:
             reqs = dist.batch_isend_irecv(ops)
