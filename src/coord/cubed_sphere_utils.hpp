@@ -96,7 +96,7 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
  *
  * Return:
  *   usrc : source 1D location with length 6 * 4 * nghost * N elements
- *          (use cs_gmap_index(...) to access)
+ *          (use cs_usrc_index(...) to access)
  */
 std::vector<double> cs_build_ghost_usrc(int N, int nghost,
                                         int apply_rev_flag = false);

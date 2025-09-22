@@ -244,6 +244,9 @@ class GnomonicEquiangleImpl
   // metric data
   torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
 
+  // ghost zone interpolation data
+  torch::Tensor usrc;
+
   GnomonicEquiangleImpl() = default;
   explicit GnomonicEquiangleImpl(const CoordinateOptions &options_)
       : CoordinateImpl(options_) {

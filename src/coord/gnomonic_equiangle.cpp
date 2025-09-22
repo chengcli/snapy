@@ -2,11 +2,14 @@
 #include <snap/snap.h>
 
 #include "coordinate.hpp"
+#include "cubed_sphere_utils.hpp"
 
 namespace snap {
 
 void GnomonicEquiangleImpl::reset() {
   auto const &op = options;
+
+  TORCH_CHECK(op.nx2() == op.nx3(), "GnomonicEquiangle requires nx2 == nx3");
 
   // dimension 1
   auto dx = (op.x1max() - op.x1min()) / op.nx1();
@@ -106,6 +109,13 @@ void GnomonicEquiangleImpl::reset() {
   g12 = register_buffer("g12", torch::zeros_like(vol));
   g13 = register_buffer("g13", torch::zeros_like(vol));
   g23 = register_buffer("g23", torch::zeros_like(vol));
+
+  // register ghost zone interpolation data
+  auto usrc = cs_build_ghost_usrc(op.nx2(), op.nghost(), false);
+  usrc = register_buffer("usrc",
+                         torch::from_blob(usrc.data(), {op.nghost(), op.nx2()},
+                                          torch::dtype(torch::kFloat64))
+                             .clone());
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
