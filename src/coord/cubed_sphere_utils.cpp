@@ -139,9 +139,8 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
   return u_src;
 }
 
-std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
-                                           int apply_rev_flag) {
-  std::vector<CSGhostMap> gmap(6 * 4 * nghost * N);
+std::vector<double> cs_build_ghost_usrc(int N, int nghost, int apply_rev_flag) {
+  std::vector<double> usrc(6 * 4 * nghost * N);
 
   for (int face_t = 0; face_t < 6; ++face_t) {
     for (int side_t = SIDE_L; side_t <= SIDE_T; ++side_t) {
@@ -182,17 +181,14 @@ std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
           }
 
           /* 6) Write out */
-          size_t idx = cs_gmap_index(face_t, side_t, depth, j, N, nghost);
-          CSGhostMap &e = gmap[idx];
-          e.u_src = u_src;
-          e.alpha_s = alpha_s;
-          e.beta_s = beta_s;
+          size_t idx = cs_usrc_index(face_t, side_t, depth, j, N, nghost);
+          usrc[idx] = u_src;
         }
       }
     }
   }
 
-  return gmap;
+  return usrc;
 }
 
 }  // namespace snap

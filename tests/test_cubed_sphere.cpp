@@ -23,7 +23,7 @@ void run_demo(snap::CubedSphereLayout const &cs, int face, int rx, int ry) {
 }
 
 void run_ghost(int nxy, int nghost) {
-  auto gmap = snap::cs_build_ghost_map(nxy, nghost, false);
+  auto usrc = snap::cs_build_ghost_usrc(nxy, nghost, false);
 
   for (int face = 0; face < 6; ++face) {
     printf("\nface %d ghost map:\n", face);
@@ -36,10 +36,8 @@ void run_ghost(int nxy, int nghost) {
       printf(" side %s:\n", sname);
       for (int depth = 1; depth <= nghost; ++depth) {
         for (int j = 0; j < nxy; ++j) {
-          size_t idx = snap::cs_gmap_index(face, side, depth, j, nxy, nghost);
-          auto gm = gmap[idx];
-          printf("  d=%d j=%2d: u_src=%7.3f (alpha_s=%7.3f beta_s=%7.3f)\n",
-                 depth, j, gm.u_src, gm.alpha_s, gm.beta_s);
+          size_t idx = snap::cs_usrc_index(face, side, depth, j, nxy, nghost);
+          printf("  d=%d j=%2d: u_src=%7.3f\n", depth, j, usrc[idx]);
         }
       }
     }

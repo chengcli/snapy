@@ -14,13 +14,6 @@ struct Vec3 {
   double x, y, z;
 };
 
-/* One ghost cell mapping (target ghost -> source 1-D location) */
-struct CSGhostMap {
-  double u_src;   /* fractional index along the *source* edge interior line */
-  double alpha_s; /* optional: source face angle alpha (debug/validation) */
-  double beta_s;  /* optional: source face angle beta (debug/validation) */
-};
-
 /* Equiangular centers & ghost centers
  * cell centers: [-pi/4, pi/4], Δ = pi/(2N), center i in [0..N-1]
  */
@@ -43,7 +36,7 @@ inline double cs_angle_to_center_u(double angle, int N) {
 /* Indexing: [face][side][depth-1][j], where:
    face ∈ [0..5], side ∈ {SIDE_L..SIDE_T} (4 sides),
    depth ∈ [1..nghost], j ∈ [0..N-1] */
-inline size_t cs_gmap_index(int face, int side, int depth, int j, int N,
+inline size_t cs_usrc_index(int face, int side, int depth, int j, int N,
                             int nghost) {
   const size_t S = 4; /* L,R,B,T */
   return ((size_t)face * S * (size_t)nghost * (size_t)N) +
@@ -102,10 +95,10 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
  *   nghost  : number of ghost layers to fill (>=1)
  *
  * Return:
- *   gmap : vector with length 6 * 4 * nghost * N elements
+ *   usrc : source 1D location with length 6 * 4 * nghost * N elements
  *          (use cs_gmap_index(...) to access)
  */
-std::vector<CSGhostMap> cs_build_ghost_map(int N, int nghost,
-                                           int apply_rev_flag = false);
+std::vector<double> cs_build_ghost_usrc(int N, int nghost,
+                                        int apply_rev_flag = false);
 
 }  // namespace snap
