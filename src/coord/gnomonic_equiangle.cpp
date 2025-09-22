@@ -111,11 +111,11 @@ void GnomonicEquiangleImpl::reset() {
   g23 = register_buffer("g23", torch::zeros_like(vol));
 
   // register ghost zone interpolation data
-  auto usrc = cs_build_ghost_usrc(op.nx2(), op.nghost(), false);
-  usrc = register_buffer("usrc",
-                         torch::from_blob(usrc.data(), {op.nghost(), op.nx2()},
-                                          torch::dtype(torch::kFloat64))
-                             .clone());
+  auto usrc_vec = cs_build_ghost_usrc(op.nx2(), op.nghost(), false);
+  usrc = register_buffer(
+      "usrc", torch::from_blob(usrc_vec.data(), {op.nghost(), op.nx2()},
+                               torch::dtype(torch::kFloat64))
+                  .clone());
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
