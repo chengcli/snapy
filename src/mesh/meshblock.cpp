@@ -16,17 +16,20 @@ MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
   int nc1 = options.hydro().coord().nc1();
   int nc2 = options.hydro().coord().nc2();
   int nc3 = options.hydro().coord().nc3();
+  int nghost = options.hydro().coord().nghost();
 
-  if (nc1 > 1 && options.bfuncs().size() < 2) {
-    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 2");
-  }
+  if (nghost > 0) {
+    if (nc1 > 1 && options.bfuncs().size() < 2) {
+      throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 2");
+    }
 
-  if (nc2 > 1 && options.bfuncs().size() < 4) {
-    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 4");
-  }
+    if (nc2 > 1 && options.bfuncs().size() < 4) {
+      throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 4");
+    }
 
-  if (nc3 > 1 && options.bfuncs().size() < 6) {
-    throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 6");
+    if (nc3 > 1 && options.bfuncs().size() < 6) {
+      throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 6");
+    }
   }
 
   reset();
