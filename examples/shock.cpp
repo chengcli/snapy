@@ -1,3 +1,6 @@
+// torch
+#include <torch/script.h>
+
 // snap
 #include <snap/snap.h>
 
@@ -6,6 +9,25 @@
 #include <snap/output/output_formats.hpp>
 
 using namespace snap;
+
+std::map<std::string, torch::Tensor> load_tensors(const std::string& filename) {
+  std::map<std::string, torch::Tensor> tensor_map;
+
+  // Load scripted module
+  torch::jit::script::Module module = torch::jit::load(filename);
+
+  // Get all named buffers
+  for (const auto& p : module.named_buffers(/*recurse=*/false)) {
+    tensor_map[p.name] = p.value;
+  }
+
+  // Optionally, also load parameters (if register_parameter was used)
+  for (const auto& p : module.named_parameters(/*recurse=*/false)) {
+    tensor_map[p.name] = p.value;
+  }
+
+  return tensor_map;
+}
 
 int main(int argc, char** argv) {
   auto op = MeshBlockOptions::from_yaml("shock.yaml");
@@ -38,11 +60,23 @@ int main(int argc, char** argv) {
   auto w = torch::zeros(
       {nvar, nc3, nc2, nc1},
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
-
-  w[IDN] = torch::where(x1v < 0, 1.0, 0.125);
-  w[IPR] = torch::where(x1v < 0, 1.0, 0.1);
-
   std::cout << "w shape = " << w.sizes() << std::endl;
+
+  // use restart data
+  bool use_restart_data = true;
+
+  if (use_restart_data) {
+    auto interior = block->part({0, 0, 0});
+    auto data = load_tensors("sod.out0.00019.pt");
+    w.index(interior)[IDN] = data["rho"];
+    w.index(interior)[IVX] = data["vel1"];
+    w.index(interior)[IVY] = data["vel2"];
+    w.index(interior)[IVZ] = data["vel3"];
+    w.index(interior)[IPR] = data["press"];
+  } else {
+    w[IDN] = torch::where(x1v < 0, 1.0, 0.125);
+    w[IPR] = torch::where(x1v < 0, 1.0, 0.1);
+  }
 
   std::map<std::string, torch::Tensor> vars;
 
@@ -52,6 +86,7 @@ int main(int argc, char** argv) {
 
   vars["hydro_w"] = w;
   vars["solid"] = solid;
+
   block->initialize(vars);
 
   // output

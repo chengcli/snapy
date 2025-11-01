@@ -97,7 +97,8 @@ int main(int argc, char **argv) {
   int is = pcoord->is();
   int ie = pcoord->ie();
   auto dz = pcoord->dx1f[is].item<double>();
-  std::cout << fmt::format("{}\n", Func1Registrar::list_names()) << std::endl;
+  // std::cout << fmt::format("{}\n", Func1Registrar::list_names()) <<
+  // std::endl;
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
