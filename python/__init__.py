@@ -9,6 +9,7 @@ import platform
 from pathlib import Path
 
 from .snapy import *
+from .gmres import gmres, dot_product_distributed
 
 NODELETE = getattr(os, "RTLD_NODELETE", 0x1000)
 MODE = os.RTLD_NOW | os.RTLD_GLOBAL | NODELETE
