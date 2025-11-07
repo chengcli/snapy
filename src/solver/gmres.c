@@ -110,23 +110,37 @@ int gmres_solve(void *A, matvec_fn matvec, const double *b, double *x,
     const double tol = config->tol;
     const int verbose = config->verbose;
     
-    // Allocate workspace
-    double **V = (double **)malloc((m + 1) * sizeof(double *));
-    double *H = (double *)calloc((m + 1) * (m + 1), sizeof(double));
-    double *s = (double *)malloc((m + 1) * sizeof(double));
-    double *cs = (double *)malloc((m + 1) * sizeof(double));
-    double *sn = (double *)malloc((m + 1) * sizeof(double));
-    double *y = (double *)malloc(m * sizeof(double));
-    double *w = (double *)malloc(n * sizeof(double));
-    double *r = (double *)malloc(n * sizeof(double));
+    // Allocate workspace - initialize all pointers to NULL for safe cleanup
+    double **V = NULL;
+    double *H = NULL;
+    double *s = NULL;
+    double *cs = NULL;
+    double *sn = NULL;
+    double *y = NULL;
+    double *w = NULL;
+    double *r = NULL;
+    
+    V = (double **)malloc((m + 1) * sizeof(double *));
+    if (V) {
+        // Initialize V array to NULL
+        for (int i = 0; i <= m; i++) {
+            V[i] = NULL;
+        }
+    }
+    
+    H = (double *)calloc((m + 1) * (m + 1), sizeof(double));
+    s = (double *)malloc((m + 1) * sizeof(double));
+    cs = (double *)malloc((m + 1) * sizeof(double));
+    sn = (double *)malloc((m + 1) * sizeof(double));
+    y = (double *)malloc(m * sizeof(double));
+    w = (double *)malloc(n * sizeof(double));
+    r = (double *)malloc(n * sizeof(double));
     
     if (!V || !H || !s || !cs || !sn || !y || !w || !r) {
         if (rank == 0 && verbose > 0) {
             fprintf(stderr, "GMRES: Memory allocation failed\n");
         }
-        // Free allocated memory
-        free(V); free(H); free(s); free(cs); free(sn); free(y); free(w); free(r);
-        return -1;
+        goto cleanup;
     }
     
     for (int i = 0; i <= m; i++) {
@@ -135,9 +149,7 @@ int gmres_solve(void *A, matvec_fn matvec, const double *b, double *x,
             if (rank == 0 && verbose > 0) {
                 fprintf(stderr, "GMRES: Memory allocation failed for V[%d]\n", i);
             }
-            for (int j = 0; j < i; j++) free(V[j]);
-            free(V); free(H); free(s); free(cs); free(sn); free(y); free(w); free(r);
-            return -1;
+            goto cleanup;
         }
     }
     
@@ -146,6 +158,7 @@ int gmres_solve(void *A, matvec_fn matvec, const double *b, double *x,
     
     int total_iter = 0;
     int converged = 0;
+    int status = -1;  // Default to error
     double final_residual = 0.0;
     
     // Main GMRES loop
@@ -243,6 +256,9 @@ int gmres_solve(void *A, matvec_fn matvec, const double *b, double *x,
         }
     }
     
+    // Set success status
+    status = converged ? 0 : 1;
+    
     // Store results
     if (result != NULL) {
         result->iterations = total_iter;
@@ -250,18 +266,21 @@ int gmres_solve(void *A, matvec_fn matvec, const double *b, double *x,
         result->converged = converged;
     }
     
-    // Free memory
-    for (int i = 0; i <= m; i++) {
-        free(V[i]);
+cleanup:
+    // Free memory - safe even if pointers are NULL
+    if (V) {
+        for (int i = 0; i <= m; i++) {
+            if (V[i]) free(V[i]);
+        }
+        free(V);
     }
-    free(V);
-    free(H);
-    free(s);
-    free(cs);
-    free(sn);
-    free(y);
-    free(w);
-    free(r);
+    if (H) free(H);
+    if (s) free(s);
+    if (cs) free(cs);
+    if (sn) free(sn);
+    if (y) free(y);
+    if (w) free(w);
+    if (r) free(r);
     
-    return converged ? 0 : 1;
+    return status;
 }
