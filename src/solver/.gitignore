@@ -1,0 +1,18 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+
+# Test executables
+gmres_test
+test_debug
+test_full
+test_rhs
+test_verify
+
+# Editor files
+*~
+*.swp
+*.swo
+.DS_Store
