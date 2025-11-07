@@ -9,9 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 void gmres_config_init(gmres_config_t *config, MPI_Comm comm) {
     config->max_iter = 1000;
     config->restart = 30;

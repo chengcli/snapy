@@ -136,6 +136,17 @@ int main(int argc, char *argv[]) {
     double *x = (double *)malloc(n_local * sizeof(double));
     double *x_exact = (double *)malloc(n_local * sizeof(double));
     
+    if (!b || !x || !x_exact) {
+        if (rank == 0) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+        }
+        free(b);
+        free(x);
+        free(x_exact);
+        MPI_Finalize();
+        return 1;
+    }
+    
     const double pi = 3.14159265358979323846;
     
     for (int i = 0; i < n_local; i++) {

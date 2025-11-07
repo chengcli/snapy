@@ -34,15 +34,17 @@ $(TEST_TARGET): $(TEST_SRC) $(LIB_TARGET)
 	$(MPICC) $(CFLAGS) -c $< -o $@
 
 # Run test
+# Note: If running in a container as root, you may need to add --allow-run-as-root
+# to the mpirun commands below. For production use, always run as non-root user.
 test: $(TEST_TARGET)
 	@echo "Running sequential test..."
-	mpirun -np 1 --allow-run-as-root ./$(TEST_TARGET) 100
+	mpirun -np 1 ./$(TEST_TARGET) 100
 	@echo ""
 	@echo "Running parallel test with 2 processes..."
-	mpirun -np 2 --allow-run-as-root --oversubscribe ./$(TEST_TARGET) 100
+	mpirun -np 2 --oversubscribe ./$(TEST_TARGET) 100
 	@echo ""
 	@echo "Running parallel test with 4 processes..."
-	mpirun -np 4 --allow-run-as-root --oversubscribe ./$(TEST_TARGET) 100
+	mpirun -np 4 --oversubscribe ./$(TEST_TARGET) 100
 
 # Clean
 clean:
