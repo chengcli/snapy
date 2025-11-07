@@ -36,13 +36,13 @@ $(TEST_TARGET): $(TEST_SRC) $(LIB_TARGET)
 # Run test
 test: $(TEST_TARGET)
 	@echo "Running sequential test..."
-	mpirun -np 1 ./$(TEST_TARGET) 100
+	mpirun -np 1 --allow-run-as-root ./$(TEST_TARGET) 100
 	@echo ""
 	@echo "Running parallel test with 2 processes..."
-	mpirun -np 2 ./$(TEST_TARGET) 100
+	mpirun -np 2 --allow-run-as-root --oversubscribe ./$(TEST_TARGET) 100
 	@echo ""
 	@echo "Running parallel test with 4 processes..."
-	mpirun -np 4 ./$(TEST_TARGET) 100
+	mpirun -np 4 --allow-run-as-root --oversubscribe ./$(TEST_TARGET) 100
 
 # Clean
 clean:

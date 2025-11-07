@@ -114,6 +114,9 @@ if (CUDAToolkit_FOUND)
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})
 endif()
 
+# Add GMRES solver subdirectory
+add_subdirectory(solver)
+
 set(SNAP_INCLUDE_DIR
   "${CMAKE_CURRENT_SOURCE_DIR}/.."
   CACHE INTERNAL "snap include directory")
