@@ -115,8 +115,10 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file,
 
   // --------------- outputs --------------- //
   int fid = 0;
-  for (auto const& out_cfg : config["outputs"]) {
-    op.outputs().push_back(OutputOptions::from_yaml(out_cfg, fid++));
+  if (config["outputs"]) {
+    for (auto const& out_cfg : config["outputs"]) {
+      op.outputs().push_back(OutputOptions::from_yaml(out_cfg, fid++));
+    }
   }
 
   return op;
