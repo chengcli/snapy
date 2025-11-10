@@ -7,6 +7,7 @@
 // snap
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/output/output_formats.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -121,19 +122,16 @@ void bind_mesh(py::module &m) {
           py::arg("extend_x1") = 0, py::arg("extend_x2") = 0,
           py::arg("extend_x3") = 0)
       .def("initialize", &snap::MeshBlockImpl::initialize)
-      .def("max_time_step",
-           [](snap::MeshBlockImpl &self, py::dict vars) {
-             std::map<std::string, torch::Tensor> native;
-             for (auto &kv : vars) {
-               std::string key = py::cast<std::string>(kv.first);
-               if (!kv.second.is_none()) {
-                 native[key] = py::cast<torch::Tensor>(kv.second);
-               } else {
-                 native[key] = torch::Tensor();
-               }
-             }
-             return self.max_time_step(native);
-           })
-      .def("set_uov", [](snap::MeshBlockImpl &self, std::string name,
-                         torch::Tensor val) { self.user_out_var[name] = val; });
+      .def("max_time_step", [](snap::MeshBlockImpl &self, py::dict vars) {
+        std::map<std::string, torch::Tensor> native;
+        for (auto &kv : vars) {
+          std::string key = py::cast<std::string>(kv.first);
+          if (!kv.second.is_none()) {
+            native[key] = py::cast<torch::Tensor>(kv.second);
+          } else {
+            native[key] = torch::Tensor();
+          }
+        }
+        return self.max_time_step(native);
+      });
 }

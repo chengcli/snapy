@@ -23,7 +23,7 @@
 namespace snap {
 
 //! \brief  container for parameters read from `<output>` block in the input
-struct OutputOptions {
+class OutputOptions {
   ADD_ARG(int, fid) = 0;
   ADD_ARG(double, dt) = 0.;
 
