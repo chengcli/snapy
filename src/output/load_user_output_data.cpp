@@ -17,7 +17,7 @@ void OutputType::loadUserOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = pair.first;
-      pod->data.InitFromTensor(pair.second.unsqueeze(0), 4, 0, 1);
+      pod->data.CopyFromTensor(pair.second);
       AppendOutputDataNode(pod);
       num_vars_++;
     }

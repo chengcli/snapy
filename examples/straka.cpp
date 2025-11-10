@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
   vars["hydro_w"] = w;
   block->initialize(vars);
 
-  block->user_output_callback = [&](Variables const& vars) {
+  block->user_output_callback = [Rd, cp, p0](Variables const& vars) {
     auto w = vars.at("hydro_w");
     auto temp = w[IPR] / (w[IDN] * Rd);
 
