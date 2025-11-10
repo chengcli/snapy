@@ -349,7 +349,6 @@ void MeshBlockImpl::print_cycle_info(double time, double dt) const {
   if (options.dist().gid() != 0) return;  // only rank 0 prints
 
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 1;
-  const int ratio_precision = 3;
   if (pintg->options.ncycle_out() != 0) {
     if (cycle % pintg->options.ncycle_out() == 0) {
       std::cout << "cycle=" << cycle << std::scientific
