@@ -12,8 +12,24 @@ Stub files are special Python files with a `.pyi` extension that contain type si
 
 ## Structure
 
-- `snapy.pyi` - Main stub file containing all type signatures for the compiled pybind11 module
+The stub files are organized in the `snapy/` subdirectory to match the compiled module structure:
+
+- `snapy/__init__.pyi` - Main stub file with imports and common types (enums, type aliases)
+- `snapy/boundary.pyi` - Boundary condition classes and functions
+- `snapy/coordinate.pyi` - Coordinate system classes
+- `snapy/eos.pyi` - Equation of state classes
+- `snapy/forcing.pyi` - Forcing terms (gravity, Coriolis)
+- `snapy/hydro.pyi` - Hydrodynamics classes
+- `snapy/implicit.pyi` - Implicit solver classes
+- `snapy/integrator.pyi` - Time integration classes
+- `snapy/layout.pyi` - Domain decomposition layout classes
+- `snapy/mesh.pyi` - Mesh block classes
+- `snapy/output.pyi` - Output classes
+- `snapy/reconstruction.pyi` - Reconstruction classes
+- `snapy/riemann.pyi` - Riemann solver classes
 - `py.typed` - Marker file indicating this package supports type hints (PEP 561)
+
+This modular structure makes it easier to maintain and navigate the type definitions.
 
 ## Benefits of Separation
 
@@ -57,12 +73,15 @@ mypy your_script.py
 
 ### For Developers
 
-When modifying the C++ bindings in `python/csrc/`, remember to update the corresponding type signatures in `snapy.pyi`:
+When modifying the C++ bindings in `python/csrc/`, remember to update the corresponding type signatures in the appropriate stub file:
 
-1. Add new classes or functions to the stub file
-2. Update parameter types and return types
-3. Include docstrings with examples
-4. Test with `mypy` to ensure validity
+1. Identify which module the change belongs to (e.g., boundary, hydro, mesh)
+2. Update the corresponding `snapy/<module>.pyi` file
+3. Add new classes or functions with type signatures
+4. Update parameter types and return types
+5. Include docstrings with examples
+6. If adding cross-module dependencies, add necessary imports
+7. Test with `mypy` to ensure validity
 
 ## Implementation Details
 
@@ -86,26 +105,23 @@ The actual pybind11 implementation is in:
 
 ### Stub File Contents
 
-The `snapy.pyi` stub file includes:
+The stub files are split into logical modules:
 
-- All public classes with their methods
-- Type signatures using Python's `typing` module
-- Overloaded methods using `@overload` decorator
-- Comprehensive docstrings with parameter descriptions
-- Module-level enums and type aliases
-- All exposed C++ classes:
-  - Boundary conditions: `BoundaryFuncOptions`, `InternalBoundaryOptions`, `InternalBoundary`
-  - Coordinates: `CoordinateOptions`, `Cartesian`
-  - EOS: `EquationOfStateOptions`, `EquationOfState`
-  - Forcing: `ConstGravityOptions`, `CoriolisOptions`
-  - Hydro: `HydroOptions`, `PrimitiveProjectorOptions`, `Hydro`
-  - Implicit: `ImplicitOptions`, `ImplicitHydro`, `ImplicitCorrection`
-  - Integration: `IntegratorOptions`, `IntegratorWeight`, `Integrator`
-  - Layout: `DistributeInfo`, `SlabLayout`, `CubedLayout`, `CubedSphereLayout`
-  - Mesh: `MeshBlockOptions`, `MeshBlock`
-  - Output: `OutputOptions`, `OutputType`, `NetcdfOutput`
-  - Reconstruction: `InterpOptions`, `ReconstructOptions`, `Reconstruct`
-  - Riemann: `RiemannSolverOptions`, `UpwindSolver`, `RoeSolver`, `LmarsSolver`, `ShallowRoeSolver`
+- **`snapy/__init__.pyi`**: Main module with common enums (`index`, `BoundaryFace`) and type aliases (`bcfunc_t`), imports all submodules
+- **`snapy/boundary.pyi`**: `BoundaryFuncOptions`, `InternalBoundaryOptions`, `InternalBoundary`
+- **`snapy/coordinate.pyi`**: `CoordinateOptions`, `Cartesian`
+- **`snapy/eos.pyi`**: `EquationOfStateOptions`, `EquationOfState`
+- **`snapy/forcing.pyi`**: `ConstGravityOptions`, `CoriolisOptions`
+- **`snapy/hydro.pyi`**: `HydroOptions`, `PrimitiveProjectorOptions`, `Hydro`
+- **`snapy/implicit.pyi`**: `ImplicitOptions`, `ImplicitHydro`, `ImplicitCorrection`
+- **`snapy/integrator.pyi`**: `IntegratorOptions`, `IntegratorWeight`, `Integrator`
+- **`snapy/layout.pyi`**: `DistributeInfo`, `SlabLayout`, `CubedLayout`, `CubedSphereLayout`
+- **`snapy/mesh.pyi`**: `MeshBlockOptions`, `MeshBlock`, `ScalarOptions`
+- **`snapy/output.pyi`**: `OutputOptions`, `OutputType`, `NetcdfOutput`
+- **`snapy/reconstruction.pyi`**: `InterpOptions`, `ReconstructOptions`, `Reconstruct`
+- **`snapy/riemann.pyi`**: `RiemannSolverOptions`, `UpwindSolver`, `RoeSolver`, `LmarsSolver`, `ShallowRoeSolver`
+
+Each module file contains type signatures using Python's `typing` module, overloaded methods using `@overload` decorator, and comprehensive docstrings with parameter descriptions.
 
 ### Package Configuration
 
@@ -128,10 +144,13 @@ The stub files are included in the package via `pyproject.toml`:
 When adding new features to the C++ bindings:
 
 1. Implement the binding in the appropriate `python/csrc/*.cpp` file
-2. Add the corresponding type signature to `snapy.pyi`
-3. Include docstrings with parameter descriptions
-4. Run `mypy` to validate the stub file
-5. Test that IDEs can properly autocomplete the new features
+2. Identify which logical module it belongs to (boundary, coordinate, eos, etc.)
+3. Update the corresponding stub file in `snapy/<module>.pyi`
+4. Add type signatures for new classes/methods
+5. Include docstrings with parameter descriptions
+6. Add cross-module imports if needed (e.g., `from .coordinate import CoordinateOptions`)
+7. Run `mypy` to validate the stub file
+8. Test that IDEs can properly autocomplete the new features
 
 This separation ensures that the API remains well-documented and type-safe while maintaining the performance benefits of C++ implementation.
 
