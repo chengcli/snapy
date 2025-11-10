@@ -3,7 +3,7 @@
 #include <cstring>
 #include <string>
 
-// snapy
+// snap
 #include <snap/mesh/meshblock.hpp>
 
 // kintera
