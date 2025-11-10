@@ -36,6 +36,7 @@ struct MeshBlockOptions {
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
+class OutputType;
 
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
@@ -45,12 +46,16 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! user output variables
   Variables user_out_var;
 
+  //! outputs
+  std::vector<std::shared_ptr<OutputType>> output_types;
+
+  //! current cycle number
+  size_t cycle = 0;
+
   //! submodules
   Integrator pintg = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
-
-  std::map<std::string, double> timer;
 
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
@@ -68,20 +73,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   Variables& forward(double dt, int stage, Variables& vars);
 
-  void reset_timer() {
-    for (auto& t : timer) {
-      t.second = 0.0;
-    }
-  }
+  void make_outputs(Variables const& vars, double current_time,
+                    bool force_write = false);
 
-  void report_timer(std::ostream& stream) {
-    phydro->report_timer(std::cout);
-    for (const auto& t : timer) {
-      stream << "meshblock[" << t.first << "] = " << t.second << " miliseconds"
-             << std::endl;
-    }
-    reset_timer();
-  }
+  void print_cycle_info(double time, double dt) const;
 
  private:
   //! stage registers

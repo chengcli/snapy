@@ -1,4 +1,11 @@
-// snap
+// C/C++
+#include <iomanip>
+#include <iostream>
+#include <limits>
+
+// sqnap
+#include <snap/output/output_type.hpp>
+
 #include "meshblock.hpp"
 
 namespace snap {
@@ -238,18 +245,10 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
     fut_hydro_du = phydro->forward(dt, hydro_u, vars);
   }
 
-  auto time1 = std::chrono::high_resolution_clock::now();
-  timer["hydro"] +=
-      std::chrono::duration<double, std::milli>(time1 - start).count();
-
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
     fut_scalar_ds = pscalar->forward(dt, scalar_s, vars);
   }
-
-  auto time2 = std::chrono::high_resolution_clock::now();
-  timer["scalar"] +=
-      std::chrono::duration<double, std::milli>(time2 - time1).count();
 
   // -------- (4) multi-stage averaging --------
   if (phydro->peos->nvar() > 0) {
@@ -261,10 +260,6 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
     scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
     _scalar_s1.copy_(scalar_s);
   }
-
-  auto time3 = std::chrono::high_resolution_clock::now();
-  timer["averaging"] +=
-      std::chrono::duration<double, std::milli>(time3 - time2).count();
 
   // -------- (5) update ghost zones --------
   BoundaryFuncOptions op;
@@ -291,10 +286,6 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
     }
   }
 
-  auto time4 = std::chrono::high_resolution_clock::now();
-  timer["bc"] +=
-      std::chrono::duration<double, std::milli>(time4 - time3).count();
-
   // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 &&
       (phydro->options.eos().type() == "ideal-moist" ||
@@ -317,11 +308,35 @@ Variables& MeshBlockImpl::forward(double dt, int stage, Variables& vars) {
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }
 
-  auto time5 = std::chrono::high_resolution_clock::now();
-  timer["saturation_adjustment"] +=
-      std::chrono::duration<double, std::milli>(time5 - time4).count();
-
   return vars;
+}
+
+void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
+                                 bool force_write) {
+  for (auto& output_type : output_types) {
+    if (current_time >= output_type->next_time) {
+      output_type->write_output_file(this, vars, current_time, force_write);
+
+      // Update next_time and file_number
+      output_type->next_time += output_type->options.dt();
+      output_type->file_number += 1;
+    }
+  }
+}
+
+void MeshBlockImpl::print_cycle_info(double time, double dt) const {
+  if (options.dist().gid() != 0) return;  // only rank 0 prints
+
+  const int dt_precision = std::numeric_limits<double>::max_digits10 - 1;
+  const int ratio_precision = 3;
+  if (pintg->options.ncycle_out() != 0) {
+    if (cycle % pintg->options.ncycle_out() == 0) {
+      std::cout << "cycle=" << cycle << std::scientific
+                << std::setprecision(dt_precision) << " time=" << time
+                << " dt=" << dt;
+      std::cout << std::endl;
+    }
+  }
 }
 
 }  // namespace snap

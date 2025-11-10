@@ -28,21 +28,22 @@ class VTKOutput : public OutputType {
  public:
   explicit VTKOutput(OutputParameters oparams) : OutputType(oparams) {}
   void write_output_file(Mesh pm, ParameterInput pin, bool flag) override;
-};
+};*/
 
 //! \brief derived OutputType class for restart dumps
 class RestartOutput : public OutputType {
  public:
-  explicit RestartOutput(OutputParameters oparams) : OutputType(oparams) {}
-  void write_output_file(Mesh pm, ParameterInput pin, bool flag) override;
-};*/
+  explicit RestartOutput(OutputOptions const& options_);
+  void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
+                         bool flag) override;
+};
 
 // \brief derived OutputType class for Athena HDF5 files
 class HDF5Output : public OutputType {
  public:
   // Function declarations
   explicit HDF5Output(OutputOptions const& options_);
-  void write_output_file(MeshBlock pm, Variables const& var, double time,
+  void write_output_file(MeshBlockImpl* pmb, Variables const& var, double time,
                          bool flag) override;
   void MakeXDMF();
 
@@ -79,7 +80,7 @@ class NetcdfOutput : public OutputType {
 
   ///  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
   ///         one MeshBlock per file
-  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+  void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool flag) override;
 
   void combine_blocks() override;
@@ -89,7 +90,7 @@ class PnetcdfOutput : public OutputType {
  public:
   explicit PnetcdfOutput(OutputOptions const& options_);
   ~PnetcdfOutput() {}
-  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+  void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool flag) override;
 };
 
@@ -97,7 +98,7 @@ class FITSOutput : public OutputType {
  public:
   explicit FITSOutput(OutputOptions const& options_);
   ~FITSOutput() {}
-  void write_output_file(MeshBlock pmb, Variables const& vars, double time,
+  void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool flag) override;
 };
 }  // namespace snap

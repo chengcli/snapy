@@ -47,27 +47,17 @@ int main(int argc, char** argv) {
   solid.to(torch::kBool);
 
   // output
-  auto out =
-      NetcdfOutput(OutputOptions().file_basename("aneos").variable("prim"));
-  float current_time = 0.;
+  double current_time = 0.;
+  block->make_outputs(vars, current_time);
 
-  out.write_output_file(block, vars, current_time, 0);
-  out.combine_blocks();
-
-  int count = 0;
-  while (!block->pintg->stop(count++, current_time)) {
+  while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-    // auto dt = 1.e-10;
+    block->print_cycle_info(current_time, dt);
+
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
       block->forward(dt, stage, vars);
 
     current_time += dt;
-    if (count % 100 == 0) {
-      block->report_timer(std::cout);
-      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-      ++out.file_number;
-      out.write_output_file(block, vars, current_time, 0);
-      out.combine_blocks();
-    }
+    block->make_outputs(vars, current_time);
   }
 }

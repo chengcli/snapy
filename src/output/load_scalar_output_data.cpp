@@ -6,7 +6,8 @@
 #include "output_type.hpp"
 
 namespace snap {
-void OutputType::loadScalarOutputData(MeshBlock pmb, Variables const& vars) {
+void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
+                                      Variables const& vars) {
   OutputData* pod;
 
   auto const& r = vars.at("scalar_r");
@@ -20,8 +21,7 @@ void OutputType::loadScalarOutputData(MeshBlock pmb, Variables const& vars) {
     scalar_name_cons = root_name_cons + std::to_string(n);
     scalar_name_prim = root_name_prim + std::to_string(n);
 
-    if (ContainVariable(options.variable(), scalar_name_cons) ||
-        ContainVariable(options.variable(), "cons")) {
+    if (ContainVariable(scalar_name_cons) || ContainVariable("cons")) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_cons;
@@ -30,8 +30,7 @@ void OutputType::loadScalarOutputData(MeshBlock pmb, Variables const& vars) {
       num_vars_++;
     }
 
-    if (ContainVariable(options.variable(), scalar_name_prim) ||
-        ContainVariable(options.variable(), "prim")) {
+    if (ContainVariable(scalar_name_prim) || ContainVariable("prim")) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_prim;

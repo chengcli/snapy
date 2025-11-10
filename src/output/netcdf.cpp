@@ -12,11 +12,9 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/vectorize.hpp>
 
-// output
 #include "output_formats.hpp"
 #include "output_utils.hpp"
 
@@ -32,7 +30,7 @@ namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
+void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                      double current_time, bool flag) {
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();

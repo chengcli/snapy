@@ -225,7 +225,7 @@ std::string MetadataTable::GetLongName(std::string name) const {
 
 MetadataTable* MetadataTable::myptr_ = nullptr;
 
-std::string get_hydro_names(MeshBlock pmb, std::string prepend) {
+std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend) {
   auto m = pmb->named_modules()["hydro.eos.thermo"];
   auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
   auto species = thermo->options.species();

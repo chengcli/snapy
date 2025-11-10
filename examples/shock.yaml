@@ -50,3 +50,10 @@ integration:
   implicit-scheme: 0
   nlim: 200
   tlim: 1.e9
+
+outputs:
+  - type: restart
+    dt: 1.
+  - type: netcdf
+    variables: [prim]
+    dt: 0.1

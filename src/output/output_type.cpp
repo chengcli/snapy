@@ -15,7 +15,7 @@ OutputType::OutputType(OutputOptions const &options_)
       plast_data_() {  // Initialize tail node to nullptr
 }
 
-void OutputType::LoadOutputData(MeshBlock pmb, Variables const &vars) {
+void OutputType::LoadOutputData(MeshBlockImpl *pmb, Variables const &vars) {
   num_vars_ = 0;
   OutputData *pod;
 
@@ -23,16 +23,6 @@ void OutputType::LoadOutputData(MeshBlock pmb, Variables const &vars) {
   loadDiagOutputData(pmb, vars);
   loadScalarOutputData(pmb, vars);
   loadUserOutputData(pmb, vars);
-
-  // throw an error if output variable name not recognized
-  if (num_vars_ == 0) {
-    std::stringstream msg;
-    msg << "### FATAL ERROR in function [OutputType::LoadOutputData]"
-        << std::endl
-        << "Output variable '" << options.variable() << "' not implemented"
-        << std::endl;
-    throw std::runtime_error(msg.str());
-  }
 
   return;
 }
@@ -82,15 +72,9 @@ void OutputType::ClearOutputData() {
   plast_data_ = nullptr;
 }
 
-bool OutputType::ContainVariable(const std::string &haystack,
-                                 const std::string &needle) {
-  if (haystack.compare(needle) == 0) return true;
-  if (haystack.find(',' + needle + ',') != std::string::npos) return true;
-  if (haystack.find(needle + ',') == 0) return true;
-  if (haystack.find(',' + needle) != std::string::npos &&
-      haystack.find(',' + needle) == haystack.length() - needle.length() - 1)
-    return true;
-  return false;
+bool OutputType::ContainVariable(const std::string &var) {
+  return std::find(options.variables().begin(), options.variables().end(),
+                   var) != options.variables().end();
 }
 
 }  // namespace snap

@@ -8,7 +8,8 @@
 
 namespace snap {
 
-void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
+void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
+                                     Variables const& vars) {
   OutputData* pod;
 
   auto peos = pmb->phydro->peos;
@@ -16,8 +17,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   auto const& u = vars.at("hydro_u");
 
   // (lab-frame) density
-  if (ContainVariable(options.variable(), "D") ||
-      ContainVariable(options.variable(), "cons")) {
+  if (ContainVariable("D") || ContainVariable("cons")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "dens";
@@ -27,8 +27,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   }
 
   // (rest-frame) density
-  if (ContainVariable(options.variable(), "d") ||
-      ContainVariable(options.variable(), "prim")) {
+  if (ContainVariable("d") || ContainVariable("prim")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "rho";
@@ -39,8 +38,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
 
   // total energy
   if (peos->nvar() > 4) {
-    if (ContainVariable(options.variable(), "E") ||
-        ContainVariable(options.variable(), "cons")) {
+    if (ContainVariable("E") || ContainVariable("cons")) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "Etot";
@@ -51,8 +49,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
     }
 
     // pressure
-    if (ContainVariable(options.variable(), "p") ||
-        ContainVariable(options.variable(), "prim")) {
+    if (ContainVariable("p") || ContainVariable("prim")) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "press";
@@ -63,8 +60,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   }
 
   // momentum vector
-  if (ContainVariable(options.variable(), "m") ||
-      ContainVariable(options.variable(), "cons")) {
+  if (ContainVariable("m") || ContainVariable("cons")) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "mom";
@@ -88,7 +84,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   }
 
   // each component of momentum
-  if (ContainVariable(options.variable(), "m1")) {
+  if (ContainVariable("m1")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom1";
@@ -97,7 +93,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
     AppendOutputDataNode(pod);
     num_vars_++;
   }
-  if (ContainVariable(options.variable(), "m2")) {
+  if (ContainVariable("m2")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom2";
@@ -106,7 +102,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
     AppendOutputDataNode(pod);
     num_vars_++;
   }
-  if (ContainVariable(options.variable(), "m3")) {
+  if (ContainVariable("m3")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom3";
@@ -117,8 +113,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   }
 
   // velocity vector
-  if (ContainVariable(options.variable(), "v") ||
-      ContainVariable(options.variable(), "prim")) {
+  if (ContainVariable("v") || ContainVariable("prim")) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "vel";
@@ -142,8 +137,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   }
 
   // each component of velocity
-  if (ContainVariable(options.variable(), "vx") ||
-      ContainVariable(options.variable(), "v1")) {
+  if (ContainVariable("vx") || ContainVariable("v1")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel1";
@@ -152,8 +146,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
     AppendOutputDataNode(pod);
     num_vars_++;
   }
-  if (ContainVariable(options.variable(), "vy") ||
-      ContainVariable(options.variable(), "v2")) {
+  if (ContainVariable("vy") || ContainVariable("v2")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel2";
@@ -162,8 +155,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
     AppendOutputDataNode(pod);
     num_vars_++;
   }
-  if (ContainVariable(options.variable(), "vz") ||
-      ContainVariable(options.variable(), "v3")) {
+  if (ContainVariable("vz") || ContainVariable("v3")) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel3";
@@ -176,7 +168,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
   // vapor + cloud
   auto ny = peos->nvar() - 5;
   if (ny > 0) {
-    if (options.variable().compare("prim") == 0) {
+    if (ContainVariable("prim")) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb);
@@ -186,7 +178,7 @@ void OutputType::loadHydroOutputData(MeshBlock pmb, Variables const& vars) {
       num_vars_ += ny;
     }
 
-    if (options.variable().compare("cons") == 0) {
+    if (ContainVariable("cons")) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb);
