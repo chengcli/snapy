@@ -50,8 +50,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! options with which this `MeshBlock` was constructed
   MeshBlockOptions options;
 
-  //! user output variables
-  Variables user_out_var;
+  //! user output
+  std::function<Variables(Variables const&)> user_output_callback;
 
   //! outputs
   std::vector<std::shared_ptr<OutputType>> output_types;

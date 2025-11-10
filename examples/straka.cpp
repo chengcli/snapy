@@ -77,6 +77,16 @@ int main(int argc, char** argv) {
   vars["hydro_w"] = w;
   block->initialize(vars);
 
+  block->user_output_callback = [&](Variables const& vars) {
+    auto w = vars.at("hydro_w");
+    auto temp = w[IPR] / (w[IDN] * Rd);
+
+    Variables out;
+    out["temp"] = temp;
+    out["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
+    return out;
+  };
+
   double current_time = 0.;
   block->make_outputs(vars, current_time);
 

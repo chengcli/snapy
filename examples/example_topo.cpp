@@ -206,7 +206,12 @@ int main(int argc, char** argv) {
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
-  block->user_out_var["qtol"] = torch::Tensor();
+  block->user_output_callback = [&](Variables const& vars) {
+    auto w = vars.at("hydro_w");
+    Variables out;
+    out["qtol"] = w.narrow(0, ICY, ny).sum(0);
+    return out;
+  };
 
   // create kinetics model
   auto op_kinet = kintera::KineticsOptions::from_yaml(infile);

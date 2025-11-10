@@ -10,7 +10,9 @@ void OutputType::loadUserOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
   if (!output_all_uov) return;
 
-  for (const auto& pair : pmb->user_out_var) {
+  auto user_out_var = pmb->user_output_callback(vars);
+
+  for (const auto& pair : user_out_var) {
     if (pair.first.length() != 0) {
       pod = new OutputData;
       pod->type = "SCALARS";

@@ -12,7 +12,7 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file,
                                              DistributeInfo _dist) {
   MeshBlockOptions op;
 
-  // use the basename of the input file as the basename
+  // use the basename of the input file as the basename of the output files
   op.basename() = input_file.substr(0, input_file.find_last_of('.'));
 
   op.dist() = _dist;
@@ -115,8 +115,7 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file,
 
   // --------------- outputs --------------- //
   int fid = 0;
-  for (auto const& out_cfg : config["output"]) {
-    TORCH_CHECK(out_cfg["type"], "Output ", fid, " does not a 'type' field.");
+  for (auto const& out_cfg : config["outputs"]) {
     op.outputs().push_back(OutputOptions::from_yaml(out_cfg, fid++));
   }
 

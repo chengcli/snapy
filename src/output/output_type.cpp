@@ -28,8 +28,12 @@ OutputOptions OutputOptions::from_yaml(YAML::Node const &node, int fid) {
   options.x2_slice() = node["x2_slice"].as<double>(0.);
   options.x3_slice() = node["x3_slice"].as<double>(0.);
 
-  if (node["file_type"]) {
-    options.file_type() = node["file_type"].as<std::string>();
+  if (node["type"]) {
+    options.file_type() = node["type"].as<std::string>();
+  } else {
+    throw std::invalid_argument(
+        "OutputOptions::from_yaml: output file type "
+        "must be specified");
   }
 
   if (node["data_format"]) {
