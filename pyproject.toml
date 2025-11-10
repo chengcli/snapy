@@ -51,7 +51,7 @@ packages = ["snapy"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-"snapy" = ["snap/**/*", "lib/*.so", "lib/*.dylib"]
+"snapy" = ["snap/**/*", "lib/*.so", "lib/*.dylib", "snapy/*.pyi", "py.typed"]
 
 [tool.setuptools.exclude-package-data]
 "snapy" = ["csrc/**/*"]
