@@ -2,7 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/bc/bc_func.hpp>
+#include <snap/output/output_type.hpp>
 
 #include "meshblock.hpp"
 
@@ -12,11 +12,16 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file,
                                              DistributeInfo _dist) {
   MeshBlockOptions op;
 
+  // use the basename of the input file as the basename
+  op.basename() = input_file.substr(0, input_file.find_last_of('.'));
+
   op.dist() = _dist;
   op.hydro() = HydroOptions::from_yaml(input_file, op.dist());
   op.intg() = IntegratorOptions::from_yaml(input_file);
 
   auto config = YAML::LoadFile(input_file);
+
+  // --------------- boundary conditions --------------- //
 
   if (!config["boundary-condition"]) return op;
   if (!config["boundary-condition"]["external"]) return op;
@@ -106,6 +111,13 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file,
     } else {  // block boundary
       op.bfuncs().push_back(nullptr);
     }
+  }
+
+  // --------------- outputs --------------- //
+  int fid = 0;
+  for (auto const& out_cfg : config["output"]) {
+    TORCH_CHECK(out_cfg["type"], "Output ", fid, " does not a 'type' field.");
+    op.outputs().push_back(OutputOptions::from_yaml(out_cfg, fid++));
   }
 
   return op;

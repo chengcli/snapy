@@ -22,6 +22,7 @@ IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   op.tlim() = config["integration"]["tlim"].as<double>(1.e9);
   op.nlim() = config["integration"]["nlim"].as<int>(-1);
   op.ncycle_out() = config["integration"]["ncycle_out"].as<int>(1);
+  op.restart() = config["integration"]["restart"].as<std::string>("");
 
   return op;
 }

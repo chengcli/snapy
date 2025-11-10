@@ -3,6 +3,9 @@
 // C/C++
 #include <memory>
 
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // torch
 #include <torch/torch.h>
 
@@ -23,7 +26,6 @@ namespace snap {
 struct OutputOptions {
   ADD_ARG(int, fid) = 0;
   ADD_ARG(double, dt) = 0.;
-  ADD_ARG(int, dcycle) = 1;
 
   ADD_ARG(bool, output_slicex1) = false;
   ADD_ARG(bool, output_slicex2) = false;
@@ -40,13 +42,12 @@ struct OutputOptions {
   ADD_ARG(double, x2_slice) = 0.0;
   ADD_ARG(double, x3_slice) = 0.0;
 
-  ADD_ARG(std::string, block_name);
-  ADD_ARG(std::string, file_basename);
   ADD_ARG(std::string, file_type);
   ADD_ARG(std::string, data_format);
   ADD_ARG(std::vector<std::string>, variables);
 
  public:
+  static OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
 };
 
@@ -124,7 +125,6 @@ class OutputType {
   // following pure virtual function must be implemented in all derived classes
   virtual void write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                  double time, bool flag) {}
-  virtual void combine_blocks() {}
 
  protected:
   void loadHydroOutputData(MeshBlockImpl *pmb, Variables const &vars);

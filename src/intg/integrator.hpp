@@ -39,6 +39,7 @@ struct IntegratorOptions {
   ADD_ARG(double, tlim) = 1.e9;
   ADD_ARG(int, nlim) = -1;
   ADD_ARG(int, ncycle_out) = 1;
+  ADD_ARG(std::string, restart) = "";
 };
 
 class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {

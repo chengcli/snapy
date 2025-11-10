@@ -3,8 +3,9 @@
 #include <iostream>
 #include <limits>
 
-// sqnap
-#include <snap/output/output_type.hpp>
+// snap
+#include <snap/input/read_restart_file.hpp>
+#include <snap/output/output_formats.hpp>
 
 #include "meshblock.hpp"
 
@@ -32,6 +33,21 @@ MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
 }
 
 void MeshBlockImpl::reset() {
+  // set up output
+  for (auto const& out_op : options.outputs()) {
+    if (out_op.file_type() == "restart") {
+      output_types.push_back(std::make_shared<RestartOutput>(out_op));
+    } else if (out_op.file_type() == "netcdf") {
+      output_types.push_back(std::make_shared<NetcdfOutput>(out_op));
+      /*} else if (out_op.file_type() == "hdf5") {
+        output_types.push_back(
+            std::make_shared<HDF5Output>(out_op));*/
+    } else {
+      throw std::runtime_error("Output type '" + out_op.file_type() +
+                               "' is not implemented.");
+    }
+  }
+
   // set up integrator
   pintg = register_module("intg", Integrator(options.intg()));
   options.intg() = pintg->options;
@@ -133,6 +149,11 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 Variables& MeshBlockImpl::initialize(Variables& vars) {
+  if (pintg->options.restart() != "") {
+    read_restart_file(this, pintg->options.restart(), vars);
+    return vars;
+  }
+
   BoundaryFuncOptions op;
   op.nghost(options.hydro().coord().nghost());
 

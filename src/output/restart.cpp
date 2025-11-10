@@ -42,14 +42,14 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   out_vars["file_number"] = torch::tensor(output_file_numbers, torch::kInt64);
   out_vars["next_time"] = torch::tensor(output_next_times, torch::kFloat64);
 
-  // create filename: <file_basename>.<block_id>.<file_number>.restart
+  // create filename: <basename>.<blockid>.<file_number>.restart
   std::string fname;
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
   snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
 
-  fname.append(options.file_basename());
+  fname.append(pmb->options.basename());
   fname.append(".");
   fname.append(blockid);
   fname.append(".");

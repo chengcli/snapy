@@ -10,6 +10,7 @@
 #include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/intg/integrator.hpp>
+#include <snap/layout/distribute_info.hpp>
 #include <snap/scalar/scalar.hpp>
 
 // arg
@@ -17,11 +18,17 @@
 
 namespace snap {
 
+class OutputOptions;
+
 struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file,
                                     DistributeInfo _dist = DistributeInfo());
   MeshBlockOptions() = default;
   void report(std::ostream& os) const {}
+
+  //! output
+  ADD_ARG(std::string, basename) = "";
+  ADD_ARG(std::vector<OutputOptions>, outputs);
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);

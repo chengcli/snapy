@@ -82,8 +82,6 @@ class NetcdfOutput : public OutputType {
   ///         one MeshBlock per file
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool flag) override;
-
-  void combine_blocks() override;
 };
 
 class PnetcdfOutput : public OutputType {

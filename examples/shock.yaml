@@ -50,6 +50,7 @@ integration:
   implicit-scheme: 0
   nlim: 200
   tlim: 1.e9
+  restart_from:
 
 outputs:
   - type: restart
