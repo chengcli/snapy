@@ -109,11 +109,11 @@ The `snapy.pyi` stub file includes:
 
 ### Package Configuration
 
-The stub files should be included in the package via `pyproject.toml`:
+The stub files are included in the package via `pyproject.toml`:
 
 ```toml
 [tool.setuptools.package-data]
-"snapy" = ["*.pyi", "py.typed", ...]
+"snapy" = ["snap/**/*", "lib/*.so", "lib/*.dylib", "*.pyi", "py.typed"]
 ```
 
 ## References
