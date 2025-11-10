@@ -1,3 +1,6 @@
+// torch
+#include <torch/script.h>
+
 // snap
 #include <snap/snap.h>
 
@@ -42,8 +45,6 @@ int main(int argc, char** argv) {
   w[IDN] = torch::where(x1v < 0, 1.0, 0.125);
   w[IPR] = torch::where(x1v < 0, 1.0, 0.1);
 
-  std::cout << "w shape = " << w.sizes() << std::endl;
-
   std::map<std::string, torch::Tensor> vars;
 
   // internal boundary
@@ -52,29 +53,21 @@ int main(int argc, char** argv) {
 
   vars["hydro_w"] = w;
   vars["solid"] = solid;
+
   block->initialize(vars);
 
-  // output
-  auto out =
-      NetcdfOutput(OutputOptions().file_basename("sod").variable("prim"));
-
   double current_time = 0.;
-  int count = 0;
-  while (!block->pintg->stop(count, current_time)) {
-    auto dt = block->max_time_step(vars);
+  block->make_outputs(vars, current_time);
 
-    if (count % 10 == 0) {
-      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-      out.write_output_file(block, vars, current_time, 0);
-      out.combine_blocks();
-      out.file_number++;
-    }
+  while (!block->pintg->stop(block->cycle++, current_time)) {
+    auto dt = block->max_time_step(vars);
+    block->print_cycle_info(current_time, dt);
 
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(dt, stage, vars);
     }
 
-    count++;
     current_time += dt;
+    block->make_outputs(vars, current_time);
   }
 }

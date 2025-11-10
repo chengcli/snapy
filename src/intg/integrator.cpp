@@ -21,6 +21,8 @@ IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   op.cfl() = config["integration"]["cfl"].as<double>(0.9);
   op.tlim() = config["integration"]["tlim"].as<double>(1.e9);
   op.nlim() = config["integration"]["nlim"].as<int>(-1);
+  op.ncycle_out() = config["integration"]["ncycle_out"].as<int>(1);
+  op.restart() = config["integration"]["restart"].as<std::string>("");
 
   return op;
 }
@@ -80,7 +82,7 @@ IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)
 
 void IntegratorImpl::reset() {}
 
-bool IntegratorImpl::stop(int steps, float current_time) {
+bool IntegratorImpl::stop(int steps, double current_time) {
   if (options.nlim() >= 0 && steps >= options.nlim()) {
     return true;  // stop if number of steps exceeds nlim
   }

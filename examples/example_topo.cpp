@@ -206,15 +206,12 @@ int main(int argc, char** argv) {
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
-  block->user_out_var["qtol"] = torch::Tensor();
-
-  // output fields
-  auto out2 = NetcdfOutput(
-      OutputOptions().file_basename(exp_name).fid(2).variable("prim"));
-  auto out3 = NetcdfOutput(
-      OutputOptions().file_basename(exp_name).fid(3).variable("uov"));
-  auto out4 = NetcdfOutput(
-      OutputOptions().file_basename(exp_name).fid(4).variable("diag"));
+  block->user_output_callback = [&](Variables const& vars) {
+    auto w = vars.at("hydro_w");
+    Variables out;
+    out["qtol"] = w.narrow(0, ICY, ny).sum(0);
+    return out;
+  };
 
   // create kinetics model
   auto op_kinet = kintera::KineticsOptions::from_yaml(infile);
@@ -224,31 +221,12 @@ int main(int argc, char** argv) {
             << std::endl;
 
   // time loop
-  int count = 0;
   double current_time = 0.;
-  while (!block->pintg->stop(count, current_time)) {
+  block->make_outputs(vars, current_time);
+
+  while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-
-    // make output
-    if (count % 10 == 0) {
-      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-
-      block->report_timer(std::cout);
-
-      block->user_out_var.at("qtol") = w.narrow(0, ICY, ny).sum(0);
-
-      out2.write_output_file(block, vars, current_time, 0);
-      out2.combine_blocks();
-      out2.file_number++;
-
-      out3.write_output_file(block, vars, current_time, 0);
-      out3.combine_blocks();
-      out3.file_number++;
-
-      out4.write_output_file(block, vars, current_time, 0);
-      out4.combine_blocks();
-      out4.file_number++;
-    }
+    block->print_cycle_info(current_time, dt);
 
     // evolve dynamics
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
@@ -275,8 +253,8 @@ int main(int argc, char** argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
-    count++;
     current_time += dt;
+    block->make_outputs(vars, current_time);
   }
 
   CommandLine::Destroy();

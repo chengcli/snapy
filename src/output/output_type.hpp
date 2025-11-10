@@ -3,6 +3,9 @@
 // C/C++
 #include <memory>
 
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // torch
 #include <torch/torch.h>
 
@@ -20,10 +23,9 @@
 namespace snap {
 
 //! \brief  container for parameters read from `<output>` block in the input
-struct OutputOptions {
+class OutputOptions {
   ADD_ARG(int, fid) = 0;
   ADD_ARG(double, dt) = 0.;
-  ADD_ARG(int, dcycle) = 1;
 
   ADD_ARG(bool, output_slicex1) = false;
   ADD_ARG(bool, output_slicex2) = false;
@@ -40,13 +42,12 @@ struct OutputOptions {
   ADD_ARG(double, x2_slice) = 0.0;
   ADD_ARG(double, x3_slice) = 0.0;
 
-  ADD_ARG(std::string, block_name);
-  ADD_ARG(std::string, file_basename);
-  ADD_ARG(std::string, variable);
   ADD_ARG(std::string, file_type);
   ADD_ARG(std::string, data_format);
+  ADD_ARG(std::vector<std::string>, variables);
 
  public:
+  static OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
 };
 
@@ -70,7 +71,6 @@ struct OutputData {
 //! in the Output class
 class OutputType {
  public:
-  // control data read from <output> block
   OutputOptions options;
 
   int file_number = 0;
@@ -104,34 +104,33 @@ class OutputType {
   // functions
   //! \brief Create doubly linked list of OutputData's containing requested
   //! variables
-  void LoadOutputData(MeshBlock pmb, Variables const &vars);
+  void LoadOutputData(MeshBlockImpl *pmb, Variables const &vars);
 
   void AppendOutputDataNode(OutputData *pdata);
   void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
   void ClearOutputData();
 
-  bool TransformOutputData(MeshBlock pmb);
+  bool TransformOutputData(MeshBlockImpl *pmb);
 
   //! \brief perform data slicing and update the data list
-  bool SliceOutputData(MeshBlock pmb, int dim) { return false; }
+  bool SliceOutputData(MeshBlockImpl *pmb, int dim) { return false; }
 
   //! \brief perform data summation and update the data list
-  void SumOutputData(MeshBlock pmb, int dim);
+  void SumOutputData(MeshBlockImpl *pmb, int dim);
 
   //! \brief Convert vectors in curvilinear coordinates into Cartesian
   void CalculateCartesianVector(torch::Tensor const &src, torch::Tensor dst,
                                 Coordinate pco);
-  bool ContainVariable(const std::string &haystack, const std::string &needle);
+  bool ContainVariable(const std::string &var);
   // following pure virtual function must be implemented in all derived classes
-  virtual void write_output_file(MeshBlock pmb, Variables const &vars,
+  virtual void write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                  double time, bool flag) {}
-  virtual void combine_blocks() {}
 
  protected:
-  void loadHydroOutputData(MeshBlock pmb, Variables const &vars);
-  void loadDiagOutputData(MeshBlock pmb, Variables const &vars);
-  void loadScalarOutputData(MeshBlock pmb, Variables const &vars);
-  void loadUserOutputData(MeshBlock pmb, Variables const &vars);
+  void loadHydroOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  void loadDiagOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  void loadScalarOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  void loadUserOutputData(MeshBlockImpl *pmb, Variables const &vars);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):

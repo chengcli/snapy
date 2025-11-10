@@ -12,7 +12,7 @@
 
 namespace snap {
 
-void OutputType::loadDiagOutputData(MeshBlock pmb, Variables const& vars) {
+void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   if (!(pmb->phydro->options.eos().type() == "ideal-moist" ||
         pmb->phydro->options.eos().type() == "moist-mixture")) {
     // skip if not using kintera thermo
@@ -62,7 +62,7 @@ void OutputType::loadDiagOutputData(MeshBlock pmb, Variables const& vars) {
   auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
                                        thermo_x->options.nucleation());
 
-  if (options.variable().compare("diag") == 0) {
+  if (ContainVariable("diag")) {
     // temperature
     pod = new OutputData;
     pod->type = "SCALARS";

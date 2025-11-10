@@ -38,6 +38,8 @@ struct IntegratorOptions {
   ADD_ARG(double, cfl) = 0.9;
   ADD_ARG(double, tlim) = 1.e9;
   ADD_ARG(int, nlim) = -1;
+  ADD_ARG(int, ncycle_out) = 1;
+  ADD_ARG(std::string, restart) = "";
 };
 
 class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
@@ -53,7 +55,7 @@ class IntegratorImpl : public torch::nn::Cloneable<IntegratorImpl> {
   void reset() override;
 
   //! \brief check if the integration should stop
-  bool stop(int steps, float current_time);
+  bool stop(int steps, double current_time);
 
   //! \brief compute the average of the three input tensors
   torch::Tensor forward(int stage, torch::Tensor u0, torch::Tensor u1,

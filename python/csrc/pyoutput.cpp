@@ -23,7 +23,6 @@ void bind_output(py::module &m) {
            })
       .ADD_OPTION(int, snap::OutputOptions, fid)
       .ADD_OPTION(double, snap::OutputOptions, dt)
-      .ADD_OPTION(int, snap::OutputOptions, dcycle)
       .ADD_OPTION(bool, snap::OutputOptions, output_slicex1)
       .ADD_OPTION(bool, snap::OutputOptions, output_slicex2)
       .ADD_OPTION(bool, snap::OutputOptions, output_slicex3)
@@ -35,9 +34,7 @@ void bind_output(py::module &m) {
       .ADD_OPTION(double, snap::OutputOptions, x1_slice)
       .ADD_OPTION(double, snap::OutputOptions, x2_slice)
       .ADD_OPTION(double, snap::OutputOptions, x3_slice)
-      .ADD_OPTION(std::string, snap::OutputOptions, block_name)
-      .ADD_OPTION(std::string, snap::OutputOptions, file_basename)
-      .ADD_OPTION(std::string, snap::OutputOptions, variable)
+      .ADD_OPTION(std::vector<std::string>, snap::OutputOptions, variables)
       .ADD_OPTION(std::string, snap::OutputOptions, file_type)
       .ADD_OPTION(std::string, snap::OutputOptions, data_format);
 
@@ -80,9 +77,8 @@ void bind_output(py::module &m) {
               }
             }
 
-            self.write_output_file(pmb, native, time, wtflag);
+            self.write_output_file(pmb.get(), native, time, wtflag);
           },
           py::arg("block"), py::arg("vars"), py::arg("time"),
-          py::arg("wtflag") = 0)
-      .def("combine_blocks", &snap::NetcdfOutput::combine_blocks);
+          py::arg("wtflag") = 0);
 }

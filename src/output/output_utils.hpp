@@ -52,7 +52,7 @@ int get_num_variables(std::string grid, AthenaArray<T> const& data) {
   return nvar;
 }
 
-class MeshBlock;
-std::string get_hydro_names(MeshBlock pmb, std::string prepend = "");
+class MeshBlockImpl;
+std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend = "");
 
 }  // namespace snap

@@ -12,11 +12,9 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
-#include <snap/input/parameter_input.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/vectorize.hpp>
 
-// output
 #include "output_formats.hpp"
 #include "output_utils.hpp"
 
@@ -32,7 +30,7 @@ namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
+void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                      double current_time, bool flag) {
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();
@@ -73,8 +71,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   // set ptrs to data in OutputData linked list, then slice/sum as needed
   LoadOutputData(pmb, vars);
 
-  // create filename: "file_basename"+
-  // "."+"blockid"+"."+"fileid"+"."+XXXXX+".nc", where XXXXX = 5-digit
+  // create filename: <basename>.<blockid>.<fileid>.<XXXXX>.nc
   // file_number
   std::string fname;
   char number[6];
@@ -82,7 +79,7 @@ void NetcdfOutput::write_output_file(MeshBlock pmb, Variables const &vars,
   char blockid[12];
   snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
 
-  fname.assign(options.file_basename());
+  fname.assign(pmb->options.basename());
   fname.append(".");
   fname.append(blockid);
   fname.append(".");

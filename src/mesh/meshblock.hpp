@@ -10,6 +10,7 @@
 #include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/intg/integrator.hpp>
+#include <snap/layout/distribute_info.hpp>
 #include <snap/scalar/scalar.hpp>
 
 // arg
@@ -17,11 +18,17 @@
 
 namespace snap {
 
+class OutputOptions;
+
 struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file,
                                     DistributeInfo _dist = DistributeInfo());
   MeshBlockOptions() = default;
   void report(std::ostream& os) const {}
+
+  //! output
+  ADD_ARG(std::string, basename) = "";
+  ADD_ARG(std::vector<OutputOptions>, outputs);
 
   //! submodule options
   ADD_ARG(IntegratorOptions, intg);
@@ -36,21 +43,26 @@ struct MeshBlockOptions {
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
+class OutputType;
 
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
   //! options with which this `MeshBlock` was constructed
   MeshBlockOptions options;
 
-  //! user output variables
-  Variables user_out_var;
+  //! user output
+  std::function<Variables(Variables const&)> user_output_callback;
+
+  //! outputs
+  std::vector<std::shared_ptr<OutputType>> output_types;
+
+  //! current cycle number
+  size_t cycle = 0;
 
   //! submodules
   Integrator pintg = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
-
-  std::map<std::string, double> timer;
 
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
@@ -68,20 +80,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   Variables& forward(double dt, int stage, Variables& vars);
 
-  void reset_timer() {
-    for (auto& t : timer) {
-      t.second = 0.0;
-    }
-  }
+  void make_outputs(Variables const& vars, double current_time,
+                    bool force_write = false);
 
-  void report_timer(std::ostream& stream) {
-    phydro->report_timer(std::cout);
-    for (const auto& t : timer) {
-      stream << "meshblock[" << t.first << "] = " << t.second << " miliseconds"
-             << std::endl;
-    }
-    reset_timer();
-  }
+  void print_cycle_info(double time, double dt) const;
 
  private:
   //! stage registers

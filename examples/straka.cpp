@@ -77,48 +77,28 @@ int main(int argc, char** argv) {
   vars["hydro_w"] = w;
   block->initialize(vars);
 
-  // output
-  auto out2 = NetcdfOutput(
-      OutputOptions().file_basename("straka").fid(2).variable("prim"));
-  auto out3 = NetcdfOutput(
-      OutputOptions().file_basename("straka").fid(3).variable("uov"));
+  block->user_output_callback = [Rd, cp, p0](Variables const& vars) {
+    auto w = vars.at("hydro_w");
+    auto temp = w[IPR] / (w[IDN] * Rd);
 
-  block->user_out_var["temp"] = temp;
-  block->user_out_var["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
-
-  auto m = block->named_modules()["hydro.eos.thermo"];
-  auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+    Variables out;
+    out["temp"] = temp;
+    out["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
+    return out;
+  };
 
   double current_time = 0.;
-  int count = 0;
-  while (!block->pintg->stop(count, current_time)) {
+  block->make_outputs(vars, current_time);
+
+  while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-
-    if (count % 100 == 0) {
-      printf("count = %d, dt = %.6f, time = %.6f\n", count, dt, current_time);
-      block->report_timer(std::cout);
-
-      auto ivol =
-          thermo_y->compute("DY->V", {w[IDN], w.slice(0, ICY, w.size(0))});
-      temp = thermo_y->compute("PV->T", {w[IPR], ivol});
-
-      block->user_out_var.at("temp") = temp;
-      block->user_out_var.at("theta") = temp * (p0 / w[IPR]).pow(Rd / cp);
-
-      out2.write_output_file(block, vars, current_time, 0);
-      out2.combine_blocks();
-      out2.file_number++;
-
-      out3.write_output_file(block, vars, current_time, 0);
-      out3.combine_blocks();
-      out3.file_number++;
-    }
+    block->print_cycle_info(current_time, dt);
 
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(dt, stage, vars);
     }
 
-    count++;
     current_time += dt;
+    block->make_outputs(vars, current_time);
   }
 }

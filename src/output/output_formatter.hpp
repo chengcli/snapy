@@ -11,9 +11,6 @@ struct fmt::formatter<snap::OutputOptions> {
   // Define the format function for OutputOptions
   template <typename FormatContext>
   auto format(const snap::OutputOptions& p, FormatContext& ctx) const {
-    return fmt::format_to(
-        ctx.out(),
-        "(fid = {}; dt = {}; dcycle = {}; block_name = {}; file_basename = {})",
-        p.fid(), p.dt(), p.block_name(), p.file_basename());
+    return fmt::format_to(ctx.out(), "(fid = {}; dt = {})", p.fid(), p.dt());
   }
 };

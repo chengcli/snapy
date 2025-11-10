@@ -43,7 +43,6 @@ void AthenaArray<T>::initFromTensor4D(torch::Tensor const& tensor, int index,
   int64_t str2 = nx1_;
   int64_t str3 = nx2_ * nx1_;
   int64_t str4 = nx3_ * nx2_ * nx1_;
-  int64_t str5 = nx4_ * nx3_ * nx2_ * nx1_;
 
   if (tensor.device().is_cpu()) {  // tensor on CPU
     pdata_ = tensor.data_ptr<T>() + index * str4;
@@ -75,7 +74,6 @@ void AthenaArray<T>::copyFromTensor3D(torch::Tensor const& tensor) {
   int64_t str2 = nx1_;
   int64_t str3 = nx2_ * nx1_;
   int64_t str4 = nx3_ * nx2_ * nx1_;
-  int64_t str5 = nx4_ * nx3_ * nx2_ * nx1_;
 
   DeleteAthenaArray();  // clear existing memory
   pdata_ = new T[str4];
