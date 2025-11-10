@@ -53,8 +53,8 @@ integration:
   ncycle_out: 10
 
 outputs:
-  #- type: restart
-  #  dt: 300.
+  - type: restart
+    dt: 300.
   - type: netcdf
     variables: [prim, uov]
     dt: 30.

@@ -22,7 +22,9 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   // make a cpu copy of variables
   Variables out_vars;
   for (auto const &[name, var] : vars) {
-    out_vars[name] = var.to(torch::kCPU);
+    if (var.defined()) {
+      out_vars[name] = var.to(torch::kCPU);
+    }
   }
 
   // store current time and cycle
