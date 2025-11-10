@@ -49,12 +49,12 @@ integration:
   cfl: 0.9
   implicit-scheme: 0
   nlim: 200
-  tlim: 1.e9
-  restart_from:
+  tlim: 1.0
+  ncycle_out: 10
 
 outputs:
   - type: restart
-    dt: 1.
+    dt: 0.1
   - type: netcdf
     variables: [prim]
-    dt: 0.1
+    dt: 0.01
