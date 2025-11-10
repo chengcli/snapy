@@ -20,7 +20,7 @@
 namespace snap {
 HDF5Output::HDF5Output(OutputOptions const &options_) : OutputType(options_) {}
 
-void HDF5Output::write_output_file(MeshBlockImp *pmb, float current_time,
+void HDF5Output::write_output_file(MeshBlockImpl *pmb, float current_time,
                                    bool flag) {}
 }  // namespace snap
 
