@@ -21,3 +21,6 @@ data/
 
 # pt file
 *.pt
+
+# restart file
+*.restart

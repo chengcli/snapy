@@ -15,6 +15,14 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 torch.set_default_dtype(torch.float64)
 
+def call_user_output(bvars, p0, Rd, cp):
+    hydro_w = bvars["hydro_w"]
+    out = {}
+    temp = hydro_w[index.ipr] / (Rd * hydro_w[index.idn])
+    out["temp"] = temp
+    out["theta"] = temp * (p0 / hydro_w[index.ipr]).pow(Rd / cp)
+    return out
+
 # torch.set_num_threads(1)
 # torch.set_num_interop_threads(1)
 
@@ -75,47 +83,27 @@ block_vars = {}
 block_vars["hydro_w"] = w
 block_vars = block.initialize(block_vars)
 
-# make output
-out2 = NetcdfOutput(OutputOptions().file_basename("straka").fid(2).variable("prim"))
-out3 = NetcdfOutput(OutputOptions().file_basename("straka").fid(3).variable("uov"))
-
-block.set_uov("temp", temp)
-block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
+block.set_user_output_func(lambda bvars: call_user_output(bvars, p0, Rd, cp))
 
 activities = [ProfilerActivity.CPU]
 
 # integration
-count = 0;
 start_time = time.time()
-interior = block.part((0, 0, 0))
 current_time = 0.0
+block.make_outputs(block_vars, current_time)
 
 # with profile(activities=activities, record_shapes=True) as prof:
-while not block.intg.stop(count, current_time):
+while not block.intg.stop(block.inc_cycle(), current_time):
     dt = block.max_time_step(block_vars)
-
-    if count % 100 == 0:
-        print(f"count = {count}, dt = {dt}, time = {current_time}")
-        u = block_vars["hydro_u"]
-        print("mass = ", u[interior][index.idn].sum())
-
-        ivol = thermo.compute("DY->V", (w[index.idn], w[index.icy:]))
-        temp = thermo.compute("PV->T", (w[index.ipr], ivol))
-
-        block.set_uov("temp", temp)
-        block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
-
-        for out in [out2, out3]:
-            out.increment_file_number()
-            out.write_output_file(block, block_vars, current_time)
-            out.combine_blocks()
+    block.print_cycle_info(current_time, dt)
 
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage, block_vars)
 
-    count += 1
     current_time += dt
+    block.make_outputs(block_vars, current_time)
 
 print("elapsed time = ", time.time() - start_time)
+
 # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
