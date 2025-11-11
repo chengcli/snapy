@@ -88,6 +88,38 @@ void bind_mesh(py::module &m) {
       .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptions, bfuncs);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
+      .def("inc_cycle",
+           [](snap::MeshBlockImpl &self) {
+             auto v = self.cycle;
+             self.cycle++;
+             return v;
+           })
+      .def("set_user_output_func",
+           [&](snap::MeshBlockImpl &self, py::object func_ojb) {
+             py::function f = py::cast<py::function>(func_ojb);
+             self.user_output_callback =
+                 [f](std::map<std::string, torch::Tensor> const &vars) {
+                   py::gil_scoped_acquire gil;
+                   return f(vars).cast<std::map<std::string, torch::Tensor>>();
+                 };
+           })
+      .def(
+          "make_outputs",
+          [](snap::MeshBlockImpl &self, py::dict vars, double time,
+             bool force_write) {
+            std::map<std::string, torch::Tensor> native;
+            for (auto &kv : vars) {
+              std::string key = py::cast<std::string>(kv.first);
+              if (!kv.second.is_none()) {
+                native[key] = py::cast<torch::Tensor>(kv.second);
+              } else {
+                native[key] = torch::Tensor();
+              }
+            }
+            self.make_outputs(native, time, force_write);
+          },
+          py::arg("vars"), py::arg("time"), py::arg("force_write") = false)
+      .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def(
           "forward",
           [](snap::MeshBlockImpl &self, double dt, int stage, py::dict vars) {

@@ -57,7 +57,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   std::vector<std::shared_ptr<OutputType>> output_types;
 
   //! current cycle number
-  size_t cycle = 0;
+  int cycle = 0;
 
   //! submodules
   Integrator pintg = nullptr;
