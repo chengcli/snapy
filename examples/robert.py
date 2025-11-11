@@ -11,6 +11,14 @@ from snapy import (
 
 torch.set_default_dtype(torch.float64)
 
+def call_user_output(bvars, p0, Rd, cp):
+    hydro_w = bvars["hydro_w"]
+    out = {}
+    temp = hydro_w[index.ipr] / (Rd * hydro_w[index.idn])
+    out["temp"] = temp
+    out["theta"] = temp * (p0 / hydro_w[index.ipr]).pow(Rd / cp)
+    return out
+
 dT = 0.5
 p0 = 1.0e5
 Ts = 303.15
@@ -69,39 +77,21 @@ block_vars = {}
 block_vars["hydro_w"] = w
 block_vars = block.initialize(block_vars)
 
-# make output
-# out1 = AsciiOutput(OutputOptions().file_basename("robert").fid(1).variable("hst"))
-out2 = NetcdfOutput(OutputOptions().file_basename("robert").fid(2).variable("prim"))
-out3 = NetcdfOutput(OutputOptions().file_basename("robert").fid(3).variable("uov"))
+block.set_user_output_func(lambda bvars: call_user_output(bvars, p0, Rd, cp))
 
 # integration
-count = 0
 start_time = time.time()
-interior = block.part((0, 0, 0))
 current_time = 0.
-while not block.intg.stop(count, current_time):
+block.make_outputs(block_vars, current_time)
+
+while not block.intg.stop(block.inc_cycle(), current_time):
     dt = block.max_time_step(block_vars)
-
-    if count % 1000 == 0:
-        print(f"count = {count}, dt = {dt}, time = {current_time}")
-        u = block_vars["hydro_u"]
-        print("mass = ", u[interior][index.idn].sum())
-
-        ivol = thermo.compute("DY->V", (w[index.idn], w[index.icy:]))
-        temp = thermo.compute("PV->T", (w[index.ipr], ivol))
-
-        block.set_uov("temp", temp)
-        block.set_uov("theta", temp * (p0 / w[index.ipr]).pow(Rd / cp))
-
-        for out in [out2, out3]:
-            out.increment_file_number()
-            out.write_output_file(block, block_vars, current_time)
-            out.combine_blocks()
+    block.print_cycle_info(current_time, dt)
 
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage, block_vars)
 
-    count += 1
     current_time += dt
+    block.make_outputs(block_vars, current_time)
 
 print("elapsed time = ", time.time() - start_time)

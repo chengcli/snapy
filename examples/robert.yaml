@@ -50,7 +50,15 @@ integration:
   implicit-scheme: 0
   nlim: -1
   tlim: 1080
+  ncycle_out: 10
 
 forcing:
   const-gravity:
     grav1: -9.8
+
+outputs:
+  - type: restart
+    dt: 300.
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 30.
