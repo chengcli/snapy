@@ -2,9 +2,7 @@ import torch
 from snapy import (
         index,
         MeshBlockOptions,
-        MeshBlock,
-        OutputOptions,
-        NetcdfOutput
+        MeshBlock
         )
 
 torch.set_default_dtype(torch.float64)
@@ -39,25 +37,25 @@ w[index.idn] = torch.where(x1v < 0.0, 1.0, 0.125)
 w[index.ipr] = torch.where(x1v < 0.0, 1.0, 0.1)
 w[index.ivx] = w[index.ivy] = w[index.ivz] = 0.0
 
+# internal boundary
+r1 = torch.sqrt(x1v * x1v + x2v * x2v + x3v * x3v)
+solid = torch.where(r1 < 0.1, 1, 0).to(torch.bool)
+
 block_vars = {}
 block_vars["hydro_w"] = w
+block_vars["solid"] = solid
 block_vars = block.initialize(block_vars)
 
-out = NetcdfOutput(OutputOptions().file_basename("sod").variable("prim"))
-
-count = 0;
+# integration
 current_time = 0.
-while not block.intg.stop(count, current_time):
-    dt = block.max_time_step(block_vars)
+block.make_outputs(block_vars, current_time)
 
-    if count % 10 == 0:
-        print(f"count = {count}, dt = {dt}, time = {current_time}")
-        out.increment_file_number()
-        out.write_output_file(block, block_vars, current_time)
-        out.combine_blocks()
+while not block.intg.stop(block.inc_cycle(), current_time):
+    dt = block.max_time_step(block_vars)
+    block.print_cycle_info(current_time, dt)
 
     for stage in range(len(block.intg.stages)):
         block.forward(dt, stage, block_vars)
 
-    count += 1
     current_time += dt
+    block.make_outputs(block_vars, current_time)
