@@ -33,13 +33,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snap";
   m.doc() = "Python bindings for snap";
 
-  py::enum_<snap::Index>(m, "index")
-      .value("idn", snap::Index::IDN)
-      .value("ivx", snap::Index::IVX)
-      .value("ivy", snap::Index::IVY)
-      .value("ivz", snap::Index::IVZ)
-      .value("ipr", snap::Index::IPR)
-      .value("icy", snap::Index::ICY);
+  py::enum_<snap::Index>(m, "Index")
+      .value("kIDN", snap::Index::IDN)
+      .value("kIV1", snap::Index::IVX)
+      .value("kIV2", snap::Index::IVY)
+      .value("kIV3", snap::Index::IVZ)
+      .value("kIPR", snap::Index::IPR)
+      .value("kICY", snap::Index::ICY);
 
   bind_layout(m);
   bind_bc(m);
