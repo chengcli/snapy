@@ -33,13 +33,19 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snap";
   m.doc() = "Python bindings for snap";
 
-  py::enum_<snap::Index>(m, "Index")
-      .value("kIDN", snap::Index::IDN)
-      .value("kIV1", snap::Index::IVX)
-      .value("kIV2", snap::Index::IVY)
-      .value("kIV3", snap::Index::IVZ)
-      .value("kIPR", snap::Index::IPR)
-      .value("kICY", snap::Index::ICY);
+  m.attr("kIDN") = snap::Index::IDN;
+  m.attr("kIV1") = snap::Index::IVX;
+  m.attr("kIV2") = snap::Index::IVY;
+  m.attr("kIV3") = snap::Index::IVZ;
+  m.attr("kIPR") = snap::Index::IPR;
+  m.attr("kICY") = snap::Index::ICY;
+
+  m.attr("kInnerX1") = snap::BoundaryType::kInnerX1;
+  m.attr("kOuterX1") = snap::BoundaryType::kOuterX1;
+  m.attr("kInnerX2") = snap::BoundaryType::kInnerX2;
+  m.attr("kOuterX2") = snap::BoundaryType::kOuterX2;
+  m.attr("kInnerX3") = snap::BoundaryType::kInnerX3;
+  m.attr("kOuterX3") = snap::BoundaryType::kOuterX3;
 
   bind_layout(m);
   bind_bc(m);
