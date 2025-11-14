@@ -91,7 +91,10 @@ jobs:
             cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 3
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: |
             export TORCH_LIB=$(python -c 'import torch; print(torch.__path__[0] + "/lib")')
-            export DYLD_FALLBACK_LIBRARY_PATH="$(pwd)/build/lib:$TORCH_LIB:$DYLD_FALLBACK_LIBRARY_PATH"
+            export KINTERA_LIB=$(python -c 'import kintera; print(kintera.__path__[0] + "/lib")')
+            export PYHARP_LIB=$(python -c 'import pyharp; print(pyharp.__path__[0] + "/lib")')
+            export PYDISORT_LIB=$(python -c 'import pydisort; print(pydisort.__path__[0] + "/lib")')
+            export DYLD_FALLBACK_LIBRARY_PATH="$(pwd)/build/lib:$TORCH_LIB:$KINTERA_LIB:$PYHARP_LIB:$PYDISORT_LIB:$DYLD_FALLBACK_LIBRARY_PATH"
             delocate-wheel -e torch -e snapy_release -w {dest_dir} {wheel}
         run: |
           export TORCH_LIB=$(python -c 'import torch; print(torch.__path__[0] + "/lib")')
