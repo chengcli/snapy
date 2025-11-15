@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include <snap/input/parameter_input.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -39,6 +40,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("kIV3") = (int)snap::Index::IVZ;
   m.attr("kIPR") = (int)snap::Index::IPR;
   m.attr("kICY") = (int)snap::Index::ICY;
+
+  // handle signal
+  m.def("check_signal", []() {
+    auto sig = snap::SignalHandler::GetInstance();
+    return sig->CheckSignalFlags();
+  });
 
   bind_layout(m);
   bind_bc(m);

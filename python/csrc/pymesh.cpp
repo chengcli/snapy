@@ -103,38 +103,10 @@ void bind_mesh(py::module &m) {
                    return f(vars).cast<std::map<std::string, torch::Tensor>>();
                  };
            })
-      .def(
-          "make_outputs",
-          [](snap::MeshBlockImpl &self, py::dict vars, double time,
-             bool force_write) {
-            std::map<std::string, torch::Tensor> native;
-            for (auto &kv : vars) {
-              std::string key = py::cast<std::string>(kv.first);
-              if (!kv.second.is_none()) {
-                native[key] = py::cast<torch::Tensor>(kv.second);
-              } else {
-                native[key] = torch::Tensor();
-              }
-            }
-            self.make_outputs(native, time, force_write);
-          },
-          py::arg("vars"), py::arg("time"), py::arg("force_write") = false)
+      .def("make_outputs", &snap::MeshBlockImpl::make_outputs, py::arg("vars"),
+           py::arg("time"), py::arg("final_write") = false)
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
-      .def(
-          "forward",
-          [](snap::MeshBlockImpl &self, double dt, int stage, py::dict vars) {
-            std::map<std::string, torch::Tensor> native;
-            for (auto &kv : vars) {
-              std::string key = py::cast<std::string>(kv.first);
-              if (!kv.second.is_none()) {
-                native[key] = py::cast<torch::Tensor>(kv.second);
-              } else {
-                native[key] = torch::Tensor();
-              }
-            }
-            return self.forward(dt, stage, native);
-          },
-          py::arg("dt"), py::arg("stage"), py::arg("vars"))
+      .def("forward", &snap::MeshBlockImpl::forward)
       .def(
           "part",
           [](snap::MeshBlockImpl &self, std::tuple<int, int, int> offset,
@@ -154,16 +126,6 @@ void bind_mesh(py::module &m) {
           py::arg("extend_x1") = 0, py::arg("extend_x2") = 0,
           py::arg("extend_x3") = 0)
       .def("initialize", &snap::MeshBlockImpl::initialize)
-      .def("max_time_step", [](snap::MeshBlockImpl &self, py::dict vars) {
-        std::map<std::string, torch::Tensor> native;
-        for (auto &kv : vars) {
-          std::string key = py::cast<std::string>(kv.first);
-          if (!kv.second.is_none()) {
-            native[key] = py::cast<torch::Tensor>(kv.second);
-          } else {
-            native[key] = torch::Tensor();
-          }
-        }
-        return self.max_time_step(native);
-      });
+      .def("finalize", &snap::MeshBlockImpl::finalize)
+      .def("max_time_step", &snap::MeshBlockImpl::max_time_step);
 }
