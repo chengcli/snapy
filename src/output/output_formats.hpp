@@ -35,7 +35,7 @@ class RestartOutput : public OutputType {
  public:
   explicit RestartOutput(OutputOptions const& options_);
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
-                         bool flag) override;
+                         bool final_write) override;
 };
 
 // \brief derived OutputType class for Athena HDF5 files
@@ -44,7 +44,7 @@ class HDF5Output : public OutputType {
   // Function declarations
   explicit HDF5Output(OutputOptions const& options_);
   void write_output_file(MeshBlockImpl* pmb, Variables const& var, double time,
-                         bool flag) override;
+                         bool final_write) override;
   void MakeXDMF();
 
  private:
@@ -78,10 +78,10 @@ class NetcdfOutput : public OutputType {
   explicit NetcdfOutput(OutputOptions const& options_);
   ~NetcdfOutput() {}
 
-  ///  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
+  //!  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
   ///         one MeshBlock per file
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
-                         bool flag) override;
+                         bool final_write) override;
 };
 
 class PnetcdfOutput : public OutputType {
@@ -89,7 +89,7 @@ class PnetcdfOutput : public OutputType {
   explicit PnetcdfOutput(OutputOptions const& options_);
   ~PnetcdfOutput() {}
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
-                         bool flag) override;
+                         bool final_write) override;
 };
 
 class FITSOutput : public OutputType {
@@ -97,6 +97,6 @@ class FITSOutput : public OutputType {
   explicit FITSOutput(OutputOptions const& options_);
   ~FITSOutput() {}
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
-                         bool flag) override;
+                         bool final_write) override;
 };
 }  // namespace snap

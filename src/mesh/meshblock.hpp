@@ -115,10 +115,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   /*!
    * \param vars: current variables
    * \param current_time: current simulation time
-   * \param force_write: if true, force writing outputs even if not scheduled
+   * \param final_write: if true, writing outputs as 'final' outputs
    */
   void make_outputs(Variables const& vars, double current_time,
-                    bool force_write = false);
+                    bool final_write = false);
 
   //! print cycle info
   /*!
@@ -127,6 +127,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    * \param dt: current time step
    */
   void print_cycle_info(Variables const& vars, double time, double dt) const;
+
+  void finalize(Variables const& vars, double time);
 
  private:
   //! stage registers

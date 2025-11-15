@@ -6,6 +6,7 @@
 // snap
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 #include "meshblock.hpp"
 
@@ -150,6 +151,9 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 Variables& MeshBlockImpl::initialize(Variables& vars) {
+  // Set up a signal handler
+  SignalHandler::GetInstance();
+
   if (pintg->options.restart() != "") {
     read_restart_file(this, pintg->options.restart(), vars);
     return vars;
@@ -372,6 +376,33 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
       std::cout << std::endl;
     }
   }
+}
+
+void MeshBlockImpl::finalize(Variables const& vars, double time) {
+  // make final output
+  make_outputs(vars, time, /*final_write=*/true);
+
+  if (options.dist().gid() == 0) {  // only rank 0 prints
+    auto sig = SignalHandler::GetInstance();
+    if (sig->GetSignalFlag(SIGTERM) != 0) {
+      std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
+    } else if (sig->GetSignalFlag(SIGINT) != 0) {
+      std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
+    } else if (sig->GetSignalFlag(SIGALRM) != 0) {
+      std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
+    } else if (cycle == pintg->options.nlim()) {
+      std::cout << std::endl << "Terminating on cycle limit" << std::endl;
+    } else {
+      std::cout << std::endl << "Terminating on time limit" << std::endl;
+    }
+
+    std::cout << "time=" << time << " cycle=" << cycle << std::endl;
+    std::cout << "tlim=" << pintg->options.tlim()
+              << " nlim=" << pintg->options.nlim() << std::endl;
+  }
+
+  // destroy signal handler
+  SignalHandler::Destroy();
 }
 
 }  // namespace snap

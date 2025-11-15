@@ -31,7 +31,10 @@ NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
 void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
-                                     double current_time, bool flag) {
+                                     double current_time, bool final_write) {
+  // skip final write if specified
+  if (final_write) return;
+
 #ifdef NETCDFOUTPUT
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;

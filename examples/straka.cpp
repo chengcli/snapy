@@ -13,6 +13,7 @@
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
@@ -94,11 +95,19 @@ int main(int argc, char** argv) {
     auto dt = block->max_time_step(vars);
     block->print_cycle_info(vars, current_time, dt);
 
+    // main loop
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(vars, dt, stage);
     }
 
+    // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
+
+    // check for signals
+    auto sig = SignalHandler::GetInstance();
+    if (sig->CheckSignalFlags() != 0) break;
   }
+
+  block->finalize(vars, current_time);
 }

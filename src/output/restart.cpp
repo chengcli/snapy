@@ -18,7 +18,7 @@ RestartOutput::RestartOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
 void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
-                                      double current_time, bool force_write) {
+                                      double current_time, bool final_write) {
   // make a cpu copy of variables
   Variables out_vars;
   for (auto const &[name, var] : vars) {
@@ -55,10 +55,10 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   fname.append(".");
   fname.append(blockid);
   fname.append(".");
-  if (!force_write) {
-    fname.append(number);
-  } else {
+  if (final_write) {
     fname.append("final");
+  } else {
+    fname.append(number);
   }
   fname.append(".restart");
 
