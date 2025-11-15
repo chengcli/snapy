@@ -244,8 +244,8 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
-  auto& hydro_u = vars.at("hydro_u");
-  auto& scalar_s = vars.at("scalar_s");
+  auto hydro_u = vars.at("hydro_u");
+  auto scalar_s = vars.count("scalars") ? vars.at("scalar_s") : torch::Tensor();
 
   auto start = std::chrono::high_resolution_clock::now();
   // -------- (1) save initial state --------
@@ -361,12 +361,12 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
       auto interior = part({0, 0, 0});
       if (compute_mass) {
         auto mass =
-            vars.at("hydro_u")[IDN].index(interior).sum().item<double>();
+            vars.at("hydro_u").index(interior)[IDN].sum().item<double>();
         std::cout << " mass=" << mass;
       }
       if (compute_energy) {
         auto energy =
-            vars.at("hydro_u")[Index::IPR].index(interior).sum().item<double>();
+            vars.at("hydro_u").index(interior)[IPR].sum().item<double>();
         std::cout << " energy=" << energy;
       }
       std::cout << std::endl;

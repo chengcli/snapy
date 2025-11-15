@@ -10,6 +10,10 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
                                       Variables const& vars) {
   OutputData* pod;
 
+  if (!vars.count("scalar_r") || !vars.count("scalar_s")) {
+    return;
+  }
+
   auto const& r = vars.at("scalar_r");
   auto const& s = vars.at("scalar_s");
 
