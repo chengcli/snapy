@@ -18,10 +18,11 @@ struct fmt::formatter<snap::MeshBlockOptions> {
   template <typename FormatContext>
   auto format(const snap::MeshBlockOptions& p, FormatContext& ctx) const {
     std::stringstream ss;
-    ss << "MeshBlock options:\n";
     p.report(ss);
     ss << "Integrator options:\n";
     p.intg().report(ss);
-    return fmt::format_to(ctx.out(), "{}\n{}", ss.str(), p.hydro());
+    ss << "Hydro options:\n";
+    p.hydro().report(ss);
+    return fmt::format_to(ctx.out(), "{}", ss.str());
   }
 };

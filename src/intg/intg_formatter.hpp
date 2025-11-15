@@ -32,6 +32,6 @@ struct fmt::formatter<snap::IntegratorOptions> {
   auto format(const snap::IntegratorOptions& p, FormatContext& ctx) const {
     std::stringstream ss;
     p.report(ss);
-    return fmt::format_to(ctx.out(), ss.str());
+    return fmt::format_to(ctx.out(), "{}", ss.str());
   }
 };
