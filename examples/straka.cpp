@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     device = torch::kCUDA;
   }
 
-  std::cout << fmt::format("MeshBlock Options: {}", block->options)
+  std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
             << std::endl;
 
   block->to(device);

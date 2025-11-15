@@ -31,7 +31,9 @@ struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file,
                                     DistributeInfo _dist = DistributeInfo());
   MeshBlockOptions() = default;
-  void report(std::ostream& os) const {}
+  void report(std::ostream& os) const {
+    os << "* basename = " << basename() << "\n";
+  }
 
   //! output
   ADD_ARG(std::string, basename) = "";
