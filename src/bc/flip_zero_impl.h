@@ -28,7 +28,7 @@ DISPATCH_MACRO void initialize_dp(int n, T *dp, T *fromLen, T *fromBit,
       // For bit=0, we only care about runLen up to maxLen0
       // For bit=1, we only care about runLen up to maxLen1
       for (int len = 0; len < MAXRUN; len++) {
-        DP(i, len, bit) = INF;
+        DP(i, len, bit) = (T)INF;
         FROMLEN(i, len, bit) = -1;
         FROMBIT(i, len, bit) = -1;
         USEDFLIP(i, len, bit) = -1;
