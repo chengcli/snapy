@@ -17,6 +17,7 @@
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
@@ -33,9 +34,6 @@ int main(int argc, char **argv) {
     device = torch::kCUDA;
   }
 
-  // experiment name is before "."
-  auto exp_name = infile.substr(0, infile.find('.'));
-
   auto config = YAML::LoadFile(infile);
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
   auto Ts = config["problem"]["Ts"].as<double>(300.);
@@ -44,7 +42,8 @@ int main(int argc, char **argv) {
 
   // initialize the block
   auto block = MeshBlock(MeshBlockOptions::from_yaml(infile));
-  std::cout << fmt::format("{}", block->options) << std::endl;
+  std::cout << fmt::format("MeshBlock Options\n{}", block->options)
+            << std::endl;
   block->to(device);
 
   // useful modules
@@ -187,9 +186,16 @@ int main(int argc, char **argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
+    // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
+
+    // check for signals
+    auto sig = SignalHandler::GetInstance();
+    if (sig->CheckSignalFlags() != 0) break;
   }
+
+  block->finalize(vars, current_time);
 
   CommandLine::Destroy();
 }

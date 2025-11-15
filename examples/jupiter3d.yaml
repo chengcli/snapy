@@ -156,6 +156,13 @@ reactions:
     type: evaporation
     rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
 
+outputs:
+  - type: restart
+    dt: 1.e4
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 100.
+
 problem:
   Ps: 100.e5
   Ts: 600.

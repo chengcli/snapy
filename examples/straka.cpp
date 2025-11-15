@@ -30,8 +30,7 @@ int main(int argc, char** argv) {
   auto K = config["problem"]["K"].as<double>();
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
-  auto op = MeshBlockOptions::from_yaml("straka.yaml");
-  auto block = MeshBlock(op);
+  auto block = MeshBlock(MeshBlockOptions::from_yaml("straka.yaml"));
   auto device = torch::kCPU;
   if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
@@ -40,7 +39,6 @@ int main(int argc, char** argv) {
 
   std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
             << std::endl;
-
   block->to(device);
 
   // initial conditions
