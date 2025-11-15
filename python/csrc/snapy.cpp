@@ -30,22 +30,15 @@ void bind_intg(py::module &);
 void bind_layout(py::module &);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.attr("__name__") = "snap";
+  m.attr("__name__") = "snapy";
   m.doc() = "Python bindings for snap";
 
-  m.attr("kIDN") = snap::Index::IDN;
-  m.attr("kIV1") = snap::Index::IVX;
-  m.attr("kIV2") = snap::Index::IVY;
-  m.attr("kIV3") = snap::Index::IVZ;
-  m.attr("kIPR") = snap::Index::IPR;
-  m.attr("kICY") = snap::Index::ICY;
-
-  m.attr("kInnerX1") = snap::BoundaryType::kInnerX1;
-  m.attr("kOuterX1") = snap::BoundaryType::kOuterX1;
-  m.attr("kInnerX2") = snap::BoundaryType::kInnerX2;
-  m.attr("kOuterX2") = snap::BoundaryType::kOuterX2;
-  m.attr("kInnerX3") = snap::BoundaryType::kInnerX3;
-  m.attr("kOuterX3") = snap::BoundaryType::kOuterX3;
+  m.attr("kIDN") = (int)snap::Index::IDN;
+  m.attr("kIV1") = (int)snap::Index::IVX;
+  m.attr("kIV2") = (int)snap::Index::IVY;
+  m.attr("kIV3") = (int)snap::Index::IVZ;
+  m.attr("kIPR") = (int)snap::Index::IPR;
+  m.attr("kICY") = (int)snap::Index::ICY;
 
   bind_layout(m);
   bind_bc(m);

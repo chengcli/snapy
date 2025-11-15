@@ -88,8 +88,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   SedHydro psed = nullptr;
 
-  std::map<std::string, double> timer;
-
   //! forcings
   std::vector<torch::nn::AnyModule> forcings;
 
@@ -104,20 +102,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(double dt, torch::Tensor hydro_u,
                         Variables const& other);
-
-  void reset_timer() {
-    for (auto& t : timer) {
-      t.second = 0.0;
-    }
-  }
-
-  void report_timer(std::ostream& stream) {
-    for (const auto& t : timer) {
-      stream << "hydro[" << t.first << "] = " << t.second << " miliseconds"
-             << std::endl;
-    }
-    reset_timer();
-  }
 
  private:
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;

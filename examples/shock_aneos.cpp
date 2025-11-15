@@ -52,10 +52,10 @@ int main(int argc, char** argv) {
 
   while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-    block->print_cycle_info(current_time, dt);
+    block->print_cycle_info(vars, current_time, dt);
 
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage)
-      block->forward(dt, stage, vars);
+      block->forward(vars, dt, stage);
 
     current_time += dt;
     block->make_outputs(vars, current_time);

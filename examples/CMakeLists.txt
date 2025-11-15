@@ -6,7 +6,6 @@ setup_problem(shock)
 setup_problem(straka)
 setup_problem(shock_aneos)
 setup_problem(example_crm)
-setup_problem(example_topo)
 setup_problem(expansion)
 
 file(GLOB inputs *.yaml *.py)

@@ -70,20 +70,56 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   void reset() override;
 
   //! \brief return an index tensor for part of the meshblock
+  /*!
+   * \param offset: tuple of (x1_offset, x2_offset, x3_offset)
+   * \param exterior: if true, return the exterior part (with ghost zones);
+   *                  if false, return the interior part (without ghost zones)
+   * \param extend_x1: number of cells to extend in the x1 direction
+   * \param extend_x2: number of cells to extend in the x2 direction
+   * \param extend_x3: number of cells to extend in the x3 direction
+   * \return: vector of TensorIndex for each dimension
+   */
   std::vector<torch::indexing::TensorIndex> part(
       std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
       int extend_x2 = 0, int extend_x3 = 0) const;
 
+  //! initialize the variables
+  /*!
+   * \param vars: variables to initialize
+   */
   Variables& initialize(Variables& vars);
 
+  //! compute the maximum allowable time step
+  /*!
+   * \param vars: current variables
+   * \return: maximum time step
+   */
   double max_time_step(Variables const& vars);
 
-  Variables& forward(double dt, int stage, Variables& vars);
+  //! advance the variables by one time step
+  /*!
+   * \param vars: current variables
+   * \param dt: time step
+   * \param stage: current stage of the integrator
+   */
+  void forward(Variables& vars, double dt, int stage);
 
+  //! make write outputs at the current time
+  /*!
+   * \param vars: current variables
+   * \param current_time: current simulation time
+   * \param force_write: if true, force writing outputs even if not scheduled
+   */
   void make_outputs(Variables const& vars, double current_time,
                     bool force_write = false);
 
-  void print_cycle_info(double time, double dt) const;
+  //! print cycle info
+  /*!
+   * \param vars: current variables
+   * \param time: current simulation time
+   * \param dt: current time step
+   */
+  void print_cycle_info(Variables const& vars, double time, double dt) const;
 
  private:
   //! stage registers
