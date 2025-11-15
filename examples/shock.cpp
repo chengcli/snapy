@@ -7,6 +7,7 @@
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
@@ -20,7 +21,7 @@ int main(int argc, char** argv) {
     device = torch::kCUDA;
   }
 
-  std::cout << fmt::format("MeshBlock Options: {}", block->options)
+  std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
             << std::endl;
 
   block->to(device);
@@ -29,9 +30,11 @@ int main(int argc, char** argv) {
   auto pcoord = block->phydro->pcoord;
   auto peos = block->phydro->peos;
 
-  auto x1v = pcoord->x1v.view({1, 1, -1});
-  auto x2v = pcoord->x2v.view({1, -1, 1});
-  auto x3v = pcoord->x3v.view({-1, 1, 1});
+  // coordinates
+  auto grids = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto x1v = grids[2];
+  auto x2v = grids[1];
+  auto x3v = grids[0];
 
   int nc1 = pcoord->options.nc1();
   int nc2 = pcoord->options.nc2();
@@ -63,11 +66,19 @@ int main(int argc, char** argv) {
     auto dt = block->max_time_step(vars);
     block->print_cycle_info(vars, current_time, dt);
 
+    // main loop
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
       block->forward(vars, dt, stage);
     }
 
+    // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
+
+    // check for signals
+    auto sig = SignalHandler::GetInstance();
+    if (sig->CheckSignalFlags() != 0) break;
   }
+
+  block->finalize(vars, current_time);
 }

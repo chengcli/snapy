@@ -33,6 +33,11 @@ MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
   reset();
 }
 
+MeshBlockImpl::~MeshBlockImpl() {
+  // destroy signal handler
+  SignalHandler::Destroy();
+}
+
 void MeshBlockImpl::reset() {
   // set up output
   for (auto const& out_op : options.outputs()) {
@@ -335,12 +340,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
                                  bool final_write) {
   for (auto& output_type : output_types) {
-    if ((current_time >= output_type->next_time) || final_write) {
+    if (final_write) {
       output_type->write_output_file(this, vars, current_time, final_write);
-    }
-
-    // Update next_time and file_number
-    if (!final_write) {
+    } else if (current_time >= output_type->next_time) {
+      output_type->write_output_file(this, vars, current_time, final_write);
       output_type->next_time += output_type->options.dt();
       output_type->file_number += 1;
     }
@@ -392,19 +395,16 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
       std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
     } else if (sig->GetSignalFlag(SIGALRM) != 0) {
       std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
-    } else if (cycle == pintg->options.nlim()) {
+    } else if (cycle >= pintg->options.nlim()) {
       std::cout << std::endl << "Terminating on cycle limit" << std::endl;
     } else {
       std::cout << std::endl << "Terminating on time limit" << std::endl;
     }
 
-    std::cout << "time=" << time << " cycle=" << cycle << std::endl;
+    std::cout << "time=" << time << " cycle=" << cycle - 1 << std::endl;
     std::cout << "tlim=" << pintg->options.tlim()
               << " nlim=" << pintg->options.nlim() << std::endl;
   }
-
-  // destroy signal handler
-  SignalHandler::Destroy();
 }
 
 }  // namespace snap

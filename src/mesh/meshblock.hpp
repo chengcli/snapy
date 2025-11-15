@@ -76,6 +76,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
   explicit MeshBlockImpl(MeshBlockOptions const& options_);
+  ~MeshBlockImpl() override;
   void reset() override;
 
   //! \brief return an index tensor for part of the meshblock

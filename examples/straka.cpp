@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
   auto cv = kintera::species_cref_R[0] * Rd;
   auto cp = cv + Rd;
 
+  // coordinates
   auto grids = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
   auto x1v = grids[2];
   auto x2v = grids[1];
