@@ -18,8 +18,15 @@
 
 namespace snap {
 
-class OutputOptions;
+//! defined in output/output_type.hpp
+struct OutputOptions;
 
+//! \brief  container for parameters to initialize a MeshBlock
+/*!
+ * This struct holds all the options required to initialize a MeshBlock.
+ * It can be initialized from a YAML input file using the `from_yaml` method,
+ * or by setting the individual options manually.
+ */
 struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file,
                                     DistributeInfo _dist = DistributeInfo());
