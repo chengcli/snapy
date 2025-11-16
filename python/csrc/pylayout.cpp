@@ -1,5 +1,6 @@
 // pybind11
 #include <pybind11/functional.h>
+#include <pybind11/stl.h>
 
 // fmt
 #include <fmt/format.h>
@@ -13,6 +14,8 @@
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/layout/distribute_info.hpp>
 #include <snap/layout/slab_layout.hpp>
+#include <snap/layout/exchange.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -101,4 +104,34 @@ void bind_layout(py::module &m) {
              int dz) { return self.neighbor_rank(face, rx, ry, dx, dy); },
           py::arg("face"), py::arg("rx"), py::arg("ry"), py::arg("dx"),
           py::arg("dy"), py::arg("dz") = 0);
+
+  // Exchange functions
+  m.def("get_buffer_id", &snap::get_buffer_id,
+        py::arg("dx"), py::arg("dy"), py::arg("dz") = 0,
+        "Calculate buffer ID from directional offsets");
+  
+  m.def("init_buffers_2d",
+        [](snap::MeshBlock const& block, torch::Tensor const& hydro_u) {
+          std::vector<torch::Tensor> send_bufs, recv_bufs;
+          snap::init_buffers_2d(block.ptr().get(), hydro_u, send_bufs, recv_bufs);
+          return py::make_tuple(send_bufs, recv_bufs);
+        },
+        py::arg("block"), py::arg("hydro_u"),
+        "Initialize send and receive buffers for 2D domain decomposition");
+  
+  m.def("serialize_2d",
+        [](snap::MeshBlock const& block, torch::Tensor& hydro_u, 
+           std::vector<torch::Tensor>& send_bufs) {
+          snap::serialize_2d(block.ptr().get(), hydro_u, send_bufs);
+        },
+        py::arg("block"), py::arg("hydro_u"), py::arg("send_bufs"),
+        "Serialize mesh data into send buffers");
+  
+  m.def("deserialize_2d",
+        [](snap::MeshBlock const& block, torch::Tensor& hydro_u,
+           std::vector<torch::Tensor> const& recv_bufs) {
+          snap::deserialize_2d(block.ptr().get(), hydro_u, recv_bufs);
+        },
+        py::arg("block"), py::arg("hydro_u"), py::arg("recv_bufs"),
+        "Deserialize received data into mesh ghost zones");
 }
