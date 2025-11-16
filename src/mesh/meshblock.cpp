@@ -39,6 +39,56 @@ MeshBlockImpl::~MeshBlockImpl() {
 }
 
 void MeshBlockImpl::reset() {
+  // set up distributed environment
+  pdist = std::make_shared<DistributeEnv>(options.dist());
+
+  if (options.layout().type() == "slab") {
+    playout = std::make_shared<SlabLayout>(options.layout());
+  } else if (options.layout().type() == "cubed") {
+    playout = std::make_shared<CubedLayout>(options.layout());
+  } else if (options.layout().type() == "cubed_sphere") {
+    playout = std::make_shared<CubedSphereLayout>(options.layout());
+  } else {
+    throw std::runtime_error("MeshBlockImpl: layout type '" +
+                             options.layout().type() + "' is not implemented.");
+  }
+
+  int nranks = playout->px() * playout->py() * playout->pz();
+  TORCH_CHECK(pdist->options.world_size() == nranks,
+              "MeshBlockImpl: world_size (", pdist->options.world_size(),
+              ") does not match layout partitioning (", nranks, ").");
+
+  // reset internal block boundaries
+  if (options.layout().type() != "cubed_sphere") {  // slab or cubed layout
+    auto iloc = playout->loc_of(pdist->options.rank());
+    // x1-dir
+    auto lx1 = std::get<2>(iloc);
+    if (lx1 != 0) {
+      op.bfuncs()[BoundaryFace::kInnerX1] = nullptr;
+    }
+    if (lx1 != playout->pz() - 1) {
+      op.bfuncs()[BoundaryFace::kOuterX1] = nullptr;
+    }
+
+    // x2-dir
+    auto lx2 = std::get<1>(iloc);
+    if (lx2 != 0) {
+      op.bfuncs()[BoundaryFace::kInnerX2] = nullptr;
+    }
+    if (lx2 != playout->py() - 1) {
+      op.bfuncs()[BoundaryFace::kOuterX2] = nullptr;
+    }
+
+    // x3-dir
+    auto lx3 = std::get<0>(iloc);
+    if (lx3 != 0) {
+      op.bfuncs()[BoundaryFace::kInnerX3] = nullptr;
+    }
+    if (lx3 != playout->px() - 1) {
+      op.bfuncs()[BoundaryFace::kOuterX3] = nullptr;
+    }
+  }
+
   // set up output
   for (auto const& out_op : options.outputs()) {
     if (out_op.file_type() == "restart") {
@@ -231,6 +281,9 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
     vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
 
+  // exchange buffers
+  _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
+
   return vars;
 }
 
@@ -335,6 +388,9 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }
+
+  // -------- (7) ghost zone exchange --------
+  exchange(vars);
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
@@ -444,6 +500,131 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   // good to go
   pintg->current_redo = 0;
   return 0;
+}
+
+void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
+                                     std::vector<std::string> const& names) {
+  // Initialize vectors to size 9 (2D decomposition) with empty tensors
+  send_bufs.clear();
+  recv_bufs.clear();
+  send_bufs.resize(9);
+  recv_bufs.resize(9);
+
+  // Iterate over all 2D neighbor directions
+  _buf_names.clear();
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+
+      // Get the part indices for this neighbor direction
+      auto part = part(offset);
+
+      // Get shape by applying indices to tensor
+      send_bufs[bid].clear();
+      recv_bufs[bid].clear();
+
+      for (auto name : names) {
+        if (vars.count(name) == 0) continue;
+
+        _buf_names.push_back(name);
+        auto part_tensor = vars.at(name).index(part);
+
+        // Allocate send and receive buffers with same shape
+        send_bufs[bid].push_back(torch::empty_like(part_tensor));
+        recv_bufs[bid].push_back(torch::empty_like(part_tensor));
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_serialize_2d(Variables const& vars) {
+  // Iterate over all 2D neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+
+      // Only serialize if buffer exists
+      if (!send_bufs[bid].empty()) {
+        // Get the interior part for this direction
+        auto part = part(offset, /*exterior=*/false);
+
+        // Copy data from mesh to send buffer
+        int count = 0;
+        for (auto name : _buf_names) {
+          send_bufs[bid][count++].copy_(vars.at(name).index(part));
+        }
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_deserialize_2d(Variables& vars) const {
+  // Iterate over all 2D neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+
+      // Only deserialize if buffer exists
+      if (!recv_bufs[bid].empty()) {
+        // Get the exterior (ghost zone) part for this direction
+        auto part = part(offset, /*exterior=*/true);
+
+        // Copy data from receive buffer to mesh ghost zones
+        int count = 0;
+        for (auto name : _buf_names) {
+          vars.at(name).index_put_(part, recv_bufs[bid][count++]);
+        }
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_slab_exchange(Variables& vars) {
+  // Serialize data into send buffers
+  _serialize_2d(vars)
+
+      std::vector<c10::intrusive_ptr<c10d::Work>>
+          works;
+
+  // Get my logical location
+  auto iloc = playout->loc_of(pdist->options.rank());
+
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      int nb =
+          playout->neighbor_rank(std::get<0>(iloc), std::get<1>(iloc),
+                                 std::get<2>(iloc), x3_offset, x2_offset, 0);
+
+      int r = get_buffer_id(x3_offset, x2_offset, 0);
+      if (nb >= 0) {
+        // Send operation
+        auto send_work = pdist->pg->send(send_bufs[r], nb, 0);
+        works.push_back(send_work);
+
+        // Receive operation
+        auto recv_work = pdist->pg->recv(recv_bufs[r], nb, 0);
+        works.push_back(recv_work);
+      }
+    }
+  }
+
+  // Wait for all operations to complete
+  for (auto& work : works) work->wait();
+
+  // Deserialize received data into ghost zones
+  _deserialize_2d(vars);
 }
 
 }  // namespace snap

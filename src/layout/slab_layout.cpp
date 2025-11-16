@@ -1,29 +1,33 @@
-// C/C++
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
 // fmt
 #include <fmt/format.h>
 
 // snap
-#include "slab_layout.hpp"
+#include "layout.hpp"
 
 namespace snap {
 
 void SlabLayout::report(std::ostream &os) const {
-  os << "px=" << _px << " py=" << _py << " periodic_x=" << _periodic_x
-     << " periodic_y=" << _periodic_y << "\n";
+  options.report(os);
   os << " Rank | (rx,ry)\n";
   os << "----------------\n";
   for (int r = 0; r < _px * _py; ++r) {
-    os << fmt::format(" {:>3} | ({:>2},{:>2})\n", r, _coords[r].x,
-                      _coords[r].y);
+    os << fmt::format(" {:>3} | ({:>2},{:>2})\n", r, _coords2[r].x,
+                      _coords2[r].y);
   }
 }
 
-int SlabLayout::neighbor_rank(int rx, int ry, int dx, int dy) const {
+std::tuple<int, int, int> SlabLayout::loc_of(int rank) const {
+  if (rank < 0 || rank >= opitions.px() * options.py()) return {-1, -1, 0};
+  return {_coords2[rank].x, _coords2[rank].y, 0};
+}
+
+int SlabLayout::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
+                              int dz) const {
+  if (rz != 0 || dz != 0) {
+    throw std::runtime_error(
+        "SlabLayout::neighbor_rank: rz and dz must be zero in slab layout");
+  }
+
   int nx = rx + dx;
   int ny = ry + dy;
 

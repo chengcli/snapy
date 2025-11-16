@@ -10,7 +10,8 @@
 #include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/intg/integrator.hpp>
-#include <snap/layout/distribute_info.hpp>
+#include <snap/layout/distribute_env.hpp>
+#include <snap/layout/layout.hpp>
 #include <snap/scalar/scalar.hpp>
 
 // arg
@@ -28,8 +29,7 @@ struct OutputOptions;
  * or by setting the individual options manually.
  */
 struct MeshBlockOptions {
-  static MeshBlockOptions from_yaml(std::string input_file,
-                                    DistributeInfo _dist = DistributeInfo());
+  static MeshBlockOptions from_yaml(std::string input_file);
   MeshBlockOptions() = default;
   void report(std::ostream& os) const {
     os << "* basename = " << basename() << "\n";
@@ -47,8 +47,9 @@ struct MeshBlockOptions {
   //! boundary functions
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
 
-  //! distributed meshblock info
-  ADD_ARG(DistributeInfo, dist);
+  //! distributed environment
+  ADD_ARG(DistributeEnvOptions, dist);
+  ADD_ARG(LayoutOptions, layout);
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
@@ -72,6 +73,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Integrator pintg = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
+  DistributeEnv pdist = nullptr;
+  Layout playout = nullptr;
 
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
@@ -141,10 +144,55 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   int check_redo(Variables& vars);
 
+  void exchange(Variables& vars) {
+    if (options.layout.type() == "slab") {
+      _slab_exchange(vars);
+    } else {
+      throw std::invalid_argument("MeshBlock::exchange: layout type " +
+                                  options.layout.type() + " not implemented");
+    }
+  }
+
+ protected:
+  /*!
+   * \brief Initialize send and receive buffers for 2D domain decomposition
+   *
+   * Allocates torch::Tensor buffers for exchanging ghost zone data with
+   * neighboring processes in a 2D slab decomposition. Buffers are sized
+   * to match the ghost zone dimensions of the mesh block.
+   */
+  void _init_buffers_2d(Variables const& vars,
+                        std::vector<std::string> const& names);
+
+  //! Serialize function for 2D layout
+  void _serialize_2d(Variables const& vars);
+
+  //! Deserialize function for 2D layout
+  void _deserialize_2d(Variables& vars) const;
+
+  /*!
+   * \brief Perform ghost zone exchange for slab layout
+   *
+   * Exchanges ghost zone data with neighboring processes using point-to-point
+   * communication. This function serializes data, performs send/recv
+   * operations, and deserializes received data into ghost zones.
+   */
+  void _slab_exchange(Variables& vars);
+
  private:
   //! stage registers
   torch::Tensor _hydro_u0, _hydro_u1;
   torch::Tensor _scalar_s0, _scalar_s1;
+
+  //! exchange buffers
+  /*!
+   * The first index indicates the rank
+   * The second index indicates the variable group
+   */
+  std::vector<std::vector<torch::Tensor>> _send_bufs, _recv_bufs;
+
+  //! buffer variable names
+  std::vector<std::string> _buf_names;
 };
 
 TORCH_MODULE(MeshBlock);
