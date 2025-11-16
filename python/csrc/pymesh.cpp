@@ -127,5 +127,6 @@ void bind_mesh(py::module &m) {
           py::arg("extend_x3") = 0)
       .def("initialize", &snap::MeshBlockImpl::initialize)
       .def("finalize", &snap::MeshBlockImpl::finalize)
-      .def("max_time_step", &snap::MeshBlockImpl::max_time_step);
+      .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
+      .def("check_redo", &snap::MeshBlockImpl::check_redo);
 }

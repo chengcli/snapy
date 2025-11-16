@@ -12,8 +12,6 @@
 #include <snap/eos/ideal_gas.hpp>
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
-#include <snap/output/output_formats.hpp>
-#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
@@ -99,13 +97,13 @@ int main(int argc, char** argv) {
       block->forward(vars, dt, stage);
     }
 
+    int err = block->check_redo(vars);
+    if (err > 0) continue;  // redo this step with smaller dt
+    if (err < 0) break;     // terminate simulation
+
     // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
-
-    // check for signals
-    auto sig = SignalHandler::GetInstance();
-    if (sig->CheckSignalFlags() != 0) break;
   }
 
   block->finalize(vars, current_time);

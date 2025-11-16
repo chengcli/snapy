@@ -246,7 +246,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
     dt = std::min(dt, phydro->max_time_step(w));
   }
 
-  return pintg->options.cfl() * dt;
+  return pow(2., -pintg->current_redo) * pintg->options.cfl() * dt;
 }
 
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
@@ -354,7 +354,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
   if (options.dist().gid() != 0) return;  // only rank 0 prints
 
-  const int dt_precision = std::numeric_limits<double>::max_digits10 - 1;
+  const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
   bool compute_mass = false;
   bool compute_energy = false;
 
@@ -364,9 +364,9 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         compute_mass = true;
         compute_energy = true;
       }
-      std::cout << "cycle=" << cycle << std::scientific
-                << std::setprecision(dt_precision) << " time=" << time
-                << " dt=" << dt;
+      std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
+                << std::scientific << std::setprecision(dt_precision)
+                << " time=" << time << " dt=" << dt;
       auto interior = part({0, 0, 0});
       if (compute_mass) {
         auto mass =
@@ -395,16 +395,55 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
       std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
     } else if (sig->GetSignalFlag(SIGALRM) != 0) {
       std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
-    } else if (cycle >= pintg->options.nlim()) {
+    } else if (pintg->options.nlim() >= 0 && cycle >= pintg->options.nlim()) {
       std::cout << std::endl << "Terminating on cycle limit" << std::endl;
-    } else {
+    } else if (time >= pintg->options.tlim()) {
       std::cout << std::endl << "Terminating on time limit" << std::endl;
+    } else {
+      std::cout << std::endl << "Terminating abnormally" << std::endl;
     }
 
     std::cout << "time=" << time << " cycle=" << cycle - 1 << std::endl;
     std::cout << "tlim=" << pintg->options.tlim()
               << " nlim=" << pintg->options.nlim() << std::endl;
   }
+}
+
+int MeshBlockImpl::check_redo(Variables& vars) {
+  auto sig = snap::SignalHandler::GetInstance();
+  if (sig->CheckSignalFlags()) return -1;  // terminate
+
+  // check if density or pressure is negative
+  auto hydro_u = vars.at("hydro_u");
+  auto interior = part({0, 0, 0});
+  auto rho = hydro_u.index(interior)[IDN];
+  auto pres = hydro_u.index(interior)[IPR];
+
+  if (rho.min().item<double>() <= 0. || pres.min().item<double>() <= 0.) {
+    std::cout << "Negative density/pressure detected. Redoing the step with "
+                 "smaller dt."
+              << std::endl;
+    pintg->current_redo += 1;
+    if (pintg->current_redo > pintg->options.max_redo()) {
+      std::cout << "Maximum number of redo attempts exceeded. Terminating."
+                << std::endl;
+      return -1;  // terminate
+    }
+
+    // reset variables
+    vars["hydro_u"].copy_(_hydro_u0);
+    if (vars.count("scalar_s")) {
+      vars["scalar_s"].copy_(_scalar_s0);
+    }
+
+    // reset cycle
+    cycle -= 1;
+    return 1;  // redo
+  }
+
+  // good to go
+  pintg->current_redo = 0;
+  return 0;
 }
 
 }  // namespace snap

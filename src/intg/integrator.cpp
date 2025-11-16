@@ -28,7 +28,7 @@ IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
 }
 
 IntegratorImpl::IntegratorImpl(IntegratorOptions const& options_)
-    : options(options_) {
+    : options(options_), current_redo(0) {
   if (options.type() == "rk1" || options.type() == "euler") {
     stages.resize(1);
     stages[0].wght0(0.0);
