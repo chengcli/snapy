@@ -131,7 +131,15 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   void print_cycle_info(Variables const& vars, double time, double dt) const;
 
+  //! make final output and print diagnostics
   void finalize(Variables const& vars, double time);
+
+  //! check if redo is needed
+  /*!
+   * \param vars: current variables
+   * \return: > 0, redo is needed; 0, no redo; < 0, terminate simulation
+   */
+  int check_redo(Variables& vars);
 
  private:
   //! stage registers
