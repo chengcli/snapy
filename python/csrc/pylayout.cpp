@@ -134,4 +134,44 @@ void bind_layout(py::module &m) {
         },
         py::arg("block"), py::arg("hydro_u"), py::arg("recv_bufs"),
         "Deserialize received data into mesh ghost zones");
+  
+  m.def("init_dist",
+        [](std::string const& backend,
+           std::string const& init_method,
+           std::string const& layout_type,
+           int px, int py, int pz,
+           bool periodic_x1,
+           bool periodic_x2,
+           bool periodic_x3,
+           std::string const& device_type,
+           int local_rank) {
+          auto result = snap::init_dist(backend, init_method, layout_type,
+                                       px, py, pz, periodic_x1, periodic_x2, periodic_x3,
+                                       device_type, local_rank);
+          // Return tuple: (layout, ranks, device, info, layout_type)
+          // Note: layout is stored as void* internally, so we can't easily expose it
+          // Instead, return the components that Python needs
+          return py::make_tuple(result.ranks, result.device, result.info, result.layout_type);
+        },
+        py::arg("backend"),
+        py::arg("init_method"),
+        py::arg("layout_type"),
+        py::arg("px"), py::arg("py"), py::arg("pz"),
+        py::arg("periodic_x1") = false,
+        py::arg("periodic_x2") = false,
+        py::arg("periodic_x3") = false,
+        py::arg("device_type") = "cpu",
+        py::arg("local_rank") = -1,
+        "Initialize distributed computing environment");
+  
+  m.def("slab_exchange",
+        [](snap::MeshBlock const& block, torch::Tensor& hydro_u,
+           std::vector<int> const& ranks,
+           std::vector<torch::Tensor>& send_bufs,
+           std::vector<torch::Tensor>& recv_bufs) {
+          snap::slab_exchange(block.ptr().get(), hydro_u, ranks, send_bufs, recv_bufs);
+        },
+        py::arg("block"), py::arg("hydro_u"), py::arg("ranks"),
+        py::arg("send_bufs"), py::arg("recv_bufs"),
+        "Perform ghost zone exchange for slab layout");
 }
