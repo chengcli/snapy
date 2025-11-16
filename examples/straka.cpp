@@ -12,8 +12,6 @@
 #include <snap/eos/ideal_gas.hpp>
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
-#include <snap/output/output_formats.hpp>
-#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
