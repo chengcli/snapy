@@ -395,10 +395,12 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
       std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
     } else if (sig->GetSignalFlag(SIGALRM) != 0) {
       std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
-    } else if (cycle >= pintg->options.nlim()) {
+    } else if (pintg->options.nlim() >= 0 && cycle >= pintg->options.nlim()) {
       std::cout << std::endl << "Terminating on cycle limit" << std::endl;
-    } else {
+    } else if (time >= pintg->options.tlim()) {
       std::cout << std::endl << "Terminating on time limit" << std::endl;
+    } else {
+      std::cout << std::endl << "Terminating abnormally" << std::endl;
     }
 
     std::cout << "time=" << time << " cycle=" << cycle - 1 << std::endl;
