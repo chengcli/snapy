@@ -11,25 +11,19 @@ import torch
 # Type aliases
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
 
-# Enums
-class index:
-    """Index enumeration for variable types."""
-    idn: int
-    ivx: int
-    ivy: int
-    ivz: int
-    ipr: int
-    icy: int
+kIDN: int   # Density index
+kIV1: int   # Velocity index in X1 direction
+kIV2: int   # Velocity index in X2 direction
+kIV3: int   # Velocity index in X3 direction
+kIPR: int   # Pressure (or internal energy) index
+KICY: int   # Tracer index start
 
-class BoundaryFace:
-    """Boundary face enumeration."""
-    kUnknown: int
-    kInnerX1: int
-    kOuterX1: int
-    kInnerX2: int
-    kOuterX2: int
-    kInnerX3: int
-    kOuterX3: int
+kInnerX1: int   # Inner boundary in the X1 direction (bottom)
+kOuterX1: int   # Outer boundary in the X1 direction (top)
+kInnerX2: int   # Inner boundary in the X2 direction (south)
+kOuterX2: int   # Outer boundary in the X2 direction (north)
+kInnerX3: int   # Inner boundary in the X3 direction (west)
+kOuterX3: int   # Outer boundary in the X3 direction (east)
 
 # Import all submodules
 from .boundary import *

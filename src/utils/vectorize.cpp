@@ -3,8 +3,10 @@
 #include <string>
 #include <vector>
 
-// utils header
+// snap
 #include "vectorize.hpp"
+
+namespace snap {
 
 template <>
 std::vector<std::string> Vectorize(const char* cstr, const char* delimiter) {
@@ -18,3 +20,5 @@ std::vector<std::string> Vectorize(const char* cstr, const char* delimiter) {
   }
   return arr;
 }
+
+}  // namespace snap

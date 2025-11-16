@@ -1,14 +1,8 @@
-// C/C++
-#include <random>
-
 // yaml
 #include <yaml-cpp/yaml.h>
 
 // fmt
 #include <fmt/format.h>
-
-// torch
-#include <torch/script.h>
 
 // kintera
 #include <kintera/constants.h>
@@ -23,35 +17,11 @@
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
-torch::Tensor gaussian_func(torch::Tensor x, torch::Tensor y, double x0,
-                            double y0, double sigma) {
-  return torch::exp(-((x - x0) * (x - x0) + (y - y0) * (y - y0)) /
-                    (2 * sigma * sigma));
-}
-
-std::map<std::string, torch::Tensor> load_tensors(const std::string& filename) {
-  std::map<std::string, torch::Tensor> tensor_map;
-
-  // Load scripted module
-  torch::jit::script::Module module = torch::jit::load(filename);
-
-  // Get all named buffers
-  for (const auto& p : module.named_buffers(/*recurse=*/false)) {
-    tensor_map[p.name] = p.value;
-  }
-
-  // Optionally, also load parameters (if register_parameter was used)
-  for (const auto& p : module.named_parameters(/*recurse=*/false)) {
-    tensor_map[p.name] = p.value;
-  }
-
-  return tensor_map;
-}
-
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   // read parameters
   auto cli = CommandLine::ParseArguments(argc, argv);
   if (!cli) return 0;
@@ -64,9 +34,6 @@ int main(int argc, char** argv) {
     device = torch::kCUDA;
   }
 
-  // experiment name is before "."
-  auto exp_name = infile.substr(0, infile.find('.'));
-
   auto config = YAML::LoadFile(infile);
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
   auto Ts = config["problem"]["Ts"].as<double>(300.);
@@ -75,7 +42,8 @@ int main(int argc, char** argv) {
 
   // initialize the block
   auto block = MeshBlock(MeshBlockOptions::from_yaml(infile));
-  std::cout << fmt::format("{}", block->options) << std::endl;
+  std::cout << fmt::format("MeshBlock Options\n{}", block->options)
+            << std::endl;
   block->to(device);
 
   // useful modules
@@ -91,38 +59,6 @@ int main(int argc, char** argv) {
   int nc1 = pcoord->x1v.size(0);
   int ny = thermo_y->options.species().size() - 1;
   int nvar = peos->nvar();
-
-  /* add bottom topography
-  auto result = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto x3v = result[0];
-  auto x2v = result[1];
-  auto x1v = result[2];
-
-  std::random_device rd;   // Seed source
-  std::mt19937 gen(rd());  // Mersenne Twister engine
-  std::uniform_real_distribution<> dist(0.0, 1.0);
-
-  auto topo = torch::zeros_like(x1v);
-  std::cout << "topo shape = " << topo.sizes() << std::endl;
-
-  for (int n = 0; n < 10; ++n) {
-    auto x0 = dist(gen) * 10.e3;
-    auto y0 = dist(gen) * 20.e3;
-    auto sigma = 500. + dist(gen) * 1000.;
-    auto height = 500. + dist(gen) * 500.;
-    topo += height * gaussian_func(x2v, x3v, x0, y0, sigma);
-  }*/
-  // std::cout << "topo = " << topo.min() << ", " << topo.max() << std::endl;
-  // auto solid = torch::where(x1v < topo, 1, 0);
-
-  auto data =
-      load_tensors("topo_20kmx10km_32.7719_32.9881_-106.5098_-106.3802.pt");
-  auto solid = data["solid_80m"].to(device);
-
-  int flips;
-  solid = phydro->pib->rectify_solid(solid, flips, block->options.bfuncs());
-  std::cout << "total number of flips = " << flips << std::endl;
-  solid = torch::where(solid > 0, true, false);
 
   // construct an adiabatic atmosphere
   kintera::ThermoX thermo_x(thermo_y->options);
@@ -152,6 +88,7 @@ int main(int argc, char** argv) {
     auto xmixr = config["problem"]["x" + name].as<double>(0.);
     xfrac.select(2, i) = xmixr;
   }
+
   // dry air mole fraction
   xfrac.select(2, 0) = 1. - xfrac.narrow(-1, 1, ny).sum(-1);
 
@@ -159,17 +96,14 @@ int main(int argc, char** argv) {
   int is = pcoord->is();
   int ie = pcoord->ie();
   auto dz = pcoord->dx1f[is].item<double>();
+  // std::cout << fmt::format("{}\n", Func1Registrar::list_names()) <<
+  // std::endl;
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
   int nvapor = thermo_x->options.vapor_ids().size();
   int ncloud = thermo_x->options.cloud_ids().size();
   for (; i <= ie; ++i) {
-    // remove clouds
-    auto cloud_frac = xfrac.narrow(-1, nvapor, ncloud).sum(-1, true);
-    xfrac.narrow(-1, nvapor, ncloud) = 0.;
-    xfrac /= (1. - cloud_frac);
-
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
     w[IPR].select(2, i) = pres;
@@ -201,12 +135,11 @@ int main(int argc, char** argv) {
   // initialize
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  vars["solid"] = solid;
   block->initialize(vars);
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
-  block->user_output_callback = [&](Variables const& vars) {
+  block->user_output_callback = [&](Variables const &vars) {
     auto w = vars.at("hydro_w");
     Variables out;
     out["qtol"] = w.narrow(0, ICY, ny).sum(0);
@@ -226,16 +159,16 @@ int main(int argc, char** argv) {
 
   while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-    block->print_cycle_info(current_time, dt);
+    block->print_cycle_info(vars, current_time, dt);
 
     // evolve dynamics
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(dt, stage, vars);
+      block->forward(vars, dt, stage);
     }
 
     // evolve kinetics
-    auto& hydro_u = vars["hydro_u"];
-    auto& hydro_w = vars["hydro_w"];
+    auto &hydro_u = vars["hydro_u"];
+    auto &hydro_w = vars["hydro_w"];
 
     auto temp = peos->compute("W->T", {hydro_w});
     auto pres = hydro_w[IPR];
@@ -253,9 +186,16 @@ int main(int argc, char** argv) {
     auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
     hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
+    // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
+
+    // check for signals
+    auto sig = SignalHandler::GetInstance();
+    if (sig->CheckSignalFlags() != 0) break;
   }
+
+  block->finalize(vars, current_time);
 
   CommandLine::Destroy();
 }

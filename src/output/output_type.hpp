@@ -23,7 +23,21 @@
 namespace snap {
 
 //! \brief  container for parameters read from `<output>` block in the input
-class OutputOptions {
+struct OutputOptions {
+  void report(std::ostream &os) const {
+    os << "* fid = " << fid() << "\n"
+       << "* dt = " << dt() << "\n"
+       << "* include_ghost_zones = " << include_ghost_zones() << "\n"
+       << "* cartesian_vector = " << cartesian_vector() << "\n"
+       << "* file_type = " << file_type() << "\n"
+       << "* data_format = " << data_format() << "\n"
+       << "* variables = ";
+    for (auto const &var : variables()) {
+      os << var << " ";
+    }
+    os << "\n";
+  }
+
   ADD_ARG(int, fid) = 0;
   ADD_ARG(double, dt) = 0.;
 

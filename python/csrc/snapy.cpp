@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include <snap/input/parameter_input.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -30,16 +31,21 @@ void bind_intg(py::module &);
 void bind_layout(py::module &);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.attr("__name__") = "snap";
+  m.attr("__name__") = "snapy";
   m.doc() = "Python bindings for snap";
 
-  py::enum_<snap::Index>(m, "index")
-      .value("idn", snap::Index::IDN)
-      .value("ivx", snap::Index::IVX)
-      .value("ivy", snap::Index::IVY)
-      .value("ivz", snap::Index::IVZ)
-      .value("ipr", snap::Index::IPR)
-      .value("icy", snap::Index::ICY);
+  m.attr("kIDN") = (int)snap::Index::IDN;
+  m.attr("kIV1") = (int)snap::Index::IVX;
+  m.attr("kIV2") = (int)snap::Index::IVY;
+  m.attr("kIV3") = (int)snap::Index::IVZ;
+  m.attr("kIPR") = (int)snap::Index::IPR;
+  m.attr("kICY") = (int)snap::Index::ICY;
+
+  // handle signal
+  m.def("check_signal", []() {
+    auto sig = snap::SignalHandler::GetInstance();
+    return sig->CheckSignalFlags();
+  });
 
   bind_layout(m);
   bind_bc(m);

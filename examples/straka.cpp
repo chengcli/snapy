@@ -13,6 +13,7 @@
 #include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 using namespace snap;
 
@@ -29,17 +30,15 @@ int main(int argc, char** argv) {
   auto K = config["problem"]["K"].as<double>();
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
-  auto op = MeshBlockOptions::from_yaml("straka.yaml");
-  auto block = MeshBlock(op);
+  auto block = MeshBlock(MeshBlockOptions::from_yaml("straka.yaml"));
   auto device = torch::kCPU;
   if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
     device = torch::kCUDA;
   }
 
-  std::cout << fmt::format("MeshBlock Options: {}", block->options)
+  std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
             << std::endl;
-
   block->to(device);
 
   // initial conditions
@@ -51,6 +50,7 @@ int main(int argc, char** argv) {
   auto cv = kintera::species_cref_R[0] * Rd;
   auto cp = cv + Rd;
 
+  // coordinates
   auto grids = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
   auto x1v = grids[2];
   auto x2v = grids[1];
@@ -92,13 +92,21 @@ int main(int argc, char** argv) {
 
   while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);
-    block->print_cycle_info(current_time, dt);
+    block->print_cycle_info(vars, current_time, dt);
 
+    // main loop
     for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(dt, stage, vars);
+      block->forward(vars, dt, stage);
     }
 
+    // make outputs
     current_time += dt;
     block->make_outputs(vars, current_time);
+
+    // check for signals
+    auto sig = SignalHandler::GetInstance();
+    if (sig->CheckSignalFlags() != 0) break;
   }
+
+  block->finalize(vars, current_time);
 }

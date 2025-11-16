@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+namespace snap {
+
 //! split a string to a vector
 template <typename A>
 std::vector<A> Vectorize(const char* cstr, const char* delimiter = " ") {
@@ -21,3 +23,5 @@ std::vector<A> Vectorize(const char* cstr, const char* delimiter = " ") {
 
 template <>
 std::vector<std::string> Vectorize(const char* cstr, const char* delimiter);
+
+}  // namespace snap

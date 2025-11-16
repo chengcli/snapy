@@ -6,6 +6,7 @@
 // snap
 #include <snap/hydro/hydro_formatter.hpp>
 #include <snap/intg/intg_formatter.hpp>
+#include <snap/output/output_type.hpp>
 
 #include "meshblock.hpp"
 
@@ -18,8 +19,15 @@ struct fmt::formatter<snap::MeshBlockOptions> {
   template <typename FormatContext>
   auto format(const snap::MeshBlockOptions& p, FormatContext& ctx) const {
     std::stringstream ss;
-    ss << "MeshBlock options:\n";
     p.report(ss);
+    ss << "Distribute info:\n";
+    p.dist().report(ss);
+    ss << "Output options: [\n";
+    for (auto const& out : p.outputs()) {
+      out.report(ss);
+      ss << ",\n";
+    }
+    ss << "]\n";
     ss << "Integrator options:\n";
     p.intg().report(ss);
     return fmt::format_to(ctx.out(), "{}\n{}", ss.str(), p.hydro());

@@ -16,15 +16,13 @@
 namespace py = pybind11;
 
 void bind_bc(py::module &m) {
-  py::enum_<snap::BoundaryFace>(m, "BoundaryFace")
-      .value("kUnknown", snap::kUnknown)
-      .value("kInnerX1", snap::kInnerX1)
-      .value("kOuterX1", snap::kOuterX1)
-      .value("kInnerX2", snap::kInnerX2)
-      .value("kOuterX2", snap::kOuterX2)
-      .value("kInnerX3", snap::kInnerX3)
-      .value("kOuterX3", snap::kOuterX3)
-      .export_values();
+  m.attr("kUnknown") = (int)snap::BoundaryFace::kUnknown;
+  m.attr("kInnerX1") = (int)snap::BoundaryFace::kInnerX1;
+  m.attr("kOuterX1") = (int)snap::BoundaryFace::kOuterX1;
+  m.attr("kInnerX2") = (int)snap::BoundaryFace::kInnerX2;
+  m.attr("kOuterX2") = (int)snap::BoundaryFace::kOuterX2;
+  m.attr("kInnerX3") = (int)snap::BoundaryFace::kInnerX3;
+  m.attr("kOuterX3") = (int)snap::BoundaryFace::kOuterX3;
 
   auto pyBoundaryFunctionOptions =
       py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions");

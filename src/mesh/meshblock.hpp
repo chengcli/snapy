@@ -18,13 +18,22 @@
 
 namespace snap {
 
-class OutputOptions;
+//! defined in output/output_type.hpp
+struct OutputOptions;
 
+//! \brief  container for parameters to initialize a MeshBlock
+/*!
+ * This struct holds all the options required to initialize a MeshBlock.
+ * It can be initialized from a YAML input file using the `from_yaml` method,
+ * or by setting the individual options manually.
+ */
 struct MeshBlockOptions {
   static MeshBlockOptions from_yaml(std::string input_file,
                                     DistributeInfo _dist = DistributeInfo());
   MeshBlockOptions() = default;
-  void report(std::ostream& os) const {}
+  void report(std::ostream& os) const {
+    os << "* basename = " << basename() << "\n";
+  }
 
   //! output
   ADD_ARG(std::string, basename) = "";
@@ -67,23 +76,62 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! Constructor to initialize the layers
   MeshBlockImpl() = default;
   explicit MeshBlockImpl(MeshBlockOptions const& options_);
+  ~MeshBlockImpl() override;
   void reset() override;
 
   //! \brief return an index tensor for part of the meshblock
+  /*!
+   * \param offset: tuple of (x1_offset, x2_offset, x3_offset)
+   * \param exterior: if true, return the exterior part (with ghost zones);
+   *                  if false, return the interior part (without ghost zones)
+   * \param extend_x1: number of cells to extend in the x1 direction
+   * \param extend_x2: number of cells to extend in the x2 direction
+   * \param extend_x3: number of cells to extend in the x3 direction
+   * \return: vector of TensorIndex for each dimension
+   */
   std::vector<torch::indexing::TensorIndex> part(
       std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
       int extend_x2 = 0, int extend_x3 = 0) const;
 
+  //! initialize the variables
+  /*!
+   * \param vars: variables to initialize
+   */
   Variables& initialize(Variables& vars);
 
+  //! compute the maximum allowable time step
+  /*!
+   * \param vars: current variables
+   * \return: maximum time step
+   */
   double max_time_step(Variables const& vars);
 
-  Variables& forward(double dt, int stage, Variables& vars);
+  //! advance the variables by one time step
+  /*!
+   * \param vars: current variables
+   * \param dt: time step
+   * \param stage: current stage of the integrator
+   */
+  void forward(Variables& vars, double dt, int stage);
 
+  //! make write outputs at the current time
+  /*!
+   * \param vars: current variables
+   * \param current_time: current simulation time
+   * \param final_write: if true, writing outputs as 'final' outputs
+   */
   void make_outputs(Variables const& vars, double current_time,
-                    bool force_write = false);
+                    bool final_write = false);
 
-  void print_cycle_info(double time, double dt) const;
+  //! print cycle info
+  /*!
+   * \param vars: current variables
+   * \param time: current simulation time
+   * \param dt: current time step
+   */
+  void print_cycle_info(Variables const& vars, double time, double dt) const;
+
+  void finalize(Variables const& vars, double time);
 
  private:
   //! stage registers

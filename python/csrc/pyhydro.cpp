@@ -61,13 +61,7 @@ void bind_hydro(py::module &m) {
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def("max_time_step", &snap::HydroImpl::max_time_step)
-      .def("reset_timer", &snap::HydroImpl::reset_timer)
       .def(
           "get_eos", [](snap::HydroImpl &self) { return self.peos; },
-          py::return_value_policy::reference_internal)
-      .def("report_timer", [](snap::HydroImpl &self) {
-        std::stringstream ss;
-        self.report_timer(ss);
-        return ss.str();
-      });
+          py::return_value_policy::reference_internal);
 }
