@@ -14,13 +14,6 @@ void init_buffers_2d(MeshBlockImpl const* block,
   send_bufs.resize(9);
   recv_bufs.resize(9);
 
-  // Get the number of hydro variables
-  int64_t nhydro = hydro_u.size(0);
-  
-  // Get device and dtype from input tensor
-  auto device = hydro_u.device();
-  auto dtype = hydro_u.dtype();
-
   // Iterate over all 2D neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
@@ -35,7 +28,6 @@ void init_buffers_2d(MeshBlockImpl const* block,
       
       // Get shape by applying indices to tensor
       auto part_tensor = hydro_u.index(part);
-      auto sizes = part_tensor.sizes();
       
       // Allocate send and receive buffers with same shape
       send_bufs[bid] = torch::empty_like(part_tensor);
@@ -47,8 +39,6 @@ void init_buffers_2d(MeshBlockImpl const* block,
 void serialize_2d(MeshBlockImpl const* block,
                   torch::Tensor& hydro_u,
                   std::vector<torch::Tensor>& send_bufs) {
-  int64_t nhydro = hydro_u.size(0);
-
   // Iterate over all 2D neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
@@ -73,8 +63,6 @@ void serialize_2d(MeshBlockImpl const* block,
 void deserialize_2d(MeshBlockImpl const* block,
                     torch::Tensor& hydro_u,
                     std::vector<torch::Tensor> const& recv_bufs) {
-  int64_t nhydro = hydro_u.size(0);
-
   // Iterate over all 2D neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
