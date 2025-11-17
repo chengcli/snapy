@@ -49,7 +49,7 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
 
   fname.append(pmb->options.basename());
   fname.append(".");

@@ -11,12 +11,6 @@ namespace snap {
 MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
   MeshBlockOptions op;
 
-  // use the basename of the input file as the basename of the output files
-  op.basename() = input_file.substr(0, input_file.find_last_of('.'));
-
-  op.hydro() = HydroOptions::from_yaml(input_file, op.dist());
-  op.intg() = IntegratorOptions::from_yaml(input_file);
-
   auto config = YAML::LoadFile(input_file);
 
   // distribution environment and layout
@@ -35,6 +29,12 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
     op.dist().backend() =
         config["distribute"]["backend"].as<std::string>("gloo");
   }
+
+  // use the basename of the input file as the basename of the output files
+  op.basename() = input_file.substr(0, input_file.find_last_of('.'));
+
+  op.hydro() = HydroOptions::from_yaml(input_file, op.layout());
+  op.intg() = IntegratorOptions::from_yaml(input_file);
 
   // --------------- boundary conditions --------------- //
 

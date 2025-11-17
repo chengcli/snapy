@@ -145,11 +145,11 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   int check_redo(Variables& vars);
 
   void exchange(Variables& vars) {
-    if (options.layout.type() == "slab") {
+    if (options.layout().type() == "slab") {
       _slab_exchange(vars);
     } else {
       throw std::invalid_argument("MeshBlock::exchange: layout type " +
-                                  options.layout.type() + " not implemented");
+                                  options.layout().type() + " not implemented");
     }
   }
 

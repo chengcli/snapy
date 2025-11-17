@@ -1,2 +1,0 @@
-// snap
-#include "layout.hpp"

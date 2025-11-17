@@ -1,5 +1,11 @@
 #pragma once
 
+// GLOO
+#define USE_C10D_GLOO
+
+// NCCL
+#define USE_C10D_NCCL
+
 // NetCDF output (NETCDFOUTPUT or NO_NETCDFOUTPUT)
 #define @NETCDF_OPTION@
 

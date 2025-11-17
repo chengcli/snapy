@@ -32,7 +32,7 @@
 #include <fmt/format.h>
 
 // snap
-#include "cubed_sphere_layout.hpp"
+#include "layout.hpp"
 
 namespace snap {
 
@@ -137,26 +137,26 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
   }
 }
 
-void CubedSphereLayout::report(std::ostream &os) const {
+void CubedSphereLayoutImpl::report(std::ostream &os) const {
   options.report(os);
   for (int f = 0; f < 6; ++f) {
     os << " Face " << f << "\n";
     os << " Rank | (rx,ry)\n";
     os << "----------------\n";
-    for (int r = 0; r < _pxy * _pxy; ++r) {
+    for (int r = 0; r < pxy() * pxy(); ++r) {
       os << fmt::format(" {:>3} | ({:>2},{:>2})\n", _rankof6[f][r],
                         _coords6[f][r].x, _coords6[f][r].y);
     }
   }
 }
 
-void CubedSphereLayout::_step_one(int face, int rx, int ry, int dx, int dy,
-                                  int *out_face, int *out_rx,
-                                  int *out_ry) const {
+void CubedSphereLayoutImpl::_step_one(int face, int rx, int ry, int dx, int dy,
+                                      int *out_face, int *out_rx,
+                                      int *out_ry) const {
   /* Try to stay on-face */
   int nx = rx + dx;
   int ny = ry + dy;
-  if (0 <= nx && nx < _pxy && 0 <= ny && ny < _pxy) {
+  if (0 <= nx && nx < pxy() && 0 <= ny && ny < pxy()) {
     *out_face = face;
     *out_rx = nx;
     *out_ry = ny;
@@ -167,11 +167,11 @@ void CubedSphereLayout::_step_one(int face, int rx, int ry, int dx, int dy,
   int side = -1;
   if (nx < 0)
     side = SIDE_L;
-  else if (nx >= _pxy)
+  else if (nx >= pxy())
     side = SIDE_R;
   else if (ny < 0)
     side = SIDE_B;
-  else if (ny >= _pxy)
+  else if (ny >= pxy())
     side = SIDE_T;
 
   const CSEdge emap = CS_FACE_EDGES[face][side];
@@ -181,47 +181,53 @@ void CubedSphereLayout::_step_one(int face, int rx, int ry, int dx, int dy,
   int pos = (side == SIDE_L || side == SIDE_R) ? ry : rx;
 
   /* Map to neighbor border */
-  cs_edge_map_into_neighbor(_pxy, side, pos, &emap, out_rx, out_ry);
+  cs_edge_map_into_neighbor(pxy(), side, pos, &emap, out_rx, out_ry);
 
   // cs_clamp_inside(pxy, out_rx, out_ry);
 }
 
-int CubedSphereLayout::rank_of(int face, int rx, int ry) const {
+int CubedSphereLayoutImpl::rank_of(int rx, int ry, int face) const {
   if (face < 0 || face >= 6) return -1;
   if (rx < 0 || rx >= pxy() || ry < 0 || ry >= pxy()) return -1;
   return _rankof6[face][ry * pxy() + rx];
 }
 
-std::tuple<int, int, int> CubedSphereLayout::loc_of(int global_rank) const {
+std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
   if (global_rank < 0 || global_rank >= 6 * pxy() * pxy()) return {-1, -1, -1};
   int face, r_local;
-  global_rank_to_face_local(global_rank, &face, &r_local);
+  _global_rank_to_face_local(global_rank, &face, &r_local);
   int rx = _coords6[face][r_local].x;
   int ry = _coords6[face][r_local].y;
-  return {face, rx, ry};
+  return {rx, ry, face};
 }
 
 /* get neighbor GLOBAL rank for (dx,dy) in {-1,0,1}^2 (incl. corners) */
-int CubedSphereLayout::neighbor_rank(int face, int rx, int ry, int dx,
-                                     int dy) const {
+int CubedSphereLayoutImpl::neighbor_rank(int rx, int ry, int face, int dx,
+                                         int dy, int dz) const {
+  if (dz != 0) {
+    throw std::runtime_error(
+        "CubedSphereLayout::neighbor_rank: dz must be zero in cubed-sphere "
+        "layout");
+  }
+
   if (dx == 0 && dy == 0) {
     /* self */
-    int rloc = face_local_rank(face, rx, ry);
-    return global_rank_from_face_local(face, rloc);
+    int rloc = _face_local_rank(face, rx, ry);
+    return _global_rank_from_face_local(face, rloc);
   }
 
   /* 1-step edge move */
   if ((dx == 0) ^ (dy == 0)) {
     int f1, x1, y1;
     _step_one(face, rx, ry, dx, dy, &f1, &x1, &y1);
-    int rloc = face_local_rank(f1, x1, y1);
-    return global_rank_from_face_local(f1, rloc);
+    int rloc = _face_local_rank(f1, x1, y1);
+    return _global_rank_from_face_local(f1, rloc);
   }
 
   /* corners: at least crossing one edge, maybe two */
   // find the current block's logical location
   int lx, ly;
-  logical_loc2(rx, ry, _pxy, _pxy, &lx, &ly);
+  logical_loc2(rx, ry, pxy(), pxy(), &lx, &ly);
 
   if ((dx + lx <= 1) && (dx + lx >= -1)) {
     // do (dx,0) and then (0,dy)
@@ -231,8 +237,8 @@ int CubedSphereLayout::neighbor_rank(int face, int rx, int ry, int dx,
 
     int f2, x2, y2;
     _step_one(f1, x1, y1, 0, dy, &f2, &x2, &y2);
-    int rloc = face_local_rank(f2, x2, y2);
-    return global_rank_from_face_local(f2, rloc);
+    int rloc = _face_local_rank(f2, x2, y2);
+    return _global_rank_from_face_local(f2, rloc);
   } else if ((dy + ly <= 1) && (dy + ly >= -1)) {
     // do (0, dy) and then (dx, 0)
     int f1, x1, y1;
@@ -240,13 +246,13 @@ int CubedSphereLayout::neighbor_rank(int face, int rx, int ry, int dx,
 
     int f2, x2, y2;
     _step_one(f1, x1, y1, dx, 0, &f2, &x2, &y2);
-    int rloc = face_local_rank(f2, x2, y2);
-    return global_rank_from_face_local(f2, rloc);
+    int rloc = _face_local_rank(f2, x2, y2);
+    return _global_rank_from_face_local(f2, rloc);
   } else {  // crossing two edges
     int f1, x1, y1;
     _step_one(face, rx, ry, dx, 0, &f1, &x1, &y1);
-    int rloc = face_local_rank(f1, x1, y1);
-    return global_rank_from_face_local(f1, rloc);
+    int rloc = _face_local_rank(f1, x1, y1);
+    return _global_rank_from_face_local(f1, rloc);
   }
 }
 

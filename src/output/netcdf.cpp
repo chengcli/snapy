@@ -80,7 +80,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
 
   fname.assign(pmb->options.basename());
   fname.append(".");
@@ -124,11 +124,14 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   if (ncells3 > 1) nc_def_dim(ifile, "x3f", nfaces3, &idx3f);
 
   // 3. define variables
+  int level = 0;
   auto iloc = pmb->playout->loc_of(pmb->pdist->options.rank());
-  int lx1 = std::get<2>(iloc);
+
+  int lx1 =
+      pmb->playout->options.type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
-  int level = 0;
+
   int nb1 = pmb->playout->options.pz();
   int nb2 = pmb->playout->options.py();
   int nb3 = pmb->playout->options.px();

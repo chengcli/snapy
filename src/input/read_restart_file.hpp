@@ -19,7 +19,7 @@ void read_restart_file(MeshBlockImpl *pmb, std::string fileid,
   // create filename: <file_basename>.<block_id>.<fileid>.restart
   std::string fname;
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
 
   fname.append(pmb->options.basename());
   fname.append(".");

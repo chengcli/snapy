@@ -69,15 +69,15 @@ class LayoutImpl {
     _rankof = new int[P];
   }
 
-  virtual void report(std::ostream &os) const { options.report(os); }
-
-  virtual ~LayoutImpl() { delete[] _rankof; }
-
-  virtual std::tuple<int, int, int> get_procs() const {
+  std::tuple<int, int, int> get_procs() const {
     return {options.px(), options.py(), options.pz()};
   }
 
-  virtual int rank_of(int rx, int ry, int rz) const {
+  virtual ~LayoutImpl() { delete[] _rankof; }
+
+  virtual void report(std::ostream &os) const { options.report(os); }
+
+  virtual int rank_of(int rx, int ry, int rz = 0) const {
     int px = options.px();
     int py = options.py();
     int pz = options.pz();
@@ -87,8 +87,7 @@ class LayoutImpl {
   }
 
   virtual std::tuple<int, int, int> loc_of(int rank) const {
-    if (rank < 0 || rank >= _px * _py * _pz) return {-1, -1, -1};
-    return {_coords[rank].x, _coords[rank].y, _coords[rank].z};
+    return {-1, -1, -1};
   }
 
   //! \brief Neighbor -> Z-order rank (3D)
@@ -98,11 +97,13 @@ class LayoutImpl {
    * (rx,ry,rz) are THIS rank's coords in the process grid (not Morton code).
    */
   virtual int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                            int dz) const;
+                            int dz = 0) const {
+    return -1;
+  }
 
  protected:
-  Coord3 *_coords2 = nullptr;
-  Coord2 *_coords3 = nullptr;
+  Coord2 *_coords2 = nullptr;
+  Coord3 *_coords3 = nullptr;
   int *_rankof = nullptr;
 };
 
@@ -116,12 +117,16 @@ class SlabLayoutImpl : public LayoutImpl {
     int px = options.px();
     int py = options.py();
 
-    _coords2 = new Coord3[px * py];
+    _coords2 = new Coord2[px * py];
     build_zorder_coords2(px, py, _coords2);
     build_rank_of2(px, py, _coords2, _rankof);
   }
 
   ~SlabLayoutImpl() { delete[] _coords2; }
+  void report(std::ostream &os) const override;
+  std::tuple<int, int, int> loc_of(int rank) const override;
+  int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
+                    int dz = 0) const override;
 };
 
 class CubedLayoutImpl : public LayoutImpl {
@@ -137,16 +142,21 @@ class CubedLayoutImpl : public LayoutImpl {
   }
 
   ~CubedLayoutImpl() { delete[] _coords3; }
+
+  void report(std::ostream &os) const override;
+  std::tuple<int, int, int> loc_of(int rank) const override;
+  int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
+                    int dz = 0) const override;
 };
 
 class CubedSphereLayoutImpl : public LayoutImpl {
  public:
   CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts, 6) {
     int P = pxy() * pxy();
-    _coords2[f] = new Coord2[6 * P];
+    _coords2 = new Coord2[6 * P];
 
     for (int f = 0; f < 6; ++f) {
-      _coors6[f] = _coords2 + f * P;
+      _coords6[f] = _coords2 + f * P;
       _rankof6[f] = _rankof + f * P;
 
       build_zorder_coords2(pxy(), pxy(), _coords6[f]);
@@ -154,24 +164,34 @@ class CubedSphereLayoutImpl : public LayoutImpl {
     }
   }
 
-  ~CubedSphereLayout() { delete[] _coords2[f]; }
-
-  int rank_of(int face, int rx, int ry) const override;
-  std::tuple<int, int, int> loc_of(int global_rank) const override;
+  ~CubedSphereLayoutImpl() { delete[] _coords2; }
 
   int pxy() const { return options.px(); }
 
+  int rank_of(int rx, int ry, int face) const override;
+  std::tuple<int, int, int> loc_of(int global_rank) const override;
+
+  int neighbor_rank(int rx, int ry, int face, int dx, int dy,
+                    int dz = 0) const override;
+  void report(std::ostream &os) const override;
+
+ private:
   //! \brieff Global rank layout: face-major, Z-order within face
-  int global_rank_from_face_local(int face, int r_local) const {
+  int _global_rank_from_face_local(int face, int r_local) const {
     int P = pxy() * pxy();
     return face * P + r_local;
   }
 
   //! \brief Reverse: get (face, r_local) from global rank */
-  void global_rank_to_face_local(int grank, int *face, int *r_local) const {
+  void _global_rank_to_face_local(int grank, int *face, int *r_local) const {
     int P = pxy() * pxy();
     *face = grank / P;
     *r_local = grank % P;
+  }
+
+  //! \brief map local (rx,ry) to per-face Z-order rank */
+  int _face_local_rank(int face, int rx, int ry) const {
+    return _rankof6[face][linear_index2(pxy(), pxy(), ry, rx)];
   }
 
   //! \brief Edge stepping helper
@@ -191,12 +211,6 @@ class CubedSphereLayoutImpl : public LayoutImpl {
    *    and second step outside. This mirrors typical ghost-corner
    *    exchange.
    */
-  int face_local_rank(int face, int rx, int ry) const {
-    /* map local (rx,ry) to per-face Z-order rank */
-    return _rankof6[face][linear_index2(_pxy, _pxy, ry, rx)];
-  }
-
- private:
   void _step_one(int face, int rx, int ry, int dx, int dy, int *out_face,
                  int *out_rx, int *out_ry) const;
 
@@ -208,6 +222,19 @@ using Layout = std::shared_ptr<LayoutImpl>;
 using SlabLayout = std::shared_ptr<SlabLayoutImpl>;
 using CubedLayout = std::shared_ptr<CubedLayoutImpl>;
 using CubedSphereLayout = std::shared_ptr<CubedSphereLayoutImpl>;
+
+inline Layout create_layout(LayoutOptions const &opts) {
+  if (opts.type() == "slab") {
+    return std::make_shared<SlabLayoutImpl>(opts);
+  } else if (opts.type() == "cubed") {
+    return std::make_shared<CubedLayoutImpl>(opts);
+  } else if (opts.type() == "cubed_sphere") {
+    return std::make_shared<CubedSphereLayoutImpl>(opts);
+  } else {
+    throw std::runtime_error("layout type '" + opts.type() +
+                             "' is not implemented.");
+  }
+}
 
 }  // namespace snap
 

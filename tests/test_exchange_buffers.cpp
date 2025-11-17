@@ -2,7 +2,7 @@
 #include <cstdio>
 
 // snap
-#include <snap/layout/exchange.hpp>
+#include <snap/layout/layout.hpp>
 
 int main(void) {
   printf("Testing get_buffer_id function\n");
@@ -33,7 +33,7 @@ int main(void) {
   // Verify center is always buffer 0 (for all cases where all offsets are 0)
   int center = snap::get_buffer_id(0, 0, 0);
   printf("\nCenter buffer: %d (expected 0)\n", center);
-  
+
   // Verify corners in 2D
   int corner_2d_tl = snap::get_buffer_id(-1, 1, 0);
   int corner_2d_br = snap::get_buffer_id(1, -1, 0);

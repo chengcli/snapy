@@ -6,7 +6,7 @@
 
 namespace snap {
 
-void CubedLayout::report(std::ostream &os) const {
+void CubedLayoutImpl::report(std::ostream &os) const {
   options.report(os);
   os << " Rank | (rx,ry,rz)\n";
   os << "-------------------\n";
@@ -16,14 +16,14 @@ void CubedLayout::report(std::ostream &os) const {
   }
 }
 
-std::tuple<int, int, int> CubedLayout::loc_of(int rank) const {
-  if (rank < 0 || rank >= opitions.px() * options.py() * options.pz())
+std::tuple<int, int, int> CubedLayoutImpl::loc_of(int rank) const {
+  if (rank < 0 || rank >= options.px() * options.py() * options.pz())
     return {-1, -1, -1};
   return {_coords3[rank].x, _coords3[rank].y, _coords3[rank].z};
 }
 
-int CubedLayout::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                               int dz) const {
+int CubedLayoutImpl::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
+                                   int dz) const {
   int nx = rx + dx;
   int ny = ry + dy;
   int nz = rz + dz;
