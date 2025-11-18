@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# arguments
+# -n: number of processes (world size)
+# must have at least 2 arguments: world size and executable
+
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <world_size> <executable>"
+  exit 1
+fi
+
 WORLD_SIZE=${1:-2}
+EXECUTABLE=${2}
 BACKEND=${BACKEND:-gloo}
 MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -26,7 +36,7 @@ for (( RANK=0; RANK<${WORLD_SIZE}; RANK++ )); do
   MASTER_ADDR=$MASTER_ADDR \
   MASTER_PORT=$MASTER_PORT \
   CUDA_VISIBLE_DEVICES=$DEV \
-  ./test_torchrun.release &
+  ./${EXECUTABLE} &
 done
 
 wait
