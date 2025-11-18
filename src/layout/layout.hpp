@@ -2,6 +2,8 @@
 
 // C/C++
 #include <iostream>
+#include <memory>
+#include <tuple>
 
 // snap
 #include "connectivity.hpp"
