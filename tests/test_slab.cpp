@@ -18,11 +18,11 @@ int main(void) {
 
   for (int ry = 0; ry < op.py(); ++ry)
     for (int rx = 0; rx < op.px(); ++rx) {
-      int left = sl.neighbor_rank(rx, ry, 0, -1, 0, 0);
-      int right = sl.neighbor_rank(rx, ry, 0, 1, 0, 0);
-      int up = sl.neighbor_rank(rx, ry, 0, 0, 1, 0);
-      int down = sl.neighbor_rank(rx, ry, 0, 0, -1, 0);
-      int r = sl.rank_of(rx, ry, 0);
+      int left = sl.neighbor_rank(rx, ry, 0, -1, 0);
+      int right = sl.neighbor_rank(rx, ry, 0, 1, 0);
+      int up = sl.neighbor_rank(rx, ry, 0, 0, 1);
+      int down = sl.neighbor_rank(rx, ry, 0, 0, -1);
+      int r = sl.rank_of(rx, ry);
       printf("rank %2d @ (y=%d,x=%d): L=%2d R=%2d U=%2d D=%2d\n", r, ry, rx,
              left, right, up, down);
     }
