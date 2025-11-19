@@ -1,0 +1,28 @@
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+
+distribute:
+  backend: gloo
+  layout: slab
+  nb2: 2
+  nb3: 2
+  verbose: true
+
+geometry:
+  type: cartesian
+  cells: {nx1: 1, nx2: 4, nx3: 4, nghost: 2}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic

@@ -21,13 +21,13 @@ int main(void) {
   for (int rx = 0; rx < op.px(); ++rx)
     for (int ry = 0; ry < op.py(); ++ry)
       for (int rz = 0; rz < op.pz(); ++rz) {
-        int xp = cl.neighbor_rank(rx, ry, rz, 1, 0, 0);
-        int xm = cl.neighbor_rank(rx, ry, rz, -1, 0, 0);
-        int yp = cl.neighbor_rank(rx, ry, rz, 0, 1, 0);
-        int ym = cl.neighbor_rank(rx, ry, rz, 0, -1, 0);
-        int zp = cl.neighbor_rank(rx, ry, rz, 0, 0, 1);
-        int zm = cl.neighbor_rank(rx, ry, rz, 0, 0, -1);
-        int r = cl.rank_of(rx, ry, rz);
+        int xp = cl.neighbor_rank({rx, ry, rz}, {1, 0, 0});
+        int xm = cl.neighbor_rank({rx, ry, rz}, {-1, 0, 0});
+        int yp = cl.neighbor_rank({rx, ry, rz}, {0, 1, 0});
+        int ym = cl.neighbor_rank({rx, ry, rz}, {0, -1, 0});
+        int zp = cl.neighbor_rank({rx, ry, rz}, {0, 0, 1});
+        int zm = cl.neighbor_rank({rx, ry, rz}, {0, 0, -1});
+        int r = cl.rank_of({rx, ry, rz});
         printf(
             "rank %2d @ (z=%d,y=%d,x=%d): x-=%2d x+=%2d y-=%2d y+=%2d z-=%2d "
             "z+=%2d\n",

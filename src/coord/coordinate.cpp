@@ -15,15 +15,18 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node,
   CoordinateOptions op;
 
   op.type(node["type"].as<std::string>("cartesian"));
-  if (!node["bounds"]) return op;
 
-  auto x1min = node["bounds"]["x1min"].as<double>(0.0);
-  auto x2min = node["bounds"]["x2min"].as<double>(0.0);
-  auto x3min = node["bounds"]["x3min"].as<double>(0.0);
+  double x1min = 0, x2min = 0, x3min = 0, x1max = 1, x2max = 1, x3max = 1;
 
-  auto x1max = node["bounds"]["x1max"].as<double>(1.0);
-  auto x2max = node["bounds"]["x2max"].as<double>(1.0);
-  auto x3max = node["bounds"]["x3max"].as<double>(1.0);
+  if (node["bounds"]) {
+    x1min = node["bounds"]["x1min"].as<double>(0.0);
+    x2min = node["bounds"]["x2min"].as<double>(0.0);
+    x3min = node["bounds"]["x3min"].as<double>(0.0);
+
+    x1max = node["bounds"]["x1max"].as<double>(1.0);
+    x2max = node["bounds"]["x2max"].as<double>(1.0);
+    x3max = node["bounds"]["x3max"].as<double>(1.0);
+  }
 
   // construct a temporay playout
   int rank = get_rank();

@@ -186,7 +186,8 @@ void CubedSphereLayoutImpl::_step_one(int face, int rx, int ry, int dx, int dy,
   // cs_clamp_inside(pxy, out_rx, out_ry);
 }
 
-int CubedSphereLayoutImpl::rank_of(int rx, int ry, int face) const {
+int CubedSphereLayoutImpl::rank_of(std::tuple<int, int, int> iloc) const {
+  auto [rx, ry, face] = iloc;
   if (face < 0 || face >= 6) return -1;
   if (rx < 0 || rx >= pxy() || ry < 0 || ry >= pxy()) return -1;
   return _rankof6[face][ry * pxy() + rx];
@@ -202,13 +203,10 @@ std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
 }
 
 /* get neighbor GLOBAL rank for (dx,dy) in {-1,0,1}^2 (incl. corners) */
-int CubedSphereLayoutImpl::neighbor_rank(int rx, int ry, int face, int dx,
-                                         int dy, int dz) const {
-  if (dz != 0) {
-    throw std::runtime_error(
-        "CubedSphereLayout::neighbor_rank: dz must be zero in cubed-sphere "
-        "layout");
-  }
+int CubedSphereLayoutImpl::neighbor_rank(
+    std::tuple<int, int, int> iloc, std::tuple<int, int, int> offset) const {
+  auto [rx, ry, face] = iloc;
+  auto [dx, dy, _] = offset;
 
   if (dx == 0 && dy == 0) {
     /* self */

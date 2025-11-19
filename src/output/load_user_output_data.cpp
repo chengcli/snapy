@@ -1,4 +1,6 @@
 // snap
+#include <snap/mesh/meshblock.hpp>
+
 #include "output_type.hpp"
 
 namespace snap {

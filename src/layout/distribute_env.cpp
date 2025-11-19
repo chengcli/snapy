@@ -49,8 +49,11 @@ DistributeEnvImpl::DistributeEnvImpl(DistributeEnvOptions const& opts)
 }
 
 void DistributeEnvImpl::_init_gloo() {
+  auto opts = c10d::ProcessGroupGloo::Options::create();
+  opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
+
   pg = std::make_shared<c10d::ProcessGroupGloo>(store, options.rank(),
-                                                options.world_size());
+                                                options.world_size(), opts);
 
   if (options.verbose()) {
     std::cout << "[Rank " << options.rank() << ":" << options.local_rank()

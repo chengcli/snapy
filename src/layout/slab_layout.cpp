@@ -21,12 +21,10 @@ std::tuple<int, int, int> SlabLayoutImpl::loc_of(int rank) const {
   return {_coords2[rank].x, _coords2[rank].y, 0};
 }
 
-int SlabLayoutImpl::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                                  int dz) const {
-  if (rz != 0 || dz != 0) {
-    throw std::runtime_error(
-        "SlabLayout::neighbor_rank: rz and dz must be zero in slab layout");
-  }
+int SlabLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
+                                  std::tuple<int, int, int> offset) const {
+  auto [rx, ry, _] = iloc;
+  auto [dx, dy, _] = offset;
 
   int nx = rx + dx;
   int ny = ry + dy;

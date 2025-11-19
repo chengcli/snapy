@@ -12,15 +12,13 @@
 #include <snap/intg/integrator.hpp>
 #include <snap/layout/distribute_env.hpp>
 #include <snap/layout/layout.hpp>
+#include <snap/output/output_type.hpp>
 #include <snap/scalar/scalar.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
-
-//! defined in output/output_type.hpp
-struct OutputOptions;
 
 //! \brief  container for parameters to initialize a MeshBlock
 /*!

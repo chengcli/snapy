@@ -25,7 +25,8 @@ namespace snap {
  * \param dz offset in x1 direction (-1, 0, or 1)
  * \return linear buffer index
  */
-inline int get_buffer_id(int dx, int dy, int dz = 0) {
+inline int get_buffer_id(std::tuple<int, int, int> offset) {
+  auto [dx, dy, dz] = offset;
   return (dx % 3 + 3) % 3 + ((dy % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
 }
 
@@ -79,7 +80,9 @@ class LayoutImpl {
 
   virtual void report(std::ostream &os) const { options.report(os); }
 
-  virtual int rank_of(int rx, int ry, int rz = 0) const {
+  virtual int rank_of(std::tuple<int, int, int> iloc) const {
+    auto [rx, ry, rz] = iloc;
+
     int px = options.px();
     int py = options.py();
     int pz = options.pz();
@@ -94,12 +97,13 @@ class LayoutImpl {
 
   //! \brief Neighbor -> Z-order rank (3D)
   /*!
-   * dx,dy,dz <- {-1,0,1}. periodic flags control wrap;
+   * offset = (dx,dy,dz) <- {-1,0,1}. periodic flags control wrap;
    * otherwise off-domain -> -1.
-   * (rx,ry,rz) are THIS rank's coords in the process grid (not Morton code).
+   * iloc = (rx,ry,rz) are THIS rank's logical coords in the process grid (not
+   * Morton code).
    */
-  virtual int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                            int dz = 0) const {
+  virtual int neighbor_rank(std::tuple<int, int, int> iloc,
+                            std::tuple<int, int, int> offset) const {
     return -1;
   }
 
@@ -127,8 +131,8 @@ class SlabLayoutImpl : public LayoutImpl {
   ~SlabLayoutImpl() { delete[] _coords2; }
   void report(std::ostream &os) const override;
   std::tuple<int, int, int> loc_of(int rank) const override;
-  int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                    int dz = 0) const override;
+  int neighbor_rank(std::tuple<int, int, int> iloc,
+                    std::tuple<int, int, int> offset) const override;
 };
 
 class CubedLayoutImpl : public LayoutImpl {
@@ -147,8 +151,8 @@ class CubedLayoutImpl : public LayoutImpl {
 
   void report(std::ostream &os) const override;
   std::tuple<int, int, int> loc_of(int rank) const override;
-  int neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                    int dz = 0) const override;
+  int neighbor_rank(std::tuple<int, int, int> iloc,
+                    std::tuple<int, int, int> offset) const override;
 };
 
 class CubedSphereLayoutImpl : public LayoutImpl {
@@ -170,11 +174,11 @@ class CubedSphereLayoutImpl : public LayoutImpl {
 
   int pxy() const { return options.px(); }
 
-  int rank_of(int rx, int ry, int face) const override;
+  int rank_of(std::tuple<int, int, int> iloc) const override;
   std::tuple<int, int, int> loc_of(int global_rank) const override;
 
-  int neighbor_rank(int rx, int ry, int face, int dx, int dy,
-                    int dz = 0) const override;
+  int neighbor_rank(std::tuple<int, int, int> iloc,
+                    std::tuple<int, int, int> offset) const override;
   void report(std::ostream &os) const override;
 
  private:

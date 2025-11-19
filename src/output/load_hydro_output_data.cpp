@@ -2,6 +2,7 @@
 #include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "output_type.hpp"
 #include "output_utils.hpp"

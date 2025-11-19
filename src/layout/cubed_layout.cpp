@@ -22,8 +22,11 @@ std::tuple<int, int, int> CubedLayoutImpl::loc_of(int rank) const {
   return {_coords3[rank].x, _coords3[rank].y, _coords3[rank].z};
 }
 
-int CubedLayoutImpl::neighbor_rank(int rx, int ry, int rz, int dx, int dy,
-                                   int dz) const {
+int CubedLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
+                                   std::tuple<int, int, int> offset) const {
+  auto [rx, ry, rz] = iloc;
+  auto [dx, dy, dz] = offset;
+
   int nx = rx + dx;
   int ny = ry + dy;
   int nz = rz + dz;

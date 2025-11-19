@@ -24,10 +24,13 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
       TORCH_CHECK(
           op.layout().pz() == 1,
           "Slab layout only supports partitioning along x2-x3 directions.");
+    } else {
+      TORCH_CHECK(false, "Only 'slab' layout is supported currently.");
     }
 
     op.dist().backend() =
         config["distribute"]["backend"].as<std::string>("gloo");
+    op.dist().verbose() = config["distribute"]["verbose"].as<bool>(false);
   }
 
   // use the basename of the input file as the basename of the output files

@@ -506,13 +506,25 @@ void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
 
   // Iterate over all 2D neighbor directions
   _buf_names.clear();
+  // only include names that exist in vars
+  for (auto name : names) {
+    if (vars.count(name) > 0) _buf_names.push_back(name);
+  }
+
+  // Get my logical location
+  auto iloc = playout->loc_of(pdist->options.rank());
+
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // Skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+
+      int nb = playout->neighbor_rank(iloc, offset);
+      // Skip if no neighbor in this direction
+      if (nb < 0) continue;
+
+      int bid = get_buffer_id(offset);
 
       // Get the part indices for this neighbor direction
       auto sub = part(offset);
@@ -521,10 +533,7 @@ void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
       _send_bufs[bid].clear();
       _recv_bufs[bid].clear();
 
-      for (auto name : names) {
-        if (vars.count(name) == 0) continue;
-
-        _buf_names.push_back(name);
+      for (auto name : _buf_names) {
         auto sub_tensor = vars.at(name).index(sub);
 
         // Allocate send and receive buffers with same shape
@@ -543,7 +552,7 @@ void MeshBlockImpl::_serialize_2d(Variables const& vars) {
       if (x3_offset == 0 && x2_offset == 0) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
 
       // Only serialize if buffer exists
       if (!_send_bufs[bid].empty()) {
@@ -552,9 +561,8 @@ void MeshBlockImpl::_serialize_2d(Variables const& vars) {
 
         // Copy data from mesh to send buffer
         int count = 0;
-        for (auto name : _buf_names) {
+        for (auto name : _buf_names)
           _send_bufs[bid][count++].copy_(vars.at(name).index(sub));
-        }
       }
     }
   }
@@ -568,7 +576,7 @@ void MeshBlockImpl::_deserialize_2d(Variables& vars) const {
       if (x3_offset == 0 && x2_offset == 0) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
 
       // Only deserialize if buffer exists
       if (!_recv_bufs[bid].empty()) {
@@ -594,21 +602,31 @@ void MeshBlockImpl::_slab_exchange(Variables& vars) {
   // Get my logical location
   auto iloc = playout->loc_of(pdist->options.rank());
 
+  // Get my rank
+  auto rank = pdist->options.rank();
+
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      int nb =
-          playout->neighbor_rank(std::get<0>(iloc), std::get<1>(iloc),
-                                 std::get<2>(iloc), x3_offset, x2_offset, 0);
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
 
-      int r = get_buffer_id(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = playout->neighbor_rank(iloc, offset);
+
+      int r = get_buffer_id(offset);
       if (nb >= 0) {
-        // Send operation
-        auto send_work = pdist->pg->send(_send_bufs[r], nb, 0);
-        works.push_back(send_work);
+        if (nb != rank) {  // different ranks
+          // Send operation
+          auto send_work = pdist->pg->send(_send_bufs[r], nb, 0);
+          works.push_back(send_work);
 
-        // Receive operation
-        auto recv_work = pdist->pg->recv(_recv_bufs[r], nb, 0);
-        works.push_back(recv_work);
+          // Receive operation
+          auto recv_work = pdist->pg->recv(_recv_bufs[r], nb, 0);
+          works.push_back(recv_work);
+        } else {  // self-send
+          for (int n = 0; n < _recv_bufs[r].size(); ++n)
+            _recv_bufs[r][n].copy_(_send_bufs[r][n]);
+        }
       }
     }
   }
