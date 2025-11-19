@@ -23,8 +23,8 @@ std::tuple<int, int, int> SlabLayoutImpl::loc_of(int rank) const {
 
 int SlabLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
                                   std::tuple<int, int, int> offset) const {
-  auto [rx, ry, _] = iloc;
-  auto [dx, dy, _] = offset;
+  auto [rx, ry, _1] = iloc;
+  auto [dx, dy, _2] = offset;
 
   int nx = rx + dx;
   int ny = ry + dy;
