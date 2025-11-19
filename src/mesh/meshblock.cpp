@@ -445,6 +445,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
           std::cout << " mass=" << mass[0].item<double>();
         }
       }
+
       if (compute_energy) {
         std::vector<at::Tensor> energy = {
             vars.at("hydro_u").index(interior)[IPR].sum()};
@@ -456,7 +457,10 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
           std::cout << " energy=" << energy[0].item<double>();
         }
       }
-      std::cout << std::endl;
+
+      if (pdist->is_root()) {
+        std::cout << std::endl;
+      }
     }
   }
 }
@@ -493,7 +497,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
-  auto interior = part({0, 0, 0});
+  auto interior = part({0, 0, 0}, /*exterior=*/false);
   auto rho = hydro_u.index(interior)[IDN];
   auto pres = hydro_u.index(interior)[IPR];
 
