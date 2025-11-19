@@ -44,6 +44,7 @@ struct DistributeEnvOptions {
 
   ADD_ARG(std::string, backend) = "gloo";
   ADD_ARG(std::string, master_addr) = "127.0.0.1";
+  ADD_ARG(int, root_rank) = 0;
   ADD_ARG(int, rank) = 0;
   ADD_ARG(int, local_rank) = 0;
   ADD_ARG(int, world_size) = 1;
@@ -63,7 +64,7 @@ class DistributeEnvImpl {
   explicit DistributeEnvImpl(DistributeEnvOptions const& opts);
   virtual ~DistributeEnvImpl() = default;
 
-  bool is_server() const { return options.rank() == 0; }
+  bool is_root() const { return options.rank() == options.root_rank(); }
 
  private:
   // --- Backend initializers ---

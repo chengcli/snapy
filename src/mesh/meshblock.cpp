@@ -277,6 +277,7 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
 
   // exchange buffers
   _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
+  exchange(vars);
 
   return vars;
 }
@@ -293,6 +294,14 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
     dt = std::min(dt, phydro->max_time_step(w));
   }
 
+  // gather the minimum dt across all ranks
+  std::vector<at::Tensor> dt_reduce = {torch::tensor({dt}, torch::kFloat64)};
+
+  c10d::AllreduceOptions op;
+  op.reduceOp = c10d::ReduceOp::MIN;
+  pdist->pg->allreduce(dt_reduce, op)->wait();
+
+  dt = dt_reduce[0].item<double>();
   return pow(2., -pintg->current_redo) * pintg->options.cfl() * dt;
 }
 
@@ -402,11 +411,13 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
-  if (pdist->is_server() != 0) return;
-
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
   bool compute_mass = false;
   bool compute_energy = false;
+
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = pdist->options.root_rank();
 
   if (pintg->options.ncycle_out() != 0) {
     if (cycle % pintg->options.ncycle_out() == 0) {
@@ -414,19 +425,36 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         compute_mass = true;
         compute_energy = true;
       }
-      std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
-                << std::scientific << std::setprecision(dt_precision)
-                << " time=" << time << " dt=" << dt;
-      auto interior = part({0, 0, 0});
+
+      if (pdist->is_root()) {
+        std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
+                  << std::scientific << std::setprecision(dt_precision)
+                  << " time=" << time << " dt=" << dt;
+      }
+
+      auto interior = part({0, 0, 0}, /*exterior=*/false);
+
       if (compute_mass) {
-        auto mass =
-            vars.at("hydro_u").index(interior)[IDN].sum().item<double>();
-        std::cout << " mass=" << mass;
+        std::vector<at::Tensor> mass = {
+            vars.at("hydro_u").index(interior)[IDN].sum()};
+
+        // sum across all ranks
+        pdist->pg->reduce(mass, opsum)->wait();
+
+        if (pdist->is_root()) {
+          std::cout << " mass=" << mass[0].item<double>();
+        }
       }
       if (compute_energy) {
-        auto energy =
-            vars.at("hydro_u").index(interior)[IPR].sum().item<double>();
-        std::cout << " energy=" << energy;
+        std::vector<at::Tensor> energy = {
+            vars.at("hydro_u").index(interior)[IPR].sum()};
+
+        // sum across all ranks
+        pdist->pg->reduce(energy, opsum)->wait();
+
+        if (pdist->is_root()) {
+          std::cout << " energy=" << energy[0].item<double>();
+        }
       }
       std::cout << std::endl;
     }
@@ -437,7 +465,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
-  if (pdist->is_server()) {  // only server prints
+  if (pdist->is_root()) {  // only root prints
     auto sig = SignalHandler::GetInstance();
     if (sig->GetSignalFlag(SIGTERM) != 0) {
       std::cout << std::endl << "Terminating on Terminate signal" << std::endl;

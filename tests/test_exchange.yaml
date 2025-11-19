@@ -12,7 +12,7 @@ distribute:
   layout: slab
   nb2: 2
   nb3: 2
-  verbose: true
+  verbose: false
 
 geometry:
   type: cartesian
