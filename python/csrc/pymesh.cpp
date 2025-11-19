@@ -25,12 +25,7 @@ void bind_mesh(py::module &m) {
              a.report(ss);
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
            })
-      .def_static(
-          "from_yaml",
-          [](const std::string &filename, const snap::DistributeInfo &dist) {
-            return snap::MeshBlockOptions::from_yaml(filename, dist);
-          },
-          py::arg("filename"), py::arg("dist") = snap::DistributeInfo())
+      .def_static("from_yaml", &snap::MeshBlockOptions::from_yaml)
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,
@@ -81,11 +76,12 @@ void bind_mesh(py::module &m) {
             }
           },
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
-      .ADD_OPTION(snap::DistributeInfo, snap::MeshBlockOptions, dist)
       .ADD_OPTION(snap::IntegratorOptions, snap::MeshBlockOptions, intg)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptions, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptions, scalar)
-      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptions, bfuncs);
+      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptions, bfuncs)
+      .ADD_OPTION(snap::DistributeEnvOptions, snap::MeshBlockOptions, dist)
+      .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptions, layout);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def("inc_cycle",
@@ -103,9 +99,9 @@ void bind_mesh(py::module &m) {
                    return f(vars).cast<std::map<std::string, torch::Tensor>>();
                  };
            })
+      .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
       .def("make_outputs", &snap::MeshBlockImpl::make_outputs, py::arg("vars"),
            py::arg("time"), py::arg("final_write") = false)
-      .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("forward", &snap::MeshBlockImpl::forward)
       .def(
           "part",
@@ -122,11 +118,17 @@ void bind_mesh(py::module &m) {
             }
             return index_spec;
           },
-          py::arg("offset"), py::arg("exterior") = false,
+          py::arg("offset"), py::arg("exterior") = true,
           py::arg("extend_x1") = 0, py::arg("extend_x2") = 0,
           py::arg("extend_x3") = 0)
-      .def("initialize", &snap::MeshBlockImpl::initialize)
+      //.def("initialize", &snap::MeshBlockImpl::initialize)
+      .def("initialize",
+           [](snap::MeshBlockImpl &self, snap::Variables &vars) {
+             auto time = self.initialize(vars);
+             return std::make_pair(vars, time);
+           })
+      .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
-      .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
+      .def("exchange", &snap::MeshBlockImpl::exchange)
       .def("check_redo", &snap::MeshBlockImpl::check_redo);
 }

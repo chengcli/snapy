@@ -23,6 +23,7 @@ include_directories(
   SYSTEM ${TORCH_INCLUDE_DIR}
   SYSTEM ${KINTERA_INCLUDE_DIR}
   SYSTEM ${HARP_INCLUDE_DIR}
+  SYSTEM ${CMAKE_SOURCE_DIR}/external/gloo
   )
 
 string(TOLOWER ${CMAKE_BUILD_TYPE} buildl)

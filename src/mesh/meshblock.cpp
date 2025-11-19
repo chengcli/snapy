@@ -1,10 +1,13 @@
 // C/C++
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 
+// kintera
+#include <kintera/utils/serialize.hpp>
+
 // snap
-#include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/signal_handler.hpp>
 
@@ -39,6 +42,50 @@ MeshBlockImpl::~MeshBlockImpl() {
 }
 
 void MeshBlockImpl::reset() {
+  // set up distributed environment
+  pdist = std::make_shared<DistributeEnvImpl>(options.dist());
+  playout = create_layout(options.layout());
+
+  int px = playout->options.px();
+  int py = playout->options.py();
+  int pz = playout->options.pz();
+
+  int nranks = px * py * pz;
+  TORCH_CHECK(pdist->options.world_size() == nranks,
+              "MeshBlockImpl: world_size (", pdist->options.world_size(),
+              ") does not match layout partitioning (", nranks, ").");
+
+  // reset internal block boundaries
+  if (options.layout().type() != "cubed_sphere") {  // slab or cubed layout
+    auto iloc = playout->loc_of(pdist->options.rank());
+    // x1-dir
+    auto lx1 = std::get<2>(iloc);
+    if (lx1 != 0) {
+      options.bfuncs()[BoundaryFace::kInnerX1] = nullptr;
+    }
+    if (lx1 != pz - 1) {
+      options.bfuncs()[BoundaryFace::kOuterX1] = nullptr;
+    }
+
+    // x2-dir
+    auto lx2 = std::get<1>(iloc);
+    if (lx2 != 0) {
+      options.bfuncs()[BoundaryFace::kInnerX2] = nullptr;
+    }
+    if (lx2 != py - 1) {
+      options.bfuncs()[BoundaryFace::kOuterX2] = nullptr;
+    }
+
+    // x3-dir
+    auto lx3 = std::get<0>(iloc);
+    if (lx3 != 0) {
+      options.bfuncs()[BoundaryFace::kInnerX3] = nullptr;
+    }
+    if (lx3 != px - 1) {
+      options.bfuncs()[BoundaryFace::kOuterX3] = nullptr;
+    }
+  }
+
   // set up output
   for (auto const& out_op : options.outputs()) {
     if (out_op.file_type() == "restart") {
@@ -155,13 +202,12 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-Variables& MeshBlockImpl::initialize(Variables& vars) {
+double MeshBlockImpl::initialize(Variables& vars) {
   // Set up a signal handler
   SignalHandler::GetInstance();
 
   if (pintg->options.restart() != "") {
-    read_restart_file(this, pintg->options.restart(), vars);
-    return vars;
+    return _init_from_restart(vars);
   }
 
   BoundaryFuncOptions bops;
@@ -231,7 +277,14 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
     vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
 
-  return vars;
+  // exchange buffers
+  _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
+  exchange(vars);
+
+  // start timing
+  _time_start = clock();
+
+  return 0.;  // default start time is 0.0
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
@@ -246,6 +299,14 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
     dt = std::min(dt, phydro->max_time_step(w));
   }
 
+  // gather the minimum dt across all ranks
+  std::vector<at::Tensor> dt_reduce = {torch::tensor({dt}, torch::kFloat64)};
+
+  c10d::AllreduceOptions op;
+  op.reduceOp = c10d::ReduceOp::MIN;
+  pdist->pg->allreduce(dt_reduce, op)->wait();
+
+  dt = dt_reduce[0].item<double>();
   return pow(2., -pintg->current_redo) * pintg->options.cfl() * dt;
 }
 
@@ -335,6 +396,9 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
   }
+
+  // -------- (7) ghost zone exchange --------
+  exchange(vars);
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
@@ -352,11 +416,13 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
-  if (options.dist().gid() != 0) return;  // only rank 0 prints
-
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
   bool compute_mass = false;
   bool compute_energy = false;
+
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = pdist->options.root_rank();
 
   if (pintg->options.ncycle_out() != 0) {
     if (cycle % pintg->options.ncycle_out() == 0) {
@@ -364,21 +430,42 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         compute_mass = true;
         compute_energy = true;
       }
-      std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
-                << std::scientific << std::setprecision(dt_precision)
-                << " time=" << time << " dt=" << dt;
-      auto interior = part({0, 0, 0});
+
+      if (pdist->is_root()) {
+        std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
+                  << std::scientific << std::setprecision(dt_precision)
+                  << " time=" << time << " dt=" << dt;
+      }
+
+      auto interior = part({0, 0, 0}, /*exterior=*/false);
+
       if (compute_mass) {
-        auto mass =
-            vars.at("hydro_u").index(interior)[IDN].sum().item<double>();
-        std::cout << " mass=" << mass;
+        std::vector<at::Tensor> mass = {
+            vars.at("hydro_u").index(interior)[IDN].sum()};
+
+        // sum across all ranks
+        pdist->pg->reduce(mass, opsum)->wait();
+
+        if (pdist->is_root()) {
+          std::cout << " mass=" << mass[0].item<double>();
+        }
       }
+
       if (compute_energy) {
-        auto energy =
-            vars.at("hydro_u").index(interior)[IPR].sum().item<double>();
-        std::cout << " energy=" << energy;
+        std::vector<at::Tensor> energy = {
+            vars.at("hydro_u").index(interior)[IPR].sum()};
+
+        // sum across all ranks
+        pdist->pg->reduce(energy, opsum)->wait();
+
+        if (pdist->is_root()) {
+          std::cout << " energy=" << energy[0].item<double>();
+        }
       }
-      std::cout << std::endl;
+
+      if (pdist->is_root()) {
+        std::cout << std::endl;
+      }
     }
   }
 }
@@ -387,7 +474,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
-  if (options.dist().gid() == 0) {  // only rank 0 prints
+  if (pdist->is_root()) {  // only root prints
     auto sig = SignalHandler::GetInstance();
     if (sig->GetSignalFlag(SIGTERM) != 0) {
       std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -407,15 +494,41 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
     std::cout << "tlim=" << pintg->options.tlim()
               << " nlim=" << pintg->options.nlim() << std::endl;
   }
+
+  // ---------- timing info ----------
+  clock_t tstop = clock();
+  double cpu_time =
+      (tstop > _time_start ? static_cast<double>(tstop - _time_start) : 1.0) /
+      static_cast<double>(CLOCKS_PER_SEC);
+
+  std::vector<at::Tensor> cells = {
+      torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
+                    torch::kInt64)};
+
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = pdist->options.root_rank();
+
+  pdist->pg->reduce(cells, opsum)->wait();
+
+  int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
+  double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
+
+  if (pdist->is_root()) {
+    std::cout << std::endl
+              << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
+    std::cout << "cpu time used (s) = " << cpu_time << std::endl;
+    std::cout << "M cell-updates/cpu-second = " << zc_cpus / 1e6 << std::endl;
+  }
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
   auto sig = snap::SignalHandler::GetInstance();
-  if (sig->CheckSignalFlags()) return -1;  // terminate
+  if (sig->CheckSignalFlags(this)) return -1;  // terminate
 
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
-  auto interior = part({0, 0, 0});
+  auto interior = part({0, 0, 0}, /*exterior=*/false);
   auto rho = hydro_u.index(interior)[IDN];
   auto pres = hydro_u.index(interior)[IPR];
 
@@ -444,6 +557,190 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   // good to go
   pintg->current_redo = 0;
   return 0;
+}
+
+double MeshBlockImpl::_init_from_restart(Variables& vars) {
+  // create filename: <file_basename>.<block_id>.<fid>.restart
+  std::string fid = pintg->options.restart();
+
+  std::string fname;
+  char bid[12];
+  snprintf(bid, sizeof(bid), "block%d", pdist->options.rank());
+
+  fname.append(options.basename());
+  fname.append(".");
+  fname.append(bid);
+  fname.append(".");
+  fname.append(fid);
+  fname.append(".restart");
+
+  // load variables from disk
+  kintera::load_tensors(vars, fname);
+
+  // load auxiliary timing data from disk
+  Variables timing_vars;
+
+  timing_vars["last_time"] = torch::Tensor();
+  timing_vars["last_cycle"] = torch::Tensor();
+  timing_vars["file_number"] = torch::Tensor();
+  timing_vars["next_time"] = torch::Tensor();
+
+  kintera::load_tensors(timing_vars, fname);
+
+  cycle = timing_vars.at("last_cycle").item<int64_t>();
+  for (int n = 0; n < output_types.size(); ++n) {
+    output_types[n]->file_number =
+        timing_vars.at("file_number")[n].item<int64_t>();
+    output_types[n]->next_time = timing_vars.at("next_time")[n].item<double>();
+  }
+
+  // start timing
+  _time_start = clock();
+  _cycle_start = cycle;
+
+  return timing_vars.at("last_time").item<double>();
+}
+
+void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
+                                     std::vector<std::string> const& names) {
+  // Initialize vectors to size 9 (2D decomposition) with empty tensors
+  _send_bufs.clear();
+  _recv_bufs.clear();
+  _send_bufs.resize(9);
+  _recv_bufs.resize(9);
+
+  // Iterate over all 2D neighbor directions
+  _buf_names.clear();
+  // only include names that exist in vars
+  for (auto name : names) {
+    if (vars.count(name) > 0) _buf_names.push_back(name);
+  }
+
+  // Get my logical location
+  auto iloc = playout->loc_of(pdist->options.rank());
+
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+
+      int nb = playout->neighbor_rank(iloc, offset);
+      // Skip if no neighbor in this direction
+      if (nb < 0) continue;
+
+      int bid = get_buffer_id(offset);
+
+      // Get the part indices for this neighbor direction
+      auto sub = part(offset);
+
+      // Get shape by applying indices to tensor
+      _send_bufs[bid].clear();
+      _recv_bufs[bid].clear();
+
+      for (auto name : _buf_names) {
+        auto sub_tensor = vars.at(name).index(sub);
+
+        // Allocate send and receive buffers with same shape
+        _send_bufs[bid].push_back(torch::empty_like(sub_tensor));
+        _recv_bufs[bid].push_back(torch::empty_like(sub_tensor));
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_serialize_2d(Variables const& vars) {
+  // Iterate over all 2D neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
+
+      // Only serialize if buffer exists
+      if (!_send_bufs[bid].empty()) {
+        // Get the interior part for this direction
+        auto sub = part(offset, /*exterior=*/false);
+
+        // Copy data from mesh to send buffer
+        int count = 0;
+        for (auto name : _buf_names)
+          _send_bufs[bid][count++].copy_(vars.at(name).index(sub));
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_deserialize_2d(Variables& vars) const {
+  // Iterate over all 2D neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
+
+      // Only deserialize if buffer exists
+      if (!_recv_bufs[bid].empty()) {
+        // Get the exterior (ghost zone) part for this direction
+        auto sub = part(offset, /*exterior=*/true);
+
+        // Copy data from receive buffer to mesh ghost zones
+        int count = 0;
+        for (auto name : _buf_names) {
+          vars.at(name).index_put_(sub, _recv_bufs[bid][count++]);
+        }
+      }
+    }
+  }
+}
+
+void MeshBlockImpl::_slab_exchange(Variables& vars) {
+  // Serialize data into send buffers
+  _serialize_2d(vars);
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+
+  // Get my logical location
+  auto iloc = playout->loc_of(pdist->options.rank());
+
+  // Get my rank
+  auto rank = pdist->options.rank();
+
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = playout->neighbor_rank(iloc, offset);
+
+      int r = get_buffer_id(offset);
+      if (nb >= 0) {
+        if (nb != rank) {  // different ranks
+          // Send operation
+          auto send_work = pdist->pg->send(_send_bufs[r], nb, 0);
+          works.push_back(send_work);
+
+          // Receive operation
+          auto recv_work = pdist->pg->recv(_recv_bufs[r], nb, 0);
+          works.push_back(recv_work);
+        } else {  // self-send
+          for (int n = 0; n < _recv_bufs[r].size(); ++n)
+            _recv_bufs[r][n].copy_(_send_bufs[r][n]);
+        }
+      }
+    }
+  }
+
+  // Wait for all operations to complete
+  for (auto& work : works) work->wait();
+
+  // Deserialize received data into ghost zones
+  _deserialize_2d(vars);
 }
 
 }  // namespace snap

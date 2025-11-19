@@ -6,6 +6,8 @@
 #include <mutex>
 
 // snap
+#include <snap/mesh/meshblock.hpp>
+
 #include "signal_handler.hpp"
 
 //! \file signal_handler.cpp
@@ -58,7 +60,7 @@ SignalHandler* SignalHandler::GetInstance() {
 
 //! \brief Synchronize and check signal flags and return true if any of them is
 //! caught
-int SignalHandler::CheckSignalFlags() {
+int SignalHandler::CheckSignalFlags(MeshBlockImpl const* pmb) {
   // Currently, only checking for nonzero return code at the end of each
   // timestep in main.cpp; i.e. if an issue prevents a process from reaching the
   // end of a cycle, the signals will never be handled by that process / the
@@ -67,7 +69,13 @@ int SignalHandler::CheckSignalFlags() {
   sigprocmask(SIG_BLOCK, &mask_, nullptr);
   for (int n = 0; n < nsignal; n++) ret += signalflag_[n];
   sigprocmask(SIG_UNBLOCK, &mask_, nullptr);
-  return ret;
+
+  std::vector<at::Tensor> ret_reduce = {torch::tensor({ret}, torch::kInt32)};
+  c10d::AllreduceOptions op;
+  op.reduceOp = c10d::ReduceOp::MAX;
+  pmb->pdist->pg->allreduce(ret_reduce, op)->wait();
+
+  return ret_reduce[0].item<int>();
 }
 
 //! \brief Gets a signal flag assuming the signalflag array is already

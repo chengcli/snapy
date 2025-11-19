@@ -1,6 +1,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/mesh/meshblock.hpp>
 #include <snap/scalar/scalar.hpp>
 
 #include "output_type.hpp"

@@ -15,12 +15,14 @@
 // snap
 #include <snap/coord/coordinate.hpp>
 #include <snap/interface/athena_arrays.hpp>
-#include <snap/mesh/meshblock.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
+
+class MeshBlockImpl;
+using Variables = std::map<std::string, torch::Tensor>;
 
 //! \brief  container for parameters read from `<output>` block in the input
 struct OutputOptions {

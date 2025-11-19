@@ -27,10 +27,9 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
     }
   }
 
-  // store current time and cycle
-  out_vars["current_time"] = torch::tensor({current_time}, torch::kFloat64);
-  out_vars["current_cycle"] =
-      torch::tensor({(int64_t)pmb->cycle}, torch::kInt64);
+  // store last time and cycle
+  out_vars["last_time"] = torch::tensor({current_time}, torch::kFloat64);
+  out_vars["last_cycle"] = torch::tensor({(int64_t)pmb->cycle}, torch::kInt64);
 
   // save file number and next time for each output type
   std::vector<int> output_file_numbers;
@@ -49,7 +48,7 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->options.dist().gid());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
 
   fname.append(pmb->options.basename());
   fname.append(".");

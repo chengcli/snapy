@@ -11,11 +11,7 @@ IntegratorOptions IntegratorOptions::from_yaml(std::string const& filename) {
   IntegratorOptions op;
 
   auto config = YAML::LoadFile(filename);
-  if (!config["integration"]) {
-    TORCH_WARN(
-        "no integration options specified, using default RK3 integrator");
-    return op;
-  }
+  if (!config["integration"]) return op;
 
   op.type() = config["integration"]["type"].as<std::string>("rk3");
   op.cfl() = config["integration"]["cfl"].as<double>(0.9);

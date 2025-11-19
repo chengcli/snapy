@@ -14,6 +14,7 @@
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/implicit/implicit.hpp>
+#include <snap/layout/layout.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
@@ -27,7 +28,7 @@ namespace snap {
 
 struct HydroOptions {
   static HydroOptions from_yaml(std::string const& filename,
-                                DistributeInfo dist = DistributeInfo());
+                                LayoutOptions layout = LayoutOptions());
   HydroOptions() = default;
   void report(std::ostream& os) const {
     os << "* disable_dynamics = " << disable_dynamics() << "\n";

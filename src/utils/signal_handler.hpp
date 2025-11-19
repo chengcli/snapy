@@ -3,6 +3,8 @@
 
 namespace snap {
 
+class MeshBlockImpl;
+
 class SignalHandler {
  protected:
   SignalHandler();  // disable direct instantiation
@@ -16,7 +18,7 @@ class SignalHandler {
   static void SetSignalFlag(int s);
 
   ~SignalHandler() {}
-  int CheckSignalFlags();
+  int CheckSignalFlags(MeshBlockImpl const *pmb);
   int GetSignalFlag(int s);
   void SetWallTimeAlarm(int t);
   void CancelWallTimeAlarm();

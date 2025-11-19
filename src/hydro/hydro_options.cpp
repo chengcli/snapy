@@ -12,7 +12,7 @@
 namespace snap {
 
 HydroOptions HydroOptions::from_yaml(std::string const& filename,
-                                     DistributeInfo dist) {
+                                     LayoutOptions layout) {
   HydroOptions op;
 
   op.thermo() = kintera::ThermoOptions::from_yaml(filename);
@@ -28,7 +28,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
 
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
-    op.coord() = CoordinateOptions::from_yaml(config["geometry"], dist);
+    op.coord() = CoordinateOptions::from_yaml(config["geometry"], layout);
   }
 
   // project primitive variables

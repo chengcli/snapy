@@ -10,7 +10,7 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/layout/distribute_info.hpp>
+#include <snap/layout/layout.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"
@@ -27,7 +27,7 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 
 struct CoordinateOptions {
   static CoordinateOptions from_yaml(const YAML::Node &node,
-                                     DistributeInfo dist = DistributeInfo());
+                                     LayoutOptions layout = LayoutOptions());
   CoordinateOptions() = default;
   void report(std::ostream &os) const {
     os << "* type = " << type() << "\n"

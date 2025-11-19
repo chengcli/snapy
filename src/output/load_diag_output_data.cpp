@@ -7,6 +7,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/mesh/meshblock.hpp>
+
 #include "output_type.hpp"
 #include "output_utils.hpp"
 
