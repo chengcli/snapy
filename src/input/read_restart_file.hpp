@@ -13,25 +13,6 @@
 
 namespace snap {
 
-// restart files are named as: <file_basename>.<block_id>.<fileid>.restart
-void read_restart_file(MeshBlockImpl *pmb, std::string fileid,
-                       Variables &in_vars) {
-  // create filename: <file_basename>.<block_id>.<fileid>.restart
-  std::string fname;
-  char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
-
-  fname.append(pmb->options.basename());
-  fname.append(".");
-  fname.append(blockid);
-  fname.append(".");
-  fname.append(fileid);
-  fname.append(".restart");
-
-  // load from disk
-  kintera::load_tensors(in_vars, fname);
-}
-
 void set_hydro_interior(MeshBlockImpl *block, torch::Tensor &hydro_w,
                         Variables &in_vars) {
   auto interior = block->part({0, 0, 0});

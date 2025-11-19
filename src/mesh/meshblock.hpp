@@ -97,8 +97,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! initialize the variables
   /*!
    * \param vars: variables to initialize
+   * \return: initial simulation time
    */
-  Variables& initialize(Variables& vars);
+  double initialize(Variables& vars);
 
   //! compute the maximum allowable time step
   /*!
@@ -142,6 +143,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   int check_redo(Variables& vars);
 
+  //! exchange ghost zones
   void exchange(Variables& vars) {
     if (options.layout().type() == "slab") {
       _slab_exchange(vars);
@@ -177,7 +179,18 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   void _slab_exchange(Variables& vars);
 
+  //! initialize from restart file
+  /*!
+   * \param vars: variables to initialize
+   * \return: simulation time from the restart file
+   */
+  double _init_from_restart(Variables& vars);
+
  private:
+  //! clock and cycle at time start
+  clock_t _time_start;
+  int _cycle_start = 0;
+
   //! stage registers
   torch::Tensor _hydro_u0, _hydro_u1;
   torch::Tensor _scalar_s0, _scalar_s1;

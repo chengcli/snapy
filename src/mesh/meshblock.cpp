@@ -1,10 +1,13 @@
 // C/C++
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 
+// kintera
+#include <kintera/utils/serialize.hpp>
+
 // snap
-#include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/signal_handler.hpp>
 
@@ -199,13 +202,12 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   return {slice4, slice3, slice2, slice1};
 }
 
-Variables& MeshBlockImpl::initialize(Variables& vars) {
+double MeshBlockImpl::initialize(Variables& vars) {
   // Set up a signal handler
   SignalHandler::GetInstance();
 
   if (pintg->options.restart() != "") {
-    read_restart_file(this, pintg->options.restart(), vars);
-    return vars;
+    return _init_from_restart(vars);
   }
 
   BoundaryFuncOptions bops;
@@ -279,7 +281,10 @@ Variables& MeshBlockImpl::initialize(Variables& vars) {
   _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
   exchange(vars);
 
-  return vars;
+  // start timing
+  _time_start = clock();
+
+  return 0.;  // default start time is 0.0
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
@@ -489,11 +494,37 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
     std::cout << "tlim=" << pintg->options.tlim()
               << " nlim=" << pintg->options.nlim() << std::endl;
   }
+
+  // ---------- timing info ----------
+  clock_t tstop = clock();
+  double cpu_time =
+      (tstop > _time_start ? static_cast<double>(tstop - _time_start) : 1.0) /
+      static_cast<double>(CLOCKS_PER_SEC);
+
+  std::vector<at::Tensor> cells = {
+      torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
+                    torch::kInt64)};
+
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = pdist->options.root_rank();
+
+  pdist->pg->reduce(cells, opsum)->wait();
+
+  int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
+  double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
+
+  if (pdist->is_root()) {
+    std::cout << std::endl
+              << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
+    std::cout << "cpu time used (s) = " << cpu_time << std::endl;
+    std::cout << "M cell-updates/cpu-second = " << zc_cpus / 1e6 << std::endl;
+  }
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
   auto sig = snap::SignalHandler::GetInstance();
-  if (sig->CheckSignalFlags()) return -1;  // terminate
+  if (sig->CheckSignalFlags(this)) return -1;  // terminate
 
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
@@ -526,6 +557,48 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   // good to go
   pintg->current_redo = 0;
   return 0;
+}
+
+double MeshBlockImpl::_init_from_restart(Variables& vars) {
+  // create filename: <file_basename>.<block_id>.<fid>.restart
+  std::string fid = pintg->options.restart();
+
+  std::string fname;
+  char bid[12];
+  snprintf(bid, sizeof(bid), "block%d", pdist->options.rank());
+
+  fname.append(options.basename());
+  fname.append(".");
+  fname.append(bid);
+  fname.append(".");
+  fname.append(fid);
+  fname.append(".restart");
+
+  // load variables from disk
+  kintera::load_tensors(vars, fname);
+
+  // load auxiliary timing data from disk
+  Variables timing_vars;
+
+  timing_vars["last_time"] = torch::Tensor();
+  timing_vars["last_cycle"] = torch::Tensor();
+  timing_vars["file_number"] = torch::Tensor();
+  timing_vars["next_time"] = torch::Tensor();
+
+  kintera::load_tensors(timing_vars, fname);
+
+  cycle = timing_vars.at("last_cycle").item<int64_t>();
+  for (int n = 0; n < output_types.size(); ++n) {
+    output_types[n]->file_number =
+        timing_vars.at("file_number")[n].item<int64_t>();
+    output_types[n]->next_time = timing_vars.at("next_time")[n].item<double>();
+  }
+
+  // start timing
+  _time_start = clock();
+  _cycle_start = cycle;
+
+  return timing_vars.at("last_time").item<double>();
 }
 
 void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
