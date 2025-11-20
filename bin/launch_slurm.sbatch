@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J snap_gloo_test
+#SBATCH -J snap
 #SBATCH -N 1                  # 1 node
 #SBATCH -n 4                  # 4 tasks/ranks total
 #SBATCH -t 00:10:00
@@ -21,5 +21,5 @@ srun --mpi=none bash -c '
 
   echo "Launching rank $RANK/$WORLD_SIZE on node $(hostname), local_rank=$LOCAL_RANK"
 
-  ./test_torchrun.release
+  ./run.release
 '
