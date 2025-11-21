@@ -7,8 +7,8 @@
 namespace snap {
 
 void DistributeEnvImpl::_init_nccl() {
-  c10d::ProcessGroupNCCL::Options opts;
-  opts.isHighPriorityStream = false;
+  auto opts = c10d::ProcessGroupNCCL::Options::create();
+  options->is_high_priority_stream = false;
 
   // Rank -> GPU mapping
   int device_index = options.local_rank() % torch::cuda::device_count();

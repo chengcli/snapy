@@ -9,3 +9,4 @@ add_package(${PACKAGE_NAME} ${REPO_URL} ${REPO_TAG} "" ON)
 set(FMT_INCLUDE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/_deps/${PACKAGE_NAME}-src/include"
     CACHE PATH "fmt include directory")
+include_directories(${FMT_INCLUDE_DIR})

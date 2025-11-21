@@ -91,6 +91,7 @@ if (CUDAToolkit_FOUND)
       riemann/*.cu
       implicit/*.cu
       utils/*.cu
+      layout/*.cpp
       )
 
   add_library(${namel}_cuda_${buildl}
