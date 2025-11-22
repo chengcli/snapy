@@ -51,7 +51,11 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     std::string outfile;
     outfile.assign(pmb->options.basename());
     outfile.append(".");
-    outfile.append(number);
+    if (final_write) {
+      outfile.append("final");
+    } else {
+      outfile.append(number);
+    }
     outfile.append(".restart");
 
     std::vector<std::string> file_list;
