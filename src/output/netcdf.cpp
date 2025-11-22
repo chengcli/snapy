@@ -416,6 +416,10 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   ClearOutputData();  // required when LoadOutputData() is used.
   delete[] data;
   delete[] var_ids;
+
+  if (options.combine()) {
+    combine_blocks(pmb, final_write);
+  }
 #endif  // NETCDFOUTPUT
 }
 }  // namespace snap

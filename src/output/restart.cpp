@@ -15,7 +15,10 @@
 namespace snap {
 
 RestartOutput::RestartOutput(OutputOptions const &options_)
-    : OutputType(options_) {}
+    : OutputType(options_) {
+  // restart files are always combined
+  options.combine(true);
+}
 
 void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                       double current_time, bool final_write) {
@@ -43,7 +46,7 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   out_vars["file_number"] = torch::tensor(output_file_numbers, torch::kInt64);
   out_vars["next_time"] = torch::tensor(output_next_times, torch::kFloat64);
 
-  // create filename: <basename>.<blockid>.<file_number>.restart
+  // create filename: <basename>.<blockid>.<file_number>.part
   std::string fname;
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
@@ -59,10 +62,14 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   } else {
     fname.append(number);
   }
-  fname.append(".restart");
+  fname.append(".part");
 
   // save to disk
   kintera::save_tensors(out_vars, fname);
+
+  if (options.combine()) {
+    combine_blocks(pmb, final_write);
+  }
 }
 
 }  // namespace snap

@@ -36,6 +36,7 @@ class RestartOutput : public OutputType {
   explicit RestartOutput(OutputOptions const& options_);
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool final_write) override;
+  void combine_blocks(MeshBlockImpl* pmb, bool) override;
 };
 
 // \brief derived OutputType class for Athena HDF5 files
@@ -82,6 +83,7 @@ class NetcdfOutput : public OutputType {
   ///         one MeshBlock per file
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool final_write) override;
+  void combine_blocks(MeshBlockImpl* pmb, bool) override;
 };
 
 class PnetcdfOutput : public OutputType {

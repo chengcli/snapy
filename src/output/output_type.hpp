@@ -62,6 +62,9 @@ struct OutputOptions {
   ADD_ARG(std::string, data_format);
   ADD_ARG(std::vector<std::string>, variables);
 
+  ADD_ARG(bool, combine) = true;
+  ADD_ARG(bool, verbose) = false;
+
  public:
   static OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
@@ -141,6 +144,7 @@ class OutputType {
   // following pure virtual function must be implemented in all derived classes
   virtual void write_output_file(MeshBlockImpl *pmb, Variables const &vars,
                                  double time, bool flag) {}
+  virtual void combine_blocks(MeshBlockImpl *pmb, bool) {}
 
  protected:
   void loadHydroOutputData(MeshBlockImpl *pmb, Variables const &vars);
