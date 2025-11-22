@@ -44,6 +44,8 @@ OutputOptions OutputOptions::from_yaml(YAML::Node const &node, int fid) {
     options.variables() = node["variables"].as<std::vector<std::string>>();
   }
 
+  options.verbose() = node["verbose"].as<bool>(false);
+
   return options;
 }
 
