@@ -4,6 +4,7 @@
 #include <snap/eos/ideal_gas.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/eos/moist_mixture.hpp>
+#include <snap/eos/plume_eos.hpp>
 #include <snap/eos/shallow_water.hpp>
 #include <snap/recon/interpolation.hpp>
 #include <snap/riemann/riemann_solver.hpp>
@@ -21,6 +22,8 @@ EquationOfState register_module_op(torch::nn::Module *p, std::string name,
     return p->register_module(name, ANEOS(op));
   } else if (op.type() == "shallow-water") {
     return p->register_module(name, ShallowWater(op));
+  } else if (op.type() == "plume-eos") {
+    return p->register_module(name, PlumeEOS(op));
   } else {
     throw std::runtime_error("register_module: unknown type " + op.type());
   }
@@ -38,6 +41,8 @@ RiemannSolver register_module_op(torch::nn::Module *p, std::string name,
     return p->register_module(name, UpwindSolver(op));
   } else if (op.type() == "shallow-roe") {
     return p->register_module(name, ShallowRoeSolver(op));
+  } else if (op.type() == "plume-upwind") {
+    return p->register_module(name, PlumeRoeSolver(op));
   } else {
     throw std::runtime_error("register_module: unknown type " + op.type());
   }

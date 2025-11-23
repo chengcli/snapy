@@ -217,8 +217,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     pib->mark_prim_solid_(w, other.at("solid"));
   }
 
-  auto temp = peos->compute("W->T", {w});
-
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   std::chrono::high_resolution_clock::time_point time2;
 
@@ -261,6 +259,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (6) Calculate external forcing ------------ ////
   auto du = -dt * _div;
+  auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
 
   //// ------------ (7) Perform implicit correction ------------ ////
