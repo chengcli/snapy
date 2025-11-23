@@ -181,6 +181,18 @@ struct BotSpongeLyrOptions {
   ADD_ARG(CoordinateOptions, coord);
 };
 
+struct PlumeForcingOptions {
+  static PlumeForcingOptions from_yaml(YAML::Node const& node);
+  PlumeForcingOptions() = default;
+  void report(std::ostream& os) const {
+    os << "* entrainment = " << entrainment() << "\n"
+       << "* N2 = " << N2() << "\n";
+  }
+
+  ADD_ARG(double, entrainment) = 0.1;
+  ADD_ARG(double, N2) = 0.0;
+};
+
 class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
  public:
   //! options with which this `ConstGravity` was constructed
@@ -424,6 +436,21 @@ class BotSpongeLyrImpl : public torch::nn::Cloneable<BotSpongeLyrImpl> {
                         double dt);
 };
 TORCH_MODULE(BotSpongeLyr);
+
+class PlumeForcingImpl : public torch::nn::Cloneable<PlumeForcingImpl> {
+ public:
+  //! options with which this `PlumeForcing` was constructed
+  PlumeForcingOptions options;
+
+  // Constructor to initialize the layers
+  PlumeForcingImpl() = default;
+  explicit PlumeForcingImpl(PlumeForcingOptions const& options_) { reset(); }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(PlumeForcing);
 
 }  // namespace snap
 

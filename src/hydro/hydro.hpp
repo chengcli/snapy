@@ -5,9 +5,6 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// kintera
-#include <kintera/thermo/thermo.hpp>
-
 // snap
 #include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
@@ -31,13 +28,17 @@ struct HydroOptions {
                                 LayoutOptions layout = LayoutOptions());
   HydroOptions() = default;
   void report(std::ostream& os) const {
-    os << "* disable_dynamics = " << disable_dynamics() << "\n";
+    os << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
+       << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
+       << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
 
-  ADD_ARG(bool, disable_dynamics) = false;
+  //! verbose
+  ADD_ARG(bool, verbose) = false;
 
-  //! Thermodynamics options
-  ADD_ARG(kintera::ThermoOptions, thermo);
+  ADD_ARG(bool, disable_flux_x1) = false;
+  ADD_ARG(bool, disable_flux_x2) = false;
+  ADD_ARG(bool, disable_flux_x3) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav);
@@ -52,6 +53,7 @@ struct HydroOptions {
   ADD_ARG(RelaxBotVeloOptions, relaxBotVelo);
   ADD_ARG(TopSpongeLyrOptions, topSpongeLyr);
   ADD_ARG(BotSpongeLyrOptions, botSpongeLyr);
+  ADD_ARG(PlumeForcingOptions, plumeForcing);
 
   //! submodule options
   ADD_ARG(CoordinateOptions, coord);

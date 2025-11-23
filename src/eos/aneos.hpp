@@ -28,7 +28,8 @@ class ANEOSImpl : public EquationOfStateImpl,
    * W->U: convert primitive variables to conserved variables
    * U->W: convert conserved variables to primitive variables
    * W->A: compute adiabatic index from primitive variables
-   * W->L: compute internal energy from primitive variables
+   * W->L: compute sound speed from primitive variables
+   * W->T: compute temperature
    * WL->A: compute sound speed from primitive variables and adiabatic index
    */
   torch::Tensor compute(std::string ab,
@@ -38,7 +39,7 @@ class ANEOSImpl : public EquationOfStateImpl,
     return named_buffers()[var];
   }
 
-  // forward function is get_pres
+  //! forward function
   torch::Tensor forward(torch::Tensor cons) { return compute("U->W", {cons}); }
 
  private:

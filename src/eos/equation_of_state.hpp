@@ -21,7 +21,8 @@ class Node;
 namespace snap {
 
 struct EquationOfStateOptions {
-  static EquationOfStateOptions from_yaml(YAML::Node const& node);
+  static EquationOfStateOptions from_yaml(YAML::Node const& node,
+                                          std::string filename = "");
   EquationOfStateOptions() = default;
   void report(std::ostream& os) const {
     os << "* type = " << type() << "\n"

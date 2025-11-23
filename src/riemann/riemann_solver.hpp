@@ -149,6 +149,37 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
                         torch::Tensor out) override;
 };
 TORCH_MODULE(ShallowRoeSolver);
+
+class PlumeRoeSolverImpl : public torch::nn::Cloneable<PlumeRoeSolverImpl>,
+                           public RiemannSolverImpl {
+ public:
+  //! submodules
+  EquationOfState peos = nullptr;
+
+  //! Constructor to initialize the layers
+  PlumeRoeSolverImpl() = default;
+  explicit PlumeRoeSolverImpl(const RiemannSolverOptions& options_)
+      : RiemannSolverImpl(options_) {
+    reset();
+  }
+  void reset() override;
+
+  //! Solver the Riemann problem
+  /*!
+   * F1 = (1 - 1/e) * R^2 * W
+   * F2 = 1/2 * R^2 * W * W - 1/2 * R^3 * V - 1/8 * R^2 * V^2
+   * F3 = 1/2 * R^2 * B * W
+   * F4 = 1/4 * R^3 * V * W + 1/2 * R^4 * W
+   *
+   * d(Q1)/dt = - d(F1)/dx
+   * d(Q2)/dt = - d(F2)/dx
+   * d(Q3)/dt = - d(F3)/dx
+   * d(Q4)/dt = - d(F4)/dx
+   */
+  torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
+                        torch::Tensor out) override;
+};
+TORCH_MODULE(PlumeRoeSolver);
 }  // namespace snap
 
 #undef ADD_ARG

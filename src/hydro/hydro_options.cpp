@@ -7,6 +7,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/registry.hpp>
+
 #include "hydro.hpp"
 
 namespace snap {
@@ -15,39 +17,33 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
                                      LayoutOptions layout) {
   HydroOptions op;
 
-  op.thermo() = kintera::ThermoOptions::from_yaml(filename);
-
-  TORCH_CHECK(
-      NMASS == 0 ||
-          op.thermo().vapor_ids().size() + op.thermo().cloud_ids().size() ==
-              1 + NMASS,
-      "Athena++ style indexing is enabled (NMASS > 0), but the number of "
-      "vapor and cloud species in the thermodynamics options does not match "
-      "the expected number of vapor + cloud species = ",
-      1 + NMASS);
-
   auto config = YAML::LoadFile(filename);
   if (config["geometry"]) {
     op.coord() = CoordinateOptions::from_yaml(config["geometry"], layout);
   }
 
-  // project primitive variables
-  op.proj() = PrimitiveProjectorOptions::from_yaml(config);
-
   if (!config["dynamics"]) return op;
 
   auto dyn = config["dynamics"];
+  op.verbose() = dyn["verbose"].as<bool>(false);
 
-  op.disable_dynamics() = dyn["disable"].as<bool>(false);
+  op.disable_flux_x1() = dyn["disable_flux_x1"].as<bool>(false);
+  op.disable_flux_x2() = dyn["disable_flux_x2"].as<bool>(false);
+  op.disable_flux_x3() = dyn["disable_flux_x3"].as<bool>(false);
 
   // equation of state
   if (dyn["equation-of-state"]) {
-    op.eos() = EquationOfStateOptions::from_yaml(dyn["equation-of-state"]);
+    op.eos() =
+        EquationOfStateOptions::from_yaml(dyn["equation-of-state"], filename);
     op.coord().eos_type() = op.eos().type();
   }
-
   op.eos().coord() = op.coord();
-  op.eos().thermo() = op.thermo();
+
+  // primitive projector
+  if (op.eos().type() == "ideal-gas" || op.eos().type() == "ideal-moist" ||
+      op.eos().type() == "moist-mixture") {
+    op.proj() = PrimitiveProjectorOptions::from_yaml(config);
+  }
 
   // reconstruction
   if (dyn["reconstruct"]) {
@@ -59,7 +55,6 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
   if (dyn["riemann-solver"]) {
     op.riemann() = RiemannSolverOptions::from_yaml(dyn["riemann-solver"]);
   }
-
   op.riemann().eos() = op.eos();
 
   // internal boundaries
@@ -75,8 +70,8 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
     op.sed().eos() = op.eos();
 
     // check all precipitating particles are in the clouds
-    std::unordered_set<int> cloud_set(op.thermo().cloud_ids().begin(),
-                                      op.thermo().cloud_ids().end());
+    std::unordered_set<int> cloud_set(op.eos().thermo().cloud_ids().begin(),
+                                      op.eos().thermo().cloud_ids().end());
     auto particle_ids = op.sed().sedvel().particle_ids();
     auto pass = std::all_of(particle_ids.begin(), particle_ids.end(),
                             [&](int x) { return cloud_set.count(x); });
@@ -84,7 +79,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
     TORCH_CHECK(pass, "Missing sedimentation particles in the clouds.");
 
     // setup hydro ids
-    auto hydro_species = op.thermo().species();
+    auto hydro_species = op.eos().thermo().species();
     for (auto const& p : op.sed().sedvel().species()) {
       auto it = std::find(hydro_species.begin(), hydro_species.end(), p);
       op.sed().hydro_ids().push_back(Index::ICY - 1 + it -
@@ -93,61 +88,7 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
   }
 
   // forcings
-  if (config["forcing"]) {
-    auto forcing = config["forcing"];
-    if (forcing["const-gravity"]) {
-      op.grav() = ConstGravityOptions::from_yaml(forcing["const-gravity"]);
-    }
-
-    if (forcing["coriolis"]) {
-      op.coriolis() = CoriolisOptions::from_yaml(forcing["coriolis"]);
-    }
-
-    if (forcing["diffusion"]) {
-      op.visc() = DiffusionOptions::from_yaml(forcing["diffusion"]);
-    }
-
-    if (forcing["fric-heat"]) {
-      op.fricHeat() = FricHeatOptions::from_yaml(config);
-    }
-
-    if (forcing["body-heat"]) {
-      op.bodyHeat() = BodyHeatOptions::from_yaml(forcing["body-heat"]);
-    }
-
-    if (forcing["top-cool"]) {
-      op.topCool() = TopCoolOptions::from_yaml(forcing["top-cool"]);
-    }
-
-    if (forcing["bot-heat"]) {
-      op.botHeat() = BotHeatOptions::from_yaml(forcing["bot-heat"]);
-    }
-
-    if (forcing["relax-bot-comp"]) {
-      op.relaxBotComp() =
-          RelaxBotCompOptions::from_yaml(forcing["relax-bot-comp"]);
-    }
-
-    if (forcing["relax-bot-temp"]) {
-      op.relaxBotTemp() =
-          RelaxBotTempOptions::from_yaml(forcing["relax-bot-temp"]);
-    }
-
-    if (forcing["relax-bot-velo"]) {
-      op.relaxBotVelo() =
-          RelaxBotVeloOptions::from_yaml(forcing["relax-bot-velo"]);
-    }
-
-    if (forcing["top-sponge-lyr"]) {
-      op.topSpongeLyr() =
-          TopSpongeLyrOptions::from_yaml(forcing["top-sponge-lyr"]);
-    }
-
-    if (forcing["bot-sponge-lyr"]) {
-      op.botSpongeLyr() =
-          BotSpongeLyrOptions::from_yaml(forcing["bot-sponge-lyr"]);
-    }
-  }
+  if (config["forcing"]) register_forcings_options(op, config, layout);
 
   return op;
 }

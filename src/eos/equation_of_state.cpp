@@ -10,8 +10,8 @@
 
 namespace snap {
 
-EquationOfStateOptions EquationOfStateOptions::from_yaml(
-    YAML::Node const& node) {
+EquationOfStateOptions EquationOfStateOptions::from_yaml(YAML::Node const& node,
+                                                         std::string filename) {
   EquationOfStateOptions op;
 
   op.type() = node["type"].as<std::string>("moist-mixture");
@@ -20,6 +20,20 @@ EquationOfStateOptions EquationOfStateOptions::from_yaml(
   op.temperature_floor() = node["temperature-floor"].as<double>(20.);
   op.limiter() = node["limiter"].as<bool>(false);
   op.eos_file() = node["eos-file"].as<std::string>("");
+
+  if (op.type() == "ideal-gas" || op.type() == "ideal-moisture" ||
+      op.type() == "moist-mixture") {
+    op.thermo() = kintera::ThermoOptions::from_yaml(filename);
+
+    TORCH_CHECK(
+        NMASS == 0 ||
+            op.thermo().vapor_ids().size() + op.thermo().cloud_ids().size() ==
+                1 + NMASS,
+        "Athena++ style indexing is enabled (NMASS > 0), but the number of "
+        "vapor and cloud species in the thermodynamics options does not match "
+        "the expected number of vapor + cloud species = ",
+        1 + NMASS);
+  }
 
   return op;
 }
