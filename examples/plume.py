@@ -9,6 +9,9 @@ op = MeshBlockOptions.from_yaml("plume.yaml")
 # initialize block
 block = MeshBlock(op)
 
+# get handles to modules
+coord = block.module("hydro.coord")
+
 # setup a meshgrid for simulation
 x3v, x2v, x1v = torch.meshgrid(
     coord.buffer("x3v"), coord.buffer("x2v"), coord.buffer("x1v"), indexing="ij"
@@ -34,7 +37,8 @@ block.make_outputs(block_vars, current_time)
 
 while not block.intg.stop(block.inc_cycle(), current_time):
     dt = block.max_time_step(block_vars)
-    block.print_cycle_info(block_vars, current_time, dt)
+    #block.print_cycle_info(block_vars, current_time, dt)
+    print('time = ', current_time, ', dt = ', dt)
 
     for stage in range(len(block.intg.stages)):
         block.forward(block_vars, dt, stage)

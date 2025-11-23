@@ -128,18 +128,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   bool has_solid = other.count("solid");
+  auto start = std::chrono::high_resolution_clock::now();
 
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
 
   peos->forward(u, w);
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "[Hydro] EOS time: " << elapsed.count() << " s\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
+
   if (has_solid) {
     pib->mark_prim_solid_(w, other.at("solid"));
   }
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
-  std::chrono::high_resolution_clock::time_point time2;
-
   if (u.size(DIM1) > 1) {
     auto wp = pproj->forward(w, pcoord->dx1f);
     auto wtmp = precon1->forward(wp, DIM1);
@@ -149,6 +155,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     if (!options.disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
+      if (options.verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "[Hydro] Flux-x1 time: " << elapsed.count() << " s\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
     }
 
     // add sedimentation flux
@@ -161,6 +173,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
     if (!options.disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+      if (options.verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "[Hydro] Flux-x2 time: " << elapsed.count() << " s\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
     }
   }
 
@@ -171,6 +189,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;
     if (!options.disable_flux_x3()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
+      if (options.verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "[Hydro] Flux-x3 time: " << elapsed.count() << " s\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
     }
   }
 
@@ -181,6 +205,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   auto du = -dt * _div;
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "[Hydro] Forcing time: " << elapsed.count() << " s\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   //// ------------ (7) Perform implicit correction ------------ ////
   torch::Tensor wi;
@@ -200,6 +230,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     gamma = peos->compute("W->A", {wi});
   }
   _imp.set_(pimp->forward(du, wi, gamma, dt));
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "[Hydro] Implicit time: " << elapsed.count() << " s\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   return du;
 }

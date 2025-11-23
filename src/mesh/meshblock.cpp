@@ -133,6 +133,14 @@ void MeshBlockImpl::reset() {
       "s0", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
   _scalar_s1 = register_buffer(
       "s1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
+
+  if (options.verbose()) {
+    std::cout << "Setting up buffer with shapes:" << std::endl;
+    std::cout << "  hydro_u0: " << _hydro_u0.sizes() << std::endl;
+    std::cout << "  hydro_u1: " << _hydro_u1.sizes() << std::endl;
+    std::cout << "  scalar_s0: " << _scalar_s0.sizes() << std::endl;
+    std::cout << "  scalar_s1: " << _scalar_s1.sizes() << std::endl;
+  }
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
@@ -284,6 +292,10 @@ double MeshBlockImpl::initialize(Variables& vars) {
   // start timing
   _time_start = clock();
 
+  if (options.verbose()) {
+    std::cout << "Initialization completed." << std::endl;
+  }
+
   return 0.;  // default start time is 0.0
 }
 
@@ -307,6 +319,11 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
   pdist->pg->allreduce(dt_reduce, op)->wait();
 
   dt = dt_reduce[0].item<double>();
+
+  if (options.verbose()) {
+    std::cout << "Suggested dt from hydro: " << std::scientific
+              << std::setprecision(6) << dt << std::endl;
+  }
   return pow(2., -pintg->current_redo) * pintg->options.cfl() * dt;
 }
 
@@ -335,19 +352,49 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
   fut_hydro_du = phydro->forward(dt, hydro_u, vars);
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "  Stage " << stage
+              << " hydro forward time (s): " << elapsed.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
     fut_scalar_ds = pscalar->forward(dt, scalar_s, vars);
+    if (options.verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "  Stage " << stage
+                << " scalar forward time (s): " << elapsed.count() << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+    }
   }
 
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
   _hydro_u1.copy_(hydro_u);
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "  Stage " << stage
+              << " multi-stage averaging time (s): " << elapsed.count()
+              << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   if (pscalar->nvar() > 0) {
     scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
     _scalar_s1.copy_(scalar_s);
+    if (options.verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "  Stage " << stage
+                << " multi-stage scalar averaging time (s): " << elapsed.count()
+                << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+    }
   }
 
   // -------- (5) update ghost zones --------
@@ -357,6 +404,14 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (vars.count("solid")) {
     phydro->pib->fill_cons_solid_(hydro_u, vars.at("solid"),
                                   vars.at("fill_solid_hydro_u"));
+    if (options.verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "  Stage " << stage
+                << " fill solid hydro conserved time (s): " << elapsed.count()
+                << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+    }
   }
 
   // (5.1) apply hydro boundary
@@ -365,6 +420,14 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options.bfuncs()[i] == nullptr) continue;
     options.bfuncs()[i](hydro_u, 3 - i / 2, bops);
   }
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "  Stage " << stage
+              << " hydro boundary condition time (s): " << elapsed.count()
+              << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   // (5.2) apply scalar boundary
   if (pscalar->nvar() > 0) {
@@ -372,6 +435,14 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     for (int i = 0; i < options.bfuncs().size(); ++i) {
       if (options.bfuncs()[i] == nullptr) continue;
       options.bfuncs()[i](scalar_s, 3 - i / 2, bops);
+    }
+    if (options.verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "  Stage " << stage
+                << " scalar boundary condition time (s): " << elapsed.count()
+                << std::endl;
+      start = std::chrono::high_resolution_clock::now();
     }
   }
 
@@ -395,10 +466,26 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     pthermo->forward(rho, ie, yfrac, /*warm_start=*/true);
 
     hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
+    if (options.verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "  Stage " << stage
+                << " saturation adjustment time (s): " << elapsed.count()
+                << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+    }
   }
 
   // -------- (7) ghost zone exchange --------
   exchange(vars);
+  if (options.verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "  Stage " << stage
+              << " ghost zone exchange time (s): " << elapsed.count()
+              << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+  }
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
@@ -411,6 +498,10 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
       output_type->next_time += output_type->options.dt();
       output_type->file_number += 1;
     }
+  }
+  if (options.verbose()) {
+    std::cout << "Output writing completed at time: " << current_time
+              << std::endl;
   }
 }
 

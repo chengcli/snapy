@@ -22,12 +22,10 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
     op.coord() = CoordinateOptions::from_yaml(config["geometry"], layout);
   }
 
-  // project primitive variables
-  op.proj() = PrimitiveProjectorOptions::from_yaml(config);
-
   if (!config["dynamics"]) return op;
 
   auto dyn = config["dynamics"];
+  op.verbose() = dyn["verbose"].as<bool>(false);
 
   op.disable_flux_x1() = dyn["disable_flux_x1"].as<bool>(false);
   op.disable_flux_x2() = dyn["disable_flux_x2"].as<bool>(false);
@@ -40,6 +38,12 @@ HydroOptions HydroOptions::from_yaml(std::string const& filename,
     op.coord().eos_type() = op.eos().type();
   }
   op.eos().coord() = op.coord();
+
+  // primitive projector
+  if (op.eos().type() == "ideal-gas" || op.eos().type() == "ideal-moist" ||
+      op.eos().type() == "moist-mixture") {
+    op.proj() = PrimitiveProjectorOptions::from_yaml(config);
+  }
 
   // reconstruction
   if (dyn["reconstruct"]) {

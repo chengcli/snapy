@@ -33,6 +33,9 @@ struct HydroOptions {
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
 
+  //! verbose
+  ADD_ARG(bool, verbose) = false;
+
   ADD_ARG(bool, disable_flux_x1) = false;
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;

@@ -1,3 +1,4 @@
+verbose: true
 
 geometry:
   type: cartesian
@@ -5,6 +6,7 @@ geometry:
   cells: {nx1: 100, nghost: 3}
 
 dynamics:
+  verbose: true
   equation-of-state:
     type: plume-eos
 

@@ -12,6 +12,7 @@ MeshBlockOptions MeshBlockOptions::from_yaml(std::string input_file) {
   MeshBlockOptions op;
 
   auto config = YAML::LoadFile(input_file);
+  op.verbose() = config["verbose"].as<bool>(false);
 
   // distribution environment and layout
   if (config["distribute"]) {

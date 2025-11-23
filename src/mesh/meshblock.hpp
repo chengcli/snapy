@@ -33,6 +33,9 @@ struct MeshBlockOptions {
     os << "* basename = " << basename() << "\n";
   }
 
+  //! verbose
+  ADD_ARG(bool, verbose) = false;
+
   //! output
   ADD_ARG(std::string, basename) = "";
   ADD_ARG(std::vector<OutputOptions>, outputs);
