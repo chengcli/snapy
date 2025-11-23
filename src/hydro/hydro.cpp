@@ -49,86 +49,7 @@ void HydroImpl::reset() {
   options.sed() = psed->options;
 
   //// ---- (10) set up forcings ---- ////
-  std::vector<std::string> forcing_names;
-  if (options.grav().grav1() != 0.0 || options.grav().grav2() != 0.0 ||
-      options.grav().grav3() != 0.0) {
-    if (!options.disable_dynamics()) {
-      forcings.push_back(torch::nn::AnyModule(ConstGravity(options.grav())));
-      forcing_names.push_back("const-gravity");
-    }
-  }
-
-  if (options.coriolis().omega1() != 0.0 ||
-      options.coriolis().omega2() != 0.0 ||
-      options.coriolis().omega3() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(Coriolis123(options.coriolis())));
-    forcing_names.push_back("coriolis");
-  }
-
-  if (options.coriolis().omegax() != 0.0 ||
-      options.coriolis().omegay() != 0.0 ||
-      options.coriolis().omegaz() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(CoriolisXYZ(options.coriolis())));
-    if (std::find(forcing_names.begin(), forcing_names.end(), "coriolis") !=
-        forcing_names.end()) {
-      TORCH_CHECK(false,
-                  "CoriolisXYZ cannot be used together with Coriolis123. "
-                  "Please choose one of them.");
-    }
-    forcing_names.push_back("coriolis");
-  }
-
-  if (options.fricHeat().grav() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(FricHeat(options.fricHeat())));
-    forcing_names.push_back("fric-heat");
-  }
-
-  if (options.bodyHeat().dTdt() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(BodyHeat(options.bodyHeat())));
-    forcing_names.push_back("body-heat");
-  }
-
-  if (options.topCool().flux() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(TopCool(options.topCool())));
-    forcing_names.push_back("top-cool");
-  }
-
-  if (options.botHeat().flux() != 0.0) {
-    forcings.push_back(torch::nn::AnyModule(BotHeat(options.botHeat())));
-    forcing_names.push_back("bot-heat");
-  }
-
-  if (options.relaxBotComp().tau() != 0.0) {
-    forcings.push_back(
-        torch::nn::AnyModule(RelaxBotComp(options.relaxBotComp())));
-    forcing_names.push_back("relax-bot-comp");
-  }
-
-  if (options.relaxBotTemp().tau() != 0.0) {
-    forcings.push_back(
-        torch::nn::AnyModule(RelaxBotTemp(options.relaxBotTemp())));
-    forcing_names.push_back("relax-bot-temp");
-  }
-
-  if (options.relaxBotVelo().tau() != 0.0) {
-    forcings.push_back(
-        torch::nn::AnyModule(RelaxBotVelo(options.relaxBotVelo())));
-    forcing_names.push_back("relax-bot-velo");
-  }
-
-  if (options.topSpongeLyr().tau() != 0.0 &&
-      options.topSpongeLyr().width() > 0.0) {
-    forcings.push_back(
-        torch::nn::AnyModule(TopSpongeLyr(options.topSpongeLyr())));
-    forcing_names.push_back("top-sponge-lyr");
-  }
-
-  if (options.botSpongeLyr().tau() != 0.0 &&
-      options.botSpongeLyr().width() > 0.0) {
-    forcings.push_back(
-        torch::nn::AnyModule(BotSpongeLyr(options.botSpongeLyr())));
-    forcing_names.push_back("bot-sponge-lyr");
-  }
+  auto forcing_names = register_forcings_module(options, forcings);
 
   //// ---- (11) register all forcings ---- ////
   for (auto i = 0; i < forcings.size(); i++) {
@@ -170,9 +91,8 @@ void HydroImpl::reset() {
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
-  // should be preceeded by initialize, W->I, or W->U
   torch::Tensor cs;
-  if (options.eos().type() == "aneos") {
+  if (options.eos().type() == "aneos" || options.eos().type() == "plume-eos") {
     cs = peos->compute("W->L", {w});
   } else {
     auto gamma = peos->compute("W->A", {w});
@@ -227,7 +147,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     pproj->restore_inplace(wtmp);
     auto wlr1 = has_solid ? pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
-    if (!options.disable_dynamics()) {
+    if (!options.disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
     }
 
@@ -239,7 +159,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (u.size(DIM2) > 1) {
     auto wtmp = precon23->forward(w, DIM2);
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
-    if (!options.disable_dynamics()) {
+    if (!options.disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
     }
   }
@@ -249,7 +169,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wtmp = precon23->forward(w, DIM3);
 
     auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;
-    if (!options.disable_dynamics()) {
+    if (!options.disable_flux_x3()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
     }
   }
