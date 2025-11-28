@@ -6,10 +6,12 @@
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
 
+// harp
+#include <snap/harp/integrator/integrator.hpp>
+
 // snap
 #include <snap/bc/bc_func.hpp>
 #include <snap/hydro/hydro.hpp>
-#include <snap/intg/integrator.hpp>
 #include <snap/layout/distribute_env.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/output/output_type.hpp>
@@ -41,7 +43,7 @@ struct MeshBlockOptions {
   ADD_ARG(std::vector<OutputOptions>, outputs);
 
   //! submodule options
-  ADD_ARG(IntegratorOptions, intg);
+  ADD_ARG(harp::IntegratorOptions, intg);
   ADD_ARG(HydroOptions, hydro);
   ADD_ARG(ScalarOptions, scalar);
 
@@ -71,7 +73,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   int cycle = 0;
 
   //! submodules
-  Integrator pintg = nullptr;
+  harp::Integrator pintg = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
   DistributeEnv pdist = nullptr;

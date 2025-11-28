@@ -32,7 +32,6 @@ from .eos import *
 from .forcing import *
 from .hydro import *
 from .implicit import *
-from .integrator import *
 from .layout import *
 from .mesh import *
 from .output import *
