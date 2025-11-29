@@ -15,7 +15,7 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;
 
-  int64_t nvar() const override { return 4; }
+  int nvar() const override { return 4; }
 
   torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
@@ -26,9 +26,6 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
                         std::vector<torch::Tensor> const& args) override;
 
  private:
-  //! cache
-  torch::Tensor _prim, _cons, _cs;
-
   //! \brief Convert primitive variables to conserved variables.
   /*
    * \param[in] prim  primitive variables
@@ -46,9 +43,9 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
   //! \brief Compute the gravity wave sound speed
   /*
    * \param[in] prim  primitive variables
-   * \param[out] out  sound speed
+   * \return          gravity wave speed
    */
-  void _gravity_wave_speed(torch::Tensor prim, torch::Tensor& out) const;
+  torch::Tensor _gravity_wave_speed(torch::Tensor prim) const;
 };
 TORCH_MODULE(ShallowWater);
 

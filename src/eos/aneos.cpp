@@ -3,8 +3,6 @@
 
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 namespace snap {
 
 ANEOSImpl::ANEOSImpl(EquationOfStateOptions const &options_)
@@ -13,11 +11,8 @@ ANEOSImpl::ANEOSImpl(EquationOfStateOptions const &options_)
 }
 
 void ANEOSImpl::reset() {
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
-
-  // set up thermodynamics model
-  pthermo = register_module("thermo", ANEOSThermo(options.eos_file()));
+  pcoord = CoordinateImpl::create(options->coord(), this);
+  pthermo = ANEOSThermoImpl::create(options->eos_file(), this);
 }
 
 torch::Tensor ANEOSImpl::compute(std::string ab,

@@ -17,6 +17,9 @@ class ANEOSThermoImpl : public torch::nn::Cloneable<ANEOSThermoImpl> {
   //! cached properties
   std::map<std::string, torch::Tensor> cache;
 
+  static std::shared_ptr<ANEOSThermoImpl> create(std::string const& filename,
+                                                 torch::nn::Module* p);
+
   ANEOSThermoImpl() = default;
   explicit ANEOSThermoImpl(const std::string& fname);
   void reset() override;
@@ -42,5 +45,10 @@ class ANEOSThermoImpl : public torch::nn::Cloneable<ANEOSThermoImpl> {
       torch::Tensor rho, torch::Tensor temp);
 };
 TORCH_MODULE(ANEOSThermo);
+
+std::shared_ptr<ANEOSThermoImpl> create(std::string const& filename,
+                                        torch::nn::Module* p) {
+  return p->register_module("thermo", ANEOSThermo(filename));
+}
 
 }  // namespace snap

@@ -8,23 +8,26 @@
 
 namespace snap {
 
-InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
+InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
+    std::string const &filename) {
+  YAML::Node root = YAML::LoadFile(filename);
+  return from_yaml(root);
+}
+
+InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
     const YAML::Node &root) {
-  InternalBoundaryOptions op;
+  auto op = InternalBoundaryOptionsImpl::create();
 
   if (!root["geometry"]) return op;
   if (!root["geometry"]["cells"]) return op;
-
-  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
-
   if (!root["boundary-condition"]) return op;
   if (!root["boundary-condition"]["internal"]) return op;
 
   auto bc = root["boundary-condition"]["internal"];
 
-  op.max_iter() = bc["max-iter"].as<int>(5);
-  op.solid_density() = bc["solid-density"].as<double>(1.e3);
-  op.solid_pressure() = bc["solid-pressure"].as<double>(1.e9);
+  op->max_iter() = bc["max-iter"].as<int>(5);
+  op->solid_density() = bc["solid-density"].as<double>(1.e3);
+  op->solid_pressure() = bc["solid-pressure"].as<double>(1.e9);
 
   return op;
 }
@@ -40,8 +43,8 @@ void InternalBoundaryImpl::mark_prim_solid_(torch::Tensor w,
                                             torch::Tensor solid) {
   if (!solid.defined()) return;
 
-  w[IDN].masked_fill_(solid, options.solid_density());
-  w[IPR].masked_fill_(solid, options.solid_pressure());
+  w[IDN].masked_fill_(solid, options->solid_density());
+  w[IPR].masked_fill_(solid, options->solid_pressure());
   w.narrow(0, IVX, 3).masked_fill_(solid, 0.);
 
   int ny = w.size(0) - 5;

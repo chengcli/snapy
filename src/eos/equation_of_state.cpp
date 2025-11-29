@@ -4,31 +4,42 @@
 // snap
 #include <snap/snap.h>  // Index
 
+#include <snap/eos/aneos.hpp>
+#include <snap/eos/ideal_gas.hpp>
+#include <snap/eos/ideal_moist.hpp>
+#include <snap/eos/moist_mixture.hpp>
+#include <snap/eos/plume_eos.hpp>
+#include <snap/eos/shallow_water.hpp>
 #include <snap/utils/pull_neighbors.hpp>
 
 #include "equation_of_state.hpp"
 
 namespace snap {
 
-EquationOfStateOptions EquationOfStateOptions::from_yaml(YAML::Node const& node,
-                                                         std::string filename) {
-  EquationOfStateOptions op;
+EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
+    std::string const& filename) {
+  auto config = YAML::LoadFile(filename);
+  auto op = EquationOfStateOptionsImpl::create();
 
-  op.type() = node["type"].as<std::string>("moist-mixture");
-  op.density_floor() = node["density-floor"].as<double>(1.e-6);
-  op.pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
-  op.temperature_floor() = node["temperature-floor"].as<double>(20.);
-  op.limiter() = node["limiter"].as<bool>(false);
-  op.eos_file() = node["eos-file"].as<std::string>("");
+  if (!config["dynamics"]) return op;
+  if (!config["dynamics"]["equation-of-state"]) return op;
 
-  if (op.type() == "ideal-gas" || op.type() == "ideal-moisture" ||
-      op.type() == "moist-mixture") {
-    op.thermo() = kintera::ThermoOptions::from_yaml(filename);
+  auto node = config["dynamics"]["equation-of-state"];
 
+  op->type() = node["type"].as<std::string>("moist-mixture");
+  op->density_floor() = node["density-floor"].as<double>(1.e-6);
+  op->pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
+  op->temperature_floor() = node["temperature-floor"].as<double>(20.);
+  op->limiter() = node["limiter"].as<bool>(false);
+  op->eos_file() = node["eos-file"].as<std::string>("");
+
+  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename);
+
+  if (op->thermo() != nullptr) {
     TORCH_CHECK(
-        NMASS == 0 ||
-            op.thermo().vapor_ids().size() + op.thermo().cloud_ids().size() ==
-                1 + NMASS,
+        NMASS == 0 || op->thermo()->vapor_ids().size() +
+                              op->thermo()->cloud_ids().size() ==
+                          1 + NMASS,
         "Athena++ style indexing is enabled (NMASS > 0), but the number of "
         "vapor and cloud species in the thermodynamics options does not match "
         "the expected number of vapor + cloud species = ",
@@ -56,14 +67,14 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
-  if (!options.limiter()) return;  // no limiter
+  if (!options->limiter()) return;  // no limiter
   cons.masked_fill_(torch::isnan(cons), 0.);
-  cons[IDN].clamp_min_(options.density_floor());
+  cons[IDN].clamp_min_(options->density_floor());
 
-  auto nghost = pcoord->options.nghost();
+  auto nghost = pcoord->options->nghost();
   auto interior = get_interior(cons.sizes(), nghost);
-  int nvapor = options.thermo().vapor_ids().size() - 1;
-  int ncloud = options.thermo().cloud_ids().size();
+  int nvapor = options->thermo()->vapor_ids().size() - 1;
+  int ncloud = options->thermo()->cloud_ids().size();
   // for (int i = ICY; i < ICY + nvapor; ++i)
   //   cons.index(interior)[i] = pull_neighbors3(cons.index(interior)[i]);
   //  batched
@@ -75,21 +86,41 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   pcoord->vec_raise_(mom);
 
   auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / cons[IDN];
-  auto min_temp = options.temperature_floor() * torch::ones_like(ke);
+  auto min_temp = options->temperature_floor() * torch::ones_like(ke);
   auto min_ie = compute("UT->I", {cons, min_temp});
   cons[IPR].clamp_min_(ke + min_ie);
 }
 
 void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
-  if (!options.limiter()) return;  // no limiter
+  if (!options->limiter()) return;  // no limiter
   prim.masked_fill_(torch::isnan(prim), 0.);
-  prim[IDN].clamp_min_(options.density_floor());
+  prim[IDN].clamp_min_(options->density_floor());
 
-  int ny = options.thermo().vapor_ids().size() +
-           options.thermo().cloud_ids().size() - 1;
+  int ny = options->thermo()->vapor_ids().size() +
+           options->thermo()->cloud_ids().size() - 1;
   prim.narrow(0, ICY, ny).clamp_min_(0.);
 
-  prim[IPR].clamp_min_(options.pressure_floor());
+  prim[IPR].clamp_min_(options->pressure_floor());
+}
+
+EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
+                                            torch::nn::Module* p) {
+  if (opts->type() == "ideal-gas") {
+    return p->register_module("eos", IdealGas(opts));
+  } else if (opts->type() == "ideal-moist") {
+    return p->register_module("eos", IdealMoist(opts));
+  } else if (opts->type() == "moist-mixture") {
+    return p->register_module("eos", MoistMixture(opts));
+  } else if (opts->type() == "aneos") {
+    return p->register_module("eos", ANEOS(opts));
+  } else if (opts->type() == "shallow-water") {
+    return p->register_module("eos", ShallowWater(opts));
+  } else if (opts->type() == "plume-eos") {
+    return p->register_module("eos", PlumeEOS(opts));
+  } else {
+    TORCH_CHECK(false, "Equation of state type '", opts->type(),
+                "' is not supported.");
+  }
 }
 
 }  // namespace snap

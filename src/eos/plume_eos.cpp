@@ -3,8 +3,6 @@
 
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 namespace snap {
 
 PlumeEOSImpl::PlumeEOSImpl(EquationOfStateOptions const &options_)
@@ -13,8 +11,7 @@ PlumeEOSImpl::PlumeEOSImpl(EquationOfStateOptions const &options_)
 }
 
 void PlumeEOSImpl::reset() {
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
+  pcoord = CoordinateImpl::create(options->coord(), this);
 }
 
 torch::Tensor PlumeEOSImpl::compute(std::string ab,

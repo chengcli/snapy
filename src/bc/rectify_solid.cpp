@@ -3,6 +3,8 @@
 #include <torch/torch.h>
 
 // snap
+#include <snap/coord/coordinate.hpp>
+
 #include "bc.hpp"
 #include "bc_dispatch.hpp"
 #include "internal_boundary.hpp"
@@ -12,7 +14,7 @@ enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };
 
 // run dimension 1
 int run_flip_dim1(torch::Tensor& solid, int dir) {
-  constexpr int MAXRUN = InternalBoundaryOptions::MAXRUN;
+  constexpr int MAXRUN = InternalBoundaryOptionsImpl::MAXRUN;
 
   int nc3 = solid.size(0);
   int nc2 = solid.size(1);
@@ -43,7 +45,7 @@ int run_flip_dim1(torch::Tensor& solid, int dir) {
 
 // run dimension 2
 int run_flip_dim2(torch::Tensor& solid, int dir) {
-  constexpr int MAXRUN = InternalBoundaryOptions::MAXRUN;
+  constexpr int MAXRUN = InternalBoundaryOptionsImpl::MAXRUN;
 
   int nc3 = solid.size(0);
   int nc2 = solid.size(1);
@@ -74,7 +76,7 @@ int run_flip_dim2(torch::Tensor& solid, int dir) {
 
 // run dimension 3
 int run_flip_dim3(torch::Tensor& solid, int dir) {
-  constexpr int MAXRUN = InternalBoundaryOptions::MAXRUN;
+  constexpr int MAXRUN = InternalBoundaryOptionsImpl::MAXRUN;
 
   int nc3 = solid.size(0);
   int nc2 = solid.size(1);
@@ -114,7 +116,7 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
 
   ///-----  set all ghost zones to 1  -----///
   BoundaryFuncOptions op;
-  op.nghost(options.nghost());
+  op.nghost(options->coord()->nghost());
   op.type(kScalar);
 
   auto solid_inner = get_bc_func()["solid_inner"];
@@ -136,7 +138,7 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
   total_num_flips = 0;
   int i = 0;
   int dir = 1;
-  for (; i < options.max_iter(); ++i) {
+  for (; i < options->max_iter(); ++i) {
     auto num_flips = run_flip_dim1(solid, dir);
 
     if (nc2 > 1) {
@@ -153,8 +155,8 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
     dir *= -1;
   }
 
-  TORCH_CHECK(i < options.max_iter(), "rectify_solid did not converge after ",
-              options.max_iter(), " iterations");
+  TORCH_CHECK(i < options->max_iter(), "rectify_solid did not converge after ",
+              options->max_iter(), " iterations");
 
   ///-----  set proper boundary conditions  -----///
   for (int i = 0; i < bfuncs.size(); ++i) {

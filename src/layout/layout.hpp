@@ -30,7 +30,14 @@ inline int get_buffer_id(std::tuple<int, int, int> offset) {
   return (dx % 3 + 3) % 3 + ((dy % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
 }
 
-struct LayoutOptions {
+struct LayoutOptionsImpl {
+  static std::shared_ptr<LayoutOptionsImpl> create() {
+    return std::make_shared<LayoutOptionsImpl>();
+  }
+
+  static std::shared_ptr<LayoutOptionsImpl> from_yaml(
+      std::string const &filename);
+
   void report(std::ostream &os) const {
     os << "* type=" << type() << "\n";
     os << "* px=" << px() << "\n";
@@ -62,30 +69,37 @@ struct LayoutOptions {
   //! periodicity in Z
   ADD_ARG(bool, periodic_z) = false;
 };
+using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
 class LayoutImpl {
  public:
+  static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts);
+
   //! options with which this `Layout` was constructed
   LayoutOptions options;
+
+  LayoutImpl() : options(LayoutOptionsImpl::create()) {}
   LayoutImpl(const LayoutOptions &opts, int copies = 1) : options(opts) {
-    int P = copies * options.px() * options.py() * options.pz();
+    int P = copies * options->px() * options->py() * options->pz();
     _rankof = new int[P];
   }
 
   std::tuple<int, int, int> get_procs() const {
-    return {options.px(), options.py(), options.pz()};
+    return {options->px(), options->py(), options->pz()};
   }
 
-  virtual ~LayoutImpl() { delete[] _rankof; }
+  virtual ~LayoutImpl() {
+    if (_rankof) delete[] _rankof;
+  }
 
-  virtual void report(std::ostream &os) const { options.report(os); }
+  virtual void report(std::ostream &os) const { options->report(os); }
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
     auto [rx, ry, rz] = iloc;
 
-    int px = options.px();
-    int py = options.py();
-    int pz = options.pz();
+    int px = options->px();
+    int py = options->py();
+    int pz = options->pz();
     if (rx < 0 || rx >= px || ry < 0 || ry >= py || rz < 0 || rz >= pz)
       return -1;
     return _rankof[rz * (px * py) + ry * px + rx];
@@ -116,12 +130,12 @@ class LayoutImpl {
 class SlabLayoutImpl : public LayoutImpl {
  public:
   SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
-    if (options.pz() != 1) {
+    if (options->pz() != 1) {
       throw std::runtime_error("SlabLayoutImpl: pz must be 1 for slab layout");
     }
 
-    int px = options.px();
-    int py = options.py();
+    int px = options->px();
+    int py = options->py();
 
     _coords2 = new Coord2[px * py];
     build_zorder_coords2(px, py, _coords2);
@@ -138,9 +152,9 @@ class SlabLayoutImpl : public LayoutImpl {
 class CubedLayoutImpl : public LayoutImpl {
  public:
   CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
-    int px = options.px();
-    int py = options.py();
-    int pz = options.pz();
+    int px = options->px();
+    int py = options->py();
+    int pz = options->pz();
 
     _coords3 = new Coord3[px * py * pz];
     build_zorder_coords3(px, py, pz, _coords3);
@@ -172,7 +186,7 @@ class CubedSphereLayoutImpl : public LayoutImpl {
 
   ~CubedSphereLayoutImpl() { delete[] _coords2; }
 
-  int pxy() const { return options.px(); }
+  int pxy() const { return options->px(); }
 
   int rank_of(std::tuple<int, int, int> iloc) const override;
   std::tuple<int, int, int> loc_of(int global_rank) const override;
@@ -229,15 +243,15 @@ using SlabLayout = std::shared_ptr<SlabLayoutImpl>;
 using CubedLayout = std::shared_ptr<CubedLayoutImpl>;
 using CubedSphereLayout = std::shared_ptr<CubedSphereLayoutImpl>;
 
-inline Layout create_layout(LayoutOptions const &opts) {
-  if (opts.type() == "slab") {
+Layout LayoutImpl::create(LayoutOptions const &opts) {
+  if (opts->type() == "slab") {
     return std::make_shared<SlabLayoutImpl>(opts);
-  } else if (opts.type() == "cubed") {
+  } else if (opts->type() == "cubed") {
     return std::make_shared<CubedLayoutImpl>(opts);
-  } else if (opts.type() == "cubed_sphere") {
+  } else if (opts->type() == "cubed_sphere") {
     return std::make_shared<CubedSphereLayoutImpl>(opts);
   } else {
-    throw std::runtime_error("layout type '" + opts.type() +
+    throw std::runtime_error("layout type '" + opts->type() +
                              "' is not implemented.");
   }
 }

@@ -12,8 +12,9 @@ class PlumeEOSImpl : public torch::nn::Cloneable<PlumeEOSImpl>,
   PlumeEOSImpl() = default;
   explicit PlumeEOSImpl(EquationOfStateOptions const& options_);
   void reset() override;
+  using EquationOfStateImpl::forward;
 
-  int64_t nvar() const override { return 4; }
+  int nvar() const override { return 4; }
 
   //! The following transformations are need to implement the EOS
   /*!
@@ -29,9 +30,6 @@ class PlumeEOSImpl : public torch::nn::Cloneable<PlumeEOSImpl>,
   torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
   }
-
-  //! forward function
-  torch::Tensor forward(torch::Tensor cons) { return compute("U->W", {cons}); }
 
  private:
   //! \brief Convert primitive variables to conserved variables.

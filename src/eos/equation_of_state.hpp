@@ -14,21 +14,23 @@
 // arg
 #include <snap/add_arg.h>
 
-namespace YAML {
-class Node;
-}  // namespace YAML
-
 namespace snap {
 
-struct EquationOfStateOptions {
-  static EquationOfStateOptions from_yaml(YAML::Node const& node,
-                                          std::string filename = "");
-  EquationOfStateOptions() = default;
+struct EquationOfStateOptionsImpl {
+  static std::shared_ptr<EquationOfStateOptionsImpl> create() {
+    return std::make_shared<EquationOfStateOptionsImpl>();
+  }
+  static std::shared_ptr<EquationOfStateOptionsImpl> from_yaml(
+      std::string const& filename);
+
+  EquationOfStateOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "* type = " << type() << "\n"
        << "* density_floor = " << density_floor() << "\n"
        << "* pressure_floor = " << pressure_floor() << "\n"
-       << "* limiter = " << (limiter() ? "true" : "false") << "\n";
+       << "* temperature_floor = " << temperature_floor() << "\n"
+       << "* limiter = " << (limiter() ? "true" : "false") << "\n"
+       << "* eos_file = " << eos_file() << "\n";
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";
@@ -39,13 +41,24 @@ struct EquationOfStateOptions {
   ADD_ARG(std::string, eos_file) = "";
 
   //! submodules options
-  ADD_ARG(kintera::ThermoOptions, thermo);
-  ADD_ARG(CoordinateOptions, coord);
+  ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
+using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
 class EquationOfStateImpl {
  public:
-  virtual ~EquationOfStateImpl() = default;
+  //! Create and register an EquationOfState module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the EquationOfState module
+   * \param[in] p     parent module for registering the created module
+   * \return created EquationOfState module
+   */
+  static std::shared_ptr<EquationOfStateImpl> create(
+      EquationOfStateOptions const& opts, torch::nn::Module* p);
 
   //! options with which this `EquationOfState` was constructed
   EquationOfStateOptions options;
@@ -53,7 +66,12 @@ class EquationOfStateImpl {
   //! submodules
   Coordinate pcoord = nullptr;
 
-  virtual int64_t nvar() const { return 5; }
+  EquationOfStateImpl() : options(EquationOfStateOptionsImpl::create()) {}
+  explicit EquationOfStateImpl(EquationOfStateOptions const& options_)
+      : options(options_) {}
+  virtual ~EquationOfStateImpl() = default;
+
+  virtual int nvar() const { return 5; }
 
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
@@ -82,12 +100,6 @@ class EquationOfStateImpl {
 
   //! \brief Apply the primitive variable limiter in place.
   virtual void apply_primitive_limiter_(torch::Tensor const& prim);
-
- protected:
-  //! Disable constructor, to be used only by derived classes.
-  EquationOfStateImpl() = default;
-  explicit EquationOfStateImpl(EquationOfStateOptions const& options_)
-      : options(options_) {}
 };
 
 using EquationOfState = std::shared_ptr<EquationOfStateImpl>;

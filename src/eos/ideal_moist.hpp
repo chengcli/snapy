@@ -21,9 +21,9 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;
 
-  int64_t nvar() const override {
-    return 4 + pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size();
+  int nvar() const override {
+    return 4 + pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size();
   }
 
   torch::Tensor get_buffer(std::string var) const override {

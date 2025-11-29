@@ -18,7 +18,7 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;
 
-  int64_t nvar() const override { return 5; }
+  int nvar() const override { return 5; }
 
   torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];

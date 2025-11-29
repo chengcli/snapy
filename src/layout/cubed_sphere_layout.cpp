@@ -138,7 +138,7 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
 }
 
 void CubedSphereLayoutImpl::report(std::ostream &os) const {
-  options.report(os);
+  options->report(os);
   for (int f = 0; f < 6; ++f) {
     os << " Face " << f << "\n";
     os << " Rank | (rx,ry)\n";
