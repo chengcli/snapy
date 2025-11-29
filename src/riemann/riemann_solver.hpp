@@ -16,41 +16,58 @@ class Node;
 }  // namespace YAML
 
 namespace snap {
-struct RiemannSolverOptions {
-  static RiemannSolverOptions from_yaml(YAML::Node const& node);
-  RiemannSolverOptions() = default;
+struct RiemannSolverOptionsImpl {
+  static std::shared_ptr<RiemannSolverOptionsImpl> create() {
+    return std::make_shared<RiemannSolverOptionsImpl>();
+  }
+  static std::shared_ptr<RiemannSolverOptionsImpl> from_yaml(
+      YAML::Node const& node);
+  RiemannSolverOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "* type = " << type() << "\n"
        << "* dir = " << dir() << "\n";
   }
 
+  // type of Riemann solver
   ADD_ARG(std::string, type) = "roe";
 
   // used in shallow water equations
   ADD_ARG(std::string, dir) = "omni";
 
   //! submodule options
-  ADD_ARG(EquationOfStateOptions, eos);
+  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
+using RiemannSolverOptions = std::shared_ptr<RiemannSolverOptionsImpl>;
 
 class RiemannSolverImpl {
  public:
+  //! Create and register a RiemannSolver module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] options  options for creating the RiemannSolver module
+   * \param[in] p        parent module for registering the created module
+   * \return created RiemannSolver module
+   */
+  static std::shared_ptr<RiemannSolverImpl> create(
+      RiemannSolverOptions const& options, torch::nn::Module* p);
+
   //! data
   torch::Tensor elr, clr, glr;
 
   //! options with which this `RiemannSolver` was constructed
   RiemannSolverOptions options;
 
+  RiemannSolverImpl() : options(RiemannSolverOptionsImpl::create()) {}
+  explicit RiemannSolverImpl(const RiemannSolverOptions& options_)
+      : options(options_) {}
+  virtual ~RiemannSolverImpl() = default;
+
   //! Solver the Riemann problem
   virtual torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                                 torch::Tensor vel_or_flux);
-
- protected:
-  //! Disable constructor
-  RiemannSolverImpl() = default;
-  explicit RiemannSolverImpl(const RiemannSolverOptions& options_);
 };
-
 using RiemannSolver = std::shared_ptr<RiemannSolverImpl>;
 
 class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
@@ -63,10 +80,7 @@ class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
     reset();
   }
   void reset() override {}
-
-  //! Solver the Riemann problem
-  torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor vel_or_flux) override;
+  using RiemannSolverImpl::forward;
 };
 TORCH_MODULE(UpwindSolver);
 

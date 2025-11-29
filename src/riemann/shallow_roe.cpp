@@ -2,30 +2,27 @@
 #include <configure.h>
 
 // snap
-#include <snap/registry.hpp>
-
-#include "riemann_formatter.hpp"
 #include "riemann_solver.hpp"
 
 namespace snap {
 void ShallowRoeSolverImpl::reset() {
-  // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  peos = EquationOfStateImpl::create(options->eos(), this);
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                             int dim, torch::Tensor flx) {
   int ivx, ivy;
-  if (options.dir() == "xy") {
+  if (options->dir() == "xy") {
     ivx = dim == 3 ? 1 : 2;
     ivy = dim == 3 ? 2 : 1;
-  } else if (options.dir() == "yz") {
+  } else if (options->dir() == "yz") {
     ivx = dim == 2 ? 2 : 3;
     ivy = dim == 2 ? 3 : 2;
   } else {
     TORCH_CHECK(false,
-                "ShallowRoeSolver takes options.dir() = 'xy' or 'yz'"
-                " but got options.dir() = ");
+                "ShallowRoeSolver takes options->dir() = 'xy' or 'yz'"
+                " but got options->dir() = ",
+                options->dir());
   }
 
   auto sqrtdl = torch::sqrt(wl[0]);

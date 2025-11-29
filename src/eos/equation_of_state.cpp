@@ -118,8 +118,7 @@ EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
   } else if (opts->type() == "plume-eos") {
     return p->register_module("eos", PlumeEOS(opts));
   } else {
-    TORCH_CHECK(false, "Equation of state type '", opts->type(),
-                "' is not supported.");
+    TORCH_CHECK(false, "EquationOfState: Unknown type: ", opts->type());
   }
 }
 

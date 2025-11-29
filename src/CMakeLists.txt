@@ -41,14 +41,12 @@ file(GLOB src_files
     #hydro/*.cpp
     riemann/*.cpp
     #recon/*.cpp
-    #column/*.cpp
     #mesh/*.cpp
     #output/*.cpp
     #scalar/*.cpp
     #utils/*.cpp
     #forcing/*.cpp
     #implicit/*.cpp
-    #intg/*.cpp
     #input/*.cpp
     #sedimentation/*.cpp
     #layout/*.cpp

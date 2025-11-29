@@ -1,8 +1,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "riemann_solver.hpp"
 
 namespace snap {
@@ -11,16 +9,11 @@ torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState const& peos) {
 }
 
 void RoeSolverImpl::reset() {
-  // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  peos = EquationOfStateImpl::create(options->eos(), this);
 }
 
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                      int dim, torch::Tensor flx) {
-  using Index::IDN;
-  using Index::IPR;
-  using Index::IVX;
-
   // dim, ivx, ivy, ivz
   // 3, IVX, IVY, iVZ
   // 2, IVX + 1, IVX + 2, IVX

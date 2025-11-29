@@ -8,25 +8,6 @@
 #include <snap/riemann/riemann_solver.hpp>
 
 namespace snap {
-RiemannSolver register_module_op(torch::nn::Module *p, std::string name,
-                                 RiemannSolverOptions const &op) {
-  if (op.type() == "roe") {
-    return p->register_module(name, RoeSolver(op));
-  } else if (op.type() == "lmars") {
-    return p->register_module(name, LmarsSolver(op));
-  } else if (op.type() == "hllc") {
-    return p->register_module(name, HLLCSolver(op));
-  } else if (op.type() == "upwind") {
-    return p->register_module(name, UpwindSolver(op));
-  } else if (op.type() == "shallow-roe") {
-    return p->register_module(name, ShallowRoeSolver(op));
-  } else if (op.type() == "plume-roe") {
-    return p->register_module(name, PlumeRoeSolver(op));
-  } else {
-    throw std::runtime_error("register_module: unknown type " + op.type());
-  }
-}
-
 Interp register_module_op(torch::nn::Module *p, std::string name,
                           InterpOptions const &op) {
   if (op.type() == "dc") {
