@@ -8,38 +8,6 @@
 #include <snap/riemann/riemann_solver.hpp>
 
 namespace snap {
-Interp register_module_op(torch::nn::Module *p, std::string name,
-                          InterpOptions const &op) {
-  if (op.type() == "dc") {
-    return p->register_module(name, DonorCellInterp(op));
-  } else if (op.type() == "plm") {
-    return p->register_module(name, PLMInterp(op));
-  } else if (op.type() == "ppm") {
-    return p->register_module(name, PPMInterp(op));
-  } else if (op.type() == "cp3") {
-    return p->register_module(name, Center3Interp(op));
-  } else if (op.type() == "cp5") {
-    return p->register_module(name, Center5Interp(op));
-  } else if (op.type() == "weno3") {
-    if (name.back() == '1') {
-      return p->register_module(name, Weno3Interp(op));
-    } else if (name.back() == '2') {
-      return p->register_module(name, Center3Interp(op));
-    } else {
-      throw std::runtime_error("register_module: unknown name " + name);
-    }
-  } else if (op.type() == "weno5") {
-    if (name.back() == '1') {
-      return p->register_module(name, Weno5Interp(op));
-    } else if (name.back() == '2') {
-      return p->register_module(name, Center5Interp(op));
-    } else {
-      throw std::runtime_error("register_module: unknown name " + name);
-    }
-  } else {
-    throw std::runtime_error("register_module: unknown type " + op.type());
-  }
-}
 
 void register_forcings_options(HydroOptions &op, YAML::Node const &config,
                                LayoutOptions const &layout) {

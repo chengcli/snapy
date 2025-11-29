@@ -55,7 +55,7 @@ class EquationOfStateImpl {
    *
    * \param[in] opts  options for creating the EquationOfState module
    * \param[in] p     parent module for registering the created module
-   * \return created EquationOfState module
+   * \return          created EquationOfState module
    */
   static std::shared_ptr<EquationOfStateImpl> create(
       EquationOfStateOptions const& opts, torch::nn::Module* p);

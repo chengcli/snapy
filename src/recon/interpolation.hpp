@@ -15,9 +15,13 @@
 #include <snap/add_arg.h>
 
 namespace snap {
-struct InterpOptions {
-  InterpOptions() = default;
-  explicit InterpOptions(std::string name) { type(name); }
+struct InterpOptionsImpl {
+  static std::shared_ptr<InterpOptionsImpl> create(std::string name) {
+    return std::make_shared<InterpOptionsImpl>(name);
+  }
+
+  InterpOptionsImpl() = default;
+  explicit InterpOptionsImpl(std::string name) { type(name); }
   void report(std::ostream& os) const {
     os << "* type = " << type() << "\n"
        << "* scale = " << (scale() ? "true" : "false") << "\n";
@@ -26,11 +30,30 @@ struct InterpOptions {
   ADD_ARG(std::string, type) = "dc";
   ADD_ARG(bool, scale) = false;
 };
+using InterpOptions = std::shared_ptr<InterpOptionsImpl>;
 
 class InterpImpl {
  public:
+  //! Create and register an Interp module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the Interp module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  module name
+   * \return          created Interp module
+   */
+  static std::shared_ptr<InterpImpl> create(InterpOptions const& options,
+                                            torch::nn::Module* p,
+                                            std::string const& name);
+
   //! options with which this `Interp` was constructed
   InterpOptions options;
+
+  InterpImpl() : options(InterpOptionsImpl::create("dc")) {}
+  explicit InterpImpl(InterpOptions const& options_) : options(options_) {}
+  virtual ~InterpImpl() = default;
 
   virtual int stencils() const { return 1; }
 
@@ -59,13 +82,7 @@ class InterpImpl {
   virtual void right(torch::Tensor w, int dim, torch::Tensor const& out) {
     forward(w, dim, torch::nullopt, out);
   }
-
- protected:
-  //! Disable constructor
-  InterpImpl() = default;
-  explicit InterpImpl(InterpOptions const& options) : options(options) {}
 };
-
 using Interp = std::shared_ptr<InterpImpl>;
 
 class DonorCellInterpImpl : public torch::nn::Cloneable<DonorCellInterpImpl>,
@@ -136,7 +153,7 @@ class Center3InterpImpl : public torch::nn::Cloneable<Center3InterpImpl>,
 
   //! Constructor to initialize the layer
   Center3InterpImpl() {
-    options.type("cp3");
+    options->type("cp3");
     reset();
   }
 
@@ -162,7 +179,7 @@ class Weno3InterpImpl : public torch::nn::Cloneable<Weno3InterpImpl>,
 
   //! Constructor to initialize the layer
   Weno3InterpImpl() {
-    options.type("weno3");
+    options->type("weno3");
     reset();
   }
 
@@ -188,7 +205,7 @@ class Center5InterpImpl : public torch::nn::Cloneable<Center5InterpImpl>,
 
   //! Constructor to initialize the layer
   Center5InterpImpl() {
-    options.type("cp5");
+    options->type("cp5");
     reset();
   }
 
@@ -214,7 +231,7 @@ class Weno5InterpImpl : public torch::nn::Cloneable<Weno5InterpImpl>,
 
   //! Constructor to initialize the layer
   Weno5InterpImpl() {
-    options.type("weno5");
+    options->type("weno5");
     reset();
   }
 

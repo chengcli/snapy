@@ -16,12 +16,16 @@ class Node;
 }  // namespace YAML
 
 namespace snap {
-struct ReconstructOptions {
-  static ReconstructOptions from_yaml(const YAML::Node& dyn,
-                                      std::string section);
-  ReconstructOptions() = default;
+struct ReconstructOptionsImpl {
+  static std::shared_ptr<ReconstructOptionsImpl> create() {
+    return std::make_shared<ReconstructOptionsImpl>();
+  }
+  static std::shared_ptr<ReconstructOptionsImpl> from_yaml(
+      const YAML::Node& dyn, std::string section);
+
+  ReconstructOptionsImpl() = default;
   void report(std::ostream& os) const {
-    interp().report(os);
+    interp()->report(os);
     os << "* is_boundary_lower = " << (is_boundary_lower() ? "true" : "false")
        << "\n"
        << "* is_boundary_upper = " << (is_boundary_upper() ? "true" : "false")
@@ -43,6 +47,7 @@ struct ReconstructOptions {
   //! abstract submodules
   ADD_ARG(InterpOptions, interp);
 };
+using ReconstructOptions = std::shared_ptr<ReconstructOptionsImpl>;
 
 class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
  public:
@@ -54,7 +59,7 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
   Interp pinterp2 = nullptr;
 
   //! Constructor to initialize the layers
-  ReconstructImpl() = default;
+  ReconstructImpl() : options(ReconstructOptionsImpl::create()) {}
   explicit ReconstructImpl(const ReconstructOptions& options_);
   void reset() override;
 

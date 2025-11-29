@@ -40,7 +40,7 @@ file(GLOB src_files
     eos/aneos/*.cpp
     #hydro/*.cpp
     riemann/*.cpp
-    #recon/*.cpp
+    recon/*.cpp
     #mesh/*.cpp
     #output/*.cpp
     #scalar/*.cpp

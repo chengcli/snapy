@@ -37,7 +37,7 @@ void Weno5InterpImpl::left(torch::Tensor w, int dim, torch::Tensor const& out) {
                   .add_input(w)
                   .build();
 
-  at::native::call_weno5(out.device().type(), iter, cm, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, cm, dim, options->scale());
 }
 
 void Weno5InterpImpl::right(torch::Tensor w, int dim,
@@ -55,7 +55,7 @@ void Weno5InterpImpl::right(torch::Tensor w, int dim,
                   .add_input(w)
                   .build();
 
-  at::native::call_weno5(out.device().type(), iter, cp, dim, options.scale());
+  at::native::call_weno5(out.device().type(), iter, cp, dim, options->scale());
 }
 
 }  // namespace snap

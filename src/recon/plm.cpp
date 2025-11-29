@@ -8,7 +8,6 @@
 #include <snap/snap.h>
 
 #include "interpolation.hpp"
-#include "recon_formatter.hpp"
 
 namespace snap {
 std::pair<torch::Tensor, torch::Tensor> PLMInterpImpl::forward(

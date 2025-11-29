@@ -4,30 +4,28 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "reconstruct.hpp"
 
 namespace snap {
-ReconstructOptions ReconstructOptions::from_yaml(const YAML::Node &dyn,
-                                                 std::string section) {
-  ReconstructOptions op;
-
-  if (!dyn["reconstruct"]) return op;
+ReconstructOptions ReconstructOptionsImpl::from_yaml(const YAML::Node &dyn,
+                                                     std::string section) {
+  if (!dyn["reconstruct"]) return nullptr;
 
   auto node = dyn["reconstruct"];
-  if (!node[section]) return op;
+  if (!node[section]) return nullptr;
 
-  op.shock() = node[section]["shock"].as<bool>(false);
-  op.interp().type() = node[section]["type"].as<std::string>("dc");
-  op.interp().scale() = node[section]["scale"].as<bool>(false);
+  auto op = ReconstructOptionsImpl::create();
+
+  op->shock() = node[section]["shock"].as<bool>(false);
+  op->interp()->type() = node[section]["type"].as<std::string>("dc");
+  op->interp()->scale() = node[section]["scale"].as<bool>(false);
 
   if (dyn["equation-of-state"]) {
-    op.density_floor() =
+    op->density_floor() =
         dyn["equation-of-state"]["density-floor"].as<double>(1.e-10);
-    op.pressure_floor() =
+    op->pressure_floor() =
         dyn["equation-of-state"]["pressure-floor"].as<double>(1.e-10);
-    op.limiter() = dyn["equation-of-state"]["limiter"].as<bool>(false);
+    op->limiter() = dyn["equation-of-state"]["limiter"].as<bool>(false);
   }
 
   return op;
@@ -65,8 +63,8 @@ ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
 }
 
 void ReconstructImpl::reset() {
-  pinterp1 = register_module_op(this, "interp1", options.interp());
-  pinterp2 = register_module_op(this, "interp2", options.interp());
+  pinterp1 = InterpImpl::create(options->interp(), this, "interp1");
+  pinterp2 = InterpImpl::create(options->interp(), this, "interp2");
 }
 
 torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
@@ -82,24 +80,24 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 
   TORCH_CHECK(il <= iu, "il > iu");
 
-  if (options.shock()) {
+  if (options->shock()) {
     _apply_inplace(dim, il, iu, w, pinterp1, result);
     return result;
   }
 
   /* modify velocity/pressure variables
   if (dim_size > 2 * nghost) {
-    if (options.is_boundary_lower()) {
+    if (options->is_boundary_lower()) {
       il += nghost;
-    } else if (options.is_boundary_upper()) {
+    } else if (options->is_boundary_upper()) {
       iu -= nghost;
     }
   } else {
-    if (options.is_boundary_lower() && !options.is_boundary_upper()) {
+    if (options->is_boundary_lower() && !options->is_boundary_upper()) {
       il += nghost;
-    } else if (!options.is_boundary_lower() && options.is_boundary_upper()) {
+    } else if (!options->is_boundary_lower() && options->is_boundary_upper()) {
       iu -= nghost;
-    } else if (options.is_boundary_lower() && options.is_boundary_upper()) {
+    } else if (options->is_boundary_lower() && options->is_boundary_upper()) {
       int len1 = dim_size / 2;
       int len2 = dim_size - len1;
       il += len1;
@@ -115,22 +113,22 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
                  result.narrow(1, IDN, 1));
-  if (options.limiter()) {
-    result.select(1, IDN).clamp_min_(options.density_floor());
+  if (options->limiter()) {
+    result.select(1, IDN).clamp_min_(options->density_floor());
   }
 
   // velocity/pressure
   _apply_inplace(dim, il, iu, w.narrow(0, IVX, 4), pinterp2,
                  result.narrow(1, IVX, 4));
-  if (options.limiter()) {
-    result.select(1, IPR).clamp_min_(options.pressure_floor());
+  if (options->limiter()) {
+    result.select(1, IPR).clamp_min_(options->pressure_floor());
   }
 
   // others
   int ny = w.size(0) - 5;
   _apply_inplace(dim, il, iu, w.narrow(0, ICY, ny), pinterp1,
                  result.narrow(1, ICY, ny));
-  if (options.limiter()) {
+  if (options->limiter()) {
     result.narrow(1, ICY, ny).clamp_min_(0.);
   }
 
