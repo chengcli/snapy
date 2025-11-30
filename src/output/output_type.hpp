@@ -3,6 +3,9 @@
 // C/C++
 #include <memory>
 
+// fmat
+#include <fmt/format.h>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -26,18 +29,28 @@ using Variables = std::map<std::string, torch::Tensor>;
 
 //! \brief  container for parameters read from `<output>` block in the input
 struct OutputOptions {
+  OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
+  std::string file_id() const { return "out" + std::to_string(fid()); }
+
   void report(std::ostream &os) const {
     os << "* fid = " << fid() << "\n"
        << "* dt = " << dt() << "\n"
+       << "* output_slicex1 = " << output_slicex1() << "\n"
+       << "* output_slicex2 = " << output_slicex2() << "\n"
+       << "* output_slicex3 = " << output_slicex3() << "\n"
+       << "* output_sumx1 = " << output_sumx1() << "\n"
+       << "* output_sumx2 = " << output_sumx2() << "\n"
+       << "* output_sumx3 = " << output_sumx3() << "\n"
        << "* include_ghost_zones = " << include_ghost_zones() << "\n"
        << "* cartesian_vector = " << cartesian_vector() << "\n"
+       << "* x1_slice = " << x1_slice() << "\n"
+       << "* x2_slice = " << x2_slice() << "\n"
+       << "* x3_slice = " << x3_slice() << "\n"
        << "* file_type = " << file_type() << "\n"
        << "* data_format = " << data_format() << "\n"
-       << "* variables = ";
-    for (auto const &var : variables()) {
-      os << var << " ";
-    }
-    os << "\n";
+       << "* variables = " << fmt::format("{}", variables()) << "\n"
+       << "* combine = " << combine() << "\n"
+       << "* verbose = " << verbose() << "\n";
   }
 
   ADD_ARG(int, fid) = 0;
@@ -64,10 +77,6 @@ struct OutputOptions {
 
   ADD_ARG(bool, combine) = true;
   ADD_ARG(bool, verbose) = false;
-
- public:
-  static OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
-  std::string file_id() const { return "out" + std::to_string(fid()); }
 };
 
 //! \brief container for output data and metadata; node in nested doubly linked

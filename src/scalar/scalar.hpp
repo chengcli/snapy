@@ -18,21 +18,26 @@
 #include <snap/add_arg.h>
 
 namespace snap {
-struct ScalarOptions {
-  static ScalarOptions from_yaml(std::string const& filename);
-  ScalarOptions() = default;
+struct ScalarOptionsImpl {
+  static std::shared_ptr<ScalarOptionsImpl> create() {
+    return std::make_shared<ScalarOptionsImpl>();
+  }
+  static std::shared_ptr<ScalarOptionsImpl> from_yaml(
+      std::string const& filename);
+  ScalarOptionsImpl() = default;
 
   //! Thermodynamics options
-  ADD_ARG(kintera::ThermoOptions, thermo);
+  ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
 
   //! Kinetics options
-  ADD_ARG(kintera::KineticsOptions, kinetics);
+  ADD_ARG(kintera::KineticsOptions, kinetics) = nullptr;
 
   //! submodules options
-  ADD_ARG(CoordinateOptions, coord);
-  ADD_ARG(ReconstructOptions, recon);
-  ADD_ARG(RiemannSolverOptions, riemann);
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+  ADD_ARG(ReconstructOptions, recon) = nullptr;
+  ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 };
+using ScalarOptions = std::shared_ptr<ScalarOptionsImpl>;
 
 using Variables = std::map<std::string, torch::Tensor>;
 
@@ -50,7 +55,7 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   kintera::Kinetics pkinetics = nullptr;
 
   //! Constructor to initialize the layers
-  ScalarImpl() = default;
+  ScalarImpl() : options(ScalarOptionsImpl::create()) {}
   explicit ScalarImpl(const ScalarOptions& options_);
   void reset() override;
 

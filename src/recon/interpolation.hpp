@@ -34,15 +34,15 @@ using InterpOptions = std::shared_ptr<InterpOptionsImpl>;
 
 class InterpImpl {
  public:
-  //! Create and register an Interp module
+  //! Create and register an `Interp` module
   /*!
    * This function registers the created module as a submodule
    * of the given parent module `p`.
    *
-   * \param[in] opts  options for creating the Interp module
+   * \param[in] opts  options for creating the `Interp` module
    * \param[in] p     parent module for registering the created module
    * \param[in] name  module name
-   * \return          created Interp module
+   * \return          created `Interp` module
    */
   static std::shared_ptr<InterpImpl> create(InterpOptions const& options,
                                             torch::nn::Module* p,

@@ -51,6 +51,20 @@ using ReconstructOptions = std::shared_ptr<ReconstructOptionsImpl>;
 
 class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
  public:
+  //! Create and register a Reconstruct module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `Reconstruct` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return              created `Reconstruct` module
+   */
+  static std::shared_ptr<ReconstructImpl> create(
+      ReconstructOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "recon");
+
   //! options with which this `Reconstruction` was constructed
   ReconstructOptions options;
 

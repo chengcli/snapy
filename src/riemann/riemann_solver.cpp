@@ -23,6 +23,9 @@ torch::Tensor RiemannSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 RiemannSolver RiemannSolverImpl::create(RiemannSolverOptions const& opts,
                                         torch::nn::Module* p,
                                         std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "RiemannSolver options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+
   if (opts->type() == "roe") {
     return p->register_module(name, RoeSolver(opts));
   } else if (opts->type() == "lmars") {

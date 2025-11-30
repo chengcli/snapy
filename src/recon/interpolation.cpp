@@ -5,6 +5,9 @@ namespace snap {
 
 Interp InterpImpl::create(InterpOptions const& opts, torch::nn::Module* p,
                           std::string const& name) {
+  TORCH_CHECK(opts, "Interp options is null");
+  TORCH_CHECK(p, "Parent module is null");
+
   if (opts->type() == "dc") {
     return p->register_module(name, DonorCellInterp(opts));
   } else if (opts->type() == "plm") {

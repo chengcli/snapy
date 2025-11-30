@@ -134,4 +134,13 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 
   return result;
 }
+
+std::shared_ptr<ReconstructImpl> ReconstructImpl::create(
+    ReconstructOptions const &opts, torch::nn::Module *p,
+    std::string const &name) {
+  TORCH_CHECK(opts, "Reconstruct options is null");
+  TORCH_CHECK(p, "Parent module is null");
+  return p->register_module(name, Reconstruct(opts));
+}
+
 }  // namespace snap

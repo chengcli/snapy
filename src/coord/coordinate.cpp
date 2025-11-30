@@ -337,15 +337,19 @@ IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
 }
 
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
-                                  torch::nn::Module* p) {
+                                  torch::nn::Module* p,
+                                  std::string const& name) {
+  TORCH_CHECK(opts, "Coordinate options is null");
+  TORCH_CHECK(p, "Parent module is null");
+
   if (opts->type() == "cartesian") {
-    return p->register_module("coord", Cartesian(opts));
+    return p->register_module(name, Cartesian(opts));
   } else if (opts->type() == "cylindrical") {
-    return p->register_module("coord", Cylindrical(opts));
+    return p->register_module(name, Cylindrical(opts));
   } else if (opts->type() == "spherical-polar") {
-    return p->register_module("coord", SphericalPolar(opts));
+    return p->register_module(name, SphericalPolar(opts));
   } else if (opts->type() == "cubed-sphere") {
-    return p->register_module("coord", GnomonicEquiangle(opts));
+    return p->register_module(name, GnomonicEquiangle(opts));
   } else {
     TORCH_CHECK(false, "Unknown coordinate type: ", opts->type());
   }

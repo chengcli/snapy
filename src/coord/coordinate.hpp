@@ -69,17 +69,19 @@ using CoordinateOptions = std::shared_ptr<CoordinateOptionsImpl>;
 
 class CoordinateImpl {
  public:
-  //! Create a Coordinate module given the options
+  //! Create and register a `Coordinate` module
   /*!
-   * Optionally this function can register the created module as a submodule
+   * This function registers the created module as a submodule
    * of the given parent module `p`.
    *
-   * \param[in] opts  options for creating the Coordinate module
+   * \param[in] opts  options for creating the `Coordinate` module
    * \param[in] p     parent module for registering the created module
-   * \return created Coordinate module
+   * \param[in] name  name for the created module
+   * \return          created `Coordinate` module
    */
-  static std::shared_ptr<CoordinateImpl> create(CoordinateOptions const &opts,
-                                                torch::nn::Module *p = nullptr);
+  static std::shared_ptr<CoordinateImpl> create(
+      CoordinateOptions const &opts, torch::nn::Module *p,
+      std::string const &name = "coord");
 
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;

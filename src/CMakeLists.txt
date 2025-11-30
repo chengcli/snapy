@@ -43,11 +43,11 @@ file(GLOB src_files
     recon/*.cpp
     #mesh/*.cpp
     #output/*.cpp
-    #scalar/*.cpp
+    scalar/*.cpp
     utils/*.cpp
     forcing/*.cpp
     implicit/*.cpp
-    #input/*.cpp
+    input/*.cpp
     sedimentation/*.cpp
     layout/*.cpp
     )
