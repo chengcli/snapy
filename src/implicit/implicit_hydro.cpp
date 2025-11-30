@@ -18,9 +18,7 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions options_)
 }
 
 void ImplicitHydroImpl::reset() {
-  CHECK_MODULE_LINKED(ImplicitOptions, coord);
-  CHECK_MODULE_LINKED(ImplicitOptions, grav);
-
+  TORCH_CHECK(options->grav(), "gravity module is nullptr");
   pcoord = CoordinateImpl::create(options->coord(), this);
 }
 
@@ -177,6 +175,8 @@ ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
 std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(
     ImplicitOptions const& opts, torch::nn::Module* p,
     std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "ImplicitHydro options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
   return p->register_module(name, ImplicitHydro(opts));
 }
 

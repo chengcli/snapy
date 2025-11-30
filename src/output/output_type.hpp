@@ -3,9 +3,6 @@
 // C/C++
 #include <memory>
 
-// fmat
-#include <fmt/format.h>
-
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -14,6 +11,9 @@
 
 // base
 #include <configure.h>
+
+// kintera
+#include <kintera/utils/format.hpp>
 
 // snap
 #include <snap/coord/coordinate.hpp>
@@ -28,8 +28,13 @@ class MeshBlockImpl;
 using Variables = std::map<std::string, torch::Tensor>;
 
 //! \brief  container for parameters read from `<output>` block in the input
-struct OutputOptions {
-  OutputOptions from_yaml(YAML::Node const &node, int fid = 0);
+struct OutputOptionsImpl {
+  static std::shared_ptr<OutputOptionsImpl> create() {
+    return std::make_shared<OutputOptionsImpl>();
+  }
+
+  std::shared_ptr<OutputOptionsImpl> from_yaml(YAML::Node const &node,
+                                               int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
 
   void report(std::ostream &os) const {
@@ -78,6 +83,7 @@ struct OutputOptions {
   ADD_ARG(bool, combine) = true;
   ADD_ARG(bool, verbose) = false;
 };
+using OutputOptions = std::shared_ptr<OutputOptionsImpl>;
 
 //! \brief container for output data and metadata; node in nested doubly linked
 //! list
@@ -105,7 +111,7 @@ class OutputType {
   double next_time = 0.0;
 
   // constructors
-  OutputType() = default;
+  OutputType() : options(OutputOptionsImpl::create()) {}
 
   // mark single parameter constructors as "explicit" to prevent them from
   // acting as implicit conversion functions: for f(OutputType arg), prevent

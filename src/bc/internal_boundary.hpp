@@ -50,6 +50,20 @@ using InternalBoundaryOptions = std::shared_ptr<InternalBoundaryOptionsImpl>;
 
 class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
  public:
+  //! Create and register a InternalBoundary module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `InternalBoundary` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return              created `InternalBoundary` module
+   */
+  static std::shared_ptr<InternalBoundaryImpl> create(
+      InternalBoundaryOptions const &opts, torch::nn::Module *p,
+      std::string const &name = "ib");
+
   //! options with which this `InternalBoundary` was constructed
   InternalBoundaryOptions options;
 

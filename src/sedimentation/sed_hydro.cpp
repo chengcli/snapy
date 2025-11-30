@@ -1,6 +1,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
 
 #include "sedimentation.hpp"
@@ -8,9 +9,6 @@
 namespace snap {
 
 void SedHydroImpl::reset() {
-  CHECK_MODULE_LINKED(SedHydroOptions, eos);
-  CHECK_MODULE_LINKED(SedHydroOptions, sedvel);
-
   peos = EquationOfStateImpl::create(options->eos(), this);
   psedvel = SedVelImpl::create(options->sedvel(), this);
 
@@ -56,6 +54,14 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   flux[IPR] += (vsed * en).sum(0);
 
   return flux;
+}
+
+std::shared_ptr<SedHydroImpl> SedHydroImpl::create(SedHydroOptions const& opts,
+                                                   torch::nn::Module* p,
+                                                   std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "SedHydro options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  return p->register_module(name, SedHydro(opts));
 }
 
 }  // namespace snap

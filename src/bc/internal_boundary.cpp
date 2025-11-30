@@ -88,5 +88,12 @@ torch::Tensor InternalBoundaryImpl::forward(torch::Tensor wlr, int dim,
 
   return wlr;
 }
+std::shared_ptr<InternalBoundaryImpl> InternalBoundaryImpl::create(
+    InternalBoundaryOptions const &opts, torch::nn::Module *p,
+    std::string const &name) {
+  TORCH_CHECK(opts != nullptr, "InternalBoundary options is null");
+  TORCH_CHECK(p != nullptr, "Parent module pointer is null");
+  return p->register_module(name, InternalBoundary(opts));
+}
 
 }  // namespace snap

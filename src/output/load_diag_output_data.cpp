@@ -15,11 +15,8 @@
 namespace snap {
 
 void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
-  if (!(pmb->phydro->options.eos().type() == "ideal-moist" ||
-        pmb->phydro->options.eos().type() == "moist-mixture")) {
-    // skip if not using kintera thermo
-    return;
-  }
+  // skip if not using kintera thermo
+  if (pmb->phydro->options->eos()->thermo() == nullptr) return;
 
   OutputData* pod;
   auto peos = pmb->phydro->peos;
@@ -31,7 +28,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   kintera::ThermoX thermo_x(thermo_y->options);
   thermo_x->to(w.device());
 
-  int ny = thermo_y->options.species().size() - 1;
+  int ny = thermo_y->options->species().size() - 1;
   auto temp = peos->compute("W->T", {w});
   auto pres = w[IPR];
   auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
@@ -62,7 +59,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
   // relative humidity
   auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
-                                       thermo_x->options.nucleation());
+                                       thermo_x->options->nucleation());
 
   if (ContainVariable("diag")) {
     // temperature
@@ -90,7 +87,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     num_vars_ += 1;
 
     // relative humidity
-    auto reactions = thermo_x->options.nucleation().reactions();
+    auto reactions = thermo_x->options->nucleation()->reactions();
     for (int i = 0; i < reactions.size(); ++i) {
       pod = new OutputData;
       pod->type = "SCALARS";
@@ -102,7 +99,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     }
 
     // implicit corrrection
-    if (pmb->phydro->options.imp().scheme() > 0) {
+    if (pmb->phydro->options->imp()->scheme() > 0) {
       auto du = pmb->phydro->named_buffers()["M"];
 
       // density

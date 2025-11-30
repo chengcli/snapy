@@ -29,8 +29,11 @@ inline int get_rank() { return std::stoi(get_env("RANK", "0")); }
 //! get local rank from environment variable
 inline int get_local_rank() { return std::stoi(get_env("LOCAL_RANK", "0")); }
 
-struct DistributeEnvOptions {
-  DistributeEnvOptions();
+struct DistributeEnvOptionsImpl {
+  static std::shared_ptr<DistributeEnvOptionsImpl> create() {
+    return std::make_shared<DistributeEnvOptionsImpl>();
+  }
+  DistributeEnvOptionsImpl();
 
   void report(std::ostream& os) const {
     os << "* backend = " << backend() << "\n";
@@ -51,6 +54,7 @@ struct DistributeEnvOptions {
   ADD_ARG(int, master_port) = 29500;
   ADD_ARG(bool, verbose) = false;
 };
+using DistributeEnvOptions = std::shared_ptr<DistributeEnvOptionsImpl>;
 
 class DistributeEnvImpl {
  public:
@@ -60,11 +64,11 @@ class DistributeEnvImpl {
   at::intrusive_ptr<c10d::Store> store;
   std::shared_ptr<c10d::Backend> pg;
 
-  DistributeEnvImpl() = default;
+  DistributeEnvImpl() : options(DistributeEnvOptionsImpl::create()) {}
   explicit DistributeEnvImpl(DistributeEnvOptions const& opts);
   virtual ~DistributeEnvImpl() = default;
 
-  bool is_root() const { return options.rank() == options.root_rank(); }
+  bool is_root() const { return options->rank() == options->root_rank(); }
 
  private:
   // --- Backend initializers ---

@@ -106,6 +106,8 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
 std::shared_ptr<PrimitiveProjectorImpl> PrimitiveProjectorImpl::create(
     PrimitiveProjectorOptions const &opts, torch::nn::Module *p,
     std::string const &name) {
+  TORCH_CHECK(opts != nullptr, "PrimitiveProjectorOptions is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
   return p->register_module(name, PrimitiveProjector(opts));
 }
 

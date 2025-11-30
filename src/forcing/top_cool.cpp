@@ -20,7 +20,6 @@ TopCoolOptions TopCoolOptionsImpl::from_yaml(YAML::Node const& forcing) {
 }
 
 void TopCoolImpl::reset() {
-  CHECK_MODULE_LINKED(TopCoolOptions, coord);
   pcoord = CoordinateImpl::create(options->coord(), this);
 }
 

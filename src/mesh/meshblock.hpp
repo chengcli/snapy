@@ -49,16 +49,16 @@ struct MeshBlockOptionsImpl {
   ADD_ARG(std::vector<OutputOptions>, outputs);
 
   //! submodule options
-  ADD_ARG(harp::IntegratorOptions, intg);
-  ADD_ARG(HydroOptions, hydro);
-  ADD_ARG(ScalarOptions, scalar);
+  ADD_ARG(harp::IntegratorOptions, intg) = nullptr;
+  ADD_ARG(HydroOptions, hydro) = nullptr;
+  ADD_ARG(ScalarOptions, scalar) = nullptr;
 
   //! boundary functions
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
 
   //! distributed environment
-  ADD_ARG(DistributeEnvOptions, dist);
-  ADD_ARG(LayoutOptions, layout);
+  ADD_ARG(DistributeEnvOptions, dist) = nullptr;
+  ADD_ARG(LayoutOptions, layout) = nullptr;
 };
 using MeshBlockOptions = std::shared_ptr<MeshBlockOptionsImpl>;
 

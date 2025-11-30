@@ -90,4 +90,12 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   return du - du0;
 }
 
+std::shared_ptr<ImplicitCorrectionImpl> ImplicitCorrectionImpl::create(
+    ImplicitOptions const& opts, torch::nn::Module* p,
+    std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "ImplicitCorrection options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  return p->register_module(name, ImplicitCorrection(opts));
+}
+
 }  // namespace snap

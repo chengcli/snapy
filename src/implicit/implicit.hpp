@@ -83,6 +83,20 @@ TORCH_MODULE(ImplicitHydro);
 class ImplicitCorrectionImpl
     : public torch::nn::Cloneable<ImplicitCorrectionImpl> {
  public:
+  //! Create and register a ImplicitCorrection module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `ImplicitCorrection` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return              created `ImplicitCorrection` module
+   */
+  static std::shared_ptr<ImplicitCorrectionImpl> create(
+      ImplicitOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "icorr");
+
   //! options with which this `ImplicitCorrection` was constructed
   ImplicitOptions options;
 

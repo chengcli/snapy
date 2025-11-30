@@ -1,6 +1,5 @@
 // snap
 #include <snap/constants.h>
-#include <snap/snap.h>
 
 #include <snap/forcing/forcing.hpp>
 
@@ -11,8 +10,7 @@
 namespace snap {
 
 void SedVelImpl::reset() {
-  CHECK_MODULE_LINKED(SedVelOptions, grav);
-
+  TORCH_CHECK(options->grav(), "SedVelOptions: grav is nullptr");
   TORCH_CHECK(options->radius().size() == options->density().size(),
               "SedVel: radius and density must have the same size");
 
@@ -60,6 +58,14 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   vel += const_vsed.view(vec);
 
   return vel.clamp(-options->upper_limit(), options->upper_limit());
+}
+
+std::shared_ptr<SedVelImpl> SedVelImpl::create(SedVelOptions const& opts,
+                                               torch::nn::Module* p,
+                                               std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "SedVel options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  return p->register_module(name, SedVel(opts));
 }
 
 }  // namespace snap

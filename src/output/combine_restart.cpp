@@ -29,7 +29,7 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     snprintf(number, sizeof(number), "%05d", file_number);
 
     std::string infile;
-    infile.assign(pmb->options.basename());
+    infile.assign(pmb->options->basename());
     infile.append(".block*.");
     if (final_write) {
       infile.append("final");
@@ -49,7 +49,7 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     }
 
     std::string outfile;
-    outfile.assign(pmb->options.basename());
+    outfile.assign(pmb->options->basename());
     outfile.append(".");
     if (final_write) {
       outfile.append("final");

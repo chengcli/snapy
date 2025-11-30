@@ -20,7 +20,6 @@ BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
 }
 
 void BotHeatImpl::reset() {
-  CHECK_MODULE_LINKED(BotHeatOptions, coord);
   pcoord = CoordinateImpl::create(options->coord(), this);
 }
 

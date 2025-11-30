@@ -1,15 +1,12 @@
 #pragma once
 
-// fmt
-#include <fmt/format.h>
-
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// snap
-#include <snap/eos/equation_of_state.hpp>
+// kintera
+#include <kintera/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -22,6 +19,12 @@ namespace snap {
 
 struct ConstGravityOptionsImpl;
 using ConstGravityOptions = std::shared_ptr<ConstGravityOptionsImpl>;
+
+struct EquationOfStateOptionsImpl;
+using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
+
+struct EquationOfStateImpl;
+using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
 
 struct SedVelOptionsImpl {
   static std::shared_ptr<SedVelOptionsImpl> create() {
@@ -101,7 +104,7 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
    * \param[in] name     name for registering the created module
    * \return           created `SedVel` module
    */
-  static std::shared_ptr<SedVelImpl> create(SedVelOptions const& options,
+  static std::shared_ptr<SedVelImpl> create(SedVelOptions const& opts,
                                             torch::nn::Module* p,
                                             std::string const& name = "sedvel");
 
@@ -135,6 +138,10 @@ TORCH_MODULE(SedVel);
 
 class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
  public:
+  static std::shared_ptr<SedHydroImpl> create(SedHydroOptions const& opts,
+                                              torch::nn::Module* p,
+                                              std::string const& name = "sed");
+
   //! cache
   torch::Tensor vsed;
 

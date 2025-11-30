@@ -7,29 +7,29 @@
 #include "output_type.hpp"
 
 namespace snap {
-OutputOptions OutputOptions::from_yaml(YAML::Node const &node, int fid) {
-  OutputOptions options;
+OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
+  auto options = OutputOptionsImpl::create();
 
-  options.fid() = fid;
-  options.dt() = node["dt"].as<double>(0.);
+  options->fid() = fid;
+  options->dt() = node["dt"].as<double>(0.);
 
-  options.output_slicex1() = node["output_slicex1"].as<bool>(false);
-  options.output_slicex2() = node["output_slicex2"].as<bool>(false);
-  options.output_slicex3() = node["output_slicex3"].as<bool>(false);
+  options->output_slicex1() = node["output_slicex1"].as<bool>(false);
+  options->output_slicex2() = node["output_slicex2"].as<bool>(false);
+  options->output_slicex3() = node["output_slicex3"].as<bool>(false);
 
-  options.output_sumx1() = node["output_sumx1"].as<bool>(false);
-  options.output_sumx2() = node["output_sumx2"].as<bool>(false);
-  options.output_sumx3() = node["output_sumx3"].as<bool>(false);
+  options->output_sumx1() = node["output_sumx1"].as<bool>(false);
+  options->output_sumx2() = node["output_sumx2"].as<bool>(false);
+  options->output_sumx3() = node["output_sumx3"].as<bool>(false);
 
-  options.include_ghost_zones() = node["include_ghost_zones"].as<bool>(false);
-  options.cartesian_vector() = node["cartesian_vector"].as<bool>(false);
+  options->include_ghost_zones() = node["include_ghost_zones"].as<bool>(false);
+  options->cartesian_vector() = node["cartesian_vector"].as<bool>(false);
 
-  options.x1_slice() = node["x1_slice"].as<double>(0.);
-  options.x2_slice() = node["x2_slice"].as<double>(0.);
-  options.x3_slice() = node["x3_slice"].as<double>(0.);
+  options->x1_slice() = node["x1_slice"].as<double>(0.);
+  options->x2_slice() = node["x2_slice"].as<double>(0.);
+  options->x3_slice() = node["x3_slice"].as<double>(0.);
 
   if (node["type"]) {
-    options.file_type() = node["type"].as<std::string>();
+    options->file_type() = node["type"].as<std::string>();
   } else {
     throw std::invalid_argument(
         "OutputOptions::from_yaml: output file type "
@@ -37,14 +37,14 @@ OutputOptions OutputOptions::from_yaml(YAML::Node const &node, int fid) {
   }
 
   if (node["data_format"]) {
-    options.data_format() = node["data_format"].as<std::string>();
+    options->data_format() = node["data_format"].as<std::string>();
   }
 
   if (node["variables"]) {
-    options.variables() = node["variables"].as<std::vector<std::string>>();
+    options->variables() = node["variables"].as<std::vector<std::string>>();
   }
 
-  options.verbose() = node["verbose"].as<bool>(false);
+  options->verbose() = node["verbose"].as<bool>(false);
 
   return options;
 }
@@ -115,8 +115,8 @@ void OutputType::ClearOutputData() {
 }
 
 bool OutputType::ContainVariable(const std::string &var) {
-  return std::find(options.variables().begin(), options.variables().end(),
-                   var) != options.variables().end();
+  return std::find(options->variables().begin(), options->variables().end(),
+                   var) != options->variables().end();
 }
 
 }  // namespace snap

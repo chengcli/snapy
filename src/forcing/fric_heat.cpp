@@ -19,8 +19,6 @@ FricHeatOptions FricHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
 }
 
 void FricHeatImpl::reset() {
-  CHECK_MODULE_LINKED(FricHeatOptions, sedvel);
-
   psedvel = SedVelImpl::create(options->sedvel(), this);
 }
 

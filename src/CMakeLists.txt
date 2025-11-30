@@ -42,7 +42,7 @@ file(GLOB src_files
     riemann/*.cpp
     recon/*.cpp
     #mesh/*.cpp
-    #output/*.cpp
+    output/*.cpp
     scalar/*.cpp
     utils/*.cpp
     forcing/*.cpp

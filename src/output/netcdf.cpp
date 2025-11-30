@@ -39,10 +39,10 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;
 
-  int nc1 = pmb->options.hydro().coord().nc1();
-  int nc2 = pmb->options.hydro().coord().nc2();
-  int nc3 = pmb->options.hydro().coord().nc3();
-  int nghost = pmb->options.hydro().coord().nghost();
+  int nc1 = pmb->options->hydro()->coord()->nc1();
+  int nc2 = pmb->options->hydro()->coord()->nc2();
+  int nc3 = pmb->options->hydro()->coord()->nc3();
+  int nghost = pmb->options->hydro()->coord()->nghost();
 
   // set start/end array indices depending on whether ghost zones are included
   out_is = nc1 > 1 ? nghost : 0;
@@ -54,7 +54,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // FIXME: include_ghost zones probably doesn't work with grids other than
   // CCC
-  if (options.include_ghost_zones()) {
+  if (options->include_ghost_zones()) {
     if (out_is != out_ie) {
       out_is -= nghost;
       out_ie += nghost;
@@ -80,13 +80,13 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options->rank());
 
-  fname.assign(pmb->options.basename());
+  fname.assign(pmb->options->basename());
   fname.append(".");
   fname.append(blockid);
   fname.append(".");
-  fname.append(options.file_id());
+  fname.append(options->file_id());
   fname.append(".");
   fname.append(number);
   fname.append(".nc");
@@ -125,16 +125,16 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // 3. define variables
   int level = 0;
-  auto iloc = pmb->playout->loc_of(pmb->pdist->options.rank());
+  auto iloc = pmb->playout->loc_of(pmb->pdist->options->rank());
 
   int lx1 =
-      pmb->playout->options.type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
+      pmb->playout->options->type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
 
-  int nb1 = pmb->playout->options.pz();
-  int nb2 = pmb->playout->options.py();
-  int nb3 = pmb->playout->options.px();
+  int nb1 = pmb->playout->options->pz();
+  int nb2 = pmb->playout->options->py();
+  int nb3 = pmb->playout->options->px();
 
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f, imu, iphi;
   int loc[4] = {lx1, lx2, lx3, level};
@@ -417,7 +417,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   delete[] data;
   delete[] var_ids;
 
-  if (options.combine()) {
+  if (options->combine()) {
     combine_blocks(pmb, final_write);
   }
 #endif  // NETCDFOUTPUT
