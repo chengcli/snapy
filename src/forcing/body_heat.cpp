@@ -6,7 +6,10 @@
 
 namespace snap {
 
-BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& node) {
+BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["body-heat"]) return nullptr;
+
+  auto node = forcing["body-heat"];
   auto op = BodyHeatOptionsImpl::create();
 
   op->dTdt() = node["dTdt"].as<double>(0.0);

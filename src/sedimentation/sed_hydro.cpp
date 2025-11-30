@@ -1,6 +1,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/forcing/forcing.hpp>
+
 #include "sedimentation.hpp"
 
 namespace snap {
@@ -24,7 +26,7 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
 
   // null-op
   if (options->sedvel()->grav()->grav1() == 0. ||
-      options->sedvel()->species()->size() == 0) {
+      options->sedvel()->species().size() == 0) {
     return flux;
   }
 

@@ -6,7 +6,11 @@
 
 namespace snap {
 
-PlumeForcingOptions PlumeForcingOptionsImpl::from_yaml(YAML::Node const& node) {
+PlumeForcingOptions PlumeForcingOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["plume-forcing"]) return nullptr;
+
+  auto node = forcing["plume-forcing"];
   auto op = PlumeForcingOptionsImpl::create();
 
   op->entrainment() = node["entrainment"].as<double>(0.1);

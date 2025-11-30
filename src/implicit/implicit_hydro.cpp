@@ -7,8 +7,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "implicit.hpp"
 #include "implicit_dispatch.hpp"
 
@@ -20,16 +18,18 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions options_)
 }
 
 void ImplicitHydroImpl::reset() {
-  // set up coordinate
-  pcoord = register_module_op(this, "coord", options.coord());
+  CHECK_MODULE_LINKED(ImplicitOptions, coord);
+  CHECK_MODULE_LINKED(ImplicitOptions, grav);
+
+  pcoord = CoordinateImpl::create(options->coord(), this);
 }
 
 torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
                                                   torch::Tensor gamma,
                                                   int dim) {
-  int nc1 = pcoord->options.nc1();
-  int nc2 = pcoord->options.nc2();
-  int nc3 = pcoord->options.nc3();
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
 
   auto wroe = torch::empty({5, nc3, nc2, nc1}, wlr.options());
 
@@ -70,7 +70,7 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
 
   auto result = Rmat.matmul(EV.abs()).matmul(Rimat);
 
-  if ((options.scheme() >> 3) & 1) {  // full matrix
+  if ((options->scheme() >> 3) & 1) {  // full matrix
     return result;
   } else {  // partial matrix
     auto sub = torch::tensor(
@@ -81,9 +81,9 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
 
 torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w,
                                                torch::Tensor gamma, int dim) {
-  int nc1 = pcoord->options.nc1();
-  int nc2 = pcoord->options.nc2();
-  int nc3 = pcoord->options.nc3();
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
 
   auto dfdq = torch::empty({nc3, nc2, nc1, 25}, w.options());
 
@@ -103,7 +103,7 @@ torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w,
   // resize 25 -> 5x5
   dfdq = dfdq.view({nc3, nc2, nc1, 5, 5});
 
-  if ((options.scheme() >> 3) & 1) {  // full matrix
+  if ((options->scheme() >> 3) & 1) {  // full matrix
     return dfdq;
   } else {  // partial matrix
     auto sub = torch::tensor({IDN, IVX, IPR},
@@ -172,6 +172,12 @@ ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
       (2. * vol);
 
   return std::make_tuple(a, b, c, corr);
+}
+
+std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(
+    ImplicitOptions const& opts, torch::nn::Module* p,
+    std::string const& name) {
+  return p->register_module(name, ImplicitHydro(opts));
 }
 
 }  // namespace snap

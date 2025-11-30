@@ -8,14 +8,19 @@
 
 namespace snap {
 
-CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const& node) {
+CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["coriolis"]) return nullptr;
+
+  auto node = forcing["coriolis"];
   auto op = CoriolisOptionsImpl::create();
+
   op->omega1() = node["omega1"].as<double>(0.);
   op->omega2() = node["omega2"].as<double>(0.);
   op->omega3() = node["omega3"].as<double>(0.);
   op->omegax() = node["omegax"].as<double>(0.);
   op->omegay() = node["omegay"].as<double>(0.);
   op->omegaz() = node["omegaz"].as<double>(0.);
+
   return op;
 }
 

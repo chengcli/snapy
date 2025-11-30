@@ -8,7 +8,10 @@
 
 namespace snap {
 
-BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& node) {
+BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["bot-heat"]) return nullptr;
+
+  auto node = forcing["bot-heat"];
   auto op = BotHeatOptionsImpl::create();
 
   op->flux() = node["flux"].as<double>(0.0);

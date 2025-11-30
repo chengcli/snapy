@@ -29,7 +29,7 @@ struct ConstGravityOptionsImpl {
     return std::make_shared<ConstGravityOptionsImpl>();
   }
   static std::shared_ptr<ConstGravityOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   ConstGravityOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -68,7 +68,8 @@ struct CoriolisOptionsImpl {
   static std::shared_ptr<CoriolisOptionsImpl> create() {
     return std::make_shared<CoriolisOptionsImpl>();
   }
-  static std::shared_ptr<CoriolisOptionsImpl> from_yaml(YAML::Node const& node);
+  static std::shared_ptr<CoriolisOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
 
   CoriolisOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -138,7 +139,7 @@ struct DiffusionOptionsImpl {
     return std::make_shared<DiffusionOptionsImpl>();
   }
   static std::shared_ptr<DiffusionOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   DiffusionOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -174,7 +175,8 @@ struct FricHeatOptionsImpl {
   static std::shared_ptr<FricHeatOptionsImpl> create() {
     return std::make_shared<FricHeatOptionsImpl>();
   }
-  static std::shared_ptr<FricHeatOptionsImpl> from_yaml(YAML::Node const& node);
+  static std::shared_ptr<FricHeatOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
 
   FricHeatOptionsImpl() = default;
   void report(std::ostream& os) const {}
@@ -210,7 +212,8 @@ struct BodyHeatOptionsImpl {
   static std::shared_ptr<BodyHeatOptionsImpl> create() {
     return std::make_shared<BodyHeatOptionsImpl>();
   }
-  static std::shared_ptr<BodyHeatOptionsImpl> from_yaml(YAML::Node const& node);
+  static std::shared_ptr<BodyHeatOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
 
   BodyHeatOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -252,7 +255,8 @@ struct TopCoolOptionsImpl {
   static std::shared_ptr<TopCoolOptionsImpl> create() {
     return std::make_shared<TopCoolOptionsImpl>();
   }
-  static std::shared_ptr<TopCoolOptionsImpl> from_yaml(YAML::Node const& node);
+  static std::shared_ptr<TopCoolOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
 
   TopCoolOptionsImpl() = default;
   void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
@@ -288,7 +292,8 @@ struct BotHeatOptionsImpl {
   static std::shared_ptr<BotHeatOptionsImpl> create() {
     return std::make_shared<BotHeatOptionsImpl>();
   }
-  static std::shared_ptr<BotHeatOptionsImpl> from_yaml(YAML::Node const& node);
+  static std::shared_ptr<BotHeatOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
 
   BotHeatOptionsImpl() = default;
   void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
@@ -325,7 +330,7 @@ struct RelaxBotCompOptionsImpl {
     return std::make_shared<RelaxBotCompOptionsImpl>();
   }
   static std::shared_ptr<RelaxBotCompOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   RelaxBotCompOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -365,7 +370,7 @@ struct RelaxBotTempOptionsImpl {
     return std::make_shared<RelaxBotTempOptionsImpl>();
   }
   static std::shared_ptr<RelaxBotTempOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   RelaxBotTempOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -403,7 +408,7 @@ struct RelaxBotVeloOptionsImpl {
     return std::make_shared<RelaxBotVeloOptionsImpl>();
   }
   static std::shared_ptr<RelaxBotVeloOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   RelaxBotVeloOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -445,7 +450,7 @@ struct TopSpongeLyrOptionsImpl {
     return std::make_shared<TopSpongeLyrOptionsImpl>();
   }
   static std::shared_ptr<TopSpongeLyrOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   TopSpongeLyrOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -484,7 +489,7 @@ struct BotSpongeLyrOptionsImpl {
     return std::make_shared<BotSpongeLyrOptionsImpl>();
   }
   static std::shared_ptr<BotSpongeLyrOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   BotSpongeLyrOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -523,7 +528,7 @@ struct PlumeForcingOptionsImpl {
     return std::make_shared<PlumeForcingOptionsImpl>();
   }
   static std::shared_ptr<PlumeForcingOptionsImpl> from_yaml(
-      YAML::Node const& node);
+      YAML::Node const& forcing);
 
   PlumeForcingOptionsImpl() = default;
   void report(std::ostream& os) const {

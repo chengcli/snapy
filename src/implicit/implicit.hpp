@@ -45,6 +45,20 @@ using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
  public:
+  //! Create and register a ImplicitHydro module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `ImplicitHydro` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return created      `ImplicitHydro` module
+   */
+  static std::shared_ptr<ImplicitHydroImpl> create(
+      ImplicitOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "vic");
+
   //! options with which this `ImplicitHydro` was constructed
   ImplicitOptions options;
 

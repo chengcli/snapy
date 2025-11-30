@@ -46,9 +46,9 @@ file(GLOB src_files
     #scalar/*.cpp
     utils/*.cpp
     forcing/*.cpp
-    #implicit/*.cpp
+    implicit/*.cpp
     #input/*.cpp
-    #sedimentation/*.cpp
+    sedimentation/*.cpp
     layout/*.cpp
     )
 

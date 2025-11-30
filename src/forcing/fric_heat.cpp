@@ -9,8 +9,12 @@
 #include "forcing.hpp"
 
 namespace snap {
-FricHeatOptions FricHeatOptionsImpl::from_yaml(YAML::Node const& node) {
+FricHeatOptions FricHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["fric-heat"]) return nullptr;
+
+  auto node = forcing["fric-heat"];
   auto op = FricHeatOptionsImpl::create();
+
   return op;
 }
 

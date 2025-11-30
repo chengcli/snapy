@@ -15,7 +15,7 @@ ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions options_)
 }
 
 void ImplicitCorrectionImpl::reset() {
-  pvic = register_module("vic", ImplicitHydro(options));
+  pvic = ImplicitHydroImpl::create(options, this);
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
@@ -43,11 +43,12 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto Dt = torch::eye(m, w.options()) / dt;
   auto Phi = torch::zeros({m, m}, w.options());
 
-  Phi[Index::IVX][Index::IDN] = options->grav();
-  Phi[m - 1][Index::IVX] = options->grav();
+  auto grav = options->grav()->grav1();
+  Phi[IVX][IDN] = grav;
+  Phi[m - 1][IVX] = grav;
 
   auto Bnd = torch::eye(m, w.options());
-  Bnd[Index::IVX][Index::IVX] = -1.;
+  Bnd[IVX][IVX] = -1.;
 
   int is = pvic->pcoord->is();
   int ie = pvic->pcoord->ie();

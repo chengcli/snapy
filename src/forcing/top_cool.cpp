@@ -8,7 +8,10 @@
 
 namespace snap {
 
-TopCoolOptions TopCoolOptionsImpl::from_yaml(YAML::Node const& node) {
+TopCoolOptions TopCoolOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["top-cool"]) return nullptr;
+
+  auto node = forcing["top-cool"];
   auto op = TopCoolOptionsImpl::create();
 
   op->flux() = node["flux"].as<double>(0.0);

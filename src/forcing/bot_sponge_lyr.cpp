@@ -6,7 +6,11 @@
 
 namespace snap {
 
-BotSpongeLyrOptions BotSpongeLyrOptionsImpl::from_yaml(YAML::Node const& node) {
+BotSpongeLyrOptions BotSpongeLyrOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["bot-sponge-lyr"]) return nullptr;
+
+  auto node = forcing["bot-sponge-lyr"];
   auto op = BotSpongeLyrOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

@@ -6,7 +6,11 @@
 
 namespace snap {
 
-RelaxBotCompOptions RelaxBotCompOptionsImpl::from_yaml(YAML::Node const& node) {
+RelaxBotCompOptions RelaxBotCompOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["relax-bot-comp"]) return nullptr;
+
+  auto node = forcing["relax-bot-comp"];
   auto op = RelaxBotCompOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

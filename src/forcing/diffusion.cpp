@@ -6,7 +6,10 @@
 
 namespace snap {
 
-DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& node) {
+DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["diffusion"]) return nullptr;
+
+  auto node = forcing["diffusion"];
   auto op = DiffusionOptionsImpl::create();
 
   op->K() = node["K"].as<double>(0.);

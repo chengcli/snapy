@@ -7,11 +7,17 @@
 #include "forcing.hpp"
 
 namespace snap {
-ConstGravityOptions ConstGravityOptionsImpl::from_yaml(YAML::Node const& node) {
+ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["const-gravity"]) return nullptr;
+
+  auto node = forcing["const-gravity"];
   auto op = ConstGravityOptionsImpl::create();
+
   op->grav1() = node["grav1"].as<double>(0.);
   op->grav2() = node["grav2"].as<double>(0.);
   op->grav3() = node["grav3"].as<double>(0.);
+
   return op;
 }
 

@@ -27,7 +27,7 @@ struct SedVelOptionsImpl {
   static std::shared_ptr<SedVelOptionsImpl> create() {
     return std::make_shared<SedVelOptionsImpl>();
   }
-  static std::shared_ptr<SedVelOptionsImpl> from_yaml(YAML::Node const& config);
+  static std::shared_ptr<SedVelOptionsImpl> from_yaml(YAML::Node const& node);
 
   void report(std::ostream& os) const {
     os << "* particle_ids = " << fmt::format("{}", particle_ids()) << "\n"

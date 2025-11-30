@@ -6,7 +6,11 @@
 
 namespace snap {
 
-RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(YAML::Node const& node) {
+RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["relax-bot-temp"]) return nullptr;
+
+  auto node = forcing["relax-bot-temp"];
   auto op = RelaxBotTempOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

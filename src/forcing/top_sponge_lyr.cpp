@@ -6,7 +6,11 @@
 
 namespace snap {
 
-TopSpongeLyrOptions TopSpongeLyrOptionsImpl::from_yaml(YAML::Node const& node) {
+TopSpongeLyrOptions TopSpongeLyrOptionsImpl::from_yaml(
+    YAML::Node const& forcing) {
+  if (!forcing["top-sponge-lyr"]) return nullptr;
+
+  auto node = forcing["top-sponge-lyr"];
   auto op = TopSpongeLyrOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

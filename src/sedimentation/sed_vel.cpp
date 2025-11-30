@@ -52,7 +52,7 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   auto beta = 1.0 + Kn * (1.256 + 0.4 * torch::exp(-1.1 / Kn));
 
   // Calculate vsed
-  auto grav = -options->grav()->grav1;
+  auto grav = -options->grav()->grav1();
   auto vel = beta / (9.0 * eta) *
              (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
 
