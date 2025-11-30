@@ -104,19 +104,20 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
 }
 
 EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
-                                            torch::nn::Module* p) {
+                                            torch::nn::Module* p,
+                                            std::string const& name) {
   if (opts->type() == "ideal-gas") {
-    return p->register_module("eos", IdealGas(opts));
+    return p->register_module(name, IdealGas(opts));
   } else if (opts->type() == "ideal-moist") {
-    return p->register_module("eos", IdealMoist(opts));
+    return p->register_module(name, IdealMoist(opts));
   } else if (opts->type() == "moist-mixture") {
-    return p->register_module("eos", MoistMixture(opts));
+    return p->register_module(name, MoistMixture(opts));
   } else if (opts->type() == "aneos") {
-    return p->register_module("eos", ANEOS(opts));
+    return p->register_module(name, ANEOS(opts));
   } else if (opts->type() == "shallow-water") {
-    return p->register_module("eos", ShallowWater(opts));
+    return p->register_module(name, ShallowWater(opts));
   } else if (opts->type() == "plume-eos") {
-    return p->register_module("eos", PlumeEOS(opts));
+    return p->register_module(name, PlumeEOS(opts));
   } else {
     TORCH_CHECK(false, "EquationOfState: Unknown type: ", opts->type());
   }

@@ -45,7 +45,7 @@ struct ReconstructOptionsImpl {
   ADD_ARG(bool, limiter) = false;
 
   //! abstract submodules
-  ADD_ARG(InterpOptions, interp);
+  ADD_ARG(InterpOptions, interp) = nullptr;
 };
 using ReconstructOptions = std::shared_ptr<ReconstructOptionsImpl>;
 

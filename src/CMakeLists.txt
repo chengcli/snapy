@@ -44,12 +44,12 @@ file(GLOB src_files
     #mesh/*.cpp
     #output/*.cpp
     #scalar/*.cpp
-    #utils/*.cpp
-    #forcing/*.cpp
+    utils/*.cpp
+    forcing/*.cpp
     #implicit/*.cpp
     #input/*.cpp
     #sedimentation/*.cpp
-    #layout/*.cpp
+    layout/*.cpp
     )
 
 add_library(${namel}_${buildl}

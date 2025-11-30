@@ -6,11 +6,11 @@
 
 namespace snap {
 
-TopSpongeLyrOptions TopSpongeLyrOptions::from_yaml(YAML::Node const& node) {
-  TopSpongeLyrOptions op;
+TopSpongeLyrOptions TopSpongeLyrOptionsImpl::from_yaml(YAML::Node const& node) {
+  auto op = TopSpongeLyrOptionsImpl::create();
 
-  op.tau() = node["tau"].as<double>(0.0);
-  op.width() = node["width"].as<double>(0.0);
+  op->tau() = node["tau"].as<double>(0.0);
+  op->width() = node["width"].as<double>(0.0);
 
   return op;
 }

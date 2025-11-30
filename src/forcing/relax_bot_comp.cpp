@@ -6,16 +6,16 @@
 
 namespace snap {
 
-RelaxBotCompOptions RelaxBotCompOptions::from_yaml(YAML::Node const& node) {
-  RelaxBotCompOptions op;
+RelaxBotCompOptions RelaxBotCompOptionsImpl::from_yaml(YAML::Node const& node) {
+  auto op = RelaxBotCompOptionsImpl::create();
 
-  op.tau() = node["tau"].as<double>(0.0);
-  op.species() =
+  op->tau() = node["tau"].as<double>(0.0);
+  op->species() =
       node["species"].as<std::vector<std::string>>(std::vector<std::string>{});
-  op.xfrac() = node["xfrac"].as<std::vector<double>>(std::vector<double>{});
+  op->xfrac() = node["xfrac"].as<std::vector<double>>(std::vector<double>{});
 
   TORCH_CHECK(
-      op.species().size() == op.xfrac().size(),
+      op->species().size() == op->xfrac().size(),
       "RelaxBotCompOptions: 'species' and 'xfrac' must have the same length.");
 
   return op;

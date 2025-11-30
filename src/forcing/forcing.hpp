@@ -7,7 +7,7 @@
 #include <torch/nn/modules/container/any.h>
 
 // kintera
-#include <kintera/utils/format.hpp>
+#include <kintera/thermo/thermo.hpp>
 
 // snap
 #include <snap/coord/coordinate.hpp>
@@ -22,9 +22,16 @@ class Node;
 
 namespace snap {
 
-struct ConstGravityOptions {
-  static ConstGravityOptions from_yaml(YAML::Node const& node);
-  ConstGravityOptions() = default;
+////// (1) Constant Gravity //////
+
+struct ConstGravityOptionsImpl {
+  static std::shared_ptr<ConstGravityOptionsImpl> create() {
+    return std::make_shared<ConstGravityOptionsImpl>();
+  }
+  static std::shared_ptr<ConstGravityOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  ConstGravityOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "* grav1 = " << grav1() << "\n"
        << "* grav2 = " << grav2() << "\n"
@@ -35,10 +42,35 @@ struct ConstGravityOptions {
   ADD_ARG(double, grav2) = 0.;
   ADD_ARG(double, grav3) = 0.;
 };
+using ConstGravityOptions = std::shared_ptr<ConstGravityOptionsImpl>;
 
-struct CoriolisOptions {
-  static CoriolisOptions from_yaml(YAML::Node const& node);
-  CoriolisOptions() = default;
+class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
+ public:
+  //! options with which this `ConstGravity` was constructed
+  ConstGravityOptions options;
+
+  // Constructor to initialize the layers
+  ConstGravityImpl() : options(ConstGravityOptionsImpl::create()) {}
+  explicit ConstGravityImpl(ConstGravityOptions const& options_)
+      : options(options_) {
+    reset();
+  }
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+};
+TORCH_MODULE(ConstGravity);
+
+////// (2) Coriolis //////
+
+struct CoriolisOptionsImpl {
+  static std::shared_ptr<CoriolisOptionsImpl> create() {
+    return std::make_shared<CoriolisOptionsImpl>();
+  }
+  static std::shared_ptr<CoriolisOptionsImpl> from_yaml(YAML::Node const& node);
+
+  CoriolisOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "* omega1 = " << omega1() << "\n"
        << "* omega2 = " << omega2() << "\n"
@@ -56,160 +88,9 @@ struct CoriolisOptions {
   ADD_ARG(double, omegay) = 0.;
   ADD_ARG(double, omegaz) = 0.;
 
-  ADD_ARG(CoordinateOptions, coord);
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
-
-struct DiffusionOptions {
-  static DiffusionOptions from_yaml(YAML::Node const& node);
-  DiffusionOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* K = " << K() << "\n"
-       << "* type = " << type() << "\n";
-  }
-
-  ADD_ARG(double, K) = 0.;
-  ADD_ARG(std::string, type) = "theta";
-};
-
-struct FricHeatOptions {
-  static FricHeatOptions from_yaml(YAML::Node const& root);
-  FricHeatOptions() = default;
-  void report(std::ostream& os) const { os << "* grav = " << grav() << "\n"; }
-
-  ADD_ARG(double, grav) = 0.;
-  ADD_ARG(SedVelOptions, sedvel);
-};
-
-struct BodyHeatOptions {
-  static BodyHeatOptions from_yaml(YAML::Node const& node);
-  BodyHeatOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* dTdt = " << dTdt() << "\n"
-       << "* pmin = " << pmin() << "\n"
-       << "* pmax = " << pmax() << "\n";
-  }
-
-  ADD_ARG(double, dTdt) = 0.0;
-  ADD_ARG(double, pmin) = 0.0;
-  ADD_ARG(double, pmax) = 1.0;
-  ADD_ARG(kintera::ThermoOptions, thermo);
-};
-
-struct TopCoolOptions {
-  static TopCoolOptions from_yaml(YAML::Node const& node);
-  TopCoolOptions() = default;
-  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
-
-  ADD_ARG(double, flux) = 0.0;
-  ADD_ARG(CoordinateOptions, coord);
-};
-
-struct BotHeatOptions {
-  static BotHeatOptions from_yaml(YAML::Node const& node);
-  BotHeatOptions() = default;
-  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
-
-  ADD_ARG(double, flux) = 0.0;
-  ADD_ARG(CoordinateOptions, coord);
-};
-
-struct RelaxBotCompOptions {
-  static RelaxBotCompOptions from_yaml(YAML::Node const& node);
-  RelaxBotCompOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* tau = " << tau() << "\n"
-       << "* species = " << fmt::format("{}", species()) << "\n"
-       << "* xfrac = " << fmt::format("{}", xfrac()) << "\n";
-  }
-
-  ADD_ARG(double, tau) = 0.0;
-  ADD_ARG(std::vector<std::string>, species) = {};
-  ADD_ARG(std::vector<double>, xfrac) = {};
-};
-
-struct RelaxBotTempOptions {
-  static RelaxBotTempOptions from_yaml(YAML::Node const& node);
-  RelaxBotTempOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* tau = " << tau() << "\n"
-       << "* btemp = " << btemp() << "\n";
-  }
-
-  ADD_ARG(double, tau) = 0.0;
-  ADD_ARG(double, btemp) = 300.0;
-};
-
-struct RelaxBotVeloOptions {
-  static RelaxBotVeloOptions from_yaml(YAML::Node const& node);
-  RelaxBotVeloOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* tau = " << tau() << "\n"
-       << "* bvx = " << bvx() << "\n"
-       << "* bvy = " << bvy() << "\n"
-       << "* bvz = " << bvz() << "\n";
-  }
-
-  ADD_ARG(double, tau) = 0.0;
-  ADD_ARG(double, bvx) = 0.0;
-  ADD_ARG(double, bvy) = 0.0;
-  ADD_ARG(double, bvz) = 0.0;
-};
-
-struct TopSpongeLyrOptions {
-  static TopSpongeLyrOptions from_yaml(YAML::Node const& node);
-  TopSpongeLyrOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* tau = " << tau() << "\n"
-       << "* width = " << width() << "\n";
-  }
-
-  ADD_ARG(double, tau) = 0.0;
-  ADD_ARG(double, width) = 0.0;
-  ADD_ARG(CoordinateOptions, coord);
-};
-
-struct BotSpongeLyrOptions {
-  static BotSpongeLyrOptions from_yaml(YAML::Node const& node);
-  BotSpongeLyrOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* tau = " << tau() << "\n"
-       << "* width = " << width() << "\n";
-  }
-
-  ADD_ARG(double, tau) = 0.0;
-  ADD_ARG(double, width) = 0.0;
-  ADD_ARG(CoordinateOptions, coord);
-};
-
-struct PlumeForcingOptions {
-  static PlumeForcingOptions from_yaml(YAML::Node const& node);
-  PlumeForcingOptions() = default;
-  void report(std::ostream& os) const {
-    os << "* entrainment = " << entrainment() << "\n"
-       << "* N2 = " << N2() << "\n";
-  }
-
-  ADD_ARG(double, entrainment) = 0.1;
-  ADD_ARG(double, N2) = 0.0;
-};
-
-class ConstGravityImpl : public torch::nn::Cloneable<ConstGravityImpl> {
- public:
-  //! options with which this `ConstGravity` was constructed
-  ConstGravityOptions options;
-
-  // Constructor to initialize the layers
-  ConstGravityImpl() = default;
-  explicit ConstGravityImpl(ConstGravityOptions const& options_)
-      : options(options_) {
-    reset();
-  }
-  void reset() override {}
-
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
-                        double dt);
-};
-TORCH_MODULE(ConstGravity);
+using CoriolisOptions = std::shared_ptr<CoriolisOptionsImpl>;
 
 class Coriolis123Impl : public torch::nn::Cloneable<Coriolis123Impl> {
  public:
@@ -217,7 +98,7 @@ class Coriolis123Impl : public torch::nn::Cloneable<Coriolis123Impl> {
   CoriolisOptions options;
 
   // Constructor to initialize the layers
-  Coriolis123Impl() = default;
+  Coriolis123Impl() : options(CoriolisOptionsImpl::create()) {}
   explicit Coriolis123Impl(CoriolisOptions const& options_)
       : options(options_) {
     reset();
@@ -231,14 +112,14 @@ TORCH_MODULE(Coriolis123);
 
 class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
  public:
+  //! submodules
+  Coordinate pcoord = nullptr;
+
   //! options with which this `CoriolisXYZ` was constructed
   CoriolisOptions options;
 
-  //! submodules
-  Coordinate pcoord;
-
   // Constructor to initialize the layers
-  CoriolisXYZImpl() = default;
+  CoriolisXYZImpl() : options(CoriolisOptionsImpl::create()) {}
   explicit CoriolisXYZImpl(CoriolisOptions const& options_)
       : options(options_) {
     reset();
@@ -250,13 +131,33 @@ class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
 };
 TORCH_MODULE(CoriolisXYZ);
 
+//////// (3) Diffusion ////////
+
+struct DiffusionOptionsImpl {
+  static std::shared_ptr<DiffusionOptionsImpl> create() {
+    return std::make_shared<DiffusionOptionsImpl>();
+  }
+  static std::shared_ptr<DiffusionOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  DiffusionOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* K = " << K() << "\n"
+       << "* type = " << type() << "\n";
+  }
+
+  ADD_ARG(double, K) = 0.;
+  ADD_ARG(std::string, type) = "theta";
+};
+using DiffusionOptions = std::shared_ptr<DiffusionOptionsImpl>;
+
 class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
  public:
   //! options with which this `Diffusion` was constructed
   DiffusionOptions options;
 
   // Constructor to initialize the layers
-  DiffusionImpl() = default;
+  DiffusionImpl() : options(DiffusionOptionsImpl::create()) {}
   explicit DiffusionImpl(DiffusionOptions const& options_) : options(options_) {
     reset();
   }
@@ -267,6 +168,22 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
 };
 TORCH_MODULE(Diffusion);
 
+//////// (4) Frictional Heating ////////
+
+struct FricHeatOptionsImpl {
+  static std::shared_ptr<FricHeatOptionsImpl> create() {
+    return std::make_shared<FricHeatOptionsImpl>();
+  }
+  static std::shared_ptr<FricHeatOptionsImpl> from_yaml(YAML::Node const& node);
+
+  FricHeatOptionsImpl() = default;
+  void report(std::ostream& os) const {}
+
+  ADD_ARG(SedVelOptions, sedvel) = nullptr;
+  ADD_ARG(ConstGravityOptions, coord) = nullptr;
+};
+using FricHeatOptions = std::shared_ptr<FricHeatOptionsImpl>;
+
 class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
  public:
   //! submodules
@@ -276,7 +193,7 @@ class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
   FricHeatOptions options;
 
   // Constructor to initialize the layers
-  FricHeatImpl() = default;
+  FricHeatImpl() : options(FricHeatOptionsImpl::create()) {}
   explicit FricHeatImpl(FricHeatOptions const& options_) : options(options_) {
     reset();
   }
@@ -287,6 +204,28 @@ class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
 };
 TORCH_MODULE(FricHeat);
 
+//////// (5) Body Heating ////////
+
+struct BodyHeatOptionsImpl {
+  static std::shared_ptr<BodyHeatOptionsImpl> create() {
+    return std::make_shared<BodyHeatOptionsImpl>();
+  }
+  static std::shared_ptr<BodyHeatOptionsImpl> from_yaml(YAML::Node const& node);
+
+  BodyHeatOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* dTdt = " << dTdt() << "\n"
+       << "* pmin = " << pmin() << "\n"
+       << "* pmax = " << pmax() << "\n";
+  }
+
+  ADD_ARG(double, dTdt) = 0.0;
+  ADD_ARG(double, pmin) = 0.0;
+  ADD_ARG(double, pmax) = 1.0;
+  ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
+};
+using BodyHeatOptions = std::shared_ptr<BodyHeatOptionsImpl>;
+
 class BodyHeatImpl : public torch::nn::Cloneable<BodyHeatImpl> {
  public:
   //! submodules
@@ -296,7 +235,7 @@ class BodyHeatImpl : public torch::nn::Cloneable<BodyHeatImpl> {
   BodyHeatOptions options;
 
   // Constructor to initialize the layers
-  BodyHeatImpl() = default;
+  BodyHeatImpl() : options(BodyHeatOptionsImpl::create()) {}
   explicit BodyHeatImpl(BodyHeatOptions const& options_) : options(options_) {
     reset();
   }
@@ -307,6 +246,22 @@ class BodyHeatImpl : public torch::nn::Cloneable<BodyHeatImpl> {
 };
 TORCH_MODULE(BodyHeat);
 
+//////// (6) Top Cooling ////////
+
+struct TopCoolOptionsImpl {
+  static std::shared_ptr<TopCoolOptionsImpl> create() {
+    return std::make_shared<TopCoolOptionsImpl>();
+  }
+  static std::shared_ptr<TopCoolOptionsImpl> from_yaml(YAML::Node const& node);
+
+  TopCoolOptionsImpl() = default;
+  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
+
+  ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+};
+using TopCoolOptions = std::shared_ptr<TopCoolOptionsImpl>;
+
 class TopCoolImpl : public torch::nn::Cloneable<TopCoolImpl> {
  public:
   //! submodules
@@ -316,7 +271,7 @@ class TopCoolImpl : public torch::nn::Cloneable<TopCoolImpl> {
   TopCoolOptions options;
 
   // Constructor to initialize the layers
-  TopCoolImpl() = default;
+  TopCoolImpl() : options(TopCoolOptionsImpl::create()) {}
   explicit TopCoolImpl(TopCoolOptions const& options_) : options(options_) {
     reset();
   }
@@ -327,6 +282,22 @@ class TopCoolImpl : public torch::nn::Cloneable<TopCoolImpl> {
 };
 TORCH_MODULE(TopCool);
 
+//////// (7) Bottom Heating ////////
+
+struct BotHeatOptionsImpl {
+  static std::shared_ptr<BotHeatOptionsImpl> create() {
+    return std::make_shared<BotHeatOptionsImpl>();
+  }
+  static std::shared_ptr<BotHeatOptionsImpl> from_yaml(YAML::Node const& node);
+
+  BotHeatOptionsImpl() = default;
+  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
+
+  ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(CoordinateOptions, coord);
+};
+using BotHeatOptions = std::shared_ptr<BotHeatOptionsImpl>;
+
 class BotHeatImpl : public torch::nn::Cloneable<BotHeatImpl> {
  public:
   //! submodules
@@ -336,7 +307,7 @@ class BotHeatImpl : public torch::nn::Cloneable<BotHeatImpl> {
   BotHeatOptions options;
 
   // Constructor to initialize the layers
-  BotHeatImpl() = default;
+  BotHeatImpl() : options(BotHeatOptionsImpl::create()) {}
   explicit BotHeatImpl(BotHeatOptions const& options_) : options(options_) {
     reset();
   }
@@ -347,13 +318,35 @@ class BotHeatImpl : public torch::nn::Cloneable<BotHeatImpl> {
 };
 TORCH_MODULE(BotHeat);
 
+//////// (8) Relax Bottom Composition ////////
+
+struct RelaxBotCompOptionsImpl {
+  static std::shared_ptr<RelaxBotCompOptionsImpl> create() {
+    return std::make_shared<RelaxBotCompOptionsImpl>();
+  }
+  static std::shared_ptr<RelaxBotCompOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  RelaxBotCompOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* species = " << fmt::format("{}", species()) << "\n"
+       << "* xfrac = " << fmt::format("{}", xfrac()) << "\n";
+  }
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(std::vector<std::string>, species) = {};
+  ADD_ARG(std::vector<double>, xfrac) = {};
+};
+using RelaxBotCompOptions = std::shared_ptr<RelaxBotCompOptionsImpl>;
+
 class RelaxBotCompImpl : public torch::nn::Cloneable<RelaxBotCompImpl> {
  public:
   //! options with which this `RelaxBotComp` was constructed
   RelaxBotCompOptions options;
 
   // Constructor to initialize the layers
-  RelaxBotCompImpl() = default;
+  RelaxBotCompImpl() : options(RelaxBotCompOptionsImpl::create()) {}
   explicit RelaxBotCompImpl(RelaxBotCompOptions const& options_)
       : options(options_) {
     reset();
@@ -365,13 +358,33 @@ class RelaxBotCompImpl : public torch::nn::Cloneable<RelaxBotCompImpl> {
 };
 TORCH_MODULE(RelaxBotComp);
 
+//////// (9) Relax Bottom Temperature ////////
+
+struct RelaxBotTempOptionsImpl {
+  static std::shared_ptr<RelaxBotTempOptionsImpl> create() {
+    return std::make_shared<RelaxBotTempOptionsImpl>();
+  }
+  static std::shared_ptr<RelaxBotTempOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  RelaxBotTempOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* btemp = " << btemp() << "\n";
+  }
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, btemp) = 300.0;
+};
+using RelaxBotTempOptions = std::shared_ptr<RelaxBotTempOptionsImpl>;
+
 class RelaxBotTempImpl : public torch::nn::Cloneable<RelaxBotTempImpl> {
  public:
   //! options with which this `RelaxBotTemp` was constructed
   RelaxBotTempOptions options;
 
   // Constructor to initialize the layers
-  RelaxBotTempImpl() = default;
+  RelaxBotTempImpl() : options(RelaxBotTempOptionsImpl::create()) {}
   explicit RelaxBotTempImpl(RelaxBotTempOptions const& options_)
       : options(options_) {
     reset();
@@ -383,13 +396,37 @@ class RelaxBotTempImpl : public torch::nn::Cloneable<RelaxBotTempImpl> {
 };
 TORCH_MODULE(RelaxBotTemp);
 
+//////// (10) Relax Bottom Velocity ////////
+
+struct RelaxBotVeloOptionsImpl {
+  static std::shared_ptr<RelaxBotVeloOptionsImpl> create() {
+    return std::make_shared<RelaxBotVeloOptionsImpl>();
+  }
+  static std::shared_ptr<RelaxBotVeloOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  RelaxBotVeloOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* bvx = " << bvx() << "\n"
+       << "* bvy = " << bvy() << "\n"
+       << "* bvz = " << bvz() << "\n";
+  }
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, bvx) = 0.0;
+  ADD_ARG(double, bvy) = 0.0;
+  ADD_ARG(double, bvz) = 0.0;
+};
+using RelaxBotVeloOptions = std::shared_ptr<RelaxBotVeloOptionsImpl>;
+
 class RelaxBotVeloImpl : public torch::nn::Cloneable<RelaxBotVeloImpl> {
  public:
   //! options with which this `RelaxBotVelo` was constructed
   RelaxBotVeloOptions options;
 
   // Constructor to initialize the layers
-  RelaxBotVeloImpl() = default;
+  RelaxBotVeloImpl() : options(RelaxBotVeloOptionsImpl::create()) {}
   explicit RelaxBotVeloImpl(RelaxBotVeloOptions const& options_)
       : options(options_) {
     reset();
@@ -401,13 +438,34 @@ class RelaxBotVeloImpl : public torch::nn::Cloneable<RelaxBotVeloImpl> {
 };
 TORCH_MODULE(RelaxBotVelo);
 
+/////// (11) Top Sponge Layer ////////
+
+struct TopSpongeLyrOptionsImpl {
+  static std::shared_ptr<TopSpongeLyrOptionsImpl> create() {
+    return std::make_shared<TopSpongeLyrOptionsImpl>();
+  }
+  static std::shared_ptr<TopSpongeLyrOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  TopSpongeLyrOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* width = " << width() << "\n";
+  }
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, width) = 0.0;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+};
+using TopSpongeLyrOptions = std::shared_ptr<TopSpongeLyrOptionsImpl>;
+
 class TopSpongeLyrImpl : public torch::nn::Cloneable<TopSpongeLyrImpl> {
  public:
   //! options with which this `TopSpongeLyr` was constructed
   TopSpongeLyrOptions options;
 
   // Constructor to initialize the layers
-  TopSpongeLyrImpl() = default;
+  TopSpongeLyrImpl() : options(TopSpongeLyrOptionsImpl::create()) {}
   explicit TopSpongeLyrImpl(TopSpongeLyrOptions const& options_)
       : options(options_) {
     reset();
@@ -419,13 +477,34 @@ class TopSpongeLyrImpl : public torch::nn::Cloneable<TopSpongeLyrImpl> {
 };
 TORCH_MODULE(TopSpongeLyr);
 
+//////// (12) Bottom Sponge Layer ////////
+
+struct BotSpongeLyrOptionsImpl {
+  static std::shared_ptr<BotSpongeLyrOptionsImpl> create() {
+    return std::make_shared<BotSpongeLyrOptionsImpl>();
+  }
+  static std::shared_ptr<BotSpongeLyrOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  BotSpongeLyrOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* tau = " << tau() << "\n"
+       << "* width = " << width() << "\n";
+  }
+
+  ADD_ARG(double, tau) = 0.0;
+  ADD_ARG(double, width) = 0.0;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+};
+using BotSpongeLyrOptions = std::shared_ptr<BotSpongeLyrOptionsImpl>;
+
 class BotSpongeLyrImpl : public torch::nn::Cloneable<BotSpongeLyrImpl> {
  public:
   //! options with which this `BotSpongeLyr` was constructed
   BotSpongeLyrOptions options;
 
   // Constructor to initialize the layers
-  BotSpongeLyrImpl() = default;
+  BotSpongeLyrImpl() : options(BotSpongeLyrOptionsImpl::create()) {}
   explicit BotSpongeLyrImpl(BotSpongeLyrOptions const& options_)
       : options(options_) {
     reset();
@@ -437,13 +516,33 @@ class BotSpongeLyrImpl : public torch::nn::Cloneable<BotSpongeLyrImpl> {
 };
 TORCH_MODULE(BotSpongeLyr);
 
+//////// (13) Plume Forcing ////////
+
+struct PlumeForcingOptionsImpl {
+  static std::shared_ptr<PlumeForcingOptionsImpl> create() {
+    return std::make_shared<PlumeForcingOptionsImpl>();
+  }
+  static std::shared_ptr<PlumeForcingOptionsImpl> from_yaml(
+      YAML::Node const& node);
+
+  PlumeForcingOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    os << "* entrainment = " << entrainment() << "\n"
+       << "* N2 = " << N2() << "\n";
+  }
+
+  ADD_ARG(double, entrainment) = 0.1;
+  ADD_ARG(double, N2) = 0.0;
+};
+using PlumeForcingOptions = std::shared_ptr<PlumeForcingOptionsImpl>;
+
 class PlumeForcingImpl : public torch::nn::Cloneable<PlumeForcingImpl> {
  public:
   //! options with which this `PlumeForcing` was constructed
   PlumeForcingOptions options;
 
   // Constructor to initialize the layers
-  PlumeForcingImpl() = default;
+  PlumeForcingImpl() : options(PlumeForcingOptionsImpl::create()) {}
   explicit PlumeForcingImpl(PlumeForcingOptions const& options_) { reset(); }
   void reset() override {}
 

@@ -52,4 +52,9 @@ enum {
   kDPMassLR = 6,
 };
 
+#define CHECK_MODULE_LINKED(parent, module)                                   \
+  TORCH_CHECK(options->module(), #module " module is not linked in " #parent, \
+              "\n Use options->" #module "()",                                \
+              " to link the module before creating " #parent)
+
 }  // namespace snap

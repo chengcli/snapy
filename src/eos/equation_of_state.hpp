@@ -48,17 +48,19 @@ using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
 class EquationOfStateImpl {
  public:
-  //! Create and register an EquationOfState module
+  //! Create and register an `EquationOfState` module
   /*!
    * This function registers the created module as a submodule
    * of the given parent module `p`.
    *
-   * \param[in] opts  options for creating the EquationOfState module
+   * \param[in] opts  options for creating the `EquationOfState` module
    * \param[in] p     parent module for registering the created module
-   * \return          created EquationOfState module
+   * \param[in] name  name for registering the created module
+   * \return          created `EquationOfState` module
    */
   static std::shared_ptr<EquationOfStateImpl> create(
-      EquationOfStateOptions const& opts, torch::nn::Module* p);
+      EquationOfStateOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "eos");
 
   //! options with which this `EquationOfState` was constructed
   EquationOfStateOptions options;

@@ -1,6 +1,8 @@
-
 // snap
 #include <snap/constants.h>
+#include <snap/snap.h>
+
+#include <snap/forcing/forcing.hpp>
 
 #include "sedimentation.hpp"
 
@@ -9,26 +11,26 @@
 namespace snap {
 
 void SedVelImpl::reset() {
-  if (options.radius().size() != options.density().size()) {
-    throw std::runtime_error(
-        "Sedimentation: radius and density must have the same size");
-  }
+  CHECK_MODULE_LINKED(SedVelOptions, grav);
+
+  TORCH_CHECK(options->radius().size() == options->density().size(),
+              "SedVel: radius and density must have the same size");
 
   radius = register_buffer("radius",
-                           torch::tensor(options.radius(), torch::kFloat64));
+                           torch::tensor(options->radius(), torch::kFloat64));
 
   density = register_buffer("density",
-                            torch::tensor(options.density(), torch::kFloat64));
+                            torch::tensor(options->density(), torch::kFloat64));
 
   const_vsed = register_buffer(
-      "const_vsed", torch::tensor(options.const_vsed(), torch::kFloat64));
+      "const_vsed", torch::tensor(options->const_vsed(), torch::kFloat64));
 }
 
 torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
                                   torch::Tensor temp) {
-  const auto d = options.a_diameter();
-  const auto epsilon_LJ = options.a_epsilon_LJ();
-  const auto m = options.a_mass();
+  const auto d = options->a_diameter();
+  const auto epsilon_LJ = options->a_epsilon_LJ();
+  const auto m = options->a_mass();
 
   std::vector<int64_t> vec(temp.dim() + 1, 1);
   vec[0] = -1;
@@ -50,14 +52,14 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   auto beta = 1.0 + Kn * (1.256 + 0.4 * torch::exp(-1.1 / Kn));
 
   // Calculate vsed
+  auto grav = -options->grav()->grav1;
   auto vel = beta / (9.0 * eta) *
-             (2.0 * sqr(radius.view(vec)) * options.grav() *
-              (density.view(vec) - dens));
+             (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
 
   // add a constant sedimentation velocity
   vel += const_vsed.view(vec);
 
-  return vel.clamp(-options.upper_limit(), options.upper_limit());
+  return vel.clamp(-options->upper_limit(), options->upper_limit());
 }
 
 }  // namespace snap

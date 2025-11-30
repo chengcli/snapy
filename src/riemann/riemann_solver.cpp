@@ -21,9 +21,8 @@ torch::Tensor RiemannSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 }
 
 RiemannSolver RiemannSolverImpl::create(RiemannSolverOptions const& opts,
-                                        torch::nn::Module* p) {
-  std::string name = "riemann";
-
+                                        torch::nn::Module* p,
+                                        std::string const& name) {
   if (opts->type() == "roe") {
     return p->register_module(name, RoeSolver(opts));
   } else if (opts->type() == "lmars") {

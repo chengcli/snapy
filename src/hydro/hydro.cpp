@@ -3,8 +3,6 @@
 
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 namespace snap {
 
 HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {

@@ -6,11 +6,11 @@
 
 namespace snap {
 
-PlumeForcingOptions PlumeForcingOptions::from_yaml(YAML::Node const& node) {
-  PlumeForcingOptions op;
+PlumeForcingOptions PlumeForcingOptionsImpl::from_yaml(YAML::Node const& node) {
+  auto op = PlumeForcingOptionsImpl::create();
 
-  op.entrainment() = node["entrainment"].as<double>(0.1);
-  op.N2() = node["N2"].as<double>(0.0);
+  op->entrainment() = node["entrainment"].as<double>(0.1);
+  op->N2() = node["N2"].as<double>(0.0);
 
   return op;
 }
@@ -26,9 +26,9 @@ torch::Tensor PlumeForcingImpl::forward(torch::Tensor du, torch::Tensor w,
   auto B = w[2];
   auto V = w[3];
 
-  du[0] -= 2. * R * options.entrainment() * dt;
+  du[0] -= 2. * R * options->entrainment() * dt;
   du[1] += R * R * B * dt;
-  du[2] -= options.N2() * R * R * W * dt;
+  du[2] -= options->N2() * R * R * W * dt;
 
   return du;
 }

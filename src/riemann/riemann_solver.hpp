@@ -46,12 +46,14 @@ class RiemannSolverImpl {
    * This function registers the created module as a submodule
    * of the given parent module `p`.
    *
-   * \param[in] options  options for creating the RiemannSolver module
-   * \param[in] p        parent module for registering the created module
-   * \return created RiemannSolver module
+   * \param[in] opts      options for creating the `RiemannSolver` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return created      `RiemannSolver` module
    */
   static std::shared_ptr<RiemannSolverImpl> create(
-      RiemannSolverOptions const& options, torch::nn::Module* p);
+      RiemannSolverOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "riemann");
 
   //! data
   torch::Tensor elr, clr, glr;

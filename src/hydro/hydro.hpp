@@ -23,12 +23,17 @@
 
 namespace snap {
 
-struct HydroOptions {
-  static HydroOptions from_yaml(std::string const& filename,
-                                LayoutOptions layout = LayoutOptions());
-  HydroOptions() = default;
+struct HydroOptionsImpl {
+  static std::shared_ptr<HydroOptionsImpl> create() {
+    return std::make_shared<HydroOptionsImpl>();
+  }
+  static std::shared_ptr<HydroOptionsImpl> from_yaml(
+      std::string const& filename);
+
+  HydroOptionsImpl() = default;
   void report(std::ostream& os) const {
-    os << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
+    os << "* verbose = " << verbose() << "\n"
+       << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
@@ -41,34 +46,35 @@ struct HydroOptions {
   ADD_ARG(bool, disable_flux_x3) = false;
 
   //! forcing options
-  ADD_ARG(ConstGravityOptions, grav);
-  ADD_ARG(CoriolisOptions, coriolis);
-  ADD_ARG(DiffusionOptions, visc);
-  ADD_ARG(FricHeatOptions, fricHeat);
-  ADD_ARG(BodyHeatOptions, bodyHeat);
-  ADD_ARG(BotHeatOptions, botHeat);
-  ADD_ARG(TopCoolOptions, topCool);
-  ADD_ARG(RelaxBotCompOptions, relaxBotComp);
-  ADD_ARG(RelaxBotTempOptions, relaxBotTemp);
-  ADD_ARG(RelaxBotVeloOptions, relaxBotVelo);
-  ADD_ARG(TopSpongeLyrOptions, topSpongeLyr);
-  ADD_ARG(BotSpongeLyrOptions, botSpongeLyr);
-  ADD_ARG(PlumeForcingOptions, plumeForcing);
+  ADD_ARG(ConstGravityOptions, grav) = nullptr;
+  ADD_ARG(CoriolisOptions, coriolis) = nullptr;
+  ADD_ARG(DiffusionOptions, visc) = nullptr;
+  ADD_ARG(FricHeatOptions, fricHeat) = nullptr;
+  ADD_ARG(BodyHeatOptions, bodyHeat) = nullptr;
+  ADD_ARG(BotHeatOptions, botHeat) = nullptr;
+  ADD_ARG(TopCoolOptions, topCool) = nullptr;
+  ADD_ARG(RelaxBotCompOptions, relaxBotComp) = nullptr;
+  ADD_ARG(RelaxBotTempOptions, relaxBotTemp) = nullptr;
+  ADD_ARG(RelaxBotVeloOptions, relaxBotVelo) = nullptr;
+  ADD_ARG(TopSpongeLyrOptions, topSpongeLyr) = nullptr;
+  ADD_ARG(BotSpongeLyrOptions, botSpongeLyr) = nullptr;
+  ADD_ARG(PlumeForcingOptions, plumeForcing) = nullptr;
 
   //! submodule options
-  ADD_ARG(CoordinateOptions, coord);
-  ADD_ARG(EquationOfStateOptions, eos);
-  ADD_ARG(PrimitiveProjectorOptions, proj);
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
+  ADD_ARG(PrimitiveProjectorOptions, proj) = nullptr;
 
-  ADD_ARG(ReconstructOptions, recon1);
-  ADD_ARG(ReconstructOptions, recon23);
-  ADD_ARG(RiemannSolverOptions, riemann);
+  ADD_ARG(ReconstructOptions, recon1) = nullptr;
+  ADD_ARG(ReconstructOptions, recon23) = nullptr;
+  ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 
-  ADD_ARG(InternalBoundaryOptions, ib);
-  ADD_ARG(ImplicitOptions, imp);
+  ADD_ARG(InternalBoundaryOptions, ib) = nullptr;
+  ADD_ARG(ImplicitOptions, imp) = nullptr;
 
-  ADD_ARG(SedHydroOptions, sed);
+  ADD_ARG(SedHydroOptions, sed) = nullptr;
 };
+using HydroOptions = std::shared_ptr<HydroOptionsImpl>;
 
 using Variables = std::map<std::string, torch::Tensor>;
 

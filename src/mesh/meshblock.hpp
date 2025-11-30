@@ -7,7 +7,7 @@
 #include <torch/nn/modules/container/any.h>
 
 // harp
-#include <snap/harp/integrator/integrator.hpp>
+#include <harp/integrator/integrator.hpp>
 
 // snap
 #include <snap/bc/bc_func.hpp>
@@ -28,10 +28,16 @@ namespace snap {
  * It can be initialized from a YAML input file using the `from_yaml` method,
  * or by setting the individual options manually.
  */
-struct MeshBlockOptions {
-  static MeshBlockOptions from_yaml(std::string input_file);
-  MeshBlockOptions() = default;
+struct MeshBlockOptionsImpl {
+  static std::shared_ptr<MeshBlockOptionsImpl> create() {
+    return std::make_shared<MeshBlockOptionsImpl>();
+  }
+  static std::shared_ptr<MeshBlockOptionsImpl> from_yaml(
+      std::string input_file);
+
+  MeshBlockOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "* verbose = " << verbose() << "\n";
     os << "* basename = " << basename() << "\n";
   }
 
@@ -54,6 +60,7 @@ struct MeshBlockOptions {
   ADD_ARG(DistributeEnvOptions, dist);
   ADD_ARG(LayoutOptions, layout);
 };
+using MeshBlockOptions = std::shared_ptr<MeshBlockOptionsImpl>;
 
 using Variables = std::map<std::string, torch::Tensor>;
 class OutputType;
@@ -80,7 +87,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Layout playout = nullptr;
 
   //! Constructor to initialize the layers
-  MeshBlockImpl() = default;
+  MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
   explicit MeshBlockImpl(MeshBlockOptions const& options_);
   ~MeshBlockImpl() override;
   void reset() override;
@@ -150,11 +157,12 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   //! exchange ghost zones
   void exchange(Variables& vars) {
-    if (options.layout().type() == "slab") {
+    if (options->layout()->type() == "slab") {
       _slab_exchange(vars);
     } else {
       throw std::invalid_argument("MeshBlock::exchange: layout type " +
-                                  options.layout().type() + " not implemented");
+                                  options->layout()->type() +
+                                  " not implemented");
     }
   }
 
