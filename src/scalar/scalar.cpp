@@ -31,4 +31,10 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   return u;
 }
 
+std::shared_ptr<ScalarImpl> ScalarImpl::create(ScalarOptions const& opts,
+                                               torch::nn::Module* p,
+                                               std::string const& name) {
+  return p->register_module(name, Scalar(opts));
+}
+
 }  // namespace snap

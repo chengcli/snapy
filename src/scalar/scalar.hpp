@@ -43,6 +43,20 @@ using Variables = std::map<std::string, torch::Tensor>;
 
 class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
  public:
+  //! \brief Create and register a `Scalar` module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the `Scalar` module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  name for registering the created module
+   * \return          created `Scalar` module
+   */
+  static std::shared_ptr<ScalarImpl> create(ScalarOptions const& opts,
+                                            torch::nn::Module* p,
+                                            std::string const& name = "scalar");
+
   //! options with which this `Scalar` was constructed
   ScalarOptions options;
 

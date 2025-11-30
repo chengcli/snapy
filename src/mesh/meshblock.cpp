@@ -43,21 +43,20 @@ MeshBlockImpl::~MeshBlockImpl() {
 
 void MeshBlockImpl::reset() {
   // set up distributed environment
-  pdist = DistributeEnvImpl::create(options->dist(), this);
-  playout = LayoutIMpl::create(options->layout(), this);
+  playout = LayoutImpl::create(options->layout(), this);
 
-  int px = playout->options->px();
-  int py = playout->options->py();
-  int pz = playout->options->pz();
+  int px = options->layout()->px();
+  int py = options->layout()->py();
+  int pz = options->layout()->pz();
 
   int nranks = px * py * pz;
-  TORCH_CHECK(pdist->options->world_size() == nranks,
-              "MeshBlockImpl: world_size (", pdist->options->world_size(),
+  TORCH_CHECK(options->layout()->world_size() == nranks,
+              "MeshBlockImpl: world_size (", options->layout()->world_size(),
               ") does not match layout partitioning (", nranks, ").");
 
   // reset internal block boundaries
-  if (options->layout().type() != "cubed_sphere") {  // slab or cubed layout
-    auto iloc = playout->loc_of(pdist->options->rank());
+  if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
+    auto iloc = playout->loc_of(options->layout()->rank());
     // x1-dir
     auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
@@ -88,27 +87,27 @@ void MeshBlockImpl::reset() {
 
   // set up output
   for (auto const& out_op : options->outputs()) {
-    if (out_op.file_type() == "restart") {
+    if (out_op->file_type() == "restart") {
       output_types.push_back(std::make_shared<RestartOutput>(out_op));
-    } else if (out_op.file_type() == "netcdf") {
+    } else if (out_op->file_type() == "netcdf") {
       output_types.push_back(std::make_shared<NetcdfOutput>(out_op));
       /*} else if (out_op.file_type() == "hdf5") {
         output_types.push_back(
             std::make_shared<HDF5Output>(out_op));*/
     } else {
-      throw std::runtime_error("Output type '" + out_op.file_type() +
+      throw std::runtime_error("Output type '" + out_op->file_type() +
                                "' is not implemented.");
     }
   }
 
   // set up integrator
-  pintg = IntegratorImpl::create(options->intg(), this);
+  pintg = harp::IntegratorImpl::create(options->intg(), this);
 
   // set up hydro model
   phydro = HydroImpl::create(options->hydro(), this);
 
   // set up scalar model
-  pscalar = ScalarImpl::(options->scalar(), this);
+  pscalar = ScalarImpl::create(options->scalar(), this);
 
   // dimensions
   int nc1 = options->hydro()->coord()->nc1();
@@ -221,9 +220,9 @@ double MeshBlockImpl::initialize(Variables& vars) {
   torch::Tensor hydro_w, scalar_r, solid;
 
   // hydro
-  int64_t nc3 = options->hydro().coord().nc3();
-  int64_t nc2 = options->hydro().coord().nc2();
-  int64_t nc1 = options->hydro().coord().nc1();
+  int64_t nc3 = options->hydro()->coord()->nc3();
+  int64_t nc2 = options->hydro()->coord()->nc2();
+  int64_t nc1 = options->hydro()->coord()->nc1();
 
   TORCH_CHECK(vars.count("hydro_w"),
               "initialize: hydro_w is required for hydro model.");
@@ -283,8 +282,8 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   // exchange buffers
-  _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
-  exchange(vars);
+  playout->init_buffers(this, vars, {"hydro_u", "scalar_s"});
+  playout->forward(this, vars);
 
   // start timing
   _time_start = clock();
@@ -313,7 +312,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  pdist->pg->allreduce(dt_reduce, op)->wait();
+  playout->pg->allreduce(dt_reduce, op)->wait();
 
   dt = dt_reduce[0].item<double>();
 
@@ -396,7 +395,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
   // -------- (5) update ghost zones --------
   BoundaryFuncOptions bops;
-  bops.nghost(options->hydro().coord().nghost());
+  bops.nghost(options->hydro()->coord()->nghost());
 
   if (vars.count("solid")) {
     phydro->pib->fill_cons_solid_(hydro_u, vars.at("solid"),
@@ -472,7 +471,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (7) ghost zone exchange --------
-  exchange(vars);
+  playout->forward(this, vars);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -508,7 +507,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = pdist->options->root_rank();
+  opsum.rootRank = options->layout()->root_rank();
 
   if (pintg->options->ncycle_out() != 0) {
     if (cycle % pintg->options->ncycle_out() == 0) {
@@ -517,7 +516,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         compute_energy = true;
       }
 
-      if (pdist->is_root()) {
+      if (playout->is_root()) {
         std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
                   << std::scientific << std::setprecision(dt_precision)
                   << " time=" << time << " dt=" << dt;
@@ -530,9 +529,9 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IDN].sum()};
 
         // sum across all ranks
-        pdist->pg->reduce(mass, opsum)->wait();
+        playout->pg->reduce(mass, opsum)->wait();
 
-        if (pdist->is_root()) {
+        if (playout->is_root()) {
           std::cout << " mass=" << mass[0].item<double>();
         }
       }
@@ -542,14 +541,14 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IPR].sum()};
 
         // sum across all ranks
-        pdist->pg->reduce(energy, opsum)->wait();
+        playout->pg->reduce(energy, opsum)->wait();
 
-        if (pdist->is_root()) {
+        if (playout->is_root()) {
           std::cout << " energy=" << energy[0].item<double>();
         }
       }
 
-      if (pdist->is_root()) {
+      if (playout->is_root()) {
         std::cout << std::endl;
       }
     }
@@ -560,7 +559,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
-  if (pdist->is_root()) {  // only root prints
+  if (playout->is_root()) {  // only root prints
     auto sig = SignalHandler::GetInstance();
     if (sig->GetSignalFlag(SIGTERM) != 0) {
       std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -593,14 +592,14 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = pdist->options->root_rank();
+  opsum.rootRank = options->layout()->root_rank();
 
-  pdist->pg->reduce(cells, opsum)->wait();
+  playout->pg->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
 
-  if (pdist->is_root()) {
+  if (playout->is_root()) {
     std::cout << std::endl
               << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
     std::cout << "cpu time used (s) = " << cpu_time << std::endl;
@@ -651,7 +650,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars) {
 
   std::string fname;
   char bid[12];
-  snprintf(bid, sizeof(bid), "block%d", pdist->options->rank());
+  snprintf(bid, sizeof(bid), "block%d", options->layout()->rank());
 
   fname.append(options->basename());
   fname.append(".");
@@ -685,148 +684,6 @@ double MeshBlockImpl::_init_from_restart(Variables& vars) {
   _cycle_start = cycle;
 
   return timing_vars.at("last_time").item<double>();
-}
-
-void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
-                                     std::vector<std::string> const& names) {
-  // Initialize vectors to size 9 (2D decomposition) with empty tensors
-  _send_bufs.clear();
-  _recv_bufs.clear();
-  _send_bufs.resize(9);
-  _recv_bufs.resize(9);
-
-  // Iterate over all 2D neighbor directions
-  _buf_names.clear();
-  // only include names that exist in vars
-  for (auto name : names) {
-    if (vars.count(name) > 0) _buf_names.push_back(name);
-  }
-
-  // Get my logical location
-  auto iloc = playout->loc_of(pdist->options->rank());
-
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-
-      int nb = playout->neighbor_rank(iloc, offset);
-      // Skip if no neighbor in this direction
-      if (nb < 0) continue;
-
-      int bid = get_buffer_id(offset);
-
-      // Get the part indices for this neighbor direction
-      auto sub = part(offset);
-
-      // Get shape by applying indices to tensor
-      _send_bufs[bid].clear();
-      _recv_bufs[bid].clear();
-
-      for (auto name : _buf_names) {
-        auto sub_tensor = vars.at(name).index(sub);
-
-        // Allocate send and receive buffers with same shape
-        _send_bufs[bid].push_back(torch::empty_like(sub_tensor));
-        _recv_bufs[bid].push_back(torch::empty_like(sub_tensor));
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_serialize_2d(Variables const& vars) {
-  // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(offset);
-
-      // Only serialize if buffer exists
-      if (!_send_bufs[bid].empty()) {
-        // Get the interior part for this direction
-        auto sub = part(offset, /*exterior=*/false);
-
-        // Copy data from mesh to send buffer
-        int count = 0;
-        for (auto name : _buf_names)
-          _send_bufs[bid][count++].copy_(vars.at(name).index(sub));
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_deserialize_2d(Variables& vars) const {
-  // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(offset);
-
-      // Only deserialize if buffer exists
-      if (!_recv_bufs[bid].empty()) {
-        // Get the exterior (ghost zone) part for this direction
-        auto sub = part(offset, /*exterior=*/true);
-
-        // Copy data from receive buffer to mesh ghost zones
-        int count = 0;
-        for (auto name : _buf_names) {
-          vars.at(name).index_put_(sub, _recv_bufs[bid][count++]);
-        }
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_slab_exchange(Variables& vars) {
-  // Serialize data into send buffers
-  _serialize_2d(vars);
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-
-  // Get my logical location
-  auto iloc = playout->loc_of(pdist->options->rank());
-
-  // Get my rank
-  auto rank = pdist->options->rank();
-
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int nb = playout->neighbor_rank(iloc, offset);
-
-      int r = get_buffer_id(offset);
-      if (nb >= 0) {
-        if (nb != rank) {  // different ranks
-          // Send operation
-          auto send_work = pdist->pg->send(_send_bufs[r], nb, 0);
-          works.push_back(send_work);
-
-          // Receive operation
-          auto recv_work = pdist->pg->recv(_recv_bufs[r], nb, 0);
-          works.push_back(recv_work);
-        } else {  // self-send
-          for (int n = 0; n < _recv_bufs[r].size(); ++n)
-            _recv_bufs[r][n].copy_(_send_bufs[r][n]);
-        }
-      }
-    }
-  }
-
-  // Wait for all operations to complete
-  for (auto& work : works) work->wait();
-
-  // Deserialize received data into ghost zones
-  _deserialize_2d(vars);
 }
 
 }  // namespace snap

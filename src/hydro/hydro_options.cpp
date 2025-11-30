@@ -13,8 +13,7 @@
 
 namespace snap {
 
-HydroOptions HydroOptions::from_yaml(std::string const& filename,
-                                     LayoutOptions layout) {
+HydroOptions HydroOptions::from_yaml(std::string const& filename) {
   HydroOptions op;
 
   auto config = YAML::LoadFile(filename);

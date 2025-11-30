@@ -70,7 +70,7 @@ struct HydroOptionsImpl {
   ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 
   ADD_ARG(InternalBoundaryOptions, ib) = nullptr;
-  ADD_ARG(ImplicitOptions, imp) = nullptr;
+  ADD_ARG(ImplicitOptions, icorr) = nullptr;
 
   ADD_ARG(SedHydroOptions, sed) = nullptr;
 };
@@ -80,6 +80,20 @@ using Variables = std::map<std::string, torch::Tensor>;
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
  public:
+  //! \brief Create and register a `Hydro` module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the `Hydro` module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  name for registering the created module
+   * \return          created `Hydro` module
+   */
+  static std::shared_ptr<HydroImpl> create(HydroOptions const& opts,
+                                           torch::nn::Module* p,
+                                           std::string const& name = "hydro");
+
   //! options with which this `Hydro` was constructed
   HydroOptions options;
 
@@ -93,7 +107,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   Reconstruct precon23 = nullptr;
 
   InternalBoundary pib = nullptr;
-  ImplicitCorrection pimp = nullptr;
+  ImplicitCorrection picorr = nullptr;
 
   SedHydro psed = nullptr;
 

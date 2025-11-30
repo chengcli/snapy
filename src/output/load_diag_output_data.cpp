@@ -99,7 +99,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     }
 
     // implicit corrrection
-    if (pmb->phydro->options->imp()->scheme() > 0) {
+    if (pmb->phydro->options->icorr()->scheme() > 0) {
       auto du = pmb->phydro->named_buffers()["M"];
 
       // density

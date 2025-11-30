@@ -73,6 +73,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // set ptrs to data in OutputData linked list, then slice/sum as needed
   LoadOutputData(pmb, vars);
+  int rank = pmb->options->layout()->rank();
 
   // create filename: <basename>.<blockid>.<fileid>.<XXXXX>.nc
   // file_number
@@ -80,7 +81,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options->rank());
+  snprintf(blockid, sizeof(blockid), "block%d", rank);
 
   fname.assign(pmb->options->basename());
   fname.append(".");
@@ -125,10 +126,10 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // 3. define variables
   int level = 0;
-  auto iloc = pmb->playout->loc_of(pmb->pdist->options->rank());
+  auto iloc = pmb->playout->loc_of(rank);
 
   int lx1 =
-      pmb->playout->options->type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
+      pmb->playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
 

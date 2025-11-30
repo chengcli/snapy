@@ -32,9 +32,8 @@ struct OutputOptionsImpl {
   static std::shared_ptr<OutputOptionsImpl> create() {
     return std::make_shared<OutputOptionsImpl>();
   }
-
-  std::shared_ptr<OutputOptionsImpl> from_yaml(YAML::Node const &node,
-                                               int fid = 0);
+  static std::shared_ptr<OutputOptionsImpl> from_yaml(YAML::Node const &node,
+                                                      int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
 
   void report(std::ostream &os) const {

@@ -5,7 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
-#include <snap/layout/distribute_env.hpp>
+#include <snap/layout/layout.hpp>
 
 #include "coordinate.hpp"
 
@@ -34,7 +34,7 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   }
 
   auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));
-  int rank = get_rank();
+  int rank = playout->options->rank();
   auto iloc = playout->loc_of(rank);
 
   int lx1 = playout->options->type() == "cubed_sphere" ? 0 : std::get<2>(iloc);

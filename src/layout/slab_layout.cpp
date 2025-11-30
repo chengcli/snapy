@@ -2,11 +2,28 @@
 #include <fmt/format.h>
 
 // snap
+#include "connectivity.hpp"
 #include "layout.hpp"
 
 namespace snap {
 
-void SlabLayoutImpl::report(std::ostream &os) const {
+void SlabLayoutImpl::reset() {
+  // build the ranks
+  TORCH_CHECK(options->pz() == 1,
+              "SlabLayoutImpl: pz must be 1 for slab layout");
+
+  int px = options->px();
+  int py = options->py();
+
+  _coords2.resize(px * py);
+  build_zorder_coords2(px, py, _coords2.data());
+  build_rank_of2(px, py, _coords2.data(), _rankof.data());
+
+  // build backend
+  _init_backend();
+}
+
+void SlabLayoutImpl::pretty_print(std::ostream& os) const {
   options->report(os);
   os << " Rank | (rx,ry)\n";
   os << "----------------\n";
@@ -48,6 +65,51 @@ int SlabLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
   }
 
   return _rankof[linear_index2(options->px(), options->py(), ny, nx)];
+}
+
+void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
+  // Serialize data into send buffers
+  serialize(pmb, vars);
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+
+  // Get my rank
+  auto rank = options->rank();
+
+  // Get my logical location
+  auto iloc = loc_of(rank);
+
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // Skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = neighbor_rank(iloc, offset);
+
+      int r = get_buffer_id(offset);
+      if (nb >= 0) {
+        if (nb != rank) {  // different ranks
+          // Send operation
+          auto send_work = pg->send(send_bufs[r], nb, 0);
+          works.push_back(send_work);
+
+          // Receive operation
+          auto recv_work = pg->recv(recv_bufs[r], nb, 0);
+          works.push_back(recv_work);
+        } else {  // self-send
+          for (int n = 0; n < recv_bufs[r].size(); ++n)
+            recv_bufs[r][n].copy_(send_bufs[r][n]);
+        }
+      }
+    }
+  }
+
+  // Wait for all operations to complete
+  for (auto& work : works) work->wait();
+
+  // Deserialize received data into ghost zones
+  deserialize(pmb, vars);
 }
 
 }  // namespace snap

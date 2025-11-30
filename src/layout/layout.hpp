@@ -5,6 +5,15 @@
 #include <memory>
 #include <tuple>
 
+// torch
+#include <torch/nn/cloneable.h>
+#include <torch/nn/module.h>
+#include <torch/nn/modules/common.h>
+
+#include <torch/csrc/distributed/c10d/Store.hpp>
+// #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
+#include <torch/csrc/distributed/c10d/Backend.hpp>
+
 // snap
 #include "connectivity.hpp"
 
@@ -30,22 +39,42 @@ inline int get_buffer_id(std::tuple<int, int, int> offset) {
   return (dx % 3 + 3) % 3 + ((dy % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
 }
 
+//! get environment variable with default
+inline std::string get_env(const char *name, const std::string &def) {
+  const char *v = std::getenv(name);
+  return v ? std::string(v) : def;
+}
+
+//! get global rank from environment variable
+inline int get_rank() { return std::stoi(get_env("RANK", "0")); }
+
+//! get local rank from environment variable
+inline int get_local_rank() { return std::stoi(get_env("LOCAL_RANK", "0")); }
+
 struct LayoutOptionsImpl {
   static std::shared_ptr<LayoutOptionsImpl> create() {
     return std::make_shared<LayoutOptionsImpl>();
   }
-
   static std::shared_ptr<LayoutOptionsImpl> from_yaml(
       std::string const &filename);
 
+  LayoutOptionsImpl();
+
   void report(std::ostream &os) const {
-    os << "* type=" << type() << "\n";
-    os << "* px=" << px() << "\n";
-    os << "* py=" << py() << "\n";
-    os << "* pz=" << pz() << "\n";
-    os << "* periodic_x=" << (periodic_x() ? "true" : "false") << "\n";
-    os << "* periodic_y=" << (periodic_y() ? "true" : "false") << "\n";
-    os << "* periodic_z=" << (periodic_z() ? "true" : "false") << "\n";
+    os << "* type=" << type() << "\n"
+       << "* px=" << px() << "\n"
+       << "* py=" << py() << "\n"
+       << "* pz=" << pz() << "\n"
+       << "* periodic_x=" << (periodic_x() ? "true" : "false") << "\n"
+       << "* periodic_y=" << (periodic_y() ? "true" : "false") << "\n"
+       << "* periodic_z=" << (periodic_z() ? "true" : "false") << "\n"
+       << "* backend = " << backend() << "\n"
+       << "* master_addr = " << master_addr() << "\n"
+       << "* rank = " << rank() << "\n"
+       << "* local_rank = " << local_rank() << "\n"
+       << "* world_size = " << world_size() << "\n"
+       << "* master_port = " << master_port() << "\n"
+       << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
 
   //! type of layout
@@ -68,12 +97,41 @@ struct LayoutOptionsImpl {
 
   //! periodicity in Z
   ADD_ARG(bool, periodic_z) = false;
+
+  ADD_ARG(std::string, backend) = "gloo";
+  ADD_ARG(std::string, master_addr) = "127.0.0.1";
+  ADD_ARG(int, rank) = 0;
+  ADD_ARG(int, root_rank) = 0;
+  ADD_ARG(int, local_rank) = 0;
+  ADD_ARG(int, world_size) = 1;
+  ADD_ARG(int, master_port) = 29500;
+  ADD_ARG(bool, verbose) = false;
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
+using Variables = std::map<std::string, torch::Tensor>;
+
+class MeshBlockImpl;
+
 class LayoutImpl {
  public:
-  static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts);
+  static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts,
+                                            torch::nn::Module *p = nullptr,
+                                            std::string const &name = "layout");
+
+  //! exchange buffers
+  /*!
+   * The first index indicates the rank
+   * The second index indicates the variable group
+   */
+  std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
+
+  //! buffer variable names
+  std::vector<std::string> buf_names;
+
+  //! submodules
+  at::intrusive_ptr<c10d::Store> store;
+  std::shared_ptr<c10d::Backend> pg;
 
   //! options with which this `Layout` was constructed
   LayoutOptions options;
@@ -81,18 +139,16 @@ class LayoutImpl {
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
   LayoutImpl(const LayoutOptions &opts, int copies = 1) : options(opts) {
     int P = copies * options->px() * options->py() * options->pz();
-    _rankof = new int[P];
+    _rankof.resize(P);
   }
 
   std::tuple<int, int, int> get_procs() const {
     return {options->px(), options->py(), options->pz()};
   }
 
-  virtual ~LayoutImpl() {
-    if (_rankof) delete[] _rankof;
-  }
+  bool is_root() const { return options->rank() == options->root_rank(); }
 
-  virtual void report(std::ostream &os) const { options->report(os); }
+  virtual ~LayoutImpl() = default;
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
     auto [rx, ry, rz] = iloc;
@@ -105,9 +161,7 @@ class LayoutImpl {
     return _rankof[rz * (px * py) + ry * px + rx];
   }
 
-  virtual std::tuple<int, int, int> loc_of(int rank) const {
-    return {-1, -1, -1};
-  }
+  virtual std::tuple<int, int, int> loc_of(int rank) const = 0;
 
   //! \brief Neighbor -> Z-order rank (3D)
   /*!
@@ -117,74 +171,93 @@ class LayoutImpl {
    * Morton code).
    */
   virtual int neighbor_rank(std::tuple<int, int, int> iloc,
-                            std::tuple<int, int, int> offset) const {
-    return -1;
-  }
+                            std::tuple<int, int, int> offset) const = 0;
+
+  //! \brief Initialize send and receive buffers for 2D domain decomposition
+  /*!
+   * Allocates torch::Tensor buffers for exchanging ghost zone data with
+   * neighboring processes in a 2D slab decomposition. Buffers are sized
+   * to match the ghost zone dimensions of the mesh block.
+   */
+  virtual void init_buffers(MeshBlockImpl const *pmb, Variables const &vars,
+                            std::vector<std::string> const &names);
+
+  //! Serialize variables
+  virtual void serialize(MeshBlockImpl const *pmb, Variables const &vars);
+
+  //! Deserialize variables
+  virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars) const;
+
+  //! \brief Perform ghost zone exchange
+  /*!
+   * Exchanges ghost zone data with neighboring processes using point-to-point
+   * communication. This function serializes data, performs send/recv
+   * operations, and deserializes received data into ghost zones.
+   */
+  virtual void forward(MeshBlockImpl const *pmb, Variables &vars) {}
 
  protected:
-  Coord2 *_coords2 = nullptr;
-  Coord3 *_coords3 = nullptr;
-  int *_rankof = nullptr;
+  void _init_backend();
+  // --- Backend initializers ---
+  void _init_gloo();
+  void _init_nccl();
+
+  std::vector<Coord2> _coords2;
+  std::vector<Coord3> _coords3;
+  std::vector<int> _rankof;
 };
+using Layout = std::shared_ptr<LayoutImpl>;
 
-class SlabLayoutImpl : public LayoutImpl {
+class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
+                       public LayoutImpl {
  public:
-  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
-    if (options->pz() != 1) {
-      throw std::runtime_error("SlabLayoutImpl: pz must be 1 for slab layout");
-    }
+  //! Constructor to initialize the layers
+  SlabLayoutImpl() = default;
+  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) { reset(); }
+  void reset() override;
 
-    int px = options->px();
-    int py = options->py();
+  ~SlabLayoutImpl() = default;
+  void pretty_print(std::ostream &os) const override;
 
-    _coords2 = new Coord2[px * py];
-    build_zorder_coords2(px, py, _coords2);
-    build_rank_of2(px, py, _coords2, _rankof);
-  }
+  std::tuple<int, int, int> loc_of(int rank) const override;
+  int neighbor_rank(std::tuple<int, int, int> iloc,
+                    std::tuple<int, int, int> offset) const override;
 
-  ~SlabLayoutImpl() { delete[] _coords2; }
-  void report(std::ostream &os) const override;
+  //! \brief Perform ghost zone exchange for slab layout
+  void forward(MeshBlockImpl const *pmb, Variables &vars) override;
+};
+TORCH_MODULE(SlabLayout);
+
+class CubedLayoutImpl : public torch::nn::Cloneable<CubedLayoutImpl>,
+                        public LayoutImpl {
+ public:
+  //! Constructor to initialize the layers
+  CubedLayoutImpl() = default;
+  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) { reset(); }
+  void reset() override;
+
+  ~CubedLayoutImpl() = default;
+  void pretty_print(std::ostream &os) const override;
+
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 };
+TORCH_MODULE(CubedLayout);
 
-class CubedLayoutImpl : public LayoutImpl {
+class CubedSphereLayoutImpl
+    : public torch::nn::Cloneable<CubedSphereLayoutImpl>,
+      public LayoutImpl {
  public:
-  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
-    int px = options->px();
-    int py = options->py();
-    int pz = options->pz();
-
-    _coords3 = new Coord3[px * py * pz];
-    build_zorder_coords3(px, py, pz, _coords3);
-    build_rank_of3(px, py, pz, _coords3, _rankof);
-  }
-
-  ~CubedLayoutImpl() { delete[] _coords3; }
-
-  void report(std::ostream &os) const override;
-  std::tuple<int, int, int> loc_of(int rank) const override;
-  int neighbor_rank(std::tuple<int, int, int> iloc,
-                    std::tuple<int, int, int> offset) const override;
-};
-
-class CubedSphereLayoutImpl : public LayoutImpl {
- public:
+  //! Constructor to initialize the layers
+  CubedSphereLayoutImpl() = default;
   CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts, 6) {
-    int P = pxy() * pxy();
-    _coords2 = new Coord2[6 * P];
-
-    for (int f = 0; f < 6; ++f) {
-      _coords6[f] = _coords2 + f * P;
-      _rankof6[f] = _rankof + f * P;
-
-      build_zorder_coords2(pxy(), pxy(), _coords6[f]);
-      build_rank_of2(pxy(), pxy(), _coords6[f], _rankof6[f]);
-    }
+    reset();
   }
+  void reset() override;
 
-  ~CubedSphereLayoutImpl() { delete[] _coords2; }
+  ~CubedSphereLayoutImpl() = default;
+  void pretty_print(std::ostream &os) const override;
 
   int pxy() const { return options->px(); }
 
@@ -193,7 +266,6 @@ class CubedSphereLayoutImpl : public LayoutImpl {
 
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
-  void report(std::ostream &os) const override;
 
  private:
   //! \brieff Global rank layout: face-major, Z-order within face
@@ -237,24 +309,7 @@ class CubedSphereLayoutImpl : public LayoutImpl {
   Coord2 *_coords6[6];  //! coords per face: length P=px*py each
   int *_rankof6[6];     //! inverse map per face: length P=px*py each
 };
-
-using Layout = std::shared_ptr<LayoutImpl>;
-using SlabLayout = std::shared_ptr<SlabLayoutImpl>;
-using CubedLayout = std::shared_ptr<CubedLayoutImpl>;
-using CubedSphereLayout = std::shared_ptr<CubedSphereLayoutImpl>;
-
-Layout LayoutImpl::create(LayoutOptions const &opts) {
-  if (opts->type() == "slab") {
-    return std::make_shared<SlabLayoutImpl>(opts);
-  } else if (opts->type() == "cubed") {
-    return std::make_shared<CubedLayoutImpl>(opts);
-  } else if (opts->type() == "cubed_sphere") {
-    return std::make_shared<CubedSphereLayoutImpl>(opts);
-  } else {
-    throw std::runtime_error("layout type '" + opts->type() +
-                             "' is not implemented.");
-  }
-}
+TORCH_MODULE(CubedSphereLayout);
 
 }  // namespace snap
 

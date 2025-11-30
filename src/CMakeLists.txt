@@ -41,7 +41,7 @@ file(GLOB src_files
     #hydro/*.cpp
     riemann/*.cpp
     recon/*.cpp
-    #mesh/*.cpp
+    mesh/*.cpp
     output/*.cpp
     scalar/*.cpp
     utils/*.cpp

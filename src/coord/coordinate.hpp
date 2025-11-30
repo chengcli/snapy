@@ -10,7 +10,6 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/layout/layout.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"

@@ -2,11 +2,26 @@
 #include <fmt/format.h>
 
 // snap
+#include "connectivity.hpp"
 #include "layout.hpp"
 
 namespace snap {
 
-void CubedLayoutImpl::report(std::ostream &os) const {
+void CubedLayoutImpl::reset() {
+  // build the ranks
+  int px = options->px();
+  int py = options->py();
+  int pz = options->pz();
+
+  _coords3.resize(px * py * pz);
+  build_zorder_coords3(px, py, pz, _coords3.data());
+  build_rank_of3(px, py, pz, _coords3.data(), _rankof.data());
+
+  // build backend
+  _init_backend();
+}
+
+void CubedLayoutImpl::pretty_print(std::ostream &os) const {
   options->report(os);
   os << " Rank | (rx,ry,rz)\n";
   os << "-------------------\n";

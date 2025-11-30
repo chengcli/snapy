@@ -95,18 +95,18 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
 
-  if ((cs.size(2) > 1) && (!(pimp->options->scheme() & 1) ||
+  if ((cs.size(2) > 1) && (!(options->icorr()->scheme() & 1) ||
                            (cs.size(0) == 1 && cs.size(1) == 1))) {
     dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
               .item<double>();
   }
 
-  if ((cs.size(1) > 1) && (!((pimp->options->scheme() >> 1) & 1))) {
+  if ((cs.size(1) > 1) && (!((options->icorr()->scheme() >> 1) & 1))) {
     dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
               .item<double>();
   }
 
-  if ((cs.size(0) > 1) && (!((pimp->options->scheme() >> 2) & 1))) {
+  if ((cs.size(0) > 1) && (!((options->icorr()->scheme() >> 2) & 1))) {
     dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
               .item<double>();
   }
@@ -219,7 +219,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   } else {
     gamma = peos->compute("W->A", {wi});
   }
-  _imp.set_(pimp->forward(du, wi, gamma, dt));
+  _imp.set_(picorr->forward(du, wi, gamma, dt));
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -228,6 +228,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   return du;
+}
+
+std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
+                                             torch::nn::Module* p,
+                                             std::string const& name) {
+  return p->register_module(name, Hydro(opts));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,

@@ -32,6 +32,7 @@
 #include <fmt/format.h>
 
 // snap
+#include "connectivity.hpp"
 #include "layout.hpp"
 
 namespace snap {
@@ -137,7 +138,24 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
   }
 }
 
-void CubedSphereLayoutImpl::report(std::ostream &os) const {
+void CubedSphereLayoutImpl::reset() {
+  // build the ranks
+  int P = pxy() * pxy();
+  _coords2.resize(6 * P);
+
+  for (int f = 0; f < 6; ++f) {
+    _coords6[f] = _coords2.data() + f * P;
+    _rankof6[f] = _rankof.data() + f * P;
+
+    build_zorder_coords2(pxy(), pxy(), _coords6[f]);
+    build_rank_of2(pxy(), pxy(), _coords6[f], _rankof6[f]);
+  }
+
+  // build backend
+  _init_backend();
+}
+
+void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
   options->report(os);
   for (int f = 0; f < 6; ++f) {
     os << " Face " << f << "\n";

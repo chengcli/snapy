@@ -21,10 +21,10 @@ int make_tar_archive(std::string const &archive_name,
 }
 
 void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
-  pmb->pdist->pg->barrier();
+  pmb->playout->pg->barrier();
   std::stringstream msg;
 
-  if (pmb->pdist->is_root()) {
+  if (pmb->playout->is_root()) {
     char number[64];
     snprintf(number, sizeof(number), "%05d", file_number);
 
