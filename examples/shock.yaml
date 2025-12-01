@@ -1,5 +1,3 @@
-verbose: true
-
 reference-state:
   Tref: 0.
   Pref: 1.e5

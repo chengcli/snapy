@@ -68,7 +68,7 @@ void HydroImpl::reset() {
   }
 
   //// ---- (8) set up implicit solver ---- ////
-  if (options->icorr() != nullptr) {
+  if (options->icorr()) {
     picorr = ImplicitCorrectionImpl::create(options->icorr(), this);
     if (options->verbose() && rank == 0) {
       std::cout << "[Hydro] Implicit correction type: "
@@ -147,21 +147,39 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   }
 
   double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
+  auto icorr = options->icorr();
 
-  if ((cs.size(2) > 1) && (!(options->icorr()->scheme() & 1) ||
-                           (cs.size(0) == 1 && cs.size(1) == 1))) {
-    dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
-              .item<double>();
-  }
+  if (icorr) {
+    if ((cs.size(2) > 1) &&
+        (!(icorr->scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
+      dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
+                .item<double>();
+    }
 
-  if ((cs.size(1) > 1) && (!((options->icorr()->scheme() >> 1) & 1))) {
-    dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
-              .item<double>();
-  }
+    if ((cs.size(1) > 1) && (!((icorr->scheme() >> 1) & 1))) {
+      dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
+                .item<double>();
+    }
 
-  if ((cs.size(0) > 1) && (!((options->icorr()->scheme() >> 2) & 1))) {
-    dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
-              .item<double>();
+    if ((cs.size(0) > 1) && (!((icorr->scheme() >> 2) & 1))) {
+      dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
+                .item<double>();
+    }
+  } else {
+    if (cs.size(2) > 1) {
+      dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
+                .item<double>();
+    }
+
+    if (cs.size(1) > 1) {
+      dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
+                .item<double>();
+    }
+
+    if (cs.size(0) > 1) {
+      dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
+                .item<double>();
+    }
   }
 
   return std::min({dt1, dt2, dt3});
@@ -180,7 +198,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] EOS time: " << elapsed.count() << " s\n";
+    std::cout << "[Hydro] EOS time (s): " << elapsed.count() << "\n";
     start = std::chrono::high_resolution_clock::now();
   }
 
@@ -206,7 +224,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x1 time: " << elapsed.count() << " s\n";
+        std::cout << "[Hydro] Flux-x1 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
@@ -224,7 +242,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x2 time: " << elapsed.count() << " s\n";
+        std::cout << "[Hydro] Flux-x2 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
@@ -240,7 +258,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x3 time: " << elapsed.count() << " s\n";
+        std::cout << "[Hydro] Flux-x3 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
@@ -256,7 +274,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] Forcing time: " << elapsed.count() << " s\n";
+    std::cout << "[Hydro] Forcing time (s): " << elapsed.count() << "\n";
     start = std::chrono::high_resolution_clock::now();
   }
 
@@ -283,7 +301,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "[Hydro] Implicit time: " << elapsed.count() << " s\n";
+      std::cout << "[Hydro] Implicit time (s): " << elapsed.count() << "\n";
       start = std::chrono::high_resolution_clock::now();
     }
   }

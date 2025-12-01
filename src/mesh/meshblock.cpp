@@ -462,23 +462,24 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (6) saturation adjustment --------
-  if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo()) {
+  if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
+      phydro->options->eos()->thermo()->reactions().size() > 0) {
     phydro->peos->apply_conserved_limiter_(hydro_u);
 
     int ny = hydro_u.size(0) - 5;  // number of species
 
     auto ke = phydro->peos->compute("U->K", {hydro_u});
     auto rho = hydro_u[IDN] + hydro_u.narrow(0, ICY, ny).sum(0);
-    auto ie = hydro_u[Index::IPR] - ke;
+    auto ie = hydro_u[IPR] - ke;
 
-    auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
+    auto yfrac = hydro_u.narrow(0, ICY, ny) / rho;
 
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
     pthermo->forward(rho, ie, yfrac, /*warm_start=*/true);
 
-    hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
+    hydro_u.narrow(0, ICY, ny) = yfrac * rho;
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;

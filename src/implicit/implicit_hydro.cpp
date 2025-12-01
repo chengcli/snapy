@@ -18,7 +18,9 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions options_)
 }
 
 void ImplicitHydroImpl::reset() {
-  TORCH_CHECK(options->grav(), "gravity module is nullptr");
+  if (!options->grav()) {
+    options->grav() = ConstGravityOptionsImpl::create();
+  }
   pcoord = CoordinateImpl::create(options->coord(), this);
 }
 
