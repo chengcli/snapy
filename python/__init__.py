@@ -25,4 +25,4 @@ def load_once(name):
 load_once("libsnap_release.so")
 load_once("libsnap_cuda_release.so")
 
-__version__ = "0.9.3"
+__version__ = "1.0.0"
