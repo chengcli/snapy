@@ -23,8 +23,20 @@ struct ScalarOptionsImpl {
     return std::make_shared<ScalarOptionsImpl>();
   }
   static std::shared_ptr<ScalarOptionsImpl> from_yaml(
-      std::string const& filename);
+      std::string const& filename, bool verbose = false);
   ScalarOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    if (thermo()) {
+      os << "-- thermo options --\n";
+      thermo()->report(os);
+    }
+    if (kinetics()) {
+      os << "-- kinetics options --\n";
+      kinetics()->report(os);
+    }
+  }
+
+  ADD_ARG(bool, verbose) = false;
 
   //! Thermodynamics options
   ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
@@ -83,10 +95,6 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(double dt, torch::Tensor scalar_u,
                         Variables const& other);
-
- private:
-  //! cache
-  torch::Tensor _X, _V;
 };
 
 TORCH_MODULE(Scalar);

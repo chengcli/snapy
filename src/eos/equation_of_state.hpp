@@ -21,7 +21,7 @@ struct EquationOfStateOptionsImpl {
     return std::make_shared<EquationOfStateOptionsImpl>();
   }
   static std::shared_ptr<EquationOfStateOptionsImpl> from_yaml(
-      std::string const& filename);
+      std::string const& filename, bool verbose = false);
 
   EquationOfStateOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -31,6 +31,10 @@ struct EquationOfStateOptionsImpl {
        << "* temperature_floor = " << temperature_floor() << "\n"
        << "* limiter = " << (limiter() ? "true" : "false") << "\n"
        << "* eos_file = " << eos_file() << "\n";
+    if (thermo()) {
+      os << "-- thermo options --\n";
+      thermo()->report(os);
+    }
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";

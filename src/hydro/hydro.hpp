@@ -28,7 +28,7 @@ struct HydroOptionsImpl {
     return std::make_shared<HydroOptionsImpl>();
   }
   static std::shared_ptr<HydroOptionsImpl> from_yaml(
-      std::string const& filename);
+      std::string const& filename, bool verbose = false);
 
   HydroOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -38,7 +38,8 @@ struct HydroOptionsImpl {
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
 
-  void register_forcings_options(std::string const& filename);
+  void register_forcings_options(std::string const& filename,
+                                 bool verbose = false);
 
   //! verbose
   ADD_ARG(bool, verbose) = false;

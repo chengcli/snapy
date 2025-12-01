@@ -339,8 +339,8 @@ IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
                                   torch::nn::Module* p,
                                   std::string const& name) {
-  TORCH_CHECK(opts, "Coordinate options is null");
-  TORCH_CHECK(p, "Parent module is null");
+  TORCH_CHECK(p, "[Coordinate] Parent module is null");
+  TORCH_CHECK(opts, "[Coordinate] Options pointer is null");
 
   if (opts->type() == "cartesian") {
     return p->register_module(name, Cartesian(opts));

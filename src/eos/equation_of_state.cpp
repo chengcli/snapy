@@ -17,7 +17,7 @@
 namespace snap {
 
 EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
-    std::string const& filename) {
+    std::string const& filename, bool verbose) {
   auto config = YAML::LoadFile(filename);
   auto op = EquationOfStateOptionsImpl::create();
 
@@ -33,13 +33,13 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   op->limiter() = node["limiter"].as<bool>(false);
   op->eos_file() = node["eos-file"].as<std::string>("");
 
-  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename);
+  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, verbose);
 
-  if (op->thermo() != nullptr) {
+  if (op->thermo()) {
     TORCH_CHECK(
-        NMASS == 0 || op->thermo()->vapor_ids().size() +
-                              op->thermo()->cloud_ids().size() ==
-                          1 + NMASS,
+        NMASS == 0 || (op->thermo()->vapor_ids().size() +
+                           op->thermo()->cloud_ids().size() ==
+                       1 + NMASS),
         "Athena++ style indexing is enabled (NMASS > 0), but the number of "
         "vapor and cloud species in the thermodynamics options does not match "
         "the expected number of vapor + cloud species = ",
@@ -106,6 +106,9 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
 EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
                                             torch::nn::Module* p,
                                             std::string const& name) {
+  TORCH_CHECK(p, "[EquationOfState] Parent module pointer is null.");
+  TORCH_CHECK(opts, "[EquationOfState] Options pointer is null.");
+
   if (opts->type() == "ideal-gas") {
     return p->register_module(name, IdealGas(opts));
   } else if (opts->type() == "ideal-moist") {

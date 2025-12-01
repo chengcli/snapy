@@ -1,7 +1,12 @@
-// snap
-#include "hydro.hpp"
+// kintera
+#include <kintera/utils/format.hpp>
 
+// snap
 #include <snap/snap.h>
+
+#include <snap/layout/layout.hpp>
+
+#include "hydro.hpp"
 
 namespace snap {
 
@@ -10,41 +15,83 @@ HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
 }
 
 void HydroImpl::reset() {
+  int rank = get_rank();
+
   //// ---- (1) set up coordinate model ---- ////
   pcoord = CoordinateImpl::create(options->coord(), this);
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Coordinate type: " << pcoord->options->type() << "\n";
+  }
 
   //// ---- (2) set up equation-of-state model ---- ////
   peos = EquationOfStateImpl::create(options->eos(), this);
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] EOS type: " << peos->options->type() << "\n";
+  }
 
   //// ---- (3) set up primitive projector model ---- ////
   if (options->proj() != nullptr) {
     pproj = PrimitiveProjectorImpl::create(options->proj(), this);
+
+    if (options->verbose() && rank == 0) {
+      std::cout << "[Hydro] Primitive projector type: "
+                << pproj->options->type() << "\n";
+    }
   }
 
   //// ---- (4) set up reconstruction-x1 model ---- ////
   precon1 = ReconstructImpl::create(options->recon1(), this, "recon1");
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Reconstruction-x1 type: "
+              << precon1->pinterp1->options->type() << "\n";
+  }
 
   //// ---- (5) set up reconstruction-x23 model ---- ////
   precon23 = ReconstructImpl::create(options->recon23(), this, "recon23");
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Reconstruction-x2/x3 type: "
+              << precon23->pinterp1->options->type() << "\n";
+  }
 
   //// ---- (6) set up riemann-solver model ---- ////
   priemann = RiemannSolverImpl::create(options->riemann(), this);
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Riemann solver type: " << priemann->options->type()
+              << "\n";
+  }
 
   //// ---- (7) set up internal boundary ---- ////
   pib = InternalBoundaryImpl::create(options->ib(), this);
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Internal boundary max-iter: "
+              << pib->options->max_iter() << "\n";
+  }
 
   //// ---- (8) set up implicit solver ---- ////
   if (options->icorr() != nullptr) {
     picorr = ImplicitCorrectionImpl::create(options->icorr(), this);
+    if (options->verbose() && rank == 0) {
+      std::cout << "[Hydro] Implicit correction type: "
+                << picorr->options->type() << "\n";
+    }
   }
 
   //// ---- (9) set up sedimentation ---- ////
   if (options->sed() != nullptr) {
     psed = SedHydroImpl::create(options->sed(), this);
+    if (options->verbose() && rank == 0) {
+      std::cout << "[Hydro] Sedimentation particle ids: "
+                << fmt::format("{}", psed->options->sedvel()->particle_ids())
+                << "\n";
+    }
   }
 
   //// ---- (10) set up forcings ---- ////
   auto forcing_names = register_forcings_module();
+  if (options->verbose() && rank == 0) {
+    std::cout << "[Hydro] Forcings: " << fmt::format("{}", forcing_names)
+              << "\n";
+  }
 
   //// ---- (11) register all forcings ---- ////
   for (auto i = 0; i < forcings.size(); i++) {

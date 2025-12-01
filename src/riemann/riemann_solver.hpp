@@ -21,7 +21,7 @@ struct RiemannSolverOptionsImpl {
     return std::make_shared<RiemannSolverOptionsImpl>();
   }
   static std::shared_ptr<RiemannSolverOptionsImpl> from_yaml(
-      std::string const& filename);
+      std::string const& filename, std::string const& section);
   static std::shared_ptr<RiemannSolverOptionsImpl> from_yaml(
       YAML::Node const& node);
 

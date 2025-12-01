@@ -50,13 +50,15 @@ void MeshBlockImpl::reset() {
   int pz = options->layout()->pz();
 
   int nranks = px * py * pz;
+  int rank = options->layout()->rank();
+
   TORCH_CHECK(options->layout()->world_size() == nranks,
               "MeshBlockImpl: world_size (", options->layout()->world_size(),
               ") does not match layout partitioning (", nranks, ").");
 
   // reset internal block boundaries
   if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
-    auto iloc = playout->loc_of(options->layout()->rank());
+    auto iloc = playout->loc_of(rank);
     // x1-dir
     auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
@@ -83,6 +85,10 @@ void MeshBlockImpl::reset() {
     if (lx3 != px - 1) {
       options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
     }
+
+    if (options->verbose() && playout->is_root()) {
+      std::cout << "[MeshBlock] setting up rank bcs" << std::endl;
+    }
   }
 
   // set up output
@@ -98,13 +104,26 @@ void MeshBlockImpl::reset() {
       throw std::runtime_error("Output type '" + out_op->file_type() +
                                "' is not implemented.");
     }
+
+    if (options->verbose() && playout->is_root()) {
+      std::cout << "[MeshBlock] adding output type: " << out_op->file_type()
+                << std::endl;
+    }
   }
 
   // set up integrator
   pintg = harp::IntegratorImpl::create(options->intg(), this);
+  if (options->verbose() && playout->is_root()) {
+    std::cout << "[MeshBlock] using integrator type: " << pintg->options->type()
+              << std::endl;
+  }
 
   // set up hydro model
   phydro = HydroImpl::create(options->hydro(), this);
+  if (options->verbose() && playout->is_root()) {
+    std::cout << "[MeshBlock] using hydro type: "
+              << phydro->peos->options->type() << std::endl;
+  }
 
   // set up scalar model
   pscalar = ScalarImpl::create(options->scalar(), this);
@@ -131,11 +150,11 @@ void MeshBlockImpl::reset() {
       "s1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
   if (options->verbose()) {
-    std::cout << "Setting up buffer with shapes:" << std::endl
-              << "  hydro_u0: " << _hydro_u0.sizes() << std::endl
-              << "  hydro_u1: " << _hydro_u1.sizes() << std::endl
-              << "  scalar_s0: " << _scalar_s0.sizes() << std::endl
-              << "  scalar_s1: " << _scalar_s1.sizes() << std::endl;
+    std::cout << "[Meshblock] setting up buffer with shapes:" << std::endl
+              << "* hydro_u0: " << _hydro_u0.sizes() << std::endl
+              << "* hydro_u1: " << _hydro_u1.sizes() << std::endl
+              << "* scalar_s0: " << _scalar_s0.sizes() << std::endl
+              << "* scalar_s1: " << _scalar_s1.sizes() << std::endl;
   }
 }
 
@@ -289,7 +308,7 @@ double MeshBlockImpl::initialize(Variables& vars) {
   _time_start = clock();
 
   if (options->verbose()) {
-    std::cout << "Initialization completed." << std::endl;
+    std::cout << "[Meshblock] initialization completed." << std::endl;
   }
 
   return 0.;  // default start time is 0.0
@@ -317,7 +336,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
   dt = dt_reduce[0].item<double>();
 
   if (options->verbose()) {
-    std::cout << "Suggested dt from hydro: " << std::scientific
+    std::cout << "[Meshblock] suggested dt from hydro: " << std::scientific
               << std::setprecision(6) << dt << std::endl;
   }
   return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
@@ -351,7 +370,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " hydro forward time (s): " << elapsed.count() << std::endl;
     start = std::chrono::high_resolution_clock::now();
   }
@@ -362,7 +381,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " scalar forward time (s): " << elapsed.count() << std::endl;
       start = std::chrono::high_resolution_clock::now();
     }
@@ -374,7 +393,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " multi-stage averaging time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -386,7 +405,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " multi-stage scalar averaging time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -403,7 +422,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " fill solid hydro conserved time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -419,7 +438,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " hydro boundary condition time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -435,7 +454,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " scalar boundary condition time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -463,7 +482,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " saturation adjustment time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -475,7 +494,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " ghost zone exchange time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -494,8 +513,8 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
     }
   }
   if (options->verbose()) {
-    std::cout << "Output writing completed at time: " << current_time
-              << std::endl;
+    std::cout << "[MeshBlock] output writing completed at time: "
+              << current_time << std::endl;
   }
 }
 

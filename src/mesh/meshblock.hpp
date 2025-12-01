@@ -33,13 +33,13 @@ struct MeshBlockOptionsImpl {
   static std::shared_ptr<MeshBlockOptionsImpl> create() {
     return std::make_shared<MeshBlockOptionsImpl>();
   }
-  static std::shared_ptr<MeshBlockOptionsImpl> from_yaml(
-      std::string input_file);
+  static std::shared_ptr<MeshBlockOptionsImpl> from_yaml(std::string input_file,
+                                                         bool verbose = false);
 
   MeshBlockOptionsImpl() = default;
   void report(std::ostream& os) const {
-    os << "* verbose = " << verbose() << "\n";
-    os << "* basename = " << basename() << "\n";
+    os << "* verbose = " << (verbose() ? "true" : "false") << "\n"
+       << "* basename = " << basename() << "\n";
   }
 
   //! verbose
