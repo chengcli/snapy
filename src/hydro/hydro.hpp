@@ -38,6 +38,8 @@ struct HydroOptionsImpl {
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
 
+  void register_forcings_options(std::string const& filename);
+
   //! verbose
   ADD_ARG(bool, verbose) = false;
 

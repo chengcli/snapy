@@ -182,7 +182,6 @@ struct FricHeatOptionsImpl {
   void report(std::ostream& os) const {}
 
   ADD_ARG(SedVelOptions, sedvel) = nullptr;
-  ADD_ARG(ConstGravityOptions, coord) = nullptr;
 };
 using FricHeatOptions = std::shared_ptr<FricHeatOptionsImpl>;
 

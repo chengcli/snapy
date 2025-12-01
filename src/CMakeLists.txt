@@ -38,7 +38,7 @@ file(GLOB src_files
     coord/*.cpp
     eos/*.cpp
     eos/aneos/*.cpp
-    #hydro/*.cpp
+    hydro/*.cpp
     riemann/*.cpp
     recon/*.cpp
     mesh/*.cpp

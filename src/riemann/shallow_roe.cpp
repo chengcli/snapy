@@ -6,6 +6,8 @@
 
 namespace snap {
 void ShallowRoeSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[ShallowRoe] eos is nullptr");
+
   peos = EquationOfStateImpl::create(options->eos(), this);
 }
 

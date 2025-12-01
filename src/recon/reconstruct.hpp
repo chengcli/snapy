@@ -16,12 +16,18 @@ class Node;
 }  // namespace YAML
 
 namespace snap {
+
+struct EquationOfStateOptionsImpl;
+using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
+
 struct ReconstructOptionsImpl {
   static std::shared_ptr<ReconstructOptionsImpl> create() {
     return std::make_shared<ReconstructOptionsImpl>();
   }
   static std::shared_ptr<ReconstructOptionsImpl> from_yaml(
-      const YAML::Node& dyn, std::string section);
+      std::string const& filename, std::string const& section);
+  static std::shared_ptr<ReconstructOptionsImpl> from_yaml(
+      const YAML::Node& node, std::string const& section);
 
   ReconstructOptionsImpl() = default;
   void report(std::ostream& os) const {
@@ -46,6 +52,7 @@ struct ReconstructOptionsImpl {
 
   //! abstract submodules
   ADD_ARG(InterpOptions, interp) = nullptr;
+  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
 using ReconstructOptions = std::shared_ptr<ReconstructOptionsImpl>;
 

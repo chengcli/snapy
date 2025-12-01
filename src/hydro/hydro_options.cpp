@@ -1,93 +1,129 @@
-// C/C++
-#include <algorithm>
-
 // yaml
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/snap.h>
-
-#include <snap/registry.hpp>
+#include <snap/forcing/forcing.hpp>
 
 #include "hydro.hpp"
 
 namespace snap {
 
-HydroOptions HydroOptions::from_yaml(std::string const& filename) {
-  HydroOptions op;
-
+void HydroOptionsImpl::register_forcings_options(std::string const& filename) {
   auto config = YAML::LoadFile(filename);
-  if (config["geometry"]) {
-    op.coord() = CoordinateOptions::from_yaml(config["geometry"], layout);
+  auto forcing = config["forcing"];
+  if (!forcing) return;
+
+  grav() = ConstGravityOptionsImpl::from_yaml(forcing);
+
+  coriolis() = CoriolisOptionsImpl::from_yaml(forcing);
+  if (coriolis()) {
+    coriolis()->coord() = coord();
   }
 
-  if (!config["dynamics"]) return op;
+  visc() = DiffusionOptionsImpl::from_yaml(forcing);
 
-  auto dyn = config["dynamics"];
-  op.verbose() = dyn["verbose"].as<bool>(false);
+  fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
 
-  op.disable_flux_x1() = dyn["disable_flux_x1"].as<bool>(false);
-  op.disable_flux_x2() = dyn["disable_flux_x2"].as<bool>(false);
-  op.disable_flux_x3() = dyn["disable_flux_x3"].as<bool>(false);
+  bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
+  if (bodyHeat()) {
+    bodyHeat()->thermo() = eos()->thermo();
+  }
+
+  topCool() = TopCoolOptionsImpl::from_yaml(forcing);
+  if (topCool()) {
+    topCool()->coord() = coord();
+  }
+
+  botHeat() = BotHeatOptionsImpl::from_yaml(forcing);
+  if (botHeat()) {
+    botHeat()->coord() = coord();
+  }
+
+  relaxBotComp() = RelaxBotCompOptionsImpl::from_yaml(forcing);
+
+  relaxBotTemp() = RelaxBotTempOptionsImpl::from_yaml(forcing);
+
+  relaxBotVelo() = RelaxBotVeloOptionsImpl::from_yaml(forcing);
+
+  topSpongeLyr() = TopSpongeLyrOptionsImpl::from_yaml(forcing);
+  if (topSpongeLyr()) {
+    topSpongeLyr()->coord() = coord();
+  }
+
+  botSpongeLyr() = BotSpongeLyrOptionsImpl::from_yaml(forcing);
+  if (botSpongeLyr()) {
+    botSpongeLyr()->coord() = coord();
+  }
+
+  if (eos()->type() == "plume-eos") {
+    plumeForcing() = PlumeForcingOptionsImpl::from_yaml(forcing);
+  }
+}
+
+HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename) {
+  auto op = HydroOptionsImpl::create();
+
+  // internal boundaries
+  op->ib() = InternalBoundaryOptionsImpl::from_yaml(filename);
+
+  // coordinate system
+  op->coord() = CoordinateOptionsImpl::from_yaml(filename);
 
   // equation of state
-  if (dyn["equation-of-state"]) {
-    op.eos() =
-        EquationOfStateOptions::from_yaml(dyn["equation-of-state"], filename);
-    op.coord().eos_type() = op.eos().type();
-  }
-  op.eos().coord() = op.coord();
+  op->eos() = EquationOfStateOptionsImpl::from_yaml(filename);
+
+  // link eos and coord
+  op->eos()->coord() = op->coord();
+  op->coord()->eos() = op->eos();
+
+  // forcings
+  op->register_forcings_options(filename);
 
   // primitive projector
-  if (op.eos().type() == "ideal-gas" || op.eos().type() == "ideal-moist" ||
-      op.eos().type() == "moist-mixture") {
-    op.proj() = PrimitiveProjectorOptions::from_yaml(config);
+  op->proj() = PrimitiveProjectorOptionsImpl::from_yaml(filename);
+  if (op->proj()) {
+    op->proj()->coord() = op->coord();
+    op->proj()->grav() = op->grav();
   }
 
   // reconstruction
-  if (dyn["reconstruct"]) {
-    op.recon1() = ReconstructOptions::from_yaml(dyn, "vertical");
-    op.recon23() = ReconstructOptions::from_yaml(dyn, "horizontal");
+  op->recon1() = ReconstructOptionsImpl::from_yaml(filename, "vertical");
+  if (op->recon1()) {
+    op->recon1()->eos() = op->eos();
+  }
+
+  op->recon23() = ReconstructOptionsImpl::from_yaml(filename, "horizontal");
+  if (op->recon23()) {
+    op->recon23()->eos() = op->eos();
   }
 
   // riemann solver
-  if (dyn["riemann-solver"]) {
-    op.riemann() = RiemannSolverOptions::from_yaml(dyn["riemann-solver"]);
+  op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename);
+  if (op->riemann()) {
+    op->riemann()->eos() = op->eos();
   }
-  op.riemann().eos() = op.eos();
-
-  // internal boundaries
-  op.ib() = InternalBoundaryOptions::from_yaml(config);
 
   // implicit options
-  op.imp() = ImplicitOptions::from_yaml(config);
-  op.imp().coord() = op.coord();
-
-  // sedimentation
-  if (config["sedimentation"]) {
-    op.sed().sedvel() = SedVelOptions::from_yaml(config);
-    op.sed().eos() = op.eos();
-
-    // check all precipitating particles are in the clouds
-    std::unordered_set<int> cloud_set(op.eos().thermo().cloud_ids().begin(),
-                                      op.eos().thermo().cloud_ids().end());
-    auto particle_ids = op.sed().sedvel().particle_ids();
-    auto pass = std::all_of(particle_ids.begin(), particle_ids.end(),
-                            [&](int x) { return cloud_set.count(x); });
-
-    TORCH_CHECK(pass, "Missing sedimentation particles in the clouds.");
-
-    // setup hydro ids
-    auto hydro_species = op.eos().thermo().species();
-    for (auto const& p : op.sed().sedvel().species()) {
-      auto it = std::find(hydro_species.begin(), hydro_species.end(), p);
-      op.sed().hydro_ids().push_back(Index::ICY - 1 + it -
-                                     hydro_species.begin());
-    }
+  op->icorr() = ImplicitOptionsImpl::from_yaml(filename);
+  if (op->icorr()) {
+    op->icorr()->coord() = op->coord();
+    op->icorr()->grav() = op->grav();
   }
 
-  // forcings
-  if (config["forcing"]) register_forcings_options(op, config, layout);
+  // sedimentation
+  op->sed() = SedHydroOptionsImpl::from_yaml(filename);
+  if (op->sed()) {
+    op->sed()->eos() = op->eos();
+    op->sed()->sedvel()->grav() = op->grav();
+    op->fricHeat()->sedvel() = op->sed()->sedvel();
+  }
+
+  auto config = YAML::LoadFile(filename);
+  auto dyn = config["dynamics"];
+  op->verbose() = dyn["verbose"].as<bool>(false);
+  op->disable_flux_x1() = dyn["disable_flux_x1"].as<bool>(false);
+  op->disable_flux_x2() = dyn["disable_flux_x2"].as<bool>(false);
+  op->disable_flux_x3() = dyn["disable_flux_x3"].as<bool>(false);
 
   return op;
 }

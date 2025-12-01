@@ -11,34 +11,40 @@ HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
 
 void HydroImpl::reset() {
   //// ---- (1) set up coordinate model ---- ////
-  pcoord = CoordianteImpl::create(options->coord(), this);
+  pcoord = CoordinateImpl::create(options->coord(), this);
 
   //// ---- (2) set up equation-of-state model ---- ////
   peos = EquationOfStateImpl::create(options->eos(), this);
 
   //// ---- (3) set up primitive projector model ---- ////
-  pproj = PrimitiveProjectImpl::create(options->proj(), this);
+  if (options->proj() != nullptr) {
+    pproj = PrimitiveProjectorImpl::create(options->proj(), this);
+  }
 
   //// ---- (4) set up reconstruction-x1 model ---- ////
   precon1 = ReconstructImpl::create(options->recon1(), this, "recon1");
 
   //// ---- (5) set up reconstruction-x23 model ---- ////
-  precon23 = ReconstructImpl(options->recon23(), this, "recon23");
+  precon23 = ReconstructImpl::create(options->recon23(), this, "recon23");
 
   //// ---- (6) set up riemann-solver model ---- ////
-  priemann = RiemannSolverImpl(options->riemann(), this);
+  priemann = RiemannSolverImpl::create(options->riemann(), this);
 
   //// ---- (7) set up internal boundary ---- ////
-  pib = InternalBoundaryImpld(options->ib(), this);
+  pib = InternalBoundaryImpl::create(options->ib(), this);
 
   //// ---- (8) set up implicit solver ---- ////
-  picorr = ImplicitCorrectionImpl(options->icorr(), this);
+  if (options->icorr() != nullptr) {
+    picorr = ImplicitCorrectionImpl::create(options->icorr(), this);
+  }
 
   //// ---- (9) set up sedimentation ---- ////
-  psed = SedHydroImpl::create(options->sed(), this);
+  if (options->sed() != nullptr) {
+    psed = SedHydroImpl::create(options->sed(), this);
+  }
 
   //// ---- (10) set up forcings ---- ////
-  auto forcing_names = register_forcings_module(forcings);
+  auto forcing_names = register_forcings_module();
 
   //// ---- (11) register all forcings ---- ////
   for (auto i = 0; i < forcings.size(); i++) {
@@ -81,7 +87,7 @@ void HydroImpl::reset() {
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   torch::Tensor cs;
-  if (options->eos().type() == "aneos" ||
+  if (options->eos()->type() == "aneos" ||
       options->eos()->type() == "plume-eos") {
     cs = peos->compute("W->L", {w});
   } else {
@@ -137,10 +143,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
-    auto wp = pproj->forward(w, pcoord->dx1f);
-    auto wtmp = precon1->forward(wp, DIM1);
+    torch::Tensor wtmp;
+    if (pproj) {
+      auto wp = pproj->forward(w, pcoord->dx1f);
+      wtmp = precon1->forward(wp, DIM1);
+      pproj->restore_inplace(wtmp);
+    } else {
+      wtmp = precon1->forward(w, DIM1);
+    }
 
-    pproj->restore_inplace(wtmp);
     auto wlr1 = has_solid ? pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
     if (!options->disable_flux_x1()) {
@@ -154,7 +165,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
 
     // add sedimentation flux
-    psed->forward(w, _flux1);
+    if (psed) psed->forward(w, _flux1);
   }
 
   //// ------------ (3) Calculate dimension 2 flux ------------ ////
@@ -203,28 +214,31 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   //// ------------ (7) Perform implicit correction ------------ ////
-  torch::Tensor wi;
-  if (has_solid) {
-    wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
-                      other.at("fill_solid_hydro_w"), w);
-    du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
-  } else {
-    wi = w;
-  }
+  if (picorr) {
+    torch::Tensor wi;
+    if (has_solid) {
+      wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
+                        other.at("fill_solid_hydro_w"), w);
+      du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
+    } else {
+      wi = w;
+    }
 
-  torch::Tensor gamma;
-  if (options->eos()->type() == "aneos") {
-    auto cs = peos->compute("W->L", {w});
-    gamma = peos->compute("WL->A", {w, cs});
-  } else {
-    gamma = peos->compute("W->A", {wi});
-  }
-  _imp.set_(picorr->forward(du, wi, gamma, dt));
-  if (options->verbose()) {
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] Implicit time: " << elapsed.count() << " s\n";
-    start = std::chrono::high_resolution_clock::now();
+    torch::Tensor gamma;
+    if (options->eos()->type() == "aneos") {
+      auto cs = peos->compute("W->L", {w});
+      gamma = peos->compute("WL->A", {w, cs});
+    } else {
+      gamma = peos->compute("W->A", {wi});
+    }
+    _imp.set_(picorr->forward(du, wi, gamma, dt));
+
+    if (options->verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      std::cout << "[Hydro] Implicit time: " << elapsed.count() << " s\n";
+      start = std::chrono::high_resolution_clock::now();
+    }
   }
 
   return du;
@@ -233,6 +247,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              torch::nn::Module* p,
                                              std::string const& name) {
+  TORCH_CHECK(p, "Parent module pointer is null");
   return p->register_module(name, Hydro(opts));
 }
 

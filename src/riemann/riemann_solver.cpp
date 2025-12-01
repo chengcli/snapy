@@ -5,12 +5,24 @@
 #include "riemann_solver.hpp"
 
 namespace snap {
+RiemannSolverOptions RiemannSolverOptionsImpl::from_yaml(
+    std::string const& filename) {
+  auto config = YAML::LoadFile(filename);
+  if (!config["dynamics"]) return nullptr;
+  if (!config["dynamics"]["riemann-solver"]) return nullptr;
+  return from_yaml(config["dynamics"]["riemann-solver"]);
+}
 
 RiemannSolverOptions RiemannSolverOptionsImpl::from_yaml(
-    YAML::Node const& node) {
+    YAML::Node const& dyn) {
+  if (!dyn["riemann-solver"]) return nullptr;
+
+  auto node = dyn["riemann-solver"];
   auto op = RiemannSolverOptionsImpl::create();
+
   op->type() = node["type"].as<std::string>("roe");
   op->dir() = node["dir"].as<std::string>("omni");
+
   return op;
 }
 
@@ -23,8 +35,8 @@ torch::Tensor RiemannSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 RiemannSolver RiemannSolverImpl::create(RiemannSolverOptions const& opts,
                                         torch::nn::Module* p,
                                         std::string const& name) {
-  TORCH_CHECK(opts != nullptr, "RiemannSolver options is nullptr");
-  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  TORCH_CHECK(p, "Parent module is nullptr");
+  TORCH_CHECK(opts, "RiemannSolver options is nullptr");
 
   if (opts->type() == "roe") {
     return p->register_module(name, RoeSolver(opts));

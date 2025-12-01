@@ -1,6 +1,7 @@
-// snap
-#include <snap/constants.h>
+// kintera
+#include <kintera/constants.h>
 
+// snap
 #include <snap/forcing/forcing.hpp>
 
 #include "sedimentation.hpp"
@@ -10,9 +11,9 @@
 namespace snap {
 
 void SedVelImpl::reset() {
-  TORCH_CHECK(options->grav(), "SedVelOptions: grav is nullptr");
+  TORCH_CHECK(options->grav(), "[SedVel] grav is nullptr");
   TORCH_CHECK(options->radius().size() == options->density().size(),
-              "SedVel: radius and density must have the same size");
+              "[SedVel] radius and density must have the same size");
 
   radius = register_buffer("radius",
                            torch::tensor(options->radius(), torch::kFloat64));
@@ -26,6 +27,8 @@ void SedVelImpl::reset() {
 
 torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
                                   torch::Tensor temp) {
+  using namespace kintera::constants;
+
   const auto d = options->a_diameter();
   const auto epsilon_LJ = options->a_epsilon_LJ();
   const auto m = options->a_mass();
@@ -34,14 +37,13 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   vec[0] = -1;
 
   // cope with float precision
-  auto eta = (5.0 / 16.0) * std::sqrt(M_PI * constants::kBoltz) * std::sqrt(m) *
-             torch::sqrt(temp) *
-             torch::pow(constants::kBoltz / epsilon_LJ * temp, 0.16) /
+  auto eta = (5.0 / 16.0) * std::sqrt(M_PI * KBoltz) * std::sqrt(m) *
+             torch::sqrt(temp) * torch::pow(KBoltz / epsilon_LJ * temp, 0.16) /
              (M_PI * d * d * 1.22);
 
   // Calculate mean free path, lambda
-  auto lambda = (eta * std::sqrt(M_PI * sqr(constants::kBoltz))) /
-                (pres * std::sqrt(2.0 * m));
+  auto lambda =
+      (eta * std::sqrt(M_PI * sqr(KBoltz))) / (pres * std::sqrt(2.0 * m));
 
   // Calculate Knudsen number, Kn
   auto Kn = lambda / radius.view(vec);

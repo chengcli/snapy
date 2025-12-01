@@ -20,7 +20,8 @@ BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
 }
 
 void BodyHeatImpl::reset() {
-  pthermo = register_module("thermo", kintera::ThermoY(options->thermo()));
+  TORCH_CHECK(options->thermo(), "[BodyHeat] thermo is null.");
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 }
 
 torch::Tensor BodyHeatImpl::forward(torch::Tensor du, torch::Tensor w,

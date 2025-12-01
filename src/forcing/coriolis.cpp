@@ -43,8 +43,6 @@ torch::Tensor Coriolis123Impl::forward(torch::Tensor du, torch::Tensor w,
 }
 
 void CoriolisXYZImpl::reset() {
-  TORCH_CHECK(options->coord() != nullptr,
-              "CoordinateOptions not linked in CoriolisXYZ");
   pcoord = CoordinateImpl::create(options->coord(), this);
 }
 

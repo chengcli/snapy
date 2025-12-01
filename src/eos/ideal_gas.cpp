@@ -18,8 +18,7 @@ IdealGasImpl::IdealGasImpl(EquationOfStateOptions const &options_)
 
 void IdealGasImpl::reset() {
   pcoord = CoordinateImpl::create(options->coord(), this);
-  pthermo = register_module("thermo", kintera::ThermoY(options->thermo()));
-  // pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 }
 
 torch::Tensor IdealGasImpl::compute(std::string ab,

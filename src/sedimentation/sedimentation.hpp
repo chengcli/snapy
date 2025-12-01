@@ -78,6 +78,9 @@ struct SedHydroOptionsImpl {
   static std::shared_ptr<SedHydroOptionsImpl> create() {
     return std::make_shared<SedHydroOptionsImpl>();
   }
+  static std::shared_ptr<SedHydroOptionsImpl> from_yaml(
+      std::string const& filename);
+
   void report(std::ostream& os) const {
     os << "* hydro_ids = " << fmt::format("{}", hydro_ids()) << "\n";
     sedvel()->report(os);

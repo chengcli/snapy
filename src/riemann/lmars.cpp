@@ -7,6 +7,8 @@
 namespace snap {
 
 void LmarsSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[LmarsSolver] eos is nullptr");
+
   peos = EquationOfStateImpl::create(options->eos(), this);
 
   // register buffers

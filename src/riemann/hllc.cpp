@@ -7,6 +7,8 @@
 namespace snap {
 
 void HLLCSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[HLLCSolver] eos is nullptr");
+
   // set up equation-of-state model
   peos = EquationOfStateImpl::create(options->eos(), this);
 

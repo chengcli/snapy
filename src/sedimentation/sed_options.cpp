@@ -5,9 +5,43 @@
 #include <kintera/species.hpp>
 
 // snap
+#include <snap/snap.h>
+
+#include <snap/eos/equation_of_state.hpp>
+
 #include "sedimentation.hpp"
 
 namespace snap {
+
+SedHydroOptions SedHydroOptionsImpl::from_yaml(std::string const& filename) {
+  auto config = YAML::LoadFile(filename);
+  if (!config["sedimentation"]) return nullptr;
+
+  auto op = SedHydroOptionsImpl::create();
+
+  op->sedvel() = SedVelOptionsImpl::from_yaml(config["sedimentation"]);
+
+  auto eos = EquationOfStateOptionsImpl::from_yaml(filename);
+
+  // check all precipitating particles are in the clouds
+  std::unordered_set<int> cloud_set(eos->thermo()->cloud_ids().begin(),
+                                    eos->thermo()->cloud_ids().end());
+
+  auto particle_ids = op->sedvel()->particle_ids();
+  auto pass = std::all_of(particle_ids.begin(), particle_ids.end(),
+                          [&](int x) { return cloud_set.count(x); });
+
+  TORCH_CHECK(pass, "Missing sedimentation particles in the clouds.");
+
+  // setup hydro ids
+  auto hydro_species = eos->thermo()->species();
+  for (auto const& p : op->sedvel()->species()) {
+    auto it = std::find(hydro_species.begin(), hydro_species.end(), p);
+    op->hydro_ids().push_back(ICY - 1 + it - hydro_species.begin());
+  }
+
+  return op;
+}
 
 SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
   auto op = SedVelOptionsImpl::create();

@@ -18,7 +18,7 @@ IdealMoistImpl::IdealMoistImpl(EquationOfStateOptions const &options_)
 
 void IdealMoistImpl::reset() {
   pcoord = CoordinateImpl::create(options->coord(), this);
-  pthermo = register_module("thermo", kintera::ThermoY(options->thermo()));
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 
   // populate buffers
   int ny = pthermo->options->vapor_ids().size() +

@@ -3,7 +3,7 @@
 
 namespace snap {
 
-std::vector<std::string> HydroImp::register_forcings_module() {
+std::vector<std::string> HydroImpl::register_forcings_module() {
   std::vector<std::string> forcing_names;
 
   if (options->grav()) {

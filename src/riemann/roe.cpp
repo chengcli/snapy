@@ -9,6 +9,7 @@ torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState const& peos) {
 }
 
 void RoeSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[RoeSolver] eos is nullptr");
   peos = EquationOfStateImpl::create(options->eos(), this);
 }
 

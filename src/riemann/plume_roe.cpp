@@ -37,6 +37,8 @@ static torch::Tensor lax_friedrichs_flux(torch::Tensor const& priml,
 }
 
 void PlumeRoeSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[PlumeRoe] eos is nullptr");
+
   peos = EquationOfStateImpl::create(options->eos(), this);
 }
 

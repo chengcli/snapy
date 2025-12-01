@@ -9,7 +9,7 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/coordinate/coordinate.hpp>
+#include <snap/coord/coordinate.hpp>
 #include <snap/forcing/forcing.hpp>
 
 #include "primitive_projector.hpp"
@@ -17,15 +17,18 @@
 namespace snap {
 
 PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(
-    YAML::Node const &node) {
-  if (!node["vertical-projection"]) return nullptr;
+    std::string const &filename) {
+  auto config = YAML::LoadFile(filename);
+  if (!config["vertical-projection"]) return nullptr;
+  return from_yaml(config["vertical-projection"]);
+}
 
+PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(
+    YAML::Node const &node) {
   auto op = PrimitiveProjectorOptionsImpl::create();
 
-  op->type() = node["vertical-projection"]["type"].as<std::string>("none");
-
-  op->margin() =
-      node["vertical-projection"]["pressure-margin"].as<double>(1.e-6);
+  op->type() = node["type"].as<std::string>("none");
+  op->margin() = node["pressure-margin"].as<double>(1.e-6);
 
   TORCH_CHECK(kintera::species_weights.size() > 0,
               "PrimitiveProjectorOptions: species is not initialized. ",
@@ -44,8 +47,8 @@ PrimitiveProjectorImpl::PrimitiveProjectorImpl(
 }
 
 void PrimitiveProjectorImpl::reset() {
-  CHECK_MODULE_LINKED(PrimitiveProjectorOptions, grav);
-  CHECK_MODULE_LINKED(PrimitiveProjectorOptions, coord);
+  TORCH_CHECK(options->coord(), "[PrimitiveProjector] coord module is nullptr");
+  TORCH_CHECK(options->grav(), "[PrimitiveProjector] grav module is nullptr");
 
   // populate buffer
   _psf = register_buffer("psf", torch::empty({0}, torch::kFloat64));

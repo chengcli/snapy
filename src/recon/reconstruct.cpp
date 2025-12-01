@@ -4,14 +4,21 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/eos/equation_of_state.hpp>
+
 #include "reconstruct.hpp"
 
 namespace snap {
-ReconstructOptions ReconstructOptionsImpl::from_yaml(const YAML::Node &dyn,
-                                                     std::string section) {
-  if (!dyn["reconstruct"]) return nullptr;
+ReconstructOptions ReconstructOptionsImpl::from_yaml(
+    std::string const &filename, std::string const &section) {
+  auto config = YAML::LoadFile(filename);
+  if (!config["dynamics"]) return nullptr;
+  if (!config["dynamics"]["reconstruct"]) return nullptr;
+  return from_yaml(config["dynamics"]["reconstruct"], section);
+}
 
-  auto node = dyn["reconstruct"];
+ReconstructOptions ReconstructOptionsImpl::from_yaml(
+    const YAML::Node &node, std::string const &section) {
   if (!node[section]) return nullptr;
 
   auto op = ReconstructOptionsImpl::create();
@@ -19,14 +26,6 @@ ReconstructOptions ReconstructOptionsImpl::from_yaml(const YAML::Node &dyn,
   op->shock() = node[section]["shock"].as<bool>(false);
   op->interp()->type() = node[section]["type"].as<std::string>("dc");
   op->interp()->scale() = node[section]["scale"].as<bool>(false);
-
-  if (dyn["equation-of-state"]) {
-    op->density_floor() =
-        dyn["equation-of-state"]["density-floor"].as<double>(1.e-10);
-    op->pressure_floor() =
-        dyn["equation-of-state"]["pressure-floor"].as<double>(1.e-10);
-    op->limiter() = dyn["equation-of-state"]["limiter"].as<bool>(false);
-  }
 
   return op;
 }
@@ -63,6 +62,7 @@ ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
 }
 
 void ReconstructImpl::reset() {
+  TORCH_CHECK(options->eos(), "[Reconstruct] eos is nullptr");
   pinterp1 = InterpImpl::create(options->interp(), this, "interp1");
   pinterp2 = InterpImpl::create(options->interp(), this, "interp2");
 }
@@ -113,22 +113,22 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
                  result.narrow(1, IDN, 1));
-  if (options->limiter()) {
-    result.select(1, IDN).clamp_min_(options->density_floor());
+  if (options->eos()->limiter()) {
+    result.select(1, IDN).clamp_min_(options->eos()->density_floor());
   }
 
   // velocity/pressure
   _apply_inplace(dim, il, iu, w.narrow(0, IVX, 4), pinterp2,
                  result.narrow(1, IVX, 4));
-  if (options->limiter()) {
-    result.select(1, IPR).clamp_min_(options->pressure_floor());
+  if (options->eos()->limiter()) {
+    result.select(1, IPR).clamp_min_(options->eos()->pressure_floor());
   }
 
   // others
   int ny = w.size(0) - 5;
   _apply_inplace(dim, il, iu, w.narrow(0, ICY, ny), pinterp1,
                  result.narrow(1, ICY, ny));
-  if (options->limiter()) {
+  if (options->eos()->limiter()) {
     result.narrow(1, ICY, ny).clamp_min_(0.);
   }
 
@@ -138,8 +138,8 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 std::shared_ptr<ReconstructImpl> ReconstructImpl::create(
     ReconstructOptions const &opts, torch::nn::Module *p,
     std::string const &name) {
-  TORCH_CHECK(opts, "Reconstruct options is null");
   TORCH_CHECK(p, "Parent module is null");
+  TORCH_CHECK(opts, "Reconstruct options is null");
   return p->register_module(name, Reconstruct(opts));
 }
 
