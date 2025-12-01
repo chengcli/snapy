@@ -74,6 +74,10 @@ void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
   // Serialize data into send buffers
   serialize(pmb, vars);
 
+  if (options->verbose() && is_root()) {
+    std::cout << "[SlabLayout] performing communication\n";
+  }
+
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
 
   // Get my rank

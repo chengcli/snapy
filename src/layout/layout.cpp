@@ -81,7 +81,7 @@ void LayoutImpl::init_buffers(MeshBlockImpl const* pmb, Variables const& vars,
                               std::vector<std::string> const& names) {
   if (options->verbose()) {
     std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Initializing communication buffers...\n";
+              << "] Initializing communication buffers\n";
   }
 
   // Initialize vectors to size 9 (2D decomposition) with empty tensors
@@ -132,6 +132,10 @@ void LayoutImpl::init_buffers(MeshBlockImpl const* pmb, Variables const& vars,
 }
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables const& vars) {
+  if (options->verbose() && is_root()) {
+    std::cout << "[Layout] serializing data into send buffers\n";
+  }
+
   // Iterate over all 2D neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
@@ -156,6 +160,10 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables const& vars) {
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars) const {
+  if (options->verbose() && is_root()) {
+    std::cout << "[Layout] deserializing data from receive buffers\n";
+  }
+
   // Iterate over all 2D neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
@@ -185,7 +193,7 @@ void LayoutImpl::_init_backend() {
 
   if (options->verbose()) {
     std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Initializing distributed environment...\n";
+              << "] Initializing distributed environment\n";
   }
 
   // 1. Build the store
