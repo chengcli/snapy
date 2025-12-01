@@ -228,8 +228,10 @@ MetadataTable* MetadataTable::myptr_ = nullptr;
 
 std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend) {
   auto m = pmb->named_modules()["hydro.eos.thermo"];
+  if (!m) return "";
+
   auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
-  auto species = thermo->options.species();
+  auto species = thermo->options->species();
 
   std::string result = prepend + species[1];
   for (int i = 2; i < species.size(); ++i) {

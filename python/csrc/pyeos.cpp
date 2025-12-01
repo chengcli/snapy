@@ -5,7 +5,6 @@
 #include <kintera/thermo/thermo.hpp>
 
 // snap
-#include <snap/eos/eos_formatter.hpp>
 #include <snap/eos/equation_of_state.hpp>
 
 // python
@@ -15,27 +14,37 @@ namespace py = pybind11;
 
 void bind_eos(py::module &m) {
   auto pyEquationOfStateOptions =
-      py::class_<snap::EquationOfStateOptions>(m, "EquationOfStateOptions");
+      py::class_<snap::EquationOfStateOptionsImpl,
+                 snap::EquationOfStateOptions>(m, "EquationOfStateOptions");
 
   pyEquationOfStateOptions.def(py::init<>())
+      .def_static("from_yaml", &snap::EquationOfStateOptionsImpl::from_yaml,
+                  py::arg("filename"), py::arg("verobse") = false)
       .def("__repr__",
            [](const snap::EquationOfStateOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("EquationOfStateOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(std::string, snap::EquationOfStateOptions, type)
-      .ADD_OPTION(double, snap::EquationOfStateOptions, density_floor)
-      .ADD_OPTION(double, snap::EquationOfStateOptions, pressure_floor)
-      .ADD_OPTION(bool, snap::EquationOfStateOptions, limiter)
-      .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptions, thermo)
-      .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptions, coord);
+      .ADD_OPTION(std::string, snap::EquationOfStateOptionsImpl, type)
+      .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, density_floor)
+      .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, pressure_floor)
+      .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, temperature_floor)
+      .ADD_OPTION(bool, snap::EquationOfStateOptionsImpl, limiter)
+      .ADD_OPTION(bool, snap::EquationOfStateOptionsImpl, verbose)
+      .ADD_OPTION(std::string, snap::EquationOfStateOptionsImpl, eos_file)
+      .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptionsImpl,
+                  thermo)
+      .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptionsImpl,
+                  coord);
 
-  py::class_<snap::EquationOfStateImpl,
-             std::shared_ptr<snap::EquationOfStateImpl>>(m, "EquationOfState")
+  py::class_<snap::EquationOfStateImpl, snap::EquationOfState>(
+      m, "EquationOfState")
       .def("__repr__",
            [](const snap::EquationOfStateImpl &a) {
-             return fmt::format("EquationOfState(\n{})", a.options);
+             std::stringstream ss;
+             a.options->report(ss);
+             return fmt::format("EquationOfState(\n{})", ss.str());
            })
       .def("nvar", &snap::EquationOfStateImpl::nvar)
       .def("compute", &snap::EquationOfStateImpl::compute)

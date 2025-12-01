@@ -34,6 +34,7 @@ include_dirs = [
     f"{current_dir}/build/_deps/fmt-src/include",
     f'{current_dir}/build/_deps/yaml-cpp-src/include',
     f"{site_dir}/kintera",
+    f"{site_dir}/pyharp",
 ]
 
 # add homebrew directories if on MacOS

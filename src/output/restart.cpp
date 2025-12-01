@@ -17,7 +17,7 @@ namespace snap {
 RestartOutput::RestartOutput(OutputOptions const &options_)
     : OutputType(options_) {
   // restart files are always combined
-  options.combine(true);
+  options->combine(true);
 }
 
 void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
@@ -51,9 +51,9 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char number[6];
   snprintf(number, sizeof(number), "%05d", file_number);
   char blockid[12];
-  snprintf(blockid, sizeof(blockid), "block%d", pmb->pdist->options.rank());
+  snprintf(blockid, sizeof(blockid), "block%d", pmb->options->layout()->rank());
 
-  fname.append(pmb->options.basename());
+  fname.append(pmb->options->basename());
   fname.append(".");
   fname.append(blockid);
   fname.append(".");
@@ -67,7 +67,7 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   // save to disk
   kintera::save_tensors(out_vars, fname);
 
-  if (options.combine()) {
+  if (options->combine()) {
     combine_blocks(pmb, final_write);
   }
 }

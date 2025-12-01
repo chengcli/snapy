@@ -22,9 +22,9 @@ void run_demo(snap::CubedSphereLayoutImpl const &cs, int rx, int ry, int face) {
 }
 
 int main(void) {
-  snap::LayoutOptions op;
-  op.px(4);
-  op.py(4);
+  auto op = snap::LayoutOptionsImpl::create();
+  op->px(4);
+  op->py(4);
 
   snap::CubedSphereLayoutImpl cs(op);
 

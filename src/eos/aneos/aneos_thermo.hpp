@@ -17,6 +17,10 @@ class ANEOSThermoImpl : public torch::nn::Cloneable<ANEOSThermoImpl> {
   //! cached properties
   std::map<std::string, torch::Tensor> cache;
 
+  static std::shared_ptr<ANEOSThermoImpl> create(
+      std::string const& filename, torch::nn::Module* p,
+      std::string const& name = "thermo");
+
   ANEOSThermoImpl() = default;
   explicit ANEOSThermoImpl(const std::string& fname);
   void reset() override;

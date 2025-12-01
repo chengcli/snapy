@@ -33,7 +33,7 @@ set(namel snap)
 string(TOUPPER ${namel} nameu)
 
 file(GLOB src_files
-    *.cpp
+    #*.cpp
     bc/*.cpp
     coord/*.cpp
     eos/*.cpp
@@ -41,14 +41,12 @@ file(GLOB src_files
     hydro/*.cpp
     riemann/*.cpp
     recon/*.cpp
-    column/*.cpp
     mesh/*.cpp
     output/*.cpp
     scalar/*.cpp
     utils/*.cpp
     forcing/*.cpp
     implicit/*.cpp
-    intg/*.cpp
     input/*.cpp
     sedimentation/*.cpp
     layout/*.cpp
@@ -84,13 +82,13 @@ add_library(snapy::snap ALIAS ${namel}_${buildl})
 if (CUDAToolkit_FOUND)
   file(GLOB cu_src_files
       bc/*.cu
-      eos/*.cu
-      eos/aneos/*.cu
-      intg/*.cu
-      recon/*.cu
-      riemann/*.cu
-      implicit/*.cu
-      utils/*.cu
+      #eos/*.cu
+      #eos/aneos/*.cu
+      #intg/*.cu
+      #recon/*.cu
+      #riemann/*.cu
+      #implicit/*.cu
+      #utils/*.cu
       )
 
   add_library(${namel}_cuda_${buildl}

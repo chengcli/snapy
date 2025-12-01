@@ -6,8 +6,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "eos_dispatch.hpp"
 #include "ideal_gas.hpp"
 
@@ -19,11 +17,8 @@ IdealGasImpl::IdealGasImpl(EquationOfStateOptions const &options_)
 }
 
 void IdealGasImpl::reset() {
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
-
-  // set up thermodynamics model
-  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
+  pcoord = CoordinateImpl::create(options->coord(), this);
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 }
 
 torch::Tensor IdealGasImpl::compute(std::string ab,
@@ -52,7 +47,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
   } else if (ab == "W->A") {
     auto w = args[0];
     auto gammad =
-        (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
+        (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
     return gammad * torch::ones_like(w[IDN]);
   } else if (ab == "WA->L") {
     auto w = args[0];
@@ -91,7 +86,7 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
 
   auto gammad =
-      (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
+      (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -108,7 +103,7 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 
 torch::Tensor IdealGasImpl::_prim2intEng(torch::Tensor prim) {
   auto gammad =
-      (pthermo->options.cref_R()[0] + 1) / pthermo->options.cref_R()[0];
+      (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
   return prim[IPR] / (gammad - 1);
 }
 

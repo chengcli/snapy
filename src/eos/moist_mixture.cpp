@@ -7,8 +7,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "moist_mixture.hpp"
 
 namespace snap {
@@ -19,11 +17,8 @@ MoistMixtureImpl::MoistMixtureImpl(EquationOfStateOptions const &options_)
 }
 
 void MoistMixtureImpl::reset() {
-  // set up coordinate model
-  pcoord = register_module_op(this, "coord", options.coord());
-
-  // set up thermodynamics model
-  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
+  pcoord = CoordinateImpl::create(options->coord(), this);
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 
   // populate buffers
   ivol = register_buffer("ivol", torch::empty({0}, torch::kFloat64));
@@ -63,8 +58,8 @@ torch::Tensor MoistMixtureImpl::compute(
     auto w = args[0];
 
     if (!_check_copy(w, w1)) {
-      int ny = pthermo->options.vapor_ids().size() +
-               pthermo->options.cloud_ids().size() - 1;
+      int ny = pthermo->options->vapor_ids().size() +
+               pthermo->options->cloud_ids().size() - 1;
       ivol.set_(pthermo->compute("DY->V", {w[IDN], w.narrow(0, ICY, ny)}));
       temp.set_(pthermo->compute("PV->T", {w[IPR], ivol}));
     }
@@ -75,8 +70,8 @@ torch::Tensor MoistMixtureImpl::compute(
     auto gamma = args[1];
 
     if (!_check_copy(w, w1)) {
-      int ny = pthermo->options.vapor_ids().size() +
-               pthermo->options.cloud_ids().size() - 1;
+      int ny = pthermo->options->vapor_ids().size() +
+               pthermo->options->cloud_ids().size() - 1;
       ivol.set_(pthermo->compute("DY->V", {w[IDN], w.narrow(0, ICY, ny)}));
       temp.set_(pthermo->compute("PV->T", {w[IPR], ivol}));
     }
@@ -90,8 +85,8 @@ torch::Tensor MoistMixtureImpl::compute(
 
 void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
-  int ny = pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size() - 1;
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
 
   // den -> den
   auto out = cons[IDN];
@@ -119,8 +114,8 @@ void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
 void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
-  int ny = pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size() - 1;
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
 
   // den -> den
   auto out = prim[IDN];
@@ -150,8 +145,8 @@ void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 
 torch::Tensor MoistMixtureImpl::_prim2intEng(torch::Tensor prim) {
   if (!_check_copy(prim, w1)) {
-    int ny = pthermo->options.vapor_ids().size() +
-             pthermo->options.cloud_ids().size() - 1;
+    int ny = pthermo->options->vapor_ids().size() +
+             pthermo->options->cloud_ids().size() - 1;
     ivol.set_(pthermo->compute("DY->V", {prim[IDN], prim.narrow(0, ICY, ny)}));
     temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
   }
@@ -160,8 +155,8 @@ torch::Tensor MoistMixtureImpl::_prim2intEng(torch::Tensor prim) {
 
 torch::Tensor MoistMixtureImpl::_prim2temp(torch::Tensor prim) {
   if (!_check_copy(prim, w1)) {
-    int ny = pthermo->options.vapor_ids().size() +
-             pthermo->options.cloud_ids().size() - 1;
+    int ny = pthermo->options->vapor_ids().size() +
+             pthermo->options->cloud_ids().size() - 1;
     auto yfrac = prim.narrow(0, ICY, ny);
     ivol.set_(pthermo->compute("DY->V", {prim[IDN], yfrac}));
     temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
@@ -171,8 +166,8 @@ torch::Tensor MoistMixtureImpl::_prim2temp(torch::Tensor prim) {
 }
 
 torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {
-  int ny = pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size() - 1;
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
 
   auto yfrac = prim.narrow(0, ICY, ny);
 
@@ -194,8 +189,8 @@ torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {
 }
 
 torch::Tensor MoistMixtureImpl::_cons2ke(torch::Tensor cons) {
-  int ny = pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size() - 1;
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
   auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);
   auto mom = cons.narrow(0, IVX, 3).clone();
   pcoord->vec_raise_(mom);
@@ -204,8 +199,8 @@ torch::Tensor MoistMixtureImpl::_cons2ke(torch::Tensor cons) {
 
 torch::Tensor MoistMixtureImpl::_temp2intEng(torch::Tensor cons,
                                              torch::Tensor T) {
-  int ny = pthermo->options.vapor_ids().size() +
-           pthermo->options.cloud_ids().size() - 1;
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
   auto vec = T.sizes().vec();
   vec.push_back(ny + 1);
 
@@ -229,7 +224,7 @@ torch::Tensor MoistMixtureImpl::_adiabatic_index(torch::Tensor V,
 torch::Tensor MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor V,
                                                         torch::Tensor T,
                                                         torch::Tensor dens) {
-  int nvapor = pthermo->options.vapor_ids().size();
+  int nvapor = pthermo->options->vapor_ids().size();
   auto conc_gas = (V * pthermo->inv_mu).narrow(-1, 0, nvapor);
   auto cz = kintera::eval_czh(T, conc_gas, pthermo->options);
   auto cz_ddC = kintera::eval_czh_ddC(T, conc_gas, pthermo->options);

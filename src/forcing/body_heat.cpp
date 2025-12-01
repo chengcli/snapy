@@ -6,18 +6,22 @@
 
 namespace snap {
 
-BodyHeatOptions BodyHeatOptions::from_yaml(YAML::Node const& node) {
-  BodyHeatOptions op;
+BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["body-heat"]) return nullptr;
 
-  op.dTdt() = node["dTdt"].as<double>(0.0);
-  op.pmin() = node["pmin"].as<double>(0.0);
-  op.pmax() = node["pmax"].as<double>(1.0e6);
+  auto node = forcing["body-heat"];
+  auto op = BodyHeatOptionsImpl::create();
+
+  op->dTdt() = node["dTdt"].as<double>(0.0);
+  op->pmin() = node["pmin"].as<double>(0.0);
+  op->pmax() = node["pmax"].as<double>(1.0e6);
 
   return op;
 }
 
 void BodyHeatImpl::reset() {
-  pthermo = register_module("thermo", kintera::ThermoY(options.thermo()));
+  TORCH_CHECK(options->thermo(), "[BodyHeat] thermo is null.");
+  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 }
 
 torch::Tensor BodyHeatImpl::forward(torch::Tensor du, torch::Tensor w,

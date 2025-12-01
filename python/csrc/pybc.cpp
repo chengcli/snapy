@@ -7,8 +7,8 @@
 
 // snap
 #include <snap/bc/bc.hpp>
-#include <snap/bc/bc_formatter.hpp>
 #include <snap/bc/internal_boundary.hpp>
+#include <snap/coord/coordinate.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -38,19 +38,21 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
   auto pyInternalBoundaryOptions =
-      py::class_<snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
+      py::class_<snap::InternalBoundaryOptionsImpl,
+                 snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
 
   pyInternalBoundaryOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::InternalBoundaryOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("InternalBoundaryOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(int, snap::InternalBoundaryOptions, nghost)
-      .ADD_OPTION(int, snap::InternalBoundaryOptions, max_iter)
-      .ADD_OPTION(double, snap::InternalBoundaryOptions, solid_density)
-      .ADD_OPTION(double, snap::InternalBoundaryOptions, solid_pressure);
+      .ADD_OPTION(int, snap::InternalBoundaryOptionsImpl, max_iter)
+      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_density)
+      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_pressure)
+      .ADD_OPTION(snap::CoordinateOptions, snap::InternalBoundaryOptionsImpl,
+                  coord);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
       .def("mark_prim_solid_", &snap::InternalBoundaryImpl::mark_prim_solid_)

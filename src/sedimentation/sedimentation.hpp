@@ -8,9 +8,6 @@
 // kintera
 #include <kintera/utils/format.hpp>
 
-// snap
-#include <snap/eos/equation_of_state.hpp>
-
 // arg
 #include <snap/add_arg.h>
 
@@ -20,14 +17,26 @@ class Node;
 
 namespace snap {
 
-struct SedVelOptions {
-  static SedVelOptions from_yaml(YAML::Node const& config);
+struct ConstGravityOptionsImpl;
+using ConstGravityOptions = std::shared_ptr<ConstGravityOptionsImpl>;
+
+struct EquationOfStateOptionsImpl;
+using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
+
+class EquationOfStateImpl;
+using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
+
+struct SedVelOptionsImpl {
+  static std::shared_ptr<SedVelOptionsImpl> create() {
+    return std::make_shared<SedVelOptionsImpl>();
+  }
+  static std::shared_ptr<SedVelOptionsImpl> from_yaml(YAML::Node const& node);
+
   void report(std::ostream& os) const {
     os << "* particle_ids = " << fmt::format("{}", particle_ids()) << "\n"
        << "* radius = " << fmt::format("{}", radius()) << "\n"
        << "* density = " << fmt::format("{}", density()) << "\n"
        << "* const_vsed = " << fmt::format("{}", const_vsed()) << "\n"
-       << "* grav = " << grav() << "\n"
        << "* a_diameter = " << a_diameter() << "\n"
        << "* a_epsilon_LJ = " << a_epsilon_LJ() << "\n"
        << "* a_mass = " << a_mass() << "\n"
@@ -47,8 +56,6 @@ struct SedVelOptions {
   //! additional constant sedimentation velocity
   ADD_ARG(std::vector<double>, const_vsed) = {};
 
-  ADD_ARG(double, grav) = 0.;
-
   //! default H2-atmosphere properties
   //! diameter of molecule [m]
   ADD_ARG(double, a_diameter) = 2.827e-10;
@@ -61,12 +68,22 @@ struct SedVelOptions {
 
   //! upper limit of sedimentation velocity [m/s]
   ADD_ARG(double, upper_limit) = 5.e3;
-};
 
-struct SedHydroOptions {
+  //! submodules options
+  ADD_ARG(ConstGravityOptions, grav) = nullptr;
+};
+using SedVelOptions = std::shared_ptr<SedVelOptionsImpl>;
+
+struct SedHydroOptionsImpl {
+  static std::shared_ptr<SedHydroOptionsImpl> create() {
+    return std::make_shared<SedHydroOptionsImpl>();
+  }
+  static std::shared_ptr<SedHydroOptionsImpl> from_yaml(
+      std::string const& filename);
+
   void report(std::ostream& os) const {
     os << "* hydro_ids = " << fmt::format("{}", hydro_ids()) << "\n";
-    sedvel().report(os);
+    sedvel()->report(os);
   }
 
   //! id of precipitating particles in hydro
@@ -76,9 +93,24 @@ struct SedHydroOptions {
   ADD_ARG(EquationOfStateOptions, eos);
   ADD_ARG(SedVelOptions, sedvel);
 };
+using SedHydroOptions = std::shared_ptr<SedHydroOptionsImpl>;
 
 class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
  public:
+  //! Create and register a `SedVel` module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] options  options for creating the `SedVel` module
+   * \param[in] p        parent module for registering the created module
+   * \param[in] name     name for registering the created module
+   * \return           created `SedVel` module
+   */
+  static std::shared_ptr<SedVelImpl> create(SedVelOptions const& opts,
+                                            torch::nn::Module* p,
+                                            std::string const& name = "sedvel");
+
   //! particle radius and density
   //! 1D tensor of number of particles
   //! radius and density must have the same size
@@ -88,6 +120,7 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
   SedVelOptions options;
 
   //! Constructor to initialize the layers
+  SedVelImpl() : options(SedVelOptionsImpl::create()) {}
   explicit SedVelImpl(SedVelOptions const& options_) : options(options_) {
     reset();
   }
@@ -108,6 +141,10 @@ TORCH_MODULE(SedVel);
 
 class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
  public:
+  static std::shared_ptr<SedHydroImpl> create(SedHydroOptions const& opts,
+                                              torch::nn::Module* p,
+                                              std::string const& name = "sed");
+
   //! cache
   torch::Tensor vsed;
 
@@ -122,6 +159,7 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
   SedHydroOptions options;
 
   //! Constructor to initialize the layers
+  SedHydroImpl() : options(SedHydroOptionsImpl::create()) {}
   explicit SedHydroImpl(SedHydroOptions const& options_) : options(options_) {
     reset();
   }

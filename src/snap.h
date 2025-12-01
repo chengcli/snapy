@@ -5,8 +5,6 @@
 
 namespace snap {
 
-extern int my_rank, nranks;
-
 #if NMASS > 0  // use legacy Athena++ indexing scheme
 
 enum Index {

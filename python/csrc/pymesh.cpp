@@ -5,7 +5,6 @@
 #include <torch/extension.h>
 
 // snap
-#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
@@ -16,16 +15,18 @@ namespace py = pybind11;
 
 void bind_mesh(py::module &m) {
   auto pyMeshBlockOptions =
-      py::class_<snap::MeshBlockOptions>(m, "MeshBlockOptions");
+      py::class_<snap::MeshBlockOptionsImpl, snap::MeshBlockOptions>(
+          m, "MeshBlockOptions");
 
   pyMeshBlockOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::MeshBlockOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
            })
-      .def_static("from_yaml", &snap::MeshBlockOptions::from_yaml)
+      .def_static("from_yaml", &snap::MeshBlockOptionsImpl::from_yaml,
+                  py::arg("filename"), py::arg("verbose") = false)
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,
@@ -42,46 +43,45 @@ void bind_mesh(py::module &m) {
               };
             }
 
-            if (self.bfuncs().empty()) {
+            if (self->bfuncs().empty()) {
               throw std::runtime_error(
                   "Cannot set boundary function when bfuncs is empty.");
-            } else if (self.bfuncs().size() == 2) {
+            } else if (self->bfuncs().size() == 2) {
               if (dx3 != 0 || dx2 != 0) {
                 throw std::runtime_error(
                     "Only dx1 can be non-zero when bfuncs has size 2.");
               }
-            } else if (self.bfuncs().size() == 4) {
+            } else if (self->bfuncs().size() == 4) {
               if (dx3 != 0) {
                 throw std::runtime_error(
                     "Only dx1 and dx2 can be non-zero when bfuncs has size 4.");
               }
-            } else if (self.bfuncs().size() != 6) {
+            } else if (self->bfuncs().size() != 6) {
               throw std::runtime_error(
                   "bfuncs must have size 2, 4, or 6 to set boundary "
                   "functions.");
             }
 
             if (dx3 == 0 && dx2 == 0 && dx1 == -1) {
-              self.bfuncs()[0] = func;
+              self->bfuncs()[0] = func;
             } else if (dx3 == 0 && dx2 == 0 && dx1 == 1) {
-              self.bfuncs()[1] = func;
+              self->bfuncs()[1] = func;
             } else if (dx3 == 0 && dx2 == -1 && dx1 == 0) {
-              self.bfuncs()[2] = func;
+              self->bfuncs()[2] = func;
             } else if (dx3 == 0 && dx2 == 1 && dx1 == 0) {
-              self.bfuncs()[3] = func;
+              self->bfuncs()[3] = func;
             } else if (dx3 == -1 && dx2 == 0 && dx1 == 0) {
-              self.bfuncs()[4] = func;
+              self->bfuncs()[4] = func;
             } else if (dx3 == 1 && dx2 == 0 && dx1 == 0) {
-              self.bfuncs()[5] = func;
+              self->bfuncs()[5] = func;
             }
           },
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
-      .ADD_OPTION(snap::IntegratorOptions, snap::MeshBlockOptions, intg)
-      .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptions, hydro)
-      .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptions, scalar)
-      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptions, bfuncs)
-      .ADD_OPTION(snap::DistributeEnvOptions, snap::MeshBlockOptions, dist)
-      .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptions, layout);
+      .ADD_OPTION(harp::IntegratorOptions, snap::MeshBlockOptionsImpl, intg)
+      .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptionsImpl, hydro)
+      .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptionsImpl, scalar)
+      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptionsImpl, bfuncs)
+      .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptionsImpl, layout);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def("inc_cycle",
@@ -129,6 +129,5 @@ void bind_mesh(py::module &m) {
            })
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
-      .def("exchange", &snap::MeshBlockImpl::exchange)
       .def("check_redo", &snap::MeshBlockImpl::check_redo);
 }

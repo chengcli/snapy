@@ -2,16 +2,19 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/snap.h>
-
 #include "forcing.hpp"
 
 namespace snap {
 
-DiffusionOptions DiffusionOptions::from_yaml(YAML::Node const& node) {
-  DiffusionOptions op;
-  op.K() = node["K"].as<double>(0.);
-  op.type() = node["type"].as<std::string>("theta");
+DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["diffusion"]) return nullptr;
+
+  auto node = forcing["diffusion"];
+  auto op = DiffusionOptionsImpl::create();
+
+  op->K() = node["K"].as<double>(0.);
+  op->type() = node["type"].as<std::string>("theta");
+
   return op;
 }
 

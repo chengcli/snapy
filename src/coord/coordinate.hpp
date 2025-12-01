@@ -10,7 +10,6 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/layout/layout.hpp>
 #include <snap/mesh/mesh_functions.hpp>
 
 #include "coordgen.hpp"
@@ -18,20 +17,23 @@
 // arg
 #include <snap/add_arg.h>
 
-namespace YAML {
-class Node;
-}
-
 namespace snap {
 using IndexRange = std::vector<torch::indexing::TensorIndex>;
 
-struct CoordinateOptions {
-  static CoordinateOptions from_yaml(const YAML::Node &node,
-                                     LayoutOptions layout = LayoutOptions());
-  CoordinateOptions() = default;
+struct EquationOfStateOptionsImpl;
+using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
+
+struct CoordinateOptionsImpl {
+  static std::shared_ptr<CoordinateOptionsImpl> create() {
+    return std::make_shared<CoordinateOptionsImpl>();
+  }
+
+  static std::shared_ptr<CoordinateOptionsImpl> from_yaml(
+      std::string const &filename);
+
+  CoordinateOptionsImpl() = default;
   void report(std::ostream &os) const {
     os << "* type = " << type() << "\n"
-       << "* eos_type = " << eos_type() << "\n"
        << "* x1min = " << x1min() << "\n"
        << "* x2min = " << x2min() << "\n"
        << "* x3min = " << x3min() << "\n"
@@ -44,13 +46,11 @@ struct CoordinateOptions {
        << "* nghost = " << nghost() << "\n";
   }
 
-  int64_t nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
-  int64_t nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
-  int64_t nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
+  int nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
+  int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
+  int nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
 
   ADD_ARG(std::string, type) = "cartesian";
-  ADD_ARG(std::string, eos_type) = "ideal-gas";
-
   ADD_ARG(double, x1min) = 0.;
   ADD_ARG(double, x2min) = 0.;
   ADD_ARG(double, x3min) = 0.;
@@ -61,12 +61,32 @@ struct CoordinateOptions {
   ADD_ARG(int, nx2) = 1;
   ADD_ARG(int, nx3) = 1;
   ADD_ARG(int, nghost) = 1;
+
+  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
+using CoordinateOptions = std::shared_ptr<CoordinateOptionsImpl>;
 
 class CoordinateImpl {
  public:
+  //! Create and register a `Coordinate` module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the `Coordinate` module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  name for the created module
+   * \return          created `Coordinate` module
+   */
+  static std::shared_ptr<CoordinateImpl> create(
+      CoordinateOptions const &opts, torch::nn::Module *p,
+      std::string const &name = "coord");
+
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
+
+  CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
+  explicit CoordinateImpl(const CoordinateOptions &options_);
 
   //! data
   torch::Tensor x1f, x2f, x3f;
@@ -75,26 +95,26 @@ class CoordinateImpl {
 
   virtual ~CoordinateImpl() = default;
 
-  int is() const { return options.nx1() > 1 ? options.nghost() : 0; }
+  int is() const { return options->nx1() > 1 ? options->nghost() : 0; }
 
   int ie() const {
-    return options.nx1() > 1 ? options.nghost() + options.nx1() - 1 : 0;
+    return options->nx1() > 1 ? options->nghost() + options->nx1() - 1 : 0;
   }
 
-  int js() const { return options.nx2() > 1 ? options.nghost() : 0; }
+  int js() const { return options->nx2() > 1 ? options->nghost() : 0; }
 
   int je() const {
-    return options.nx2() > 1 ? options.nghost() + options.nx2() - 1 : 0;
+    return options->nx2() > 1 ? options->nghost() + options->nx2() - 1 : 0;
   }
 
-  int ks() const { return options.nx3() > 1 ? options.nghost() : 0; }
+  int ks() const { return options->nx3() > 1 ? options->nghost() : 0; }
 
   int ke() const {
-    return options.nx3() > 1 ? options.nghost() + options.nx3() - 1 : 0;
+    return options->nx3() > 1 ? options->nghost() + options->nx3() - 1 : 0;
   }
 
   void print(std::ostream &stream) const;
-  virtual void reset_coordinates(std::vector<MeshGenerator> meshgens);
+  virtual void reset_coordinates(std::array<MeshGenerator, 3> meshgens);
 
   //! module methods
   virtual torch::Tensor center_width1() const;
@@ -161,16 +181,7 @@ class CoordinateImpl {
   //! fluxes -> flux divergence
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                                 torch::Tensor flux2, torch::Tensor flux3);
-
- protected:
-  //! Disable default constructor
-  CoordinateImpl() = default;
-  explicit CoordinateImpl(const CoordinateOptions &options_);
-
- private:
-  std::string name_() const { return "snap::CoordinateImpl"; }
 };
-
 using Coordinate = std::shared_ptr<CoordinateImpl>;
 
 class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
@@ -189,7 +200,7 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
     print(stream);
   }
 
-  void reset_coordinates(std::vector<MeshGenerator> meshgens) override;
+  void reset_coordinates(std::array<MeshGenerator, 3> meshgens) override;
 };
 TORCH_MODULE(Cartesian);
 

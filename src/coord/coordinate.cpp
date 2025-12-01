@@ -4,17 +4,22 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/layout/distribute_env.hpp>
+#include <snap/eos/equation_of_state.hpp>
+#include <snap/layout/layout.hpp>
 
 #include "coordinate.hpp"
 
 namespace snap {
 
-CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node,
-                                               LayoutOptions layout) {
-  CoordinateOptions op;
+CoordinateOptions CoordinateOptionsImpl::from_yaml(
+    std::string const& filename) {
+  auto op = CoordinateOptionsImpl::create();
 
-  op.type(node["type"].as<std::string>("cartesian"));
+  auto config = YAML::LoadFile(filename);
+  auto node = config["geometry"];
+  if (!node) return op;  // return default options
+
+  op->type(node["type"].as<std::string>("cartesian"));
 
   double x1min = 0, x2min = 0, x3min = 0, x1max = 1, x2max = 1, x3max = 1;
 
@@ -28,73 +33,72 @@ CoordinateOptions CoordinateOptions::from_yaml(const YAML::Node& node,
     x3max = node["bounds"]["x3max"].as<double>(1.0);
   }
 
-  // construct a temporay playout
-  int rank = get_rank();
-  auto playout = create_layout(layout);
+  auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));
+  int rank = playout->options->rank();
   auto iloc = playout->loc_of(rank);
 
-  int lx1 = layout.type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
+  int lx1 = playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
 
-  int nb1 = layout.pz();
-  int nb2 = layout.py();
-  int nb3 = layout.px();
+  int nb1 = playout->options->pz();
+  int nb2 = playout->options->py();
+  int nb3 = playout->options->px();
 
-  op.x1min() = x1min + lx1 * (x1max - x1min) / nb1;
-  op.x1max() = op.x1min() + (x1max - x1min) / nb1;
+  op->x1min() = x1min + lx1 * (x1max - x1min) / nb1;
+  op->x1max() = op->x1min() + (x1max - x1min) / nb1;
 
-  op.x2min() = x2min + lx2 * (x2max - x2min) / nb2;
-  op.x2max() = op.x2min() + (x2max - x2min) / nb2;
+  op->x2min() = x2min + lx2 * (x2max - x2min) / nb2;
+  op->x2max() = op->x2min() + (x2max - x2min) / nb2;
 
-  op.x3min() = x3min + lx3 * (x3max - x3min) / nb3;
-  op.x3max() = op.x3min() + (x3max - x3min) / nb3;
+  op->x3min() = x3min + lx3 * (x3max - x3min) / nb3;
+  op->x3max() = op->x3min() + (x3max - x3min) / nb3;
 
   if (!node["cells"]) return op;
 
-  op.nx1() = node["cells"]["nx1"].as<int>(1);
-  if (op.nx1() % nb1 != 0) {
+  op->nx1() = node["cells"]["nx1"].as<int>(1);
+  if (op->nx1() % nb1 != 0) {
     TORCH_CHECK(
         false,
         "Number of total x1 grids must be divisible by the number of mesh "
         "blocks in x1 direction");
   } else {
-    op.nx1() /= nb1;
+    op->nx1() /= nb1;
   }
 
-  op.nx2() = node["cells"]["nx2"].as<int>(1);
-  if (op.nx2() % nb2 != 0) {
+  op->nx2() = node["cells"]["nx2"].as<int>(1);
+  if (op->nx2() % nb2 != 0) {
     TORCH_CHECK(
         false,
         "Number of total x2 grids must be divisible by the number of mesh "
         "blocks in x2 direction");
   } else {
-    op.nx2() /= nb2;
+    op->nx2() /= nb2;
   }
 
-  op.nx3() = node["cells"]["nx3"].as<int>(1);
-  if (op.nx3() % nb3 != 0) {
+  op->nx3() = node["cells"]["nx3"].as<int>(1);
+  if (op->nx3() % nb3 != 0) {
     TORCH_CHECK(
         false,
         "Number of totla x3 grids must be divisible by the number of mesh "
         "blocks in x3 direction");
   } else {
-    op.nx3() /= nb3;
+    op->nx3() /= nb3;
   }
 
-  op.nghost() = node["cells"]["nghost"].as<int>(1);
+  op->nghost() = node["cells"]["nghost"].as<int>(1);
 
-  if (op.nx1() > 1 && op.nx1() < op.nghost()) {
+  if (op->nx1() > 1 && op->nx1() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x1 grids must be greater than the ghost zone size");
   }
 
-  if (op.nx2() > 1 && op.nx2() < op.nghost()) {
+  if (op->nx2() > 1 && op->nx2() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x2 grids must be greater than the ghost zone size");
   }
 
-  if (op.nx3() > 1 && op.nx3() < op.nghost()) {
+  if (op->nx3() > 1 && op->nx3() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x3 grids must be greater than the ghost zone size");
   }
@@ -106,45 +110,44 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
     : options(options_) {
   auto const& op = options;
 
-  auto dx = (op.x1max() - op.x1min()) / op.nx1();
-  auto x1min = op.nx1() > 1 ? op.x1min() - op.nghost() * dx : op.x1min();
-  auto x1max = op.nx1() > 1 ? op.x1max() + op.nghost() * dx : op.x1max();
-  x1f = torch::linspace(x1min, x1max, op.nc1() + 1, torch::kFloat64);
+  auto dx = (op->x1max() - op->x1min()) / op->nx1();
+  auto x1min = op->nx1() > 1 ? op->x1min() - op->nghost() * dx : op->x1min();
+  auto x1max = op->nx1() > 1 ? op->x1max() + op->nghost() * dx : op->x1max();
+  x1f = torch::linspace(x1min, x1max, op->nc1() + 1, torch::kFloat64);
 
-  dx = (op.x2max() - op.x2min()) / op.nx2();
-  auto x2min = op.nx2() > 1 ? op.x2min() - op.nghost() * dx : op.x2min();
-  auto x2max = op.nx2() > 1 ? op.x2max() + op.nghost() * dx : op.x2max();
-  x2f = torch::linspace(x2min, x2max, op.nc2() + 1, torch::kFloat64);
+  dx = (op->x2max() - op->x2min()) / op->nx2();
+  auto x2min = op->nx2() > 1 ? op->x2min() - op->nghost() * dx : op->x2min();
+  auto x2max = op->nx2() > 1 ? op->x2max() + op->nghost() * dx : op->x2max();
+  x2f = torch::linspace(x2min, x2max, op->nc2() + 1, torch::kFloat64);
 
-  dx = (op.x3max() - op.x3min()) / op.nx3();
-  auto x3min = op.nx3() > 1 ? op.x3min() - op.nghost() * dx : op.x3min();
-  auto x3max = op.nx3() > 1 ? op.x3max() + op.nghost() * dx : op.x3max();
-  x3f = torch::linspace(x3min, x3max, op.nc3() + 1, torch::kFloat64);
+  dx = (op->x3max() - op->x3min()) / op->nx3();
+  auto x3min = op->nx3() > 1 ? op->x3min() - op->nghost() * dx : op->x3min();
+  auto x3max = op->nx3() > 1 ? op->x3max() + op->nghost() * dx : op->x3max();
+  x3f = torch::linspace(x3min, x3max, op->nc3() + 1, torch::kFloat64);
 }
 
-void CoordinateImpl::reset_coordinates(std::vector<MeshGenerator> meshgens) {
+void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
   auto const& op = options;
-  TORCH_CHECK(meshgens.size() == 3, "requires exactly three mesh generators");
 
   if (meshgens[0] != nullptr) {
     int nx1f = x1f.size(0);
     auto rx = compute_logical_position(
         torch::linspace(0, nx1f, nx1f, torch::kFloat64), nx1f, true);
-    x1f.copy_(meshgens[0](rx, op.x1min(), op.x1max()));
+    x1f.copy_(meshgens[0](rx, op->x1min(), op->x1max()));
   }
 
   if (meshgens[1] != nullptr) {
     int nx2f = x2f.size(0);
     auto rx = compute_logical_position(
         torch::linspace(0, nx2f, nx2f, torch::kFloat64), nx2f, true);
-    x2f.copy_(meshgens[1](rx, op.x2min(), op.x2max()));
+    x2f.copy_(meshgens[1](rx, op->x2min(), op->x2max()));
   }
 
   if (meshgens[2] != nullptr) {
     int nx3f = x3f.size(0);
     auto rx = compute_logical_position(
         torch::linspace(0, nx3f, nx3f, torch::kFloat64), nx3f, true);
-    x3f.copy_(meshgens[2](rx, op.x3min(), op.x3max()));
+    x3f.copy_(meshgens[2](rx, op->x3min(), op->x3max()));
   }
 }
 
@@ -331,5 +334,24 @@ IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
   }
 
   return result;
+}
+
+Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
+                                  torch::nn::Module* p,
+                                  std::string const& name) {
+  TORCH_CHECK(p, "[Coordinate] Parent module is null");
+  TORCH_CHECK(opts, "[Coordinate] Options pointer is null");
+
+  if (opts->type() == "cartesian") {
+    return p->register_module(name, Cartesian(opts));
+  } else if (opts->type() == "cylindrical") {
+    return p->register_module(name, Cylindrical(opts));
+  } else if (opts->type() == "spherical-polar") {
+    return p->register_module(name, SphericalPolar(opts));
+  } else if (opts->type() == "cubed-sphere") {
+    return p->register_module(name, GnomonicEquiangle(opts));
+  } else {
+    TORCH_CHECK(false, "Unknown coordinate type: ", opts->type());
+  }
 }
 }  // namespace snap

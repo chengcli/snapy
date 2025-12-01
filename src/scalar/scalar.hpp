@@ -18,26 +18,57 @@
 #include <snap/add_arg.h>
 
 namespace snap {
-struct ScalarOptions {
-  static ScalarOptions from_yaml(std::string const& filename);
-  ScalarOptions() = default;
+struct ScalarOptionsImpl {
+  static std::shared_ptr<ScalarOptionsImpl> create() {
+    return std::make_shared<ScalarOptionsImpl>();
+  }
+  static std::shared_ptr<ScalarOptionsImpl> from_yaml(
+      std::string const& filename, bool verbose = false);
+  ScalarOptionsImpl() = default;
+  void report(std::ostream& os) const {
+    if (thermo()) {
+      os << "-- thermo options --\n";
+      thermo()->report(os);
+    }
+    if (kinetics()) {
+      os << "-- kinetics options --\n";
+      kinetics()->report(os);
+    }
+  }
+
+  ADD_ARG(bool, verbose) = false;
 
   //! Thermodynamics options
-  ADD_ARG(kintera::ThermoOptions, thermo);
+  ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
 
   //! Kinetics options
-  ADD_ARG(kintera::KineticsOptions, kinetics);
+  ADD_ARG(kintera::KineticsOptions, kinetics) = nullptr;
 
   //! submodules options
-  ADD_ARG(CoordinateOptions, coord);
-  ADD_ARG(ReconstructOptions, recon);
-  ADD_ARG(RiemannSolverOptions, riemann);
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
+  ADD_ARG(ReconstructOptions, recon) = nullptr;
+  ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 };
+using ScalarOptions = std::shared_ptr<ScalarOptionsImpl>;
 
 using Variables = std::map<std::string, torch::Tensor>;
 
 class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
  public:
+  //! \brief Create and register a `Scalar` module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the `Scalar` module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  name for registering the created module
+   * \return          created `Scalar` module
+   */
+  static std::shared_ptr<ScalarImpl> create(ScalarOptions const& opts,
+                                            torch::nn::Module* p,
+                                            std::string const& name = "scalar");
+
   //! options with which this `Scalar` was constructed
   ScalarOptions options;
 
@@ -50,7 +81,7 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   kintera::Kinetics pkinetics = nullptr;
 
   //! Constructor to initialize the layers
-  ScalarImpl() = default;
+  ScalarImpl() : options(ScalarOptionsImpl::create()) {}
   explicit ScalarImpl(const ScalarOptions& options_);
   void reset() override;
 
@@ -64,10 +95,6 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(double dt, torch::Tensor scalar_u,
                         Variables const& other);
-
- private:
-  //! cache
-  torch::Tensor _X, _V;
 };
 
 TORCH_MODULE(Scalar);

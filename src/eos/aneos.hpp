@@ -22,6 +22,7 @@ class ANEOSImpl : public EquationOfStateImpl,
   ANEOSImpl() = default;
   explicit ANEOSImpl(const EquationOfStateOptions& options_);
   void reset() override;
+  using EquationOfStateImpl::forward;
 
   //! The following transformations are need to implement the EOS
   /*!
@@ -38,9 +39,6 @@ class ANEOSImpl : public EquationOfStateImpl,
   torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
   }
-
-  //! forward function
-  torch::Tensor forward(torch::Tensor cons) { return compute("U->W", {cons}); }
 
  private:
   //! \brief Convert primitive variables to conserved variables.

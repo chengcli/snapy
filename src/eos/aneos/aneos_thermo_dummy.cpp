@@ -5,6 +5,11 @@
 #include "aneos_thermo.hpp"
 
 namespace snap {
+std::shared_ptr<ANEOSThermoImpl> ANEOSThermoImpl::create(
+    std::string const& filename, torch::nn::Module* p,
+    std::string const& name) {
+  return p->register_module("thermo", ANEOSThermo(filename));
+}
 
 __attribute__((weak)) ANEOSThermoImpl::ANEOSThermoImpl(
     const std::string& fname) {

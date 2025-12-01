@@ -7,18 +7,24 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/forcing/forcing.hpp>
 
 // arg
 #include <snap/add_arg.h>
 
 namespace snap {
 
-struct ImplicitOptions {
-  static ImplicitOptions from_yaml(const YAML::Node& root);
-  ImplicitOptions() = default;
+struct ImplicitOptionsImpl {
+  static std::shared_ptr<ImplicitOptionsImpl> create() {
+    return std::make_shared<ImplicitOptionsImpl>();
+  }
+  static std::shared_ptr<ImplicitOptionsImpl> from_yaml(
+      std::string const& filename, bool verbose = false);
+  static std::shared_ptr<ImplicitOptionsImpl> from_yaml(const YAML::Node& node);
+
+  ImplicitOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "* type = " << type() << "\n"
-       << "* grav = " << grav() << "\n"
        << "* scheme = " << scheme() << "\n";
   }
 
@@ -31,15 +37,30 @@ struct ImplicitOptions {
   }
 
   ADD_ARG(std::string, type) = "none";
-  ADD_ARG(double, grav) = 0.;
   ADD_ARG(int, scheme) = 0;
 
   //! submodules options
-  ADD_ARG(CoordinateOptions, coord);
+  ADD_ARG(ConstGravityOptions, grav) = nullptr;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
+using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
  public:
+  //! Create and register a ImplicitHydro module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `ImplicitHydro` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return created      `ImplicitHydro` module
+   */
+  static std::shared_ptr<ImplicitHydroImpl> create(
+      ImplicitOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "vic");
+
   //! options with which this `ImplicitHydro` was constructed
   ImplicitOptions options;
 
@@ -47,7 +68,7 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   Coordinate pcoord = nullptr;
 
   //! Constructor to initialize the layer
-  ImplicitHydroImpl() = default;
+  ImplicitHydroImpl() : options(ImplicitOptionsImpl::create()) {}
   explicit ImplicitHydroImpl(ImplicitOptions options);
   void reset() override;
 
@@ -64,6 +85,20 @@ TORCH_MODULE(ImplicitHydro);
 class ImplicitCorrectionImpl
     : public torch::nn::Cloneable<ImplicitCorrectionImpl> {
  public:
+  //! Create and register a ImplicitCorrection module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts      options for creating the `ImplicitCorrection` module
+   * \param[in] p         parent module for registering the created module
+   * \param[in] name      name for the created module
+   * \return              created `ImplicitCorrection` module
+   */
+  static std::shared_ptr<ImplicitCorrectionImpl> create(
+      ImplicitOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "icorr");
+
   //! options with which this `ImplicitCorrection` was constructed
   ImplicitOptions options;
 
@@ -71,7 +106,7 @@ class ImplicitCorrectionImpl
   ImplicitHydro pvic = nullptr;
 
   //! Constructor to initialize the layer
-  ImplicitCorrectionImpl() = default;
+  ImplicitCorrectionImpl() : options(ImplicitOptionsImpl::create()) {}
   explicit ImplicitCorrectionImpl(ImplicitOptions options);
   void reset() override;
 

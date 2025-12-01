@@ -4,22 +4,23 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "forcing.hpp"
 
 namespace snap {
 
-TopCoolOptions TopCoolOptions::from_yaml(YAML::Node const& node) {
-  TopCoolOptions op;
+TopCoolOptions TopCoolOptionsImpl::from_yaml(YAML::Node const& forcing) {
+  if (!forcing["top-cool"]) return nullptr;
 
-  op.flux() = node["flux"].as<double>(0.0);
+  auto node = forcing["top-cool"];
+  auto op = TopCoolOptionsImpl::create();
+
+  op->flux() = node["flux"].as<double>(0.0);
 
   return op;
 }
 
 void TopCoolImpl::reset() {
-  pcoord = register_module_op(this, "coord", options.coord());
+  pcoord = CoordinateImpl::create(options->coord(), this);
 }
 
 torch::Tensor TopCoolImpl::forward(torch::Tensor du, torch::Tensor w,

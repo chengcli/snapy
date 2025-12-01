@@ -14,6 +14,12 @@ class Node;
 
 namespace snap {
 
+struct CoordinateOptionsImpl;
+using CoordinateOptions = std::shared_ptr<CoordinateOptionsImpl>;
+
+struct ConstGravityOptionsImpl;
+using ConstGravityOptions = std::shared_ptr<ConstGravityOptionsImpl>;
+
 //! Calculate the hydrostatic pressure field.
 /*!
  * \param w hydro primitive variables
@@ -34,33 +40,56 @@ torch::Tensor calc_nonhydrostatic_pressure(torch::Tensor pres,
                                            torch::Tensor psf,
                                            double margin = 1.e-6);
 
-struct PrimitiveProjectorOptions {
-  static PrimitiveProjectorOptions from_yaml(YAML::Node const &node);
-  PrimitiveProjectorOptions() = default;
+struct PrimitiveProjectorOptionsImpl {
+  static std::shared_ptr<PrimitiveProjectorOptionsImpl> create() {
+    return std::make_shared<PrimitiveProjectorOptionsImpl>();
+  }
+  static std::shared_ptr<PrimitiveProjectorOptionsImpl> from_yaml(
+      std::string const &filename, bool verbose = false);
+  static std::shared_ptr<PrimitiveProjectorOptionsImpl> from_yaml(
+      YAML::Node const &node);
+
+  PrimitiveProjectorOptionsImpl() = default;
   void report(std::ostream &os) const {
     os << "* type = " << type() << "\n"
        << "* pressure-margin = " << margin() << "\n"
-       << "* grav = " << grav() << "\n"
-       << "* Rd = " << Rd() << "\n"
-       << "* nghost = " << nghost() << "\n";
+       << "* Rd = " << Rd() << "\n";
   }
 
   //! choose from ["none", "temperature"]
   ADD_ARG(std::string, type) = "none";
   ADD_ARG(double, margin) = 1.e-6;
-  ADD_ARG(int, nghost) = 1;
-  ADD_ARG(double, grav) = 0.;
   ADD_ARG(double, Rd) = 287.05;  // specific gas constant for dry air
+
+  //! submodule options
+  ADD_ARG(ConstGravityOptions, grav) = nullptr;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
+using PrimitiveProjectorOptions =
+    std::shared_ptr<PrimitiveProjectorOptionsImpl>;
 
 class PrimitiveProjectorImpl
     : public torch::nn::Cloneable<PrimitiveProjectorImpl> {
  public:
+  //! Create and register a PrimitiveProjector module
+  /*!
+   * This function registers the created module as a submodule
+   * of the given parent module `p`.
+   *
+   * \param[in] opts  options for creating the `PrimitiveProjector` module
+   * \param[in] p     parent module for registering the created module
+   * \param[in] name  name for the created module
+   * \return created  `PrimitiveProjector` module
+   */
+  static std::shared_ptr<PrimitiveProjectorImpl> create(
+      PrimitiveProjectorOptions const &opts, torch::nn::Module *p,
+      std::string const &name = "proj");
+
   //! options with which this `PrimitiveProjector` was constructed
   PrimitiveProjectorOptions options;
 
   //! Constructor to initialize the layer
-  PrimitiveProjectorImpl() = default;
+  PrimitiveProjectorImpl() : options(PrimitiveProjectorOptionsImpl::create()) {}
   explicit PrimitiveProjectorImpl(PrimitiveProjectorOptions options_);
   void reset() override;
 

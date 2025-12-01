@@ -16,20 +16,20 @@
 namespace snap {
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
-    : options(std::move(options_)) {
-  int nc1 = options.hydro().coord().nc1();
-  int nc2 = options.hydro().coord().nc2();
-  int nc3 = options.hydro().coord().nc3();
+    : options(options_) {
+  int nc1 = options->hydro()->coord()->nc1();
+  int nc2 = options->hydro()->coord()->nc2();
+  int nc3 = options->hydro()->coord()->nc3();
 
-  if (nc1 > 1 && options.bfuncs().size() < 2) {
+  if (nc1 > 1 && options->bfuncs().size() < 2) {
     throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 2");
   }
 
-  if (nc2 > 1 && options.bfuncs().size() < 4) {
+  if (nc2 > 1 && options->bfuncs().size() < 4) {
     throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 4");
   }
 
-  if (nc3 > 1 && options.bfuncs().size() < 6) {
+  if (nc3 > 1 && options->bfuncs().size() < 6) {
     throw std::runtime_error("MeshBlockImpl: bfuncs size must be at least 6");
   }
 
@@ -43,80 +43,95 @@ MeshBlockImpl::~MeshBlockImpl() {
 
 void MeshBlockImpl::reset() {
   // set up distributed environment
-  pdist = std::make_shared<DistributeEnvImpl>(options.dist());
-  playout = create_layout(options.layout());
+  playout = LayoutImpl::create(options->layout(), this);
 
-  int px = playout->options.px();
-  int py = playout->options.py();
-  int pz = playout->options.pz();
+  int px = options->layout()->px();
+  int py = options->layout()->py();
+  int pz = options->layout()->pz();
 
   int nranks = px * py * pz;
-  TORCH_CHECK(pdist->options.world_size() == nranks,
-              "MeshBlockImpl: world_size (", pdist->options.world_size(),
+  int rank = options->layout()->rank();
+
+  TORCH_CHECK(options->layout()->world_size() == nranks,
+              "MeshBlockImpl: world_size (", options->layout()->world_size(),
               ") does not match layout partitioning (", nranks, ").");
 
   // reset internal block boundaries
-  if (options.layout().type() != "cubed_sphere") {  // slab or cubed layout
-    auto iloc = playout->loc_of(pdist->options.rank());
+  if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
+    auto iloc = playout->loc_of(rank);
     // x1-dir
     auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
-      options.bfuncs()[BoundaryFace::kInnerX1] = nullptr;
+      options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
     }
     if (lx1 != pz - 1) {
-      options.bfuncs()[BoundaryFace::kOuterX1] = nullptr;
+      options->bfuncs()[BoundaryFace::kOuterX1] = nullptr;
     }
 
     // x2-dir
     auto lx2 = std::get<1>(iloc);
     if (lx2 != 0) {
-      options.bfuncs()[BoundaryFace::kInnerX2] = nullptr;
+      options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
     }
     if (lx2 != py - 1) {
-      options.bfuncs()[BoundaryFace::kOuterX2] = nullptr;
+      options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
     }
 
     // x3-dir
     auto lx3 = std::get<0>(iloc);
     if (lx3 != 0) {
-      options.bfuncs()[BoundaryFace::kInnerX3] = nullptr;
+      options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
     }
     if (lx3 != px - 1) {
-      options.bfuncs()[BoundaryFace::kOuterX3] = nullptr;
+      options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
+    }
+
+    if (options->verbose() && playout->is_root()) {
+      std::cout << "[MeshBlock] setting up rank bcs" << std::endl;
     }
   }
 
   // set up output
-  for (auto const& out_op : options.outputs()) {
-    if (out_op.file_type() == "restart") {
+  for (auto const& out_op : options->outputs()) {
+    if (out_op->file_type() == "restart") {
       output_types.push_back(std::make_shared<RestartOutput>(out_op));
-    } else if (out_op.file_type() == "netcdf") {
+    } else if (out_op->file_type() == "netcdf") {
       output_types.push_back(std::make_shared<NetcdfOutput>(out_op));
       /*} else if (out_op.file_type() == "hdf5") {
         output_types.push_back(
             std::make_shared<HDF5Output>(out_op));*/
     } else {
-      throw std::runtime_error("Output type '" + out_op.file_type() +
+      throw std::runtime_error("Output type '" + out_op->file_type() +
                                "' is not implemented.");
+    }
+
+    if (options->verbose() && playout->is_root()) {
+      std::cout << "[MeshBlock] adding output type: " << out_op->file_type()
+                << std::endl;
     }
   }
 
   // set up integrator
-  pintg = register_module("intg", Integrator(options.intg()));
-  options.intg() = pintg->options;
+  pintg = harp::IntegratorImpl::create(options->intg(), this);
+  if (options->verbose() && playout->is_root()) {
+    std::cout << "[MeshBlock] using integrator type: " << pintg->options->type()
+              << std::endl;
+  }
 
   // set up hydro model
-  phydro = register_module("hydro", Hydro(options.hydro()));
-  options.hydro() = phydro->options;
+  phydro = HydroImpl::create(options->hydro(), this);
+  if (options->verbose() && playout->is_root()) {
+    std::cout << "[MeshBlock] using hydro type: "
+              << phydro->peos->options->type() << std::endl;
+  }
 
   // set up scalar model
-  pscalar = register_module("scalar", Scalar(options.scalar()));
-  options.scalar() = pscalar->options;
+  pscalar = ScalarImpl::create(options->scalar(), this);
 
   // dimensions
-  int nc1 = options.hydro().coord().nc1();
-  int nc2 = options.hydro().coord().nc2();
-  int nc3 = options.hydro().coord().nc3();
+  int nc1 = options->hydro()->coord()->nc1();
+  int nc2 = options->hydro()->coord()->nc2();
+  int nc3 = options->hydro()->coord()->nc3();
   auto peos = phydro->peos;
 
   // set up hydro buffer
@@ -134,22 +149,22 @@ void MeshBlockImpl::reset() {
   _scalar_s1 = register_buffer(
       "s1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
-  if (options.verbose()) {
-    std::cout << "Setting up buffer with shapes:" << std::endl;
-    std::cout << "  hydro_u0: " << _hydro_u0.sizes() << std::endl;
-    std::cout << "  hydro_u1: " << _hydro_u1.sizes() << std::endl;
-    std::cout << "  scalar_s0: " << _scalar_s0.sizes() << std::endl;
-    std::cout << "  scalar_s1: " << _scalar_s1.sizes() << std::endl;
+  if (options->verbose()) {
+    std::cout << "[Meshblock] setting up buffer with shapes:" << std::endl
+              << "* hydro_u0: " << _hydro_u0.sizes() << std::endl
+              << "* hydro_u1: " << _hydro_u1.sizes() << std::endl
+              << "* scalar_s0: " << _scalar_s0.sizes() << std::endl
+              << "* scalar_s1: " << _scalar_s1.sizes() << std::endl;
   }
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     std::tuple<int, int, int> offset, bool exterior, int extend_x1,
     int extend_x2, int extend_x3) const {
-  int nc1 = options.hydro().coord().nc1();
-  int nc2 = options.hydro().coord().nc2();
-  int nc3 = options.hydro().coord().nc3();
-  int nghost_coord = options.hydro().coord().nghost();
+  int nc1 = options->hydro()->coord()->nc1();
+  int nc2 = options->hydro()->coord()->nc2();
+  int nc3 = options->hydro()->coord()->nc3();
+  int nghost_coord = options->hydro()->coord()->nghost();
 
   int is_ghost = exterior ? 1 : 0;
 
@@ -214,19 +229,19 @@ double MeshBlockImpl::initialize(Variables& vars) {
   // Set up a signal handler
   SignalHandler::GetInstance();
 
-  if (pintg->options.restart() != "") {
+  if (pintg->options->restart() != "") {
     return _init_from_restart(vars);
   }
 
   BoundaryFuncOptions bops;
-  bops.nghost(options.hydro().coord().nghost());
+  bops.nghost(options->hydro()->coord()->nghost());
 
   torch::Tensor hydro_w, scalar_r, solid;
 
   // hydro
-  int64_t nc3 = options.hydro().coord().nc3();
-  int64_t nc2 = options.hydro().coord().nc2();
-  int64_t nc1 = options.hydro().coord().nc1();
+  int64_t nc3 = options->hydro()->coord()->nc3();
+  int64_t nc2 = options->hydro()->coord()->nc2();
+  int64_t nc1 = options->hydro()->coord()->nc1();
 
   TORCH_CHECK(vars.count("hydro_w"),
               "initialize: hydro_w is required for hydro model.");
@@ -239,9 +254,9 @@ double MeshBlockImpl::initialize(Variables& vars) {
   vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
 
   bops.type(kConserved);
-  for (int i = 0; i < options.bfuncs().size(); ++i) {
-    if (options.bfuncs()[i] == nullptr) continue;
-    options.bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, bops);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, bops);
   }
 
   phydro->peos->forward(vars.at("hydro_u"), /*out=*/hydro_w);
@@ -259,9 +274,9 @@ double MeshBlockImpl::initialize(Variables& vars) {
     vars["scalar_s"] = hydro_w[IDN] * scalar_r;
 
     bops.type(kScalar);
-    for (int i = 0; i < options.bfuncs().size(); ++i) {
-      if (options.bfuncs()[i] == nullptr) continue;
-      options.bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, bops);
+    for (int i = 0; i < options->bfuncs().size(); ++i) {
+      if (options->bfuncs()[i] == nullptr) continue;
+      options->bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, bops);
     }
   }
 
@@ -286,14 +301,14 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   // exchange buffers
-  _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
-  exchange(vars);
+  playout->init_buffers(this, vars, {"hydro_u", "scalar_s"});
+  playout->forward(this, vars);
 
   // start timing
   _time_start = clock();
 
-  if (options.verbose()) {
-    std::cout << "Initialization completed." << std::endl;
+  if (options->verbose()) {
+    std::cout << "[Meshblock] initialization completed." << std::endl;
   }
 
   return 0.;  // default start time is 0.0
@@ -316,15 +331,15 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  pdist->pg->allreduce(dt_reduce, op)->wait();
+  playout->pg->allreduce(dt_reduce, op)->wait();
 
   dt = dt_reduce[0].item<double>();
 
-  if (options.verbose()) {
-    std::cout << "Suggested dt from hydro: " << std::scientific
+  if (options->verbose()) {
+    std::cout << "[Meshblock] suggested dt from hydro: " << std::scientific
               << std::setprecision(6) << dt << std::endl;
   }
-  return pow(2., -pintg->current_redo) * pintg->options.cfl() * dt;
+  return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
 }
 
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
@@ -352,10 +367,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // -------- (3) launch all jobs --------
   // (3.1) hydro forward
   fut_hydro_du = phydro->forward(dt, hydro_u, vars);
-  if (options.verbose()) {
+  if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " hydro forward time (s): " << elapsed.count() << std::endl;
     start = std::chrono::high_resolution_clock::now();
   }
@@ -363,10 +378,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // (3.2) scalar forward
   if (pscalar->nvar() > 0) {
     fut_scalar_ds = pscalar->forward(dt, scalar_s, vars);
-    if (options.verbose()) {
+    if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " scalar forward time (s): " << elapsed.count() << std::endl;
       start = std::chrono::high_resolution_clock::now();
     }
@@ -375,10 +390,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
   _hydro_u1.copy_(hydro_u);
-  if (options.verbose()) {
+  if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " multi-stage averaging time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -387,10 +402,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   if (pscalar->nvar() > 0) {
     scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
     _scalar_s1.copy_(scalar_s);
-    if (options.verbose()) {
+    if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " multi-stage scalar averaging time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -399,15 +414,15 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
   // -------- (5) update ghost zones --------
   BoundaryFuncOptions bops;
-  bops.nghost(options.hydro().coord().nghost());
+  bops.nghost(options->hydro()->coord()->nghost());
 
   if (vars.count("solid")) {
     phydro->pib->fill_cons_solid_(hydro_u, vars.at("solid"),
                                   vars.at("fill_solid_hydro_u"));
-    if (options.verbose()) {
+    if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " fill solid hydro conserved time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -416,14 +431,14 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
   // (5.1) apply hydro boundary
   bops.type(kConserved);
-  for (int i = 0; i < options.bfuncs().size(); ++i) {
-    if (options.bfuncs()[i] == nullptr) continue;
-    options.bfuncs()[i](hydro_u, 3 - i / 2, bops);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](hydro_u, 3 - i / 2, bops);
   }
-  if (options.verbose()) {
+  if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " hydro boundary condition time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -432,14 +447,14 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // (5.2) apply scalar boundary
   if (pscalar->nvar() > 0) {
     bops.type(kScalar);
-    for (int i = 0; i < options.bfuncs().size(); ++i) {
-      if (options.bfuncs()[i] == nullptr) continue;
-      options.bfuncs()[i](scalar_s, 3 - i / 2, bops);
+    for (int i = 0; i < options->bfuncs().size(); ++i) {
+      if (options->bfuncs()[i] == nullptr) continue;
+      options->bfuncs()[i](scalar_s, 3 - i / 2, bops);
     }
-    if (options.verbose()) {
+    if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " scalar boundary condition time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -447,29 +462,28 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (6) saturation adjustment --------
-  if (stage == pintg->stages.size() - 1 &&
-      (phydro->options.eos().type() == "ideal-moist" ||
-       phydro->options.eos().type() == "moist-mixture")) {
+  if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
+      phydro->options->eos()->thermo()->reactions().size() > 0) {
     phydro->peos->apply_conserved_limiter_(hydro_u);
 
     int ny = hydro_u.size(0) - 5;  // number of species
 
     auto ke = phydro->peos->compute("U->K", {hydro_u});
     auto rho = hydro_u[IDN] + hydro_u.narrow(0, ICY, ny).sum(0);
-    auto ie = hydro_u[Index::IPR] - ke;
+    auto ie = hydro_u[IPR] - ke;
 
-    auto yfrac = hydro_u.narrow(0, Index::ICY, ny) / rho;
+    auto yfrac = hydro_u.narrow(0, ICY, ny) / rho;
 
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
     pthermo->forward(rho, ie, yfrac, /*warm_start=*/true);
 
-    hydro_u.narrow(0, Index::ICY, ny) = yfrac * rho;
-    if (options.verbose()) {
+    hydro_u.narrow(0, ICY, ny) = yfrac * rho;
+    if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "  Stage " << stage
+      std::cout << "[MeshBlock] stage " << stage
                 << " saturation adjustment time (s): " << elapsed.count()
                 << std::endl;
       start = std::chrono::high_resolution_clock::now();
@@ -477,11 +491,11 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (7) ghost zone exchange --------
-  exchange(vars);
-  if (options.verbose()) {
+  playout->forward(this, vars);
+  if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "  Stage " << stage
+    std::cout << "[MeshBlock] stage " << stage
               << " ghost zone exchange time (s): " << elapsed.count()
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
@@ -495,13 +509,13 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
       output_type->write_output_file(this, vars, current_time, final_write);
     } else if (current_time >= output_type->next_time) {
       output_type->write_output_file(this, vars, current_time, final_write);
-      output_type->next_time += output_type->options.dt();
+      output_type->next_time += output_type->options->dt();
       output_type->file_number += 1;
     }
   }
-  if (options.verbose()) {
-    std::cout << "Output writing completed at time: " << current_time
-              << std::endl;
+  if (options->verbose()) {
+    std::cout << "[MeshBlock] output writing completed at time: "
+              << current_time << std::endl;
   }
 }
 
@@ -513,16 +527,16 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = pdist->options.root_rank();
+  opsum.rootRank = options->layout()->root_rank();
 
-  if (pintg->options.ncycle_out() != 0) {
-    if (cycle % pintg->options.ncycle_out() == 0) {
+  if (pintg->options->ncycle_out() != 0) {
+    if (cycle % pintg->options->ncycle_out() == 0) {
       if (vars.count("hydro_u")) {
         compute_mass = true;
         compute_energy = true;
       }
 
-      if (pdist->is_root()) {
+      if (playout->is_root()) {
         std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
                   << std::scientific << std::setprecision(dt_precision)
                   << " time=" << time << " dt=" << dt;
@@ -535,9 +549,9 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IDN].sum()};
 
         // sum across all ranks
-        pdist->pg->reduce(mass, opsum)->wait();
+        playout->pg->reduce(mass, opsum)->wait();
 
-        if (pdist->is_root()) {
+        if (playout->is_root()) {
           std::cout << " mass=" << mass[0].item<double>();
         }
       }
@@ -547,14 +561,14 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IPR].sum()};
 
         // sum across all ranks
-        pdist->pg->reduce(energy, opsum)->wait();
+        playout->pg->reduce(energy, opsum)->wait();
 
-        if (pdist->is_root()) {
+        if (playout->is_root()) {
           std::cout << " energy=" << energy[0].item<double>();
         }
       }
 
-      if (pdist->is_root()) {
+      if (playout->is_root()) {
         std::cout << std::endl;
       }
     }
@@ -565,7 +579,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
-  if (pdist->is_root()) {  // only root prints
+  if (playout->is_root()) {  // only root prints
     auto sig = SignalHandler::GetInstance();
     if (sig->GetSignalFlag(SIGTERM) != 0) {
       std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -573,17 +587,17 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
       std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
     } else if (sig->GetSignalFlag(SIGALRM) != 0) {
       std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
-    } else if (pintg->options.nlim() >= 0 && cycle >= pintg->options.nlim()) {
+    } else if (pintg->options->nlim() >= 0 && cycle >= pintg->options->nlim()) {
       std::cout << std::endl << "Terminating on cycle limit" << std::endl;
-    } else if (time >= pintg->options.tlim()) {
+    } else if (time >= pintg->options->tlim()) {
       std::cout << std::endl << "Terminating on time limit" << std::endl;
     } else {
       std::cout << std::endl << "Terminating abnormally" << std::endl;
     }
 
     std::cout << "time=" << time << " cycle=" << cycle - 1 << std::endl;
-    std::cout << "tlim=" << pintg->options.tlim()
-              << " nlim=" << pintg->options.nlim() << std::endl;
+    std::cout << "tlim=" << pintg->options->tlim()
+              << " nlim=" << pintg->options->nlim() << std::endl;
   }
 
   // ---------- timing info ----------
@@ -598,14 +612,14 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = pdist->options.root_rank();
+  opsum.rootRank = options->layout()->root_rank();
 
-  pdist->pg->reduce(cells, opsum)->wait();
+  playout->pg->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
 
-  if (pdist->is_root()) {
+  if (playout->is_root()) {
     std::cout << std::endl
               << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
     std::cout << "cpu time used (s) = " << cpu_time << std::endl;
@@ -628,7 +642,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
                  "smaller dt."
               << std::endl;
     pintg->current_redo += 1;
-    if (pintg->current_redo > pintg->options.max_redo()) {
+    if (pintg->current_redo > pintg->options->max_redo()) {
       std::cout << "Maximum number of redo attempts exceeded. Terminating."
                 << std::endl;
       return -1;  // terminate
@@ -652,13 +666,13 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 
 double MeshBlockImpl::_init_from_restart(Variables& vars) {
   // create filename: <file_basename>.<block_id>.<fid>.restart
-  std::string fid = pintg->options.restart();
+  std::string fid = pintg->options->restart();
 
   std::string fname;
   char bid[12];
-  snprintf(bid, sizeof(bid), "block%d", pdist->options.rank());
+  snprintf(bid, sizeof(bid), "block%d", options->layout()->rank());
 
-  fname.append(options.basename());
+  fname.append(options->basename());
   fname.append(".");
   fname.append(bid);
   fname.append(".");
@@ -690,148 +704,6 @@ double MeshBlockImpl::_init_from_restart(Variables& vars) {
   _cycle_start = cycle;
 
   return timing_vars.at("last_time").item<double>();
-}
-
-void MeshBlockImpl::_init_buffers_2d(Variables const& vars,
-                                     std::vector<std::string> const& names) {
-  // Initialize vectors to size 9 (2D decomposition) with empty tensors
-  _send_bufs.clear();
-  _recv_bufs.clear();
-  _send_bufs.resize(9);
-  _recv_bufs.resize(9);
-
-  // Iterate over all 2D neighbor directions
-  _buf_names.clear();
-  // only include names that exist in vars
-  for (auto name : names) {
-    if (vars.count(name) > 0) _buf_names.push_back(name);
-  }
-
-  // Get my logical location
-  auto iloc = playout->loc_of(pdist->options.rank());
-
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-
-      int nb = playout->neighbor_rank(iloc, offset);
-      // Skip if no neighbor in this direction
-      if (nb < 0) continue;
-
-      int bid = get_buffer_id(offset);
-
-      // Get the part indices for this neighbor direction
-      auto sub = part(offset);
-
-      // Get shape by applying indices to tensor
-      _send_bufs[bid].clear();
-      _recv_bufs[bid].clear();
-
-      for (auto name : _buf_names) {
-        auto sub_tensor = vars.at(name).index(sub);
-
-        // Allocate send and receive buffers with same shape
-        _send_bufs[bid].push_back(torch::empty_like(sub_tensor));
-        _recv_bufs[bid].push_back(torch::empty_like(sub_tensor));
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_serialize_2d(Variables const& vars) {
-  // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(offset);
-
-      // Only serialize if buffer exists
-      if (!_send_bufs[bid].empty()) {
-        // Get the interior part for this direction
-        auto sub = part(offset, /*exterior=*/false);
-
-        // Copy data from mesh to send buffer
-        int count = 0;
-        for (auto name : _buf_names)
-          _send_bufs[bid][count++].copy_(vars.at(name).index(sub));
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_deserialize_2d(Variables& vars) const {
-  // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int bid = get_buffer_id(offset);
-
-      // Only deserialize if buffer exists
-      if (!_recv_bufs[bid].empty()) {
-        // Get the exterior (ghost zone) part for this direction
-        auto sub = part(offset, /*exterior=*/true);
-
-        // Copy data from receive buffer to mesh ghost zones
-        int count = 0;
-        for (auto name : _buf_names) {
-          vars.at(name).index_put_(sub, _recv_bufs[bid][count++]);
-        }
-      }
-    }
-  }
-}
-
-void MeshBlockImpl::_slab_exchange(Variables& vars) {
-  // Serialize data into send buffers
-  _serialize_2d(vars);
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-
-  // Get my logical location
-  auto iloc = playout->loc_of(pdist->options.rank());
-
-  // Get my rank
-  auto rank = pdist->options.rank();
-
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int nb = playout->neighbor_rank(iloc, offset);
-
-      int r = get_buffer_id(offset);
-      if (nb >= 0) {
-        if (nb != rank) {  // different ranks
-          // Send operation
-          auto send_work = pdist->pg->send(_send_bufs[r], nb, 0);
-          works.push_back(send_work);
-
-          // Receive operation
-          auto recv_work = pdist->pg->recv(_recv_bufs[r], nb, 0);
-          works.push_back(recv_work);
-        } else {  // self-send
-          for (int n = 0; n < _recv_bufs[r].size(); ++n)
-            _recv_bufs[r][n].copy_(_send_bufs[r][n]);
-        }
-      }
-    }
-  }
-
-  // Wait for all operations to complete
-  for (auto& work : works) work->wait();
-
-  // Deserialize received data into ghost zones
-  _deserialize_2d(vars);
 }
 
 }  // namespace snap

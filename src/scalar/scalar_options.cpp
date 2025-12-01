@@ -6,26 +6,15 @@
 
 namespace snap {
 
-ScalarOptions ScalarOptions::from_yaml(std::string const& filename) {
-  ScalarOptions op;
+ScalarOptions ScalarOptionsImpl::from_yaml(std::string const& filename,
+                                           bool verbose) {
+  auto op = ScalarOptionsImpl::create();
 
-  op.thermo() = kintera::ThermoOptions::from_yaml(filename);
-  op.kinetics() = kintera::KineticsOptions::from_yaml(filename);
-
-  auto config = YAML::LoadFile(filename);
-  if (config["geometry"]) {
-    op.coord() = CoordinateOptions::from_yaml(config["geometry"]);
-  }
-
-  // reconstruction
-  if (config["reconstruct"]) {
-    op.recon() = ReconstructOptions::from_yaml(config["reconstruct"], "scalar");
-  }
+  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename);
+  op->kinetics() = kintera::KineticsOptionsImpl::from_yaml(filename);
 
   // riemann solver
-  if (config["riemann"]) {
-    op.riemann() = RiemannSolverOptions::from_yaml(config["riemann"]);
-  }
+  op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename, "scalar");
 
   return op;
 }

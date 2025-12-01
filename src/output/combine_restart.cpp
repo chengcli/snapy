@@ -21,15 +21,15 @@ int make_tar_archive(std::string const &archive_name,
 }
 
 void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
-  pmb->pdist->pg->barrier();
+  pmb->playout->pg->barrier();
   std::stringstream msg;
 
-  if (pmb->pdist->is_root()) {
+  if (pmb->playout->is_root()) {
     char number[64];
     snprintf(number, sizeof(number), "%05d", file_number);
 
     std::string infile;
-    infile.assign(pmb->options.basename());
+    infile.assign(pmb->options->basename());
     infile.append(".block*.");
     if (final_write) {
       infile.append("final");
@@ -49,7 +49,7 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     }
 
     std::string outfile;
-    outfile.assign(pmb->options.basename());
+    outfile.assign(pmb->options->basename());
     outfile.append(".");
     if (final_write) {
       outfile.append("final");

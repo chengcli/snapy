@@ -8,29 +8,31 @@
 
 namespace snap {
 
-InternalBoundaryOptions InternalBoundaryOptions::from_yaml(
-    const YAML::Node &root) {
-  InternalBoundaryOptions op;
+InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
+    std::string const &filename) {
+  YAML::Node config = YAML::LoadFile(filename);
+  auto op = InternalBoundaryOptionsImpl::create();
 
-  if (!root["geometry"]) return op;
-  if (!root["geometry"]["cells"]) return op;
+  if (!config["boundary-condition"]) return op;
+  if (!config["boundary-condition"]["internal"]) return op;
 
-  op.nghost() = root["geometry"]["cells"]["nghost"].as<int>(1);
+  return from_yaml(config["boundary-condition"]["internal"]);
+}
 
-  if (!root["boundary-condition"]) return op;
-  if (!root["boundary-condition"]["internal"]) return op;
+InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
+    const YAML::Node &node) {
+  auto op = InternalBoundaryOptionsImpl::create();
 
-  auto bc = root["boundary-condition"]["internal"];
-
-  op.max_iter() = bc["max-iter"].as<int>(5);
-  op.solid_density() = bc["solid-density"].as<double>(1.e3);
-  op.solid_pressure() = bc["solid-pressure"].as<double>(1.e9);
+  op->max_iter() = node["max-iter"].as<int>(5);
+  op->solid_density() = node["solid-density"].as<double>(1.e3);
+  op->solid_pressure() = node["solid-pressure"].as<double>(1.e9);
 
   return op;
 }
 
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
     : options(options_) {
+  TORCH_CHECK(options->coord(), "[InternalBoundary] coord is null");
   reset();
 }
 
@@ -40,8 +42,8 @@ void InternalBoundaryImpl::mark_prim_solid_(torch::Tensor w,
                                             torch::Tensor solid) {
   if (!solid.defined()) return;
 
-  w[IDN].masked_fill_(solid, options.solid_density());
-  w[IPR].masked_fill_(solid, options.solid_pressure());
+  w[IDN].masked_fill_(solid, options->solid_density());
+  w[IPR].masked_fill_(solid, options->solid_pressure());
   w.narrow(0, IVX, 3).masked_fill_(solid, 0.);
 
   int ny = w.size(0) - 5;
@@ -84,6 +86,13 @@ torch::Tensor InternalBoundaryImpl::forward(torch::Tensor wlr, int dim,
   }
 
   return wlr;
+}
+std::shared_ptr<InternalBoundaryImpl> InternalBoundaryImpl::create(
+    InternalBoundaryOptions const &opts, torch::nn::Module *p,
+    std::string const &name) {
+  TORCH_CHECK(opts != nullptr, "InternalBoundary options is null");
+  TORCH_CHECK(p != nullptr, "Parent module pointer is null");
+  return p->register_module(name, InternalBoundary(opts));
 }
 
 }  // namespace snap

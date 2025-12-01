@@ -5,19 +5,19 @@
 #include <snap/layout/layout.hpp>
 
 int main(void) {
-  snap::LayoutOptions op;
-  op.px(4);
-  op.py(3);
-  op.periodic_x(true);
-  op.periodic_y(false);
+  auto op = snap::LayoutOptionsImpl::create();
+  op->px(4);
+  op->py(3);
+  op->periodic_x(true);
+  op->periodic_y(false);
 
-  printf("2D demo %ux%u (periodic_x=%d periodic_y=%d)\n", op.px(), op.py(),
-         op.periodic_x(), op.periodic_y());
+  printf("2D demo %ux%u (periodic_x=%d periodic_y=%d)\n", op->px(), op->py(),
+         op->periodic_x(), op->periodic_y());
 
   snap::SlabLayoutImpl sl(op);
 
-  for (int ry = 0; ry < op.py(); ++ry)
-    for (int rx = 0; rx < op.px(); ++rx) {
+  for (int ry = 0; ry < op->py(); ++ry)
+    for (int rx = 0; rx < op->px(); ++rx) {
       int left = sl.neighbor_rank({rx, ry, 0}, {-1, 0, 0});
       int right = sl.neighbor_rank({rx, ry, 0}, {1, 0, 0});
       int up = sl.neighbor_rank({rx, ry, 0}, {0, 1, 0});

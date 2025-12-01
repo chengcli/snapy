@@ -14,7 +14,6 @@
 
 // snap
 #include <snap/input/command_line.hpp>
-#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -39,9 +38,7 @@ int main(int argc, char **argv) {
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block = MeshBlock(MeshBlockOptions::from_yaml(infile));
-  std::cout << fmt::format("MeshBlock Options\n{}", block->options)
-            << std::endl;
+  auto block = MeshBlock(MeshBlockOptionsImpl::from_yaml(infile));
   block->to(device);
 
   // useful modules
@@ -55,7 +52,7 @@ int main(int argc, char **argv) {
   int nc3 = pcoord->x3v.size(0);
   int nc2 = pcoord->x2v.size(0);
   int nc1 = pcoord->x1v.size(0);
-  int ny = thermo_y->options.species().size() - 1;
+  int ny = thermo_y->options->species().size() - 1;
   int nvar = peos->nvar();
 
   // construct an adiabatic atmosphere
@@ -82,7 +79,7 @@ int main(int argc, char **argv) {
 
   // read in compositions
   for (int i = 1; i <= ny; ++i) {
-    auto name = thermo_y->options.species()[i];
+    auto name = thermo_y->options->species()[i];
     auto xmixr = config["problem"]["x" + name].as<double>(0.);
     xfrac.select(2, i) = xmixr;
   }
@@ -99,8 +96,8 @@ int main(int argc, char **argv) {
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
-  int nvapor = thermo_x->options.vapor_ids().size();
-  int ncloud = thermo_x->options.cloud_ids().size();
+  int nvapor = thermo_x->options->vapor_ids().size();
+  int ncloud = thermo_x->options->cloud_ids().size();
   for (; i <= ie; ++i) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
@@ -145,11 +142,10 @@ int main(int argc, char **argv) {
   };
 
   // create kinetics model
-  auto op_kinet = kintera::KineticsOptions::from_yaml(infile);
+  auto op_kinet = kintera::KineticsOptionsImpl::from_yaml(infile);
   auto kinet = kintera::Kinetics(op_kinet);
   kinet->to(device);
-  std::cout << fmt::format("Kinetics Options:\n{}", kinet->options)
-            << std::endl;
+  kinet->options->report(std::cout);
 
   // time loop
   double current_time = 0.;

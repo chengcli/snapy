@@ -2,13 +2,12 @@
 #include <snap/snap.h>
 
 // snap
-#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
 
 int main(int argc, char** argv) {
-  auto op = MeshBlockOptions::from_yaml("shock.yaml");
+  auto op = MeshBlockOptionsImpl::from_yaml("shock.yaml");
   auto block = MeshBlock(op);
 
   auto device = torch::kCPU;
@@ -16,9 +15,6 @@ int main(int argc, char** argv) {
     std::cout << "Running on CUDA" << std::endl;
     device = torch::kCUDA;
   }
-
-  std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
-            << std::endl;
 
   block->to(device);
 
@@ -32,9 +28,9 @@ int main(int argc, char** argv) {
   auto x2v = grids[1];
   auto x3v = grids[0];
 
-  int nc1 = pcoord->options.nc1();
-  int nc2 = pcoord->options.nc2();
-  int nc3 = pcoord->options.nc3();
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
   int nvar = peos->nvar();
 
   auto w = torch::zeros(

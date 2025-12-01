@@ -1,21 +1,21 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "riemann_dispatch.hpp"
 #include "riemann_solver.hpp"
 
 namespace snap {
 
 void HLLCSolverImpl::reset() {
+  TORCH_CHECK(options->eos(), "[HLLCSolver] eos is nullptr");
+
   // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  peos = EquationOfStateImpl::create(options->eos(), this);
 
   // register buffers
-  auto nc1 = peos->pcoord->options.nc1();
-  auto nc2 = peos->pcoord->options.nc2();
-  auto nc3 = peos->pcoord->options.nc3();
+  auto nc1 = peos->pcoord->options->nc1();
+  auto nc2 = peos->pcoord->options->nc2();
+  auto nc3 = peos->pcoord->options->nc3();
 
   elr =
       register_buffer("elr", torch::empty({2, nc3, nc2, nc1}, torch::kFloat64));
@@ -31,7 +31,7 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   elr[ILT] = peos->compute("W->I", {wl});
 
-  if (options.eos().type() == "aneos") {
+  if (options->eos()->type() == "aneos") {
     clr[ILT] = peos->compute("W->L", {wl});
     glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
   } else {
@@ -41,7 +41,7 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   elr[IRT] = peos->compute("W->I", {wr});
 
-  if (options.eos().type() == "aneos") {
+  if (options->eos()->type() == "aneos") {
     clr[IRT] = peos->compute("W->L", {wr});
     glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
   } else {

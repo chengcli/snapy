@@ -1,8 +1,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/registry.hpp>
-
 #include "riemann_solver.hpp"
 
 namespace snap {
@@ -39,8 +37,9 @@ static torch::Tensor lax_friedrichs_flux(torch::Tensor const& priml,
 }
 
 void PlumeRoeSolverImpl::reset() {
-  // set up equation-of-state model
-  peos = register_module_op(this, "eos", options.eos());
+  TORCH_CHECK(options->eos(), "[PlumeRoe] eos is nullptr");
+
+  peos = EquationOfStateImpl::create(options->eos(), this);
 }
 
 torch::Tensor PlumeRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,

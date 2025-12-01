@@ -15,12 +15,12 @@ ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions options_)
 }
 
 void ImplicitCorrectionImpl::reset() {
-  pvic = register_module("vic", ImplicitHydro(options));
+  pvic = ImplicitHydroImpl::create(options, this);
 }
 
 torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
                                               torch::Tensor gammar, double dt) {
-  if (options.scheme() == 0) {  // null operation
+  if (options->scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
 
@@ -39,15 +39,16 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
 
   auto delta = torch::zeros_like(corr);
 
-  int m = options.size();
+  int m = options->size();
   auto Dt = torch::eye(m, w.options()) / dt;
   auto Phi = torch::zeros({m, m}, w.options());
 
-  Phi[Index::IVX][Index::IDN] = options.grav();
-  Phi[m - 1][Index::IVX] = options.grav();
+  auto grav = options->grav()->grav1();
+  Phi[IVX][IDN] = grav;
+  Phi[m - 1][IVX] = grav;
 
   auto Bnd = torch::eye(m, w.options());
-  Bnd[Index::IVX][Index::IVX] = -1.;
+  Bnd[IVX][IVX] = -1.;
 
   int is = pvic->pcoord->is();
   int ie = pvic->pcoord->ie();
@@ -59,9 +60,9 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   a.select(2, ie) += c.select(2, ie).matmul(Bnd);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  int nc1 = pvic->pcoord->options.nc1();
-  int nc2 = pvic->pcoord->options.nc2();
-  int nc3 = pvic->pcoord->options.nc3();
+  int nc1 = pvic->pcoord->options->nc1();
+  int nc2 = pvic->pcoord->options->nc2();
+  int nc3 = pvic->pcoord->options->nc3();
 
   std::vector<int64_t> vec1 = {nc3, nc2, nc1, -1};
 
@@ -80,13 +81,21 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
                   .add_owned_input(corr.view(vec1).permute(vec2))
                   .build();
 
-  if ((options.scheme() >> 3) & 1) {  // full
+  if ((options->scheme() >> 3) & 1) {  // full
     at::native::vic_solve5(du.device().type(), iter, dt, is, ie);
   } else {  // partial
     at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
   }
 
   return du - du0;
+}
+
+std::shared_ptr<ImplicitCorrectionImpl> ImplicitCorrectionImpl::create(
+    ImplicitOptions const& opts, torch::nn::Module* p,
+    std::string const& name) {
+  TORCH_CHECK(opts != nullptr, "ImplicitCorrection options is nullptr");
+  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  return p->register_module(name, ImplicitCorrection(opts));
 }
 
 }  // namespace snap

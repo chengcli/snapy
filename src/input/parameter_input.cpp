@@ -59,6 +59,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/layout/layout.hpp>
+
 #include "parameter_input.hpp"
 
 namespace snap {
@@ -184,6 +186,7 @@ void ParameterInputImpl::LoadFromFile(IOWrapper& input) {
   IOWrapperSizeT header = 0, ret, loc;
 
   // search <par_end> or EOF.
+  int my_rank = get_rank();
   do {
     if (my_rank == 0)  // only the master process reads the header from the file
       ret = input.Read(buf, sizeof(char), kBufSize);
