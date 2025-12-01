@@ -45,7 +45,7 @@ struct PrimitiveProjectorOptionsImpl {
     return std::make_shared<PrimitiveProjectorOptionsImpl>();
   }
   static std::shared_ptr<PrimitiveProjectorOptionsImpl> from_yaml(
-      std::string const &filename);
+      std::string const &filename, bool verbose = false);
   static std::shared_ptr<PrimitiveProjectorOptionsImpl> from_yaml(
       YAML::Node const &node);
 

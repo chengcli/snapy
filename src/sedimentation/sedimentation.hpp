@@ -23,7 +23,7 @@ using ConstGravityOptions = std::shared_ptr<ConstGravityOptionsImpl>;
 struct EquationOfStateOptionsImpl;
 using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
-struct EquationOfStateImpl;
+class EquationOfStateImpl;
 using EquationOfState = std::shared_ptr<EquationOfStateImpl>;
 
 struct SedVelOptionsImpl {

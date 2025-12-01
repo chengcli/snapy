@@ -19,7 +19,7 @@ struct ImplicitOptionsImpl {
     return std::make_shared<ImplicitOptionsImpl>();
   }
   static std::shared_ptr<ImplicitOptionsImpl> from_yaml(
-      std::string const& filename);
+      std::string const& filename, bool verbose = false);
   static std::shared_ptr<ImplicitOptionsImpl> from_yaml(const YAML::Node& node);
 
   ImplicitOptionsImpl() = default;

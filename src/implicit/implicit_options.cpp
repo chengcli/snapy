@@ -6,7 +6,8 @@
 
 namespace snap {
 
-ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename) {
+ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
+                                               bool /*verbose*/) {
   auto config = YAML::LoadFile(filename);
   if (!config["integration"]) return nullptr;
   if (!config["integration"]["implicit-scheme"]) return nullptr;

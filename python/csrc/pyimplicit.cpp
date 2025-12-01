@@ -15,19 +15,24 @@ namespace py = pybind11;
 
 void bind_implicit(py::module &m) {
   auto pyImplicitOptions =
-      py::class_<snap::ImplicitOptions>(m, "ImplicitOptions");
+      py::class_<snap::ImplicitOptionsImpl, snap::ImplicitOptions>(
+          m, "ImplicitOptions");
 
   pyImplicitOptions.def(py::init<>())
+      .def_static("from_yaml",
+                  py::overload_cast<std::string const &, bool>(
+                      &snap::ImplicitOptionsImpl::from_yaml),
+                  py::arg("filename"), py::arg("verbose") = false)
       .def("__repr__",
            [](const snap::ImplicitOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("ImplicitOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(std::string, snap::ImplicitOptions, type)
-      .ADD_OPTION(double, snap::ImplicitOptions, grav)
-      .ADD_OPTION(int, snap::ImplicitOptions, scheme)
-      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptions, coord);
+      .ADD_OPTION(std::string, snap::ImplicitOptionsImpl, type)
+      .ADD_OPTION(int, snap::ImplicitOptionsImpl, scheme)
+      .ADD_OPTION(snap::ConstGravityOptions, snap::ImplicitOptionsImpl, grav)
+      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptionsImpl, coord);
 
   ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions);
   ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions);

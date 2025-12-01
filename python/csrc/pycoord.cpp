@@ -11,41 +11,40 @@ namespace py = pybind11;
 
 void bind_coord(py::module &m) {
   auto pyCoordinateOptions =
-      py::class_<snap::CoordinateOptions>(m, "CoordinateOptions");
+      py::class_<snap::CoordinateOptionsImpl, snap::CoordinateOptions>(
+          m, "CoordinateOptions");
 
   pyCoordinateOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::CoordinateOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("CoordinateOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(double, snap::CoordinateOptions, x1min)
-      .ADD_OPTION(double, snap::CoordinateOptions, x1max)
-      .ADD_OPTION(double, snap::CoordinateOptions, x2min)
-      .ADD_OPTION(double, snap::CoordinateOptions, x2max)
-      .ADD_OPTION(double, snap::CoordinateOptions, x3min)
-      .ADD_OPTION(double, snap::CoordinateOptions, x3max)
-      .ADD_OPTION(int, snap::CoordinateOptions, nx1)
-      .ADD_OPTION(int, snap::CoordinateOptions, nx2)
-      .ADD_OPTION(int, snap::CoordinateOptions, nx3)
-      .ADD_OPTION(int, snap::CoordinateOptions, nghost);
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x1min)
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x1max)
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x2min)
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x2max)
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x3min)
+      .ADD_OPTION(double, snap::CoordinateOptionsImpl, x3max)
+      .ADD_OPTION(int, snap::CoordinateOptionsImpl, nx1)
+      .ADD_OPTION(int, snap::CoordinateOptionsImpl, nx2)
+      .ADD_OPTION(int, snap::CoordinateOptionsImpl, nx3)
+      .ADD_OPTION(int, snap::CoordinateOptionsImpl, nghost);
 
-  // temporary solution
-
-  ADD_SNAP_MODULE(Cartesian, CoordinateOptions)
+  py::class_<snap::CoordinateImpl, snap::Coordinate>(m, "Coordinate")
       .def("__repr__",
            [](const snap::CartesianImpl &self) {
              std::stringstream ss;
-             self.print(ss);
+             self.options->report(ss);
              return fmt::format("Coordinate(\n{})", ss.str());
            })
-      .def("ifirst", [](snap::CartesianImpl &self) { return self.is(); })
-      .def("ilast", [](snap::CartesianImpl &self) { return self.ie() + 1; })
-      .def("jfirst", [](snap::CartesianImpl &self) { return self.js(); })
-      .def("jlast", [](snap::CartesianImpl &self) { return self.je() + 1; })
-      .def("kfirst", [](snap::CartesianImpl &self) { return self.ks(); })
-      .def("klast", [](snap::CartesianImpl &self) { return self.ke() + 1; })
+      .def("if", [](snap::CartesianImpl &self) { return self.is(); })
+      .def("il", [](snap::CartesianImpl &self) { return self.ie() + 1; })
+      .def("jf", [](snap::CartesianImpl &self) { return self.js(); })
+      .def("jl", [](snap::CartesianImpl &self) { return self.je() + 1; })
+      .def("kf", [](snap::CartesianImpl &self) { return self.ks(); })
+      .def("kl", [](snap::CartesianImpl &self) { return self.ke() + 1; })
       .def("center_width1",
            [](snap::CartesianImpl &self) { return self.center_width1(); })
       .def("center_width2",
@@ -60,4 +59,17 @@ void bind_coord(py::module &m) {
            [](snap::CartesianImpl &self) { return self.face_area3(); })
       .def("cell_volume",
            [](snap::CartesianImpl &self) { return self.cell_volume(); });
+
+  auto pyCartesian =
+      py::class_<snap::CartesianImpl, snap::CoordinateImpl,
+                 std::shared_ptr<snap::CartesianImpl>>(m, "Cartesian");
+
+  torch::python::add_module_bindings(pyCartesian)
+      .def("buffer",
+           [](snap::CartesianImpl &self, std::string name) {
+             return self.named_buffers()[name];
+           })
+      .def("module", [](snap::CartesianImpl &self, std::string name) {
+        return self.named_modules()[name];
+      });
 }

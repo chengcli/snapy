@@ -11,16 +11,17 @@ namespace py = pybind11;
 
 void bind_riemann(py::module &m) {
   auto pyRiemannSolverOptions =
-      py::class_<snap::RiemannSolverOptions>(m, "RiemannSolverOptions");
+      py::class_<snap::RiemannSolverOptionsImpl, snap::RiemannSolverOptions>(
+          m, "RiemannSolverOptions");
 
   pyRiemannSolverOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::RiemannSolverOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("RiemannSolverOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(std::string, snap::RiemannSolverOptions, type);
+      .ADD_OPTION(std::string, snap::RiemannSolverOptionsImpl, type);
 
   ADD_SNAP_MODULE(UpwindSolver, RiemannSolverOptions);
   ADD_SNAP_MODULE(RoeSolver, RiemannSolverOptions);

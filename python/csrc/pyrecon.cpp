@@ -10,31 +10,34 @@
 namespace py = pybind11;
 
 void bind_recon(py::module &m) {
-  auto pyInterpOptions = py::class_<snap::InterpOptions>(m, "InterpOptions");
+  auto pyInterpOptions =
+      py::class_<snap::InterpOptionsImpl, snap::InterpOptions>(m,
+                                                               "InterpOptions");
 
   pyInterpOptions.def(py::init<>())
       .def(py::init<std::string>())
       .def("__repr__",
            [](const snap::InterpOptions &a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("InterpOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(std::string, snap::InterpOptions, type)
-      .ADD_OPTION(bool, snap::InterpOptions, scale);
+      .ADD_OPTION(std::string, snap::InterpOptionsImpl, type)
+      .ADD_OPTION(bool, snap::InterpOptionsImpl, scale);
 
   auto pyReconstructOptions =
-      py::class_<snap::ReconstructOptions>(m, "ReconstructOptions");
+      py::class_<snap::ReconstructOptionsImpl, snap::ReconstructOptions>(
+          m, "ReconstructOptions");
 
   pyReconstructOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::ReconstructOptions &a) {
              std::stringstream ss;
-             a.report(ss);
-             return fmt::format("ReconstructOptions{}", ss.str());
+             a->report(ss);
+             return fmt::format("ReconstructOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(bool, snap::ReconstructOptions, shock)
-      .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptions, interp);
+      .ADD_OPTION(bool, snap::ReconstructOptionsImpl, shock)
+      .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptionsImpl, interp);
 
   ADD_SNAP_MODULE(Reconstruct, ReconstructOptions);
 }

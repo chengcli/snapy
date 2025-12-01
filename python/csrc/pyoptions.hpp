@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 
 #define ADD_OPTION(T, st_name, op_name)                             \
   def(#op_name, (T const &(st_name::*)() const) & st_name::op_name) \
@@ -11,7 +12,9 @@
       .def_readonly("options", &snap::m_name##Impl::options)            \
       .def("__repr__",                                                  \
            [](const snap::m_name##Impl &a) {                            \
-             return fmt::format(#m_name "{}", a.options);               \
+             std::stringstream ss;                                      \
+             a.options->report(ss);                                     \
+             return fmt::format(#m_name "(\n{})", ss.str());            \
            })                                                           \
       .def("module",                                                    \
            [](snap::m_name##Impl &self, std::string name) {             \

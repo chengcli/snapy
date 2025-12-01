@@ -13,29 +13,33 @@
 namespace py = pybind11;
 
 void bind_output(py::module &m) {
-  auto pyOutputOptions = py::class_<snap::OutputOptions>(m, "OutputOptions");
+  auto pyOutputOptions =
+      py::class_<snap::OutputOptionsImpl, snap::OutputOptions>(m,
+                                                               "OutputOptions");
 
   pyOutputOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::OutputOptions &a) {
-             return fmt::format("OutputOptions{}", a);
+             std::stringstream ss;
+             a->report(ss);
+             return fmt::format("OutputOptions{}", ss.str());
            })
-      .ADD_OPTION(int, snap::OutputOptions, fid)
-      .ADD_OPTION(double, snap::OutputOptions, dt)
-      .ADD_OPTION(bool, snap::OutputOptions, output_slicex1)
-      .ADD_OPTION(bool, snap::OutputOptions, output_slicex2)
-      .ADD_OPTION(bool, snap::OutputOptions, output_slicex3)
-      .ADD_OPTION(bool, snap::OutputOptions, output_sumx1)
-      .ADD_OPTION(bool, snap::OutputOptions, output_sumx2)
-      .ADD_OPTION(bool, snap::OutputOptions, output_sumx3)
-      .ADD_OPTION(bool, snap::OutputOptions, include_ghost_zones)
-      .ADD_OPTION(bool, snap::OutputOptions, cartesian_vector)
-      .ADD_OPTION(double, snap::OutputOptions, x1_slice)
-      .ADD_OPTION(double, snap::OutputOptions, x2_slice)
-      .ADD_OPTION(double, snap::OutputOptions, x3_slice)
-      .ADD_OPTION(std::vector<std::string>, snap::OutputOptions, variables)
-      .ADD_OPTION(std::string, snap::OutputOptions, file_type)
-      .ADD_OPTION(std::string, snap::OutputOptions, data_format);
+      .ADD_OPTION(int, snap::OutputOptionsImpl, fid)
+      .ADD_OPTION(double, snap::OutputOptionsImpl, dt)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_slicex1)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_slicex2)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_slicex3)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_sumx1)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_sumx2)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, output_sumx3)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, include_ghost_zones)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, cartesian_vector)
+      .ADD_OPTION(double, snap::OutputOptionsImpl, x1_slice)
+      .ADD_OPTION(double, snap::OutputOptionsImpl, x2_slice)
+      .ADD_OPTION(double, snap::OutputOptionsImpl, x3_slice)
+      .ADD_OPTION(std::vector<std::string>, snap::OutputOptionsImpl, variables)
+      .ADD_OPTION(std::string, snap::OutputOptionsImpl, file_type)
+      .ADD_OPTION(std::string, snap::OutputOptionsImpl, data_format);
 
   auto pyOutputType = py::class_<snap::OutputType>(m, "OutputType");
 

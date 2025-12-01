@@ -10,7 +10,6 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
-#include <snap/layout/distribute_env.hpp>
 #include <snap/layout/layout.hpp>
 
 // python
@@ -19,41 +18,33 @@
 namespace py = pybind11;
 
 void bind_layout(py::module& m) {
-  auto pyLayoutOptions = py::class_<snap::LayoutOptions>(m, "LayoutOptions");
+  auto pyLayoutOptions =
+      py::class_<snap::LayoutOptionsImpl, snap::LayoutOptions>(m,
+                                                               "LayoutOptions");
 
   pyLayoutOptions.def(py::init<>())
       .def("__repr__",
            [](const snap::LayoutOptions& a) {
              std::stringstream ss;
-             a.report(ss);
+             a->report(ss);
              return fmt::format("LayoutOptions(\n{})", ss.str());
            })
-      .ADD_OPTION(std::string, snap::LayoutOptions, type)
-      .ADD_OPTION(int, snap::LayoutOptions, px)
-      .ADD_OPTION(int, snap::LayoutOptions, py)
-      .ADD_OPTION(int, snap::LayoutOptions, pz)
-      .ADD_OPTION(bool, snap::LayoutOptions, periodic_x)
-      .ADD_OPTION(bool, snap::LayoutOptions, periodic_y)
-      .ADD_OPTION(bool, snap::LayoutOptions, periodic_z);
-
-  auto pyDistributeEnvOptions =
-      py::class_<snap::DistributeEnvOptions>(m, "DistributeEnvOptions");
-
-  pyDistributeEnvOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::DistributeEnvOptions& a) {
-             std::stringstream ss;
-             a.report(ss);
-             return fmt::format("DistributeEnvOptions(\n{})", ss.str());
-           })
-      .ADD_OPTION(std::string, snap::DistributeEnvOptions, backend)
-      .ADD_OPTION(std::string, snap::DistributeEnvOptions, master_addr)
-      .ADD_OPTION(int, snap::DistributeEnvOptions, root_rank)
-      .ADD_OPTION(int, snap::DistributeEnvOptions, rank)
-      .ADD_OPTION(int, snap::DistributeEnvOptions, local_rank)
-      .ADD_OPTION(int, snap::DistributeEnvOptions, world_size)
-      .ADD_OPTION(int, snap::DistributeEnvOptions, master_port)
-      .ADD_OPTION(bool, snap::DistributeEnvOptions, verbose);
+      .ADD_OPTION(std::string, snap::LayoutOptionsImpl, type)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, px)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, py)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, pz)
+      .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_x)
+      .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_y)
+      .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_z)
+      .ADD_OPTION(bool, snap::LayoutOptionsImpl, verbose)
+      .ADD_OPTION(bool, snap::LayoutOptionsImpl, no_backend)
+      .ADD_OPTION(std::string, snap::LayoutOptionsImpl, backend)
+      .ADD_OPTION(std::string, snap::LayoutOptionsImpl, master_addr)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, master_port)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, root_rank)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, world_size)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, rank)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, local_rank);
 
   /*auto pySlabLayout = py::class_<snap::SlabLayout>(m, "SlabLayout");
 
