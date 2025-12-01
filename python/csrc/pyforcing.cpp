@@ -4,7 +4,6 @@
 
 // snap
 #include <snap/forcing/forcing.hpp>
-#include <snap/forcing/forcing_formatter.hpp>
 
 // python
 #include "pyoptions.hpp"

@@ -16,8 +16,8 @@
 
 namespace snap {
 struct InterpOptionsImpl {
-  static std::shared_ptr<InterpOptionsImpl> create(std::string name) {
-    return std::make_shared<InterpOptionsImpl>(name);
+  static std::shared_ptr<InterpOptionsImpl> create() {
+    return std::make_shared<InterpOptionsImpl>();
   }
 
   InterpOptionsImpl() = default;
@@ -51,7 +51,7 @@ class InterpImpl {
   //! options with which this `Interp` was constructed
   InterpOptions options;
 
-  InterpImpl() : options(InterpOptionsImpl::create("dc")) {}
+  InterpImpl() : options(InterpOptionsImpl::create()) {}
   explicit InterpImpl(InterpOptions const& options_) : options(options_) {}
   virtual ~InterpImpl() = default;
 

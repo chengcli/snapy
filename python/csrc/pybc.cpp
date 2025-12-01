@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/bc/bc.hpp>
-#include <snap/bc/bc_formatter.hpp>
 #include <snap/bc/internal_boundary.hpp>
 
 // python

@@ -22,7 +22,9 @@ using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
 struct ReconstructOptionsImpl {
   static std::shared_ptr<ReconstructOptionsImpl> create() {
-    return std::make_shared<ReconstructOptionsImpl>();
+    auto op = std::make_shared<ReconstructOptionsImpl>();
+    op->interp() = InterpOptionsImpl::create();
+    return op;
   }
   static std::shared_ptr<ReconstructOptionsImpl> from_yaml(
       std::string const& filename, std::string const& section);

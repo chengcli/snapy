@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/implicit/implicit.hpp>
-#include <snap/implicit/implicit_formatter.hpp>
 
 // python
 #include "pyoptions.hpp"

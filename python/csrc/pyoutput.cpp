@@ -6,7 +6,6 @@
 // snap
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
-#include <snap/output/output_formatter.hpp>
 
 // python
 #include "pyoptions.hpp"

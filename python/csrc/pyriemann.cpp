@@ -2,7 +2,6 @@
 #include <torch/extension.h>
 
 // snap
-#include <snap/riemann/riemann_formatter.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 
 // python

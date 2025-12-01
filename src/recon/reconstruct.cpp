@@ -22,8 +22,9 @@ ReconstructOptions ReconstructOptionsImpl::from_yaml(
   if (!node[section]) return nullptr;
 
   auto op = ReconstructOptionsImpl::create();
-
   op->shock() = node[section]["shock"].as<bool>(false);
+
+  op->interp() = InterpOptionsImpl::create();
   op->interp()->type() = node[section]["type"].as<std::string>("dc");
   op->interp()->scale() = node[section]["scale"].as<bool>(false);
 

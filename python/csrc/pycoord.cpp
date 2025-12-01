@@ -2,7 +2,6 @@
 #include <torch/extension.h>
 
 // snap
-#include <snap/coord/coord_formatter.hpp>
 #include <snap/coord/coordinate.hpp>
 
 // python

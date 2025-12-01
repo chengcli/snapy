@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/hydro/hydro.hpp>
-#include <snap/hydro/hydro_formatter.hpp>
 
 // python
 #include "pyoptions.hpp"

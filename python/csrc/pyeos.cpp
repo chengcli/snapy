@@ -5,7 +5,6 @@
 #include <kintera/thermo/thermo.hpp>
 
 // snap
-#include <snap/eos/eos_formatter.hpp>
 #include <snap/eos/equation_of_state.hpp>
 
 // python
