@@ -37,8 +37,6 @@ int main(int argc, char** argv) {
     device = torch::kCUDA;
   }
 
-  std::cout << "MeshBlock Options:\n";
-  block->options->report(std::cout);
   block->to(device);
 
   // initial conditions

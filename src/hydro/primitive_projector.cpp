@@ -19,8 +19,9 @@ namespace snap {
 PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(
     std::string const &filename) {
   auto config = YAML::LoadFile(filename);
-  if (!config["vertical-projection"]) return nullptr;
-  return from_yaml(config["vertical-projection"]);
+  if (!config["dynamics"]) return nullptr;
+  if (!config["dynamics"]["vertical-projection"]) return nullptr;
+  return from_yaml(config["dynamics"]["vertical-projection"]);
 }
 
 PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(

@@ -312,7 +312,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              torch::nn::Module* p,
                                              std::string const& name) {
-  TORCH_CHECK(p, "Parent module pointer is null");
+  TORCH_CHECK(p, "[Hydro] Parent module is null");
+  TORCH_CHECK(opts, "[Hydro] Options pointer is null");
   return p->register_module(name, Hydro(opts));
 }
 
