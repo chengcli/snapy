@@ -43,7 +43,7 @@ int test1(int argc, char *argv[]) {
   }
 
   // initialize dp arrays
-  constexpr int MAXRUN = InternalBoundaryOptions::MAXRUN;
+  constexpr int MAXRUN = InternalBoundaryOptionsImpl::MAXRUN;
   int *dp = (int *)malloc((n + 1) * MAXRUN * 2 * sizeof(int));
   int *fromLen = (int *)malloc((n + 1) * MAXRUN * 2 * sizeof(int));
   int *fromBit = (int *)malloc((n + 1) * MAXRUN * 2 * sizeof(int));

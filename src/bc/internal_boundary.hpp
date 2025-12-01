@@ -30,7 +30,7 @@ struct InternalBoundaryOptionsImpl {
   static std::shared_ptr<InternalBoundaryOptionsImpl> from_yaml(
       std::string const &filename);
   static std::shared_ptr<InternalBoundaryOptionsImpl> from_yaml(
-      const YAML::Node &root);
+      const YAML::Node &node);
 
   InternalBoundaryOptionsImpl() = default;
   void report(std::ostream &os) const {

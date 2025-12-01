@@ -63,9 +63,6 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename) {
 HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename) {
   auto op = HydroOptionsImpl::create();
 
-  // internal boundaries
-  op->ib() = InternalBoundaryOptionsImpl::from_yaml(filename);
-
   // coordinate system
   op->coord() = CoordinateOptionsImpl::from_yaml(filename);
 
@@ -75,6 +72,12 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename) {
   // link eos and coord
   op->eos()->coord() = op->coord();
   op->coord()->eos() = op->eos();
+
+  // internal boundaries
+  op->ib() = InternalBoundaryOptionsImpl::from_yaml(filename);
+  if (op->ib()) {
+    op->ib()->coord() = op->coord();
+  }
 
   // forcings
   op->register_forcings_options(filename);

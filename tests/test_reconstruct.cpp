@@ -32,8 +32,8 @@ TEST_P(DeviceTest, test_dc) {
   int nc1 = 10;
   auto w =
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
-  auto op = ReconstructOptions();
-  op.interp().type("dc");
+  auto op = ReconstructOptionsImpl::create();
+  op->interp()->type("dc");
 
   Reconstruct precon(op);
   precon->to(device, dtype);
@@ -51,13 +51,14 @@ TEST_P(DeviceTest, test_plm) {
   int nc1 = 10;
   auto w =
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
-  auto op = ReconstructOptions();
-  op.interp().type("plm");
+  auto op = ReconstructOptionsImpl::create();
+  op->interp()->type("plm");
 
   Reconstruct precon(op);
   precon->to(device, dtype);
 
-  std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
+  std::cout << "ReconstructOptions: ";
+  op->report(std::cout);
 
   std::cout << "w = " << w << std::endl;
   auto result = precon->forward(w, DIM1);
@@ -76,8 +77,9 @@ TEST_P(DeviceTest, test_small) {
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
   auto op =
-      ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
-  std::cout << "ReconstructOptions: " << fmt::format("{}", op) << std::endl;
+      ReconstructOptionsImpl::from_yaml(YAML::Load(recon_config), "horizontal");
+  std::cout << "ReconstructOptions: ";
+  op->report(std::cout);
 
   Reconstruct precon(op);
   precon->to(device, dtype);
@@ -101,7 +103,7 @@ TEST_P(DeviceTest, test_large) {
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
   auto op =
-      ReconstructOptions::from_yaml(YAML::Load(recon_config), "horizontal");
+      ReconstructOptionsImpl::from_yaml(YAML::Load(recon_config), "horizontal");
 
   Reconstruct precon(op);
   precon->to(device, dtype);

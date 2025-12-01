@@ -10,30 +10,29 @@ namespace snap {
 
 InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
     std::string const &filename) {
-  YAML::Node root = YAML::LoadFile(filename);
-  return from_yaml(root);
+  YAML::Node config = YAML::LoadFile(filename);
+  auto op = InternalBoundaryOptionsImpl::create();
+
+  if (!config["boundary-condition"]) return op;
+  if (!config["boundary-condition"]["internal"]) return op;
+
+  return from_yaml(config["boundary-condition"]["internal"]);
 }
 
 InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
-    const YAML::Node &root) {
+    const YAML::Node &node) {
   auto op = InternalBoundaryOptionsImpl::create();
 
-  if (!root["geometry"]) return op;
-  if (!root["geometry"]["cells"]) return op;
-  if (!root["boundary-condition"]) return op;
-  if (!root["boundary-condition"]["internal"]) return op;
-
-  auto bc = root["boundary-condition"]["internal"];
-
-  op->max_iter() = bc["max-iter"].as<int>(5);
-  op->solid_density() = bc["solid-density"].as<double>(1.e3);
-  op->solid_pressure() = bc["solid-pressure"].as<double>(1.e9);
+  op->max_iter() = node["max-iter"].as<int>(5);
+  op->solid_density() = node["solid-density"].as<double>(1.e3);
+  op->solid_pressure() = node["solid-pressure"].as<double>(1.e9);
 
   return op;
 }
 
 InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
     : options(options_) {
+  TORCH_CHECK(options->coord(), "[InternalBoundary] coord is null");
   reset();
 }
 

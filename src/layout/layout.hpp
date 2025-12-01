@@ -213,7 +213,10 @@ class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
  public:
   //! Constructor to initialize the layers
   SlabLayoutImpl() = default;
-  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) { reset(); }
+  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+    options->type("slab");
+    reset();
+  }
   void reset() override;
 
   ~SlabLayoutImpl() = default;
@@ -233,7 +236,10 @@ class CubedLayoutImpl : public torch::nn::Cloneable<CubedLayoutImpl>,
  public:
   //! Constructor to initialize the layers
   CubedLayoutImpl() = default;
-  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) { reset(); }
+  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+    options->type("cubed");
+    reset();
+  }
   void reset() override;
 
   ~CubedLayoutImpl() = default;
@@ -252,6 +258,7 @@ class CubedSphereLayoutImpl
   //! Constructor to initialize the layers
   CubedSphereLayoutImpl() = default;
   CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts, 6) {
+    options->type("cubed-sphere");
     reset();
   }
   void reset() override;

@@ -10,7 +10,6 @@
 #include <snap/snap.h>
 
 #include <snap/eos/ideal_gas.hpp>
-#include <snap/mesh/mesh_formatter.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -31,15 +30,15 @@ int main(int argc, char** argv) {
   auto K = config["problem"]["K"].as<double>();
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
-  auto block = MeshBlock(MeshBlockOptions::from_yaml("straka.yaml"));
+  auto block = MeshBlock(MeshBlockOptionsImpl::from_yaml("straka.yaml"));
   auto device = torch::kCPU;
   if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
     device = torch::kCUDA;
   }
 
-  std::cout << fmt::format("MeshBlock Options:\n{}", block->options)
-            << std::endl;
+  std::cout << "MeshBlock Options:\n";
+  block->options->report(std::cout);
   block->to(device);
 
   // initial conditions
@@ -56,9 +55,9 @@ int main(int argc, char** argv) {
   auto x1v = grids[2];
   auto x2v = grids[1];
 
-  int nc1 = pcoord->options.nc1();
-  int nc2 = pcoord->options.nc2();
-  int nc3 = pcoord->options.nc3();
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
   int nvar = peos->nvar();
 
   auto w = torch::zeros(

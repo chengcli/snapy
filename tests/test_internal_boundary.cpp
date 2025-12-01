@@ -7,21 +7,21 @@
 
 // snap
 #include <snap/bc/internal_boundary.hpp>
+#include <snap/coord/coordinate.hpp>
 
 #include "device_testing.hpp"
 
 using namespace snap;
 
 char const* bc_config = R"(
-geomtry:
-  cells: {nx1: 1, nx2: 1, nx3: 1, nghost: 1}
-
-boundary-condition:
-  internal: {solid-density: 1.e3, solid-pressure: 1.9, max-iter: 5}
+solid-density: 1.e3
+solid-pressure: 1.9
+max-iter: 5
 )";
 
 TEST_P(DeviceTest, mark_solid) {
-  auto op = InternalBoundaryOptions::from_yaml(YAML::Load(bc_config));
+  auto op = InternalBoundaryOptionsImpl::from_yaml(YAML::Load(bc_config));
+  op->coord() = CoordinateOptionsImpl::create();
   auto pib = InternalBoundary(op);
 
   auto w = torch::randn({5, 1, 5, 5}, torch::device(device).dtype(dtype));
