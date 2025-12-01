@@ -29,6 +29,7 @@ struct EquationOfStateOptionsImpl {
        << "* density_floor = " << density_floor() << "\n"
        << "* pressure_floor = " << pressure_floor() << "\n"
        << "* temperature_floor = " << temperature_floor() << "\n"
+       << "* verbose = " << (verbose() ? "true" : "false") << "\n"
        << "* limiter = " << (limiter() ? "true" : "false") << "\n"
        << "* eos_file = " << eos_file() << "\n";
     if (thermo()) {
@@ -43,6 +44,7 @@ struct EquationOfStateOptionsImpl {
   ADD_ARG(double, temperature_floor) = 20.;
   ADD_ARG(bool, limiter) = false;
   ADD_ARG(std::string, eos_file) = "";
+  ADD_ARG(bool, verbose) = false;
 
   //! submodules options
   ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;

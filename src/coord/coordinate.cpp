@@ -37,7 +37,7 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   int rank = playout->options->rank();
   auto iloc = playout->loc_of(rank);
 
-  int lx1 = playout->options->type() == "cubed_sphere" ? 0 : std::get<2>(iloc);
+  int lx1 = playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
 

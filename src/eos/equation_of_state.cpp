@@ -32,6 +32,7 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   op->temperature_floor() = node["temperature-floor"].as<double>(20.);
   op->limiter() = node["limiter"].as<bool>(false);
   op->eos_file() = node["eos-file"].as<std::string>("");
+  op->verbose() = node["verbose"].as<bool>(verbose);
 
   op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, verbose);
 

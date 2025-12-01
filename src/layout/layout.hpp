@@ -56,7 +56,7 @@ struct LayoutOptionsImpl {
     return std::make_shared<LayoutOptionsImpl>();
   }
   static std::shared_ptr<LayoutOptionsImpl> from_yaml(
-      std::string const &filename);
+      std::string const &filename, bool verbose = false);
 
   LayoutOptionsImpl();
 
@@ -74,6 +74,7 @@ struct LayoutOptionsImpl {
        << "* local_rank = " << local_rank() << "\n"
        << "* world_size = " << world_size() << "\n"
        << "* master_port = " << master_port() << "\n"
+       << "* no_backend = " << (no_backend() ? "true" : "false") << "\n"
        << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
 
@@ -106,6 +107,7 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, world_size) = 1;
   ADD_ARG(int, master_port) = 29500;
   ADD_ARG(bool, verbose) = false;
+  ADD_ARG(bool, no_backend) = false;
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 

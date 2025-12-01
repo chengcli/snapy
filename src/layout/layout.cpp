@@ -25,7 +25,8 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));
 }
 
-LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename) {
+LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
+                                           bool verbose) {
   auto op = LayoutOptionsImpl::create();
   auto config = YAML::LoadFile(filename);
 
@@ -44,9 +45,14 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename) {
         "Slab layout only supports partitioning along x2-x3 directions.");
 
     op->backend() = node["backend"].as<std::string>("gloo");
-    op->verbose() = node["verbose"].as<bool>(false);
+    op->verbose() = node["verbose"].as<bool>(verbose);
   } else {
     TORCH_CHECK(false, "Unsupported layout type: ", op->type());
+  }
+
+  if (op->verbose() && get_rank() == 0) {
+    std::cout << "[LayoutOptions] layout options:" << std::endl;
+    op->report(std::cout);
   }
 
   return op;
@@ -55,6 +61,8 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename) {
 std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
                                                torch::nn::Module* p,
                                                std::string const& name) {
+  if (p == nullptr) options->no_backend(true);
+
   if (options->type() == "slab") {
     return p ? p->register_module(name, SlabLayout(options))
              : SlabLayout(options).ptr();
@@ -71,6 +79,11 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
 
 void LayoutImpl::init_buffers(MeshBlockImpl const* pmb, Variables const& vars,
                               std::vector<std::string> const& names) {
+  if (options->verbose()) {
+    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
+              << "] Initializing communication buffers...\n";
+  }
+
   // Initialize vectors to size 9 (2D decomposition) with empty tensors
   send_bufs.clear();
   recv_bufs.clear();
@@ -168,6 +181,13 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars) const {
 }
 
 void LayoutImpl::_init_backend() {
+  if (options->no_backend()) return;
+
+  if (options->verbose()) {
+    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
+              << "] Initializing distributed environment...\n";
+  }
+
   // 1. Build the store
   c10d::TCPStoreOptions store_op;
 
@@ -195,16 +215,16 @@ void LayoutImpl::_init_backend() {
 }
 
 void LayoutImpl::_init_gloo() {
+  if (options->verbose()) {
+    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
+              << "] Using Gloo backend on CPU\n";
+  }
+
   auto opts = c10d::ProcessGroupGloo::Options::create();
   opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
 
   pg = std::make_shared<c10d::ProcessGroupGloo>(store, options->rank(),
                                                 options->world_size(), opts);
-
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Using Gloo backend on CPU\n";
-  }
 }
 
 __attribute__((weak)) void LayoutImpl::_init_nccl() {}

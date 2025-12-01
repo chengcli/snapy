@@ -68,6 +68,9 @@ int SlabLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
 }
 
 void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
+  TORCH_CHECK(!options->no_backend(),
+              "[SlabLayout:forward] backend is disabled");
+
   // Serialize data into send buffers
   serialize(pmb, vars);
 
