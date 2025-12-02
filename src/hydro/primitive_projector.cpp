@@ -68,11 +68,10 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
 
   auto result = w.clone();
 
-  result[Index::IPR] =
-      calc_nonhydrostatic_pressure(w[Index::IPR], _psf, options->margin());
+  result[IPR] = calc_nonhydrostatic_pressure(w[IPR], _psf, options->margin());
 
   if (options->type() == "temperature") {
-    result[Index::IDN] = w[Index::IPR] / (w[Index::IDN] * options->Rd());
+    result[IDN] = w[IPR] / (w[IDN] * options->Rd());
   } else if (options->type() == "density") {
     // do nothing
   } else {
@@ -92,13 +91,13 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
   int ie = wlr.size(4) - options->coord()->nghost();
 
   // restore pressure
-  wlr.select(1, Index::IPR).slice(3, is, ie + 1) += _psf.slice(2, is, ie + 1);
+  wlr.select(1, IPR).slice(3, is, ie + 1) += _psf.slice(2, is, ie + 1);
 
   // restore density
   if (options->type() == "temperature") {
-    wlr.select(1, Index::IDN).slice(3, is, ie + 1) =
-        wlr.select(1, Index::IPR).slice(3, is, ie + 1) /
-        (wlr.select(1, Index::IDN).slice(3, is, ie + 1) * options->Rd());
+    wlr.select(1, IDN).slice(3, is, ie + 1) =
+        wlr.select(1, IPR).slice(3, is, ie + 1) /
+        (wlr.select(1, IDN).slice(3, is, ie + 1) * options->Rd());
   } else if (options->type() == "density") {
     // do nothing
   } else {
@@ -121,20 +120,19 @@ torch::Tensor calc_hydrostatic_pressure(torch::Tensor w, double grav,
   auto nc1 = w.size(3);
 
   // lower ghost zones and interior
-  psf.slice(2, 0, ie) =
-      grav * w[Index::IDN].slice(2, 0, ie) * dz.slice(0, 0, ie);
+  psf.slice(2, 0, ie) = grav * w[IDN].slice(2, 0, ie) * dz.slice(0, 0, ie);
 
   // flip lower ghost zones
   psf.slice(2, 0, is) *= -1;
 
   // isothermal extrapolation to top boundary
-  auto RdTv = w[Index::IPR].select(2, ie - 1) / w[Index::IDN].select(2, ie - 1);
+  auto RdTv = w[IPR].select(2, ie - 1) / w[IDN].select(2, ie - 1);
   psf.select(2, ie) =
-      w[Index::IPR].select(2, ie - 1) * exp(-grav * dz[ie - 1] / (2. * RdTv));
+      w[IPR].select(2, ie - 1) * exp(-grav * dz[ie - 1] / (2. * RdTv));
 
   // upper ghost zones
   psf.slice(2, ie + 1, nc1 + 1) =
-      grav * w[Index::IDN].slice(2, ie, nc1) * dz.slice(0, ie, nc1);
+      grav * w[IDN].slice(2, ie, nc1) * dz.slice(0, ie, nc1);
 
   // integrate downwards
   psf.slice(2, 0, ie + 1) =

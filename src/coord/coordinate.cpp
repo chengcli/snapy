@@ -348,7 +348,7 @@ Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
     return p->register_module(name, Cylindrical(opts));
   } else if (opts->type() == "spherical-polar") {
     return p->register_module(name, SphericalPolar(opts));
-  } else if (opts->type() == "cubed-sphere") {
+  } else if (opts->type() == "gnomonic-equiangle") {
     return p->register_module(name, GnomonicEquiangle(opts));
   } else {
     TORCH_CHECK(false, "Unknown coordinate type: ", opts->type());

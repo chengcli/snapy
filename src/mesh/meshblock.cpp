@@ -50,6 +50,9 @@ void MeshBlockImpl::reset() {
   int pz = options->layout()->pz();
 
   int nranks = px * py * pz;
+  if (options->layout()->type() == "cubed-sphere") {
+    nranks *= 6;
+  }
   int rank = options->layout()->rank();
 
   TORCH_CHECK(options->layout()->world_size() == nranks,

@@ -2,6 +2,7 @@
 #include <cstdio>
 
 // snap
+#include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/layout/layout.hpp>
 
 void run_demo(snap::CubedSphereLayoutImpl const &cs, int rx, int ry, int face) {

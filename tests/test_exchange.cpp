@@ -10,7 +10,7 @@
 using namespace snap;
 
 int main(int argc, char **argv) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
+  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml", true);
   auto block = MeshBlock(op);
 
   auto device = torch::kCPU;
@@ -30,6 +30,9 @@ int main(int argc, char **argv) {
       {5, nc3, nc2, nc1},
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
   int r = block->options->layout()->rank();
+
+  auto playout = block->named_modules()["layout"];
+  if (r == 0) playout->pretty_print(std::cout);
 
   auto interior = block->part({0, 0, 0}, /*exterior=*/false);
   w.index(interior)[IDN] = r + 1.0;

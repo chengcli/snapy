@@ -14,12 +14,12 @@ dynamics:
 distribute:
   backend: gloo
   layout: slab
-  nb2: 2
-  nb3: 2
-  verbose: false
+  nb2: 1
+  nb3: 1
+  verbose: true
 
 geometry:
-  type: cartesian
+  type: gnomonic-equiangle
   cells: {nx1: 1, nx2: 4, nx3: 4, nghost: 2}
 
 boundary-condition:

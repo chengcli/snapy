@@ -1,12 +1,13 @@
-/*
+//! \brief Cubed-sphere layout implementation
+/*!
  * Notes on connectivity:
- * - We model only the surface (six 2D faces).
- * - Each face holds a px-by-py processor grid (px==py required by the cubed
+ *  - We model only the surface (six 2D faces).
+ *  - Each face holds a px-by-py processor grid (px==py required by the cubed
  * grid; however code allows px,py).
- * - Global rank = face_major * (py*px) + zorder_rank_within_face.
+ *  - Global rank = face_major * (py*px) + zorder_rank_within_face.
  *
  * Orientation model across an edge:
- *   From (face f, side s ∈ {L,R,B,T}) we land on (nface, nside),
+ *   From (face f, side s \in {L,R,B,T}) we land on (nface, nside),
  *   and the along-edge index is either preserved or reversed.
  *   No "transpose" is required if nside is defined correctly:
  *     - neighbor side L/R varies along neighbor Y (rows)
@@ -14,13 +15,32 @@
  *   This matches p4est's face orientation idea at coarse level.
  *
  * If the geometry requires a different convention (e.g., local axes on faces),
- * just edit the table `CS_FACE_EDGES[6][4]`.
+ * edit the table `CS_FACE_EDGES[6][4]`.
  *
- * WRONG
- * Demo cubed-sphere Z-order connectivity px=2 face=4 (rx,ry)=(0,1)
- * self=18 L=14 R=19 D=16 U=11 UL=18
- * Demo cubed-sphere Z-order connectivity px=2 face=5 (rx,ry)=(0,1)
- * self=22 L=13 R=23 D=20 U=0 UL=15
+ * Ghost zone communication:
+ *   The main function to perform ghost zone communication is
+ *    CubedSphereLayoutImpl::forward().
+ *   The loc_of() function return a 3-item tuple (rx,ry,face) for a given rank.
+ *   Position of a serialization/deserialization buffer is identified by
+ *   get_buffer_id(offset), where offset is a 3-item tuple (dx,dy,0)
+ *
+ *   CubedSphereLayoutImpl::serialize() saves the ghost zone data into send
+ * buffers. CubedSphereLayoutImpl::deserialize() loads the received data into
+ * ghost zones.
+ *
+ *   For the cubed-sphere layout, only face-adjacent neighbors are considered.
+ *   Within serialization, _covariant_to_cartesian() is called to convert
+ *   covariant vector components to Cartesian components.
+ *
+ *   Within deserialization, _cartesian_to_covariant() is called to convert
+ *   Cartesian vector components back to covariant components.
+ *
+ *   These functions will use the coordinate information from the MeshBlock.
+ *   Access the coordinate via `pmb->pcoord`.
+ *
+ *   The cell-centered angular coordinates are in `pcoord->x2v` and
+ * `pcoord->x3v`. Consult src/coord/coordinate.hpp,
+ * src/coord/gnomonic_equiangular.cpp, for more details.
  */
 
 // C/C++
@@ -32,8 +52,13 @@
 #include <fmt/format.h>
 
 // snap
+#include <snap/snap.h>
+
+#include <snap/coord/coordinate.hpp>
+#include <snap/mesh/meshblock.hpp>
+
 #include "connectivity.hpp"
-#include "layout.hpp"
+#include "cubed_sphere_layout.hpp"
 
 namespace snap {
 
@@ -158,12 +183,11 @@ void CubedSphereLayoutImpl::reset() {
 void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
   options->report(os);
   for (int f = 0; f < 6; ++f) {
-    os << " Face " << f << "\n";
-    os << " Rank | (rx,ry)\n";
+    os << " Rank | (rx,ry;f)\n";
     os << "----------------\n";
     for (int r = 0; r < pxy() * pxy(); ++r) {
-      os << fmt::format(" {:>3} | ({:>2},{:>2})\n", _rankof6[f][r],
-                        _coords6[f][r].x, _coords6[f][r].y);
+      os << fmt::format(" {:>3} | ({:>2},{:>2},{:>2})\n", _rankof6[f][r],
+                        _coords6[f][r].x, _coords6[f][r].y, f);
     }
   }
 }
@@ -293,13 +317,15 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars) {
 
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
+      // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
+      // skip corners for cubed-sphere
+      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
-
       int r = get_buffer_id(offset);
+
       if (nb >= 0) {
         if (nb != rank) {  // different ranks
           // Send operation
@@ -322,6 +348,112 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars) {
 
   // Deserialize received data into ghost zones
   deserialize(pmb, vars);
+}
+
+void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
+                                      Variables &vars) {
+  if (options->verbose() && is_root()) {
+    std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
+  }
+
+  // Iterate over all face-adjacent neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+      // skip the corners for cubed-sphere
+      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
+
+      // Only serialize if buffer exists
+      if (!send_bufs[bid].empty()) {
+        // Get the interior part for this direction
+        auto sub = pmb->part(offset, /*exterior=*/false);
+
+        // Copy data from mesh to send buffer
+        int count = 0;
+        for (auto name : buf_names) {
+          auto var = vars.at(name).index(sub);
+          if (name == "hydro_u") {
+            _covariant_to_cartesian(pmb, offset, var[IVX], var[IVY], var[IVZ]);
+          }
+          send_bufs[bid][count++].copy_(var);
+        }
+      }
+    }
+  }
+}
+
+void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
+                                        Variables &vars) const {
+  if (options->verbose() && is_root()) {
+    std::cout << "[Layout] deserializing data from receive buffers\n";
+  }
+
+  // Iterate over all 2D neighbor directions
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+      // skip the corners for cubed-sphere
+      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int bid = get_buffer_id(offset);
+
+      // Only deserialize if buffer exists
+      if (!recv_bufs[bid].empty()) {
+        // Get the exterior (ghost zone) part for this direction
+        auto sub = pmb->part(offset, /*exterior=*/true);
+
+        // Copy data from receive buffer to mesh ghost zones
+        int count = 0;
+        for (auto name : buf_names) {
+          auto var = vars.at(name).index(sub);
+          if (name == "hydro_u") {
+            _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
+          }
+          vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
+        }
+      }
+    }
+  }
+}
+
+void CubedSphereLayoutImpl::_covariant_to_cartesian(
+    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
+    torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
+  // get coordinates
+  auto pcoord = pmb->phydro->pcoord;
+  auto x2v = pcoord->x2v;
+  auto x3v = pcoord->x3v;
+
+  auto sub = pmb->part(offset, /*exterior=*/false);
+
+  auto co_vz = vz.clone();
+  auto co_vx = vx.clone();
+  auto co_vy = vy.clone();
+
+  //\TODO transform (co_vx, co_vy, co_vz) from covariant to cartesian
+}
+
+void CubedSphereLayoutImpl::_cartesian_to_covariant(
+    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
+    torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
+  // coordinates
+  auto pcoord = pmb->phydro->pcoord;
+  auto x2v = pcoord->x2v;
+  auto x3v = pcoord->x3v;
+
+  auto sub = pmb->part(offset, /*exterior=*/true);
+
+  auto cart_vz = vz.clone();
+  auto cart_vx = vx.clone();
+  auto cart_vy = vy.clone();
+
+  //\TODO transform (cart_vx, cart_vy, cart_vz) from cartesian to covariant
 }
 
 }  // namespace snap

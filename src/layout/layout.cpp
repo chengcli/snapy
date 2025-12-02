@@ -11,6 +11,7 @@
 // snap
 #include <snap/mesh/meshblock.hpp>
 
+#include "cubed_sphere_layout.hpp"
 #include "layout.hpp"
 
 namespace snap {
@@ -35,19 +36,16 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   auto node = config["distribute"];
 
   op->type() = node["layout"].as<std::string>("slab");
-  if (op->type() == "slab") {
-    op->px(node["nb3"].as<int>(1));
-    op->py(node["nb2"].as<int>(1));
-    op->pz(node["nb1"].as<int>(1));
+  op->px(node["nb3"].as<int>(1));
+  op->py(node["nb2"].as<int>(1));
+  op->pz(node["nb1"].as<int>(1));
+  op->backend() = node["backend"].as<std::string>("gloo");
+  op->verbose() = node["verbose"].as<bool>(verbose);
 
-    TORCH_CHECK(
-        op->pz() == 1,
-        "Slab layout only supports partitioning along x2-x3 directions.");
-
-    op->backend() = node["backend"].as<std::string>("gloo");
-    op->verbose() = node["verbose"].as<bool>(verbose);
-  } else {
-    TORCH_CHECK(false, "Unsupported layout type: ", op->type());
+  if (op->type() == "slab" || op->type() == "cubed-sphere") {
+    TORCH_CHECK(op->pz() == 1,
+                "slab/cubed-sphere layout only supports partitioning along "
+                "x2-x3 directions.");
   }
 
   if (op->verbose() && get_rank() == 0) {
@@ -131,7 +129,7 @@ void LayoutImpl::init_buffers(MeshBlockImpl const* pmb, Variables const& vars,
   }
 }
 
-void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables const& vars) {
+void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars) {
   if (options->verbose() && is_root()) {
     std::cout << "[Layout] serializing data into send buffers\n";
   }
