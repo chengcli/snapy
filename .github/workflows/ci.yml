@@ -57,7 +57,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install numpy pytest 'kintera>=1.2.1' 'torch==2.7.1'
+          pip install numpy pytest 'kintera>=1.2.2' 'torch==2.7.1'
 
       - name: Install NetCDF
         run: |
