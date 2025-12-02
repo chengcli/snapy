@@ -13,7 +13,7 @@ dynamics:
 
 distribute:
   backend: gloo
-  layout: slab
+  layout: cubed-sphere
   nb2: 1
   nb3: 1
   verbose: true

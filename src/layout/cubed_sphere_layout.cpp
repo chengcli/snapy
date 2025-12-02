@@ -389,7 +389,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                                         Variables &vars) const {
   if (options->verbose() && is_root()) {
-    std::cout << "[Layout] deserializing data from receive buffers\n";
+    std::cout
+        << "[CubedSphereLayout] deserializing data from receive buffers\n";
   }
 
   // Iterate over all 2D neighbor directions
@@ -427,10 +428,20 @@ void CubedSphereLayoutImpl::_covariant_to_cartesian(
     torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
   // get coordinates
   auto pcoord = pmb->phydro->pcoord;
-  auto x2v = pcoord->x2v;
-  auto x3v = pcoord->x3v;
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
+                              /*indexing=*/"ij");
 
   auto sub = pmb->part(offset, /*exterior=*/false);
+
+  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+
+  if (options->verbose() && is_root()) {
+    std::cout << "offset = (" << std::get<0>(offset) << ", "
+              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
+    std::cout << "x2v = " << x2v << "\n";
+    std::cout << "x3v = " << x3v << "\n";
+  }
 
   auto co_vz = vz.clone();
   auto co_vx = vx.clone();
@@ -444,10 +455,20 @@ void CubedSphereLayoutImpl::_cartesian_to_covariant(
     torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
   // coordinates
   auto pcoord = pmb->phydro->pcoord;
-  auto x2v = pcoord->x2v;
-  auto x3v = pcoord->x3v;
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
+                              /*indexing=*/"ij");
 
   auto sub = pmb->part(offset, /*exterior=*/true);
+
+  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+
+  if (options->verbose() && is_root()) {
+    std::cout << "offset = (" << std::get<0>(offset) << ", "
+              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
+    std::cout << "x2v = " << x2v << "\n";
+    std::cout << "x3v = " << x3v << "\n";
+  }
 
   auto cart_vz = vz.clone();
   auto cart_vx = vx.clone();

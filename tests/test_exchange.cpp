@@ -10,7 +10,7 @@
 using namespace snap;
 
 int main(int argc, char **argv) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml", true);
+  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
   auto block = MeshBlock(op);
 
   auto device = torch::kCPU;
