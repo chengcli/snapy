@@ -39,16 +39,16 @@ class CubedSphereLayoutImpl
                                torch::Tensor vz, torch::Tensor vx,
                                torch::Tensor vy) const;
 
+  //! \brief Interpolate transmitted variable to local ghost zones
+  void _interpolate_to_local(MeshBlockImpl const *pmb,
+                             std::tuple<int, int, int> offset,
+                             torch::Tensor var) const;
+
   //! \brief Deproject cartesian velocities to covariant velocities
   void _cartesian_to_covariant(MeshBlockImpl const *pmb,
                                std::tuple<int, int, int> offset,
                                torch::Tensor vz, torch::Tensor vx,
                                torch::Tensor vy) const;
-
-  //! \brief Interpolate transmitted variable to local grid
-  void _interpolate_to_local(MeshBlockImpl const *pmb,
-                             std::tuple<int, int, int> offset,
-                             torch::Tensor var) const;
 
   //! \brieff Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {

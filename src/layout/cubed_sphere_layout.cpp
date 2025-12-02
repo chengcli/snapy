@@ -186,8 +186,9 @@ void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
     os << " Rank | (rx,ry;f)\n";
     os << "----------------\n";
     for (int r = 0; r < pxy() * pxy(); ++r) {
-      os << fmt::format(" {:>3} | ({:>2},{:>2},{:>2})\n", _rankof6[f][r],
-                        _coords6[f][r].x, _coords6[f][r].y, f);
+      int gr = _global_rank_from_face_local(f, r);
+      os << fmt::format(" {:>3} | ({:>2},{:>2};{:>2})\n", gr, _coords6[f][r].x,
+                        _coords6[f][r].y, f);
     }
   }
 }
@@ -414,10 +415,10 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         for (auto name : buf_names) {
           auto var = vars.at(name).index(sub);
           vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
+          _interpolate_to_local(pmb, offset, var);
           if (name == "hydro_u") {
             _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
           }
-          _interpolate_to_local(pmb, offset, var);
         }
       }
     }
@@ -451,6 +452,30 @@ void CubedSphereLayoutImpl::_covariant_to_cartesian(
   //\TODO transform (co_vx, co_vy, co_vz) from covariant to cartesian
 }
 
+void CubedSphereLayoutImpl::_interpolate_to_local(
+    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
+    torch::Tensor var) const {
+  // my coordinates
+  auto pcoord = pmb->phydro->pcoord;
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
+                              /*indexing=*/"ij");
+
+  auto sub = pmb->part(offset, /*exterior=*/true);
+
+  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+
+  auto var_neighbor = var.index(sub).clone();
+
+  if (options->verbose() && is_root()) {
+    std::cout << "offset = (" << std::get<0>(offset) << ", "
+              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
+    std::cout << "var from neighbor = " << var_neighbor << "\n";
+  }
+
+  //\TODO calculate neighbor coordinates and perform interpolation
+}
+
 void CubedSphereLayoutImpl::_cartesian_to_covariant(
     MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
     torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
@@ -476,30 +501,6 @@ void CubedSphereLayoutImpl::_cartesian_to_covariant(
   auto cart_vy = vy.clone();
 
   //\TODO transform (cart_vx, cart_vy, cart_vz) from cartesian to covariant
-}
-
-void CubedSphereLayoutImpl::_interpolate_to_local(
-    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
-    torch::Tensor var) const {
-  // my coordinates
-  auto pcoord = pmb->phydro->pcoord;
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
-                              /*indexing=*/"ij");
-
-  auto sub = pmb->part(offset, /*exterior=*/true);
-
-  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
-  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-
-  auto var_neighbor = var.index(sub).clone();
-
-  if (options->verbose() && is_root()) {
-    std::cout << "offset = (" << std::get<0>(offset) << ", "
-              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "var from neighbor = " << var_neighbor << "\n";
-  }
-
-  //\TODO calculate neighbor coordinates and perform interpolation
 }
 
 }  // namespace snap
