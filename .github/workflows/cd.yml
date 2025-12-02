@@ -52,7 +52,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        #python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9"]
     env:
       MACOSX_DEPLOYMENT_TARGET: 15.0
     steps:
@@ -95,7 +96,7 @@ jobs:
             export PYHARP_LIB=$(python -c 'import pyharp; print(pyharp.__path__[0] + "/lib")')
             export PYDISORT_LIB=$(python -c 'import pydisort; print(pydisort.__path__[0] + "/lib")')
             export DYLD_FALLBACK_LIBRARY_PATH="$(pwd)/build/lib:$TORCH_LIB:$KINTERA_LIB:$PYHARP_LIB:$PYDISORT_LIB:$DYLD_FALLBACK_LIBRARY_PATH"
-            delocate-wheel -e torch -e snapy_release -w {dest_dir} {wheel}
+            delocate-wheel -e torch -e snapy_release -e kintera_release -eharp_release -edisort_release -w {dest_dir} {wheel}
         run: |
           export TORCH_LIB=$(python -c 'import torch; print(torch.__path__[0] + "/lib")')
           export DYLD_FALLBACK_LIBRARY_PATH="$TORCH_LIB:$DYLD_FALLBACK_LIBRARY_PATH"
