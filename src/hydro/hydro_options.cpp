@@ -165,36 +165,29 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
 
   // reconstruction
   op->recon1() = ReconstructOptionsImpl::from_yaml(filename, "vertical");
-  if (op->recon1()) {
-    op->recon1()->eos() = op->eos();
+  op->recon1()->eos() = op->eos();
 
-    if (verbose) {
-      std::cout << "[HydroOptions] vertical reconstruction options:"
-                << std::endl;
-      op->recon1()->report(std::cout);
-    }
+  if (verbose) {
+    std::cout << "[HydroOptions] vertical reconstruction options:" << std::endl;
+    op->recon1()->report(std::cout);
   }
 
   op->recon23() = ReconstructOptionsImpl::from_yaml(filename, "horizontal");
-  if (op->recon23()) {
-    op->recon23()->eos() = op->eos();
+  op->recon23()->eos() = op->eos();
 
-    if (verbose) {
-      std::cout << "[HydroOptions] horizontal reconstruction options:"
-                << std::endl;
-      op->recon23()->report(std::cout);
-    }
+  if (verbose) {
+    std::cout << "[HydroOptions] horizontal reconstruction options:"
+              << std::endl;
+    op->recon23()->report(std::cout);
   }
 
   // riemann solver
   op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename, "dynamics");
-  if (op->riemann()) {
-    op->riemann()->eos() = op->eos();
+  op->riemann()->eos() = op->eos();
 
-    if (verbose) {
-      std::cout << "[HydroOptions] riemann solver options:" << std::endl;
-      op->riemann()->report(std::cout);
-    }
+  if (verbose) {
+    std::cout << "[HydroOptions] riemann solver options:" << std::endl;
+    op->riemann()->report(std::cout);
   }
 
   // implicit options
