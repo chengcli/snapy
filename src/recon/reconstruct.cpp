@@ -11,19 +11,21 @@
 namespace snap {
 ReconstructOptions ReconstructOptionsImpl::from_yaml(
     std::string const &filename, std::string const &section) {
+  auto op = ReconstructOptionsImpl::create();
+
   auto config = YAML::LoadFile(filename);
-  if (!config["dynamics"]) return nullptr;
-  if (!config["dynamics"]["reconstruct"]) return nullptr;
+  if (!config["dynamics"]) return op;
+  if (!config["dynamics"]["reconstruct"]) return op;
   return from_yaml(config["dynamics"]["reconstruct"], section);
 }
 
 ReconstructOptions ReconstructOptionsImpl::from_yaml(
     const YAML::Node &node, std::string const &section) {
-  if (!node[section]) return nullptr;
-
   auto op = ReconstructOptionsImpl::create();
-  op->shock() = node[section]["shock"].as<bool>(false);
 
+  if (!node[section]) return op;
+
+  op->shock() = node[section]["shock"].as<bool>(false);
   op->interp() = InterpOptionsImpl::create();
   op->interp()->type() = node[section]["type"].as<std::string>("dc");
   op->interp()->scale() = node[section]["scale"].as<bool>(false);
@@ -139,8 +141,8 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 std::shared_ptr<ReconstructImpl> ReconstructImpl::create(
     ReconstructOptions const &opts, torch::nn::Module *p,
     std::string const &name) {
-  TORCH_CHECK(p, "Parent module is null");
-  TORCH_CHECK(opts, "Reconstruct options is null");
+  TORCH_CHECK(p, "[Reconstruct] Parent module is null");
+  TORCH_CHECK(opts, "[Reconstruct] Options pointer is null");
   return p->register_module(name, Reconstruct(opts));
 }
 

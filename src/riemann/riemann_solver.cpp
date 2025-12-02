@@ -7,9 +7,11 @@
 namespace snap {
 RiemannSolverOptions RiemannSolverOptionsImpl::from_yaml(
     std::string const& filename, std::string const& section) {
+  auto op = RiemannSolverOptionsImpl::create();
+
   auto config = YAML::LoadFile(filename);
-  if (!config[section]) return nullptr;
-  if (!config[section]["riemann-solver"]) return nullptr;
+  if (!config[section]) return op;
+  if (!config[section]["riemann-solver"]) return op;
   return from_yaml(config["dynamics"]["riemann-solver"]);
 }
 

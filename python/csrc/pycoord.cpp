@@ -39,12 +39,12 @@ void bind_coord(py::module &m) {
              self.options->report(ss);
              return fmt::format("Coordinate(\n{})", ss.str());
            })
-      .def("if", [](snap::CartesianImpl &self) { return self.is(); })
-      .def("il", [](snap::CartesianImpl &self) { return self.ie() + 1; })
-      .def("jf", [](snap::CartesianImpl &self) { return self.js(); })
-      .def("jl", [](snap::CartesianImpl &self) { return self.je() + 1; })
-      .def("kf", [](snap::CartesianImpl &self) { return self.ks(); })
-      .def("kl", [](snap::CartesianImpl &self) { return self.ke() + 1; })
+      .def("ifirst", [](snap::CartesianImpl &self) { return self.is(); })
+      .def("ilast", [](snap::CartesianImpl &self) { return self.ie() + 1; })
+      .def("jfirst", [](snap::CartesianImpl &self) { return self.js(); })
+      .def("jlast", [](snap::CartesianImpl &self) { return self.je() + 1; })
+      .def("kfirst", [](snap::CartesianImpl &self) { return self.ks(); })
+      .def("klast", [](snap::CartesianImpl &self) { return self.ke() + 1; })
       .def("center_width1",
            [](snap::CartesianImpl &self) { return self.center_width1(); })
       .def("center_width2",

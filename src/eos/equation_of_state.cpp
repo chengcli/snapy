@@ -34,7 +34,7 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   op->eos_file() = node["eos-file"].as<std::string>("");
   op->verbose() = node["verbose"].as<bool>(verbose);
 
-  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, verbose);
+  op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, op->verbose());
 
   if (op->thermo()) {
     TORCH_CHECK(
