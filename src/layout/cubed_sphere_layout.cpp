@@ -413,10 +413,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         int count = 0;
         for (auto name : buf_names) {
           auto var = vars.at(name).index(sub);
+          vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
           if (name == "hydro_u") {
             _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
           }
-          vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
+          _interpolate_to_local(pmb, offset, var);
         }
       }
     }
@@ -426,7 +427,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 void CubedSphereLayoutImpl::_covariant_to_cartesian(
     MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
     torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
-  // get coordinates
+  // coordinates
   auto pcoord = pmb->phydro->pcoord;
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
                               /*indexing=*/"ij");
@@ -475,6 +476,30 @@ void CubedSphereLayoutImpl::_cartesian_to_covariant(
   auto cart_vy = vy.clone();
 
   //\TODO transform (cart_vx, cart_vy, cart_vz) from cartesian to covariant
+}
+
+void CubedSphereLayoutImpl::_interpolate_to_local(
+    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
+    torch::Tensor var) const {
+  // my coordinates
+  auto pcoord = pmb->phydro->pcoord;
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
+                              /*indexing=*/"ij");
+
+  auto sub = pmb->part(offset, /*exterior=*/true);
+
+  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+
+  auto var_neighbor = var.index(sub).clone();
+
+  if (options->verbose() && is_root()) {
+    std::cout << "offset = (" << std::get<0>(offset) << ", "
+              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
+    std::cout << "var from neighbor = " << var_neighbor << "\n";
+  }
+
+  //\TODO calculate neighbor coordinates and perform interpolation
 }
 
 }  // namespace snap

@@ -45,6 +45,11 @@ class CubedSphereLayoutImpl
                                torch::Tensor vz, torch::Tensor vx,
                                torch::Tensor vy) const;
 
+  //! \brief Interpolate transmitted variable to local grid
+  void _interpolate_to_local(MeshBlockImpl const *pmb,
+                             std::tuple<int, int, int> offset,
+                             torch::Tensor var) const;
+
   //! \brieff Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {
     int P = pxy() * pxy();
