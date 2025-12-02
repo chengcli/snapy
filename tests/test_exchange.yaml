@@ -1,3 +1,7 @@
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
 species:
   - name: dry
     composition: {O: 0.42, N: 1.56, Ar: 0.01}

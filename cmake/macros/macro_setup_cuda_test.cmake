@@ -16,6 +16,7 @@ macro(setup_cuda_test namel)
     PRIVATE ${CMAKE_BINARY_DIR}
             ${KINTERA_INCLUDE_DIR}
             ${SNAP_INCLUDE_DIR}
+            ${HARP_INCLUDE_DIR}
             ${NETCDF_INCLUDES}
             ${TORCH_INCLUDE_DIR}
             ${TORCH_API_INCLUDE_DIR}

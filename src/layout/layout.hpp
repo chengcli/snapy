@@ -276,6 +276,8 @@ class CubedSphereLayoutImpl
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 
+  void forward(MeshBlockImpl const *pmb, Variables &vars) override;
+
  private:
   //! \brieff Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {
