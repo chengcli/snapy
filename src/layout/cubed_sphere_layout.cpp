@@ -359,6 +359,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
     std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
   }
 
+  // Get my logical location
+  auto iloc = loc_of(options->rank());
+
   // Iterate over all face-adjacent neighbor directions
   for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
@@ -370,6 +373,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int bid = get_buffer_id(offset);
 
+      int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;
+      bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
+
       // Only serialize if buffer exists
       if (send_bufs[bid].empty()) continue;
 
@@ -380,7 +387,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
       int count = 0;
       for (auto name : buf_names) {
         auto var = vars.at(name).index(sub);
-        if (name == "hydro_u") {
+        if (name == "hydro_u" && inter_panel) {
           _covariant_to_cartesian(pmb, offset, var[IVX], var[IVY], var[IVZ]);
         }
         send_bufs[bid][count++].copy_(var);
