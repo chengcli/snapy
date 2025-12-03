@@ -126,16 +126,16 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // 3. define variables
   int level = 0;
-  auto iloc = pmb->playout->loc_of(rank);
+  auto iloc = pmb->layout()->loc_of(rank);
 
   int lx1 =
-      pmb->playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
+      pmb->options->layout()->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
   int lx2 = std::get<1>(iloc);
   int lx3 = std::get<0>(iloc);
 
-  int nb1 = pmb->playout->options->pz();
-  int nb2 = pmb->playout->options->py();
-  int nb3 = pmb->playout->options->px();
+  int nb1 = pmb->options->layout()->pz();
+  int nb2 = pmb->options->layout()->py();
+  int nb3 = pmb->options->layout()->px();
 
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f, imu, iphi;
   int loc[4] = {lx1, lx2, lx3, level};

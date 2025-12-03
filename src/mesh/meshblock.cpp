@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <mutex>
 
 // kintera
 #include <kintera/utils/serialize.hpp>
@@ -14,6 +15,11 @@
 #include "meshblock.hpp"
 
 namespace snap {
+
+static std::mutex meshblock_mutex;
+
+// Static member variable definitions
+Layout MeshBlockImpl::_playout = nullptr;
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
@@ -43,7 +49,10 @@ MeshBlockImpl::~MeshBlockImpl() {
 
 void MeshBlockImpl::reset() {
   // set up distributed environment
-  playout = LayoutImpl::create(options->layout(), this);
+  if (_playout == nullptr) {
+    std::unique_lock<std::mutex> lock(meshblock_mutex);
+    _playout = LayoutImpl::create(options->layout(), this);
+  }
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -61,7 +70,7 @@ void MeshBlockImpl::reset() {
 
   // reset internal block boundaries
   if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
-    auto iloc = playout->loc_of(rank);
+    auto iloc = _playout->loc_of(rank);
     // x1-dir
     auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
@@ -89,7 +98,7 @@ void MeshBlockImpl::reset() {
       options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
     }
 
-    if (options->verbose() && playout->is_root()) {
+    if (options->verbose() && _playout->is_root()) {
       std::cout << "[MeshBlock] setting up rank bcs" << std::endl;
     }
   }
@@ -108,7 +117,7 @@ void MeshBlockImpl::reset() {
                                "' is not implemented.");
     }
 
-    if (options->verbose() && playout->is_root()) {
+    if (options->verbose() && _playout->is_root()) {
       std::cout << "[MeshBlock] adding output type: " << out_op->file_type()
                 << std::endl;
     }
@@ -116,14 +125,14 @@ void MeshBlockImpl::reset() {
 
   // set up integrator
   pintg = harp::IntegratorImpl::create(options->intg(), this);
-  if (options->verbose() && playout->is_root()) {
+  if (options->verbose() && _playout->is_root()) {
     std::cout << "[MeshBlock] using integrator type: " << pintg->options->type()
               << std::endl;
   }
 
   // set up hydro model
   phydro = HydroImpl::create(options->hydro(), this);
-  if (options->verbose() && playout->is_root()) {
+  if (options->verbose() && _playout->is_root()) {
     std::cout << "[MeshBlock] using hydro type: "
               << phydro->peos->options->type() << std::endl;
   }
@@ -304,8 +313,8 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   // exchange buffers
-  playout->init_buffers(this, vars, {"hydro_u", "scalar_s"});
-  playout->forward(this, vars);
+  _playout->init_buffers(this, vars, {"hydro_u", "scalar_s"});
+  _playout->forward(this, vars);
 
   // start timing
   _time_start = clock();
@@ -334,7 +343,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  playout->pg->allreduce(dt_reduce, op)->wait();
+  _playout->pg->allreduce(dt_reduce, op)->wait();
 
   dt = dt_reduce[0].item<double>();
 
@@ -494,7 +503,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (7) ghost zone exchange --------
-  playout->forward(this, vars);
+  _playout->forward(this, vars);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -539,7 +548,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         compute_energy = true;
       }
 
-      if (playout->is_root()) {
+      if (_playout->is_root()) {
         std::cout << "cycle=" << cycle << " redo=" << pintg->current_redo
                   << std::scientific << std::setprecision(dt_precision)
                   << " time=" << time << " dt=" << dt;
@@ -552,9 +561,9 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IDN].sum()};
 
         // sum across all ranks
-        playout->pg->reduce(mass, opsum)->wait();
+        _playout->pg->reduce(mass, opsum)->wait();
 
-        if (playout->is_root()) {
+        if (_playout->is_root()) {
           std::cout << " mass=" << mass[0].item<double>();
         }
       }
@@ -564,14 +573,14 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
             vars.at("hydro_u").index(interior)[IPR].sum()};
 
         // sum across all ranks
-        playout->pg->reduce(energy, opsum)->wait();
+        _playout->pg->reduce(energy, opsum)->wait();
 
-        if (playout->is_root()) {
+        if (_playout->is_root()) {
           std::cout << " energy=" << energy[0].item<double>();
         }
       }
 
-      if (playout->is_root()) {
+      if (_playout->is_root()) {
         std::cout << std::endl;
       }
     }
@@ -582,7 +591,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
-  if (playout->is_root()) {  // only root prints
+  if (_playout->is_root()) {  // only root prints
     auto sig = SignalHandler::GetInstance();
     if (sig->GetSignalFlag(SIGTERM) != 0) {
       std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -617,12 +626,12 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   opsum.reduceOp = c10d::ReduceOp::SUM;
   opsum.rootRank = options->layout()->root_rank();
 
-  playout->pg->reduce(cells, opsum)->wait();
+  _playout->pg->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
 
-  if (playout->is_root()) {
+  if (_playout->is_root()) {
     std::cout << std::endl
               << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
     std::cout << "cpu time used (s) = " << cpu_time << std::endl;
