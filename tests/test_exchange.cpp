@@ -31,8 +31,9 @@ int main(int argc, char **argv) {
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
   int r = block->options->layout()->rank();
 
-  auto playout = block->named_modules()["layout"];
-  if (r == 0) playout->pretty_print(std::cout);
+  if (r == 0) {
+    block->named_modules()["layout"]->pretty_print(std::cout);
+  }
 
   auto interior = block->part({0, 0, 0}, /*exterior=*/false);
   w.index(interior)[IDN] = r + 1.0;
@@ -46,9 +47,11 @@ int main(int argc, char **argv) {
 
   auto [rx, ry, face] = block->layout()->loc_of(r);
 
-  for (int f = 0; f < 6; ++f) {
-    if (face == f) {
-      std::cout << "face = " << face << std::endl;
+  for (int i = 0; i < block->options->layout()->world_size(); ++i) {
+    if (i == r) {
+      std::cout << fmt::format("rx = {}, ry= {}, face= {}, rank= {}", rx, ry,
+                               face, r)
+                << std::endl;
       std::cout << "hydro_u = \n"
                 << vars["hydro_u"][IDN].squeeze() << std::endl;
     }

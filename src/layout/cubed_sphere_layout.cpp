@@ -164,6 +164,13 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
 }
 
 void CubedSphereLayoutImpl::reset() {
+  // build the ranks
+  TORCH_CHECK(options->pz() == 1,
+              "CubedSphereLayoutImpl: pz must be 1 for cubed-sphere layout");
+  TORCH_CHECK(
+      options->px() == options->py(),
+      "CubedSphereLayoutImpl: px must equal py for cubed-sphere layout");
+
   int px = options->px();
   int py = options->py();
 
@@ -435,8 +442,8 @@ void CubedSphereLayoutImpl::_covariant_to_cartesian(
   if (options->verbose() && is_root()) {
     std::cout << "offset = (" << std::get<0>(offset) << ", "
               << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "x2v = " << x2v << "\n";
-    std::cout << "x3v = " << x3v << "\n";
+    std::cout << "x2v = \n" << x2v.squeeze(-1) << "\n";
+    std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
   }
 
   auto co_vz = vz.clone();
@@ -487,8 +494,8 @@ void CubedSphereLayoutImpl::_cartesian_to_covariant(
   if (options->verbose() && is_root()) {
     std::cout << "offset = (" << std::get<0>(offset) << ", "
               << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "x2v = " << x2v << "\n";
-    std::cout << "x3v = " << x3v << "\n";
+    std::cout << "x2v = \n" << x2v.squeeze(-1) << "\n";
+    std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
   }
 
   auto cart_vz = vz.clone();
