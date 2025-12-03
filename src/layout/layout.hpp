@@ -139,8 +139,8 @@ class LayoutImpl {
   LayoutOptions options;
 
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
-  LayoutImpl(const LayoutOptions &opts, int copies = 1) : options(opts) {
-    int P = copies * options->px() * options->py() * options->pz();
+  LayoutImpl(const LayoutOptions &opts) : options(opts) {
+    int P = options->px() * options->py() * options->pz();
     _rankof.resize(P);
   }
 

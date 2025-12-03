@@ -9,7 +9,7 @@ class CubedSphereLayoutImpl
  public:
   //! Constructor to initialize the layers
   CubedSphereLayoutImpl() = default;
-  CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts, 6) {
+  CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
     options->type("cubed-sphere");
     reset();
   }
@@ -64,8 +64,8 @@ class CubedSphereLayoutImpl
   }
 
   //! \brief map local (rx,ry) to per-face Z-order rank */
-  int _face_local_rank(int face, int rx, int ry) const {
-    return _rankof6[face][linear_index2(pxy(), pxy(), ry, rx)];
+  int _face_local_rank(int rx, int ry) const {
+    return _rankof[linear_index2(pxy(), pxy(), ry, rx)];
   }
 
   //! \brief Edge stepping helper
@@ -87,9 +87,6 @@ class CubedSphereLayoutImpl
    */
   void _step_one(int face, int rx, int ry, int dx, int dy, int *out_face,
                  int *out_rx, int *out_ry) const;
-
-  Coord2 *_coords6[6];  //! coords per face: length P=px*py each
-  int *_rankof6[6];     //! inverse map per face: length P=px*py each
 };
 TORCH_MODULE(CubedSphereLayout);
 

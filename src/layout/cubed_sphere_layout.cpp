@@ -164,17 +164,12 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
 }
 
 void CubedSphereLayoutImpl::reset() {
-  // build the ranks
-  int P = pxy() * pxy();
-  _coords2.resize(6 * P);
+  int px = options->px();
+  int py = options->py();
 
-  for (int f = 0; f < 6; ++f) {
-    _coords6[f] = _coords2.data() + f * P;
-    _rankof6[f] = _rankof.data() + f * P;
-
-    build_zorder_coords2(pxy(), pxy(), _coords6[f]);
-    build_rank_of2(pxy(), pxy(), _coords6[f], _rankof6[f]);
-  }
+  _coords2.resize(px * py);
+  build_zorder_coords2(pxy(), pxy(), _coords2.data());
+  build_rank_of2(pxy(), pxy(), _coords2.data(), _rankof.data());
 
   // build backend
   _init_backend();
@@ -187,8 +182,8 @@ void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
     os << "----------------\n";
     for (int r = 0; r < pxy() * pxy(); ++r) {
       int gr = _global_rank_from_face_local(f, r);
-      os << fmt::format(" {:>3} | ({:>2},{:>2};{:>2})\n", gr, _coords6[f][r].x,
-                        _coords6[f][r].y, f);
+      os << fmt::format(" {:>3} | ({:>2},{:>2};{:>2})\n", gr, _coords2[r].x,
+                        _coords2[r].y, f);
     }
   }
 }
@@ -233,15 +228,15 @@ int CubedSphereLayoutImpl::rank_of(std::tuple<int, int, int> iloc) const {
   auto [rx, ry, face] = iloc;
   if (face < 0 || face >= 6) return -1;
   if (rx < 0 || rx >= pxy() || ry < 0 || ry >= pxy()) return -1;
-  return _rankof6[face][ry * pxy() + rx];
+  return _rankof[ry * pxy() + rx];
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
   if (global_rank < 0 || global_rank >= 6 * pxy() * pxy()) return {-1, -1, -1};
   int face, r_local;
   _global_rank_to_face_local(global_rank, &face, &r_local);
-  int rx = _coords6[face][r_local].x;
-  int ry = _coords6[face][r_local].y;
+  int rx = _coords2[r_local].x;
+  int ry = _coords2[r_local].y;
   return {rx, ry, face};
 }
 
@@ -253,7 +248,7 @@ int CubedSphereLayoutImpl::neighbor_rank(
 
   if (dx == 0 && dy == 0) {
     /* self */
-    int rloc = _face_local_rank(face, rx, ry);
+    int rloc = _face_local_rank(rx, ry);
     return _global_rank_from_face_local(face, rloc);
   }
 
@@ -261,7 +256,7 @@ int CubedSphereLayoutImpl::neighbor_rank(
   if ((dx == 0) ^ (dy == 0)) {
     int f1, x1, y1;
     _step_one(face, rx, ry, dx, dy, &f1, &x1, &y1);
-    int rloc = _face_local_rank(f1, x1, y1);
+    int rloc = _face_local_rank(x1, y1);
     return _global_rank_from_face_local(f1, rloc);
   }
 
@@ -278,7 +273,7 @@ int CubedSphereLayoutImpl::neighbor_rank(
 
     int f2, x2, y2;
     _step_one(f1, x1, y1, 0, dy, &f2, &x2, &y2);
-    int rloc = _face_local_rank(f2, x2, y2);
+    int rloc = _face_local_rank(x2, y2);
     return _global_rank_from_face_local(f2, rloc);
   } else if ((dy + ly <= 1) && (dy + ly >= -1)) {
     // do (0, dy) and then (dx, 0)
@@ -287,12 +282,12 @@ int CubedSphereLayoutImpl::neighbor_rank(
 
     int f2, x2, y2;
     _step_one(f1, x1, y1, dx, 0, &f2, &x2, &y2);
-    int rloc = _face_local_rank(f2, x2, y2);
+    int rloc = _face_local_rank(x2, y2);
     return _global_rank_from_face_local(f2, rloc);
   } else {  // crossing two edges
     int f1, x1, y1;
     _step_one(face, rx, ry, dx, 0, &f1, &x1, &y1);
-    int rloc = _face_local_rank(f1, x1, y1);
+    int rloc = _face_local_rank(x1, y1);
     return _global_rank_from_face_local(f1, rloc);
   }
 }
@@ -416,9 +411,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
           auto var = vars.at(name).index(sub);
           vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
           _interpolate_to_local(pmb, offset, var);
-          if (name == "hydro_u") {
+          if (name == "hydro_u")
             _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
-          }
         }
       }
     }

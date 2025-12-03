@@ -42,12 +42,6 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   op->backend() = node["backend"].as<std::string>("gloo");
   op->verbose() = node["verbose"].as<bool>(verbose);
 
-  if (op->type() == "slab" || op->type() == "cubed-sphere") {
-    TORCH_CHECK(op->pz() == 1,
-                "slab/cubed-sphere layout only supports partitioning along "
-                "x2-x3 directions.");
-  }
-
   if (op->verbose() && get_rank() == 0) {
     std::cout << "[LayoutOptions] layout options:" << std::endl;
     op->report(std::cout);
