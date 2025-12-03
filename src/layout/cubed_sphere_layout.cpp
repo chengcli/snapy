@@ -360,7 +360,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
   }
 
   // Iterate over all face-adjacent neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
@@ -371,22 +371,21 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
       int bid = get_buffer_id(offset);
 
       // Only serialize if buffer exists
-      if (!send_bufs[bid].empty()) {
-        // Get the interior part for this direction
-        auto sub = pmb->part(offset, /*exterior=*/false);
+      if (send_bufs[bid].empty()) continue;
 
-        // Copy data from mesh to send buffer
-        int count = 0;
-        for (auto name : buf_names) {
-          auto var = vars.at(name).index(sub);
-          if (name == "hydro_u") {
-            _covariant_to_cartesian(pmb, offset, var[IVX], var[IVY], var[IVZ]);
-          }
-          send_bufs[bid][count++].copy_(var);
+      // Get the interior part for this direction
+      auto sub = pmb->part(offset, /*exterior=*/false);
+
+      // Copy data from mesh to send buffer
+      int count = 0;
+      for (auto name : buf_names) {
+        auto var = vars.at(name).index(sub);
+        if (name == "hydro_u") {
+          _covariant_to_cartesian(pmb, offset, var[IVX], var[IVY], var[IVZ]);
         }
+        send_bufs[bid][count++].copy_(var);
       }
     }
-  }
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
@@ -396,8 +395,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         << "[CubedSphereLayout] deserializing data from receive buffers\n";
   }
 
-  // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+  // Get my logical location
+  auto iloc = loc_of(options->rank());
+
+  // Deserialize over all intra-panel neighbors first
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
@@ -405,25 +407,56 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = neighbor_rank(iloc, offset);
+      // skip inter-panel neighbors
+      if (nb < 0 || std::get<2>(iloc) != std::get<2>(loc_of(nb))) continue;
+
       int bid = get_buffer_id(offset);
 
       // Only deserialize if buffer exists
-      if (!recv_bufs[bid].empty()) {
-        // Get the exterior (ghost zone) part for this direction
-        auto sub = pmb->part(offset, /*exterior=*/true);
+      if (recv_bufs[bid].empty()) continue;
 
-        // Copy data from receive buffer to mesh ghost zones
-        int count = 0;
-        for (auto name : buf_names) {
-          auto var = vars.at(name).index(sub);
-          vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
-          _interpolate_to_local(pmb, offset, var);
-          if (name == "hydro_u")
-            _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
-        }
+      // Get the exterior (ghost zone) part for this direction
+      auto sub = pmb->part(offset, /*exterior=*/true);
+
+      // Copy data from receive buffer to mesh ghost zones
+      int count = 0;
+      for (auto name : buf_names) {
+        auto var = vars.at(name).index(sub);
+        vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
       }
     }
-  }
+
+  // Deserialize over all inter-panel neighbors
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
+    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+      // skip the center (self)
+      if (x3_offset == 0 && x2_offset == 0) continue;
+      // skip the corners for cubed-sphere
+      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+
+      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = neighbor_rank(iloc, offset);
+      // skip intra-panel neighbors
+      if (nb < 0 || std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
+
+      int bid = get_buffer_id(offset);
+
+      // Only deserialize if buffer exists
+      if (recv_bufs[bid].empty()) continue;
+      // Get the exterior (ghost zone) part for this direction
+      auto sub = pmb->part(offset, /*exterior=*/true);
+
+      // Copy data from receive buffer to mesh ghost zones
+      int count = 0;
+      for (auto name : buf_names) {
+        auto var = vars.at(name).index(sub);
+        vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
+        _interpolate_to_local(pmb, offset, var);
+        if (name == "hydro_u")
+          _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
+      }
+    }
 }
 
 void CubedSphereLayoutImpl::_covariant_to_cartesian(
