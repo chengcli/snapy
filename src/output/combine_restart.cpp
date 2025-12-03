@@ -21,7 +21,7 @@ int make_tar_archive(std::string const &archive_name,
 }
 
 void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
-  pmb->playout->pg->barrier();
+  pmb->playout->pg->barrier()->wait();
   std::stringstream msg;
 
   if (pmb->playout->is_root()) {

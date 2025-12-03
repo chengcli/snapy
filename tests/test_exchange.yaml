@@ -26,7 +26,7 @@ boundary-condition:
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: periodic
-    x2-outer: periodic
-    x3-inner: periodic
-    x3-outer: periodic
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom

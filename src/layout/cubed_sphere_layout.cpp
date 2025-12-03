@@ -464,7 +464,8 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
   if (options->verbose() && is_root()) {
     std::cout << "offset = (" << std::get<0>(offset) << ", "
               << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "var from neighbor = " << var_neighbor << "\n";
+    std::cout << "var from neighbor = \n"
+              << var_neighbor[IDN].squeeze(-1) << "\n";
   }
 
   //\TODO calculate neighbor coordinates and perform interpolation

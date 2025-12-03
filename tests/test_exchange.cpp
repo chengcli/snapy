@@ -42,8 +42,17 @@ int main(int argc, char **argv) {
   vars["hydro_w"] = w;
   block->initialize(vars);
 
-  if (r == 0) {
-    std::cout << "hydro_u = " << vars["hydro_u"].squeeze() << std::endl;
+  block->playout->pg->barrier()->wait();
+
+  auto [rx, ry, face] = block->playout->loc_of(r);
+
+  for (int f = 0; f < 6; ++f) {
+    if (face == f) {
+      std::cout << "face = " << face << std::endl;
+      std::cout << "hydro_u = \n"
+                << vars["hydro_u"][IDN].squeeze() << std::endl;
+    }
+    block->playout->pg->barrier()->wait();
   }
 
   return 0;

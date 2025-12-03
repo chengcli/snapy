@@ -21,7 +21,7 @@ namespace snap {
 void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
-  pmb->playout->pg->barrier();
+  pmb->playout->pg->barrier()->wait();
   std::stringstream msg;
 
   if (pmb->playout->is_root()) {
