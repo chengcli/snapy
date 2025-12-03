@@ -53,7 +53,8 @@ int main(int argc, char **argv) {
                                face, r)
                 << std::endl;
       std::cout << "hydro_u = \n"
-                << vars["hydro_u"][IDN].squeeze() << std::endl;
+                << vars["hydro_u"][IDN].squeeze().transpose(0, 1).flip(0)
+                << std::endl;
     }
     block->layout()->pg->barrier()->wait();
   }
