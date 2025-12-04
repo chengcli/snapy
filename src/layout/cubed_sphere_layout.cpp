@@ -499,13 +499,13 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
   auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
   auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
 
-  auto var_neighbor = var.index(sub).clone();
+  auto var_neighbor = var.clone();
 
   if (options->verbose() && is_root()) {
     std::cout << "offset = (" << std::get<0>(offset) << ", "
               << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
     std::cout << "var from neighbor = \n"
-              << var_neighbor[IDN].squeeze(-1) << "\n";
+              << var_neighbor[IDN].squeeze().transpose(0, 1).flip(0) << "\n";
   }
 
   //\TODO calculate neighbor coordinates and perform interpolation

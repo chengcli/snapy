@@ -8,6 +8,7 @@
 #include <snap/layout/layout.hpp>
 
 #include "coordinate.hpp"
+#include "gnomonic_equiangle.hpp"
 
 namespace snap {
 

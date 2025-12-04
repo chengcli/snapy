@@ -1,9 +1,9 @@
 // snap
+#include "gnomonic_equiangle.hpp"
+
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
-
-#include "coordinate.hpp"
 
 namespace snap {
 
@@ -180,6 +180,14 @@ void GnomonicEquiangleImpl::_set_face3_metric() const {
   gi33.set_(1. / (sin_theta * sin_theta));
 }
 
+void GnomonicEquiangleImpl::prim2local1_(torch::Tensor &w) const {
+  auto cos_theta = cosine_cell_kj.unsqueeze(-1);
+  auto sin_theta = sine_cell_kj.unsqueeze(-1);
+
+  w[IVY] += w[IVZ] * cos_theta;
+  w[IVZ] *= sin_theta;
+}
+
 void GnomonicEquiangleImpl::prim2local2_(torch::Tensor &w) const {
   _set_face2_metric();
 
@@ -230,13 +238,14 @@ void GnomonicEquiangleImpl::prim2local3_(torch::Tensor &w) const {
   w[IVZ] = uz;
 }
 
-// does not de-orthonormal, but only transforms to covariant form
+// de-orthonormal and transforms to covariant form
 void GnomonicEquiangleImpl::flux2global1_(torch::Tensor &flux) const {
   auto cos_theta = cosine_cell_kj.unsqueeze(-1);
+  auto sin_theta = sine_cell_kj.unsqueeze(-1);
 
   // Extract contravariant fluxes
-  auto ty = flux[IVY].clone();
-  auto tz = flux[IVZ].clone();
+  auto tz = flux[IVZ] / sin_theta;
+  auto ty = flux[IVY] - tz * cos_theta;
 
   // Transform to covariant fluxes
   flux[IVY] = ty + tz * cos_theta;
