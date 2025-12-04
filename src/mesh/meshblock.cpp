@@ -51,7 +51,9 @@ void MeshBlockImpl::reset() {
   // set up distributed environment
   if (_playout == nullptr) {
     std::unique_lock<std::mutex> lock(meshblock_mutex);
-    _playout = LayoutImpl::create(options->layout(), this);
+    if (_playout == nullptr) {  // Check again after acquiring lock
+      _playout = LayoutImpl::create(options->layout(), this);
+    }
   }
 
   int px = options->layout()->px();
