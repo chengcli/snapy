@@ -86,31 +86,30 @@ void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // Skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;  // out-of-domain
 
       int r = get_buffer_id(offset);
-      if (nb >= 0) {
-        if (nb != rank) {  // different ranks
-          // Send operation
-          auto send_work = pg->send(send_bufs[r], nb, 0);
-          works.push_back(send_work);
 
-          // Receive operation
-          auto recv_work = pg->recv(recv_bufs[r], nb, 0);
-          works.push_back(recv_work);
-        } else {  // self-send
-          for (int n = 0; n < recv_bufs[r].size(); ++n)
-            recv_bufs[r][n].copy_(send_bufs[r][n]);
-        }
+      if (nb != rank) {  // different ranks
+        // Send operation
+        auto send_work = pg->send(send_bufs[r], nb, 0);
+        works.push_back(send_work);
+
+        // Receive operation
+        auto recv_work = pg->recv(recv_bufs[r], nb, 0);
+        works.push_back(recv_work);
+      } else {  // self-send
+        for (int n = 0; n < recv_bufs[r].size(); ++n)
+          recv_bufs[r][n].copy_(send_bufs[r][n]);
       }
     }
-  }
 
   // Wait for all operations to complete
   for (auto& work : works) work->wait();

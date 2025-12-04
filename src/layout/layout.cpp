@@ -55,72 +55,27 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
                                                std::string const& name) {
   if (p == nullptr) options->no_backend(true);
 
+  std::shared_ptr<LayoutImpl> pl;
   if (options->type() == "slab") {
-    return p ? p->register_module(name, SlabLayout(options))
-             : SlabLayout(options).ptr();
+    pl = p ? p->register_module(name, SlabLayout(options))
+           : SlabLayout(options).ptr();
+    pl->send_bufs.resize(9);
+    pl->recv_bufs.resize(9);
   } else if (options->type() == "cubed") {
-    return p ? p->register_module(name, CubedLayout(options))
-             : CubedLayout(options).ptr();
+    pl = p ? p->register_module(name, CubedLayout(options))
+           : CubedLayout(options).ptr();
+    pl->send_bufs.resize(27);
+    pl->recv_bufs.resize(27);
   } else if (options->type() == "cubed-sphere") {
-    return p ? p->register_module(name, CubedSphereLayout(options))
-             : CubedSphereLayout(options).ptr();
+    pl = p ? p->register_module(name, CubedSphereLayout(options))
+           : CubedSphereLayout(options).ptr();
+    pl->send_bufs.resize(9);
+    pl->recv_bufs.resize(9);
   } else {
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
-}
 
-void LayoutImpl::init_buffers(MeshBlockImpl const* pmb, Variables const& vars,
-                              std::vector<std::string> const& names) {
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Initializing communication buffers\n";
-  }
-
-  // Initialize vectors to size 9 (2D decomposition) with empty tensors
-  send_bufs.clear();
-  recv_bufs.clear();
-  send_bufs.resize(9);
-  recv_bufs.resize(9);
-
-  // Iterate over all 2D neighbor directions
-  buf_names.clear();
-
-  // only include names that exist in vars
-  for (auto name : names) {
-    if (vars.count(name) > 0) buf_names.push_back(name);
-  }
-
-  // Get my logical location
-  auto iloc = loc_of(options->rank());
-
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
-      // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-
-      int nb = neighbor_rank(iloc, offset);
-      // Skip if no neighbor in this direction
-      if (nb < 0) continue;
-
-      int bid = get_buffer_id(offset);
-
-      // Get the part indices for this neighbor direction
-      auto sub = pmb->part(offset);
-
-      // Get shape by applying indices to tensor
-      send_bufs[bid].clear();
-      recv_bufs[bid].clear();
-
-      for (auto name : buf_names) {
-        auto sub_tensor = vars.at(name).index(sub);
-
-        // Allocate send and receive buffers with same shape
-        send_bufs[bid].push_back(torch::empty_like(sub_tensor));
-        recv_bufs[bid].push_back(torch::empty_like(sub_tensor));
-      }
-    }
-  }
+  return pl;
 }
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars) {
@@ -128,27 +83,33 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars) {
     std::cout << "[Layout] serializing data into send buffers\n";
   }
 
+  // Get my logical location
+  auto iloc = loc_of(options->rank());
+
   // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // Skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;  // no neighbor
+
+      // Get the interior part for this direction
+      auto sub = pmb->part(offset, /*exterior=*/false);
+
+      // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
-
-      // Only serialize if buffer exists
-      if (!send_bufs[bid].empty()) {
-        // Get the interior part for this direction
-        auto sub = pmb->part(offset, /*exterior=*/false);
-
-        // Copy data from mesh to send buffer
-        int count = 0;
-        for (auto name : buf_names)
-          send_bufs[bid][count++].copy_(vars.at(name).index(sub));
+      int count = 0;
+      send_bufs[bid].resize(vars.size());
+      recv_bufs[bid].resize(vars.size());
+      for (auto& [name, var] : vars) {
+        send_bufs[bid][count] = var.index(sub).clone();
+        recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
+        count++;
       }
     }
-  }
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars) const {
@@ -156,28 +117,29 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars) const {
     std::cout << "[Layout] deserializing data from receive buffers\n";
   }
 
+  // Get my logical location
+  auto iloc = loc_of(options->rank());
+
   // Iterate over all 2D neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset) {
+  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
     for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
       // Skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;  // no neighbor
+
+      // Get the exterior (ghost zone) part for this direction
+      auto sub = pmb->part(offset, /*exterior=*/true);
+
+      // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
-
-      // Only deserialize if buffer exists
-      if (!recv_bufs[bid].empty()) {
-        // Get the exterior (ghost zone) part for this direction
-        auto sub = pmb->part(offset, /*exterior=*/true);
-
-        // Copy data from receive buffer to mesh ghost zones
-        int count = 0;
-        for (auto name : buf_names) {
-          vars.at(name).index_put_(sub, recv_bufs[bid][count++]);
-        }
+      int count = 0;
+      for (auto& [name, var] : vars) {
+        var.index_put_(sub, recv_bufs[bid][count++]);
       }
     }
-  }
 }
 
 void LayoutImpl::_init_backend() {

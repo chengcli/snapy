@@ -128,9 +128,6 @@ class LayoutImpl {
    */
   std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
 
-  //! buffer variable names
-  std::vector<std::string> buf_names;
-
   //! submodules
   at::intrusive_ptr<c10d::Store> store;
   std::shared_ptr<c10d::Backend> pg;
@@ -174,15 +171,6 @@ class LayoutImpl {
    */
   virtual int neighbor_rank(std::tuple<int, int, int> iloc,
                             std::tuple<int, int, int> offset) const = 0;
-
-  //! \brief Initialize send and receive buffers for 2D domain decomposition
-  /*!
-   * Allocates torch::Tensor buffers for exchanging ghost zone data with
-   * neighboring processes in a 2D slab decomposition. Buffers are sized
-   * to match the ghost zone dimensions of the mesh block.
-   */
-  virtual void init_buffers(MeshBlockImpl const *pmb, Variables const &vars,
-                            std::vector<std::string> const &names);
 
   //! Serialize variables
   virtual void serialize(MeshBlockImpl const *pmb, Variables &vars);
