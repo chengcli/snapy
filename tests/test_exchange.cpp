@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
   for (int i = 0; i < block->options->layout()->world_size(); ++i) {
     if (i == r) {
-      std::cout << fmt::format("rx = {}, ry= {}, face= {}, rank= {}", rx, ry,
+      std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
                                face, r)
                 << std::endl;
       std::cout << "hydro_u = \n"
