@@ -27,6 +27,21 @@ pip install snapy
 
 This will install the Python interface with pre-built binaries for Python 3.9-3.13 on Linux (x86_64) and macOS (ARM64).
 
+### Parallel run
+```
+pd-run 6 ./test_exchange.release
+```
+
+### list listening port
+```bash
+lsof -i:29500
+```
+
+### kill listening port
+```bash
+pkill -9 XXXXX
+```
+
 **Requirements:**
 - Python 3.9 or higher
 - PyTorch 2.7.x

@@ -54,12 +54,11 @@ TEST_P(DeviceTest, moist_mixture) {
 
   cons.uniform_(0., 1.);
 
-  cons[Index::IDN].abs_();
-  cons[Index::IDN] += 1.E-6;  // avoid division by zero
+  cons[IDN].abs_();
+  cons[IDN] += 1.E-6;  // avoid division by zero
 
-  cons[Index::IPR].abs_().mul_(10.);
-  cons[Index::IPR] +=
-      0.5 * cons.narrow(0, Index::IVX, 3).pow(2).sum() / cons[Index::IDN];
+  cons[IPR].abs_().mul_(10.);
+  cons[IPR] += 0.5 * cons.narrow(0, IVX, 3).pow(2).sum() / cons[IDN];
 
   std::cout << "cons min = " << cons.min() << std::endl;
   std::cout << "cons max = " << cons.max() << std::endl;

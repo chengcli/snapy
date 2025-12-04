@@ -1,9 +1,9 @@
 // snap
+#include "gnomonic_equiangle.hpp"
+
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
-
-#include "coordinate.hpp"
 
 namespace snap {
 
@@ -12,6 +12,7 @@ void GnomonicEquiangleImpl::reset() {
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
+
   dx1f = register_buffer("dx1f", torch::ones(op->nc1()) * dx);
   x1v = register_buffer("x1v", 0.5 * (x1f.slice(0, 0, op->nc1()) +
                                       x1f.slice(0, 1, op->nc1() + 1)));
@@ -60,44 +61,46 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("cosine_face3_kj", cosine_face3_kj);
   register_buffer("sine_face3_kj", sine_face3_kj);
 
-  auto x1 = x2f.tan().unsqueeze(0);
-  auto x2 = x2f.tan().roll(-1).unsqueeze(0);
+  auto x1 = x2f.slice(0, 0, op->nc2()).tan().unsqueeze(0);
+  auto x2 = x2f.slice(0, 1, op->nc2() + 1).tan().unsqueeze(0);
+
   auto delta1 = (1. + x1 * x1 + y * y).sqrt();
   auto delta2 = (1. + x2 * x2 + y * y).sqrt();
   auto delta1f = (1. + x1 * x1 + yf * yf).sqrt();
   auto delta2f = (1. + x2 * x2 + yf * yf).sqrt();
 
   dx2f_ang_kj = ((1. + x1 * x2 + y * y) / (delta1 * delta2)).acos();
-  dx2f_ang_face3_kj = ((1. + x1 * x2 + yf * yf) / (delta1f * delta2)).acos();
+  dx2f_ang_face3_kj = ((1. + x1 * x2 + yf * yf) / (delta1f * delta2f)).acos();
 
   register_buffer("dx2f_ang_kj", dx2f_ang_kj);
   register_buffer("dx2f_ang_face3_kj", dx2f_ang_face3_kj);
 
-  auto y1 = x3f.tan().unsqueeze(-1);
-  auto y2 = x3f.tan().roll(-1).unsqueeze(-1);
+  auto y1 = x3f.slice(0, 0, op->nc3()).tan().unsqueeze(-1);
+  auto y2 = x3f.slice(0, 1, op->nc3() + 1).tan().unsqueeze(-1);
+
   delta1 = (1. + x * x + y1 * y1).sqrt();
   delta2 = (1. + x * x + y2 * y2).sqrt();
   delta1f = (1. + xf * xf + y1 * y1).sqrt();
   delta2f = (1. + xf * xf + y2 * y2).sqrt();
 
   dx3f_ang_kj = ((1. + x * x + y1 * y2) / (delta1 * delta2)).acos();
-  dx3f_ang_face2_kj = ((1. + xf * xf + y1 * y2) / (delta1f * delta2)).acos();
+  dx3f_ang_face2_kj = ((1. + xf * xf + y1 * y2) / (delta1f * delta2f)).acos();
 
   register_buffer("dx3f_ang_kj", dx3f_ang_kj);
   register_buffer("dx3f_ang_face2_kj", dx3f_ang_face2_kj);
 
-  auto fx1 = face_area2() * sine_face2_kj.unsqueeze(-1);
-  auto fx2 = fx1.roll(-1, /*dim=*/1);
-  auto fy1 = face_area3() * sine_face3_kj.unsqueeze(-1);
-  auto fy2 = fy1.roll(-1, /*dim=*/0);
+  auto fx = face_area2() * sine_face2_kj.unsqueeze(-1);
+  auto fy = face_area3() * sine_face3_kj.unsqueeze(-1);
 
-  x_ov_rD_kji = (fx1 - fx2) / cell_volume();
-  y_ov_rC_kji = (fy1 - fy2) / cell_volume();
+  x_ov_rD_kji = (fx.slice(1, 1, op->nc2() + 1) - fx.slice(1, 0, op->nc2())) /
+                cell_volume();
+  y_ov_rC_kji = (fy.slice(0, 1, op->nc3() + 1) - fy.slice(0, 0, op->nc3())) /
+                cell_volume();
 
   register_buffer("x_ov_rD_kji", x_ov_rD_kji);
   register_buffer("y_ov_rC_kji", y_ov_rC_kji);
 
-  // register metric data
+  // register metric data (placeholder, overwritten later)
   auto vol = cell_volume();
   g11 = register_buffer("g11", torch::ones_like(vol));
   g22 = register_buffer("g22", torch::ones_like(vol));
@@ -177,6 +180,14 @@ void GnomonicEquiangleImpl::_set_face3_metric() const {
   gi33.set_(1. / (sin_theta * sin_theta));
 }
 
+void GnomonicEquiangleImpl::prim2local1_(torch::Tensor &w) const {
+  auto cos_theta = cosine_cell_kj.unsqueeze(-1);
+  auto sin_theta = sine_cell_kj.unsqueeze(-1);
+
+  w[IVY] += w[IVZ] * cos_theta;
+  w[IVZ] *= sin_theta;
+}
+
 void GnomonicEquiangleImpl::prim2local2_(torch::Tensor &w) const {
   _set_face2_metric();
 
@@ -227,13 +238,14 @@ void GnomonicEquiangleImpl::prim2local3_(torch::Tensor &w) const {
   w[IVZ] = uz;
 }
 
-// does not de-orthonormal, but only transforms to covariant form
+// de-orthonormal and transforms to covariant form
 void GnomonicEquiangleImpl::flux2global1_(torch::Tensor &flux) const {
   auto cos_theta = cosine_cell_kj.unsqueeze(-1);
+  auto sin_theta = sine_cell_kj.unsqueeze(-1);
 
   // Extract contravariant fluxes
-  auto ty = flux[IVY].clone();
-  auto tz = flux[IVZ].clone();
+  auto tz = flux[IVZ] / sin_theta;
+  auto ty = flux[IVY] - tz * cos_theta;
 
   // Transform to covariant fluxes
   flux[IVY] = ty + tz * cos_theta;
