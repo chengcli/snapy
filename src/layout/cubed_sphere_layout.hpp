@@ -50,7 +50,7 @@ class CubedSphereLayoutImpl
                                torch::Tensor vz, torch::Tensor vx,
                                torch::Tensor vy) const;
 
-  //! \brieff Global rank layout: face-major, Z-order within face
+  //! \brief Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {
     int P = pxy() * pxy();
     return face * P + r_local;
