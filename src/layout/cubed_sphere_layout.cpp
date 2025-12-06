@@ -4,7 +4,7 @@
  *  - We model only the surface (six 2D faces).
  *  - Each face holds a px-by-py processor grid (px==py required by the cubed
  * grid; however code allows px,py).
- *  - Global rank = face_major * (py*px) + zorder_rank_within_face.
+ *  - Global rank = face_number * (py*px) + zorder_rank_within_face.
  *
  * Orientation model across an edge:
  *   From (face f, side s \in {L,R,B,T}) we land on (nface, nside),
@@ -12,10 +12,14 @@
  *   No "transpose" is required if nside is defined correctly:
  *     - neighbor side L/R varies along neighbor Y (rows)
  *     - neighbor side B/T varies along neighbor X (cols)
- *   This matches p4est's face orientation idea at coarse level.
  *
- * If the geometry requires a different convention (e.g., local axes on faces),
- * edit the table `CS_FACE_EDGES[6][4]`.
+ * Face naming:
+ *   Faces are named according to the global carteian +X,+Y,+Z,-X,-Y,-Z
+ * directions Face names should be consistent with the numbering of faces in the
+ * global cartesian coordinates.
+ *
+ *   Table `CS_FACE_EDGES[6][4]` and `CS_FACE_NAMES[6][3]` should be
+ *   edited together to ensure consistency.
  *
  * Ghost zone communication:
  *   The main function to perform ghost zone communication is
@@ -62,7 +66,19 @@
 
 namespace snap {
 
-/* --------------------------
+/*!
+ * ----------------------------
+ * Global cartesian coordiantes
+ * ----------------------------
+ *
+ *       +z
+ *       ^
+ *       |
+ *       |----> +y
+ *      /
+ *  +x /
+ *
+ * --------------------------
  * Cubed-sphere connectivity
  * --------------------------
  * Face numbering (editable):
@@ -71,49 +87,68 @@ namespace snap {
  *       3   0   1   2
  *           5
  *
+ *           -------
+ *           |  3  |
+ *     |-----|-----|-----|-----|
+ *     |  4  |  0  |  1  |  2  |
+ *     |-----|-----|-----|-----|
+ *           |  5  |
+ *           |-----|
+ *
  * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
  * Each entry says: leaving face F via side S,
  * you arrive at (nface, nside) and the along-edge index is reversed? (0/1)
  *
+ * -------------------------------
+ * Local face orientaion and sides
+ * -------------------------------
+ *
+ *         (T,3)          beta
+ *        |-----|         ^
+ *  (L,0) |  X  | (R,1)   |
+ *        |-----|         |----> alpha
+ *         (B,2)
+ *
  * IMPORTANT: Different codes choose different local face axes.
  * If your tests show flipped corner order, toggle `rev` for that edge.
  */
-enum { SIDE_L = 0, SIDE_R = 1, SIDE_B = 2, SIDE_T = 3 };
 
-struct CSEdge {
-  int nface; /* neighbor face id [0..5] */
-  int nside; /* neighbor side id (LEFT/RIGHT/BOTTOM/TOP) */
-  int rev;   /* 0: preserve along-edge index, 1: reverse */
-};
+// face 0: +X
+// face 1: +Y
+// face 2: -X
+// face 3: +Z
+// face 4: -Y
+// face 5: -Z
+const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
-static const CSEdge CS_FACE_EDGES[6][4] = {
-    /* face 0: neighbors 3(L),1(R),5(B),4(T) */
-    [0] = {/* L */ {3, SIDE_R, 0},
+const CSEdge CS_FACE_EDGES[6][4] = {
+    /* face 0: neighbors 4(L),1(R),5(B),3(T) */
+    [0] = {/* L */ {4, SIDE_R, 0},
            /* R */ {1, SIDE_L, 0},
            /* B */ {5, SIDE_T, 0},
-           /* T */ {4, SIDE_B, 0}},
-    /* face 1: neighbors 0(L),2(R),5(B),4(T) */
+           /* T */ {3, SIDE_B, 0}},
+    /* face 1: neighbors 0(L),2(R),5(B),3(T) */
     [1] = {/* L */ {0, SIDE_R, 0},
            /* R */ {2, SIDE_L, 0},
            /* B */ {5, SIDE_R, 1},
-           /* T */ {4, SIDE_R, 0}},
-    /* face 2: neighbors 1(L),3(R),5(B),4(T) */
+           /* T */ {3, SIDE_R, 0}},
+    /* face 2: neighbors 1(L),4(R),5(B),3(T) */
     [2] = {/* L */ {1, SIDE_R, 0},
-           /* R */ {3, SIDE_L, 0},
+           /* R */ {4, SIDE_L, 0},
            /* B */ {5, SIDE_B, 1},
-           /* T */ {4, SIDE_T, 1}},
-    /* face 3: neighbors 2(L),0(R),5(B),4(T) */
-    [3] = {/* L */ {2, SIDE_R, 0},
-           /* R */ {0, SIDE_L, 0},
-           /* B */ {5, SIDE_L, 0},
-           /* T */ {4, SIDE_L, 1}},
-    /* face 4: neighbors 3(L),1(R),0(B),2(T) */
-    [4] = {/* L */ {3, SIDE_T, 1},
+           /* T */ {3, SIDE_T, 1}},
+    /* face 3: neighbors 4(L),1(R),0(B),2(T) */
+    [3] = {/* L */ {4, SIDE_T, 1},
            /* R */ {1, SIDE_T, 0},
            /* B */ {0, SIDE_T, 0},
            /* T */ {2, SIDE_T, 1}},
-    /* face 5: neighbors 3(L),1(R),2(B),0(T) */
-    [5] = {/* L */ {3, SIDE_B, 0},
+    /* face 4: neighbors 2(L),0(R),5(B),3(T) */
+    [4] = {/* L */ {2, SIDE_R, 0},
+           /* R */ {0, SIDE_L, 0},
+           /* B */ {5, SIDE_L, 0},
+           /* T */ {3, SIDE_L, 1}},
+    /* face 5: neighbors 4(L),1(R),2(B),0(T) */
+    [5] = {/* L */ {4, SIDE_B, 0},
            /* R */ {1, SIDE_B, 1},
            /* B */ {2, SIDE_B, 1},
            /* T */ {0, SIDE_B, 0}}};
