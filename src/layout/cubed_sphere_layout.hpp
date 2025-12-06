@@ -82,7 +82,7 @@ class CubedSphereLayoutImpl
 
   //! \brief Edge stepping helper
   /*!
-   * Move off the face by one tile in (dx,dy) ∈ {-1,0,1}^2.
+   * Move off the face by one tile in (dx,dy) \in {-1,0,1}^2.
    * Returns neighbor (nface, nrank) or (-1, -1) on error (should not happen on
    * a closed cube).
    *
