@@ -139,7 +139,7 @@ namespace snap {
  *   Side_T = 3
  *
  * -------------------------------
- * Local face orientaion and sides
+ * Local face orientation and sides
  * -------------------------------
  *
  *         (T,3)          beta
