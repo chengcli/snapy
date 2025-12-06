@@ -3,6 +3,28 @@
 
 namespace snap {
 
+enum { SIDE_L = 0, SIDE_R = 1, SIDE_B = 2, SIDE_T = 3 };
+enum { VEL_Z = 0, VEL_X = 1, VEL_Y = 2 };
+
+struct CSEdge {
+  int nface; /* neighbor face id [0..5] */
+  int nside; /* neighbor side id (LEFT/RIGHT/BOTTOM/TOP) */
+  int rev;   /* 0: preserve along-edge index, 1: reverse */
+};
+
+struct CSVel {
+  int idx; /* velocity component index */
+  int sgn; /* velocity component sign: +1 or -1 */
+};
+
+extern const char CS_FACE_NAMES[6][3];
+extern const CSEdge CS_FACE_EDGES[6][4];
+extern const CSVel CS_G2L_VEL[6][3];
+extern const CSVel CS_L2G_VEL[6][3];
+
+//! Given CS_G2L_VEL, populate CS_L2G_VEL
+void populate_cs_l2g_vel(CSVel l2g[6][3]);
+
 class CubedSphereLayoutImpl
     : public torch::nn::Cloneable<CubedSphereLayoutImpl>,
       public LayoutImpl {
@@ -26,29 +48,20 @@ class CubedSphereLayoutImpl
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 
-  void forward(MeshBlockImpl const *pmb, Variables &vars) override;
+  void forward(MeshBlockImpl const *pmb, Variables &vars,
+               SyncOptions opts) override;
 
-  void serialize(MeshBlockImpl const *pmb, Variables &vars) override;
+  void serialize(MeshBlockImpl const *pmb, Variables &vars,
+                 SyncOptions opts) override;
 
-  void deserialize(MeshBlockImpl const *pmb, Variables &vars) const override;
+  void deserialize(MeshBlockImpl const *pmb, Variables &vars,
+                   SyncOptions opts) const override;
 
  private:
-  //! \brief Project covariant velocities to cartesian velocities
-  void _covariant_to_cartesian(MeshBlockImpl const *pmb,
-                               std::tuple<int, int, int> offset,
-                               torch::Tensor vz, torch::Tensor vx,
-                               torch::Tensor vy) const;
-
   //! \brief Interpolate transmitted variable to local ghost zones
   void _interpolate_to_local(MeshBlockImpl const *pmb,
                              std::tuple<int, int, int> offset,
                              torch::Tensor var) const;
-
-  //! \brief Deproject cartesian velocities to covariant velocities
-  void _cartesian_to_covariant(MeshBlockImpl const *pmb,
-                               std::tuple<int, int, int> offset,
-                               torch::Tensor vz, torch::Tensor vx,
-                               torch::Tensor vy) const;
 
   //! \brief Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {
@@ -70,7 +83,7 @@ class CubedSphereLayoutImpl
 
   //! \brief Edge stepping helper
   /*!
-   * Move off the face by one tile in (dx,dy) ∈ {-1,0,1}^2.
+   * Move off the face by one tile in (dx,dy) \in {-1,0,1}^2.
    * Returns neighbor (nface, nrank) or (-1, -1) on error (should not happen on
    * a closed cube).
    *

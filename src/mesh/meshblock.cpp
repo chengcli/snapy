@@ -315,13 +315,17 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   // exchange buffers
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true);
+  sync_opts.type(kConserved);
+
   Variables sync_vars;
   sync_vars["hydro_u"] = vars.at("hydro_u");
   if (pscalar->nvar() > 0) {
     sync_vars["scalar_s"] = vars.at("scalar_s");
   }
 
-  _playout->forward(this, sync_vars);
+  _playout->forward(this, sync_vars, sync_opts);
 
   // start timing
   _time_start = clock();
@@ -510,13 +514,17 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (7) ghost zone exchange --------
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true);
+  sync_opts.type(kConserved);
+
   Variables sync_vars;
   sync_vars["hydro_u"] = vars.at("hydro_u");
   if (pscalar->nvar() > 0) {
     sync_vars["scalar_s"] = vars.at("scalar_s");
   }
 
-  _playout->forward(this, sync_vars);
+  _playout->forward(this, sync_vars, sync_opts);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

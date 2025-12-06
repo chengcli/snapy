@@ -5,6 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/layout/layout.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "hydro.hpp"
 
@@ -206,6 +207,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     pib->mark_prim_solid_(w, other.at("solid"));
   }
 
+  auto playout = MeshBlockImpl::get_layout();
+
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
     torch::Tensor wtmp;
@@ -236,6 +239,21 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (3) Calculate dimension 2 flux ------------ ////
   if (u.size(DIM2) > 1) {
     auto wtmp = precon23->forward(w, DIM2);
+
+    // sync left/right states across faces for cubed sphere layout
+    if (playout->options->type() == "cubed-sphere") {
+      SyncOptions sync_opts;
+      sync_opts.cross_panel_only(true);
+      sync_opts.dim(DIM2);
+      sync_opts.interpolate(false);
+      sync_opts.type(kPrimitive);
+
+      Variables sync_vars;
+      sync_vars["hydro_wl"] = wtmp[ILT];
+      sync_vars["hydro_wr"] = wtmp[IRT];
+      playout->forward(_pmb, sync_vars, sync_opts);
+    }
+
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
     if (!options->disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
@@ -251,6 +269,20 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (4) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
     auto wtmp = precon23->forward(w, DIM3);
+
+    // sync left/right states across faces for cubed sphere layout
+    if (playout->options->type() == "cubed-sphere") {
+      SyncOptions sync_opts;
+      sync_opts.cross_panel_only(true);
+      sync_opts.dim(DIM3);
+      sync_opts.interpolate(false);
+      sync_opts.type(kPrimitive);
+
+      Variables sync_vars;
+      sync_vars["hydro_wl"] = wtmp[ILT];
+      sync_vars["hydro_wr"] = wtmp[IRT];
+      playout->forward(_pmb, sync_vars, sync_opts);
+    }
 
     auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;
     if (!options->disable_flux_x3()) {
@@ -314,7 +346,10 @@ std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              std::string const& name) {
   TORCH_CHECK(p, "[Hydro] Parent module is null");
   TORCH_CHECK(opts, "[Hydro] Options pointer is null");
-  return p->register_module(name, Hydro(opts));
+
+  auto hydro = Hydro(opts);
+  hydro->_pmb = static_cast<MeshBlockImpl const*>(p);
+  return p->register_module(name, hydro);
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,

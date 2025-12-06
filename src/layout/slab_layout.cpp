@@ -67,12 +67,14 @@ int SlabLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
   return _rankof[linear_index2(options->px(), options->py(), ny, nx)];
 }
 
-void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
+void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
+                             SyncOptions opts) {
   TORCH_CHECK(!options->no_backend(),
               "[SlabLayout:forward] backend is disabled");
+  TORCH_CHECK(pmb != nullptr, "[SlabLayout:forward] MeshBlock pointer is null");
 
   // Serialize data into send buffers
-  serialize(pmb, vars);
+  serialize(pmb, vars, opts);
 
   if (options->verbose() && is_root()) {
     std::cout << "[SlabLayout] performing communication\n";
@@ -86,10 +88,17 @@ void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+  int x3_omin = opts.x3_offset_min();
+  int x3_omax = opts.x3_offset_max();
+  int x2_omin = opts.x2_offset_min();
+  int x2_omax = opts.x2_offset_max();
+
+  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // Skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -115,7 +124,7 @@ void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars) {
   for (auto& work : works) work->wait();
 
   // Deserialize received data into ghost zones
-  deserialize(pmb, vars);
+  deserialize(pmb, vars, opts);
 }
 
 }  // namespace snap

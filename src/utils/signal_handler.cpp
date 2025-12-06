@@ -73,7 +73,7 @@ int SignalHandler::CheckSignalFlags(MeshBlockImpl const* pmb) {
   std::vector<at::Tensor> ret_reduce = {torch::tensor({ret}, torch::kInt32)};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MAX;
-  pmb->layout()->pg->allreduce(ret_reduce, op)->wait();
+  pmb->get_layout()->pg->allreduce(ret_reduce, op)->wait();
 
   return ret_reduce[0].item<int>();
 }
