@@ -608,7 +608,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       if (nb < 0) continue;  // no neighbor
 
       bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
-      if (opts.cross_panel_only() && inter_panel) continue;
+      if (opts.cross_panel_only() && !inter_panel) continue;
 
       // Get the exterior (ghost zone) part for this direction
       auto sub = pmb->part(offset, /*exterior=*/true);
