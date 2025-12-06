@@ -140,7 +140,11 @@ void GnomonicEquiangleImpl::vec_lower_(
     std::vector<torch::indexing::TensorIndex> const &sub) const {
   auto v = vel[VEL_X].clone();
   auto w = vel[VEL_Y].clone();
-  auto cth = cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0);
+
+  auto cth =
+      sub.size() > 0
+          ? cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0)
+          : cosine_cell_kj.unsqueeze(-1);
 
   vel[VEL_X] = v + w * cth;
   vel[VEL_Y] = w + v * cth;
@@ -151,7 +155,12 @@ void GnomonicEquiangleImpl::vec_raise_(
     std::vector<torch::indexing::TensorIndex> const &sub) const {
   auto v = vel[VEL_X].clone();
   auto w = vel[VEL_Y].clone();
-  auto cth = cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0);
+
+  auto cth =
+      sub.size() > 0
+          ? cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0)
+          : cosine_cell_kj.unsqueeze(-1);
+
   auto sth2 = 1. - cth * cth;
 
   vel[VEL_X] = v / sth2 - w * cth / sth2;
@@ -163,15 +172,18 @@ void GnomonicEquiangleImpl::contra_to_cart_(
     std::vector<torch::indexing::TensorIndex> const &sub) const {
   auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
 
-  auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-  auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  torch::Tensor alpha, beta;
+
+  if (sub.size() > 0) {
+    alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+    beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  } else {
+    alpha = mesh[0];
+    beta = mesh[1];
+  }
 
   auto x = alpha.tan();
   auto y = beta.tan();
-
-  auto vz = vel[VEL_Z].clone();
-  auto vx = vel[VEL_X].clone();
-  auto vy = vel[VEL_Y].clone();
 
   auto delta = sqrt(x * x + y * y + 1);
   auto C = sqrt(1 + x * x);
@@ -180,6 +192,10 @@ void GnomonicEquiangleImpl::contra_to_cart_(
   auto const l2g = CS_L2G_VEL;
   auto playout = MeshBlockImpl::get_layout();
   auto [rx, ry, f] = playout->loc_of(playout->options->rank());
+
+  auto vz = vel[VEL_Z].clone();
+  auto vx = vel[VEL_X].clone();
+  auto vy = vel[VEL_Y].clone();
 
   vel[l2g[f][VEL_Z].idx] =
       l2g[f][VEL_Z].sgn * ((vz - D * x * vx - C * y * vy) / delta);
@@ -192,8 +208,15 @@ void GnomonicEquiangleImpl::cart_to_contra_(
     std::vector<torch::indexing::TensorIndex> const &sub) const {
   auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
 
-  auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-  auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  torch::Tensor alpha, beta;
+
+  if (sub.size() > 0) {
+    alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+    beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+  } else {
+    alpha = mesh[0];
+    beta = mesh[1];
+  }
 
   auto x = alpha.tan();
   auto y = beta.tan();
