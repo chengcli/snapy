@@ -14,7 +14,7 @@
  *     - neighbor side B/T varies along neighbor X (cols)
  *
  * Face naming:
- *   Faces are named according to the global carteian +X,+Y,+Z,-X,-Y,-Z
+ *   Faces are named according to the global cartesian +X,+Y,+Z,-X,-Y,-Z
  * directions Face names should be consistent with the numbering of faces in the
  * global cartesian coordinates.
  *
