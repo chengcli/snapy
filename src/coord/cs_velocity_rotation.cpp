@@ -4,49 +4,8 @@
 namespace snap {
 
 //! Transform cubed sphere velocity to local cartesian velocity
-torch::Tensor vel_zab_to_zxy(torch::Tensor vel, torch::Tensor a,
-                             torch::Tensor b) {
-  torch::Tensor x = a.tan();
-  torch::Tensor y = b.tan();
-
-  torch::Tensor vx = vel[1];
-  torch::Tensor vy = vel[2];
-  torch::Tensor vz = vel[0];
-
-  torch::Tensor delta = sqrt(x * x + y * y + 1);
-  torch::Tensor C = sqrt(1 + x * x);
-  torch::Tensor D = sqrt(1 + y * y);
-
-  auto result = torch::empty_like(vel);
-
-  result[0] = (vz - D * x * vx - C * y * vy) / delta;
-  result[1] = (x * vz + D * vx) / delta;
-  result[2] = (y * vz + C * vy) / delta;
-
-  return result;
-}
 
 //! Transform local cartesian velocity to cubed sphere velocity
-torch::Tensor vel_zxy_to_zab(torch::Tensor vel, torch::Tensor a,
-                             torch::Tensor b) {
-  torch::Tensor x = a.tan();
-  torch::Tensor y = b.tan();
-
-  torch::Tensor vx = vel[1];
-  torch::Tensor vy = vel[2];
-  torch::Tensor vz = vel[0];
-
-  torch::Tensor delta = sqrt(x * x + y * y + 1);
-  torch::Tensor C = sqrt(1 + x * x);
-  torch::Tensor D = sqrt(1 + y * y);
-
-  auto result = torch::empty_like(vel);
-
-  result[0] = (vz + x * vx + y * vy) / delta;
-  result[1] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
-  result[2] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
-  return result;
-}
 
 //! Transform cubed sphere velocity from panel 1 to panel 2
 //! \param a $x = \tan(\xi)$ coordinates

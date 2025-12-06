@@ -71,12 +71,12 @@ namespace snap {
  * Global cartesian coordiantes
  * ----------------------------
  *
- *       +z
+ *       +Z
  *       ^
  *       |
- *       |----> +y
+ *       |----> +Y
  *      /
- *  +x /
+ *  +X /
  *
  * --------------------------
  * Cubed-sphere connectivity

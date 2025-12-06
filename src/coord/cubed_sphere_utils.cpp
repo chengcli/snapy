@@ -187,4 +187,142 @@ std::vector<double> cs_build_ghost_usrc(int N, int nghost, int apply_rev_flag) {
   return usrc;
 }
 
+torch::Tensor cs_vel_zab_to_zxy(torch::Tensor vel, torch::Tensor a,
+                                torch::Tensor b) {
+  auto x = a.tan();
+  auto y = b.tan();
+
+  auto vx = vel[1];
+  auto vy = vel[2];
+  auto vz = vel[0];
+
+  auto delta = sqrt(x * x + y * y + 1);
+  auto C = sqrt(1 + x * x);
+  auto D = sqrt(1 + y * y);
+
+  auto result = torch::empty_like(vel);
+
+  result[0] = (vz - D * x * vx - C * y * vy) / delta;
+  result[1] = (x * vz + D * vx) / delta;
+  result[2] = (y * vz + C * vy) / delta;
+
+  return result;
+}
+
+torch::Tensor cs_vel_zxy_to_zab(torch::Tensor vel, torch::Tensor a,
+                                torch::Tensor b) {
+  auto x = a.tan();
+  auto y = b.tan();
+
+  auto vx = vel[1];
+  auto vy = vel[2];
+  auto vz = vel[0];
+
+  auto delta = sqrt(x * x + y * y + 1);
+  auto C = sqrt(1 + x * x);
+  auto D = sqrt(1 + y * y);
+
+  auto result = torch::empty_like(vel);
+
+  result[0] = (vz + x * vx + y * vy) / delta;
+  result[1] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
+  result[2] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
+  return result;
+}
+
+torch::Tensor cs_vel_local_to_global(torch::Tensor vel_local, int panel) {
+  auto result = torch::empty_like(vel_local);
+  auto vz = vel_local[0];
+  auto vx = vel_local[1];
+  auto vy = vel_local[2];
+
+  switch (panel) {
+    case 0:
+      // z->+X, x->+Y, y->+Z
+      result[0] = vy;
+      result[1] = vz;
+      result[2] = vx;
+      return result;
+    case 1:
+      // z->+Y, x->-X, y->+Z
+      result[0] = vy;
+      result[1] = -vx;
+      result[2] = vz;
+      return result;
+    case 2:
+      // z->-X, x->-Y, y->+Z
+      result[0] = vy;
+      result[1] = -vz;
+      result[2] = -vx;
+      return result;
+    case 3:
+      // z->+Z, x->+Y, y->-X
+      result[0] = vz;
+      result[1] = -vy;
+      result[2] = vx;
+    case 4:
+      // z->-Y, x->+X, y->+Z
+      result[0] = vy;
+      result[1] = vx;
+      result[2] = -vz;
+      return result;
+    case 5:
+      // z->-Z, x->+Y, y->+X
+      result[0] = -vz;
+      result[1] = vy;
+      result[2] = vx;
+      return result;
+    default:
+      throw std::runtime_error("cs_vel_local_to_global: invalid panel");
+  }
+}
+
+torch::Tensor cs_vel_global_to_local(torch::Tensor vel_global, int panel) {
+  auto result = torch::empty_like(vel_global);
+  auto vz = vel_global[0];
+  auto vx = vel_global[1];
+  auto vy = vel_global[2];
+
+  switch (panel) {
+    case 0:
+      // +X->z, +Y->x, +Z->y
+      result[0] = vx;
+      result[1] = vy;
+      result[2] = vz;
+      return result;
+    case 1:
+      // +Y->z, -X->x, +Z->y
+      result[0] = vy;
+      result[1] = -vx;
+      result[2] = vz;
+      return result;
+    case 2:
+      // -X->z, -Y->x, +Z->y
+      result[0] = -vx;
+      result[1] = -vy;
+      result[2] = vz;
+      return result;
+    case 3:
+      // +Z->z, +Y->x, -X->y
+      result[0] = vz;
+      result[1] = vy;
+      result[2] = -vx;
+      return result;
+    case 4:
+      // -Y->z, +X->x, +Z->y
+      result[0] = -vy;
+      result[1] = vx;
+      result[2] = vz;
+      return result;
+    case 5:
+      // -Z->z, +Y->x, +X->y
+      result[0] = -vz;
+      result[1] = vy;
+      result[2] = vx;
+      return result;
+    default:
+      throw std::runtime_error("cs_vel_global_to_local: invalid panel");
+  }
+}
+
 }  // namespace snap

@@ -8,6 +8,71 @@
 // snap
 #include <snap/layout/cubed_sphere_layout.hpp>
 
+/*!
+ * Global cartesian coordinates
+ * ----------------------------
+ *
+ *       +Z
+ *       ^
+ *       |
+ *       |----> +Y
+ *      /
+ *  +X /
+ *
+ * Local face coordinates
+ * ----------------------
+ *
+ *         (T,3)          beta
+ *        |-----|         ^
+ *  (L,0) |  X  | (R,1)   |
+ *        |-----|         |----> alpha
+ *         (B,2)
+ *
+ * Side numbering
+ * --------------
+ *   Side_L = 0
+ *   Side_R = 1
+ *   Side_B = 2
+ *   Side_T = 3
+ *
+ * Local cartesian coordinates
+ * ---------------------------
+ *
+ * (0) +X
+ * (4) -Y
+ * (3) +Z
+ *
+ *                                            z  y
+ *                 ___________                | /
+ *                 |\        .\               |/---x
+ *                 | \   3   . \             (3)
+ *                 |  \_________\
+ *      y          | 4 |     .  |
+ *      |          \. .|......  |
+ *  z___|(4)        \  |    0 . |
+ *     /             \ |       .|             y
+ *   x/               \|________|             |
+ *                                        (0) |___x
+ *                                           /
+ *                                         z/
+ *
+ *
+ *  (1) +Y
+ *  (2) -X
+ *  (5) -Z
+ *                                         y  x
+ *                 __________              | /
+ *                 |\       .\             |/___z
+ *                 | \      . \           (1)
+ *      y  z       |  \________\
+ *      | /        |  |  2  .  |
+ *  x___|/         |..|......  |
+ *       (2)       \  |     . 1|        (5)  ___ x
+ *                  \ |  5   . |           /|
+ *                   \|_______.|         y/ |
+ *                                          z
+ */
+
 namespace snap {
 
 struct Vec3 {
@@ -57,33 +122,6 @@ inline size_t cs_usrc_index(int face, int side, int depth, int j, int N,
 }
 
 /*!
- *
- * Face names and global cartesian coordinates
- * -------------------------------------------
- *
- *       +z
- *       ^
- *       |
- *       |----> +y
- *      /
- *  +x /
- *
- * Local face coordinates
- * ----------------------
- *
- *         (T,3)          beta
- *        |-----|         ^
- *  (L,0) |  X  | (R,1)   |
- *        |-----|         |----> alpha
- *         (B,2)
- *
- * Side numbering
- * --------------
- *   Side_L = 0
- *   Side_R = 1
- *   Side_B = 2
- *   Side_T = 3
- *
  * Project unit vector to (alpha,bea) on a chosen face (no face selection).
  * Inverse of the above patterns: for +X, a=Y/X, b=Z/X, then alpha=atan(a), etc.
  * Assumes the vector is visible on that face (denominator sign consistent).
@@ -144,5 +182,19 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
  */
 std::vector<double> cs_build_ghost_usrc(int N, int nghost,
                                         int apply_rev_flag = false);
+
+//! Transform contravaraint velocity to local cartesian velocity
+torch::Tensor cs_vel_zab_to_zxy(torch::Tensor vel, torch::Tensor a,
+                                torch::Tensor b);
+
+//! Transform local cartesian velocity to constravariant velocity
+torch::Tensor cs_vel_zxy_to_zab(torch::Tensor vel, torch::Tensor a,
+                                torch::Tensor b);
+
+//! Transform local cartesian velocity to global cartesian velocity
+torch::Tensor cs_vel_local_to_global(torch::Tensor vel, int panel);
+
+//! Transform global cartesian velocity to local cartesian velocity
+torch::Tensor cs_vel_global_to_local(torch::Tensor vel, int panel);
 
 }  // namespace snap
