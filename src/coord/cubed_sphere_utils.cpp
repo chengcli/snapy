@@ -187,49 +187,6 @@ std::vector<double> cs_build_ghost_usrc(int N, int nghost, int apply_rev_flag) {
   return usrc;
 }
 
-torch::Tensor cs_vel_zab_to_zxy(torch::Tensor vel, torch::Tensor a,
-                                torch::Tensor b) {
-  auto x = a.tan();
-  auto y = b.tan();
-
-  auto vx = vel[1];
-  auto vy = vel[2];
-  auto vz = vel[0];
-
-  auto delta = sqrt(x * x + y * y + 1);
-  auto C = sqrt(1 + x * x);
-  auto D = sqrt(1 + y * y);
-
-  auto result = torch::empty_like(vel);
-
-  result[0] = (vz - D * x * vx - C * y * vy) / delta;
-  result[1] = (x * vz + D * vx) / delta;
-  result[2] = (y * vz + C * vy) / delta;
-
-  return result;
-}
-
-torch::Tensor cs_vel_zxy_to_zab(torch::Tensor vel, torch::Tensor a,
-                                torch::Tensor b) {
-  auto x = a.tan();
-  auto y = b.tan();
-
-  auto vx = vel[1];
-  auto vy = vel[2];
-  auto vz = vel[0];
-
-  auto delta = sqrt(x * x + y * y + 1);
-  auto C = sqrt(1 + x * x);
-  auto D = sqrt(1 + y * y);
-
-  auto result = torch::empty_like(vel);
-
-  result[0] = (vz + x * vx + y * vy) / delta;
-  result[1] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
-  result[2] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
-  return result;
-}
-
 torch::Tensor cs_vel_local_to_global(torch::Tensor vel_local, int panel) {
   auto result = torch::empty_like(vel_local);
   auto vz = vel_local[0];

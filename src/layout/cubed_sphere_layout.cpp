@@ -78,6 +78,44 @@ namespace snap {
  *      /
  *  +X /
  *
+ * ---------------------------
+ * Local cartesian coordinates
+ * ---------------------------
+ *
+ * (0) +X
+ * (4) -Y
+ * (3) +Z
+ *
+ *                                            z  y
+ *                 ___________                | /
+ *                 |\        .\               |/---x
+ *                 | \   3   . \             (3)
+ *                 |  \_________\
+ *      y          | 4 |     .  |
+ *      |          \. .|......  |
+ *  z___|(4)        \  |    0 . |
+ *     /             \ |       .|             y
+ *   x/               \|________|             |
+ *                                        (0) |___x
+ *                                           /
+ *                                         z/
+ *
+ *
+ *  (1) +Y
+ *  (2) -X
+ *  (5) -Z
+ *                                         y  x
+ *                 __________              | /
+ *                 |\       .\             |/___z
+ *                 | \      . \           (1)
+ *      y  z       |  \________\
+ *      | /        |  |  2  .  |
+ *  x___|/         |..|......  |
+ *       (2)       \  |     . 1|        (5)  ___ x
+ *                  \ |  5   . |           /|
+ *                   \|_______.|         y/ |
+ *                                          z
+ *
  * --------------------------
  * Cubed-sphere connectivity
  * --------------------------
@@ -91,9 +129,14 @@ namespace snap {
  *           |  5  |
  *           |-----|
  *
- * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
- * Each entry says: leaving face F via side S,
- * you arrive at (nface, nside) and the along-edge index is reversed? (0/1)
+ *
+ * --------------
+ * Side numbering
+ * --------------
+ *   Side_L = 0
+ *   Side_R = 1
+ *   Side_B = 2
+ *   Side_T = 3
  *
  * -------------------------------
  * Local face orientaion and sides
@@ -117,6 +160,71 @@ namespace snap {
 // face 5: -Z
 const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
+/*!
+ * Each entry says: on face F, the global velocity component VEL_{Z,X,Y}
+ * corresponds to local component idx with sign sgn.
+ */
+const CSVel CS_G2L_VEL[6][3] = {
+    /* face 0: */
+    [0] = {/* VEL_Z */ {VEL_Y, +1},
+           /* VEL_X */ {VEL_Z, +1},
+           /* VEL_Y */ {VEL_X, +1}},
+    /* face 1: */
+    [1] = {/* VEL_Z */ {VEL_Y, +1},
+           /* VEL_X */ {VEL_X, -1},
+           /* VEL_Y */ {VEL_Z, +1}},
+    /* face 2: */
+    [2] = {/* VEL_Z */ {VEL_Y, +1},
+           /* VEL_X */ {VEL_Z, -1},
+           /* VEL_Y */ {VEL_X, -1}},
+    /* face 3: */
+    [3] = {/* VEL_Z */ {VEL_Z, +1},
+           /* VEL_X */ {VEL_Y, -1},
+           /* VEL_Y */ {VEL_X, +1}},
+    /* face 4: */
+    [4] = {/* VEL_Z */ {VEL_Y, +1},
+           /* VEL_X */ {VEL_X, +1},
+           /* VEL_Y */ {VEL_Z, -1}},
+    /* face 5: */
+    [5] = {/* VEL_Z */ {VEL_Z, -1},
+           /* VEL_X */ {VEL_Y, +1},
+           /* VEL_Y */ {VEL_X, +1}}};
+
+/*!
+ * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
+ * corresponds to global component idx with sign sgn.
+ */
+const CSVel CS_L2G_VEL[6][3] = {
+    /* face 0: */
+    [0] = {/* VEL_Z */ {VEL_X, +1},
+           /* VEL_X */ {VEL_Y, +1},
+           /* VEL_Y */ {VEL_Z, +1}},
+    /* face 1: */
+    [1] = {/* VEL_Z */ {VEL_Y, +1},
+           /* VEL_X */ {VEL_X, -1},
+           /* VEL_Y */ {VEL_Z, +1}},
+    /* face 2: */
+    [2] = {/* VEL_Z */ {VEL_X, -1},
+           /* VEL_X */ {VEL_Y, -1},
+           /* VEL_Y */ {VEL_Z, +1}},
+    /* face 3: */
+    [3] = {/* VEL_Z */ {VEL_Z, +1},
+           /* VEL_X */ {VEL_Y, +1},
+           /* VEL_Y */ {VEL_X, -1}},
+    /* face 4: */
+    [4] = {/* VEL_Z */ {VEL_Y, -1},
+           /* VEL_X */ {VEL_X, +1},
+           /* VEL_Y */ {VEL_Z, +1}},
+    /* face 5: */
+    [5] = {/* VEL_Z */ {VEL_Z, -1},
+           /* VEL_X */ {VEL_Y, +1},
+           /* VEL_Y */ {VEL_X, +1}}};
+
+/*!
+ * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
+ * Each entry says: leaving face F via side S,
+ * you arrive at (nface, nside) and the along-edge index is reversed? (0/1)
+ */
 const CSEdge CS_FACE_EDGES[6][4] = {
     /* face 0: neighbors 4(L),1(R),5(B),3(T) */
     [0] = {/* L */ {4, SIDE_R, 0},
@@ -148,6 +256,19 @@ const CSEdge CS_FACE_EDGES[6][4] = {
            /* R */ {1, SIDE_B, 1},
            /* B */ {2, SIDE_B, 1},
            /* T */ {0, SIDE_B, 0}}};
+
+void populate_cs_l2g_vel(CSVel l2g[6][3]) {
+  for (int f = 0; f < 6; ++f) {
+    for (int c = 0; c < 3; ++c) {
+      for (int gc = 0; gc < 3; ++gc) {
+        if (CS_G2L_VEL[f][gc].idx == c) {
+          l2g[f][c].idx = gc;
+          l2g[f][c].sgn = CS_G2L_VEL[f][gc].sgn;
+        }
+      }
+    }
+  }
+}
 
 static inline void cs_clamp_inside(int pxy, int *nx, int *ny) {
   if (*nx < 0)
@@ -400,6 +521,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
     std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
   }
 
+  auto pcoord = pmb->phydro->pcoord;
+
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
@@ -433,9 +556,20 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       int count = 0;
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
-        if (name == "hydro_u" && inter_panel) {
-          _covariant_to_cartesian(pmb, offset, var.narrow(0, IVX, 3));
+
+        if (inter_panel) {
+          auto vel = var.narrow(0, IVX, 3);
+          switch (opts.type()) {
+            case kConserved:
+              pcoord->vec_raise_(vel, sub);
+              pcoord->contra_to_cart_(vel, sub);
+              break;
+            case kPrimitive:
+              pcoord->contra_to_cart_(vel, sub);
+              break;
+          }
         }
+
         send_bufs[bid][count] = var.clone();
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
         count++;
@@ -450,6 +584,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
     std::cout
         << "[CubedSphereLayout] deserializing data from receive buffers\n";
   }
+
+  auto pcoord = pmb->phydro->pcoord;
 
   // Get my logical location
   auto iloc = loc_of(options->rank());
@@ -509,37 +645,23 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       for (auto &[name, vara] : vars) {
         vara.index_put_(sub, recv_bufs[bid][count++]);
         auto var = vara.index(sub);
-        _interpolate_to_local(pmb, offset, var);
-        if (name == "hydro_u") {
-          _cartesian_to_covariant(pmb, offset, var.narrow(0, IVX, 3));
+
+        if (opts.interpolate()) {
+          _interpolate_to_local(pmb, offset, var);
+        }
+
+        auto vel = var.narrow(0, IVX, 3);
+        switch (opts.type()) {
+          case kConserved:
+            pcoord->cart_to_contra_(vel, sub);
+            pcoord->vec_lower_(vel, sub);
+            break;
+          case kPrimitive:
+            pcoord->cart_to_contra_(vel, sub);
+            break;
         }
       }
     }
-}
-
-void CubedSphereLayoutImpl::_covariant_to_cartesian(
-    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
-    torch::Tensor vel) const {
-  // coordinates
-  auto pcoord = pmb->phydro->pcoord;
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
-                              /*indexing=*/"ij");
-
-  auto sub = pmb->part(offset, /*exterior=*/false);
-
-  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
-  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-
-  if (options->verbose() && is_root()) {
-    std::cout << "offset = (" << std::get<0>(offset) << ", "
-              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "x2v = \n" << x2v.squeeze(-1) << "\n";
-    std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
-  }
-
-  auto co_vel = vel.clone();
-
-  //\TODO transform co_vel from covariant to cartesian
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(
@@ -565,31 +687,6 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
   }
 
   //\TODO calculate neighbor coordinates and perform interpolation
-}
-
-void CubedSphereLayoutImpl::_cartesian_to_covariant(
-    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
-    torch::Tensor vel) const {
-  // coordinates
-  auto pcoord = pmb->phydro->pcoord;
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
-                              /*indexing=*/"ij");
-
-  auto sub = pmb->part(offset, /*exterior=*/true);
-
-  auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
-  auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-
-  if (options->verbose() && is_root()) {
-    std::cout << "offset = (" << std::get<0>(offset) << ", "
-              << std::get<1>(offset) << ", " << std::get<2>(offset) << ")\n";
-    std::cout << "x2v = \n" << x2v.squeeze(-1) << "\n";
-    std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
-  }
-
-  auto cart_vel = vel.clone();
-
-  //\TODO transform cart_vel from cartesian to covariant
 }
 
 }  // namespace snap

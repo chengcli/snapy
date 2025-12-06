@@ -36,8 +36,19 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  void vec_lower_(torch::Tensor &vel) const override;
-  void vec_raise_(torch::Tensor &vel) const override;
+  void vec_lower_(
+      torch::Tensor &vel,
+      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+  void vec_raise_(
+      torch::Tensor &vel,
+      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+
+  void contra_to_cart_(
+      torch::Tensor vel,
+      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+  void cart_to_contra_(
+      torch::Tensor vel,
+      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
 
   void prim2local1_(torch::Tensor &wlr) const override;
   void prim2local2_(torch::Tensor &wlr) const override;

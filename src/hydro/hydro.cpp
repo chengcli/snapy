@@ -242,11 +242,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
-      Variables sync_vars;
-      sync_vars["hydro_wlr"] = wtmp;
       SyncOptions sync_opts;
       sync_opts.cross_panel_only(true);
       sync_opts.dim(DIM2);
+      sync_opts.interpolate(false);
+      sync_opts.type(kPrimitive);
+
+      Variables sync_vars;
+      sync_vars["hydro_wl"] = wtmp[ILT];
+      sync_vars["hydro_wr"] = wtmp[IRT];
       playout->forward(_pmb, sync_vars, sync_opts);
     }
 
@@ -268,11 +272,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
-      Variables sync_vars;
-      sync_vars["hydro_wlr"] = wtmp;
       SyncOptions sync_opts;
       sync_opts.cross_panel_only(true);
       sync_opts.dim(DIM3);
+      sync_opts.interpolate(false);
+      sync_opts.type(kPrimitive);
+
+      Variables sync_vars;
+      sync_vars["hydro_wl"] = wtmp[ILT];
+      sync_vars["hydro_wr"] = wtmp[IRT];
       playout->forward(_pmb, sync_vars, sync_opts);
     }
 
