@@ -37,11 +37,14 @@ class CubedSphereLayoutImpl
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 
-  void forward(MeshBlockImpl const *pmb, Variables &vars) override;
+  void forward(MeshBlockImpl const *pmb, Variables &vars,
+               SyncOptions opts) override;
 
-  void serialize(MeshBlockImpl const *pmb, Variables &vars) override;
+  void serialize(MeshBlockImpl const *pmb, Variables &vars,
+                 SyncOptions opts) override;
 
-  void deserialize(MeshBlockImpl const *pmb, Variables &vars) const override;
+  void deserialize(MeshBlockImpl const *pmb, Variables &vars,
+                   SyncOptions opts) const override;
 
  private:
   //! \brief Project covariant velocities to cartesian velocities

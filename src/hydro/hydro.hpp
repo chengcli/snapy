@@ -133,6 +133,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   std::vector<std::string> register_forcings_module();
 
  private:
+  MeshBlockImpl const* _pmb = nullptr;
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 

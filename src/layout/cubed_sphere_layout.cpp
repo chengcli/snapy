@@ -330,12 +330,18 @@ int CubedSphereLayoutImpl::neighbor_rank(
   }
 }
 
-void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars) {
+void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars,
+                                    SyncOptions opts) {
   TORCH_CHECK(!options->no_backend(),
               "[CubedSphereLayout:forward] backend is disabled");
+  TORCH_CHECK(pmb != nullptr,
+              "[CubedSphereLayout:forward] MeshBlock pointer is null");
+
+  // Skip corner exchanges for cubed-sphere layout
+  opts.skip_corner(true);
 
   // Serialize data into send buffers
-  serialize(pmb, vars);
+  serialize(pmb, vars, opts);
 
   if (options->verbose() && is_root()) {
     std::cout << "[CubedSphereLayout] performing communication\n";
@@ -349,12 +355,17 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars) {
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+  int x3_omin = opts.x3_offset_min();
+  int x3_omax = opts.x3_offset_max();
+  int x2_omin = opts.x2_offset_min();
+  int x2_omax = opts.x2_offset_max();
+
+  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-      // skip corners for cubed-sphere
-      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -380,11 +391,11 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars) {
   for (auto &work : works) work->wait();
 
   // Deserialize received data into ghost zones
-  deserialize(pmb, vars);
+  deserialize(pmb, vars, opts);
 }
 
-void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
-                                      Variables &vars) {
+void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
+                                      SyncOptions opts) {
   if (options->verbose() && is_root()) {
     std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
   }
@@ -393,18 +404,24 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
   auto iloc = loc_of(options->rank());
 
   // Iterate over all face-adjacent neighbor directions
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+  int x3_omin = opts.x3_offset_min();
+  int x3_omax = opts.x3_offset_max();
+  int x2_omin = opts.x2_offset_min();
+  int x2_omax = opts.x2_offset_max();
+
+  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-      // skip the corners for cubed-sphere
-      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
       bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
+      if (opts.cross_panel_only() && inter_panel) continue;
 
       // Get the interior part for this direction
       auto sub = pmb->part(offset, /*exterior=*/false);
@@ -427,7 +444,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb,
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
-                                        Variables &vars) const {
+                                        Variables &vars,
+                                        SyncOptions opts) const {
   if (options->verbose() && is_root()) {
     std::cout
         << "[CubedSphereLayout] deserializing data from receive buffers\n";
@@ -436,18 +454,25 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
+  int x3_omin = opts.x3_offset_min();
+  int x3_omax = opts.x3_offset_max();
+  int x2_omin = opts.x2_offset_min();
+  int x2_omax = opts.x2_offset_max();
+
   // Deserialize over all intra-panel neighbors first
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-      // skip the corners for cubed-sphere
-      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
-      // skip inter-panel neighbors
-      if (nb < 0 || std::get<2>(iloc) != std::get<2>(loc_of(nb))) continue;
+      if (nb < 0) continue;  // no neighbor
+
+      bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
+      if (opts.cross_panel_only() && inter_panel) continue;
 
       // Get the exterior (ghost zone) part for this direction
       auto sub = pmb->part(offset, /*exterior=*/true);
@@ -461,8 +486,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
     }
 
   // Deserialize over all inter-panel neighbors
-  for (int x3_offset = -1; x3_offset <= 1; ++x3_offset)
-    for (int x2_offset = -1; x2_offset <= 1; ++x2_offset) {
+  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
       // skip the corners for cubed-sphere
@@ -470,8 +495,10 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;  // no neighbor
+
       // skip intra-panel neighbors
-      if (nb < 0 || std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
+      if (std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
 
       // Get the exterior (ghost zone) part for this direction
       auto sub = pmb->part(offset, /*exterior=*/true);

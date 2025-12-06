@@ -126,7 +126,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
 
   // 3. define variables
   int level = 0;
-  auto iloc = pmb->layout()->loc_of(rank);
+  auto iloc = pmb->get_layout()->loc_of(rank);
 
   int lx1 =
       pmb->options->layout()->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);

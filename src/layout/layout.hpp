@@ -111,6 +111,21 @@ struct LayoutOptionsImpl {
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
+//! extra options for synchronization
+struct SyncOptions {
+  enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
+  int x1_offset_min() const { return dim() == DIM2 || dim() == DIM3 ? 0 : -1; }
+  int x1_offset_max() const { return dim() == DIM2 || dim() == DIM3 ? 0 : 1; }
+  int x2_offset_min() const { return dim() == DIM3 || dim() == DIM1 ? 0 : -1; }
+  int x2_offset_max() const { return dim() == DIM3 || dim() == DIM1 ? 0 : 1; }
+  int x3_offset_min() const { return dim() == DIM2 || dim() == DIM1 ? 0 : -1; }
+  int x3_offset_max() const { return dim() == DIM2 || dim() == DIM1 ? 0 : 1; }
+
+  ADD_ARG(bool, cross_panel_only) = false;
+  ADD_ARG(bool, skip_corner) = false;
+  ADD_ARG(int, dim) = -1;
+};
+
 using Variables = std::map<std::string, torch::Tensor>;
 
 class MeshBlockImpl;
@@ -173,10 +188,12 @@ class LayoutImpl {
                             std::tuple<int, int, int> offset) const = 0;
 
   //! Serialize variables
-  virtual void serialize(MeshBlockImpl const *pmb, Variables &vars);
+  virtual void serialize(MeshBlockImpl const *pmb, Variables &vars,
+                         SyncOptions opts);
 
   //! Deserialize variables
-  virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars) const;
+  virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars,
+                           SyncOptions opts) const;
 
   //! \brief Perform ghost zone exchange
   /*!
@@ -184,7 +201,8 @@ class LayoutImpl {
    * communication. This function serializes data, performs send/recv
    * operations, and deserializes received data into ghost zones.
    */
-  virtual void forward(MeshBlockImpl const *pmb, Variables &vars) {}
+  virtual void forward(MeshBlockImpl const *pmb, Variables &vars,
+                       SyncOptions opts = SyncOptions()) {}
 
  protected:
   void _init_backend();
@@ -217,7 +235,8 @@ class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
                     std::tuple<int, int, int> offset) const override;
 
   //! \brief Perform ghost zone exchange for slab layout
-  void forward(MeshBlockImpl const *pmb, Variables &vars) override;
+  void forward(MeshBlockImpl const *pmb, Variables &vars,
+               SyncOptions opts = SyncOptions()) override;
 };
 TORCH_MODULE(SlabLayout);
 

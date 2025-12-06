@@ -84,7 +84,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 
-  static Layout layout() { return _playout; }
+  static Layout get_layout() { return _playout; }
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
