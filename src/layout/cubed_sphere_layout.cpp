@@ -434,7 +434,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
         if (name == "hydro_u" && inter_panel) {
-          _covariant_to_cartesian(pmb, offset, var[IVX], var[IVY], var[IVZ]);
+          _covariant_to_cartesian(pmb, offset, var.narrow(0, IVX, 3));
         }
         send_bufs[bid][count] = var.clone();
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
@@ -511,7 +511,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         auto var = vara.index(sub);
         _interpolate_to_local(pmb, offset, var);
         if (name == "hydro_u") {
-          _cartesian_to_covariant(pmb, offset, var[IVX], var[IVY], var[IVZ]);
+          _cartesian_to_covariant(pmb, offset, var.narrow(0, IVX, 3));
         }
       }
     }
@@ -519,7 +519,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 
 void CubedSphereLayoutImpl::_covariant_to_cartesian(
     MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
-    torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
+    torch::Tensor vel) const {
   // coordinates
   auto pcoord = pmb->phydro->pcoord;
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
@@ -537,11 +537,9 @@ void CubedSphereLayoutImpl::_covariant_to_cartesian(
     std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
   }
 
-  auto co_vz = vz.clone();
-  auto co_vx = vx.clone();
-  auto co_vy = vy.clone();
+  auto co_vel = vel.clone();
 
-  //\TODO transform (co_vx, co_vy, co_vz) from covariant to cartesian
+  //\TODO transform co_vel from covariant to cartesian
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(
@@ -571,7 +569,7 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
 
 void CubedSphereLayoutImpl::_cartesian_to_covariant(
     MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
-    torch::Tensor vz, torch::Tensor vx, torch::Tensor vy) const {
+    torch::Tensor vel) const {
   // coordinates
   auto pcoord = pmb->phydro->pcoord;
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
@@ -589,11 +587,9 @@ void CubedSphereLayoutImpl::_cartesian_to_covariant(
     std::cout << "x3v = \n" << x3v.squeeze(-1) << "\n";
   }
 
-  auto cart_vz = vz.clone();
-  auto cart_vx = vx.clone();
-  auto cart_vy = vy.clone();
+  auto cart_vel = vel.clone();
 
-  //\TODO transform (cart_vx, cart_vy, cart_vz) from cartesian to covariant
+  //\TODO transform cart_vel from cartesian to covariant
 }
 
 }  // namespace snap
