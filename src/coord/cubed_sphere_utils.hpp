@@ -132,7 +132,8 @@ double cs_target_ghost_to_source_u(int face_t, int side_t, int N, int j_along,
                                    int depth_o, int *face_s, int *side_s,
                                    double *alpha_s, double *beta_s);
 
-/* Build full ghost->source interpolation table for all faces & edges.
+/*!
+ * Build full ghost->source interpolation table for all faces & edges.
  * Inputs:
  *   N       : cells per dimension on each face (px==py==N)
  *   nghost  : number of ghost layers to fill (>=1)
