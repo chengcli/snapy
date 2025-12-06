@@ -68,7 +68,7 @@ namespace snap {
 
 /*!
  * ----------------------------
- * Global cartesian coordiantes
+ * Global cartesian coordinates
  * ----------------------------
  *
  *       +Z
