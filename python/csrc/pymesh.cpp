@@ -107,8 +107,13 @@ void bind_mesh(py::module &m) {
           "part",
           [](snap::MeshBlockImpl &self, std::tuple<int, int, int> offset,
              bool exterior, int extend_x1, int extend_x2, int extend_x3) {
-            auto result =
-                self.part(offset, exterior, extend_x1, extend_x2, extend_x3);
+            snap::PartOptions opts;
+            opts.exterior(exterior);
+            opts.extend_x1(extend_x1);
+            opts.extend_x2(extend_x2);
+            opts.extend_x3(extend_x3);
+
+            auto result = self.part(offset, opts);
             py::tuple index_spec(result.size());
             for (size_t i = 0; i < result.size(); ++i) {
               auto s = result[i].slice();
