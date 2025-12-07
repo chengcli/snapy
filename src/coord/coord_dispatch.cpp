@@ -16,7 +16,7 @@ void call_cs_interp_LR_cpu(at::TensorIterator& iter, torch::Tensor usrc) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_cs_interp_LR_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), -1);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), -2);
-    int nghost = at::native::ensure_nonempty_size(iter.output(), -1);
+    int nghost = at::native::ensure_nonempty_size(iter.output(), -3);
     int N = at::native::ensure_nonempty_size(iter.output(), -2);
 
     iter.for_each(
@@ -39,8 +39,8 @@ void call_cs_interp_BT_cpu(at::TensorIterator& iter, torch::Tensor usrc) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_cs_interp_BT_cpu", [&] {
     int stride1 = at::native::ensure_nonempty_stride(iter.output(), -1);
     int stride2 = at::native::ensure_nonempty_stride(iter.output(), -2);
-    int nghost = at::native::ensure_nonempty_size(iter.output(), -1);
-    int N = at::native::ensure_nonempty_size(iter.output(), -2);
+    int nghost = at::native::ensure_nonempty_size(iter.output(), -2);
+    int N = at::native::ensure_nonempty_size(iter.output(), -3);
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
