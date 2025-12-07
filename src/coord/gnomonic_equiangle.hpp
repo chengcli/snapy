@@ -65,7 +65,7 @@ class GnomonicEquiangleImpl
                         torch::Tensor flux2, torch::Tensor flux3) override;
 
  private:
-  void _build_ghost_map(int N, int nghost, int apply_rev_flag);
+  void _build_ghost_map();
 
   void _set_face2_metric() const;
   void _set_face3_metric() const;
