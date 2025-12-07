@@ -10,9 +10,30 @@
 
 namespace snap {
 
+enum {
+  AX_X = 0,
+  AX_Y = 1
+}
+
 struct Vec3 {
   double x, y, z;
 };
+
+struct CSGhostMap {
+  int face_s;   /* source face id */
+  int side_s;   /* source side (SIDE_L/R/B/T) */
+  double u_src; /* fractional index along source edge interior line */
+};
+
+inline int cs_side_axis(int side) {
+  /* L/R vary in Y; B/T vary in X */
+  return (side == SIDE_L || side == SIDE_R) ? AX_Y : AX_X;
+}
+
+inline int cs_side_sign(int side) {
+  /* outward normal: left/bottom = -1; right/top = +1 */
+  return (side == SIDE_R || side == SIDE_T) ? +1 : -1;
+}
 
 /*!
  * Equiangular centers & ghost centers
@@ -21,6 +42,23 @@ struct Vec3 {
 inline double cs_equ_center(int N, int i) {
   double d = M_PI / (2.0 * (double)N);
   return -M_PI / 4.0 + ((double)i + 0.5) * d;
+}
+
+inline void cs_equ_ghost_center(int side, int N, int j_along, int depth,
+                                double *alpha_t, double *beta_t) {
+  double d = M_PI / (2.0 * (double)N);
+  int sgn = cs_side_sign(side);  // -1 for L/B, +1 for R/T
+  int ax = cs_side_axis(side);   // AX_Y: edge varies in beta; AX_X: in alpha
+  double along = cs_equ_center(N, j_along);
+  double perp = sgn * (M_PI / 4.0 + ((double)depth - 0.5) * d);
+
+  if (ax == AX_Y) {  // L/R: alpha outwards, beta along
+    *alpha_t = perp;
+    *beta_t = along;
+  } else {  // B/T: alpha along, beta outwards
+    *alpha_t = along;
+    *beta_t = perp;
+  }
 }
 
 /*!
@@ -55,6 +93,9 @@ inline size_t cs_usrc_index(int face, int side, int depth, int j, int N,
          ((size_t)(side - SIDE_L) * (size_t)nghost * (size_t)N) +
          ((size_t)(depth - 1) * (size_t)N) + (size_t)j;
 }
+
+inline void cs_build_ghost_map(int N, int nghost, int apply_rev_flag,
+                               CSGhostMap *table);
 
 /*!
  * Project unit vector to (alpha,bea) on a chosen face (no face selection).

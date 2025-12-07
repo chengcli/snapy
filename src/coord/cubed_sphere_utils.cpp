@@ -8,29 +8,41 @@
 
 namespace snap {
 
-void cs_equ_ghost_center(int side, int N, int j_along, int o_depth,
-                         double *alpha_t, double *beta_t) {
-  double d = M_PI / (2.0 * (double)N);
-  switch (side) {
-    case SIDE_L: /* alpha just outside left */
-      *alpha_t = -M_PI / 4.0 - ((double)o_depth - 0.5) * d;
-      *beta_t = cs_equ_center(N, j_along);
-      break;
-    case SIDE_R: /* alpha just outside right */
-      *alpha_t = M_PI / 4.0 + ((double)o_depth - 0.5) * d;
-      *beta_t = cs_equ_center(N, j_along);
-      break;
-    case SIDE_B: /* beta just outside bottom */
-      *beta_t = -M_PI / 4.0 - ((double)o_depth - 0.5) * d;
-      *alpha_t = cs_equ_center(N, j_along);
-      break;
-    case SIDE_T: /* beta just outside top */
-      *beta_t = M_PI / 4.0 + ((double)o_depth - 0.5) * d;
-      *alpha_t = cs_equ_center(N, j_along);
-      break;
-    default:
-      *alpha_t = 0.0;
-      *beta_t = 0.0; /* invalid */
+void cs_build_ghost_map(int N, int nghost, int apply_rev_flag,
+                        CSGhostMap *map) {
+  for (int face_t = 0; face_t < 6; ++face_t) {
+    for (int side_t = SIDE_L; side_t <= SIDE_T; ++side_t) {
+      const CSEdge emap = CS_FACE_EDGES[face_t][side_t];
+
+      // which angle varies on target face
+      const int src_ax = cs_side_axis(emap.nside);
+      for (int depth = 1; depth <= nghost; ++depth) {
+        for (int j = 0; j < N; ++j) {
+          // 1) Target ghost center
+          double alpha_t, beta_t;
+          cs_equ_ghost_center(side_t, N, j, depth, &alpha_t, &beta_t);
+
+          // 2) To sphere, then to source-face local
+          Vec3 v = cs_face_to_vec(face_t, alpha_t, beta_t);
+
+          double alpha_s, beta_s;
+          cs_vec_to_face_coords(emap.nface, v, &alpha_s, &beta_s);
+
+          // 3) Fractional abscissa along source edge’s interior line
+          double u =
+              cs_angle_to_center_u((src_ax == AX_Y) ? beta_s : alpha_s, N);
+
+          // Optional discrete index flip per connectivity flag
+          if (apply_rev_flag && emap.rev) u = (double)(N - 1) - u;
+
+          // Write out
+          size_t idx = cs_usrc_index(face_t, side_t, depth, j, N, nghost);
+          map[idx].face_s = emap.nface;
+          map[idx].side_s = emap.nside;
+          map[idx].u_src = u;
+        }
+      }
+    }
   }
 }
 
