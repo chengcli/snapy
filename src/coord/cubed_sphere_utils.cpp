@@ -4,8 +4,6 @@
 #include <cstring>
 
 // snap
-#include <snap/layout/cubed_sphere_layout.hpp>
-
 #include "cubed_sphere_utils.hpp"
 
 namespace snap {

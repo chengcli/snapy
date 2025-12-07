@@ -1,16 +1,23 @@
-// snap
-#include "gnomonic_equiangle.hpp"
+// torch
+#include <ATen/TensorIterator.h>
 
+// snap
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
+#include "coord_dispatch.hpp"
+#include "cubed_sphere_utils.hpp"
+#include "gnomonic_equiangle.hpp"
+
 namespace snap {
 
 void GnomonicEquiangleImpl::reset() {
   auto const &op = options;
+  TORCH_CHECK(op->nx2() == op->nx3(),
+              "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
@@ -113,6 +120,12 @@ void GnomonicEquiangleImpl::reset() {
   g12 = register_buffer("g12", torch::zeros_like(vol));
   g13 = register_buffer("g13", torch::zeros_like(vol));
   g23 = register_buffer("g23", torch::zeros_like(vol));
+
+  // register ghost cell usrc
+  int N = op->nx2();
+  usrc =
+      register_buffer("usrc", torch::empty({op->nghost(), N}, torch::kFloat64));
+  cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
@@ -133,6 +146,32 @@ torch::Tensor GnomonicEquiangleImpl::face_area3() const {
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
   return (x1v * x1v * dx1f).unsqueeze(0).unsqueeze(1) *
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
+}
+
+void GnomonicEquiangleImpl::interpolate_LR_(torch::Tensor &var,
+                                            torch::Tensor buf) const {
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(var.sizes())
+                  .add_output(var)
+                  .add_input(buf)
+                  .build();
+
+  at::native::call_cs_interp_LR(var.device().type(), iter, usrc);
+}
+
+void GnomonicEquiangleImpl::interpolate_BT_(torch::Tensor &var,
+                                            torch::Tensor buf) const {
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(var.sizes())
+                  .add_output(var)
+                  .add_input(buf)
+                  .build();
+
+  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);
 }
 
 void GnomonicEquiangleImpl::vec_lower_(

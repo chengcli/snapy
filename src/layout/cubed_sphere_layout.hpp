@@ -1,3 +1,5 @@
+#pragma once
+
 // snap
 #include "layout.hpp"
 

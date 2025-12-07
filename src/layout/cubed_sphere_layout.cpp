@@ -626,8 +626,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
     for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-      // skip the corners for cubed-sphere
-      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -643,11 +643,15 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       int bid = get_buffer_id(offset);
       int count = 0;
       for (auto &[name, vara] : vars) {
-        vara.index_put_(sub, recv_bufs[bid][count++]);
         auto var = vara.index(sub);
 
         if (opts.interpolate()) {
-          _interpolate_to_local(pmb, offset, var);
+          if (x3_offset != 0)
+            pcoord->interpolate_LR_(var, recv_bufs[bid][count]);
+          else if (x2_offset != 0)
+            pcoord->interpolate_BT_(var, recv_bufs[bid][count]);
+        } else {
+          vara.index_put_(sub, recv_bufs[bid][count]);
         }
 
         auto vel = var.narrow(0, IVX, 3);
@@ -660,6 +664,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             pcoord->cart_to_contra_(vel, sub);
             break;
         }
+        count++;
       }
     }
 }

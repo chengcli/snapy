@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <vector>
 
+// snap
+#include <snap/layout/cubed_sphere_layout.hpp>
+
 namespace snap {
 
 enum { AX_X = 0, AX_Y = 1 };
