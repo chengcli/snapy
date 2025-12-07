@@ -1,16 +1,23 @@
-// snap
-#include "gnomonic_equiangle.hpp"
+// torch
+#include <ATen/TensorIterator.h>
 
+// snap
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
+#include "coord_dispatch.hpp"
+#include "cubed_sphere_utils.hpp"
+#include "gnomonic_equiangle.hpp"
+
 namespace snap {
 
 void GnomonicEquiangleImpl::reset() {
   auto const &op = options;
+  TORCH_CHECK(op->nx2() == op->nx3(),
+              "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
@@ -113,6 +120,12 @@ void GnomonicEquiangleImpl::reset() {
   g12 = register_buffer("g12", torch::zeros_like(vol));
   g13 = register_buffer("g13", torch::zeros_like(vol));
   g23 = register_buffer("g23", torch::zeros_like(vol));
+
+  // register ghost cell usrc
+  int N = op->nx2();
+  usrc =
+      register_buffer("usrc", torch::empty({op->nghost(), N}, torch::kFloat64));
+  cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
@@ -133,6 +146,56 @@ torch::Tensor GnomonicEquiangleImpl::face_area3() const {
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
   return (x1v * x1v * dx1f).unsqueeze(0).unsqueeze(1) *
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
+}
+
+torch::Tensor GnomonicEquiangleImpl::fill_ghost_LR(torch::Tensor buf,
+                                                   bool flip) const {
+  auto usrc_t = flip ? usrc : usrc.flip(0);
+
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-2, ul.expand_as(buf));
+  auto bufu = buf.gather(-2, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
+}
+
+torch::Tensor GnomonicEquiangleImpl::fill_ghost_BT(torch::Tensor buf,
+                                                   bool flip) const {
+  auto usrc_t = flip ? usrc.transpose(0, 1) : usrc.flip(0).transpose(0, 1);
+
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-3, ul.expand_as(buf));
+  auto bufu = buf.gather(-3, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
+
+  /*auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(var.sizes())
+                  .add_output(var)
+                  .add_input(buf)
+                  .build();
+
+  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);*/
 }
 
 void GnomonicEquiangleImpl::vec_lower_(

@@ -26,12 +26,32 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
 
   if (node["bounds"]) {
     x1min = node["bounds"]["x1min"].as<double>(0.0);
-    x2min = node["bounds"]["x2min"].as<double>(0.0);
-    x3min = node["bounds"]["x3min"].as<double>(0.0);
+
+    if (node["bounds"]["x2min_pi"]) {
+      x2min = node["bounds"]["x2min_pi"].as<double>() * M_PI;
+    } else {
+      x2min = node["bounds"]["x2min"].as<double>(0.0);
+    }
+
+    if (node["bounds"]["x3min_pi"]) {
+      x3min = node["bounds"]["x3min_pi"].as<double>() * M_PI;
+    } else {
+      x3min = node["bounds"]["x3min"].as<double>(0.0);
+    }
 
     x1max = node["bounds"]["x1max"].as<double>(1.0);
-    x2max = node["bounds"]["x2max"].as<double>(1.0);
-    x3max = node["bounds"]["x3max"].as<double>(1.0);
+
+    if (node["bounds"]["x2max_pi"]) {
+      x2max = node["bounds"]["x2max_pi"].as<double>() * M_PI;
+    } else {
+      x2max = node["bounds"]["x2max"].as<double>(1.0);
+    }
+
+    if (node["bounds"]["x3max_pi"]) {
+      x3max = node["bounds"]["x3max_pi"].as<double>() * M_PI;
+    } else {
+      x3max = node["bounds"]["x3max"].as<double>(1.0);
+    }
   }
 
   auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));

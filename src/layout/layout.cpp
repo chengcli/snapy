@@ -105,7 +105,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       if (nb < 0) continue;  // no neighbor
 
       // Get the interior part for this direction
-      auto sub = pmb->part(offset, /*exterior=*/false);
+      auto sub = pmb->part(offset, PartOptions().exterior(false));
 
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
@@ -147,7 +147,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
       if (nb < 0) continue;  // no neighbor
 
       // Get the exterior (ghost zone) part for this direction
-      auto sub = pmb->part(offset, /*exterior=*/true);
+      auto sub = pmb->part(offset, PartOptions().exterior(true));
 
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);

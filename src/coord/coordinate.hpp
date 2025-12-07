@@ -167,6 +167,11 @@ class CoordinateImpl {
     return {vec[0], vec[1], vec[2]};
   }
 
+  virtual torch::Tensor fill_ghost(torch::Tensor buf,
+                                   std::tuple<int, int, int>) const {
+    return buf;
+  }
+
   virtual void vec_lower_(
       torch::Tensor &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}

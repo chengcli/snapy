@@ -547,7 +547,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       if (opts.cross_panel_only() && !inter_panel) continue;
 
       // Get the interior part for this direction
-      auto sub = pmb->part(offset, /*exterior=*/false);
+      auto sub = pmb->part(offset, PartOptions().exterior(false));
 
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
@@ -611,7 +611,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       if (opts.cross_panel_only() && !inter_panel) continue;
 
       // Get the exterior (ghost zone) part for this direction
-      auto sub = pmb->part(offset, /*exterior=*/true);
+      auto sub = pmb->part(offset, PartOptions().exterior(true));
 
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
@@ -626,8 +626,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
     for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
       if (x3_offset == 0 && x2_offset == 0) continue;
-      // skip the corners for cubed-sphere
-      if (std::abs(x3_offset) + std::abs(x2_offset) == 2) continue;
+      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
+        continue;
 
       std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -637,17 +637,21 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       if (std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
 
       // Get the exterior (ghost zone) part for this direction
-      auto sub = pmb->part(offset, /*exterior=*/true);
+      auto sub = pmb->part(offset, PartOptions().exterior(true));
 
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
       for (auto &[name, vara] : vars) {
-        vara.index_put_(sub, recv_bufs[bid][count++]);
         auto var = vara.index(sub);
 
         if (opts.interpolate()) {
-          _interpolate_to_local(pmb, offset, var);
+          if (x3_offset != 0)
+            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
+          else if (x2_offset != 0)
+            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
+        } else {
+          vara.index_put_(sub, recv_bufs[bid][count]);
         }
 
         auto vel = var.narrow(0, IVX, 3);
@@ -660,6 +664,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             pcoord->cart_to_contra_(vel, sub);
             break;
         }
+        count++;
       }
     }
 }
@@ -672,7 +677,7 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
                               /*indexing=*/"ij");
 
-  auto sub = pmb->part(offset, /*exterior=*/true);
+  auto sub = pmb->part(offset, PartOptions().exterior(true));
 
   auto x2v = mesh[1].unsqueeze(0).index(sub).squeeze(0);
   auto x3v = mesh[0].unsqueeze(0).index(sub).squeeze(0);

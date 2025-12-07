@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     block->named_modules()["layout"]->pretty_print(std::cout);
   }
 
-  auto interior = block->part({0, 0, 0}, /*exterior=*/false);
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
   w.index(interior)[IDN] = r + 1.0;
   w.index(interior)[IPR] = r + 1.0;
 
@@ -43,9 +43,9 @@ int main(int argc, char **argv) {
   vars["hydro_w"] = w;
   block->initialize(vars);
 
-  block->layout()->pg->barrier()->wait();
+  block->get_layout()->pg->barrier()->wait();
 
-  auto [rx, ry, face] = block->layout()->loc_of(r);
+  auto [rx, ry, face] = block->get_layout()->loc_of(r);
 
   for (int i = 0; i < block->options->layout()->world_size(); ++i) {
     if (i == r) {
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
                 << vars["hydro_u"][IDN].squeeze().transpose(0, 1).flip(0)
                 << std::endl;
     }
-    block->layout()->pg->barrier()->wait();
+    block->get_layout()->pg->barrier()->wait();
   }
 
   return 0;
