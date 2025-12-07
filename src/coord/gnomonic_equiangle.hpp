@@ -39,8 +39,10 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  void interpolate_LR_(torch::Tensor &var, torch::Tensor buf) const override;
-  void interpolate_BT_(torch::Tensor &var, torch::Tensor buf) const override;
+  void interpolate_LR_(torch::Tensor const &var,
+                       torch::Tensor buf) const override;
+  void interpolate_BT_(torch::Tensor const &var,
+                       torch::Tensor buf) const override;
 
   void vec_lower_(
       torch::Tensor &vel,

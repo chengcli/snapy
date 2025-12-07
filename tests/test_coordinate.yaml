@@ -20,7 +20,7 @@ distribute:
 
 geometry:
   type: gnomonic-equiangle
-  cells: {nx1: 1, nx2: 8, nx3: 8, nghost: 2}
+  cells: {nx1: 1, nx2: 6, nx3: 6, nghost: 2}
   bounds:
     x1min: 1.
     x1max: 2.

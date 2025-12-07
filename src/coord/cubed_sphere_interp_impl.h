@@ -1,14 +1,16 @@
 #pragma once
 
-#define SOURCE(j, i) source[(j) * stride_x2 + (i) * stride_x1]
+#define SRC_LR(j, i) source[(j) * (N * stride_x1) + (i) * stride_x1]
+#define SRC_BT(j, i) source[(j) * (nghost * stride_x1) + (i) * stride_x1]
 #define TARGET(j, i) target[(j) * stride_x2 + (i) * stride_x1]
 
 namespace snap {
 
 //! 1D linear interpolate from source to fill target ghost cell
 /*!
- * source is a 3D array with shape (nx3, nx2, nx1)
- * to access source data, use SOURCE(j,i) macro defined above
+ * source is a 3D array with either shape
+ * LR: (nghsot, N, nx1), or
+ * BT: (N, nghost, nx1) depending on the direction of interpolation.
  *
  * u_src is an array of length nghost*N giving the fractional
  * source coordinates along the source edge line for each
@@ -34,9 +36,9 @@ void cs_interp_LR(T* target, const T* source, int N, int nghost, T* u_src,
       T w1 = u - (T)i0;
       T w0 = 1.0 - w1;
 
-      T v0 = SOURCE(i0, n);
-      T v1 = SOURCE(i1, n);
-      TARGET(j, n) = w0 * v0 + w1 * v1;
+      T v0 = SRC_LR(n, i0);
+      T v1 = SRC_LR(n, i1);
+      TARGET(n, j) = w0 * v0 + w1 * v1;
     }
 }
 
@@ -51,13 +53,14 @@ void cs_interp_BT(T* target, const T* source, int N, int nghost, T* u_src,
       T w1 = u - (T)i0;
       T w0 = 1.0 - w1;
 
-      T v0 = SOURCE(n, i0);
-      T v1 = SOURCE(n, i1);
-      TARGET(n, j) = w0 * v0 + w1 * v1;
+      T v0 = SRC_BT(i0, n);
+      T v1 = SRC_BT(i1, n);
+      TARGET(j, n) = w0 * v0 + w1 * v1;
     }
 }
 
 }  // namespace snap
 
-#undef SOURCE
+#undef SRC_LR
+#undef SRC_BT
 #undef TARGET

@@ -173,14 +173,13 @@ void MeshBlockImpl::reset() {
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
-    std::tuple<int, int, int> offset, bool exterior, int extend_x1,
-    int extend_x2, int extend_x3) const {
+    std::tuple<int, int, int> offset, PartOptions const& opts) const {
   int nc1 = options->hydro()->coord()->nc1();
   int nc2 = options->hydro()->coord()->nc2();
   int nc3 = options->hydro()->coord()->nc3();
   int nghost_coord = options->hydro()->coord()->nghost();
 
-  int is_ghost = exterior ? 1 : 0;
+  int is_ghost = opts.exterior() ? 1 : 0;
 
   auto [o3, o2, o1] = offset;
   int start1, len1, start2, len2, start3, len3;
@@ -197,7 +196,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     len1 = nghost;
   } else if (o1 == 0) {
     start1 = nghost;
-    len1 = nx1 + extend_x1;
+    len1 = nx1 + opts.extend_x1();
   } else {  // o1 == 1
     start1 = nghost * is_ghost + nx1;
     len1 = nghost;
@@ -211,7 +210,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     len2 = nghost;
   } else if (o2 == 0) {
     start2 = nghost;
-    len2 = nx2 + extend_x2;
+    len2 = nx2 + opts.extend_x2();
   } else {  // o2 == 1
     start2 = nghost * is_ghost + nx2;
     len2 = nghost;
@@ -225,7 +224,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     len3 = nghost;
   } else if (o3 == 0) {
     start3 = nghost;
-    len3 = nx3 + extend_x3;
+    len3 = nx3 + opts.extend_x3();
   } else {  // o3 == 1
     start3 = nghost * is_ghost + nx3;
     len3 = nghost;
@@ -236,7 +235,13 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   auto slice3 = torch::indexing::Slice(start3, start3 + len3);
   auto slice4 = torch::indexing::Slice();
 
-  return {slice4, slice3, slice2, slice1};
+  if (opts.ndim() == 3) {
+    return {slice3, slice2, slice1};
+  } else if (opts.ndim() == 4) {
+    return {slice4, slice3, slice2, slice1};
+  } else {
+    throw std::runtime_error("part: ndim must be 3 or 4.");
+  }
 }
 
 double MeshBlockImpl::initialize(Variables& vars) {
@@ -575,7 +580,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                   << " time=" << time << " dt=" << dt;
       }
 
-      auto interior = part({0, 0, 0}, /*exterior=*/false);
+      auto interior = part({0, 0, 0}, PartOptions().exterior(false));
 
       if (compute_mass) {
         std::vector<at::Tensor> mass = {
@@ -666,7 +671,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
-  auto interior = part({0, 0, 0}, /*exterior=*/false);
+  auto interior = part({0, 0, 0}, PartOptions().exterior(false));
   auto rho = hydro_u.index(interior)[IDN];
   auto pres = hydro_u.index(interior)[IPR];
 

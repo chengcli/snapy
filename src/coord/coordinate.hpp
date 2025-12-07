@@ -167,8 +167,10 @@ class CoordinateImpl {
     return {vec[0], vec[1], vec[2]};
   }
 
-  virtual void interpolate_LR_(torch::Tensor &var, torch::Tensor buf) const {}
-  virtual void interpolate_BT_(torch::Tensor &var, torch::Tensor buf) const {}
+  virtual void interpolate_LR_(torch::Tensor const &var,
+                               torch::Tensor buf) const {}
+  virtual void interpolate_BT_(torch::Tensor const &var,
+                               torch::Tensor buf) const {}
 
   virtual void vec_lower_(
       torch::Tensor &vel,

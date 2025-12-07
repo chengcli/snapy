@@ -65,6 +65,17 @@ using MeshBlockOptions = std::shared_ptr<MeshBlockOptionsImpl>;
 using Variables = std::map<std::string, torch::Tensor>;
 class OutputType;
 
+struct PartOptions {
+  //! if true, return the exterior part (with ghost zones);
+  //! if false, return the interior part (without ghost zones)
+  ADD_ARG(bool, exterior) = true;
+  ADD_ARG(int, extend_x1) = 0;
+  ADD_ARG(int, extend_x2) = 0;
+  ADD_ARG(int, extend_x3) = 0;
+  ADD_ARG(int, depth) = 0;
+  ADD_ARG(int, ndim) = 4;
+};
+
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
  public:
   //! options with which this `MeshBlock` was constructed
@@ -95,16 +106,11 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! \brief return an index tensor for part of the meshblock
   /*!
    * \param offset: tuple of (x1_offset, x2_offset, x3_offset)
-   * \param exterior: if true, return the exterior part (with ghost zones);
-   *                  if false, return the interior part (without ghost zones)
-   * \param extend_x1: number of cells to extend in the x1 direction
-   * \param extend_x2: number of cells to extend in the x2 direction
-   * \param extend_x3: number of cells to extend in the x3 direction
+   * \param opts: additional options
    * \return: vector of TensorIndex for each dimension
    */
   std::vector<torch::indexing::TensorIndex> part(
-      std::tuple<int, int, int> offset, bool exterior = true, int extend_x1 = 0,
-      int extend_x2 = 0, int extend_x3 = 0) const;
+      std::tuple<int, int, int> offset, PartOptions const& opts) const;
 
   //! initialize the variables
   /*!

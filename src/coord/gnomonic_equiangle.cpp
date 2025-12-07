@@ -148,7 +148,7 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
 }
 
-void GnomonicEquiangleImpl::interpolate_LR_(torch::Tensor &var,
+void GnomonicEquiangleImpl::interpolate_LR_(torch::Tensor const &var,
                                             torch::Tensor buf) const {
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -161,7 +161,7 @@ void GnomonicEquiangleImpl::interpolate_LR_(torch::Tensor &var,
   at::native::call_cs_interp_LR(var.device().type(), iter, usrc);
 }
 
-void GnomonicEquiangleImpl::interpolate_BT_(torch::Tensor &var,
+void GnomonicEquiangleImpl::interpolate_BT_(torch::Tensor const &var,
                                             torch::Tensor buf) const {
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)

@@ -3,6 +3,7 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -83,6 +84,50 @@ TEST_P(DeviceTest, contra_cart) {
   pcoord->contra_to_cart_(vel);
 
   EXPECT_TRUE(torch::allclose(vel, vel_cart));
+}
+
+TEST_P(DeviceTest, usrc) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord =
+      std::dynamic_pointer_cast<GnomonicEquiangleImpl>(block->phydro->pcoord);
+  std::cout << "usrc = \n" << pcoord->usrc << std::endl;
+}
+
+TEST_P(DeviceTest, interpolate_LR) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->phydro->pcoord;
+
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nghost = pcoord->options->nghost();
+
+  auto var = torch::zeros({nc3, nc2, nc1},
+                          torch::TensorOptions().dtype(dtype).device(device));
+
+  // interior
+  auto sub = block->part({0, 0, 0}, PartOptions().exterior(true).ndim(3));
+  var.index(sub).fill_(1.0);
+
+  // left
+  sub = block->part({-1, 0, 0}, PartOptions().exterior(true).ndim(3));
+  auto buf = torch::ones_like(var.index(sub)) * 2.;
+
+  std::cout << "buf shape = " << buf.sizes() << std::endl;
+
+  std::cout << "var before = \n"
+            << var.squeeze().transpose(0, 1).flip(0) << std::endl;
+
+  pcoord->interpolate_LR_(var.index(sub), buf);
+
+  std::cout << "var after = \n"
+            << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 }
 
 int main(int argc, char **argv) {
