@@ -647,9 +647,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 
         if (opts.interpolate()) {
           if (x3_offset != 0)
-            pcoord->interpolate_LR_(var, recv_bufs[bid][count]);
+            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
           else if (x2_offset != 0)
-            pcoord->interpolate_BT_(var, recv_bufs[bid][count]);
+            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
         } else {
           vara.index_put_(sub, recv_bufs[bid][count]);
         }

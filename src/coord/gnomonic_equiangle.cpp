@@ -148,22 +148,46 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
 }
 
-void GnomonicEquiangleImpl::interpolate_LR_(torch::Tensor const &var,
-                                            torch::Tensor buf) const {
-  auto iter = at::TensorIteratorConfig()
-                  .resize_outputs(false)
-                  .check_all_same_dtype(true)
-                  .declare_static_shape(var.sizes())
-                  .add_output(var)
-                  .add_input(buf)
-                  .build();
+torch::Tensor GnomonicEquiangleImpl::fill_ghost_LR(torch::Tensor buf,
+                                                   bool flip) const {
+  auto usrc_t = flip ? usrc : usrc.flip(0);
 
-  at::native::call_cs_interp_LR(var.device().type(), iter, usrc);
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-2, ul.expand_as(buf));
+  auto bufu = buf.gather(-2, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
 }
 
-void GnomonicEquiangleImpl::interpolate_BT_(torch::Tensor const &var,
-                                            torch::Tensor buf) const {
-  auto iter = at::TensorIteratorConfig()
+torch::Tensor GnomonicEquiangleImpl::fill_ghost_BT(torch::Tensor buf,
+                                                   bool flip) const {
+  auto usrc_t = flip ? usrc.transpose(0, 1) : usrc.flip(0).transpose(0, 1);
+
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-3, ul.expand_as(buf));
+  auto bufu = buf.gather(-3, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
+
+  /*auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .declare_static_shape(var.sizes())
@@ -171,7 +195,7 @@ void GnomonicEquiangleImpl::interpolate_BT_(torch::Tensor const &var,
                   .add_input(buf)
                   .build();
 
-  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);
+  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);*/
 }
 
 void GnomonicEquiangleImpl::vec_lower_(

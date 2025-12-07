@@ -119,12 +119,59 @@ TEST_P(DeviceTest, interpolate_LR) {
   sub = block->part({-1, 0, 0}, PartOptions().exterior(true).ndim(3));
   auto buf = torch::ones_like(var.index(sub)) * 2.;
 
+  // set linear values
+  for (int k = 0; k < buf.size(0); ++k)
+    for (int j = 0; j < buf.size(1); ++j)
+      for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
+
   std::cout << "buf shape = " << buf.sizes() << std::endl;
 
   std::cout << "var before = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 
-  pcoord->interpolate_LR_(var.index(sub), buf);
+  var.index(sub) = pcoord->fill_ghost(buf, {-1, 0, 0});
+
+  std::cout << "var after = \n"
+            << var.squeeze().transpose(0, 1).flip(0) << std::endl;
+
+  // right
+  sub = block->part({1, 0, 0}, PartOptions().exterior(true).ndim(3));
+  buf = torch::ones_like(var.index(sub)) * 3.;
+
+  // set linear values
+  for (int k = 0; k < buf.size(0); ++k)
+    for (int j = 0; j < buf.size(1); ++j)
+      for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
+
+  var.index(sub) = pcoord->fill_ghost(buf, {1, 0, 0});
+
+  std::cout << "var after = \n"
+            << var.squeeze().transpose(0, 1).flip(0) << std::endl;
+
+  // bottom
+  sub = block->part({0, -1, 0}, PartOptions().exterior(true).ndim(3));
+  buf = torch::ones_like(var.index(sub)) * 4.;
+
+  // set linear values
+  for (int k = 0; k < buf.size(0); ++k)
+    for (int j = 0; j < buf.size(1); ++j)
+      for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
+
+  var.index(sub) = pcoord->fill_ghost(buf, {0, -1, 0});
+
+  std::cout << "var after = \n"
+            << var.squeeze().transpose(0, 1).flip(0) << std::endl;
+
+  // top
+  sub = block->part({0, 1, 0}, PartOptions().exterior(true).ndim(3));
+  buf = torch::ones_like(var.index(sub)) * 5.;
+
+  // set linear values
+  for (int k = 0; k < buf.size(0); ++k)
+    for (int j = 0; j < buf.size(1); ++j)
+      for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
+
+  var.index(sub) = pcoord->fill_ghost(buf, {0, 1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;

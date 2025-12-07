@@ -28,18 +28,16 @@ namespace snap {
 template <typename T>
 void cs_interp_LR(T* target, const T* source, int N, int nghost, T* u_src,
                   int stride_x2, int stride_x1) {
-  for (int n = 0; n < nghost; ++n)
-    for (int j = 0; j < N; ++j) {
-      T u = u_src[n * N + j];
-      int i0 = (int)floor(u);
-      int i1 = i0 + 1;
-      T w1 = u - (T)i0;
-      T w0 = 1.0 - w1;
+  /*T u = u_src[n * N + j];
+  int i0 = (int)floor(u);
+  int i1 = i0 + 1;
+  T w1 = u - (T)i0;
+  T w0 = 1.0 - w1;
 
-      T v0 = SRC_LR(n, i0);
-      T v1 = SRC_LR(n, i1);
-      TARGET(n, j) = w0 * v0 + w1 * v1;
-    }
+  T v0 = SRC_LR(n, i0);
+  T v1 = SRC_LR(n, i1);*/
+  // TARGET(n, j) = w0 * v0 + w1 * v1;
+  *target = 3.;
 }
 
 template <typename T>

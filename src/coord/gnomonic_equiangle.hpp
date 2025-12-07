@@ -39,10 +39,21 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  void interpolate_LR_(torch::Tensor const &var,
-                       torch::Tensor buf) const override;
-  void interpolate_BT_(torch::Tensor const &var,
-                       torch::Tensor buf) const override;
+  torch::Tensor fill_ghost(torch::Tensor buf,
+                           std::tuple<int, int, int> offset) const override {
+    auto [x3_offset, x2_offset, x1_offset] = offset;
+
+    if (x3_offset != 0 && x2_offset == 0) {
+      return fill_ghost_LR(buf, x3_offset + 1);
+    }
+
+    if (x2_offset != 0 && x3_offset == 0) {
+      return fill_ghost_BT(buf, x2_offset + 1);
+    }
+
+    throw std::runtime_error(
+        "Invalid offset in GnomonicEquiangleImpl::fill_ghost");
+  }
 
   void vec_lower_(
       torch::Tensor &vel,
@@ -70,6 +81,9 @@ class GnomonicEquiangleImpl
                         torch::Tensor flux2, torch::Tensor flux3) override;
 
  private:
+  torch::Tensor fill_ghost_LR(torch::Tensor buf, bool flip) const;
+  torch::Tensor fill_ghost_BT(torch::Tensor buf, bool flip) const;
+
   void _set_face2_metric() const;
   void _set_face3_metric() const;
 };
