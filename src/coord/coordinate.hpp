@@ -168,34 +168,35 @@ class CoordinateImpl {
   }
 
   virtual torch::Tensor fill_ghost(torch::Tensor buf,
-                                   std::tuple<int, int, int>) const {
+                                   std::tuple<int, int, int> const &) const {
     return buf;
   }
 
   virtual void vec_lower_(
-      torch::Tensor &vel,
+      torch::Tensor const &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
+
   virtual void vec_raise_(
-      torch::Tensor &vel,
+      torch::Tensor const &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
 
   //! \brief Project contravariant velocities to cartesian velocities
   virtual void contra_to_cart_(
-      torch::Tensor vel,
+      torch::Tensor const &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
 
   //! \brief Deproject cartesian velocities to contravariant velocities
   virtual void cart_to_contra_(
-      torch::Tensor vel,
+      torch::Tensor const &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
 
-  virtual void prim2local1_(torch::Tensor &prim) const {}
-  virtual void prim2local2_(torch::Tensor &prim) const {}
-  virtual void prim2local3_(torch::Tensor &prim) const {}
+  virtual void prim2local1_(torch::Tensor const &prim) const {}
+  virtual void prim2local2_(torch::Tensor const &prim) const {}
+  virtual void prim2local3_(torch::Tensor const &prim) const {}
 
-  virtual void flux2global1_(torch::Tensor &flux) const {}
-  virtual void flux2global2_(torch::Tensor &flux) const {}
-  virtual void flux2global3_(torch::Tensor &flux) const {}
+  virtual void flux2global1_(torch::Tensor const &flux) const {}
+  virtual void flux2global2_(torch::Tensor const &flux) const {}
+  virtual void flux2global3_(torch::Tensor const &flux) const {}
 
   //! fluxes -> flux divergence
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,

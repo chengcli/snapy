@@ -15,7 +15,7 @@
 namespace snap {
 
 void GnomonicEquiangleImpl::reset() {
-  auto const &op = options;
+  auto const& op = options;
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
@@ -148,59 +148,25 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
 }
 
-torch::Tensor GnomonicEquiangleImpl::fill_ghost_LR(torch::Tensor buf,
-                                                   bool flip) const {
-  auto usrc_t = flip ? usrc : usrc.flip(0);
+torch::Tensor GnomonicEquiangleImpl::fill_ghost(
+    torch::Tensor buf, std::tuple<int, int, int> const& offset) const {
+  auto [x3_offset, x2_offset, x1_offset] = offset;
 
-  auto vec = usrc_t.sizes().vec();
-  vec.push_back(1);
-  for (int n = 0; n < buf.dim() - 3; n++) {
-    vec.insert(vec.begin(), 1);
+  if (x3_offset != 0 && x2_offset == 0) {
+    return _fill_ghost_LR(buf, x3_offset > 0);
   }
 
-  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
-  auto uu = ul + 1;
-  auto weight = usrc_t.view(vec) - ul;
-
-  auto bufl = buf.gather(-2, ul.expand_as(buf));
-  auto bufu = buf.gather(-2, uu.expand_as(buf));
-
-  return weight * bufu + (1.0 - weight) * bufl;
-}
-
-torch::Tensor GnomonicEquiangleImpl::fill_ghost_BT(torch::Tensor buf,
-                                                   bool flip) const {
-  auto usrc_t = flip ? usrc.transpose(0, 1) : usrc.flip(0).transpose(0, 1);
-
-  auto vec = usrc_t.sizes().vec();
-  vec.push_back(1);
-  for (int n = 0; n < buf.dim() - 3; n++) {
-    vec.insert(vec.begin(), 1);
+  if (x2_offset != 0 && x3_offset == 0) {
+    return _fill_ghost_BT(buf, x2_offset > 0);
   }
 
-  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
-  auto uu = ul + 1;
-  auto weight = usrc_t.view(vec) - ul;
-
-  auto bufl = buf.gather(-3, ul.expand_as(buf));
-  auto bufu = buf.gather(-3, uu.expand_as(buf));
-
-  return weight * bufu + (1.0 - weight) * bufl;
-
-  /*auto iter = at::TensorIteratorConfig()
-                  .resize_outputs(false)
-                  .check_all_same_dtype(true)
-                  .declare_static_shape(var.sizes())
-                  .add_output(var)
-                  .add_input(buf)
-                  .build();
-
-  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);*/
+  throw std::runtime_error(
+      "Invalid offset in GnomonicEquiangleImpl::fill_ghost");
 }
 
 void GnomonicEquiangleImpl::vec_lower_(
-    torch::Tensor &vel,
-    std::vector<torch::indexing::TensorIndex> const &sub) const {
+    torch::Tensor const& vel,
+    std::vector<torch::indexing::TensorIndex> const& sub) const {
   auto v = vel[VEL_X].clone();
   auto w = vel[VEL_Y].clone();
 
@@ -214,8 +180,8 @@ void GnomonicEquiangleImpl::vec_lower_(
 }
 
 void GnomonicEquiangleImpl::vec_raise_(
-    torch::Tensor &vel,
-    std::vector<torch::indexing::TensorIndex> const &sub) const {
+    torch::Tensor const& vel,
+    std::vector<torch::indexing::TensorIndex> const& sub) const {
   auto v = vel[VEL_X].clone();
   auto w = vel[VEL_Y].clone();
 
@@ -231,8 +197,8 @@ void GnomonicEquiangleImpl::vec_raise_(
 }
 
 void GnomonicEquiangleImpl::contra_to_cart_(
-    torch::Tensor vel,
-    std::vector<torch::indexing::TensorIndex> const &sub) const {
+    torch::Tensor const& vel,
+    std::vector<torch::indexing::TensorIndex> const& sub) const {
   auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
 
   torch::Tensor alpha, beta;
@@ -267,8 +233,8 @@ void GnomonicEquiangleImpl::contra_to_cart_(
 }
 
 void GnomonicEquiangleImpl::cart_to_contra_(
-    torch::Tensor vel,
-    std::vector<torch::indexing::TensorIndex> const &sub) const {
+    torch::Tensor const& vel,
+    std::vector<torch::indexing::TensorIndex> const& sub) const {
   auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
 
   torch::Tensor alpha, beta;
@@ -337,7 +303,7 @@ void GnomonicEquiangleImpl::_set_face3_metric() const {
   gi33.set_(1. / (sin_theta * sin_theta));
 }
 
-void GnomonicEquiangleImpl::prim2local1_(torch::Tensor &w) const {
+void GnomonicEquiangleImpl::prim2local1_(torch::Tensor const& w) const {
   auto cos_theta = cosine_cell_kj.unsqueeze(-1);
   auto sin_theta = sine_cell_kj.unsqueeze(-1);
 
@@ -345,7 +311,7 @@ void GnomonicEquiangleImpl::prim2local1_(torch::Tensor &w) const {
   w[IVZ] *= sin_theta;
 }
 
-void GnomonicEquiangleImpl::prim2local2_(torch::Tensor &w) const {
+void GnomonicEquiangleImpl::prim2local2_(torch::Tensor const& w) const {
   _set_face2_metric();
 
   // Extract global projected 4-velocities
@@ -370,7 +336,7 @@ void GnomonicEquiangleImpl::prim2local2_(torch::Tensor &w) const {
   w[IVZ] = uz;
 }
 
-void GnomonicEquiangleImpl::prim2local3_(torch::Tensor &w) const {
+void GnomonicEquiangleImpl::prim2local3_(torch::Tensor const& w) const {
   _set_face3_metric();
 
   // Extract global projected 4-velocities
@@ -396,7 +362,7 @@ void GnomonicEquiangleImpl::prim2local3_(torch::Tensor &w) const {
 }
 
 // de-orthonormal and transforms to covariant form
-void GnomonicEquiangleImpl::flux2global1_(torch::Tensor &flux) const {
+void GnomonicEquiangleImpl::flux2global1_(torch::Tensor const& flux) const {
   auto cos_theta = cosine_cell_kj.unsqueeze(-1);
   auto sin_theta = sine_cell_kj.unsqueeze(-1);
 
@@ -410,7 +376,7 @@ void GnomonicEquiangleImpl::flux2global1_(torch::Tensor &flux) const {
 }
 
 // de-orthonormal and transforms to covariant form
-void GnomonicEquiangleImpl::flux2global2_(torch::Tensor &flux) const {
+void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   _set_face2_metric();
 
   // Extract local conserved quantities and fluxes
@@ -441,7 +407,7 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor &flux) const {
 }
 
 // de-orthonormal and transforms to covariant form
-void GnomonicEquiangleImpl::flux2global3_(torch::Tensor &flux) const {
+void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   _set_face3_metric();
 
   // Extract local conserved quantities and fluxes
@@ -513,6 +479,56 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   div[IVZ] -= src3;
 
   return div;
+}
+
+torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
+                                                    bool flip) const {
+  auto usrc_t = flip ? usrc : usrc.flip(0);
+
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-2, ul.expand_as(buf));
+  auto bufu = buf.gather(-2, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
+}
+
+torch::Tensor GnomonicEquiangleImpl::_fill_ghost_BT(torch::Tensor buf,
+                                                    bool flip) const {
+  auto usrc_t = flip ? usrc.transpose(0, 1) : usrc.flip(0).transpose(0, 1);
+
+  auto vec = usrc_t.sizes().vec();
+  vec.push_back(1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec.insert(vec.begin(), 1);
+  }
+
+  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto uu = ul + 1;
+  auto weight = usrc_t.view(vec) - ul;
+
+  auto bufl = buf.gather(-3, ul.expand_as(buf));
+  auto bufu = buf.gather(-3, uu.expand_as(buf));
+
+  return weight * bufu + (1.0 - weight) * bufl;
+
+  /*auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(var.sizes())
+                  .add_output(var)
+                  .add_input(buf)
+                  .build();
+
+  at::native::call_cs_interp_BT(var.device().type(), iter, usrc);*/
 }
 
 }  // namespace snap

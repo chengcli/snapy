@@ -24,12 +24,12 @@ class GnomonicEquiangleImpl
   torch::Tensor usrc;
 
   GnomonicEquiangleImpl() = default;
-  explicit GnomonicEquiangleImpl(const CoordinateOptions &options_)
+  explicit GnomonicEquiangleImpl(const CoordinateOptions& options_)
       : CoordinateImpl(options_) {
     reset();
   }
   void reset() override;
-  void pretty_print(std::ostream &stream) const override {
+  void pretty_print(std::ostream& stream) const override {
     stream << "GnomonicEquiangle coordinate:" << std::endl;
     print(stream);
   }
@@ -39,50 +39,38 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  torch::Tensor fill_ghost(torch::Tensor buf,
-                           std::tuple<int, int, int> offset) const override {
-    auto [x3_offset, x2_offset, x1_offset] = offset;
-
-    if (x3_offset != 0 && x2_offset == 0) {
-      return fill_ghost_LR(buf, x3_offset + 1);
-    }
-
-    if (x2_offset != 0 && x3_offset == 0) {
-      return fill_ghost_BT(buf, x2_offset + 1);
-    }
-
-    throw std::runtime_error(
-        "Invalid offset in GnomonicEquiangleImpl::fill_ghost");
-  }
+  torch::Tensor fill_ghost(
+      torch::Tensor buf,
+      std::tuple<int, int, int> const& offset) const override;
 
   void vec_lower_(
-      torch::Tensor &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+      torch::Tensor const& vel,
+      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
   void vec_raise_(
-      torch::Tensor &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+      torch::Tensor const& vel,
+      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
 
   void contra_to_cart_(
-      torch::Tensor vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+      torch::Tensor const& vel,
+      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
   void cart_to_contra_(
-      torch::Tensor vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const override;
+      torch::Tensor const& vel,
+      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
 
-  void prim2local1_(torch::Tensor &wlr) const override;
-  void prim2local2_(torch::Tensor &wlr) const override;
-  void prim2local3_(torch::Tensor &wlr) const override;
+  void prim2local1_(torch::Tensor const& wlr) const override;
+  void prim2local2_(torch::Tensor const& wlr) const override;
+  void prim2local3_(torch::Tensor const& wlr) const override;
 
-  void flux2global1_(torch::Tensor &flux) const override;
-  void flux2global2_(torch::Tensor &flux) const override;
-  void flux2global3_(torch::Tensor &flux) const override;
+  void flux2global1_(torch::Tensor const& flux) const override;
+  void flux2global2_(torch::Tensor const& flux) const override;
+  void flux2global3_(torch::Tensor const& flux) const override;
 
   torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                         torch::Tensor flux2, torch::Tensor flux3) override;
 
  private:
-  torch::Tensor fill_ghost_LR(torch::Tensor buf, bool flip) const;
-  torch::Tensor fill_ghost_BT(torch::Tensor buf, bool flip) const;
+  torch::Tensor _fill_ghost_LR(torch::Tensor buf, bool flip) const;
+  torch::Tensor _fill_ghost_BT(torch::Tensor buf, bool flip) const;
 
   void _set_face2_metric() const;
   void _set_face3_metric() const;
