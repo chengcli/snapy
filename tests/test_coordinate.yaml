@@ -1,0 +1,39 @@
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+
+distribute:
+  backend: gloo
+  layout: slab
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+geometry:
+  type: gnomonic-equiangle
+  cells: {nx1: 1, nx2: 8, nx3: 8, nghost: 2}
+  bounds:
+    x1min: 1.
+    x1max: 2.
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom

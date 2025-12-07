@@ -8,7 +8,7 @@
 // torch
 #include <torch/torch.h>
 
-// snapy
+// snap
 #include <snap/recon/interp_simple.hpp>
 #include <snap/recon/interpolation.hpp>
 
