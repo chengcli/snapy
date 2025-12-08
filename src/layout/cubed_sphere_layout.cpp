@@ -601,7 +601,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       send_bufs[bid].resize(vars.size());
       recv_bufs[bid].resize(vars.size());
       int count = 0;
-      bool rev_flag = CS_FACE_EDGES[std::get<2>(iloc)][get_side(offset)].rev;
+      int my_side = get_side(offset);
+      int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
+      bool rev_flag = CS_FACE_EDGES[std::get<2>(iloc)][my_side].rev;
+      bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
 
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
@@ -618,16 +621,27 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         }
 
         // check reverse flag
+        auto var_send = var;
         if (rev_flag) {
           if (x3_offset != 0) {
-            send_bufs[bid][count] = var.flip(-2);
+            var_send = var.flip(-2);
           } else if (x2_offset != 0) {
-            send_bufs[bid][count] = var.flip(-3);
+            var_send = var.flip(-3);
           }
-        } else {
-          send_bufs[bid][count] = var.clone();
         }
 
+        // check transpose flag
+        if (trans_flag) {
+          auto sizes = var_send.sizes();
+          var_send = var_send.transpose(-2, -3).reshape(sizes);
+        }
+
+        // if var_send is var, make a clone to avoid in-place modification
+        // otherwise, set it to send_bufs
+
+        send_bufs[bid][count] = (var_send.data_ptr() == var.data_ptr())
+                                    ? var_send.clone()
+                                    : var_send;
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
         count++;
       }
@@ -702,11 +716,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
 
-        if (opts.interpolate()) {
-          var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
-        } else {
-          vara.index_put_(sub, recv_bufs[bid][count]);
-        }
+        // if (opts.interpolate()) {
+        var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
+        //} else {
+        vara.index_put_(sub, recv_bufs[bid][count]);
+        //}
 
         auto vel = var.narrow(0, IVX, 3);
         switch (opts.type()) {
