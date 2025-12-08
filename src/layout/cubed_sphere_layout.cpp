@@ -270,6 +270,20 @@ void populate_cs_l2g_vel(CSVel l2g[6][3]) {
   }
 }
 
+static inline int get_side(std::tuple<int, int, int> const &offset) {
+  auto [dx, dy, _] = offset;
+  if (dx == -1 && dy == 0)
+    return SIDE_L;
+  else if (dx == 1 && dy == 0)
+    return SIDE_R;
+  else if (dx == 0 && dy == -1)
+    return SIDE_B;
+  else if (dx == 0 && dy == 1)
+    return SIDE_T;
+  else
+    return -1;  // invalid
+}
+
 static inline void cs_clamp_inside(int pxy, int *nx, int *ny) {
   if (*nx < 0)
     *nx = 0;
@@ -532,6 +546,42 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   int x2_omin = opts.x2_offset_min();
   int x2_omax = opts.x2_offset_max();
 
+  // Serialize over all intra-panel neighbors first
+  if (!opts.cross_panel_only()) {
+    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+        // skip the center (self)
+        if (x3_offset == 0 && x2_offset == 0) continue;
+        if (opts.skip_corner() &&
+            std::abs(x3_offset) + std::abs(x2_offset) == 2)
+          continue;
+
+        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        int nb = neighbor_rank(iloc, offset);
+        if (nb < 0) continue;  // no neighbor
+
+        // skip inter-panel neighbors
+        if (std::get<2>(iloc) != std::get<2>(loc_of(nb))) continue;
+
+        // Get the interior part for this direction
+        auto sub = pmb->part(offset, PartOptions().exterior(false));
+
+        // Copy data from mesh to send buffer
+        int bid = get_buffer_id(offset);
+        send_bufs[bid].resize(vars.size());
+        recv_bufs[bid].resize(vars.size());
+        int count = 0;
+        for (auto &[name, vara] : vars) {
+          auto var = vara.index(sub);
+
+          send_bufs[bid][count] = var.clone();
+          recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
+          count++;
+        }
+      }
+  }
+
+  // Serialize over all inter-panel neighbors
   for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
     for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
       // skip the center (self)
@@ -543,8 +593,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
-      bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
-      if (opts.cross_panel_only() && !inter_panel) continue;
+      // skip intra-panel neighbors
+      if (std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
 
       // Get the interior part for this direction
       auto sub = pmb->part(offset, PartOptions().exterior(false));
@@ -554,23 +604,57 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       send_bufs[bid].resize(vars.size());
       recv_bufs[bid].resize(vars.size());
       int count = 0;
+      int my_side = get_side(offset);
+      int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
+
+      bool rev_flag = CS_FACE_EDGES[std::get<2>(iloc)][my_side].rev;
+      bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
+      bool flip_flag = (my_side % 2) == (nb_side % 2);
+
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
 
-        if (inter_panel) {
-          auto vel = var.narrow(0, IVX, 3);
-          switch (opts.type()) {
-            case kConserved:
-              pcoord->vec_raise_(vel, sub);
-              pcoord->contra_to_cart_(vel, sub);
-              break;
-            case kPrimitive:
-              pcoord->contra_to_cart_(vel, sub);
-              break;
+        auto vel = var.narrow(0, IVX, 3);
+        switch (opts.type()) {
+          case kConserved:
+            pcoord->vec_raise_(vel, sub);
+            pcoord->contra_to_cart_(vel, sub);
+            break;
+          case kPrimitive:
+            pcoord->contra_to_cart_(vel, sub);
+            break;
+        }
+
+        // check reverse flag
+        auto var_send = var;
+        if (rev_flag) {
+          if (x3_offset != 0) {
+            var_send = var.flip(-2);
+          } else if (x2_offset != 0) {
+            var_send = var.flip(-3);
           }
         }
 
-        send_bufs[bid][count] = var.clone();
+        // check flip flag
+        if (flip_flag) {
+          if (x3_offset != 0) {
+            var_send = var_send.flip(-3);
+          } else if (x2_offset != 0) {
+            var_send = var_send.flip(-2);
+          }
+        }
+
+        // check transpose flag
+        if (trans_flag) {
+          auto sizes = var_send.sizes();
+          var_send = var_send.transpose(-2, -3).reshape(sizes);
+        }
+
+        // if var_send is var, make a clone to avoid in-place modification
+        // otherwise, set it to send_bufs
+        send_bufs[bid][count] = (var_send.data_ptr() == var.data_ptr())
+                                    ? var_send.clone()
+                                    : var_send;
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
         count++;
       }
@@ -596,30 +680,33 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   int x2_omax = opts.x2_offset_max();
 
   // Deserialize over all intra-panel neighbors first
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
-      // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+  if (!opts.cross_panel_only()) {
+    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
+      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+        // skip the center (self)
+        if (x3_offset == 0 && x2_offset == 0) continue;
+        if (opts.skip_corner() &&
+            std::abs(x3_offset) + std::abs(x2_offset) == 2)
+          continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
-      int nb = neighbor_rank(iloc, offset);
-      if (nb < 0) continue;  // no neighbor
+        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        int nb = neighbor_rank(iloc, offset);
+        if (nb < 0) continue;  // no neighbor
 
-      bool inter_panel = std::get<2>(iloc) != std::get<2>(loc_of(nb));
-      if (opts.cross_panel_only() && !inter_panel) continue;
+        // skip inter-panel neighbors
+        if (std::get<2>(iloc) != std::get<2>(loc_of(nb))) continue;
 
-      // Get the exterior (ghost zone) part for this direction
-      auto sub = pmb->part(offset, PartOptions().exterior(true));
+        // Get the exterior (ghost zone) part for this direction
+        auto sub = pmb->part(offset, PartOptions().exterior(true));
 
-      // Copy data from receive buffer to mesh ghost zones
-      int bid = get_buffer_id(offset);
-      int count = 0;
-      for (auto &[name, var] : vars) {
-        var.index_put_(sub, recv_bufs[bid][count++]);
+        // Copy data from receive buffer to mesh ghost zones
+        int bid = get_buffer_id(offset);
+        int count = 0;
+        for (auto &[name, var] : vars) {
+          var.index_put_(sub, recv_bufs[bid][count++]);
+        }
       }
-    }
+  }
 
   // Deserialize over all inter-panel neighbors
   for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
@@ -642,19 +729,14 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
-      for (auto &[name, vara] : vars) {
-        auto var = vara.index(sub);
-
+      for (auto &[name, var] : vars) {
         if (opts.interpolate()) {
-          if (x3_offset != 0)
-            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
-          else if (x2_offset != 0)
-            var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
+          var.index(sub) = pcoord->fill_ghost(recv_bufs[bid][count], offset);
         } else {
-          vara.index_put_(sub, recv_bufs[bid][count]);
+          var.index_put_(sub, recv_bufs[bid][count]);
         }
 
-        auto vel = var.narrow(0, IVX, 3);
+        auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
           case kConserved:
             pcoord->cart_to_contra_(vel, sub);
