@@ -66,7 +66,7 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::CoordinateOptions, snap::PrimitiveProjectorOptionsImpl,
                   coord);
 
-  ADD_SNAP_MODULE(Hydro, HydroOptions)
+  ADD_SNAP_MODULE_WITH_PARENT(Hydro, HydroOptions)
       .def("max_time_step", &snap::HydroImpl::max_time_step)
       .def(
           "get_eos", [](snap::HydroImpl &self) { return self.peos; },

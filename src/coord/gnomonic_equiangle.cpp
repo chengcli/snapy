@@ -130,14 +130,24 @@ void GnomonicEquiangleImpl::reset() {
   g23 = register_buffer("g23", torch::zeros_like(vol));
 
   // build global ghost cell usrc
-  int N = op->nx3() * _phydro->parent()->options->layout()->px();
-  auto usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
-  cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
+  int N, offset_x, offset_y;
+  torch::Tensor usrc;
+  if (_phydro != nullptr) {
+    N = op->nx3() * _phydro->parent()->options->layout()->px();
+    usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
+    cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
 
-  int my_rank = _phydro->parent()->options->layout()->rank();
-  auto [rx, ry, _] = _phydro->parent()->get_layout()->loc_of(my_rank);
-  int offset_x = op->nx3() * rx;
-  int offset_y = op->nx2() * ry;
+    int my_rank = _phydro->parent()->options->layout()->rank();
+    auto [rx, ry, _] = _phydro->parent()->get_layout()->loc_of(my_rank);
+    offset_x = op->nx3() * rx;
+    offset_y = op->nx2() * ry;
+  } else {
+    N = op->nx3();
+    usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
+    cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
+    offset_x = 0;
+    offset_y = 0;
+  }
 
   // register local ghost cell usrc
   usrc_LR = register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx2()));
@@ -170,6 +180,11 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
 
 void GnomonicEquiangleImpl::fill_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
+  if (_phydro == nullptr) {
+    CoordinateImpl::fill_ghost(var, offset);
+    return;
+  }
+
   auto [x3_offset, x2_offset, x1_offset] = offset;
   auto pmb = _phydro->parent();
 
