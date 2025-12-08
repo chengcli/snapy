@@ -603,8 +603,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       int count = 0;
       int my_side = get_side(offset);
       int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
+
       bool rev_flag = CS_FACE_EDGES[std::get<2>(iloc)][my_side].rev;
       bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
+      bool flip_flag = (my_side % 2) == (nb_side % 2);
 
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
@@ -630,6 +632,15 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
           }
         }
 
+        // check flip flag
+        if (flip_flag) {
+          if (x3_offset != 0) {
+            var_send = var_send.flip(-3);
+          } else if (x2_offset != 0) {
+            var_send = var_send.flip(-2);
+          }
+        }
+
         // check transpose flag
         if (trans_flag) {
           auto sizes = var_send.sizes();
@@ -638,7 +649,6 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         // if var_send is var, make a clone to avoid in-place modification
         // otherwise, set it to send_bufs
-
         send_bufs[bid][count] = (var_send.data_ptr() == var.data_ptr())
                                     ? var_send.clone()
                                     : var_send;
@@ -717,7 +727,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         auto var = vara.index(sub);
 
         // if (opts.interpolate()) {
-        var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
+        // var = pcoord->fill_ghost(recv_bufs[bid][count], offset);
         //} else {
         vara.index_put_(sub, recv_bufs[bid][count]);
         //}
