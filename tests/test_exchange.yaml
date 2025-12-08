@@ -22,7 +22,7 @@ distribute:
 geometry:
   type: gnomonic-equiangle
   #type: cartesian
-  cells: {nx1: 1, nx2: 4, nx3: 4, nghost: 2}
+  cells: {nx1: 1, nx2: 6, nx3: 6, nghost: 2}
 
 boundary-condition:
   external:
