@@ -1,11 +1,19 @@
 // snap
-#include <configure.h>
+#include <snap/hydro/hydro.hpp>
 
 #include "coordinate.hpp"
 
 namespace snap {
+
+CartesianImpl::CartesianImpl(const CoordinateOptions &options_,
+                             torch::nn::Module *p)
+    : CoordinateImpl(options_) {
+  _phydro = static_cast<HydroImpl const *>(p);
+  reset();
+}
+
 void CartesianImpl::reset() {
-  auto const& op = options;
+  auto const &op = options;
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();

@@ -88,8 +88,9 @@ Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta);
  *   side_t  : target side index (SIDE_L/RIGHT/BOTTOM/TOP)
  *
  * Output:
- *   usrc    : array of length nghost * N, where usrc[d*N + j] is the
- *             source coordinate along the edge line for target ghost cell
+ *   usrc    : array of length nghost * N, where usrc[d*N + j]
+ *             is the source coordinate along the edge line for target
+ *             ghost cell
  */
 void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t = 0,
                          int side_t = 0);

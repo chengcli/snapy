@@ -23,6 +23,8 @@
 
 namespace snap {
 
+class MeshBlockImpl;
+
 struct HydroOptionsImpl {
   static std::shared_ptr<HydroOptionsImpl> create() {
     return std::make_shared<HydroOptionsImpl>();
@@ -77,8 +79,8 @@ struct HydroOptionsImpl {
 
   ADD_ARG(SedHydroOptions, sed) = nullptr;
 };
-using HydroOptions = std::shared_ptr<HydroOptionsImpl>;
 
+using HydroOptions = std::shared_ptr<HydroOptionsImpl>;
 using Variables = std::map<std::string, torch::Tensor>;
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
@@ -119,7 +121,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   //! Constructor to initialize the layers
   HydroImpl() = default;
-  explicit HydroImpl(const HydroOptions& options_);
+  explicit HydroImpl(const HydroOptions& options_,
+                     torch::nn::Module* p = nullptr);
   void reset() override;
 
   virtual double max_time_step(torch::Tensor hydro_w,
@@ -131,6 +134,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   //! Register all forcing modules
   std::vector<std::string> register_forcings_module();
+
+  MeshBlockImpl const* parent() const;
 
  private:
   MeshBlockImpl const* _pmb = nullptr;

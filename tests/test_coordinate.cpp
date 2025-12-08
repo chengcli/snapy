@@ -93,7 +93,8 @@ TEST_P(DeviceTest, usrc) {
 
   auto pcoord =
       std::dynamic_pointer_cast<GnomonicEquiangleImpl>(block->phydro->pcoord);
-  std::cout << "usrc = \n" << pcoord->usrc << std::endl;
+  std::cout << "usrc_LR = \n" << pcoord->usrc_LR << std::endl;
+  std::cout << "usrc_BT = \n" << pcoord->usrc_BT << std::endl;
 }
 
 TEST_P(DeviceTest, interpolate_LR) {
@@ -129,7 +130,8 @@ TEST_P(DeviceTest, interpolate_LR) {
   std::cout << "var before = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 
-  var.index(sub) = pcoord->fill_ghost(buf, {-1, 0, 0});
+  var.index_put_(sub, buf);
+  pcoord->fill_ghost(var, {-1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -143,7 +145,8 @@ TEST_P(DeviceTest, interpolate_LR) {
     for (int j = 0; j < buf.size(1); ++j)
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
 
-  var.index(sub) = pcoord->fill_ghost(buf, {1, 0, 0});
+  var.index_put_(sub, buf);
+  pcoord->fill_ghost(var, {1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -157,7 +160,8 @@ TEST_P(DeviceTest, interpolate_LR) {
     for (int j = 0; j < buf.size(1); ++j)
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
-  var.index(sub) = pcoord->fill_ghost(buf, {0, -1, 0});
+  var.index_put_(sub, buf);
+  pcoord->fill_ghost(var, {0, -1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -171,7 +175,8 @@ TEST_P(DeviceTest, interpolate_LR) {
     for (int j = 0; j < buf.size(1); ++j)
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
-  var.index(sub) = pcoord->fill_ghost(buf, {0, 1, 0});
+  var.index_put_(sub, buf);
+  pcoord->fill_ghost(var, {0, 1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;

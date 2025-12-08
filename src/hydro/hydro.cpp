@@ -11,7 +11,9 @@
 
 namespace snap {
 
-HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
+HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
+    : options(options_) {
+  _pmb = static_cast<MeshBlockImpl const*>(p);
   reset();
 }
 
@@ -341,15 +343,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   return du;
 }
 
+MeshBlockImpl const* HydroImpl::parent() const { return _pmb; }
+
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              torch::nn::Module* p,
                                              std::string const& name) {
   TORCH_CHECK(p, "[Hydro] Parent module is null");
   TORCH_CHECK(opts, "[Hydro] Options pointer is null");
 
-  auto hydro = Hydro(opts);
-  hydro->_pmb = static_cast<MeshBlockImpl const*>(p);
-  return p->register_module(name, hydro);
+  return p->register_module(name, Hydro(opts, p));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,

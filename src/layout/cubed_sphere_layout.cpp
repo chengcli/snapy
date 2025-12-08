@@ -730,10 +730,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       int bid = get_buffer_id(offset);
       int count = 0;
       for (auto &[name, var] : vars) {
+        var.index_put_(sub, recv_bufs[bid][count]);
         if (opts.interpolate()) {
-          var.index(sub) = pcoord->fill_ghost(recv_bufs[bid][count], offset);
-        } else {
-          var.index_put_(sub, recv_bufs[bid][count]);
+          pcoord->fill_ghost(var, offset);
         }
 
         auto vel = var.index(sub).narrow(0, IVX, 3);

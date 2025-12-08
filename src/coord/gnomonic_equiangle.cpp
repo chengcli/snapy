@@ -5,6 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/hydro/hydro.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -13,6 +14,13 @@
 #include "gnomonic_equiangle.hpp"
 
 namespace snap {
+
+GnomonicEquiangleImpl::GnomonicEquiangleImpl(const CoordinateOptions& options_,
+                                             torch::nn::Module* p)
+    : CoordinateImpl(options_) {
+  _phydro = static_cast<HydroImpl const*>(p);
+  reset();
+}
 
 void GnomonicEquiangleImpl::reset() {
   auto const& op = options;
@@ -121,11 +129,23 @@ void GnomonicEquiangleImpl::reset() {
   g13 = register_buffer("g13", torch::zeros_like(vol));
   g23 = register_buffer("g23", torch::zeros_like(vol));
 
-  // register ghost cell usrc
-  int N = op->nx2();
-  usrc =
-      register_buffer("usrc", torch::empty({op->nghost(), N}, torch::kFloat64));
+  // build global ghost cell usrc
+  int N = op->nx3() * _phydro->parent()->options->layout()->px();
+  auto usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
   cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
+
+  int my_rank = _phydro->parent()->options->layout()->rank();
+  auto [rx, ry, _] = _phydro->parent()->get_layout()->loc_of(my_rank);
+  int offset_x = op->nx3() * rx;
+  int offset_y = op->nx2() * ry;
+
+  // register local ghost cell usrc
+  usrc_LR = register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx2()));
+  usrc_LR += 1 - offset_y;
+
+  usrc_BT = register_buffer(
+      "usrc_BT", usrc.narrow(-1, offset_x, op->nx3()).transpose(0, 1));
+  usrc_BT += 1 - offset_x;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
@@ -148,20 +168,22 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
 }
 
-torch::Tensor GnomonicEquiangleImpl::fill_ghost(
-    torch::Tensor buf, std::tuple<int, int, int> const& offset) const {
+void GnomonicEquiangleImpl::fill_ghost(
+    torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   auto [x3_offset, x2_offset, x1_offset] = offset;
+  auto pmb = _phydro->parent();
+
+  auto sub = pmb->part(offset, PartOptions().exterior(true));
 
   if (x3_offset != 0 && x2_offset == 0) {
-    return _fill_ghost_LR(buf, x3_offset > 0);
+    auto sub1 = pmb->part(offset, PartOptions().exterior(true).extend_x2(1));
+    var.index(sub) = _fill_ghost_LR(var.index(sub1), x3_offset > 0);
   }
 
   if (x2_offset != 0 && x3_offset == 0) {
-    return _fill_ghost_BT(buf, x2_offset > 0);
+    auto sub1 = pmb->part(offset, PartOptions().exterior(true).extend_x3(1));
+    var.index(sub) = _fill_ghost_BT(var.index(sub1), x2_offset > 0);
   }
-
-  throw std::runtime_error(
-      "Invalid offset in GnomonicEquiangleImpl::fill_ghost");
 }
 
 void GnomonicEquiangleImpl::vec_lower_(
@@ -483,7 +505,7 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
 
 torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
                                                     bool flip) const {
-  auto usrc_t = flip ? usrc : usrc.flip(0);
+  auto usrc_t = flip ? usrc_LR : usrc_LR.flip(0);
 
   auto vec = usrc_t.sizes().vec();
   vec.push_back(1);
@@ -503,7 +525,7 @@ torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
 
 torch::Tensor GnomonicEquiangleImpl::_fill_ghost_BT(torch::Tensor buf,
                                                     bool flip) const {
-  auto usrc_t = flip ? usrc.transpose(0, 1) : usrc.flip(0).transpose(0, 1);
+  auto usrc_t = flip ? usrc_BT : usrc_BT.flip(1);
 
   auto vec = usrc_t.sizes().vec();
   vec.push_back(1);
