@@ -358,8 +358,6 @@ IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
   return result;
 }
 
-HydroImpl const* CoordinateImpl::parent() const { return _phydro; }
-
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
                                   torch::nn::Module* p,
                                   std::string const& name) {

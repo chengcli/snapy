@@ -16,7 +16,11 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
 
   // Constructor to initialize the layers
   MoistMixtureImpl() = default;
-  explicit MoistMixtureImpl(EquationOfStateOptions const& options_);
+  explicit MoistMixtureImpl(EquationOfStateOptions const& options_,
+                            torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;

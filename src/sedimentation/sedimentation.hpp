@@ -95,6 +95,8 @@ struct SedHydroOptionsImpl {
 };
 using SedHydroOptions = std::shared_ptr<SedHydroOptionsImpl>;
 
+class HydroImpl;
+
 class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
  public:
   //! Create and register a `SedVel` module
@@ -151,8 +153,10 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
   //! particle indices in hydro
   torch::Tensor hydro_ids;
 
+  //! non-owning reference to parent
+  std::weak_ptr<HydroImpl const> parent;
+
   //! submodules
-  EquationOfState peos = nullptr;
   SedVel psedvel = nullptr;
 
   //! options with which this `SedHydro` was constructed
@@ -160,9 +164,8 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
 
   //! Constructor to initialize the layers
   SedHydroImpl() : options(SedHydroOptionsImpl::create()) {}
-  explicit SedHydroImpl(SedHydroOptions const& options_) : options(options_) {
-    reset();
-  }
+  explicit SedHydroImpl(SedHydroOptions const& options_,
+                        torch::nn::Module* p = nullptr);
   void reset() override;
 
   //! Calculate sedimentation velocites

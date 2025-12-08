@@ -13,7 +13,11 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
 
   // Constructor to initialize the layers
   IdealGasImpl() = default;
-  explicit IdealGasImpl(EquationOfStateOptions const& options_);
+  explicit IdealGasImpl(EquationOfStateOptions const& options_,
+                        torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;

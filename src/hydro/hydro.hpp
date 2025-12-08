@@ -102,9 +102,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! options with which this `Hydro` was constructed
   HydroOptions options;
 
-  //! concrete submodules
-  EquationOfState peos = nullptr;
+  //! non-owning reference to parent
+  std::weak_ptr<MeshBlockImpl const> parent;
+
+  //! owning submodules
   Coordinate pcoord = nullptr;
+  EquationOfState peos = nullptr;
   RiemannSolver priemann = nullptr;
   PrimitiveProjector pproj = nullptr;
 
@@ -135,10 +138,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! Register all forcing modules
   std::vector<std::string> register_forcings_module();
 
-  MeshBlockImpl const* parent() const;
-
  private:
-  MeshBlockImpl const* _pmb = nullptr;
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 

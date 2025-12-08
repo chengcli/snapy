@@ -18,11 +18,13 @@ namespace snap {
 GnomonicEquiangleImpl::GnomonicEquiangleImpl(const CoordinateOptions& options_,
                                              torch::nn::Module* p)
     : CoordinateImpl(options_) {
-  _phydro = static_cast<HydroImpl const*>(p);
+  parent = std::dynamic_pointer_cast<HydroImpl const>(p->shared_from_this());
   reset();
 }
 
 void GnomonicEquiangleImpl::reset() {
+  auto phydro = parent.lock();
+
   auto const& op = options;
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
@@ -132,13 +134,14 @@ void GnomonicEquiangleImpl::reset() {
   // build global ghost cell usrc
   int N, offset_x, offset_y;
   torch::Tensor usrc;
-  if (_phydro != nullptr) {
-    N = op->nx3() * _phydro->parent()->options->layout()->px();
+  if (phydro && phydro->parent.lock()) {
+    auto pmb = phydro->parent.lock();
+    N = op->nx3() * pmb->options->layout()->px();
     usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
     cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
 
-    int my_rank = _phydro->parent()->options->layout()->rank();
-    auto [rx, ry, _] = _phydro->parent()->get_layout()->loc_of(my_rank);
+    int my_rank = pmb->options->layout()->rank();
+    auto [rx, ry, _] = pmb->get_layout()->loc_of(my_rank);
     offset_x = op->nx3() * rx;
     offset_y = op->nx2() * ry;
   } else {
@@ -180,13 +183,12 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
 
 void GnomonicEquiangleImpl::fill_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
-  if (_phydro == nullptr) {
-    CoordinateImpl::fill_ghost(var, offset);
-    return;
-  }
+  auto phydro = parent.lock();
+  if (!phydro) return;
 
   auto [x3_offset, x2_offset, x1_offset] = offset;
-  auto pmb = _phydro->parent();
+  auto pmb = phydro->parent.lock();
+  if (!pmb) return;
 
   auto sub = pmb->part(offset, PartOptions().exterior(true));
 

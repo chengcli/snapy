@@ -1,20 +1,23 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 #include "riemann_dispatch.hpp"
 #include "riemann_solver.hpp"
 
 namespace snap {
 
 void LmarsSolverImpl::reset() {
-  TORCH_CHECK(options->eos(), "[LmarsSolver] eos is nullptr");
+  auto phydro = parent.lock();
 
-  peos = EquationOfStateImpl::create(options->eos(), this);
+  TORCH_CHECK(phydro, "[LmarsSolver] phydro is nullptr");
+  auto pcoord = phydro->pcoord;
 
   // register buffers
-  auto nc1 = peos->pcoord->options->nc1();
-  auto nc2 = peos->pcoord->options->nc2();
-  auto nc3 = peos->pcoord->options->nc3();
+  auto nc1 = pcoord->options->nc1();
+  auto nc2 = pcoord->options->nc2();
+  auto nc3 = pcoord->options->nc3();
 
   elr =
       register_buffer("elr", torch::empty({2, nc3, nc2, nc1}, torch::kFloat64));
@@ -26,11 +29,13 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
-  auto pcoord = peos->pcoord;
+  auto phydro = parent.lock();
+  auto pcoord = phydro->pcoord;
+  auto peos = phydro->peos;
 
   elr[ILT] = peos->compute("W->I", {wl}) / wl[Index::IDN];
 
-  if (options->eos()->type() == "aneos") {
+  if (peos->options->type() == "aneos") {
     clr[ILT] = peos->compute("W->L", {wl});
     glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
   } else {
@@ -39,7 +44,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   elr[IRT] = peos->compute("W->I", {wr}) / wr[Index::IDN];
 
-  if (options->eos()->type() == "aneos") {
+  if (peos->options->type() == "aneos") {
     clr = peos->compute("W->L", {wr});
     glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
   } else {

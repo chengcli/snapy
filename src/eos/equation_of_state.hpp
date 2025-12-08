@@ -8,9 +8,6 @@
 // kintera
 #include <kintera/thermo/thermo.hpp>
 
-// snap
-#include <snap/coord/coordinate.hpp>
-
 // arg
 #include <snap/add_arg.h>
 
@@ -48,9 +45,10 @@ struct EquationOfStateOptionsImpl {
 
   //! submodules options
   ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
-  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
 using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
+
+class HydroImpl;
 
 class EquationOfStateImpl {
  public:
@@ -71,12 +69,12 @@ class EquationOfStateImpl {
   //! options with which this `EquationOfState` was constructed
   EquationOfStateOptions options;
 
-  //! submodules
-  Coordinate pcoord = nullptr;
+  //! non-owning reference to parent
+  std::weak_ptr<HydroImpl const> parent;
 
   EquationOfStateImpl() : options(EquationOfStateOptionsImpl::create()) {}
-  explicit EquationOfStateImpl(EquationOfStateOptions const& options_)
-      : options(options_) {}
+  explicit EquationOfStateImpl(EquationOfStateOptions const& options_,
+                               torch::nn::Module* p = nullptr);
   virtual ~EquationOfStateImpl() = default;
 
   virtual int nvar() const { return 5; }

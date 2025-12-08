@@ -20,7 +20,11 @@ class ANEOSImpl : public EquationOfStateImpl,
   ANEOSThermo pthermo = nullptr;
 
   ANEOSImpl() = default;
-  explicit ANEOSImpl(const EquationOfStateOptions& options_);
+  explicit ANEOSImpl(const EquationOfStateOptions& options_,
+                     torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   using EquationOfStateImpl::forward;
 

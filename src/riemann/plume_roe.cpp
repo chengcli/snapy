@@ -1,6 +1,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 #include "riemann_solver.hpp"
 
 namespace snap {
@@ -37,13 +39,15 @@ static torch::Tensor lax_friedrichs_flux(torch::Tensor const& priml,
 }
 
 void PlumeRoeSolverImpl::reset() {
-  TORCH_CHECK(options->eos(), "[PlumeRoe] eos is nullptr");
-
-  peos = EquationOfStateImpl::create(options->eos(), this);
+  auto phydro = parent.lock();
+  TORCH_CHECK(phydro, "[PlumeRoeSolver] parent is nullptr");
 }
 
 torch::Tensor PlumeRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                           int dim, torch::Tensor flx) {
+  auto phydro = parent.lock();
+  auto peos = phydro->peos;
+
   if (dim != 1) {
     TORCH_CHECK(false,
                 "PlumeRoeSolver only supports dim = 1, but got dim = ", dim);

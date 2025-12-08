@@ -87,6 +87,9 @@ class CoordinateImpl {
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
 
+  //! non-owning reference to parent
+  std::weak_ptr<HydroImpl const> parent;
+
   CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
   explicit CoordinateImpl(const CoordinateOptions &options_);
 
@@ -201,11 +204,6 @@ class CoordinateImpl {
   //! fluxes -> flux divergence
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                                 torch::Tensor flux2, torch::Tensor flux3);
-
-  HydroImpl const *parent() const;
-
- protected:
-  HydroImpl const *_phydro = nullptr;
 };
 using Coordinate = std::shared_ptr<CoordinateImpl>;
 
