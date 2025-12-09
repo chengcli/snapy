@@ -55,6 +55,7 @@ void bind_bc(py::module &m) {
                   coord);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
+      .def(py::init<snap::InternalBoundaryOptions>(), py::arg("options"))
       .def("mark_prim_solid_", &snap::InternalBoundaryImpl::mark_prim_solid_)
       .def("fill_cons_solid_", &snap::InternalBoundaryImpl::fill_cons_solid_)
       .def(

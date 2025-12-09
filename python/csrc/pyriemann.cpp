@@ -23,8 +23,19 @@ void bind_riemann(py::module &m) {
            })
       .ADD_OPTION(std::string, snap::RiemannSolverOptionsImpl, type);
 
-  ADD_SNAP_MODULE(UpwindSolver, RiemannSolverOptions);
-  ADD_SNAP_MODULE(RoeSolver, RiemannSolverOptions);
-  ADD_SNAP_MODULE(LmarsSolver, RiemannSolverOptions);
-  ADD_SNAP_MODULE(ShallowRoeSolver, RiemannSolverOptions);
+  ADD_SNAP_MODULE(UpwindSolver, RiemannSolverOptions)
+      .def(py::init<snap::RiemannSolverOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro"));
+
+  ADD_SNAP_MODULE(RoeSolver, RiemannSolverOptions)
+      .def(py::init<snap::RiemannSolverOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro"));
+
+  ADD_SNAP_MODULE(LmarsSolver, RiemannSolverOptions)
+      .def(py::init<snap::RiemannSolverOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro"));
+
+  ADD_SNAP_MODULE(ShallowRoeSolver, RiemannSolverOptions)
+      .def(py::init<snap::RiemannSolverOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro"));
 }

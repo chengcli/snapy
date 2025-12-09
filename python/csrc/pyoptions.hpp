@@ -4,47 +4,22 @@
   def(#op_name, (T const &(st_name::*)() const) & st_name::op_name) \
       .def(#op_name, (st_name & (st_name::*)(const T &)) & st_name::op_name)
 
-#define ADD_SNAP_MODULE(m_name, op_name)                                \
-  torch::python::bind_module<snap::m_name##Impl>(m, #m_name)            \
-      .def(py::init<>(), R"(Construct a new default module.)")          \
-      .def(py::init<snap::op_name>(), "Construct a " #m_name " module", \
-           py::arg("options"))                                          \
-      .def_readonly("options", &snap::m_name##Impl::options)            \
-      .def("__repr__",                                                  \
-           [](const snap::m_name##Impl &a) {                            \
-             std::stringstream ss;                                      \
-             a.options->report(ss);                                     \
-             return fmt::format(#m_name "(\n{})", ss.str());            \
-           })                                                           \
-      .def("module",                                                    \
-           [](snap::m_name##Impl &self, std::string name) {             \
-             return self.named_modules()[name];                         \
-           })                                                           \
-      .def("buffer",                                                    \
-           [](snap::m_name##Impl &self, std::string name) {             \
-             return self.named_buffers()[name];                         \
-           })                                                           \
-      .def("forward", &snap::m_name##Impl::forward)
-
-#define ADD_SNAP_MODULE_WITH_PARENT(m_name, op_name)             \
-  torch::python::bind_module<snap::m_name##Impl>(m, #m_name)     \
-      .def(py::init<>(), R"(Construct a new default module.)")   \
-      .def(py::init<snap::op_name, torch::nn::Module *>(),       \
-           "Construct a " #m_name " module", py::arg("options"), \
-           py::arg("parent") = nullptr)                          \
-      .def_readonly("options", &snap::m_name##Impl::options)     \
-      .def("__repr__",                                           \
-           [](const snap::m_name##Impl &a) {                     \
-             std::stringstream ss;                               \
-             a.options->report(ss);                              \
-             return fmt::format(#m_name "(\n{})", ss.str());     \
-           })                                                    \
-      .def("module",                                             \
-           [](snap::m_name##Impl &self, std::string name) {      \
-             return self.named_modules()[name];                  \
-           })                                                    \
-      .def("buffer",                                             \
-           [](snap::m_name##Impl &self, std::string name) {      \
-             return self.named_buffers()[name];                  \
-           })                                                    \
+#define ADD_SNAP_MODULE(m_name, op_name)                       \
+  torch::python::bind_module<snap::m_name##Impl>(m, #m_name)   \
+      .def(py::init<>(), R"(Construct a new default module.)") \
+      .def_readonly("options", &snap::m_name##Impl::options)   \
+      .def("__repr__",                                         \
+           [](const snap::m_name##Impl &a) {                   \
+             std::stringstream ss;                             \
+             a.options->report(ss);                            \
+             return fmt::format(#m_name "(\n{})", ss.str());   \
+           })                                                  \
+      .def("module",                                           \
+           [](snap::m_name##Impl &self, std::string name) {    \
+             return self.named_modules()[name];                \
+           })                                                  \
+      .def("buffer",                                           \
+           [](snap::m_name##Impl &self, std::string name) {    \
+             return self.named_buffers()[name];                \
+           })                                                  \
       .def("forward", &snap::m_name##Impl::forward)

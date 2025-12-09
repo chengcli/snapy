@@ -67,7 +67,7 @@ void bind_coord(py::module &m) {
 
   torch::python::add_module_bindings(pyCartesian)
       .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),
-           py::arg("options"), py::arg("parent") = nullptr)
+           py::arg("options"), py::arg("hydro") = nullptr)
       .def("buffer",
            [](snap::CartesianImpl &self, std::string name) {
              return self.named_buffers()[name];

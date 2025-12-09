@@ -39,5 +39,6 @@ void bind_recon(py::module &m) {
       .ADD_OPTION(bool, snap::ReconstructOptionsImpl, shock)
       .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptionsImpl, interp);
 
-  ADD_SNAP_MODULE(Reconstruct, ReconstructOptions);
+  ADD_SNAP_MODULE(Reconstruct, ReconstructOptions)
+      .def(py::init<snap::ReconstructOptions>(), py::arg("options"));
 }
