@@ -61,7 +61,7 @@ class RiemannSolverImpl {
   RiemannSolverOptions options;
 
   //! non-owning reference to parent
-  HydroImpl const* phydro;
+  HydroImpl const* phydro = nullptr;
 
   RiemannSolverImpl() : options(RiemannSolverOptionsImpl::create()) {}
   explicit RiemannSolverImpl(const RiemannSolverOptions& options_,

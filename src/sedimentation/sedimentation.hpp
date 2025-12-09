@@ -154,7 +154,7 @@ class SedHydroImpl : public torch::nn::Cloneable<SedHydroImpl> {
   torch::Tensor hydro_ids;
 
   //! non-owning reference to parent
-  HydroImpl const* phydro;
+  HydroImpl const* phydro = nullptr;
 
   //! submodules
   SedVel psedvel = nullptr;
