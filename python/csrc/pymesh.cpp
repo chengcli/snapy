@@ -84,6 +84,7 @@ void bind_mesh(py::module &m) {
       .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptionsImpl, layout);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
+      .def(py::init<snap::MeshBlockOptions>(), py::arg("options"))
       .def("inc_cycle",
            [](snap::MeshBlockImpl &self) {
              auto v = self.cycle;

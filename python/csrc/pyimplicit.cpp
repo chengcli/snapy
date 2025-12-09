@@ -31,9 +31,13 @@ void bind_implicit(py::module &m) {
            })
       .ADD_OPTION(std::string, snap::ImplicitOptionsImpl, type)
       .ADD_OPTION(int, snap::ImplicitOptionsImpl, scheme)
-      .ADD_OPTION(snap::ConstGravityOptions, snap::ImplicitOptionsImpl, grav)
-      .ADD_OPTION(snap::CoordinateOptions, snap::ImplicitOptionsImpl, coord);
+      .ADD_OPTION(snap::ConstGravityOptions, snap::ImplicitOptionsImpl, grav);
 
-  ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions);
-  ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions);
+  ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions)
+      .def(py::init<snap::ImplicitOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("icorr") = nullptr);
+
+  ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions)
+      .def(py::init<snap::ImplicitOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro") = nullptr);
 }

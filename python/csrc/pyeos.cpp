@@ -34,9 +34,7 @@ void bind_eos(py::module &m) {
       .ADD_OPTION(bool, snap::EquationOfStateOptionsImpl, verbose)
       .ADD_OPTION(std::string, snap::EquationOfStateOptionsImpl, eos_file)
       .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptionsImpl,
-                  thermo)
-      .ADD_OPTION(snap::CoordinateOptions, snap::EquationOfStateOptionsImpl,
-                  coord);
+                  thermo);
 
   py::class_<snap::EquationOfStateImpl, snap::EquationOfState>(
       m, "EquationOfState")

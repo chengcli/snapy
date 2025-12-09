@@ -11,7 +11,9 @@
 
 namespace snap {
 
-HydroImpl::HydroImpl(const HydroOptions& options_) : options(options_) {
+HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
+    : options(options_) {
+  pmb = dynamic_cast<MeshBlockImpl const*>(p);
   reset();
 }
 
@@ -209,6 +211,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   auto playout = MeshBlockImpl::get_layout();
 
+  if (playout->options->type() == "cubed-sphere") {
+    TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
+  }
+
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
     torch::Tensor wtmp;
@@ -251,7 +257,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       Variables sync_vars;
       sync_vars["hydro_wl"] = wtmp[ILT];
       sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(_pmb, sync_vars, sync_opts);
+      playout->forward(pmb, sync_vars, sync_opts);
     }
 
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
@@ -281,7 +287,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       Variables sync_vars;
       sync_vars["hydro_wl"] = wtmp[ILT];
       sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(_pmb, sync_vars, sync_opts);
+      playout->forward(pmb, sync_vars, sync_opts);
     }
 
     auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;
@@ -347,9 +353,7 @@ std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
   TORCH_CHECK(p, "[Hydro] Parent module is null");
   TORCH_CHECK(opts, "[Hydro] Options pointer is null");
 
-  auto hydro = Hydro(opts);
-  hydro->_pmb = static_cast<MeshBlockImpl const*>(p);
-  return p->register_module(name, hydro);
+  return p->register_module(name, Hydro(opts, p));
 }
 
 void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,

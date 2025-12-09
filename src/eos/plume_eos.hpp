@@ -10,7 +10,11 @@ class PlumeEOSImpl : public torch::nn::Cloneable<PlumeEOSImpl>,
  public:
   // Constructor to initialize the layers
   PlumeEOSImpl() = default;
-  explicit PlumeEOSImpl(EquationOfStateOptions const& options_);
+  explicit PlumeEOSImpl(EquationOfStateOptions const& options_,
+                        torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   using EquationOfStateImpl::forward;
 

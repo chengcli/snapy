@@ -1,11 +1,12 @@
 // snap
-#include <configure.h>
+#include <snap/hydro/hydro.hpp>
 
 #include "coordinate.hpp"
 
 namespace snap {
+
 void CartesianImpl::reset() {
-  auto const& op = options;
+  auto const &op = options;
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();

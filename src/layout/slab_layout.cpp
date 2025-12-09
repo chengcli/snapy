@@ -71,7 +71,7 @@ void SlabLayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
                              SyncOptions opts) {
   TORCH_CHECK(!options->no_backend(),
               "[SlabLayout:forward] backend is disabled");
-  TORCH_CHECK(pmb != nullptr, "[SlabLayout:forward] MeshBlock pointer is null");
+  if (pmb == nullptr) return;  // nothing to do
 
   // Serialize data into send buffers
   serialize(pmb, vars, opts);

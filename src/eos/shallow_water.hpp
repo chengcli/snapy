@@ -10,7 +10,11 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
  public:
   // Constructor to initialize the layers
   ShallowWaterImpl() = default;
-  ShallowWaterImpl(EquationOfStateOptions const& options_);
+  ShallowWaterImpl(EquationOfStateOptions const& options_,
+                   torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;

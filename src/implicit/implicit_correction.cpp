@@ -4,13 +4,17 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 #include "implicit.hpp"
 #include "implicit_dispatch.hpp"
 
 namespace snap {
 
-ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions options_)
+ImplicitCorrectionImpl::ImplicitCorrectionImpl(ImplicitOptions const& options_,
+                                               torch::nn::Module* p)
     : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
   reset();
 }
 
@@ -23,6 +27,8 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   if (options->scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
+
+  auto pcoord = phydro->pcoord;
 
   auto vec = du.sizes().vec();
   vec.insert(vec.begin(), 2);
@@ -50,8 +56,8 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto Bnd = torch::eye(m, w.options());
   Bnd[IVX][IVX] = -1.;
 
-  int is = pvic->pcoord->is();
-  int ie = pvic->pcoord->ie();
+  int is = pcoord->is();
+  int ie = pcoord->ie();
 
   a.slice(2, is, ie + 1) += Dt - Phi;
 
@@ -60,9 +66,9 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   a.select(2, ie) += c.select(2, ie).matmul(Bnd);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  int nc1 = pvic->pcoord->options->nc1();
-  int nc2 = pvic->pcoord->options->nc2();
-  int nc3 = pvic->pcoord->options->nc3();
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
 
   std::vector<int64_t> vec1 = {nc3, nc2, nc1, -1};
 
@@ -95,7 +101,7 @@ std::shared_ptr<ImplicitCorrectionImpl> ImplicitCorrectionImpl::create(
     std::string const& name) {
   TORCH_CHECK(opts != nullptr, "ImplicitCorrection options is nullptr");
   TORCH_CHECK(p != nullptr, "Parent module is nullptr");
-  return p->register_module(name, ImplicitCorrection(opts));
+  return p->register_module(name, ImplicitCorrection(opts, p));
 }
 
 }  // namespace snap

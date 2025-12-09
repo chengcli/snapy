@@ -5,14 +5,7 @@
 
 namespace snap {
 
-PlumeEOSImpl::PlumeEOSImpl(EquationOfStateOptions const &options_)
-    : EquationOfStateImpl(options_) {
-  reset();
-}
-
-void PlumeEOSImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
-}
+void PlumeEOSImpl::reset() {}
 
 torch::Tensor PlumeEOSImpl::compute(std::string ab,
                                     std::vector<torch::Tensor> const &args) {

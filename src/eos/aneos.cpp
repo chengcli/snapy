@@ -5,13 +5,7 @@
 
 namespace snap {
 
-ANEOSImpl::ANEOSImpl(EquationOfStateOptions const &options_)
-    : EquationOfStateImpl(options_) {
-  reset();
-}
-
 void ANEOSImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
   pthermo = ANEOSThermoImpl::create(options->eos_file(), this);
 }
 

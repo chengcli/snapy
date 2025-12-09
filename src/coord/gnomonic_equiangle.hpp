@@ -20,12 +20,13 @@ class GnomonicEquiangleImpl
   // metric data
   torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
 
-  // ghost cell usrc
-  torch::Tensor usrc;
+  // local ghost cell usrc
+  torch::Tensor usrc_LR, usrc_BT;
 
   GnomonicEquiangleImpl() = default;
-  explicit GnomonicEquiangleImpl(const CoordinateOptions& options_)
-      : CoordinateImpl(options_) {
+  explicit GnomonicEquiangleImpl(const CoordinateOptions& options_,
+                                 torch::nn::Module* p = nullptr)
+      : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -39,9 +40,8 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  torch::Tensor fill_ghost(
-      torch::Tensor buf,
-      std::tuple<int, int, int> const& offset) const override;
+  void fill_ghost(torch::Tensor var,
+                  std::tuple<int, int, int> const& offset) const override;
 
   void vec_lower_(
       torch::Tensor const& vel,

@@ -1,15 +1,22 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/eos/equation_of_state.hpp>
-#include <snap/forcing/forcing.hpp>
+#include <snap/hydro/hydro.hpp>
 
 #include "sedimentation.hpp"
 
 namespace snap {
 
+SedHydroImpl::SedHydroImpl(SedHydroOptions const& options_,
+                           torch::nn::Module* p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+  reset();
+}
+
 void SedHydroImpl::reset() {
-  peos = EquationOfStateImpl::create(options->eos(), this);
+  TORCH_CHECK(phydro, "Parent Hydro module is nullptr");
+
   psedvel = SedVelImpl::create(options->sedvel(), this);
 
   // register buffer
@@ -20,6 +27,9 @@ void SedHydroImpl::reset() {
 
 torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
                                     torch::optional<torch::Tensor> out) {
+  auto pcoord = phydro->pcoord;
+  auto peos = phydro->peos;
+
   auto flux = out.value_or(torch::zeros_like(wr));
 
   // null-op
@@ -29,18 +39,18 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   }
 
   auto vel = wr.narrow(0, IVX, 3).clone();
-  peos->pcoord->vec_lower_(vel);
+  pcoord->vec_lower_(vel);
 
   auto temp = peos->compute("W->T", {wr});
   vsed.set_(psedvel->forward(wr[IDN], wr[IPR], temp));
 
   // seal top boundary
-  int ie = peos->pcoord->ie();
+  int ie = pcoord->ie();
   int ng = vsed.size(-1) - (ie + 1);
   vsed.narrow(-1, ie + 1, ng).fill_(0.);
 
   // seal bottom
-  int is = peos->pcoord->is();
+  int is = pcoord->is();
   vsed.slice(-1, 0, is + 1).fill_(0.);
 
   // 5 is number of hydro variables
@@ -61,7 +71,7 @@ std::shared_ptr<SedHydroImpl> SedHydroImpl::create(SedHydroOptions const& opts,
                                                    std::string const& name) {
   TORCH_CHECK(opts != nullptr, "SedHydro options is nullptr");
   TORCH_CHECK(p != nullptr, "Parent module is nullptr");
-  return p->register_module(name, SedHydro(opts));
+  return p->register_module(name, SedHydro(opts, p));
 }
 
 }  // namespace snap

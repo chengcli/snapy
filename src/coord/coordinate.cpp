@@ -6,6 +6,7 @@
 
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/layout/layout.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "coordinate.hpp"
 #include "gnomonic_equiangle.hpp"
@@ -127,8 +128,11 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   return op;
 }
 
-CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
+CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
+                               torch::nn::Module* p)
     : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+
   auto const& op = options;
 
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
@@ -364,13 +368,13 @@ Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
   TORCH_CHECK(opts, "[Coordinate] Options pointer is null");
 
   if (opts->type() == "cartesian") {
-    return p->register_module(name, Cartesian(opts));
+    return p->register_module(name, Cartesian(opts, p));
   } else if (opts->type() == "cylindrical") {
-    return p->register_module(name, Cylindrical(opts));
+    return p->register_module(name, Cylindrical(opts, p));
   } else if (opts->type() == "spherical-polar") {
-    return p->register_module(name, SphericalPolar(opts));
+    return p->register_module(name, SphericalPolar(opts, p));
   } else if (opts->type() == "gnomonic-equiangle") {
-    return p->register_module(name, GnomonicEquiangle(opts));
+    return p->register_module(name, GnomonicEquiangle(opts, p));
   } else {
     TORCH_CHECK(false, "Unknown coordinate type: ", opts->type());
   }

@@ -5,9 +5,6 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-// snap
-#include <snap/eos/equation_of_state.hpp>
-
 // arg
 #include <snap/add_arg.h>
 
@@ -36,11 +33,10 @@ struct RiemannSolverOptionsImpl {
 
   // used in shallow water equations
   ADD_ARG(std::string, dir) = "omni";
-
-  //! submodule options
-  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
 using RiemannSolverOptions = std::shared_ptr<RiemannSolverOptionsImpl>;
+
+class HydroImpl;
 
 class RiemannSolverImpl {
  public:
@@ -64,9 +60,12 @@ class RiemannSolverImpl {
   //! options with which this `RiemannSolver` was constructed
   RiemannSolverOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
   RiemannSolverImpl() : options(RiemannSolverOptionsImpl::create()) {}
-  explicit RiemannSolverImpl(const RiemannSolverOptions& options_)
-      : options(options_) {}
+  explicit RiemannSolverImpl(const RiemannSolverOptions& options_,
+                             torch::nn::Module* p = nullptr);
   virtual ~RiemannSolverImpl() = default;
 
   //! Solver the Riemann problem
@@ -80,8 +79,9 @@ class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
  public:
   //! Constructor to initialize the layers
   UpwindSolverImpl() = default;
-  explicit UpwindSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit UpwindSolverImpl(const RiemannSolverOptions& options_,
+                            torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override {}
@@ -92,13 +92,11 @@ TORCH_MODULE(UpwindSolver);
 class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
                       public RiemannSolverImpl {
  public:
-  //! submodules
-  EquationOfState peos = nullptr;
-
   //! Constructor to initialize the layers
   RoeSolverImpl() = default;
-  explicit RoeSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit RoeSolverImpl(const RiemannSolverOptions& options_,
+                         torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -112,13 +110,11 @@ TORCH_MODULE(RoeSolver);
 class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
                         public RiemannSolverImpl {
  public:
-  //! submodules
-  EquationOfState peos = nullptr;
-
   //! Constructor to initialize the layers
   LmarsSolverImpl() = default;
-  explicit LmarsSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit LmarsSolverImpl(const RiemannSolverOptions& options_,
+                           torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -132,13 +128,11 @@ TORCH_MODULE(LmarsSolver);
 class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
                        public RiemannSolverImpl {
  public:
-  //! submodules
-  EquationOfState peos = nullptr;
-
   //! Constructor to initialize the layers
   HLLCSolverImpl() = default;
-  explicit HLLCSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit HLLCSolverImpl(const RiemannSolverOptions& options_,
+                          torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -152,13 +146,11 @@ TORCH_MODULE(HLLCSolver);
 class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
                              public RiemannSolverImpl {
  public:
-  //! submodules
-  EquationOfState peos = nullptr;
-
   //! Constructor to initialize the layers
   ShallowRoeSolverImpl() = default;
-  explicit ShallowRoeSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit ShallowRoeSolverImpl(const RiemannSolverOptions& options_,
+                                torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -172,13 +164,11 @@ TORCH_MODULE(ShallowRoeSolver);
 class PlumeRoeSolverImpl : public torch::nn::Cloneable<PlumeRoeSolverImpl>,
                            public RiemannSolverImpl {
  public:
-  //! submodules
-  EquationOfState peos = nullptr;
-
   //! Constructor to initialize the layers
   PlumeRoeSolverImpl() = default;
-  explicit PlumeRoeSolverImpl(const RiemannSolverOptions& options_)
-      : RiemannSolverImpl(options_) {
+  explicit PlumeRoeSolverImpl(const RiemannSolverOptions& options_,
+                              torch::nn::Module* p = nullptr)
+      : RiemannSolverImpl(options_, p) {
     reset();
   }
   void reset() override;

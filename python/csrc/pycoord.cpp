@@ -33,6 +33,7 @@ void bind_coord(py::module &m) {
       .ADD_OPTION(int, snap::CoordinateOptionsImpl, nghost);
 
   py::class_<snap::CoordinateImpl, snap::Coordinate>(m, "Coordinate")
+      .def(py::init<snap::CoordinateOptions>(), py::arg("options"))
       .def("__repr__",
            [](const snap::CartesianImpl &self) {
              std::stringstream ss;
@@ -65,6 +66,8 @@ void bind_coord(py::module &m) {
                  std::shared_ptr<snap::CartesianImpl>>(m, "Cartesian");
 
   torch::python::add_module_bindings(pyCartesian)
+      .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro") = nullptr)
       .def("buffer",
            [](snap::CartesianImpl &self, std::string name) {
              return self.named_buffers()[name];

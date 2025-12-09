@@ -2,7 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/snap.h>  // Index
+#include <snap/snap.h>
 
 #include <snap/eos/aneos.hpp>
 #include <snap/eos/ideal_gas.hpp>
@@ -10,6 +10,7 @@
 #include <snap/eos/moist_mixture.hpp>
 #include <snap/eos/plume_eos.hpp>
 #include <snap/eos/shallow_water.hpp>
+#include <snap/hydro/hydro.hpp>
 #include <snap/utils/pull_neighbors.hpp>
 
 #include "equation_of_state.hpp"
@@ -50,6 +51,12 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   return op;
 }
 
+EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
+                                         torch::nn::Module* p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+}
+
 torch::Tensor EquationOfStateImpl::compute(
     std::string ab, std::vector<torch::Tensor> const& args) {
   TORCH_CHECK(false, "EquationOfStateImpl::compute() is not implemented.",
@@ -68,6 +75,9 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
+  if (!phydro) return;
+  auto pcoord = phydro->pcoord;
+
   if (!options->limiter()) return;  // no limiter
   cons.masked_fill_(torch::isnan(cons), 0.);
   cons[IDN].clamp_min_(options->density_floor());
@@ -111,17 +121,17 @@ EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
   TORCH_CHECK(opts, "[EquationOfState] Options pointer is null.");
 
   if (opts->type() == "ideal-gas") {
-    return p->register_module(name, IdealGas(opts));
+    return p->register_module(name, IdealGas(opts, p));
   } else if (opts->type() == "ideal-moist") {
-    return p->register_module(name, IdealMoist(opts));
+    return p->register_module(name, IdealMoist(opts, p));
   } else if (opts->type() == "moist-mixture") {
-    return p->register_module(name, MoistMixture(opts));
+    return p->register_module(name, MoistMixture(opts, p));
   } else if (opts->type() == "aneos") {
-    return p->register_module(name, ANEOS(opts));
+    return p->register_module(name, ANEOS(opts, p));
   } else if (opts->type() == "shallow-water") {
-    return p->register_module(name, ShallowWater(opts));
+    return p->register_module(name, ShallowWater(opts, p));
   } else if (opts->type() == "plume-eos") {
-    return p->register_module(name, PlumeEOS(opts));
+    return p->register_module(name, PlumeEOS(opts, p));
   } else {
     TORCH_CHECK(false, "EquationOfState: Unknown type: ", opts->type());
   }

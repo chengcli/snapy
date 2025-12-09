@@ -23,6 +23,8 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 struct EquationOfStateOptionsImpl;
 using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
+class HydroImpl;
+
 struct CoordinateOptionsImpl {
   static std::shared_ptr<CoordinateOptionsImpl> create() {
     return std::make_shared<CoordinateOptionsImpl>();
@@ -85,8 +87,12 @@ class CoordinateImpl {
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const *phydro = nullptr;
+
   CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
-  explicit CoordinateImpl(const CoordinateOptions &options_);
+  explicit CoordinateImpl(const CoordinateOptions &options_,
+                          torch::nn::Module *p = nullptr);
 
   //! data
   torch::Tensor x1f, x2f, x3f;
@@ -167,10 +173,8 @@ class CoordinateImpl {
     return {vec[0], vec[1], vec[2]};
   }
 
-  virtual torch::Tensor fill_ghost(torch::Tensor buf,
-                                   std::tuple<int, int, int> const &) const {
-    return buf;
-  }
+  virtual void fill_ghost(torch::Tensor var,
+                          std::tuple<int, int, int> const &) const {}
 
   virtual void vec_lower_(
       torch::Tensor const &vel,
@@ -210,8 +214,9 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
   using CoordinateImpl::forward;
 
   CartesianImpl() = default;
-  explicit CartesianImpl(const CoordinateOptions &options_)
-      : CoordinateImpl(options_) {
+  explicit CartesianImpl(const CoordinateOptions &options_,
+                         torch::nn::Module *p = nullptr)
+      : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override;
@@ -230,8 +235,9 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
   using CoordinateImpl::forward;
 
   CylindricalImpl() = default;
-  explicit CylindricalImpl(const CoordinateOptions &options_)
-      : CoordinateImpl(options_) {
+  explicit CylindricalImpl(const CoordinateOptions &options_,
+                           torch::nn::Module *p = nullptr)
+      : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override {}
@@ -248,8 +254,9 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
   using CoordinateImpl::forward;
 
   SphericalPolarImpl() = default;
-  explicit SphericalPolarImpl(const CoordinateOptions &options_)
-      : CoordinateImpl(options_) {
+  explicit SphericalPolarImpl(const CoordinateOptions &options_,
+                              torch::nn::Module *p = nullptr)
+      : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override {}

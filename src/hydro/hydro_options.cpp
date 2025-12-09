@@ -120,13 +120,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
                                          bool verbose) {
   auto op = HydroOptionsImpl::create();
 
-  // coordinate system
-  op->coord() = CoordinateOptionsImpl::from_yaml(filename);
-  if (verbose) {
-    std::cout << "[HydroOptions] coordinate options:" << std::endl;
-    op->coord()->report(std::cout);
-  }
-
   // equation of state
   op->eos() = EquationOfStateOptionsImpl::from_yaml(filename, verbose);
   if (verbose) {
@@ -134,8 +127,12 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->eos()->report(std::cout);
   }
 
-  // link eos and coord
-  op->eos()->coord() = op->coord();
+  // coordinate system
+  op->coord() = CoordinateOptionsImpl::from_yaml(filename);
+  if (verbose) {
+    std::cout << "[HydroOptions] coordinate options:" << std::endl;
+    op->coord()->report(std::cout);
+  }
   op->coord()->eos() = op->eos();
 
   // internal boundaries
@@ -183,7 +180,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
 
   // riemann solver
   op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename, "dynamics");
-  op->riemann()->eos() = op->eos();
 
   if (verbose) {
     std::cout << "[HydroOptions] riemann solver options:" << std::endl;
@@ -193,7 +189,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   // implicit options
   op->icorr() = ImplicitOptionsImpl::from_yaml(filename);
   if (op->icorr()) {
-    op->icorr()->coord() = op->coord();
     op->icorr()->grav() = op->grav();
 
     if (verbose) {

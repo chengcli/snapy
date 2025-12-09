@@ -1,18 +1,21 @@
 // base
 #include <configure.h>
 
+#include <snap/hydro/hydro.hpp>
+
 // snap
 #include "riemann_solver.hpp"
 
 namespace snap {
-void ShallowRoeSolverImpl::reset() {
-  TORCH_CHECK(options->eos(), "[ShallowRoe] eos is nullptr");
 
-  peos = EquationOfStateImpl::create(options->eos(), this);
+void ShallowRoeSolverImpl::reset() {
+  TORCH_CHECK(phydro, "[ShallowRoeSolver] parent is nullptr");
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                             int dim, torch::Tensor flx) {
+  auto peos = phydro->peos;
+
   int ivx, ivy;
   if (options->dir() == "xy") {
     ivx = dim == 3 ? 1 : 2;

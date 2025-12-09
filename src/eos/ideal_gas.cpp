@@ -6,18 +6,14 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 #include "eos_dispatch.hpp"
 #include "ideal_gas.hpp"
 
 namespace snap {
 
-IdealGasImpl::IdealGasImpl(EquationOfStateOptions const &options_)
-    : EquationOfStateImpl(options_) {
-  reset();
-}
-
 void IdealGasImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
   pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
 }
 
@@ -70,7 +66,7 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto out = cons.narrow(0, IVX, 3);
   torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  pcoord->vec_lower_(out);
+  if (phydro) phydro->pcoord->vec_lower_(out);
 
   // KE
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);

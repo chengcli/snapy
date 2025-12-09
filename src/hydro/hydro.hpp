@@ -23,6 +23,8 @@
 
 namespace snap {
 
+class MeshBlockImpl;
+
 struct HydroOptionsImpl {
   static std::shared_ptr<HydroOptionsImpl> create() {
     return std::make_shared<HydroOptionsImpl>();
@@ -77,8 +79,8 @@ struct HydroOptionsImpl {
 
   ADD_ARG(SedHydroOptions, sed) = nullptr;
 };
-using HydroOptions = std::shared_ptr<HydroOptionsImpl>;
 
+using HydroOptions = std::shared_ptr<HydroOptionsImpl>;
 using Variables = std::map<std::string, torch::Tensor>;
 
 class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
@@ -100,9 +102,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! options with which this `Hydro` was constructed
   HydroOptions options;
 
-  //! concrete submodules
-  EquationOfState peos = nullptr;
+  //! non-owning reference to parent
+  MeshBlockImpl const* pmb = nullptr;
+
+  //! owning submodules
   Coordinate pcoord = nullptr;
+  EquationOfState peos = nullptr;
   RiemannSolver priemann = nullptr;
   PrimitiveProjector pproj = nullptr;
 
@@ -119,7 +124,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   //! Constructor to initialize the layers
   HydroImpl() = default;
-  explicit HydroImpl(const HydroOptions& options_);
+  explicit HydroImpl(const HydroOptions& options_,
+                     torch::nn::Module* p = nullptr);
   void reset() override;
 
   virtual double max_time_step(torch::Tensor hydro_w,
@@ -133,7 +139,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   std::vector<std::string> register_forcings_module();
 
  private:
-  MeshBlockImpl const* _pmb = nullptr;
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 

@@ -16,7 +16,11 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
 
   // Constructor to initialize the layers
   IdealMoistImpl() = default;
-  explicit IdealMoistImpl(EquationOfStateOptions const& options_);
+  explicit IdealMoistImpl(EquationOfStateOptions const& options_,
+                          torch::nn::Module* p = nullptr)
+      : EquationOfStateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   // void pretty_print(std::ostream& os) const override;
   using EquationOfStateImpl::forward;

@@ -195,8 +195,8 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     start1 = nghost * (1 - is_ghost);
     len1 = nghost;
   } else if (o1 == 0) {
-    start1 = nghost;
-    len1 = nx1 + opts.extend_x1();
+    start1 = nghost - opts.extend_x1();
+    len1 = nx1 + 2 * opts.extend_x1();
   } else {  // o1 == 1
     start1 = nghost * is_ghost + nx1;
     len1 = nghost;
@@ -209,8 +209,8 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     start2 = nghost * (1 - is_ghost);
     len2 = nghost;
   } else if (o2 == 0) {
-    start2 = nghost;
-    len2 = nx2 + opts.extend_x2();
+    start2 = nghost - opts.extend_x2();
+    len2 = nx2 + 2 * opts.extend_x2();
   } else {  // o2 == 1
     start2 = nghost * is_ghost + nx2;
     len2 = nghost;
@@ -223,8 +223,8 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
     start3 = nghost * (1 - is_ghost);
     len3 = nghost;
   } else if (o3 == 0) {
-    start3 = nghost;
-    len3 = nx3 + opts.extend_x3();
+    start3 = nghost - opts.extend_x3();
+    len3 = nx3 + 2 * opts.extend_x3();
   } else {  // o3 == 1
     start3 = nghost * is_ghost + nx3;
     len3 = nghost;

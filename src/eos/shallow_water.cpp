@@ -3,16 +3,11 @@
 
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 namespace snap {
 
-ShallowWaterImpl::ShallowWaterImpl(EquationOfStateOptions const &options_)
-    : EquationOfStateImpl(options_) {
-  reset();
-}
-
-void ShallowWaterImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
-}
+void ShallowWaterImpl::reset() {}
 
 torch::Tensor ShallowWaterImpl::compute(
     std::string ab, std::vector<torch::Tensor> const &args) {
@@ -39,13 +34,13 @@ torch::Tensor ShallowWaterImpl::compute(
 void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
 
-  prim[Index::IDN] = cons[Index::IDN];
+  prim[IDN] = cons[IDN];
 
   // lvalue view
-  auto out = prim.narrow(0, Index::IVX, 3);
-  torch::div_out(out, cons.narrow(0, Index::IVX, 3), cons[Index::IDN]);
+  auto out = prim.narrow(0, IVX, 3);
+  torch::div_out(out, cons.narrow(0, IVX, 3), cons[IDN]);
 
-  pcoord->vec_raise_(prim);
+  if (phydro) phydro->pcoord->vec_raise_(prim);
 
   apply_primitive_limiter_(prim);
 }
@@ -53,19 +48,19 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
 
-  cons[Index::IDN] = prim[Index::IDN];
+  cons[IDN] = prim[IDN];
 
   // lvalue view
-  auto out = cons.narrow(0, Index::IVX, 3);
-  torch::mul_out(out, prim.narrow(0, Index::IVX, 3), prim[Index::IDN]);
+  auto out = cons.narrow(0, IVX, 3);
+  torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  pcoord->vec_lower_(cons);
+  if (phydro) phydro->pcoord->vec_lower_(cons);
 
   apply_conserved_limiter_(cons);
 }
 
 torch::Tensor ShallowWaterImpl::_gravity_wave_speed(torch::Tensor prim) const {
-  return torch::sqrt(prim[Index::IDN]);
+  return torch::sqrt(prim[IDN]);
 }
 
 }  // namespace snap
