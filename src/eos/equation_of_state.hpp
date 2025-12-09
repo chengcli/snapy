@@ -70,7 +70,7 @@ class EquationOfStateImpl {
   EquationOfStateOptions options;
 
   //! non-owning reference to parent
-  HydroImpl const* phydro;
+  HydroImpl const* phydro = nullptr;
 
   EquationOfStateImpl() : options(EquationOfStateOptionsImpl::create()) {}
   explicit EquationOfStateImpl(EquationOfStateOptions const& options_,
