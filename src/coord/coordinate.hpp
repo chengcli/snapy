@@ -88,7 +88,7 @@ class CoordinateImpl {
   CoordinateOptions options;
 
   //! non-owning reference to parent
-  HydroImpl const *phydro;
+  HydroImpl const *phydro = nullptr;
 
   CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
   explicit CoordinateImpl(const CoordinateOptions &options_,
