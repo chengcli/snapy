@@ -144,7 +144,8 @@ void GnomonicEquiangleImpl::reset() {
   }
 
   // register local ghost cell usrc
-  usrc_LR = register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx2()));
+  usrc_LR =
+      register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx2()).clone());
   usrc_LR += 1 - offset_y;
 
   usrc_BT = register_buffer(
@@ -180,15 +181,17 @@ void GnomonicEquiangleImpl::fill_ghost(
   auto pmb = phydro->pmb;
   if (!pmb) return;
 
-  auto sub = pmb->part(offset, PartOptions().exterior(true));
+  auto sub = pmb->part(offset, PartOptions().exterior(true).ndim(var.dim()));
 
   if (x3_offset != 0 && x2_offset == 0) {
-    auto sub1 = pmb->part(offset, PartOptions().exterior(true).extend_x2(1));
+    auto sub1 = pmb->part(
+        offset, PartOptions().exterior(true).extend_x2(1).ndim(var.dim()));
     var.index(sub) = _fill_ghost_LR(var.index(sub1), x3_offset > 0);
   }
 
   if (x2_offset != 0 && x3_offset == 0) {
-    auto sub1 = pmb->part(offset, PartOptions().exterior(true).extend_x3(1));
+    auto sub1 = pmb->part(
+        offset, PartOptions().exterior(true).extend_x3(1).ndim(var.dim()));
     var.index(sub) = _fill_ghost_BT(var.index(sub1), x2_offset > 0);
   }
 }
@@ -524,8 +527,14 @@ torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
   auto uu = ul + 1;
   auto weight = usrc_t.view(vec) - ul;
 
-  auto bufl = buf.gather(-2, ul.expand_as(buf));
-  auto bufu = buf.gather(-2, uu.expand_as(buf));
+  // set the correct output dimensions
+  vec.back() = buf.size(-1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec[n] = buf.size(n);
+  }
+
+  auto bufl = buf.gather(-2, ul.expand(vec));
+  auto bufu = buf.gather(-2, uu.expand(vec));
 
   return weight * bufu + (1.0 - weight) * bufl;
 }
@@ -544,8 +553,14 @@ torch::Tensor GnomonicEquiangleImpl::_fill_ghost_BT(torch::Tensor buf,
   auto uu = ul + 1;
   auto weight = usrc_t.view(vec) - ul;
 
-  auto bufl = buf.gather(-3, ul.expand_as(buf));
-  auto bufu = buf.gather(-3, uu.expand_as(buf));
+  // set the correct output dimensions
+  vec.back() = buf.size(-1);
+  for (int n = 0; n < buf.dim() - 3; n++) {
+    vec[n] = buf.size(n);
+  }
+
+  auto bufl = buf.gather(-3, ul.expand(vec));
+  auto bufu = buf.gather(-3, uu.expand(vec));
 
   return weight * bufu + (1.0 - weight) * bufl;
 

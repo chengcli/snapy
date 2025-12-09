@@ -13,9 +13,8 @@
 using namespace snap;
 
 TEST(GnomonicEquiangle, area_vol) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml", true);
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
   auto block = MeshBlock(op);
-  std::cout << "aaa" << std::endl;
 
   auto pcoord = block->phydro->pcoord;
   auto area1 = pcoord->face_area1();
@@ -125,8 +124,6 @@ TEST_P(DeviceTest, interpolate_LR) {
   for (int k = 0; k < buf.size(0); ++k)
     for (int j = 0; j < buf.size(1); ++j)
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
-
-  std::cout << "buf shape = " << buf.sizes() << std::endl;
 
   std::cout << "var before = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
