@@ -25,7 +25,10 @@ class GnomonicEquiangleImpl
 
   GnomonicEquiangleImpl() = default;
   explicit GnomonicEquiangleImpl(const CoordinateOptions& options_,
-                                 torch::nn::Module* p = nullptr);
+                                 torch::nn::Module* p = nullptr)
+      : CoordinateImpl(options_, p) {
+    reset();
+  }
   void reset() override;
   void pretty_print(std::ostream& stream) const override {
     stream << "GnomonicEquiangle coordinate:" << std::endl;

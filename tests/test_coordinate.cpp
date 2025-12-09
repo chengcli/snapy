@@ -13,8 +13,9 @@
 using namespace snap;
 
 TEST(GnomonicEquiangle, area_vol) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml", true);
   auto block = MeshBlock(op);
+  std::cout << "aaa" << std::endl;
 
   auto pcoord = block->phydro->pcoord;
   auto area1 = pcoord->face_area1();

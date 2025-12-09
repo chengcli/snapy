@@ -70,7 +70,7 @@ class EquationOfStateImpl {
   EquationOfStateOptions options;
 
   //! non-owning reference to parent
-  std::weak_ptr<HydroImpl const> parent;
+  HydroImpl const* phydro;
 
   EquationOfStateImpl() : options(EquationOfStateOptionsImpl::create()) {}
   explicit EquationOfStateImpl(EquationOfStateOptions const& options_,

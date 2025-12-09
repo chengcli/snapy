@@ -54,9 +54,7 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
 EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
                                          torch::nn::Module* p)
     : options(options_) {
-  if (p) {
-    parent = std::dynamic_pointer_cast<HydroImpl const>(p->shared_from_this());
-  }
+  phydro = dynamic_cast<HydroImpl const*>(p);
 }
 
 torch::Tensor EquationOfStateImpl::compute(
@@ -77,7 +75,6 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
-  auto phydro = parent.lock();
   if (!phydro) return;
   auto pcoord = phydro->pcoord;
 

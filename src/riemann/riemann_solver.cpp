@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/hydro/hydro.hpp>
+
 #include "riemann_solver.hpp"
 
 namespace snap {
@@ -23,6 +25,12 @@ RiemannSolverOptions RiemannSolverOptionsImpl::from_yaml(
   op->dir() = node["dir"].as<std::string>("omni");
 
   return op;
+}
+
+RiemannSolverImpl::RiemannSolverImpl(const RiemannSolverOptions& options_,
+                                     torch::nn::Module* p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
 }
 
 torch::Tensor RiemannSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,

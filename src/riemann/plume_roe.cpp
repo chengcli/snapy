@@ -39,13 +39,11 @@ static torch::Tensor lax_friedrichs_flux(torch::Tensor const& priml,
 }
 
 void PlumeRoeSolverImpl::reset() {
-  auto phydro = parent.lock();
   TORCH_CHECK(phydro, "[PlumeRoeSolver] parent is nullptr");
 }
 
 torch::Tensor PlumeRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                           int dim, torch::Tensor flx) {
-  auto phydro = parent.lock();
   auto peos = phydro->peos;
 
   if (dim != 1) {

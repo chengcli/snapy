@@ -5,13 +5,6 @@
 
 namespace snap {
 
-CartesianImpl::CartesianImpl(const CoordinateOptions &options_,
-                             torch::nn::Module *p)
-    : CoordinateImpl(options_) {
-  parent = std::dynamic_pointer_cast<HydroImpl const>(p->shared_from_this());
-  reset();
-}
-
 void CartesianImpl::reset() {
   auto const &op = options;
 

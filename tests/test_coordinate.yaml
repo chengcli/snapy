@@ -8,6 +8,7 @@ species:
     cv_R: 2.5
 
 dynamics:
+  verbose: true
   equation-of-state:
     type: ideal-gas
 

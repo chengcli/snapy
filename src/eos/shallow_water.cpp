@@ -32,7 +32,6 @@ torch::Tensor ShallowWaterImpl::compute(
 }
 
 void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  auto phydro = parent.lock();
   apply_conserved_limiter_(cons);
 
   prim[IDN] = cons[IDN];
@@ -47,7 +46,6 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 }
 
 void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  auto phydro = parent.lock();
   apply_primitive_limiter_(prim);
 
   cons[IDN] = prim[IDN];

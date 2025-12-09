@@ -11,13 +11,11 @@ torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState peos) {
 }
 
 void RoeSolverImpl::reset() {
-  auto phydro = parent.lock();
   TORCH_CHECK(phydro, "[RoeSolver] parent is nullptr");
 }
 
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                      int dim, torch::Tensor flx) {
-  auto phydro = parent.lock();
   auto peos = phydro->peos;
 
   // dim, ivx, ivy, ivz

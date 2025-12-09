@@ -57,8 +57,6 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
 }
 
 void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  auto phydro = parent.lock();
-
   apply_primitive_limiter_(prim);
 
   // den -> den

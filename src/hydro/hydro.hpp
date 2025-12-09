@@ -103,7 +103,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   HydroOptions options;
 
   //! non-owning reference to parent
-  std::weak_ptr<MeshBlockImpl const> parent;
+  MeshBlockImpl const* pmb;
 
   //! owning submodules
   Coordinate pcoord = nullptr;

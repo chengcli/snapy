@@ -13,10 +13,7 @@ namespace snap {
 
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
     : options(options_) {
-  if (p) {
-    parent =
-        std::dynamic_pointer_cast<MeshBlockImpl const>(p->shared_from_this());
-  }
+  pmb = dynamic_cast<MeshBlockImpl const*>(p);
   reset();
 }
 
@@ -193,8 +190,6 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
-  auto pmb = parent.lock();
-
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
@@ -262,7 +257,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       Variables sync_vars;
       sync_vars["hydro_wl"] = wtmp[ILT];
       sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(pmb.get(), sync_vars, sync_opts);
+      playout->forward(pmb, sync_vars, sync_opts);
     }
 
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
@@ -292,7 +287,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       Variables sync_vars;
       sync_vars["hydro_wl"] = wtmp[ILT];
       sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(pmb.get(), sync_vars, sync_opts);
+      playout->forward(pmb, sync_vars, sync_opts);
     }
 
     auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;

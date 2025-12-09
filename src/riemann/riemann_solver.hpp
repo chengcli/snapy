@@ -61,12 +61,11 @@ class RiemannSolverImpl {
   RiemannSolverOptions options;
 
   //! non-owning reference to parent
-  std::weak_ptr<HydroImpl const> parent;
+  HydroImpl const* phydro;
 
   RiemannSolverImpl() : options(RiemannSolverOptionsImpl::create()) {}
   explicit RiemannSolverImpl(const RiemannSolverOptions& options_,
-                             torch::nn::Module* p = nullptr)
-      : options(options_) {}
+                             torch::nn::Module* p = nullptr);
   virtual ~RiemannSolverImpl() = default;
 
   //! Solver the Riemann problem

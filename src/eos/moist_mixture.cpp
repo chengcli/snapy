@@ -80,8 +80,6 @@ torch::Tensor MoistMixtureImpl::compute(
 }
 
 void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  auto phydro = parent.lock();
-
   apply_primitive_limiter_(prim);
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
@@ -111,8 +109,6 @@ void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 }
 
 void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  auto phydro = parent.lock();
-
   apply_conserved_limiter_(cons);
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
@@ -166,8 +162,6 @@ torch::Tensor MoistMixtureImpl::_prim2temp(torch::Tensor prim) {
 }
 
 torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {
-  auto phydro = parent.lock();
-
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
@@ -191,8 +185,6 @@ torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {
 }
 
 torch::Tensor MoistMixtureImpl::_cons2ke(torch::Tensor cons) {
-  auto phydro = parent.lock();
-
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
   auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);

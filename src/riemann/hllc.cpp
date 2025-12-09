@@ -9,8 +9,6 @@
 namespace snap {
 
 void HLLCSolverImpl::reset() {
-  auto phydro = parent.lock();
-
   TORCH_CHECK(phydro, "[HLLCSolver] phydro is nullptr");
   auto pcoord = phydro->pcoord;
 
@@ -29,7 +27,6 @@ void HLLCSolverImpl::reset() {
 
 torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                       int dim, torch::Tensor flx) {
-  auto phydro = parent.lock();
   auto pcoord = phydro->pcoord;
   auto peos = phydro->peos;
 

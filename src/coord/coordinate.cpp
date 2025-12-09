@@ -128,8 +128,11 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   return op;
 }
 
-CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_)
+CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
+                               torch::nn::Module* p)
     : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+
   auto const& op = options;
 
   auto dx = (op->x1max() - op->x1min()) / op->nx1();

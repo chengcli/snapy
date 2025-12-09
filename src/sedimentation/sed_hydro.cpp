@@ -10,14 +10,11 @@ namespace snap {
 SedHydroImpl::SedHydroImpl(SedHydroOptions const& options_,
                            torch::nn::Module* p)
     : options(options_) {
-  if (p) {
-    parent = std::dynamic_pointer_cast<HydroImpl const>(p->shared_from_this());
-  }
+  phydro = dynamic_cast<HydroImpl const*>(p);
   reset();
 }
 
 void SedHydroImpl::reset() {
-  auto phydro = parent.lock();
   TORCH_CHECK(phydro, "Parent Hydro module is nullptr");
 
   psedvel = SedVelImpl::create(options->sedvel(), this);
@@ -30,7 +27,6 @@ void SedHydroImpl::reset() {
 
 torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
                                     torch::optional<torch::Tensor> out) {
-  auto phydro = parent.lock();
   auto pcoord = phydro->pcoord;
   auto peos = phydro->peos;
 

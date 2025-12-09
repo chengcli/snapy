@@ -9,13 +9,11 @@
 namespace snap {
 
 void ShallowRoeSolverImpl::reset() {
-  auto phydro = parent.lock();
   TORCH_CHECK(phydro, "[ShallowRoeSolver] parent is nullptr");
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                             int dim, torch::Tensor flx) {
-  auto phydro = parent.lock();
   auto peos = phydro->peos;
 
   int ivx, ivy;

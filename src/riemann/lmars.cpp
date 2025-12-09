@@ -9,8 +9,6 @@
 namespace snap {
 
 void LmarsSolverImpl::reset() {
-  auto phydro = parent.lock();
-
   TORCH_CHECK(phydro, "[LmarsSolver] phydro is nullptr");
   auto pcoord = phydro->pcoord;
 
@@ -29,7 +27,6 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
-  auto phydro = parent.lock();
   auto pcoord = phydro->pcoord;
   auto peos = phydro->peos;
 
