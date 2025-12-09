@@ -189,7 +189,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   // implicit options
   op->icorr() = ImplicitOptionsImpl::from_yaml(filename);
   if (op->icorr()) {
-    op->icorr()->coord() = op->coord();
     op->icorr()->grav() = op->grav();
 
     if (verbose) {

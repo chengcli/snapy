@@ -6,7 +6,6 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/coord/coordinate.hpp>
 #include <snap/forcing/forcing.hpp>
 
 // arg
@@ -41,9 +40,11 @@ struct ImplicitOptionsImpl {
 
   //! submodules options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
-  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
 using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
+
+class HydroImpl;
+class ImplicitCorrectionImpl;
 
 class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
  public:
@@ -64,12 +65,13 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   //! options with which this `ImplicitHydro` was constructed
   ImplicitOptions options;
 
-  //! submodules
-  Coordinate pcoord = nullptr;
+  //! non-owning pointer to parent
+  ImplicitCorrectionImpl const* picorr = nullptr;
 
   //! Constructor to initialize the layer
   ImplicitHydroImpl() : options(ImplicitOptionsImpl::create()) {}
-  explicit ImplicitHydroImpl(ImplicitOptions options);
+  explicit ImplicitHydroImpl(ImplicitOptions const& options,
+                             torch::nn::Module* p = nullptr);
   void reset() override;
 
   torch::Tensor diffusion_matrix(torch::Tensor wlr, torch::Tensor gamma,
@@ -102,12 +104,16 @@ class ImplicitCorrectionImpl
   //! options with which this `ImplicitCorrection` was constructed
   ImplicitOptions options;
 
+  //! non-owning pointer to parent
+  HydroImpl const* phydro = nullptr;
+
   //! submodules
   ImplicitHydro pvic = nullptr;
 
   //! Constructor to initialize the layer
   ImplicitCorrectionImpl() : options(ImplicitOptionsImpl::create()) {}
-  explicit ImplicitCorrectionImpl(ImplicitOptions options);
+  explicit ImplicitCorrectionImpl(ImplicitOptions const& options,
+                                  torch::nn::Module* p = nullptr);
   void reset() override;
 
   //! corrector for the implicit hydro

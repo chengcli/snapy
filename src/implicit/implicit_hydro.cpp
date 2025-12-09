@@ -7,13 +7,17 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/hydro.hpp>
+
 #include "implicit.hpp"
 #include "implicit_dispatch.hpp"
 
 namespace snap {
 
-ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions options_)
+ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions const& options_,
+                                     torch::nn::Module* p)
     : options(options_) {
+  picorr = dynamic_cast<ImplicitCorrectionImpl const*>(p);
   reset();
 }
 
@@ -21,12 +25,14 @@ void ImplicitHydroImpl::reset() {
   if (!options->grav()) {
     options->grav() = ConstGravityOptionsImpl::create();
   }
-  pcoord = CoordinateImpl::create(options->coord(), this);
+  TORCH_CHECK(picorr, "Parent module is null");
 }
 
 torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
                                                   torch::Tensor gamma,
                                                   int dim) {
+  auto pcoord = picorr->phydro->pcoord;
+
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
   int nc3 = pcoord->options->nc3();
@@ -81,6 +87,8 @@ torch::Tensor ImplicitHydroImpl::diffusion_matrix(torch::Tensor wlr,
 
 torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w,
                                                torch::Tensor gamma, int dim) {
+  auto pcoord = picorr->phydro->pcoord;
+
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
   int nc3 = pcoord->options->nc3();
@@ -115,6 +123,8 @@ torch::Tensor ImplicitHydroImpl::flux_jacobian(torch::Tensor w,
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 ImplicitHydroImpl::forward(torch::Tensor w, torch::Tensor gamma,
                            torch::Tensor wlr, int dim) {
+  auto pcoord = picorr->phydro->pcoord;
+
   auto A = diffusion_matrix(wlr, gamma, dim);
   auto B = flux_jacobian(w, gamma, dim);
 
@@ -179,7 +189,7 @@ std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(
     std::string const& name) {
   TORCH_CHECK(opts != nullptr, "ImplicitHydro options is nullptr");
   TORCH_CHECK(p != nullptr, "Parent module is nullptr");
-  return p->register_module(name, ImplicitHydro(opts));
+  return p->register_module(name, ImplicitHydro(opts, p));
 }
 
 }  // namespace snap
