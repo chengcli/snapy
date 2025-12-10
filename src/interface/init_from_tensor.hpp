@@ -24,6 +24,8 @@ template <typename T>
 void AthenaArray<T>::CopyFromTensor(torch::Tensor const& tensor) {
   if (tensor.dim() == 3) {
     copyFromTensor3D(tensor);
+  } else if (tensor.dim() == 2) {
+    copyFromTensor2D(tensor);
   } else {
     throw std::invalid_argument("Only 3D is supported");
   }
@@ -82,6 +84,30 @@ void AthenaArray<T>::copyFromTensor3D(torch::Tensor const& tensor) {
   torch::Tensor tmp =
       torch::from_blob(pdata_, {nx3_, nx2_, nx1_}, {str3, str2, str1}, nullptr,
                        torch::dtype(tensor.dtype()));
+  auto tmp1 = tensor.to(torch::kCPU);
+  tmp.copy_(tmp1);
+  state_ = DataStatus::allocated;
+}
+
+template <typename T>
+void AthenaArray<T>::copyFromTensor2D(torch::Tensor const& tensor) {
+  nx1_ = tensor.size(1);
+  nx2_ = tensor.size(0);
+  nx3_ = 1;
+  nx4_ = 1;
+  nx5_ = 1;
+  nx6_ = 1;
+
+  int64_t str1 = 1;
+  int64_t str2 = nx1_;
+  int64_t str3 = nx2_ * nx1_;
+
+  DeleteAthenaArray();  // clear existing memory
+  pdata_ = new T[str3];
+
+  // create a temporary tensor holder
+  torch::Tensor tmp = torch::from_blob(pdata_, {nx2_, nx1_}, {str2, str1},
+                                       nullptr, torch::dtype(tensor.dtype()));
   auto tmp1 = tensor.to(torch::kCPU);
   tmp.copy_(tmp1);
   state_ = DataStatus::allocated;

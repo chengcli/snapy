@@ -238,6 +238,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   int iaxis2[4] = {idt, idx1, idx2f, idx3};
   int iaxis3[4] = {idt, idx1, idx2, idx3f};
   int iaxisr[4] = {idt, iray, idx2, idx3};
+  int iaxis_23[3] = {idt, idx2, idx3};
   int *var_ids = new int[total_vars];
   int *ivar = var_ids;
 
@@ -286,6 +287,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
         nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis3, ivar);
       else if (grid == "--C")
         nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis, ivar);
+      else if (grid == "-CC")
+        nc_def_var(ifile, name.c_str(), NC_FLOAT, 3, iaxis_23, ivar);
       else if (grid == "--F")
         nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis1, ivar);
       else if (grid == "---")
@@ -319,6 +322,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   size_t count1[4] = {1, (size_t)nfaces1, (size_t)ncells2, (size_t)ncells3};
   size_t count2[4] = {1, (size_t)ncells1, (size_t)nfaces2, (size_t)ncells3};
   size_t count3[4] = {1, (size_t)ncells1, (size_t)ncells2, (size_t)nfaces3};
+  size_t count_23[3] = {1, (size_t)ncells2, (size_t)ncells3};
 
   float timef = current_time;
   nc_put_vara_float(ifile, ivt, start, count, &timef);
@@ -400,6 +404,13 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
         float *it = data;
         for (int i = out_is; i <= out_ie; ++i) *it++ = pdata->data(n, i);
         nc_put_vara_float(ifile, *ivar++, start, count, data);
+      }
+    } else if (grid == "-CC") {
+      for (int n = 0; n < nvar; n++) {
+        float *it = data;
+        for (int j = out_js; j <= out_je; ++j)
+          for (int k = out_ks; k <= out_ke; ++k) *it++ = pdata->data(n, k, j);
+        nc_put_vara_float(ifile, *ivar++, start, count_23, data);
       }
     } else if (grid == "--F") {
       for (int n = 0; n < nvar; n++) {

@@ -288,6 +288,9 @@ class AthenaArray {
 
   //! \brief copy from 3D torch::Tensor
   void copyFromTensor3D(torch::Tensor const &tensor);
+
+  //! \brief copy from 2D torch::Tensor
+  void copyFromTensor2D(torch::Tensor const &tensor);
 };
 
 // destructor

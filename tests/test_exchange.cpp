@@ -110,8 +110,7 @@ int main(int argc, char** argv) {
 
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  // set_zonal_velocity(block, vars["hydro_w"]);
-  w[IV3] = 1.0;
+  set_zonal_velocity(block, vars["hydro_w"]);
 
   block->initialize(vars);
 
