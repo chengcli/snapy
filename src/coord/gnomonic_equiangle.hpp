@@ -50,13 +50,6 @@ class GnomonicEquiangleImpl
       torch::Tensor const& vel,
       std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
 
-  void contra_to_cart_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-  void cart_to_contra_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-
   void prim2local1_(torch::Tensor const& wlr) const override;
   void prim2local2_(torch::Tensor const& wlr) const override;
   void prim2local3_(torch::Tensor const& wlr) const override;

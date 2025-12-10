@@ -24,13 +24,6 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
     print(stream);
   }
 
-  void contra_to_cart_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-  void cart_to_contra_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-
   torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                         torch::Tensor flux2, torch::Tensor flux3) override;
 };

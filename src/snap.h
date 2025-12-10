@@ -12,8 +12,11 @@ enum Index {
   IDN = 0,
   ICY = 1,
   IVX = 1 + NMASS,
+  IV1 = 1 + NMASS,
   IVY = 2 + NMASS,
+  IV2 = 2 + NMASS,
   IVZ = 3 + NMASS,
+  IV3 = 3 + NMASS,
   IPR = 4 + NMASS,
 
   // reconstruction variables
@@ -27,8 +30,11 @@ enum Index {
   // hydro variables
   IDN = 0,
   IVX = 1,
+  IV1 = 1,
   IVY = 2,
+  IV2 = 2,
   IVZ = 3,
+  IV3 = 3,
   IPR = 4,
   ICY = 5,
 
@@ -51,5 +57,6 @@ enum {
 };
 
 enum { VEL_Z = 0, VEL_X = 1, VEL_Y = 2 };
+enum { VEL_R = 0, VEL_T = 1, VEL_P = 2 };
 
 }  // namespace snap

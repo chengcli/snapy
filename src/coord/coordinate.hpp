@@ -184,16 +184,6 @@ class CoordinateImpl {
       torch::Tensor const &vel,
       std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
 
-  //! \brief Project contravariant velocities to cartesian velocities
-  virtual void contra_to_cart_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
-  //! \brief Deproject cartesian velocities to contravariant velocities
-  virtual void cart_to_contra_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
   virtual void prim2local1_(torch::Tensor const &prim) const {}
   virtual void prim2local2_(torch::Tensor const &prim) const {}
   virtual void prim2local3_(torch::Tensor const &prim) const {}

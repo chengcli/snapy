@@ -13,42 +13,6 @@ namespace snap {
 
 void SphericalPolarImpl::reset() {}
 
-void SphericalPolarImpl::cart_to_contra_(
-    torch::Tensor const& vel,
-    std::vector<torch::indexing::TensorIndex> const& sub) const {
-  auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
-
-  torch::Tensor phi, theta;
-
-  if (sub.size() > 0) {
-    phi = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-    theta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
-  } else {
-    phi = mesh[0];
-    theta = mesh[1];
-  }
-
-  sph_cart_to_contra_(vel, theta, phi);
-}
-
-void SphericalPolarImpl::contra_to_cart_(
-    torch::Tensor const& vel,
-    std::vector<torch::indexing::TensorIndex> const& sub) const {
-  auto mesh = torch::meshgrid({x3v, x2v, x1v}, /*indexing=*/"ij");
-
-  torch::Tensor phi, theta;
-
-  if (sub.size() > 0) {
-    phi = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-    theta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
-  } else {
-    phi = mesh[0];
-    theta = mesh[1];
-  }
-
-  sph_contra_to_cart_(vel, theta, phi);
-}
-
 torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
                                           torch::Tensor flux1,
                                           torch::Tensor flux2,

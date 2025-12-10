@@ -39,9 +39,6 @@
  *   Within deserialization, _cartesian_to_covariant() is called to convert
  *   Cartesian vector components back to covariant components.
  *
- *   These functions will use the coordinate information from the MeshBlock.
- *   Access the coordinate via `pmb->pcoord`.
- *
  *   The cell-centered angular coordinates are in `pcoord->x2v` and
  * `pcoord->x3v`. Consult src/coord/coordinate.hpp,
  * src/coord/gnomonic_equiangular.cpp, for more details.
@@ -59,6 +56,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/coordinate.hpp>
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "connectivity.hpp"
@@ -581,6 +579,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       }
   }
 
+  // get mesh
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+
   // Serialize over all inter-panel neighbors
   for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
     for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
@@ -611,6 +612,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
       bool flip_flag = (my_side % 2) == (nb_side % 2);
 
+      auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+      auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
 
@@ -618,10 +622,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         switch (opts.type()) {
           case kConserved:
             pcoord->vec_raise_(vel, sub);
-            pcoord->contra_to_cart_(vel, sub);
+            cs_contra_to_cart_(vel, alpha, beta);
             break;
           case kPrimitive:
-            pcoord->contra_to_cart_(vel, sub);
+            cs_contra_to_cart_(vel, alpha, beta);
             break;
         }
 
@@ -708,6 +712,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       }
   }
 
+  // get mesh
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+
   // Deserialize over all inter-panel neighbors
   for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
     for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
@@ -729,6 +736,10 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
+
+      auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
+      auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+
       for (auto &[name, var] : vars) {
         var.index_put_(sub, recv_bufs[bid][count]);
         if (opts.interpolate()) {
@@ -738,11 +749,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
           case kConserved:
-            pcoord->cart_to_contra_(vel, sub);
+            cs_cart_to_contra_(vel, alpha, beta);
             pcoord->vec_lower_(vel, sub);
             break;
           case kPrimitive:
-            pcoord->cart_to_contra_(vel, sub);
+            cs_cart_to_contra_(vel, alpha, beta);
             break;
         }
         count++;

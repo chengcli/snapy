@@ -5,11 +5,33 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/coord/cubed_sphere_utils.hpp>
+#include <snap/coord/spherical_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
 
-int main(int argc, char **argv) {
+// u = cos(lat)
+void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
+  auto pcoord = pmb->phydro->pcoord;
+  auto playout = pmb->get_layout();
+
+  int r = get_rank();
+  auto [rx, ry, face_id] = playout->loc_of(r);
+  auto face = CS_FACE_NAMES[face_id];
+
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[0];
+  auto beta = mesh[1];
+  auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+
+  hydro_w[IV3] = lat.cos();
+
+  // sph_contra_to_cart_(hydro_w.narrow(0, IV1, 3), M_PI / 2. - lat, lon);
+  // cs_cart_to_contra_(hydro_w.narrow(0, IV1, 3), alpha, beta);
+}
+
+int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
   auto block = MeshBlock(op);
 
@@ -88,6 +110,9 @@ int main(int argc, char **argv) {
 
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
+  // set_zonal_velocity(block, vars["hydro_w"]);
+  w[IV3] = 1.0;
+
   block->initialize(vars);
 
   block->get_layout()->pg->barrier()->wait();
