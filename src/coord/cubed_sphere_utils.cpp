@@ -108,8 +108,14 @@ void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t,
 std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
                                                         torch::Tensor alpha,
                                                         torch::Tensor beta) {
+  if (strcmp(face, "+Z") == 0) {
+    std::cout << "alpha = " << alpha << std::endl;
+    std::cout << "beta = " << beta << std::endl;
+  }
+
   auto x = alpha.tan();
   auto y = beta.tan();
+  auto r = (x * x + y * y + 1).sqrt();
 
   torch::Tensor lon, lat;
 
@@ -126,15 +132,11 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
     lon = alpha + 1.5 * M_PI;
     lat = (y / (1.0 + x * x).sqrt()).atan();
   } else if (strcmp(face, "+Z") == 0) {
-    lon = torch::where(x.abs() > DBL_EPSILON, torch::atan2(x, -y),
-                       torch::where(y <= 0.0, torch::zeros_like(alpha),
-                                    M_PI * torch::ones_like(alpha)));
-    lat = 0.5 * M_PI - (x * x + y * y).sqrt().atan();
+    lon = torch::atan2(x, -y);
+    lat = torch::asin(1. / r);
   } else if (strcmp(face, "-Z") == 0) {
-    lon = torch::where(x.abs() > DBL_EPSILON, torch::atan2(x, y),
-                       torch::where(y > 0.0, torch::zeros_like(alpha),
-                                    M_PI * torch::ones_like(alpha)));
-    lat = -0.5 * M_PI + (x * x + y * y).sqrt().atan();
+    lon = torch::atan2(x, y);
+    lat = -torch::asin(1. / r);
   }
 
   // Map to the interval [0, 2 pi]
