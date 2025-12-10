@@ -45,10 +45,10 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("x3f", x3f);
 
   // populate and register geometry data
-  auto x = x2v.tan().unsqueeze(0);
-  auto xf = x2f.tan().unsqueeze(0);
-  auto y = x3v.tan().unsqueeze(-1);
-  auto yf = x3f.tan().unsqueeze(-1);
+  auto x = x2v.tan().unsqueeze(0).unsqueeze(-1);
+  auto xf = x2f.tan().unsqueeze(0).unsqueeze(-1);
+  auto y = x3v.tan().unsqueeze(-1).unsqueeze(-1);
+  auto yf = x3f.tan().unsqueeze(-1).unsqueeze(-1);
 
   auto C = (1.0 + x * x).sqrt();
   auto Cf = (1.0 + xf * xf).sqrt();
@@ -71,8 +71,8 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("cosine_face3_kj", cosine_face3_kj);
   register_buffer("sine_face3_kj", sine_face3_kj);
 
-  auto x1 = x2f.slice(0, 0, op->nc2()).tan().unsqueeze(0);
-  auto x2 = x2f.slice(0, 1, op->nc2() + 1).tan().unsqueeze(0);
+  auto x1 = x2f.slice(0, 0, op->nc2()).tan().unsqueeze(0).unsqueeze(-1);
+  auto x2 = x2f.slice(0, 1, op->nc2() + 1).tan().unsqueeze(0).unsqueeze(-1);
 
   auto delta1 = (1. + x1 * x1 + y * y).sqrt();
   auto delta2 = (1. + x2 * x2 + y * y).sqrt();
@@ -85,8 +85,8 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("dx2f_ang_kj", dx2f_ang_kj);
   register_buffer("dx2f_ang_face3_kj", dx2f_ang_face3_kj);
 
-  auto y1 = x3f.slice(0, 0, op->nc3()).tan().unsqueeze(-1);
-  auto y2 = x3f.slice(0, 1, op->nc3() + 1).tan().unsqueeze(-1);
+  auto y1 = x3f.slice(0, 0, op->nc3()).tan().unsqueeze(-1).unsqueeze(-1);
+  auto y2 = x3f.slice(0, 1, op->nc3() + 1).tan().unsqueeze(-1).unsqueeze(-1);
 
   delta1 = (1. + x * x + y1 * y1).sqrt();
   delta2 = (1. + x * x + y2 * y2).sqrt();
@@ -99,8 +99,8 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("dx3f_ang_kj", dx3f_ang_kj);
   register_buffer("dx3f_ang_face2_kj", dx3f_ang_face2_kj);
 
-  auto fx = face_area2() * sine_face2_kj.unsqueeze(-1);
-  auto fy = face_area3() * sine_face3_kj.unsqueeze(-1);
+  auto fx = face_area2() * sine_face2_kj;
+  auto fy = face_area3() * sine_face3_kj;
 
   x_ov_rD_kji = (fx.slice(1, 1, op->nc2() + 1) - fx.slice(1, 0, op->nc2())) /
                 cell_volume();
@@ -155,22 +155,20 @@ void GnomonicEquiangleImpl::reset() {
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
   return (x1f * x1f).unsqueeze(0).unsqueeze(1) *
-         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
+         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj);
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area2() const {
-  return (x1v * dx1f).unsqueeze(0).unsqueeze(1) *
-         dx3f_ang_face2_kj.unsqueeze(-1);
+  return (x1v * dx1f).unsqueeze(0).unsqueeze(1) * dx3f_ang_face2_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area3() const {
-  return (x1v * dx1f).unsqueeze(0).unsqueeze(1) *
-         dx2f_ang_face3_kj.unsqueeze(-1);
+  return (x1v * dx1f).unsqueeze(0).unsqueeze(1) * dx2f_ang_face3_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
   return (x1v * x1v * dx1f).unsqueeze(0).unsqueeze(1) *
-         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
+         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj);
 }
 
 void GnomonicEquiangleImpl::interp_ghost(
@@ -198,8 +196,8 @@ void GnomonicEquiangleImpl::interp_ghost(
 
 // TODO(cli):: CHECK
 void GnomonicEquiangleImpl::_set_face2_metric() const {
-  auto cos_theta = cosine_face2_kj.unsqueeze(-1);
-  auto sin_theta = sine_face2_kj.unsqueeze(-1);
+  auto cos_theta = cosine_face2_kj;
+  auto sin_theta = sine_face2_kj;
 
   g11.set_(torch::ones_like(cos_theta));
   g22.set_(torch::ones_like(cos_theta));
@@ -213,8 +211,8 @@ void GnomonicEquiangleImpl::_set_face2_metric() const {
 
 // TODO(cli):: CHECK
 void GnomonicEquiangleImpl::_set_face3_metric() const {
-  auto cos_theta = cosine_face3_kj.unsqueeze(-1);
-  auto sin_theta = sine_face3_kj.unsqueeze(-1);
+  auto cos_theta = cosine_face3_kj;
+  auto sin_theta = sine_face3_kj;
 
   g11.set_(torch::ones_like(cos_theta));
   g22.set_(torch::ones_like(cos_theta));
@@ -227,8 +225,8 @@ void GnomonicEquiangleImpl::_set_face3_metric() const {
 }
 
 void GnomonicEquiangleImpl::prim2local1_(torch::Tensor const& w) const {
-  auto cos_theta = cosine_cell_kj.unsqueeze(-1);
-  auto sin_theta = sine_cell_kj.unsqueeze(-1);
+  auto cos_theta = cosine_cell_kj;
+  auto sin_theta = sine_cell_kj;
 
   w[IVY] += w[IVZ] * cos_theta;
   w[IVZ] *= sin_theta;
@@ -286,8 +284,8 @@ void GnomonicEquiangleImpl::prim2local3_(torch::Tensor const& w) const {
 
 // de-orthonormal and transforms to covariant form
 void GnomonicEquiangleImpl::flux2global1_(torch::Tensor const& flux) const {
-  auto cos_theta = cosine_cell_kj.unsqueeze(-1);
-  auto sin_theta = sine_cell_kj.unsqueeze(-1);
+  auto cos_theta = cosine_cell_kj;
+  auto sin_theta = sine_cell_kj;
 
   // Extract contravariant fluxes
   auto tz = flux[IVZ] / sin_theta;
@@ -318,15 +316,13 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   flux[IVY] = T22 * txy;
   flux[IVZ] = T32 * txy + T33 * txz;
 
-  auto cos_theta = cosine_face2_kj.unsqueeze(-1);
-
   // Extract contravariant fluxes
   auto ty = flux[IVY].clone();
   auto tz = flux[IVZ].clone();
 
   // Transform to covariant fluxes
-  flux[IVY] = ty + tz * cos_theta;
-  flux[IVZ] = tz + ty * cos_theta;
+  flux[IVY] = ty + tz * cosine_face2_kj;
+  flux[IVZ] = tz + ty * cosine_face2_kj;
 }
 
 // de-orthonormal and transforms to covariant form
@@ -349,15 +345,13 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   flux[IVY] = T22 * txy + T23 * txz;
   flux[IVZ] = T33 * txz;
 
-  auto cos_theta = cosine_face3_kj.unsqueeze(-1);
-
   // Extract contravariant fluxes
   auto ty = flux[IVY].clone();
   auto tz = flux[IVZ].clone();
 
   // Transform to covariant fluxes
-  flux[IVY] = ty + tz * cos_theta;
-  flux[IVZ] = tz + ty * cos_theta;
+  flux[IVY] = ty + tz * cosine_face3_kj;
+  flux[IVZ] = tz + ty * cosine_face3_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
@@ -366,8 +360,8 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
                                              torch::Tensor flux3) {
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
 
-  auto cosine = cosine_cell_kj.unsqueeze(-1);
-  auto sine2 = sine_cell_kj.square().unsqueeze(-1);
+  auto cosine = cosine_cell_kj;
+  auto sine2 = sine_cell_kj.square();
 
   // General variables
   auto v1 = prim[IVX];
@@ -424,6 +418,13 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_LR(torch::Tensor buf,
     vec[n] = buf.size(n);
   }
 
+  std::cout << "ul shape: " << ul.sizes() << std::endl;
+  std::cout << "vec = ";
+  for (auto v : vec) {
+    std::cout << v << " ";
+  }
+  std::cout << std::endl;
+
   auto bufl = buf.gather(-2, ul.expand(vec));
   auto bufu = buf.gather(-2, uu.expand(vec));
 
@@ -449,6 +450,13 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
   for (int n = 0; n < buf.dim() - 3; n++) {
     vec[n] = buf.size(n);
   }
+
+  std::cout << "ul shape: " << ul.sizes() << std::endl;
+  std::cout << "vec = ";
+  for (auto v : vec) {
+    std::cout << v << " ";
+  }
+  std::cout << std::endl;
 
   auto bufl = buf.gather(-3, ul.expand(vec));
   auto bufu = buf.gather(-3, uu.expand(vec));

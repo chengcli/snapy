@@ -10,31 +10,36 @@
 namespace snap {
 
 void coord_vec_lower_(torch::Tensor const& vel, torch::Tensor cth) {
-  torch::Tensor cosine_cell = cth;
-  if (cth.dim() < vel[IV2].dim()) {
-    cosine_cell = cth.unsqueeze(-1);
-  }
+  TORCH_CHECK(cth.dim() == vel[VEL2].dim(),
+              "coord_vec_lower_::cth has incompatible dimension with vel",
+              "Expected dim ", vel[VEL2].dim(), " but got ", cth.dim());
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
-                  .declare_static_shape(vel[IV2].sizes())
-                  .add_owned_output(vel[IV2])
-                  .add_owned_output(vel[IV3])
-                  .add_owned_input(cosine_cell.expand_as(vel[IV2]))
+                  .declare_static_shape(vel[VEL2].sizes())
+                  .add_owned_output(vel[VEL2])
+                  .add_owned_output(vel[VEL3])
+                  .add_owned_input(cth.expand_as(vel[VEL2]))
                   .build();
+
   at::native::call_coord_vec_lower(vel.device().type(), iter);
 }
 
 void coord_vec_raise_(torch::Tensor const& vel, torch::Tensor cth) {
+  TORCH_CHECK(cth.dim() == vel[VEL2].dim(),
+              "coord_vec_raise_::cth has incompatible dimension with vel",
+              "Expected dim ", vel[VEL2].dim(), " but got ", cth.dim());
+
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
-                  .declare_static_shape(vel[IV2].sizes())
-                  .add_owned_output(vel[IV2])
-                  .add_owned_output(vel[IV3])
-                  .add_owned_input(cth)
+                  .declare_static_shape(vel[VEL2].sizes())
+                  .add_owned_output(vel[VEL2])
+                  .add_owned_output(vel[VEL3])
+                  .add_owned_input(cth.expand_as(vel[VEL2]))
                   .build();
+
   at::native::call_coord_vec_raise(vel.device().type(), iter);
 }
 

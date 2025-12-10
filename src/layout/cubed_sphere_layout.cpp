@@ -621,9 +621,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         switch (opts.type()) {
           case kConserved:
-            coord_vec_raise_(
-                vel, pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(vara).index(
-                         sub3));
+            coord_vec_raise_(vel, pcoord->cosine_cell_kj.index(sub3));
             cs_contra_to_cart_(vel, alpha, beta);
             break;
           case kPrimitive:
@@ -753,9 +751,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         switch (opts.type()) {
           case kConserved:
             cs_cart_to_contra_(vel, alpha, beta);
-            coord_vec_lower_(
-                vel, pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(var).index(
-                         sub3));
+            coord_vec_lower_(vel, pcoord->cosine_cell_kj.index(sub3));
             break;
           case kPrimitive:
             cs_cart_to_contra_(vel, alpha, beta);

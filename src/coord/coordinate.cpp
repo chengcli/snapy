@@ -151,7 +151,7 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
   auto x3max = op->nx3() > 1 ? op->x3max() + op->nghost() * dx : op->x3max();
   x3f = torch::linspace(x3min, x3max, op->nc3() + 1, torch::kFloat64);
 
-  cosine_cell_kj = torch::zeros({op->nc3(), op->nc2()}, torch::kFloat64);
+  cosine_cell_kj = torch::zeros({op->nc3(), op->nc2(), 1}, torch::kFloat64);
 }
 
 void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {

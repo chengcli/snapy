@@ -93,8 +93,7 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
                   .declare_static_shape(prim.sizes(), /*squash_dims=*/0)
                   .add_output(prim)
                   .add_input(cons)
-                  .add_owned_input(
-                      pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(prim[IDN]))
+                  .add_owned_input(pcoord->cosine_cell_kj.expand_as(prim[IDN]))
                   .build();
 
   at::native::ideal_gas_cons2prim(cons.device().type(), iter, gammad);
