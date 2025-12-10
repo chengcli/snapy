@@ -10,6 +10,7 @@
 
 #include "coordinate.hpp"
 #include "gnomonic_equiangle.hpp"
+#include "spherical_polar.hpp"
 
 namespace snap {
 

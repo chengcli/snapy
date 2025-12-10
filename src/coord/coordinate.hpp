@@ -248,25 +248,6 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
 };
 TORCH_MODULE(Cylindrical);
 
-class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
-                           public CoordinateImpl {
- public:
-  using CoordinateImpl::forward;
-
-  SphericalPolarImpl() = default;
-  explicit SphericalPolarImpl(const CoordinateOptions &options_,
-                              torch::nn::Module *p = nullptr)
-      : CoordinateImpl(options_, p) {
-    reset();
-  }
-  void reset() override {}
-  void pretty_print(std::ostream &stream) const override {
-    stream << "SphericalPolar coordinate:" << std::endl;
-    print(stream);
-  }
-};
-TORCH_MODULE(SphericalPolar);
-
 IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
                         int extend_x1 = 0, int extend_x2 = 0,
                         int extend_x3 = 0);

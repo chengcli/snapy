@@ -1,4 +1,5 @@
 // C/C++
+#include <cfloat>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -97,6 +98,44 @@ void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t,
       usrc[(depth - 1) * N + j] = u_src;
     }
   }
+}
+
+std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
+                                                        torch::Tensor alpha,
+                                                        torch::Tensor beta) {
+  auto x = alpha.tan();
+  auto y = beta.tan();
+
+  torch::Tensor lon, lat;
+
+  if (strcmp(face, "+X") == 0) {
+    lon = alpha;
+    lat = atan(y / (1.0 + x * x).sqrt());
+  } else if (strcmp(face, "+Y") == 0) {
+    lon = alpha + 0.5 * M_PI;
+    lat = atan(y / (1.0 + x * x).sqrt());
+  } else if (strcmp(face, "-X") == 0) {
+    lon = alpha + M_PI;
+    lat = atan(y / (1.0 + x * x).sqrt());
+  } else if (strcmp(face, "-Y") == 0) {
+    lon = alpha + 1.5 * M_PI;
+    lat = atan(y / (1.0 + x * x).sqrt());
+  } else if (strcmp(face, "+Z") == 0) {
+    lon = torch::where(x.abs() > DBL_EPSILON, torch::atan2(x, -y),
+                       torch::where(y <= 0.0, torch::zeros_like(alpha),
+                                    M_PI * torch::ones_like(alpha)));
+    lat = 0.5 * M_PI - (x * x + y * y).sqrt().atan();
+  } else if (strcmp(face, "-Z") == 0) {
+    lon = torch::where(x.abs() > DBL_EPSILON, torch::atan2(x, y),
+                       torch::where(y > 0.0, torch::zeros_like(alpha),
+                                    M_PI * torch::ones_like(alpha)));
+    lat = -0.5 * M_PI + (x * x + y * y).sqrt().atan();
+  }
+
+  // Map to the interval [0, 2 pi]
+  lon += torch::where(lon < 0.0, 2.0 * M_PI, torch::zeros_like(lon));
+
+  return {lon, lat};
 }
 
 }  // namespace snap

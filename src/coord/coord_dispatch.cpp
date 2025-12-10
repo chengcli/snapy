@@ -7,7 +7,7 @@
 
 // snap
 #include "coord_dispatch.hpp"
-#include "cubed_sphere_interp_impl.h"
+#include "cubed_sphere_utils_impl.h"
 
 namespace snap {
 void call_cs_interp_LR_cpu(at::TensorIterator& iter, torch::Tensor usrc) {

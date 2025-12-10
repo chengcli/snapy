@@ -95,4 +95,8 @@ Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta);
 void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t = 0,
                          int side_t = 0);
 
+std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
+                                                        torch::Tensor alpha,
+                                                        torch::Tensor beta);
+
 }  // namespace snap

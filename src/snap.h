@@ -50,4 +50,6 @@ enum {
   kDPMassLR = 6,
 };
 
+enum { VEL_Z = 0, VEL_X = 1, VEL_Y = 2 };
+
 }  // namespace snap
