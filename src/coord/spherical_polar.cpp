@@ -74,12 +74,6 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
     m_ii += 2.0 * prim[IPR];
   }
 
-  // if (do_hydro_diffusion) {
-  //   m_ii += 0.5*(hd.visflx[X2DIR](IM2,k,j+1,i) +
-  //   hd.visflx[X2DIR](IM2,k,j,i)); m_ii += 0.5*(hd.visflx[X3DIR](IM3,k+1,j,i)
-  //   + hd.visflx[X3DIR](IM3,k,j,i));
-  // }
-
   div[IVX] += coord_src1_i * m_ii;
 
   // src_2 = -< M_{theta r} ><1/r>
@@ -102,10 +96,6 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
     m_pp += prim[IPR];
   }
 
-  // if (do_hydro_diffusion)
-  //   m_pp += 0.5*(hd.visflx[X3DIR](IM3,k+1,j,i) +
-  //   hd.visflx[X3DIR](IM3,k,j,i));
-
   div[IVY] += coord_src1_i * coord_src1_j * m_pp;
 
   // src_3 = -< M_{phi theta} ><cot theta/r>
@@ -116,11 +106,6 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
          face_area2(sj + 1, ej + 1) * flux2[IVZ].slice(DIM2, sj + 1, ej + 1));
   } else {
     auto m_ph = prim[IDN] * prim[IVZ] * prim[IVY];
-
-    // if (do_hydro_diffusion)
-    //   m_ph += 0.5*(hd.visflx[X2DIR](IM3,k,j+1,i) +
-    //   hd.visflx[X2DIR](IM3,k,j,i));
-
     div[IVZ] -= coord_src1_i * coord_src3_j * m_ph;
   }
 
