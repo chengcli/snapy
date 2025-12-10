@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/eos/aneos.hpp>
 #include <snap/eos/ideal_gas.hpp>
 #include <snap/eos/ideal_moist.hpp>
@@ -55,6 +56,7 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
                                          torch::nn::Module* p)
     : options(options_) {
   phydro = dynamic_cast<HydroImpl const*>(p);
+  TORCH_CHECK(phydro, "[EquationOfState] Parent module is null.");
 }
 
 torch::Tensor EquationOfStateImpl::compute(
@@ -75,7 +77,6 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
-  if (!phydro) return;
   auto pcoord = phydro->pcoord;
 
   if (!options->limiter()) return;  // no limiter
@@ -94,7 +95,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
 
   auto mom = cons.narrow(0, IVX, 3).clone();
-  pcoord->vec_raise_(mom);
+  coord_vec_raise_(mom, pcoord->cosine_cell_kj);
 
   auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / cons[IDN];
   auto min_temp = options->temperature_floor() * torch::ones_like(ke);

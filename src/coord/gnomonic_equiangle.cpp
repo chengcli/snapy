@@ -173,7 +173,7 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj).unsqueeze(-1);
 }
 
-void GnomonicEquiangleImpl::fill_ghost(
+void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   if (!phydro) return;
 
@@ -186,46 +186,14 @@ void GnomonicEquiangleImpl::fill_ghost(
   if (x3_offset != 0 && x2_offset == 0) {
     auto sub1 = pmb->part(
         offset, PartOptions().exterior(true).extend_x2(1).ndim(var.dim()));
-    var.index(sub) = _fill_ghost_LR(var.index(sub1), x3_offset > 0);
+    var.index(sub) = _interp_ghost_LR(var.index(sub1), x3_offset > 0);
   }
 
   if (x2_offset != 0 && x3_offset == 0) {
     auto sub1 = pmb->part(
         offset, PartOptions().exterior(true).extend_x3(1).ndim(var.dim()));
-    var.index(sub) = _fill_ghost_BT(var.index(sub1), x2_offset > 0);
+    var.index(sub) = _interp_ghost_BT(var.index(sub1), x2_offset > 0);
   }
-}
-
-void GnomonicEquiangleImpl::vec_lower_(
-    torch::Tensor const& vel,
-    std::vector<torch::indexing::TensorIndex> const& sub) const {
-  auto v = vel[VEL_X].clone();
-  auto w = vel[VEL_Y].clone();
-
-  auto cth =
-      sub.size() > 0
-          ? cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0)
-          : cosine_cell_kj.unsqueeze(-1);
-
-  vel[VEL_X] = v + w * cth;
-  vel[VEL_Y] = w + v * cth;
-}
-
-void GnomonicEquiangleImpl::vec_raise_(
-    torch::Tensor const& vel,
-    std::vector<torch::indexing::TensorIndex> const& sub) const {
-  auto v = vel[VEL_X].clone();
-  auto w = vel[VEL_Y].clone();
-
-  auto cth =
-      sub.size() > 0
-          ? cosine_cell_kj.unsqueeze(-1).unsqueeze(0).index(sub).squeeze(0)
-          : cosine_cell_kj.unsqueeze(-1);
-
-  auto sth2 = 1. - cth * cth;
-
-  vel[VEL_X] = v / sth2 - w * cth / sth2;
-  vel[VEL_Y] = -v * cth / sth2 + w / sth2;
 }
 
 // TODO(cli):: CHECK
@@ -436,8 +404,8 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   return div;
 }
 
-torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
-                                                    bool flip) const {
+torch::Tensor GnomonicEquiangleImpl::_interp_ghost_LR(torch::Tensor buf,
+                                                      bool flip) const {
   auto usrc_t = flip ? usrc_LR : usrc_LR.flip(0);
 
   auto vec = usrc_t.sizes().vec();
@@ -462,8 +430,8 @@ torch::Tensor GnomonicEquiangleImpl::_fill_ghost_LR(torch::Tensor buf,
   return weight * bufu + (1.0 - weight) * bufl;
 }
 
-torch::Tensor GnomonicEquiangleImpl::_fill_ghost_BT(torch::Tensor buf,
-                                                    bool flip) const {
+torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
+                                                      bool flip) const {
   auto usrc_t = flip ? usrc_BT : usrc_BT.flip(1);
 
   auto vec = usrc_t.sizes().vec();

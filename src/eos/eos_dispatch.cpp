@@ -6,6 +6,8 @@
 #include <torch/torch.h>
 
 // snap
+#include <snap/coord/coord_utils.hpp>
+
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
 // #include "ideal_moist_impl.h"
@@ -23,7 +25,9 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, double gammad) {
           for (int i = 0; i < n; i++) {
             auto prim = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto cons = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            ideal_gas_cons2prim(prim, cons, gammad, stride);
+            auto cos_theta =
+                reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+            ideal_gas_cons2prim(prim, cons, cos_theta, gammad, stride);
           }
         },
         grain_size);
@@ -33,6 +37,7 @@ void ideal_gas_cons2prim_cpu(at::TensorIterator& iter, double gammad) {
 void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   auto prim = iter.output();
   auto cons = iter.input(0);
+  auto cos_theta = iter.input(1);
 
   // den -> den
   prim[IDN] = cons[IDN];
@@ -40,7 +45,7 @@ void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   // mom -> vel
   prim.narrow(0, IVX, 3) = cons.narrow(0, IVX, 3) / prim[IDN];
 
-  // pcoord->vec_raise_(prim);
+  coord_vec_raise_(prim.narrow(0, IVX, 3), cos_theta);
 
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
 

@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 // snap
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/gnomonic_equiangle.hpp>
@@ -57,8 +58,8 @@ TEST_P(DeviceTest, vec_lower_raise) {
   auto vel = torch::ones({3, nc3, nc2, nc1},
                          torch::TensorOptions().dtype(dtype).device(device));
 
-  pcoord->vec_lower_(vel);
-  pcoord->vec_raise_(vel);
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
+  coord_vec_raise_(vel, pcoord->cosine_cell_kj);
 
   EXPECT_TRUE(torch::allclose(vel, torch::ones_like(vel)));
 }
@@ -131,7 +132,7 @@ TEST_P(DeviceTest, interpolate_LR) {
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {-1, 0, 0});
+  pcoord->interp_ghost(var, {-1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -146,7 +147,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {1, 0, 0});
+  pcoord->interp_ghost(var, {1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -161,7 +162,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {0, -1, 0});
+  pcoord->interp_ghost(var, {0, -1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -176,7 +177,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {0, 1, 0});
+  pcoord->interp_ghost(var, {0, 1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;

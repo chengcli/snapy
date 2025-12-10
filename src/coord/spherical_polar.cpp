@@ -11,7 +11,13 @@
 
 namespace snap {
 
-void SphericalPolarImpl::reset() {}
+void SphericalPolarImpl::reset() {
+  // register buffers defined in the base class
+  register_buffer("x1f", x1f);
+  register_buffer("x2f", x2f);
+  register_buffer("x3f", x3f);
+  register_buffer("cosine_cell_kj", cosine_cell_kj);
+}
 
 torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
                                           torch::Tensor flux1,

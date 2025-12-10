@@ -1,6 +1,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 
 #include "sedimentation.hpp"
@@ -39,7 +40,7 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   }
 
   auto vel = wr.narrow(0, IVX, 3).clone();
-  pcoord->vec_lower_(vel);
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
 
   auto temp = peos->compute("W->T", {wr});
   vsed.set_(psedvel->forward(wr[IDN], wr[IPR], temp));

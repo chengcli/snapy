@@ -84,6 +84,9 @@ class CoordinateImpl {
       CoordinateOptions const &opts, torch::nn::Module *p,
       std::string const &name = "coord");
 
+  //! data
+  torch::Tensor cosine_cell_kj;
+
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
 
@@ -173,16 +176,8 @@ class CoordinateImpl {
     return {vec[0], vec[1], vec[2]};
   }
 
-  virtual void fill_ghost(torch::Tensor var,
-                          std::tuple<int, int, int> const &) const {}
-
-  virtual void vec_lower_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
-  virtual void vec_raise_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
+  virtual void interp_ghost(torch::Tensor var,
+                            std::tuple<int, int, int> const &) const {}
 
   virtual void prim2local1_(torch::Tensor const &prim) const {}
   virtual void prim2local2_(torch::Tensor const &prim) const {}

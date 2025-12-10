@@ -56,7 +56,6 @@ enum {
   kDPMassLR = 6,
 };
 
-enum { VEL_Z = 0, VEL_X = 1, VEL_Y = 2 };
-enum { VEL_R = 0, VEL_T = 1, VEL_P = 2 };
+enum { VEL1 = 0, VEL2 = 1, VEL3 = 2 };
 
 }  // namespace snap

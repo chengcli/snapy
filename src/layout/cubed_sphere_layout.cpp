@@ -55,6 +55,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -164,29 +165,29 @@ const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
  */
 const CSVel CS_G2L_VEL[6][3] = {
     /* face 0: */
-    [0] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_Z, +1},
-           /* VEL_Y */ {VEL_X, +1}},
+    [0] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, +1},
+           /* VEL3 */ {VEL2, +1}},
     /* face 1: */
-    [1] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 2: */
-    [2] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_Z, -1},
-           /* VEL_Y */ {VEL_X, -1}},
+    [2] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, -1},
+           /* VEL3 */ {VEL2, -1}},
     /* face 3: */
-    [3] = {/* VEL_Z */ {VEL_Z, +1},
-           /* VEL_X */ {VEL_Y, -1},
-           /* VEL_Y */ {VEL_X, +1}},
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL2, +1}},
     /* face 4: */
-    [4] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, +1},
-           /* VEL_Y */ {VEL_Z, -1}},
+    [4] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, -1}},
     /* face 5: */
-    [5] = {/* VEL_Z */ {VEL_Z, -1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, +1}}};
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
 
 /*!
  * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
@@ -194,29 +195,29 @@ const CSVel CS_G2L_VEL[6][3] = {
  */
 const CSVel CS_L2G_VEL[6][3] = {
     /* face 0: */
-    [0] = {/* VEL_Z */ {VEL_X, +1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [0] = {/* VEL1 */ {VEL2, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 1: */
-    [1] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 2: */
-    [2] = {/* VEL_Z */ {VEL_X, -1},
-           /* VEL_X */ {VEL_Y, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [2] = {/* VEL1 */ {VEL2, -1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 3: */
-    [3] = {/* VEL_Z */ {VEL_Z, +1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, -1}},
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, -1}},
     /* face 4: */
-    [4] = {/* VEL_Z */ {VEL_Y, -1},
-           /* VEL_X */ {VEL_X, +1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [4] = {/* VEL1 */ {VEL3, -1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 5: */
-    [5] = {/* VEL_Z */ {VEL_Z, -1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, +1}}};
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
 
 /*!
  * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
@@ -569,10 +570,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         send_bufs[bid].resize(vars.size());
         recv_bufs[bid].resize(vars.size());
         int count = 0;
-        for (auto &[name, vara] : vars) {
-          auto var = vara.index(sub);
-
-          send_bufs[bid][count] = var.clone();
+        for (auto &[name, var] : vars) {
+          send_bufs[bid][count] = var.index(sub).clone();
           recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
           count++;
         }
@@ -599,6 +598,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
       // Get the interior part for this direction
       auto sub = pmb->part(offset, PartOptions().exterior(false));
+      auto sub3 = pmb->part(offset, PartOptions().exterior(false).ndim(3));
 
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
@@ -612,16 +612,18 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
       bool flip_flag = (my_side % 2) == (nb_side % 2);
 
-      auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-      auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+      auto alpha = mesh[0].index(sub3);
+      auto beta = mesh[1].index(sub3);
 
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
-
         auto vel = var.narrow(0, IVX, 3);
+
         switch (opts.type()) {
           case kConserved:
-            pcoord->vec_raise_(vel, sub);
+            coord_vec_raise_(
+                vel, pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(vara).index(
+                         sub3));
             cs_contra_to_cart_(vel, alpha, beta);
             break;
           case kPrimitive:
@@ -732,25 +734,28 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 
       // Get the exterior (ghost zone) part for this direction
       auto sub = pmb->part(offset, PartOptions().exterior(true));
+      auto sub3 = pmb->part(offset, PartOptions().exterior(true).ndim(3));
 
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
 
-      auto alpha = mesh[0].unsqueeze(0).index(sub).squeeze(0);
-      auto beta = mesh[1].unsqueeze(0).index(sub).squeeze(0);
+      auto alpha = mesh[0].index(sub3);
+      auto beta = mesh[1].index(sub3);
 
       for (auto &[name, var] : vars) {
         var.index_put_(sub, recv_bufs[bid][count]);
         if (opts.interpolate()) {
-          pcoord->fill_ghost(var, offset);
+          pcoord->interp_ghost(var, offset);
         }
 
         auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
           case kConserved:
             cs_cart_to_contra_(vel, alpha, beta);
-            pcoord->vec_lower_(vel, sub);
+            coord_vec_lower_(
+                vel, pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(var).index(
+                         sub3));
             break;
           case kPrimitive:
             cs_cart_to_contra_(vel, alpha, beta);

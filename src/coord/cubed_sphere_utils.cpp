@@ -158,17 +158,17 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
   auto playout = MeshBlockImpl::get_layout();
   auto [rx, ry, f] = playout->loc_of(playout->options->rank());
 
-  local_vel[g2l[f][VEL_Z].idx] = g2l[f][VEL_Z].sgn * vel[VEL_Z];
-  local_vel[g2l[f][VEL_X].idx] = g2l[f][VEL_X].sgn * vel[VEL_X];
-  local_vel[g2l[f][VEL_Y].idx] = g2l[f][VEL_Y].sgn * vel[VEL_Y];
+  local_vel[g2l[f][VEL1].idx] = g2l[f][VEL1].sgn * vel[VEL1];
+  local_vel[g2l[f][VEL2].idx] = g2l[f][VEL2].sgn * vel[VEL2];
+  local_vel[g2l[f][VEL3].idx] = g2l[f][VEL3].sgn * vel[VEL3];
 
-  auto vz = local_vel[VEL_Z];
-  auto vx = local_vel[VEL_X];
-  auto vy = local_vel[VEL_Y];
+  auto vz = local_vel[VEL1];
+  auto vx = local_vel[VEL2];
+  auto vy = local_vel[VEL3];
 
-  vel[VEL_Z] = (vz + x * vx + y * vy) / delta;
-  vel[VEL_X] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
-  vel[VEL_Y] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
+  vel[VEL1] = (vz + x * vx + y * vy) / delta;
+  vel[VEL2] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
+  vel[VEL3] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
 }
 
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
@@ -184,14 +184,14 @@ void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
   auto playout = MeshBlockImpl::get_layout();
   auto [rx, ry, f] = playout->loc_of(playout->options->rank());
 
-  auto vz = vel[VEL_Z].clone();
-  auto vx = vel[VEL_X].clone();
-  auto vy = vel[VEL_Y].clone();
+  auto vz = vel[VEL1].clone();
+  auto vx = vel[VEL2].clone();
+  auto vy = vel[VEL3].clone();
 
-  vel[l2g[f][VEL_Z].idx] =
-      l2g[f][VEL_Z].sgn * ((vz - D * x * vx - C * y * vy) / delta);
-  vel[l2g[f][VEL_X].idx] = l2g[f][VEL_X].sgn * (x * vz + D * vx) / delta;
-  vel[l2g[f][VEL_Y].idx] = l2g[f][VEL_Y].sgn * (y * vz + C * vy) / delta;
+  vel[l2g[f][VEL1].idx] =
+      l2g[f][VEL1].sgn * ((vz - D * x * vx - C * y * vy) / delta);
+  vel[l2g[f][VEL2].idx] = l2g[f][VEL2].sgn * (x * vz + D * vx) / delta;
+  vel[l2g[f][VEL3].idx] = l2g[f][VEL3].sgn * (y * vz + C * vy) / delta;
 }
 
 }  // namespace snap

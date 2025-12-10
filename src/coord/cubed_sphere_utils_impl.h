@@ -58,24 +58,6 @@ void cs_interp_BT(T *target, const T *source, int N, int nghost, T *u_src,
 }
 
 template <typename T>
-void cs_vec_raise(T *v2, T *v3, T cth) {
-  T v = (*v2);
-  T w = (*v3);
-  T sth2 = 1. - cth * cth;
-
-  (*v2) = v / sth2 - w * cth / sth2;
-  (*v3) = -v * cth / sth2 + w / sth2;
-}
-
-template <typename T>
-void cs_vec_lower(T *v2, T *v3, T cth) {
-  T v = (*v2);
-  T w = (*v3);
-  (*v2) = v + w * cth;
-  (*v3) = w + v * cth;
-}
-
-template <typename T>
 void cs_lonlat_to_ab(int *nP, T *alpha, T *beta, T lon, T lat) {
   // Translate from RLL coordinates to XYZ space
   T xx, yy, zz, pm;

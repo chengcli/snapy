@@ -6,6 +6,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 
 #include "eos_dispatch.hpp"
@@ -58,6 +59,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
 
 void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
+  auto pcoord = phydro->pcoord;
 
   // den -> den
   cons[IDN] = prim[IDN];
@@ -66,7 +68,7 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto out = cons.narrow(0, IVX, 3);
   torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  if (phydro) phydro->pcoord->vec_lower_(out);
+  coord_vec_lower_(out, pcoord->cosine_cell_kj);
 
   // KE
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
@@ -80,6 +82,7 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
 void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
+  auto pcoord = phydro->pcoord;
 
   auto gammad =
       (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
@@ -90,6 +93,8 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
                   .declare_static_shape(prim.sizes(), /*squash_dims=*/0)
                   .add_output(prim)
                   .add_input(cons)
+                  .add_owned_input(
+                      pcoord->cosine_cell_kj.unsqueeze(-1).expand_as(prim[IDN]))
                   .build();
 
   at::native::ideal_gas_cons2prim(cons.device().type(), iter, gammad);
