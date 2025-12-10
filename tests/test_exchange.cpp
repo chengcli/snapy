@@ -104,5 +104,7 @@ int main(int argc, char **argv) {
     block->get_layout()->pg->barrier()->wait();
   }
 
+  block->make_outputs(vars, 0.);
+
   return 0;
 }

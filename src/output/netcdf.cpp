@@ -125,17 +125,28 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   if (ncells3 > 1) nc_def_dim(ifile, "x3f", nfaces3, &idx3f);
 
   // 3. define variables
+  auto layout = pmb->get_layout();
+
   int level = 0;
-  auto iloc = pmb->get_layout()->loc_of(rank);
+  auto iloc = layout->loc_of(rank);
 
-  int lx1 =
-      pmb->options->layout()->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
-  int lx2 = std::get<1>(iloc);
-  int lx3 = std::get<0>(iloc);
+  int nb1 = layout->options->pz();
+  int nb2 = layout->options->py();
+  int nb3 = layout->options->px();
 
-  int nb1 = pmb->options->layout()->pz();
-  int nb2 = pmb->options->layout()->py();
-  int nb3 = pmb->options->layout()->px();
+  int lx1, face;
+  if (layout->options->type() == "cubed-sphere") {
+    lx1 = 0;
+    face = std::get<2>(iloc);
+    nb2 *= 2;
+    nb3 *= 3;
+  } else {
+    lx1 = std::get<2>(iloc);
+    face = 0;
+  }
+
+  int lx2 = std::get<1>(iloc) + (face / 3) * (nb2 / 2);
+  int lx3 = std::get<0>(iloc) + (face % 3) * (nb3 / 3);
 
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f, imu, iphi;
   int loc[4] = {lx1, lx2, lx3, level};
@@ -322,23 +333,31 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
     nc_put_var_float(ifile, ivx1f, data);
   }
 
-  for (int j = out_js; j <= out_je; ++j)
-    data[j - out_js] = phydro->pcoord->x2v[j].item<float>();
+  for (int j = out_js; j <= out_je; ++j) {
+    data[j - out_js] =
+        phydro->pcoord->x2v[j].item<float>() + (face / 3) * M_PI / 2.;
+  }
   nc_put_var_float(ifile, ivx2, data);
 
   if (ncells2 > 1) {
-    for (int j = out_js; j <= out_je + 1; ++j)
-      data[j - out_js] = phydro->pcoord->x2f[j].item<float>();
+    for (int j = out_js; j <= out_je + 1; ++j) {
+      data[j - out_js] =
+          phydro->pcoord->x2f[j].item<float>() + (face / 3) * M_PI / 2.;
+    }
     nc_put_var_float(ifile, ivx2f, data);
   }
 
-  for (int k = out_ks; k <= out_ke; ++k)
-    data[k - out_ks] = phydro->pcoord->x3v[k].item<float>();
+  for (int k = out_ks; k <= out_ke; ++k) {
+    data[k - out_ks] =
+        phydro->pcoord->x3v[k].item<float>() + (face % 3) * M_PI / 2.;
+  }
   nc_put_var_float(ifile, ivx3, data);
 
   if (ncells3 > 1) {
-    for (int k = out_ks; k <= out_ke + 1; ++k)
-      data[k - out_ks] = phydro->pcoord->x3f[k].item<float>();
+    for (int k = out_ks; k <= out_ke + 1; ++k) {
+      data[k - out_ks] =
+          phydro->pcoord->x3f[k].item<float>() + (face % 3) * M_PI / 2.;
+    }
     nc_put_var_float(ifile, ivx3f, data);
   }
 

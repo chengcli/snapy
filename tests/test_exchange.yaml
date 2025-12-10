@@ -32,3 +32,8 @@ boundary-condition:
     x2-outer: custom
     x3-inner: custom
     x3-outer: custom
+
+outputs:
+  - type: netcdf
+    variables: [prim]
+    dt: 30.
