@@ -87,14 +87,15 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   auto gammad =
       (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
 
-  auto iter = at::TensorIteratorConfig()
-                  .resize_outputs(false)
-                  .check_all_same_dtype(false)
-                  .declare_static_shape(prim.sizes(), /*squash_dims=*/0)
-                  .add_output(prim)
-                  .add_input(cons)
-                  .add_owned_input(pcoord->cosine_cell_kj.expand_as(prim[IDN]))
-                  .build();
+  auto iter =
+      at::TensorIteratorConfig()
+          .resize_outputs(false)
+          .check_all_same_dtype(false)
+          .declare_static_shape(prim.sizes(), /*squash_dims=*/0)
+          .add_output(prim)
+          .add_input(cons)
+          .add_owned_input(pcoord->cosine_cell_kj.unsqueeze(0).expand_as(prim))
+          .build();
 
   at::native::ideal_gas_cons2prim(cons.device().type(), iter, gammad);
 
