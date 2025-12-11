@@ -58,15 +58,13 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
 
   auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));
   int rank = playout->options->rank();
-  auto iloc = playout->loc_of(rank);
+  auto [lx2, lx3, lx1] = playout->loc_of(rank);
 
-  int lx1 = playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
-  int lx2 = std::get<1>(iloc);
-  int lx3 = std::get<0>(iloc);
+  if (playout->options->type() == "cubed-sphere") lx1 = 0;
 
   int nb1 = playout->options->pz();
-  int nb2 = playout->options->py();
-  int nb3 = playout->options->px();
+  int nb2 = playout->options->px();
+  int nb3 = playout->options->py();
 
   op->x1min() = x1min + lx1 * (x1max - x1min) / nb1;
   op->x1max() = op->x1min() + (x1max - x1min) / nb1;

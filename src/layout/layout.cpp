@@ -36,8 +36,8 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   auto node = config["distribute"];
 
   op->type() = node["layout"].as<std::string>("slab");
-  op->px(node["nb3"].as<int>(1));
-  op->py(node["nb2"].as<int>(1));
+  op->py(node["nb3"].as<int>(1));
+  op->px(node["nb2"].as<int>(1));
   op->pz(node["nb1"].as<int>(1));
   op->backend() = node["backend"].as<std::string>("gloo");
   op->verbose() = node["verbose"].as<bool>(verbose);

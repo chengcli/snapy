@@ -31,14 +31,11 @@ namespace snap {
  * For 2D layouts (dz=0), returns index in range [0,8].
  * For 3D layouts, returns index in range [0,26].
  *
- * \param dx offset in x3 direction (-1, 0, or 1)
- * \param dy offset in x2 direction (-1, 0, or 1)
- * \param dz offset in x1 direction (-1, 0, or 1)
  * \return linear buffer index
  */
 inline int get_buffer_id(std::tuple<int, int, int> offset) {
   auto [dy, dx, dz] = offset;
-  return (dy % 3 + 3) % 3 + ((dx % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
+  return (dx % 3 + 3) % 3 + ((dy % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
 }
 
 //! get environment variable with default

@@ -72,9 +72,8 @@ void MeshBlockImpl::reset() {
 
   // reset internal block boundaries
   if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
-    auto iloc = _playout->loc_of(rank);
+    auto [lx2, lx3, lx1] = _playout->loc_of(rank);
     // x1-dir
-    auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
     }
@@ -83,20 +82,18 @@ void MeshBlockImpl::reset() {
     }
 
     // x2-dir
-    auto lx2 = std::get<1>(iloc);
     if (lx2 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
     }
-    if (lx2 != py - 1) {
+    if (lx2 != px - 1) {
       options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
     }
 
     // x3-dir
-    auto lx3 = std::get<0>(iloc);
     if (lx3 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
     }
-    if (lx3 != px - 1) {
+    if (lx3 != py - 1) {
       options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
     }
 
