@@ -525,6 +525,11 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars,
 
   // Deserialize received data into ghost zones
   deserialize(pmb, vars, opts);
+
+  // Fill corners
+  if (opts.skip_corner() && !opts.cross_panel_only()) {
+    fill_corners(pmb, vars);
+  }
 }
 
 void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
@@ -750,81 +755,49 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         count++;
       }
     }
+}
+
+void CubedSphereLayoutImpl::fill_corners(MeshBlockImpl const *pmb,
+                                         Variables &vars) const {
+  auto sub_left = pmb->part({0, -1, 0}, PartOptions().exterior(true));
+  auto sub_right = pmb->part({0, +1, 0}, PartOptions().exterior(true));
+  auto sub_bot = pmb->part({-1, 0, 0}, PartOptions().exterior(true));
+  auto sub_top = pmb->part({+1, 0, 0}, PartOptions().exterior(true));
 
   // Fill-in left-bot inter-panel corners
-  int dx = -1, dy = -1;
-  std::tuple<int, int, int> corner(dy, dx, 0);
+  std::tuple<int, int, int> corner(/*dy=*/-1, /*dx=*/-1, 0);
   auto sub = pmb->part(corner, PartOptions().exterior(true));
-  int nb = neighbor_rank(iloc, corner);
-  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
-    std::tuple<int, int, int> left(0, dx, 0);
-    auto sub_left = pmb->part(left, PartOptions().exterior(true));
-
-    std::tuple<int, int, int> bot(dy, 0, 0);
-    auto sub_bot = pmb->part(bot, PartOptions().exterior(true));
-
-    for (auto &[name, var] : vars) {
-      auto var_left = var.index(sub_left).select(-3, 0).unsqueeze(-3);
-      auto var_bot = var.index(sub_bot).select(-2, 0).unsqueeze(-2);
-      var.index_put_(sub, 0.5 * (var_left + var_bot));
-    }
+  for (auto &[name, var] : vars) {
+    auto var_left = var.index(sub_left).select(-3, 0).unsqueeze(-3);
+    auto var_bot = var.index(sub_bot).select(-2, 0).unsqueeze(-2);
+    var.index_put_(sub, 0.5 * (var_left + var_bot));
   }
 
   // Fill-in right-bot inter-panel corners
-  dx = 1, dy = -1;
-  corner = std::tuple<int, int, int>(dy, dx, 0);
+  corner = std::tuple<int, int, int>(/*dy=*/-1, /*dx=*/1, 0);
   sub = pmb->part(corner, PartOptions().exterior(true));
-  nb = neighbor_rank(iloc, corner);
-  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
-    std::tuple<int, int, int> right(0, dx, 0);
-    auto sub_right = pmb->part(right, PartOptions().exterior(true));
-
-    std::tuple<int, int, int> bot(dy, 0, 0);
-    auto sub_bot = pmb->part(bot, PartOptions().exterior(true));
-
-    for (auto &[name, var] : vars) {
-      auto var_right = var.index(sub_right).select(-3, 0).unsqueeze(-3);
-      auto var_bot = var.index(sub_bot).select(-2, -1).unsqueeze(-2);
-      var.index_put_(sub, 0.5 * (var_right + var_bot));
-    }
+  for (auto &[name, var] : vars) {
+    auto var_right = var.index(sub_right).select(-3, 0).unsqueeze(-3);
+    auto var_bot = var.index(sub_bot).select(-2, -1).unsqueeze(-2);
+    var.index_put_(sub, 0.5 * (var_right + var_bot));
   }
 
   // Fill-in left-top inter-panel corners
-  dx = -1, dy = 1;
-  corner = std::tuple<int, int, int>(dy, dx, 0);
+  corner = std::tuple<int, int, int>(/*dy=*/1, /*dx=*/-1, 0);
   sub = pmb->part(corner, PartOptions().exterior(true));
-  nb = neighbor_rank(iloc, corner);
-  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
-    std::tuple<int, int, int> left(0, dx, 0);
-    auto sub_left = pmb->part(left, PartOptions().exterior(true));
-
-    std::tuple<int, int, int> top(dy, 0, 0);
-    auto sub_top = pmb->part(top, PartOptions().exterior(true));
-
-    for (auto &[name, var] : vars) {
-      auto var_left = var.index(sub_left).select(-3, -1).unsqueeze(-3);
-      auto var_top = var.index(sub_top).select(-2, 0).unsqueeze(-2);
-      var.index_put_(sub, 0.5 * (var_left + var_top));
-    }
+  for (auto &[name, var] : vars) {
+    auto var_left = var.index(sub_left).select(-3, -1).unsqueeze(-3);
+    auto var_top = var.index(sub_top).select(-2, 0).unsqueeze(-2);
+    var.index_put_(sub, 0.5 * (var_left + var_top));
   }
 
   // Fill-in right-top inter-panel corners
-  dx = 1, dy = 1;
-  corner = std::tuple<int, int, int>(dy, dx, 0);
+  corner = std::tuple<int, int, int>(/*dy=*/1, /*dx=*/1, 0);
   sub = pmb->part(corner, PartOptions().exterior(true));
-  nb = neighbor_rank(iloc, corner);
-  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
-    std::tuple<int, int, int> right(0, dx, 0);
-    auto sub_right = pmb->part(right, PartOptions().exterior(true));
-
-    std::tuple<int, int, int> top(dy, 0, 0);
-    auto sub_top = pmb->part(top, PartOptions().exterior(true));
-
-    for (auto &[name, var] : vars) {
-      auto var_right = var.index(sub_right).select(-3, -1).unsqueeze(-3);
-      auto var_top = var.index(sub_top).select(-2, -1).unsqueeze(-2);
-      var.index_put_(sub, 0.5 * (var_right + var_top));
-    }
+  for (auto &[name, var] : vars) {
+    auto var_right = var.index(sub_right).select(-3, -1).unsqueeze(-3);
+    auto var_top = var.index(sub_top).select(-2, -1).unsqueeze(-2);
+    var.index_put_(sub, 0.5 * (var_right + var_top));
   }
 }
 

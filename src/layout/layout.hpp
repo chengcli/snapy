@@ -199,6 +199,9 @@ class LayoutImpl {
   virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars,
                            SyncOptions opts) const;
 
+  //! fill corners after exchange
+  virtual void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const {}
+
   //! \brief Perform ghost zone exchange
   /*!
    * Exchanges ghost zone data with neighboring processes using point-to-point

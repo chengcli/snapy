@@ -58,6 +58,9 @@ class CubedSphereLayoutImpl
   void deserialize(MeshBlockImpl const *pmb, Variables &vars,
                    SyncOptions opts) const override;
 
+  //! fill corners after exchange
+  void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const override;
+
  private:
   //! \brief Interpolate transmitted variable to local ghost zones
   void _interpolate_to_local(MeshBlockImpl const *pmb,
