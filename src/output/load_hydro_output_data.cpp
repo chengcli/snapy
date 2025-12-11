@@ -202,8 +202,8 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       auto face = CS_FACE_NAMES[face_id];
 
       auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v}, "ij");
-      auto alpha = mesh[0];
-      auto beta = mesh[1];
+      auto alpha = mesh[1];
+      auto beta = mesh[0];
       auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
       // longitude
