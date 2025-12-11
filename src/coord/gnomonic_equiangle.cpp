@@ -444,10 +444,6 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
     vec[n] = buf.size(n);
   }
 
-  std::cout << "buf sizes: " << buf.sizes() << "\n";
-  std::cout << "ul sizes: " << ul.sizes() << "\n";
-  std::cout << "ul = " << ul << "\n";
-
   auto bufl = buf.gather(-2, ul.expand(vec));
   auto bufu = buf.gather(-2, uu.expand(vec));
 
