@@ -26,7 +26,7 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
   hydro_w[IVZ] = lat.cos();
-  // hydro_w[IV3] = 1.;
+  // hydro_w[IVY] = lat.cos();
 
   sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
   cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);
@@ -122,8 +122,14 @@ int main(int argc, char** argv) {
       std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
                                face, r)
                 << std::endl;
-      std::cout << "hydro_u = \n"
-                << vars["hydro_u"][IDN].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IDN] = \n"
+                << vars["hydro_w"][IDN].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVX] = \n"
+                << vars["hydro_w"][IVX].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVY] = \n"
+                << vars["hydro_w"][IVY].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVZ] = \n"
+                << vars["hydro_w"][IVZ].squeeze().flip(0) << std::endl;
     }
     block->get_layout()->pg->barrier()->wait();
   }

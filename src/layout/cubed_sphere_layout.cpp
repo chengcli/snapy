@@ -611,9 +611,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       auto alpha = mesh[1].index(sub3);
       auto beta = mesh[0].index(sub3);
 
-      for (auto &[name, vara] : vars) {
-        auto var = vara.index(sub);
-        auto vel = var.narrow(0, IVX, 3);
+      for (auto &[name, var] : vars) {
+        auto var_send = var.index(sub).clone();
+        auto vel = var_send.narrow(0, IVX, 3);
 
         switch (opts.type()) {
           case kConserved:
@@ -626,12 +626,11 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         }
 
         // check reverse flag
-        auto var_send = var;
         if (rev_flag) {
           if (dy != 0) {
-            var_send = var.flip(-2);
+            var_send = var_send.flip(-2);
           } else if (dx != 0) {
-            var_send = var.flip(-3);
+            var_send = var_send.flip(-3);
           }
         }
 
@@ -652,9 +651,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         // if var_send is var, make a clone to avoid in-place modification
         // otherwise, set it to send_bufs
-        send_bufs[bid][count] = (var_send.data_ptr() == var.data_ptr())
-                                    ? var_send.clone()
-                                    : var_send;
+        send_bufs[bid][count] = var_send;
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
         count++;
       }
