@@ -750,6 +750,82 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         count++;
       }
     }
+
+  // Fill-in left-bot inter-panel corners
+  int dx = -1, dy = -1;
+  std::tuple<int, int, int> corner(dy, dx, 0);
+  auto sub = pmb->part(corner, PartOptions().exterior(true));
+  int nb = neighbor_rank(iloc, corner);
+  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
+    std::tuple<int, int, int> left(0, dx, 0);
+    auto sub_left = pmb->part(left, PartOptions().exterior(true));
+
+    std::tuple<int, int, int> bot(dy, 0, 0);
+    auto sub_bot = pmb->part(bot, PartOptions().exterior(true));
+
+    for (auto &[name, var] : vars) {
+      auto var_left = var.index(sub_left).select(-3, 0).unsqueeze(-3);
+      auto var_bot = var.index(sub_bot).select(-2, 0).unsqueeze(-2);
+      var.index_put_(sub, 0.5 * (var_left + var_bot));
+    }
+  }
+
+  // Fill-in right-bot inter-panel corners
+  dx = 1, dy = -1;
+  corner = std::tuple<int, int, int>(dy, dx, 0);
+  sub = pmb->part(corner, PartOptions().exterior(true));
+  nb = neighbor_rank(iloc, corner);
+  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
+    std::tuple<int, int, int> right(0, dx, 0);
+    auto sub_right = pmb->part(right, PartOptions().exterior(true));
+
+    std::tuple<int, int, int> bot(dy, 0, 0);
+    auto sub_bot = pmb->part(bot, PartOptions().exterior(true));
+
+    for (auto &[name, var] : vars) {
+      auto var_right = var.index(sub_right).select(-3, 0).unsqueeze(-3);
+      auto var_bot = var.index(sub_bot).select(-2, -1).unsqueeze(-2);
+      var.index_put_(sub, 0.5 * (var_right + var_bot));
+    }
+  }
+
+  // Fill-in left-top inter-panel corners
+  dx = -1, dy = 1;
+  corner = std::tuple<int, int, int>(dy, dx, 0);
+  sub = pmb->part(corner, PartOptions().exterior(true));
+  nb = neighbor_rank(iloc, corner);
+  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
+    std::tuple<int, int, int> left(0, dx, 0);
+    auto sub_left = pmb->part(left, PartOptions().exterior(true));
+
+    std::tuple<int, int, int> top(dy, 0, 0);
+    auto sub_top = pmb->part(top, PartOptions().exterior(true));
+
+    for (auto &[name, var] : vars) {
+      auto var_left = var.index(sub_left).select(-3, -1).unsqueeze(-3);
+      auto var_top = var.index(sub_top).select(-2, 0).unsqueeze(-2);
+      var.index_put_(sub, 0.5 * (var_left + var_top));
+    }
+  }
+
+  // Fill-in right-top inter-panel corners
+  dx = 1, dy = 1;
+  corner = std::tuple<int, int, int>(dy, dx, 0);
+  sub = pmb->part(corner, PartOptions().exterior(true));
+  nb = neighbor_rank(iloc, corner);
+  if (nb > 0 && std::get<2>(iloc) != std::get<2>(loc_of(nb))) {
+    std::tuple<int, int, int> right(0, dx, 0);
+    auto sub_right = pmb->part(right, PartOptions().exterior(true));
+
+    std::tuple<int, int, int> top(dy, 0, 0);
+    auto sub_top = pmb->part(top, PartOptions().exterior(true));
+
+    for (auto &[name, var] : vars) {
+      auto var_right = var.index(sub_right).select(-3, -1).unsqueeze(-3);
+      auto var_top = var.index(sub_top).select(-2, -1).unsqueeze(-2);
+      var.index_put_(sub, 0.5 * (var_right + var_top));
+    }
+  }
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(
