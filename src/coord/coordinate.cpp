@@ -125,8 +125,11 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   }
 
   op->interp_order() = node["cells"]["interp_order"].as<int>(2);
-  TORCH_CHECK(op->interp_order() == 2 || op->interp_order() == 4,
-              "Only 2nd and 4rd order interpolation are supported");
+  TORCH_CHECK(op->interp_order() == 2,
+              "Only 2nd order interpolation is supported");
+  TORCH_CHECK(
+      op->interp_order() <= 2 * op->nghost(),
+      "Ghost zone size must be at least half of the interpolation order");
 
   return op;
 }
