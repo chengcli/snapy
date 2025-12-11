@@ -29,7 +29,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"thetav", "virtual potential temperature", "K", "CCC"},
       {"mse", "moist static energy", "J/kg", "CCC"},
       {"qtol", "total precipitable mass fraction", "kg/kg", "CCC"},
-      {"entroy", "entropy", "J/(kg.K)", "CCC"},
+      {"entropy", "entropy", "J/(kg.K)", "CCC"},
       {"lat", "latitude", "rad", "-CC"},
       {"lon", "longitude", "rad", "-CC"},
       // relative humidity

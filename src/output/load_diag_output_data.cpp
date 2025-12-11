@@ -96,15 +96,15 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     }
   }
 
-  // implicit corrrection
-  if (ContainVariable("implict") && pmb->phydro->options->eos()->thermo() > 0) {
+  // implicit correction
+  if (ContainVariable("implicit")) {
     auto du = pmb->phydro->named_buffers()["M"];
 
     // density
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "ic_dry";
-    pod->data.InitFromTensor(du, 4, Index::IDN, 1);
+    pod->data.InitFromTensor(du, 4, IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
 
@@ -112,7 +112,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "ic_mom";
-    pod->data.InitFromTensor(du, 4, Index::IVX, 3);
+    pod->data.InitFromTensor(du, 4, IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
@@ -121,7 +121,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "ic_etot";
-    pod->data.InitFromTensor(du, 4, Index::IPR, 1);
+    pod->data.InitFromTensor(du, 4, IPR, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -132,7 +132,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb, "ic_");
-      pod->data.InitFromTensor(du, 4, Index::ICY, ny);
+      pod->data.InitFromTensor(du, 4, ICY, ny);
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;

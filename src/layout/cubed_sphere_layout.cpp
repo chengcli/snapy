@@ -160,7 +160,7 @@ namespace snap {
 const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
 /*!
- * Each entry says: on face F, the global velocity component VEL_{Z,X,Y}
+ * Each entry says: on face F, the global velocity component VEL{1,2,3}
  * corresponds to local component idx with sign sgn.
  */
 const CSVel CS_G2L_VEL[6][3] = {
