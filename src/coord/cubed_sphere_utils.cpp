@@ -108,10 +108,6 @@ void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t,
 std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
                                                         torch::Tensor alpha,
                                                         torch::Tensor beta) {
-  if (get_rank() == 0) {
-    std::cout << "alpha = \n" << alpha.squeeze().flip(0) << std::endl;
-    std::cout << "beta = \n" << beta.squeeze().flip(0) << std::endl;
-  }
   auto x = alpha.tan();
   auto y = beta.tan();
   auto r = (x * x + y * y + 1).sqrt();

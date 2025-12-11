@@ -27,11 +27,8 @@ enum Index {
   // hydro variables
   IDN = 0,
   IVX = 1,
-  IV1 = 1,
   IVY = 2,
-  IV2 = 2,
   IVZ = 3,
-  IV3 = 3,
   IPR = 4,
   ICY = 5,
 
