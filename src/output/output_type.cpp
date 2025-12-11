@@ -44,6 +44,10 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
     options->variables() = node["variables"].as<std::vector<std::string>>();
   }
 
+  if (node["combine"]) {
+    options->combine() = node["combine"].as<bool>(true);
+  }
+
   options->verbose() = node["verbose"].as<bool>(false);
 
   return options;

@@ -1,9 +1,15 @@
 // C/C++
+#include <cfloat>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 
 // snap
+#include <snap/snap.h>
+
+#include <snap/layout/cubed_sphere_layout.hpp>
+#include <snap/mesh/meshblock.hpp>
+
 #include "cubed_sphere_utils.hpp"
 
 namespace snap {
@@ -97,6 +103,92 @@ void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t,
       usrc[(depth - 1) * N + j] = u_src;
     }
   }
+}
+
+std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
+                                                        torch::Tensor alpha,
+                                                        torch::Tensor beta) {
+  auto x = alpha.tan();
+  auto y = beta.tan();
+  auto r = (x * x + y * y + 1).sqrt();
+
+  torch::Tensor lon, lat;
+
+  if (strcmp(face, "+X") == 0) {
+    lon = alpha.clone();
+    lat = (y / (1.0 + x * x).sqrt()).atan();
+  } else if (strcmp(face, "+Y") == 0) {
+    lon = alpha + 0.5 * M_PI;
+    lat = (y / (1.0 + x * x).sqrt()).atan();
+  } else if (strcmp(face, "-X") == 0) {
+    lon = alpha + M_PI;
+    lat = (y / (1.0 + x * x).sqrt()).atan();
+  } else if (strcmp(face, "-Y") == 0) {
+    lon = alpha + 1.5 * M_PI;
+    lat = (y / (1.0 + x * x).sqrt()).atan();
+  } else if (strcmp(face, "+Z") == 0) {
+    lon = torch::atan2(x, -y);
+    lat = torch::asin(1. / r);
+  } else if (strcmp(face, "-Z") == 0) {
+    lon = torch::atan2(x, y);
+    lat = -torch::asin(1. / r);
+  }
+
+  // Map to the interval [0, 2 pi]
+  lon += torch::where(lon < 0.0, 2.0 * M_PI, torch::zeros_like(lon));
+
+  return {lon, lat};
+}
+
+void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
+                        torch::Tensor beta) {
+  auto x = alpha.tan();
+  auto y = beta.tan();
+
+  auto delta = sqrt(x * x + y * y + 1);
+  auto C = sqrt(1 + x * x);
+  auto D = sqrt(1 + y * y);
+
+  std::array<torch::Tensor, 3> local_vel;
+
+  auto const g2l = CS_G2L_VEL;
+  auto playout = MeshBlockImpl::get_layout();
+  auto [rx, ry, f] = playout->loc_of(playout->options->rank());
+
+  local_vel[g2l[f][VEL1].idx] = g2l[f][VEL1].sgn * vel[VEL1];
+  local_vel[g2l[f][VEL2].idx] = g2l[f][VEL2].sgn * vel[VEL2];
+  local_vel[g2l[f][VEL3].idx] = g2l[f][VEL3].sgn * vel[VEL3];
+
+  auto vz = local_vel[VEL1];
+  auto vx = local_vel[VEL2];
+  auto vy = local_vel[VEL3];
+
+  vel[VEL1] = (vz + x * vx + y * vy) / delta;
+  vel[VEL2] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
+  vel[VEL3] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
+}
+
+void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
+                        torch::Tensor beta) {
+  auto x = alpha.tan();
+  auto y = beta.tan();
+
+  auto delta = sqrt(x * x + y * y + 1);
+  auto C = sqrt(1 + x * x);
+  auto D = sqrt(1 + y * y);
+
+  auto const l2g = CS_L2G_VEL;
+  auto playout = MeshBlockImpl::get_layout();
+  auto [rx, ry, f] = playout->loc_of(playout->options->rank());
+
+  auto vz = vel[VEL1].clone();
+  auto vx = vel[VEL2].clone();
+  auto vy = vel[VEL3].clone();
+
+  vel[l2g[f][VEL1].idx] =
+      l2g[f][VEL1].sgn * ((vz - D * x * vx - C * y * vy) / delta);
+  vel[l2g[f][VEL2].idx] = l2g[f][VEL2].sgn * (x * vz + D * vx) / delta;
+  vel[l2g[f][VEL3].idx] = l2g[f][VEL3].sgn * (y * vz + C * vy) / delta;
 }
 
 }  // namespace snap

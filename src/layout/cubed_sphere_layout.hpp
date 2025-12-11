@@ -6,7 +6,6 @@
 namespace snap {
 
 enum { SIDE_L = 0, SIDE_R = 1, SIDE_B = 2, SIDE_T = 3 };
-enum { VEL_Z = 0, VEL_X = 1, VEL_Y = 2 };
 
 struct CSEdge {
   int nface; /* neighbor face id [0..5] */

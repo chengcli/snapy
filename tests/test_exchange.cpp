@@ -5,11 +5,34 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/coord/cubed_sphere_utils.hpp>
+#include <snap/coord/spherical_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
 
-int main(int argc, char **argv) {
+// u = cos(lat)
+void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
+  auto pcoord = pmb->phydro->pcoord;
+  auto playout = pmb->get_layout();
+
+  int r = get_rank();
+  auto [rx, ry, face_id] = playout->loc_of(r);
+  auto face = CS_FACE_NAMES[face_id];
+
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
+  auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+
+  hydro_w[IVZ] = lat.cos();
+  // hydro_w[IVY] = lat.cos();
+
+  sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
+  cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);
+}
+
+int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
   auto block = MeshBlock(op);
 
@@ -88,8 +111,9 @@ int main(int argc, char **argv) {
 
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  block->initialize(vars);
+  set_zonal_velocity(block, vars["hydro_w"]);
 
+  block->initialize(vars);
   block->get_layout()->pg->barrier()->wait();
 
   for (int i = 0; i < block->options->layout()->world_size(); ++i) {
@@ -97,12 +121,19 @@ int main(int argc, char **argv) {
       std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
                                face, r)
                 << std::endl;
-      std::cout << "hydro_u = \n"
-                << vars["hydro_u"][IDN].squeeze().transpose(0, 1).flip(0)
-                << std::endl;
+      std::cout << "hydro_w[IDN] = \n"
+                << vars["hydro_w"][IDN].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVX] = \n"
+                << vars["hydro_w"][IVX].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVY] = \n"
+                << vars["hydro_w"][IVY].squeeze().flip(0) << std::endl;
+      std::cout << "hydro_w[IVZ] = \n"
+                << vars["hydro_w"][IVZ].squeeze().flip(0) << std::endl;
     }
     block->get_layout()->pg->barrier()->wait();
   }
+
+  block->make_outputs(vars, 0.);
 
   return 0;
 }

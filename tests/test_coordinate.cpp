@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 
 // snap
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -56,8 +58,8 @@ TEST_P(DeviceTest, vec_lower_raise) {
   auto vel = torch::ones({3, nc3, nc2, nc1},
                          torch::TensorOptions().dtype(dtype).device(device));
 
-  pcoord->vec_lower_(vel);
-  pcoord->vec_raise_(vel);
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
+  coord_vec_raise_(vel, pcoord->cosine_cell_kj);
 
   EXPECT_TRUE(torch::allclose(vel, torch::ones_like(vel)));
 }
@@ -78,10 +80,11 @@ TEST_P(DeviceTest, contra_cart) {
       {3, nc3, nc2, nc1}, torch::TensorOptions().dtype(dtype).device(device));
 
   auto vel = vel_cart.clone();
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
-  pcoord->cart_to_contra_(vel);
+  cs_cart_to_contra_(vel, mesh[0], mesh[1]);
   std::cout << "vel contravariant = \n" << vel << std::endl;
-  pcoord->contra_to_cart_(vel);
+  cs_contra_to_cart_(vel, mesh[0], mesh[1]);
 
   EXPECT_TRUE(torch::allclose(vel, vel_cart));
 }
@@ -129,7 +132,7 @@ TEST_P(DeviceTest, interpolate_LR) {
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {-1, 0, 0});
+  pcoord->interp_ghost(var, {-1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -144,7 +147,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = j;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {1, 0, 0});
+  pcoord->interp_ghost(var, {1, 0, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -159,7 +162,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {0, -1, 0});
+  pcoord->interp_ghost(var, {0, -1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
@@ -174,7 +177,7 @@ TEST_P(DeviceTest, interpolate_LR) {
       for (int i = 0; i < buf.size(2); ++i) buf.index({k, j, i}) = k;
 
   var.index_put_(sub, buf);
-  pcoord->fill_ghost(var, {0, 1, 0});
+  pcoord->interp_ghost(var, {0, 1, 0});
 
   std::cout << "var after = \n"
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;

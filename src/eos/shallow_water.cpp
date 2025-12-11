@@ -3,6 +3,7 @@
 
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 
 namespace snap {
@@ -32,6 +33,7 @@ torch::Tensor ShallowWaterImpl::compute(
 }
 
 void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
+  auto pcoord = phydro->pcoord;
   apply_conserved_limiter_(cons);
 
   prim[IDN] = cons[IDN];
@@ -40,12 +42,13 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   auto out = prim.narrow(0, IVX, 3);
   torch::div_out(out, cons.narrow(0, IVX, 3), cons[IDN]);
 
-  if (phydro) phydro->pcoord->vec_raise_(prim);
+  coord_vec_raise_(prim, pcoord->cosine_cell_kj);
 
   apply_primitive_limiter_(prim);
 }
 
 void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
+  auto pcoord = phydro->pcoord;
   apply_primitive_limiter_(prim);
 
   cons[IDN] = prim[IDN];
@@ -54,7 +57,7 @@ void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto out = cons.narrow(0, IVX, 3);
   torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  if (phydro) phydro->pcoord->vec_lower_(cons);
+  coord_vec_lower_(cons, pcoord->cosine_cell_kj);
 
   apply_conserved_limiter_(cons);
 }

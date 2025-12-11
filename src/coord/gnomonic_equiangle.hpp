@@ -10,7 +10,7 @@ class GnomonicEquiangleImpl
       public CoordinateImpl {
  public:
   // geometry data
-  torch::Tensor cosine_cell_kj, sine_cell_kj;
+  torch::Tensor sine_cell_kj;
   torch::Tensor cosine_face2_kj, sine_face2_kj;
   torch::Tensor cosine_face3_kj, sine_face3_kj;
   torch::Tensor x_ov_rD_kji, y_ov_rC_kji;
@@ -40,22 +40,8 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
 
-  void fill_ghost(torch::Tensor var,
-                  std::tuple<int, int, int> const& offset) const override;
-
-  void vec_lower_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-  void vec_raise_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-
-  void contra_to_cart_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
-  void cart_to_contra_(
-      torch::Tensor const& vel,
-      std::vector<torch::indexing::TensorIndex> const& sub = {}) const override;
+  void interp_ghost(torch::Tensor var,
+                    std::tuple<int, int, int> const& offset) const override;
 
   void prim2local1_(torch::Tensor const& wlr) const override;
   void prim2local2_(torch::Tensor const& wlr) const override;
@@ -69,8 +55,8 @@ class GnomonicEquiangleImpl
                         torch::Tensor flux2, torch::Tensor flux3) override;
 
  private:
-  torch::Tensor _fill_ghost_LR(torch::Tensor buf, bool flip) const;
-  torch::Tensor _fill_ghost_BT(torch::Tensor buf, bool flip) const;
+  torch::Tensor _interp_ghost_LR(torch::Tensor buf, bool flip) const;
+  torch::Tensor _interp_ghost_BT(torch::Tensor buf, bool flip) const;
 
   void _set_face2_metric() const;
   void _set_face3_metric() const;

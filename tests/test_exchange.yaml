@@ -23,6 +23,12 @@ geometry:
   type: gnomonic-equiangle
   #type: cartesian
   cells: {nx1: 1, nx2: 6, nx3: 6, nghost: 2}
+  bounds:
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+
 
 boundary-condition:
   external:
@@ -32,3 +38,8 @@ boundary-condition:
     x2-outer: custom
     x3-inner: custom
     x3-outer: custom
+
+outputs:
+  - type: netcdf
+    variables: [prim]
+    dt: 30.

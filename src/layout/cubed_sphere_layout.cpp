@@ -39,9 +39,6 @@
  *   Within deserialization, _cartesian_to_covariant() is called to convert
  *   Cartesian vector components back to covariant components.
  *
- *   These functions will use the coordinate information from the MeshBlock.
- *   Access the coordinate via `pmb->pcoord`.
- *
  *   The cell-centered angular coordinates are in `pcoord->x2v` and
  * `pcoord->x3v`. Consult src/coord/coordinate.hpp,
  * src/coord/gnomonic_equiangular.cpp, for more details.
@@ -58,7 +55,9 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "connectivity.hpp"
@@ -142,10 +141,10 @@ namespace snap {
  * Local face orientation and sides
  * -------------------------------
  *
- *         (T,3)          beta
+ *         (T,3)          beta (y,3)
  *        |-----|         ^
  *  (L,0) |  X  | (R,1)   |
- *        |-----|         |----> alpha
+ *        |-----|         |----> alpha (x,2)
  *         (B,2)
  *
  * IMPORTANT: Different codes choose different local face axes.
@@ -161,34 +160,34 @@ namespace snap {
 const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
 /*!
- * Each entry says: on face F, the global velocity component VEL_{Z,X,Y}
+ * Each entry says: on face F, the global velocity component VEL{1,2,3}
  * corresponds to local component idx with sign sgn.
  */
 const CSVel CS_G2L_VEL[6][3] = {
     /* face 0: */
-    [0] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_Z, +1},
-           /* VEL_Y */ {VEL_X, +1}},
+    [0] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, +1},
+           /* VEL3 */ {VEL2, +1}},
     /* face 1: */
-    [1] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 2: */
-    [2] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_Z, -1},
-           /* VEL_Y */ {VEL_X, -1}},
+    [2] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, -1},
+           /* VEL3 */ {VEL2, -1}},
     /* face 3: */
-    [3] = {/* VEL_Z */ {VEL_Z, +1},
-           /* VEL_X */ {VEL_Y, -1},
-           /* VEL_Y */ {VEL_X, +1}},
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL2, +1}},
     /* face 4: */
-    [4] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, +1},
-           /* VEL_Y */ {VEL_Z, -1}},
+    [4] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, -1}},
     /* face 5: */
-    [5] = {/* VEL_Z */ {VEL_Z, -1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, +1}}};
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
 
 /*!
  * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
@@ -196,29 +195,29 @@ const CSVel CS_G2L_VEL[6][3] = {
  */
 const CSVel CS_L2G_VEL[6][3] = {
     /* face 0: */
-    [0] = {/* VEL_Z */ {VEL_X, +1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [0] = {/* VEL1 */ {VEL2, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 1: */
-    [1] = {/* VEL_Z */ {VEL_Y, +1},
-           /* VEL_X */ {VEL_X, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 2: */
-    [2] = {/* VEL_Z */ {VEL_X, -1},
-           /* VEL_X */ {VEL_Y, -1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [2] = {/* VEL1 */ {VEL2, -1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 3: */
-    [3] = {/* VEL_Z */ {VEL_Z, +1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, -1}},
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, -1}},
     /* face 4: */
-    [4] = {/* VEL_Z */ {VEL_Y, -1},
-           /* VEL_X */ {VEL_X, +1},
-           /* VEL_Y */ {VEL_Z, +1}},
+    [4] = {/* VEL1 */ {VEL3, -1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, +1}},
     /* face 5: */
-    [5] = {/* VEL_Z */ {VEL_Z, -1},
-           /* VEL_X */ {VEL_Y, +1},
-           /* VEL_Y */ {VEL_X, +1}}};
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
 
 /*!
  * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
@@ -271,7 +270,7 @@ void populate_cs_l2g_vel(CSVel l2g[6][3]) {
 }
 
 static inline int get_side(std::tuple<int, int, int> const &offset) {
-  auto [dx, dy, _] = offset;
+  auto [dy, dx, _] = offset;
   if (dx == -1 && dy == 0)
     return SIDE_L;
   else if (dx == 1 && dy == 0)
@@ -299,7 +298,7 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
                                              int pos /*0..k-1*/,
                                              const CSEdge *emap, int *out_rx,
                                              int *out_ry) {
-  /* Map along-edge index into neighbor face border, with optional reversal. */
+  // Map along-edge index into neighbor face border
   int pos2 = pos;
   if (emap->rev) {
     pos2 = pxy - 1 - pos;
@@ -417,7 +416,7 @@ std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
 int CubedSphereLayoutImpl::neighbor_rank(
     std::tuple<int, int, int> iloc, std::tuple<int, int, int> offset) const {
   auto [rx, ry, face] = iloc;
-  auto [dx, dy, _] = offset;
+  auto [dy, dx, _] = offset;
 
   if (dx == 0 && dy == 0) {
     /* self */
@@ -490,19 +489,18 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars,
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -541,22 +539,20 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   auto iloc = loc_of(options->rank());
 
   // Iterate over all face-adjacent neighbor directions
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
   // Serialize over all intra-panel neighbors first
   if (!opts.cross_panel_only()) {
-    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+    for (int dy = dy_min; dy <= dy_max; ++dy)
+      for (int dx = dx_min; dx <= dx_max; ++dx) {
         // skip the center (self)
-        if (x3_offset == 0 && x2_offset == 0) continue;
-        if (opts.skip_corner() &&
-            std::abs(x3_offset) + std::abs(x2_offset) == 2)
-          continue;
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        std::tuple<int, int, int> offset(dy, dx, 0);
         int nb = neighbor_rank(iloc, offset);
         if (nb < 0) continue;  // no neighbor
 
@@ -571,25 +567,25 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         send_bufs[bid].resize(vars.size());
         recv_bufs[bid].resize(vars.size());
         int count = 0;
-        for (auto &[name, vara] : vars) {
-          auto var = vara.index(sub);
-
-          send_bufs[bid][count] = var.clone();
+        for (auto &[name, var] : vars) {
+          send_bufs[bid][count] = var.index(sub).clone();
           recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
           count++;
         }
       }
   }
 
-  // Serialize over all inter-panel neighbors
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
-      // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+  // get mesh
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+  // Serialize over all inter-panel neighbors
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
+      // skip the center (self)
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -598,6 +594,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
       // Get the interior part for this direction
       auto sub = pmb->part(offset, PartOptions().exterior(false));
+      auto sub3 = pmb->part(offset, PartOptions().exterior(false).ndim(3));
 
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
@@ -611,35 +608,37 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
       bool flip_flag = (my_side % 2) == (nb_side % 2);
 
-      for (auto &[name, vara] : vars) {
-        auto var = vara.index(sub);
+      auto alpha = mesh[1].index(sub3);
+      auto beta = mesh[0].index(sub3);
 
-        auto vel = var.narrow(0, IVX, 3);
+      for (auto &[name, var] : vars) {
+        auto var_send = var.index(sub).clone();
+        auto vel = var_send.narrow(0, IVX, 3);
+
         switch (opts.type()) {
           case kConserved:
-            pcoord->vec_raise_(vel, sub);
-            pcoord->contra_to_cart_(vel, sub);
+            coord_vec_raise_(vel, pcoord->cosine_cell_kj.index(sub3));
+            cs_contra_to_cart_(vel, alpha, beta);
             break;
           case kPrimitive:
-            pcoord->contra_to_cart_(vel, sub);
+            cs_contra_to_cart_(vel, alpha, beta);
             break;
         }
 
         // check reverse flag
-        auto var_send = var;
         if (rev_flag) {
-          if (x3_offset != 0) {
-            var_send = var.flip(-2);
-          } else if (x2_offset != 0) {
-            var_send = var.flip(-3);
+          if (dy != 0) {
+            var_send = var_send.flip(-2);
+          } else if (dx != 0) {
+            var_send = var_send.flip(-3);
           }
         }
 
         // check flip flag
         if (flip_flag) {
-          if (x3_offset != 0) {
+          if (dy != 0) {
             var_send = var_send.flip(-3);
-          } else if (x2_offset != 0) {
+          } else if (dx != 0) {
             var_send = var_send.flip(-2);
           }
         }
@@ -652,9 +651,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         // if var_send is var, make a clone to avoid in-place modification
         // otherwise, set it to send_bufs
-        send_bufs[bid][count] = (var_send.data_ptr() == var.data_ptr())
-                                    ? var_send.clone()
-                                    : var_send;
+        send_bufs[bid][count] = var_send;
         recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
         count++;
       }
@@ -674,22 +671,20 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
   // Deserialize over all intra-panel neighbors first
   if (!opts.cross_panel_only()) {
-    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+    for (int dy = dy_min; dy <= dy_max; ++dy)
+      for (int dx = dx_min; dx <= dx_max; ++dx) {
         // skip the center (self)
-        if (x3_offset == 0 && x2_offset == 0) continue;
-        if (opts.skip_corner() &&
-            std::abs(x3_offset) + std::abs(x2_offset) == 2)
-          continue;
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        std::tuple<int, int, int> offset(dy, dx, 0);
         int nb = neighbor_rank(iloc, offset);
         if (nb < 0) continue;  // no neighbor
 
@@ -708,15 +703,17 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       }
   }
 
-  // Deserialize over all inter-panel neighbors
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
-      // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+  // get mesh
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+  // Deserialize over all inter-panel neighbors
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
+      // skip the center (self)
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -725,24 +722,29 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 
       // Get the exterior (ghost zone) part for this direction
       auto sub = pmb->part(offset, PartOptions().exterior(true));
+      auto sub3 = pmb->part(offset, PartOptions().exterior(true).ndim(3));
 
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
+
+      auto alpha = mesh[1].index(sub3);
+      auto beta = mesh[0].index(sub3);
+
       for (auto &[name, var] : vars) {
         var.index_put_(sub, recv_bufs[bid][count]);
         if (opts.interpolate()) {
-          pcoord->fill_ghost(var, offset);
+          pcoord->interp_ghost(var, offset);
         }
 
         auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
           case kConserved:
-            pcoord->cart_to_contra_(vel, sub);
-            pcoord->vec_lower_(vel, sub);
+            cs_cart_to_contra_(vel, alpha, beta);
+            coord_vec_lower_(vel, pcoord->cosine_cell_kj.index(sub3));
             break;
           case kPrimitive:
-            pcoord->cart_to_contra_(vel, sub);
+            cs_cart_to_contra_(vel, alpha, beta);
             break;
         }
         count++;

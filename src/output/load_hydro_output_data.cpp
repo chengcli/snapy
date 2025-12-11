@@ -1,7 +1,9 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "output_type.hpp"
@@ -14,6 +16,8 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
   OutputData* pod;
 
   auto peos = pmb->phydro->peos;
+  auto pcoord = pmb->phydro->pcoord;
+
   auto const& w = vars.at("hydro_w");
   auto const& u = vars.at("hydro_u");
 
@@ -187,6 +191,36 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;
+    }
+  }
+
+  // lat/lon grid for cubed sphere
+  if (ContainVariable("prim") || ContainVariable("cons")) {
+    if (pcoord->options->type() == "gnomonic-equiangle") {
+      int r = pmb->options->layout()->rank();
+      auto [rx, ry, face_id] = pmb->get_layout()->loc_of(r);
+      auto face = CS_FACE_NAMES[face_id];
+
+      auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v}, "ij");
+      auto alpha = mesh[1];
+      auto beta = mesh[0];
+      auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+
+      // longitude
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "lon";
+      pod->data.CopyFromTensor(lon);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+
+      // latitude
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "lat";
+      pod->data.CopyFromTensor(lat);
+      AppendOutputDataNode(pod);
+      num_vars_++;
     }
   }
 }

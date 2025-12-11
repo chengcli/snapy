@@ -18,11 +18,12 @@ void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, double gammad) {
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "ideal_gas_cons2prim_cuda", [&]() {
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
 
-    native::gpu_kernel<2>(
-        iter, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
+    native::gpu_kernel<3>(
+        iter, [=] GPU_LAMBDA(char* const data[3], unsigned int strides[3]) {
           auto prim = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto cons = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          ideal_gas_cons2prim(prim, cons, gammad, stride);
+          auto cos_theta = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          ideal_gas_cons2prim(prim, cons, cos_theta, gammad, stride);
         });
   });
 }

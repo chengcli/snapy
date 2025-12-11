@@ -15,53 +15,50 @@
 namespace snap {
 
 void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
-  // skip if not using kintera thermo
-  if (pmb->phydro->options->eos()->thermo() == nullptr) return;
-
   OutputData* pod;
   auto peos = pmb->phydro->peos;
 
-  auto const& w = vars.at("hydro_w");
+  if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo()) {
+    auto const& w = vars.at("hydro_w");
 
-  auto m = pmb->named_modules()["hydro.eos.thermo"];
-  auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
-  kintera::ThermoX thermo_x(thermo_y->options);
-  thermo_x->to(w.device());
+    auto m = pmb->named_modules()["hydro.eos.thermo"];
+    auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
+    kintera::ThermoX thermo_x(thermo_y->options);
+    thermo_x->to(w.device());
 
-  int ny = thermo_y->options->species().size() - 1;
-  auto temp = peos->compute("W->T", {w});
-  auto pres = w[IPR];
-  auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+    int ny = thermo_y->options->species().size() - 1;
+    auto temp = peos->compute("W->T", {w});
+    auto pres = w[IPR];
+    auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
 
-  // mole concentration [mol/m^3]
-  auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
+    // mole concentration [mol/m^3]
+    auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
-  // volumetric entropy [J/(m^3 K)]
-  auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
+    // volumetric entropy [J/(m^3 K)]
+    auto entropy_vol = thermo_x->compute("TPV->S", {temp, pres, conc});
 
-  // volumetric heat capacity [J/(m^3 K)]
-  auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
+    // volumetric heat capacity [J/(m^3 K)]
+    auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
 
-  // molar entropy [J/(mol K)]
-  auto entropy_mole = entropy_vol / conc.sum(-1);
+    // molar entropy [J/(mol K)]
+    auto entropy_mole = entropy_vol / conc.sum(-1);
 
-  // molar heat capacity [J/(mol K)]
-  auto cp_mole = cp_vol / conc.sum(-1);
+    // molar heat capacity [J/(mol K)]
+    auto cp_mole = cp_vol / conc.sum(-1);
 
-  // mean molecular weight [kg/mol]
-  auto mu = (thermo_x->mu * xfrac).sum(-1);
+    // mean molecular weight [kg/mol]
+    auto mu = (thermo_x->mu * xfrac).sum(-1);
 
-  // specific entropy [J/(kg K)]
-  auto entropy = entropy_mole / mu;
+    // specific entropy [J/(kg K)]
+    auto entropy = entropy_mole / mu;
 
-  // potential temperature [K]
-  auto theta = (entropy_vol / cp_vol).exp();
+    // potential temperature [K]
+    auto theta = (entropy_vol / cp_vol).exp();
 
-  // relative humidity
-  auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
-                                       thermo_x->options->nucleation());
+    // relative humidity
+    auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
+                                         thermo_x->options->nucleation());
 
-  if (ContainVariable("diag")) {
     // temperature
     pod = new OutputData;
     pod->type = "SCALARS";
@@ -97,48 +94,48 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       AppendOutputDataNode(pod);
       num_vars_ += 1;
     }
+  }
 
-    // implicit corrrection
-    if (pmb->phydro->options->icorr()->scheme() > 0) {
-      auto du = pmb->phydro->named_buffers()["M"];
+  // implicit correction
+  if (ContainVariable("implicit")) {
+    auto du = pmb->phydro->named_buffers()["M"];
 
-      // density
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "ic_dry";
-      pod->data.InitFromTensor(du, 4, Index::IDN, 1);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+    // density
+    pod = new OutputData;
+    pod->type = "SCALARS";
+    pod->name = "ic_dry";
+    pod->data.InitFromTensor(du, 4, IDN, 1);
+    AppendOutputDataNode(pod);
+    num_vars_++;
 
-      // momentum
+    // momentum
+    pod = new OutputData;
+    pod->type = "VECTORS";
+    pod->name = "ic_mom";
+    pod->data.InitFromTensor(du, 4, IVX, 3);
+
+    AppendOutputDataNode(pod);
+    num_vars_ += 3;
+
+    // total energy
+    pod = new OutputData;
+    pod->type = "SCALARS";
+    pod->name = "ic_etot";
+    pod->data.InitFromTensor(du, 4, IPR, 1);
+
+    AppendOutputDataNode(pod);
+    num_vars_++;
+
+    // vapor + cloud
+    auto ny = peos->nvar() - 5;
+    if (ny > 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
-      pod->name = "ic_mom";
-      pod->data.InitFromTensor(du, 4, Index::IVX, 3);
+      pod->name = get_hydro_names(pmb, "ic_");
+      pod->data.InitFromTensor(du, 4, ICY, ny);
 
       AppendOutputDataNode(pod);
-      num_vars_ += 3;
-
-      // total energy
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "ic_etot";
-      pod->data.InitFromTensor(du, 4, Index::IPR, 1);
-
-      AppendOutputDataNode(pod);
-      num_vars_++;
-
-      // vapor + cloud
-      auto ny = peos->nvar() - 5;
-      if (ny > 0) {
-        pod = new OutputData;
-        pod->type = "VECTORS";
-        pod->name = get_hydro_names(pmb, "ic_");
-        pod->data.InitFromTensor(du, 4, Index::ICY, ny);
-
-        AppendOutputDataNode(pod);
-        num_vars_ += ny;
-      }
+      num_vars_ += ny;
     }
   }
 }

@@ -22,13 +22,10 @@ class MetadataTable {
   ~MetadataTable();
 
   static MetadataTable const* GetInstance();
-
   static void Destroy();
 
   std::string GetGridType(std::string name) const;
-
   std::string GetUnits(std::string name) const;
-
   std::string GetLongName(std::string name) const;
 
  private:
@@ -43,6 +40,8 @@ int get_num_variables(std::string grid, AthenaArray<T> const& data) {
   int nvar;
   if (grid == "--C" || grid == "--F") {
     nvar = data.GetDim2();
+  } else if (grid == "-CC" || grid == "-CF" || grid == "-FC" || grid == "-FF") {
+    nvar = data.GetDim3();
   } else if (grid == "---") {
     nvar = data.GetDim1();
   } else {

@@ -72,9 +72,8 @@ void MeshBlockImpl::reset() {
 
   // reset internal block boundaries
   if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
-    auto iloc = _playout->loc_of(rank);
+    auto [lx2, lx3, lx1] = _playout->loc_of(rank);
     // x1-dir
-    auto lx1 = std::get<2>(iloc);
     if (lx1 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
     }
@@ -83,20 +82,18 @@ void MeshBlockImpl::reset() {
     }
 
     // x2-dir
-    auto lx2 = std::get<1>(iloc);
     if (lx2 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
     }
-    if (lx2 != py - 1) {
+    if (lx2 != px - 1) {
       options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
     }
 
     // x3-dir
-    auto lx3 = std::get<0>(iloc);
     if (lx3 != 0) {
       options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
     }
-    if (lx3 != px - 1) {
+    if (lx3 != py - 1) {
       options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
     }
 
@@ -265,20 +262,24 @@ double MeshBlockImpl::initialize(Variables& vars) {
   TORCH_CHECK(vars.count("hydro_w"),
               "initialize: hydro_w is required for hydro model.");
   hydro_w = vars.at("hydro_w");
+
+  vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
   TORCH_CHECK(hydro_w.sizes() ==
                   std::vector<int64_t>({phydro->peos->nvar(), nc3, nc2, nc1}),
               "initialize: hydro_w has incorrect shape.", " Expected [",
               phydro->peos->nvar(), ", ", nc3, ", ", nc2, ", ", nc1,
               "] but got ", hydro_w.sizes());
-  vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
 
-  bops.type(kConserved);
-  for (int i = 0; i < options->bfuncs().size(); ++i) {
-    if (options->bfuncs()[i] == nullptr) continue;
-    options->bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, bops);
+  // apply hydro boundary condition
+  if (options->verbose()) {
+    std::cout << "[Meshblock] applying hydro boundary conditions." << std::endl;
   }
 
-  phydro->peos->forward(vars.at("hydro_u"), /*out=*/hydro_w);
+  bops.type(kPrimitive);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](vars.at("hydro_w"), 3 - i / 2, bops);
+  }
 
   // scalar
   if (pscalar->nvar() > 0) {
@@ -290,7 +291,12 @@ double MeshBlockImpl::initialize(Variables& vars) {
                 "initialize: scalar_r has incorrect shape.", " Expected [",
                 pscalar->nvar(), ", ", nc3, ", ", nc2, ", ", nc1, "] but got ",
                 scalar_r.sizes());
-    vars["scalar_s"] = hydro_w[IDN] * scalar_r;
+
+    // apply scalar boundary condition
+    if (options->verbose()) {
+      std::cout << "[Meshblock] applying scalar boundary conditions."
+                << std::endl;
+    }
 
     bops.type(kScalar);
     for (int i = 0; i < options->bfuncs().size(); ++i) {
@@ -299,8 +305,42 @@ double MeshBlockImpl::initialize(Variables& vars) {
     }
   }
 
-  // solid
+  // exchange buffers
+  if (options->verbose()) {
+    std::cout << "[Meshblock] exchanging ghost zones." << std::endl;
+  }
+
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true);
+
+  Variables sync_vars;
+  sync_opts.type(kPrimitive);
+  sync_vars["hydro_w"] = hydro_w;
+  _playout->forward(this, sync_vars, sync_opts);
+
+  if (pscalar->nvar() > 0) {
+    sync_opts.type(kScalar);
+    sync_vars.clear();
+    sync_vars["scalar_r"] = scalar_r;
+    _playout->forward(this, sync_vars, sync_opts);
+  }
+
+  // compute conserved
+  if (options->verbose()) {
+    std::cout << "[Meshblock] computing conserved variables." << std::endl;
+  }
+
+  vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
+  if (pscalar->nvar() > 0) {
+    vars["scalar_s"] = hydro_w[IDN] * scalar_r;
+  }
+
+  // fill solid boundary
   if (vars.count("solid")) {
+    if (options->verbose()) {
+      std::cout << "[Meshblock] filling solid boundaries." << std::endl;
+    }
+
     solid = vars.at("solid");
     TORCH_CHECK(solid.sizes() == std::vector<int64_t>({nc3, nc2, nc1}),
                 "initialize: solid has incorrect shape.", " Expected [", nc3,
@@ -318,19 +358,6 @@ double MeshBlockImpl::initialize(Variables& vars) {
     vars["fill_solid_hydro_w"] = hydro_w;
     vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
-
-  // exchange buffers
-  SyncOptions sync_opts;
-  sync_opts.interpolate(true);
-  sync_opts.type(kConserved);
-
-  Variables sync_vars;
-  sync_vars["hydro_u"] = vars.at("hydro_u");
-  if (pscalar->nvar() > 0) {
-    sync_vars["scalar_s"] = vars.at("scalar_s");
-  }
-
-  _playout->forward(this, sync_vars, sync_opts);
 
   // start timing
   _time_start = clock();

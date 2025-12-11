@@ -7,6 +7,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 
 #include "ideal_moist.hpp"
@@ -94,6 +95,8 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
 
 void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
+  auto pcoord = phydro->pcoord;
+
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
@@ -109,7 +112,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   out = cons.narrow(0, IVX, 3);
   torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  if (phydro) phydro->pcoord->vec_lower_(out);
+  coord_vec_lower_(out, pcoord->cosine_cell_kj);
 
   // KE
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
@@ -123,6 +126,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
 void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
+  auto pcoord = phydro->pcoord;
 
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
@@ -140,7 +144,7 @@ void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   out = prim.narrow(0, IVX, 3);
   torch::div_out(out, cons.narrow(0, IVX, 3), prim[IDN]);
 
-  if (phydro) phydro->pcoord->vec_raise_(out);
+  coord_vec_raise_(out, pcoord->cosine_cell_kj);
 
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
   auto ie = cons[IPR] - ke;
@@ -192,6 +196,7 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
 }
 
 torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
+  auto pcoord = phydro->pcoord;
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
@@ -209,19 +214,20 @@ torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
                     (cv_ratio_m1.view(vec) + 1.) * cvd * temp);
 
   auto vel = prim.narrow(0, IVX, 3).clone();
-  if (phydro) phydro->pcoord->vec_lower_(vel);
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * vel).sum(0, /*keepdim=*/true);
 
   return ie + ke * rhos;
 }
 
 torch::Tensor IdealMoistImpl::_cons2ke(torch::Tensor cons) {
+  auto pcoord = phydro->pcoord;
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
   auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);
 
   auto mom = cons.narrow(0, IVX, 3).clone();
-  if (phydro) phydro->pcoord->vec_raise_(mom);
+  coord_vec_raise_(mom, pcoord->cosine_cell_kj);
   return 0.5 * (cons.narrow(0, IVX, 3) * mom).sum(0) / rho;
 }
 

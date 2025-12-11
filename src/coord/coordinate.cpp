@@ -10,6 +10,7 @@
 
 #include "coordinate.hpp"
 #include "gnomonic_equiangle.hpp"
+#include "spherical_polar.hpp"
 
 namespace snap {
 
@@ -57,15 +58,13 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
 
   auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));
   int rank = playout->options->rank();
-  auto iloc = playout->loc_of(rank);
+  auto [lx2, lx3, lx1] = playout->loc_of(rank);
 
-  int lx1 = playout->options->type() == "cubed-sphere" ? 0 : std::get<2>(iloc);
-  int lx2 = std::get<1>(iloc);
-  int lx3 = std::get<0>(iloc);
+  if (playout->options->type() == "cubed-sphere") lx1 = 0;
 
   int nb1 = playout->options->pz();
-  int nb2 = playout->options->py();
-  int nb3 = playout->options->px();
+  int nb2 = playout->options->px();
+  int nb3 = playout->options->py();
 
   op->x1min() = x1min + lx1 * (x1max - x1min) / nb1;
   op->x1max() = op->x1min() + (x1max - x1min) / nb1;
@@ -125,6 +124,13 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
                 "Number of x3 grids must be greater than the ghost zone size");
   }
 
+  op->interp_order() = node["cells"]["interp_order"].as<int>(2);
+  TORCH_CHECK(op->interp_order() == 2,
+              "Only 2nd order interpolation is supported");
+  TORCH_CHECK(
+      op->interp_order() <= 2 * op->nghost(),
+      "Ghost zone size must be at least half of the interpolation order");
+
   return op;
 }
 
@@ -149,6 +155,8 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
   auto x3min = op->nx3() > 1 ? op->x3min() - op->nghost() * dx : op->x3min();
   auto x3max = op->nx3() > 1 ? op->x3max() + op->nghost() * dx : op->x3max();
   x3f = torch::linspace(x3min, x3max, op->nc3() + 1, torch::kFloat64);
+
+  cosine_cell_kj = torch::zeros({op->nc3(), op->nc2(), 1}, torch::kFloat64);
 }
 
 void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {

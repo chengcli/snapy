@@ -63,6 +63,7 @@ struct CoordinateOptionsImpl {
   ADD_ARG(int, nx2) = 1;
   ADD_ARG(int, nx3) = 1;
   ADD_ARG(int, nghost) = 1;
+  ADD_ARG(int, interp_order) = 2;
 
   ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
@@ -83,6 +84,9 @@ class CoordinateImpl {
   static std::shared_ptr<CoordinateImpl> create(
       CoordinateOptions const &opts, torch::nn::Module *p,
       std::string const &name = "coord");
+
+  //! data
+  torch::Tensor cosine_cell_kj;
 
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
@@ -173,26 +177,8 @@ class CoordinateImpl {
     return {vec[0], vec[1], vec[2]};
   }
 
-  virtual void fill_ghost(torch::Tensor var,
-                          std::tuple<int, int, int> const &) const {}
-
-  virtual void vec_lower_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
-  virtual void vec_raise_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
-  //! \brief Project contravariant velocities to cartesian velocities
-  virtual void contra_to_cart_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
-
-  //! \brief Deproject cartesian velocities to contravariant velocities
-  virtual void cart_to_contra_(
-      torch::Tensor const &vel,
-      std::vector<torch::indexing::TensorIndex> const &sub = {}) const {}
+  virtual void interp_ghost(torch::Tensor var,
+                            std::tuple<int, int, int> const &) const {}
 
   virtual void prim2local1_(torch::Tensor const &prim) const {}
   virtual void prim2local2_(torch::Tensor const &prim) const {}
@@ -247,25 +233,6 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
   }
 };
 TORCH_MODULE(Cylindrical);
-
-class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
-                           public CoordinateImpl {
- public:
-  using CoordinateImpl::forward;
-
-  SphericalPolarImpl() = default;
-  explicit SphericalPolarImpl(const CoordinateOptions &options_,
-                              torch::nn::Module *p = nullptr)
-      : CoordinateImpl(options_, p) {
-    reset();
-  }
-  void reset() override {}
-  void pretty_print(std::ostream &stream) const override {
-    stream << "SphericalPolar coordinate:" << std::endl;
-    print(stream);
-  }
-};
-TORCH_MODULE(SphericalPolar);
 
 IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
                         int extend_x1 = 0, int extend_x2 = 0,
