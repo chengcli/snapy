@@ -37,8 +37,8 @@ namespace snap {
  * \return linear buffer index
  */
 inline int get_buffer_id(std::tuple<int, int, int> offset) {
-  auto [dx, dy, dz] = offset;
-  return (dx % 3 + 3) % 3 + ((dy % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
+  auto [dy, dx, dz] = offset;
+  return (dy % 3 + 3) % 3 + ((dx % 3 + 3) % 3) * 3 + ((dz % 3 + 3) % 3) * 9;
 }
 
 //! get environment variable with default
@@ -117,17 +117,14 @@ using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 struct SyncOptions {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
-  int x1_offset_min() const { return dim() == DIM2 || dim() == DIM3 ? 0 : -1; }
+  int dz_min() const { return dim() == DIM2 || dim() == DIM3 ? 0 : -1; }
+  int dz_max() const { return dim() == DIM2 || dim() == DIM3 ? 0 : 1; }
 
-  int x1_offset_max() const { return dim() == DIM2 || dim() == DIM3 ? 0 : 1; }
+  int dx_min() const { return dim() == DIM3 || dim() == DIM1 ? 0 : -1; }
+  int dx_max() const { return dim() == DIM3 || dim() == DIM1 ? 0 : 1; }
 
-  int x2_offset_min() const { return dim() == DIM3 || dim() == DIM1 ? 0 : -1; }
-
-  int x2_offset_max() const { return dim() == DIM3 || dim() == DIM1 ? 0 : 1; }
-
-  int x3_offset_min() const { return dim() == DIM2 || dim() == DIM1 ? 0 : -1; }
-
-  int x3_offset_max() const { return dim() == DIM2 || dim() == DIM1 ? 0 : 1; }
+  int dy_min() const { return dim() == DIM2 || dim() == DIM1 ? 0 : -1; }
+  int dy_max() const { return dim() == DIM2 || dim() == DIM1 ? 0 : 1; }
 
   ADD_ARG(bool, cross_panel_only) = false;
   ADD_ARG(bool, skip_corner) = false;

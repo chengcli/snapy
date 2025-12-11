@@ -141,10 +141,10 @@ namespace snap {
  * Local face orientation and sides
  * -------------------------------
  *
- *         (T,3)          beta
+ *         (T,3)          beta (y,3)
  *        |-----|         ^
  *  (L,0) |  X  | (R,1)   |
- *        |-----|         |----> alpha
+ *        |-----|         |----> alpha (x,2)
  *         (B,2)
  *
  * IMPORTANT: Different codes choose different local face axes.
@@ -270,7 +270,7 @@ void populate_cs_l2g_vel(CSVel l2g[6][3]) {
 }
 
 static inline int get_side(std::tuple<int, int, int> const &offset) {
-  auto [dx, dy, _] = offset;
+  auto [dy, dx, _] = offset;
   if (dx == -1 && dy == 0)
     return SIDE_L;
   else if (dx == 1 && dy == 0)
@@ -298,7 +298,7 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
                                              int pos /*0..k-1*/,
                                              const CSEdge *emap, int *out_rx,
                                              int *out_ry) {
-  /* Map along-edge index into neighbor face border, with optional reversal. */
+  // Map along-edge index into neighbor face border
   int pos2 = pos;
   if (emap->rev) {
     pos2 = pxy - 1 - pos;
@@ -416,7 +416,7 @@ std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
 int CubedSphereLayoutImpl::neighbor_rank(
     std::tuple<int, int, int> iloc, std::tuple<int, int, int> offset) const {
   auto [rx, ry, face] = iloc;
-  auto [dx, dy, _] = offset;
+  auto [dy, dx, _] = offset;
 
   if (dx == 0 && dy == 0) {
     /* self */
@@ -489,19 +489,18 @@ void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars,
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -540,22 +539,20 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   auto iloc = loc_of(options->rank());
 
   // Iterate over all face-adjacent neighbor directions
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
   // Serialize over all intra-panel neighbors first
   if (!opts.cross_panel_only()) {
-    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+    for (int dy = dy_min; dy <= dy_max; ++dy)
+      for (int dx = dx_min; dx <= dx_max; ++dx) {
         // skip the center (self)
-        if (x3_offset == 0 && x2_offset == 0) continue;
-        if (opts.skip_corner() &&
-            std::abs(x3_offset) + std::abs(x2_offset) == 2)
-          continue;
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        std::tuple<int, int, int> offset(dy, dx, 0);
         int nb = neighbor_rank(iloc, offset);
         if (nb < 0) continue;  // no neighbor
 
@@ -582,14 +579,13 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
   // Serialize over all inter-panel neighbors
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -632,18 +628,18 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         // check reverse flag
         auto var_send = var;
         if (rev_flag) {
-          if (x3_offset != 0) {
+          if (dy != 0) {
             var_send = var.flip(-2);
-          } else if (x2_offset != 0) {
+          } else if (dx != 0) {
             var_send = var.flip(-3);
           }
         }
 
         // check flip flag
         if (flip_flag) {
-          if (x3_offset != 0) {
+          if (dy != 0) {
             var_send = var_send.flip(-3);
-          } else if (x2_offset != 0) {
+          } else if (dx != 0) {
             var_send = var_send.flip(-2);
           }
         }
@@ -678,22 +674,20 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
   // Deserialize over all intra-panel neighbors first
   if (!opts.cross_panel_only()) {
-    for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-      for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+    for (int dy = dy_min; dy <= dy_max; ++dy)
+      for (int dx = dx_min; dx <= dx_max; ++dx) {
         // skip the center (self)
-        if (x3_offset == 0 && x2_offset == 0) continue;
-        if (opts.skip_corner() &&
-            std::abs(x3_offset) + std::abs(x2_offset) == 2)
-          continue;
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-        std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+        std::tuple<int, int, int> offset(dy, dx, 0);
         int nb = neighbor_rank(iloc, offset);
         if (nb < 0) continue;  // no neighbor
 
@@ -716,14 +710,13 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
   // Deserialize over all inter-panel neighbors
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 

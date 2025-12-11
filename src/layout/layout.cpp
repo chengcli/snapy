@@ -88,19 +88,18 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
   auto iloc = loc_of(options->rank());
 
   // Iterate over all 2D neighbor directions
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
@@ -129,20 +128,19 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
-  int x3_omin = opts.x3_offset_min();
-  int x3_omax = opts.x3_offset_max();
-  int x2_omin = opts.x2_offset_min();
-  int x2_omax = opts.x2_offset_max();
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
 
   // Iterate over all 2D neighbor directions
-  for (int x3_offset = x3_omin; x3_offset <= x3_omax; ++x3_offset)
-    for (int x2_offset = x2_omin; x2_offset <= x2_omax; ++x2_offset) {
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
       // Skip the center (self)
-      if (x3_offset == 0 && x2_offset == 0) continue;
-      if (opts.skip_corner() && std::abs(x3_offset) + std::abs(x2_offset) == 2)
-        continue;
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
 
-      std::tuple<int, int, int> offset(x3_offset, x2_offset, 0);
+      std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
 
