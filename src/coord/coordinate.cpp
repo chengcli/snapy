@@ -124,6 +124,10 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
                 "Number of x3 grids must be greater than the ghost zone size");
   }
 
+  op->interp_order() = node["cells"]["interp_order"].as<int>(2);
+  TORCH_CHECK(op->interp_order() == 2 || op->interp_order() == 4,
+              "Only 2nd and 4rd order interpolation are supported");
+
   return op;
 }
 

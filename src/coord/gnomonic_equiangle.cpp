@@ -146,11 +146,11 @@ void GnomonicEquiangleImpl::reset() {
   // register local ghost cell usrc
   usrc_BT =
       register_buffer("usrc_BT", usrc.narrow(-1, offset_x, op->nx2()).clone());
-  usrc_BT += 1 - offset_x;
+  usrc_BT += options->interp_order() / 2 - offset_x;
 
   usrc_LR = register_buffer(
       "usrc_LR", usrc.narrow(-1, offset_y, op->nx3()).transpose(0, 1));
-  usrc_LR += 1 - offset_y;
+  usrc_LR += options->interp_order() / 2 - offset_y;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
@@ -180,16 +180,17 @@ void GnomonicEquiangleImpl::interp_ghost(
   if (!pmb) return;
 
   auto sub = pmb->part(offset, PartOptions().exterior(true).ndim(var.dim()));
+  auto order = options->interp_order() / 2;
 
   if (dy != 0 && dx == 0) {
     auto sub1 = pmb->part(
-        offset, PartOptions().exterior(true).extend_x2(1).ndim(var.dim()));
+        offset, PartOptions().exterior(true).extend_x2(order).ndim(var.dim()));
     var.index(sub) = _interp_ghost_BT(var.index(sub1), dy > 0);
   }
 
   if (dx != 0 && dy == 0) {
     auto sub1 = pmb->part(
-        offset, PartOptions().exterior(true).extend_x3(1).ndim(var.dim()));
+        offset, PartOptions().exterior(true).extend_x3(order).ndim(var.dim()));
     var.index(sub) = _interp_ghost_LR(var.index(sub1), dx > 0);
   }
 }
@@ -408,9 +409,9 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_LR(torch::Tensor buf,
     vec.insert(vec.begin(), 1);
   }
 
-  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
-  auto uu = ul + 1;
-  auto weight = usrc_t.view(vec) - ul;
+  auto u0 = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto u1 = u0 + 1;
+  auto x = usrc_t.view(vec) - u0;
 
   // set the correct output dimensions
   vec.back() = buf.size(-1);
@@ -418,10 +419,22 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_LR(torch::Tensor buf,
     vec[n] = buf.size(n);
   }
 
-  auto bufl = buf.gather(-3, ul.expand(vec));
-  auto bufu = buf.gather(-3, uu.expand(vec));
+  auto buf0 = buf.gather(-3, u0.expand(vec));
+  auto buf1 = buf.gather(-3, u1.expand(vec));
 
-  return weight * bufu + (1.0 - weight) * bufl;
+  if (options->interp_order() == 2) {
+    return x * buf1 + (1.0 - x) * buf0;
+  } else {
+    auto u2 = u1 + 1;
+    auto um = u0 - 1;
+    auto bufm = buf.gather(-3, um.expand(vec));
+    auto buf2 = buf.gather(-3, u2.expand(vec));
+    auto wm = (-x * (x - 1) * (x - 2)) / 6.0;
+    auto w0 = ((x + 1) * (x - 1) * (x - 2)) / 2.0;
+    auto w1 = (-(x + 1) * x * (x - 2)) / 2.0;
+    auto w2 = (x * (x + 1) * (x - 1)) / 6.0;
+    return wm * bufm + w0 * buf0 + w1 * buf1 + w2 * buf2;
+  }
 }
 
 torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
@@ -434,9 +447,9 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
     vec.insert(vec.begin(), 1);
   }
 
-  auto ul = usrc_t.floor().to(torch::kInt64).view(vec);
-  auto uu = ul + 1;
-  auto weight = usrc_t.view(vec) - ul;
+  auto u0 = usrc_t.floor().to(torch::kInt64).view(vec);
+  auto u1 = u0 + 1;
+  auto x = usrc_t.view(vec) - u0;
 
   // set the correct output dimensions
   vec.back() = buf.size(-1);
@@ -444,10 +457,22 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
     vec[n] = buf.size(n);
   }
 
-  auto bufl = buf.gather(-2, ul.expand(vec));
-  auto bufu = buf.gather(-2, uu.expand(vec));
+  auto buf0 = buf.gather(-2, u0.expand(vec));
+  auto buf1 = buf.gather(-2, u1.expand(vec));
 
-  return weight * bufu + (1.0 - weight) * bufl;
+  if (options->interp_order() == 2) {
+    return x * buf1 + (1.0 - x) * buf0;
+  } else {
+    auto u2 = u1 + 1;
+    auto um = u0 - 1;
+    auto bufm = buf.gather(-2, um.expand(vec));
+    auto buf2 = buf.gather(-2, u2.expand(vec));
+    auto wm = (-x * (x - 1) * (x - 2)) / 6.0;
+    auto w0 = ((x + 1) * (x - 1) * (x - 2)) / 2.0;
+    auto w1 = (-(x + 1) * x * (x - 2)) / 2.0;
+    auto w2 = (x * (x + 1) * (x - 1)) / 6.0;
+    return wm * bufm + w0 * buf0 + w1 * buf1 + w2 * buf2;
+  }
 
   /*auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)

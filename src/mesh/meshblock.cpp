@@ -326,6 +326,10 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   // compute conserved
+  if (options->verbose()) {
+    std::cout << "[Meshblock] computing conserved variables." << std::endl;
+  }
+
   vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
   if (pscalar->nvar() > 0) {
     vars["scalar_s"] = hydro_w[IDN] * scalar_r;

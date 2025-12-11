@@ -114,7 +114,6 @@ int main(int argc, char** argv) {
   set_zonal_velocity(block, vars["hydro_w"]);
 
   block->initialize(vars);
-
   block->get_layout()->pg->barrier()->wait();
 
   for (int i = 0; i < block->options->layout()->world_size(); ++i) {

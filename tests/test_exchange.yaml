@@ -22,7 +22,7 @@ distribute:
 geometry:
   type: gnomonic-equiangle
   #type: cartesian
-  cells: {nx1: 1, nx2: 6, nx3: 6, nghost: 2}
+  cells: {nx1: 1, nx2: 12, nx3: 12, nghost: 2}
   bounds:
     x2min_pi: -0.25
     x2max_pi: 0.25

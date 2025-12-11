@@ -63,6 +63,7 @@ struct CoordinateOptionsImpl {
   ADD_ARG(int, nx2) = 1;
   ADD_ARG(int, nx3) = 1;
   ADD_ARG(int, nghost) = 1;
+  ADD_ARG(int, interp_order) = 2;
 
   ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
