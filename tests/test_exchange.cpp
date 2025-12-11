@@ -21,14 +21,34 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   auto face = CS_FACE_NAMES[face_id];
 
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto alpha = mesh[0];
-  auto beta = mesh[1];
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
-  hydro_w[IV3] = lat.cos();
+  // hydro_w[IV3] = lat.cos();
+  hydro_w[IV3] = 1.;
 
-  // sph_contra_to_cart_(hydro_w.narrow(0, IV1, 3), M_PI / 2. - lat, lon);
+  sph_contra_to_cart_(hydro_w.narrow(0, IV1, 3), M_PI / 2. - lat, lon);
+
+  if (get_rank() == 0) {
+    std::cout << "ve1 = \n"
+              << hydro_w[IV1].squeeze().transpose(0, 1).flip(0) << std::endl;
+    std::cout << "ve2 = \n"
+              << hydro_w[IV2].squeeze().transpose(0, 1).flip(0) << std::endl;
+    std::cout << "ve3 = \n"
+              << hydro_w[IV3].squeeze().transpose(0, 1).flip(0) << std::endl;
+  }
+
   cs_cart_to_contra_(hydro_w.narrow(0, IV1, 3), alpha, beta);
+
+  if (get_rank() == 0) {
+    std::cout << "ve1 = \n"
+              << hydro_w[IV1].squeeze().transpose(0, 1).flip(0) << std::endl;
+    std::cout << "ve2 = \n"
+              << hydro_w[IV2].squeeze().transpose(0, 1).flip(0) << std::endl;
+    std::cout << "ve3 = \n"
+              << hydro_w[IV3].squeeze().transpose(0, 1).flip(0) << std::endl;
+  }
 }
 
 int main(int argc, char** argv) {

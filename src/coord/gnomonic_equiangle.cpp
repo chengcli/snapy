@@ -133,8 +133,8 @@ void GnomonicEquiangleImpl::reset() {
 
     int my_rank = pmb->options->layout()->rank();
     auto [rx, ry, _] = pmb->get_layout()->loc_of(my_rank);
-    offset_x = op->nx3() * rx;
-    offset_y = op->nx2() * ry;
+    offset_x = op->nx2() * rx;
+    offset_y = op->nx3() * ry;
   } else {
     N = op->nx3();
     usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
@@ -145,11 +145,11 @@ void GnomonicEquiangleImpl::reset() {
 
   // register local ghost cell usrc
   usrc_LR =
-      register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx2()).clone());
+      register_buffer("usrc_LR", usrc.narrow(-1, offset_y, op->nx3()).clone());
   usrc_LR += 1 - offset_y;
 
   usrc_BT = register_buffer(
-      "usrc_BT", usrc.narrow(-1, offset_x, op->nx3()).transpose(0, 1));
+      "usrc_BT", usrc.narrow(-1, offset_x, op->nx2()).transpose(0, 1));
   usrc_BT += 1 - offset_x;
 }
 

@@ -12,11 +12,8 @@ enum Index {
   IDN = 0,
   ICY = 1,
   IVX = 1 + NMASS,
-  IV1 = 1 + NMASS,
   IVY = 2 + NMASS,
-  IV2 = 2 + NMASS,
   IVZ = 3 + NMASS,
-  IV3 = 3 + NMASS,
   IPR = 4 + NMASS,
 
   // reconstruction variables

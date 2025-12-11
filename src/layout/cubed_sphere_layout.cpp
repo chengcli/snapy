@@ -612,8 +612,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       bool trans_flag = (my_side - 1.5) * (nb_side - 1.5) < 0;
       bool flip_flag = (my_side % 2) == (nb_side % 2);
 
-      auto alpha = mesh[0].index(sub3);
-      auto beta = mesh[1].index(sub3);
+      auto alpha = mesh[1].index(sub3);
+      auto beta = mesh[0].index(sub3);
 
       for (auto &[name, vara] : vars) {
         auto var = vara.index(sub);
@@ -738,8 +738,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       int bid = get_buffer_id(offset);
       int count = 0;
 
-      auto alpha = mesh[0].index(sub3);
-      auto beta = mesh[1].index(sub3);
+      auto alpha = mesh[1].index(sub3);
+      auto beta = mesh[0].index(sub3);
 
       for (auto &[name, var] : vars) {
         var.index_put_(sub, recv_bufs[bid][count]);
