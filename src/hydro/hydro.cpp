@@ -249,15 +249,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
       SyncOptions sync_opts;
-      sync_opts.cross_panel_only(true);
-      sync_opts.dim(DIM2);
-      sync_opts.interpolate(false);
-      sync_opts.type(kPrimitive);
+      sync_opts.cross_panel_only(true).dim(DIM2).interpolate(false).type(
+          kPrimitive);
 
-      Variables sync_vars;
-      sync_vars["hydro_wl"] = wtmp[ILT];
-      sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(pmb, sync_vars, sync_opts);
+      Variables send_vars;
+      send_vars["hydro_wl:+"] = wtmp[ILT];
+      send_vars["hydro_wr:-"] = wtmp[IRT];
+      playout->forward(pmb, send_vars, sync_opts);
     }
 
     auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
@@ -279,10 +277,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
       SyncOptions sync_opts;
-      sync_opts.cross_panel_only(true);
-      sync_opts.dim(DIM3);
-      sync_opts.interpolate(false);
-      sync_opts.type(kPrimitive);
+      sync_opts.cross_panel_only(true).dim(DIM3).interpolate(false).type(
+          kPrimitive);
 
       Variables sync_vars;
       sync_vars["hydro_wl"] = wtmp[ILT];

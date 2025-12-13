@@ -140,6 +140,7 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
   return {lon, lat};
 }
 
+//! Transform global cartesian velocity to local panel contravariant velocity
 void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
                         torch::Tensor beta) {
   auto x = alpha.tan();
@@ -164,8 +165,8 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
   auto vy = local_vel[VEL3];
 
   vel[VEL1] = (vz + x * vx + y * vy) / delta;
-  vel[VEL2] = (-x * vz / D + vx * (1 + y * y) / D - vy * x * y / D) / delta;
-  vel[VEL3] = (-y * vz / C - x * y * vx / C + (1 + x * x) * vy / C) / delta;
+  vel[VEL2] = D / delta * (vx - x * vz);
+  vel[VEL3] = C / delta * (vy - y * vz);
 }
 
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
@@ -186,9 +187,11 @@ void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
   auto vy = vel[VEL3].clone();
 
   vel[l2g[f][VEL1].idx] =
-      l2g[f][VEL1].sgn * ((vz - D * x * vx - C * y * vy) / delta);
-  vel[l2g[f][VEL2].idx] = l2g[f][VEL2].sgn * (x * vz + D * vx) / delta;
-  vel[l2g[f][VEL3].idx] = l2g[f][VEL3].sgn * (y * vz + C * vy) / delta;
+      l2g[f][VEL1].sgn * (vz - vx * x / D - vy * y / C) / delta;
+  vel[l2g[f][VEL2].idx] =
+      l2g[f][VEL2].sgn * (vz * x + vx * D - (vy * x * y) / C) / delta;
+  vel[l2g[f][VEL3].idx] =
+      l2g[f][VEL3].sgn * (vz * y + vy * C - (vx * x * y) / D) / delta;
 }
 
 }  // namespace snap

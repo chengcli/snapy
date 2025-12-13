@@ -26,7 +26,7 @@ torch::Tensor ShallowWaterImpl::compute(
     return torch::Tensor();
   } else if (ab == "WA->L") {
     auto w = args[0];
-    return _gravity_wave_speed(w);
+    return torch::sqrt(w[IDN]);
   } else {
     TORCH_CHECK(false, "Unknown abbreviation: ", ab);
   }
@@ -60,10 +60,6 @@ void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   coord_vec_lower_(cons, pcoord->cosine_cell_kj);
 
   apply_conserved_limiter_(cons);
-}
-
-torch::Tensor ShallowWaterImpl::_gravity_wave_speed(torch::Tensor prim) const {
-  return torch::sqrt(prim[IDN]);
 }
 
 }  // namespace snap

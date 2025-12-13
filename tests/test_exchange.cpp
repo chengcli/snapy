@@ -25,8 +25,8 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   auto beta = mesh[0];
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
-  hydro_w[IVZ] = lat.cos();
-  // hydro_w[IVY] = lat.cos();
+  // hydro_w[IVZ] = lat.cos();
+  hydro_w[IVY] = lat.cos();
 
   sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
   cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);

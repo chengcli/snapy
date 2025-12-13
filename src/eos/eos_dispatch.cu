@@ -4,7 +4,7 @@
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
 
-// fmv
+// snap
 #include <snap/loops.cuh>
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"

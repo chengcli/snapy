@@ -581,7 +581,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   }
 
   // get mesh
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto x3_coord = opts.dim() == SyncOptions::DIM3 ? pcoord->x3f : pcoord->x3v;
+  auto x2_coord = opts.dim() == SyncOptions::DIM2 ? pcoord->x2f : pcoord->x2v;
+  auto mesh = torch::meshgrid({x3_coord, x2_coord, pcoord->x1v}, "ij");
 
   // Serialize over all inter-panel neighbors
   for (int dy = dy_min; dy <= dy_max; ++dy)
@@ -598,6 +600,13 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       if (std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
 
       // Get the interior part for this direction
+      auto part_opts = PartOptions().exterior(false);
+      if (opts.dim() == SyncOptions::DIM2) {
+        part_opts.extend_x2(1).depth(1);
+      } else if (opts.dim() == SyncOptions::DIM3) {
+        part_opts.extend_x3(1).depth(1);
+      }
+
       auto sub = pmb->part(offset, PartOptions().exterior(false));
       auto sub3 = pmb->part(offset, PartOptions().exterior(false).ndim(3));
 

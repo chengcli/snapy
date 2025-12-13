@@ -190,13 +190,14 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o1 == -1) {
     start1 = nghost * (1 - is_ghost);
-    len1 = nghost;
+    len1 = std::min(nghost, opts.depth());
   } else if (o1 == 0) {
     start1 = nghost - opts.extend_x1();
     len1 = nx1 + 2 * opts.extend_x1();
   } else {  // o1 == 1
-    start1 = nghost * is_ghost + nx1;
-    len1 = nghost;
+    start1 = nx1 + nghost * (1 + is_ghost) - std::min(nghost, opts.depth()) +
+             opts.extend_x1();
+    len1 = std::min(nghost, opts.depth());
   }
 
   // ---- dimension 2 ---- //
@@ -204,13 +205,14 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o2 == -1) {
     start2 = nghost * (1 - is_ghost);
-    len2 = nghost;
+    len2 = std::min(nghost, opts.depth());
   } else if (o2 == 0) {
     start2 = nghost - opts.extend_x2();
     len2 = nx2 + 2 * opts.extend_x2();
   } else {  // o2 == 1
-    start2 = nghost * is_ghost + nx2;
-    len2 = nghost;
+    start2 = nx2 + nghost * (1 + is_ghost) - std::min(nghost, opts.depth()) +
+             opts.extend_x2();
+    len2 = std::min(nghost, opts.depth());
   }
 
   // ---- dimension 3 ---- //
@@ -218,13 +220,14 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o3 == -1) {
     start3 = nghost * (1 - is_ghost);
-    len3 = nghost;
+    len3 = std::min(nghost, opts.depth());
   } else if (o3 == 0) {
     start3 = nghost - opts.extend_x3();
     len3 = nx3 + 2 * opts.extend_x3();
   } else {  // o3 == 1
-    start3 = nghost * is_ghost + nx3;
-    len3 = nghost;
+    start3 = nx3 + nghost * (1 + is_ghost) - std::min(nghost, opts.depth()) +
+             opts.extend_x3();
+    len3 = std::min(nghost, opts.depth());
   }
 
   auto slice1 = torch::indexing::Slice(start1, start1 + len1);
