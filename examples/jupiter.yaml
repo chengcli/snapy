@@ -54,8 +54,27 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 300.e3, x2min: 0., x2max: 1200.e3, x3min: -0.5, x3max: 0.5}
-  cells: {nx1: 100, nx2: 200, nx3: 1, nghost: 3}
+
+  bounds:
+    x1min: 0.
+    x1max: 300.e3
+    x2min: 0.
+    x2max: 1200.e3
+    x3min: -0.5
+    x3max: 0.5
+
+  cells:
+    nx1: 100
+    nx2: 200
+    nx3: 1
+    nghost: 3
+
+distribute:
+  backend: gloo
+  layout: slab
+  nb2: 4
+  nb3: 1
+  verbose: false
 
 dynamics:
   equation-of-state:
@@ -98,6 +117,14 @@ integration:
   implicit-scheme: 1
   nlim: -1
   tlim: 1.e5
+  ncycle_out: 10
+
+outputs:
+  - type: restart
+    dt: 1.E5
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 1.E3
 
 forcing:
   const-gravity:

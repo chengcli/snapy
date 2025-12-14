@@ -202,7 +202,9 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   if (op->sed()) {
     op->sed()->eos() = op->eos();
     op->sed()->sedvel()->grav() = op->grav();
-    op->fricHeat()->sedvel() = op->sed()->sedvel();
+    if (op->fricHeat()) {
+      op->fricHeat()->sedvel() = op->sed()->sedvel();
+    }
 
     if (verbose) {
       std::cout << "[HydroOptions] sedimentation options:" << std::endl;
