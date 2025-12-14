@@ -137,8 +137,7 @@ void HydroImpl::reset() {
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   torch::Tensor cs;
-  if (options->eos()->type() == "aneos" ||
-      options->eos()->type() == "plume-eos") {
+  if (options->eos()->type() == "aneos") {
     cs = peos->compute("W->L", {w});
   } else {
     auto gamma = peos->compute("W->A", {w});
@@ -315,6 +314,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (5) Calculate flux divergence ------------ ////
   _div.set_(pcoord->forward(w, _flux1, _flux2, _flux3));
+  if (options->verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "[Hydro] Divergence time (s): " << elapsed.count() << "\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
 
   //// ------------ (6) Calculate external forcing ------------ ////
   auto du = -dt * _div;

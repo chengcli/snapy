@@ -295,7 +295,17 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
 
   auto vol = cell_volume();
-  auto dflx = torch::zeros_like(flux1);
+
+  torch::Tensor dflx;
+  if (flux1.defined()) {
+    dflx = torch::zeros_like(flux1);
+  } else if (flux2.defined()) {
+    dflx = torch::zeros_like(flux2);
+  } else if (flux3.defined()) {
+    dflx = torch::zeros_like(flux3);
+  } else {
+    TORCH_CHECK(false, "At least one flux tensor must be defined");
+  }
 
   int si = is();
   int ei = ie() + 1;
