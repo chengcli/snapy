@@ -159,11 +159,9 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
  *
  * Cartesian velocity components:
  * \f{eqnarray*}{
- *  v_x & = & \mathbf{v} \cdot \hat{\mathbf{x}} = \frac{1}{\delta} (v^1 x + v2 D
- * - \frac{v^3 x y}{C}) \\
- *  v_y & = & \mathbf{v} \cdot \hat{\mathbf{y}} = \frac{1}{\delta} (v^1 y + v3 C
- * - \frac{v^2 x y}{D}) \\ v_z & = & \mathbf{v} \cdot \hat{\mathbf{z}} =
- * \frac{1}{\delta} (v^1 - \frac{v^2 x}{D} - \frac{v^3 y}{C})
+ *  v_x & = & \mathbf{v} \cdot \hat{\mathbf{x}} = \frac{1}{\delta} (v^1 x + v^2 D - \frac{v^3 x y}{C}) \\
+ *  v_y & = & \mathbf{v} \cdot \hat{\mathbf{y}} = \frac{1}{\delta} (v^1 y + v^3 C - \frac{v^2 x y}{D}) \\
+ *  v_z & = & \mathbf{v} \cdot \hat{\mathbf{z}} = \frac{1}{\delta} (v^1 - \frac{v^2 x}{D} - \frac{v^3 y}{C})
  * \f}
  */
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
