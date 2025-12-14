@@ -242,23 +242,51 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (psed) psed->forward(w, _flux1);
   }
 
-  //// ------------ (3) Calculate dimension 2 flux ------------ ////
+  //// ------------ (3.A) Calculate dimension 2 LR states ------------ ////
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  torch::Tensor wtmp2, wtmp3;
+  SyncOptions sync_opts;
+  sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
+  Variables send_vars;
+
   if (u.size(DIM2) > 1) {
-    auto wtmp = precon23->forward(w, DIM2);
+    wtmp2 = precon23->forward(w, DIM2);
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
-      SyncOptions sync_opts;
-      sync_opts.cross_panel_only(true).dim(DIM2).interpolate(false).type(
-          kPrimitive);
-
-      Variables send_vars;
-      send_vars["hydro_wl:+"] = wtmp[ILT];
-      send_vars["hydro_wr:-"] = wtmp[IRT];
-      playout->forward(pmb, send_vars, sync_opts);
+      send_vars["hydro_wl:+"] = wtmp2[ILT];
+      send_vars["hydro_wr:-"] = wtmp2[IRT];
+      playout->forward(pmb, send_vars, sync_opts.dim(DIM2), works);
     }
+  }
 
-    auto wlr2 = has_solid ? pib->forward(wtmp, DIM2, other.at("solid")) : wtmp;
+  //// ------------ (3.B) Calculate dimension 3 LR states ------------ ////
+  if (u.size(DIM3) > 1) {
+    wtmp3 = precon23->forward(w, DIM3);
+
+    // sync left/right states across faces for cubed sphere layout
+    if (playout->options->type() == "cubed-sphere") {
+      send_vars["hydro_wl:+"] = wtmp3[ILT];
+      send_vars["hydro_wr:-"] = wtmp3[IRT];
+      playout->forward(pmb, send_vars, sync_opts.dim(DIM3), works);
+    }
+  }
+
+  // finalize communications
+  if (playout->options->type() == "cubed-sphere") {
+    send_vars["hydro_wl:+"] = wtmp2[ILT];
+    send_vars["hydro_wr:-"] = wtmp2[IRT];
+    playout->finalize(pmb, send_vars, sync_opts.dim(DIM2), works);
+
+    send_vars["hydro_wl:+"] = wtmp3[ILT];
+    send_vars["hydro_wr:-"] = wtmp3[IRT];
+    playout->finalize(pmb, send_vars, sync_opts.dim(DIM3), works);
+  }
+
+  //// ------------ (4.A) Calculate dimension 2 flux ------------ ////
+  if (u.size(DIM2) > 1) {
+    auto wlr2 =
+        has_solid ? pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
     if (!options->disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
       if (options->verbose()) {
@@ -270,23 +298,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
   }
 
-  //// ------------ (4) Calculate dimension 3 flux ------------ ////
+  //// ------------ (4.B) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
-    auto wtmp = precon23->forward(w, DIM3);
-
-    // sync left/right states across faces for cubed sphere layout
-    if (playout->options->type() == "cubed-sphere") {
-      SyncOptions sync_opts;
-      sync_opts.cross_panel_only(true).dim(DIM3).interpolate(false).type(
-          kPrimitive);
-
-      Variables sync_vars;
-      sync_vars["hydro_wl"] = wtmp[ILT];
-      sync_vars["hydro_wr"] = wtmp[IRT];
-      playout->forward(pmb, sync_vars, sync_opts);
-    }
-
-    auto wlr3 = has_solid ? pib->forward(wtmp, DIM3, other.at("solid")) : wtmp;
+    auto wlr3 =
+        has_solid ? pib->forward(wtmp3, DIM3, other.at("solid")) : wtmp3;
     if (!options->disable_flux_x3()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
       if (options->verbose()) {

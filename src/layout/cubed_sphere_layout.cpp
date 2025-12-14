@@ -464,76 +464,8 @@ int CubedSphereLayoutImpl::neighbor_rank(
   }
 }
 
-void CubedSphereLayoutImpl::forward(MeshBlockImpl const *pmb, Variables &vars,
-                                    SyncOptions opts) {
-  TORCH_CHECK(!options->no_backend(),
-              "[CubedSphereLayout:forward] backend is disabled");
-  TORCH_CHECK(pmb != nullptr,
-              "[CubedSphereLayout:forward] MeshBlock pointer is null");
-
-  // Skip corner exchanges for cubed-sphere layout
-  opts.skip_corner(true);
-
-  // Serialize data into send buffers
-  serialize(pmb, vars, opts);
-
-  if (options->verbose() && is_root()) {
-    std::cout << "[CubedSphereLayout] performing communication\n";
-  }
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-
-  // Get my rank
-  auto rank = options->rank();
-
-  // Get my logical location
-  auto iloc = loc_of(rank);
-
-  int dy_min = opts.dy_min();
-  int dy_max = opts.dy_max();
-  int dx_min = opts.dx_min();
-  int dx_max = opts.dx_max();
-
-  for (int dy = dy_min; dy <= dy_max; ++dy)
-    for (int dx = dx_min; dx <= dx_max; ++dx) {
-      // skip the center (self)
-      if (dy == 0 && dx == 0) continue;
-      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
-
-      std::tuple<int, int, int> offset(dy, dx, 0);
-      int nb = neighbor_rank(iloc, offset);
-      if (nb < 0) continue;  // no neighbor
-
-      int r = get_buffer_id(offset);
-
-      if (nb != rank) {  // different ranks
-        // Send operation
-        auto send_work = pg->send(send_bufs[r], nb, 0);
-        works.push_back(send_work);
-
-        // Receive operation
-        auto recv_work = pg->recv(recv_bufs[r], nb, 0);
-        works.push_back(recv_work);
-      } else {  // self-send
-        for (int n = 0; n < recv_bufs[r].size(); ++n)
-          recv_bufs[r][n].copy_(send_bufs[r][n]);
-      }
-    }
-
-  // Wait for all operations to complete
-  for (auto &work : works) work->wait();
-
-  // Deserialize received data into ghost zones
-  deserialize(pmb, vars, opts);
-
-  // Fill corners
-  if (opts.skip_corner() && !opts.cross_panel_only()) {
-    fill_corners(pmb, vars);
-  }
-}
-
 void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
-                                      SyncOptions opts) {
+                                      SyncOptions const &opts) {
   if (options->verbose() && is_root()) {
     std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
   }
@@ -569,13 +501,23 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         // Copy data from mesh to send buffer
         int bid = get_buffer_id(offset);
-        send_bufs[bid].resize(vars.size());
-        recv_bufs[bid].resize(vars.size());
-        int count = 0;
+
+        send_bufs[bid].clear();
+        recv_bufs[bid].clear();
+        send_bufs[bid].reserve(vars.size());
+        recv_bufs[bid].reserve(vars.size());
+
         for (auto &[name, var] : vars) {
-          send_bufs[bid][count] = var.index(sub).clone();
-          recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
-          count++;
+          // do partial send if name string contains ':'
+          auto pos = name.find(":");
+          if (pos != std::string::npos) {
+            auto suffix = name.substr(pos + 1);
+            if ((suffix == "+" && (dy < 0 || dx < 0)) ||
+                (suffix == "-" && (dy > 0 || dx > 0)))
+              continue;
+          }
+          send_bufs[bid].push_back(var.index(sub).clone());
+          recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
         }
       }
   }
@@ -602,19 +544,22 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       // Get the interior part for this direction
       auto part_opts = PartOptions().exterior(false);
       if (opts.dim() == SyncOptions::DIM2) {
-        part_opts.extend_x2(1).depth(1);
+        part_opts.depth(1).exterior(dx > 0);
       } else if (opts.dim() == SyncOptions::DIM3) {
-        part_opts.extend_x3(1).depth(1);
+        part_opts.depth(1).exterior(dy > 0);
       }
 
-      auto sub = pmb->part(offset, PartOptions().exterior(false));
-      auto sub3 = pmb->part(offset, PartOptions().exterior(false).ndim(3));
+      auto sub = pmb->part(offset, part_opts);
+      auto sub3 = pmb->part(offset, part_opts.ndim(3));
 
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
-      send_bufs[bid].resize(vars.size());
-      recv_bufs[bid].resize(vars.size());
-      int count = 0;
+
+      send_bufs[bid].clear();
+      recv_bufs[bid].clear();
+      send_bufs[bid].reserve(vars.size());
+      recv_bufs[bid].reserve(vars.size());
+
       int my_side = get_side(offset);
       int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
 
@@ -626,6 +571,15 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       auto beta = mesh[0].index(sub3);
 
       for (auto &[name, var] : vars) {
+        // do partial send if name string contains ':'
+        auto pos = name.find(":");
+        if (pos != std::string::npos) {
+          auto suffix = name.substr(pos + 1);
+          if ((suffix == "+" && (dy < 0 || dx < 0)) ||
+              (suffix == "-" && (dy > 0 || dx > 0)))
+            continue;
+        }
+
         auto var_send = var.index(sub).clone();
         auto vel = var_send.narrow(0, IVX, 3);
 
@@ -663,18 +617,15 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
           var_send = var_send.transpose(-2, -3).reshape(sizes);
         }
 
-        // if var_send is var, make a clone to avoid in-place modification
-        // otherwise, set it to send_bufs
-        send_bufs[bid][count] = var_send;
-        recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
-        count++;
+        send_bufs[bid].push_back(var_send);
+        recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
       }
     }
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                                         Variables &vars,
-                                        SyncOptions opts) const {
+                                        SyncOptions const &opts) const {
   if (options->verbose() && is_root()) {
     std::cout
         << "[CubedSphereLayout] deserializing data from receive buffers\n";
@@ -712,13 +663,23 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         int bid = get_buffer_id(offset);
         int count = 0;
         for (auto &[name, var] : vars) {
+          // do partial recv if name string contains ':'
+          auto pos = name.find(":");
+          if (pos != std::string::npos) {
+            auto suffix = name.substr(pos + 1);
+            if ((suffix == "+" && (dy > 0 || dx > 0)) ||
+                (suffix == "-" && (dy < 0 || dx < 0)))
+              continue;
+          }
           var.index_put_(sub, recv_bufs[bid][count++]);
         }
       }
   }
 
   // get mesh
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto x3_coord = opts.dim() == SyncOptions::DIM3 ? pcoord->x3f : pcoord->x3v;
+  auto x2_coord = opts.dim() == SyncOptions::DIM2 ? pcoord->x2f : pcoord->x2v;
+  auto mesh = torch::meshgrid({x3_coord, x2_coord, pcoord->x1v}, "ij");
 
   // Deserialize over all inter-panel neighbors
   for (int dy = dy_min; dy <= dy_max; ++dy)
@@ -735,18 +696,33 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       if (std::get<2>(iloc) == std::get<2>(loc_of(nb))) continue;
 
       // Get the exterior (ghost zone) part for this direction
-      auto sub = pmb->part(offset, PartOptions().exterior(true));
-      auto sub3 = pmb->part(offset, PartOptions().exterior(true).ndim(3));
+      auto part_opts = PartOptions().exterior(true);
+      if (opts.dim() == SyncOptions::DIM2) {
+        part_opts.depth(1).exterior(dx > 0);
+      } else if (opts.dim() == SyncOptions::DIM3) {
+        part_opts.depth(1).exterior(dy > 0);
+      }
 
-      // Copy data from receive buffer to mesh ghost zones
-      int bid = get_buffer_id(offset);
-      int count = 0;
+      auto sub = pmb->part(offset, part_opts);
+      auto sub3 = pmb->part(offset, part_opts.ndim(3));
 
       auto alpha = mesh[1].index(sub3);
       auto beta = mesh[0].index(sub3);
 
+      // Copy data from receive buffer to mesh ghost zones
+      int bid = get_buffer_id(offset);
+      int count = 0;
       for (auto &[name, var] : vars) {
-        var.index_put_(sub, recv_bufs[bid][count]);
+        // do partial recv if name string contains ':'
+        auto pos = name.find(":");
+        if (pos != std::string::npos) {
+          auto suffix = name.substr(pos + 1);
+          if ((suffix == "+" && (dy > 0 || dx > 0)) ||
+              (suffix == "-" && (dy < 0 || dx < 0)))
+            continue;
+        }
+
+        var.index_put_(sub, recv_bufs[bid][count++]);
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
@@ -761,53 +737,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             cs_cart_to_contra_(vel, alpha, beta);
             break;
         }
-        count++;
       }
     }
-}
-
-void CubedSphereLayoutImpl::fill_corners(MeshBlockImpl const *pmb,
-                                         Variables &vars) const {
-  auto sub_left = pmb->part({0, -1, 0}, PartOptions().exterior(true));
-  auto sub_right = pmb->part({0, +1, 0}, PartOptions().exterior(true));
-  auto sub_bot = pmb->part({-1, 0, 0}, PartOptions().exterior(true));
-  auto sub_top = pmb->part({+1, 0, 0}, PartOptions().exterior(true));
-
-  // Fill-in left-bot inter-panel corners
-  std::tuple<int, int, int> corner(/*dy=*/-1, /*dx=*/-1, 0);
-  auto sub = pmb->part(corner, PartOptions().exterior(true));
-  for (auto &[name, var] : vars) {
-    auto var_left = var.index(sub_left).select(-3, 0).unsqueeze(-3);
-    auto var_bot = var.index(sub_bot).select(-2, 0).unsqueeze(-2);
-    var.index_put_(sub, 0.5 * (var_left + var_bot));
-  }
-
-  // Fill-in right-bot inter-panel corners
-  corner = std::tuple<int, int, int>(/*dy=*/-1, /*dx=*/1, 0);
-  sub = pmb->part(corner, PartOptions().exterior(true));
-  for (auto &[name, var] : vars) {
-    auto var_right = var.index(sub_right).select(-3, 0).unsqueeze(-3);
-    auto var_bot = var.index(sub_bot).select(-2, -1).unsqueeze(-2);
-    var.index_put_(sub, 0.5 * (var_right + var_bot));
-  }
-
-  // Fill-in left-top inter-panel corners
-  corner = std::tuple<int, int, int>(/*dy=*/1, /*dx=*/-1, 0);
-  sub = pmb->part(corner, PartOptions().exterior(true));
-  for (auto &[name, var] : vars) {
-    auto var_left = var.index(sub_left).select(-3, -1).unsqueeze(-3);
-    auto var_top = var.index(sub_top).select(-2, 0).unsqueeze(-2);
-    var.index_put_(sub, 0.5 * (var_left + var_top));
-  }
-
-  // Fill-in right-top inter-panel corners
-  corner = std::tuple<int, int, int>(/*dy=*/1, /*dx=*/1, 0);
-  sub = pmb->part(corner, PartOptions().exterior(true));
-  for (auto &[name, var] : vars) {
-    auto var_right = var.index(sub_right).select(-3, -1).unsqueeze(-3);
-    auto var_top = var.index(sub_top).select(-2, -1).unsqueeze(-2);
-    var.index_put_(sub, 0.5 * (var_right + var_top));
-  }
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(

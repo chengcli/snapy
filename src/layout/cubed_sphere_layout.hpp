@@ -37,6 +37,7 @@ class CubedSphereLayoutImpl
     reset();
   }
   void reset() override;
+  using LayoutImpl::forward;
 
   ~CubedSphereLayoutImpl() = default;
   void pretty_print(std::ostream &os) const override;
@@ -49,17 +50,11 @@ class CubedSphereLayoutImpl
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 
-  void forward(MeshBlockImpl const *pmb, Variables &vars,
-               SyncOptions opts) override;
-
   void serialize(MeshBlockImpl const *pmb, Variables &vars,
-                 SyncOptions opts) override;
+                 SyncOptions const &opts) override;
 
   void deserialize(MeshBlockImpl const *pmb, Variables &vars,
-                   SyncOptions opts) const override;
-
-  //! fill corners after exchange
-  void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const override;
+                   SyncOptions const &opts) const override;
 
  private:
   //! \brief Interpolate transmitted variable to local ghost zones
