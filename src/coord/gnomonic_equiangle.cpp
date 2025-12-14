@@ -245,50 +245,40 @@ void GnomonicEquiangleImpl::prim2local2_(torch::Tensor const& w) const {
   _set_face2_metric();
 
   // Extract global projected 4-velocities
-  auto uu1 = w[IVX];
-  auto uu2 = w[IVY];
-  auto uu3 = w[IVZ];
+  auto uu1 = w[IVX].clone();
+  auto uu2 = w[IVY].clone();
+  auto uu3 = w[IVZ].clone();
 
   // Calculate transformation matrix
-  auto T11 = torch::ones_like(g11);
+  auto T11 = 1.;
   auto T22 = 1.0 / gi22.sqrt();
   auto T32 = g23 / g33.sqrt();
   auto T33 = g33.sqrt();
 
   // Transform projected velocities
-  auto ux = T11 * uu1;
-  auto uy = T22 * uu2;
-  auto uz = T32 * uu2 + T33 * uu3;
-
-  // Set local projected 4-velocities
-  w[IVX] = ux;
-  w[IVY] = uy;
-  w[IVZ] = uz;
+  w[IVX] = T11 * uu1;
+  w[IVY] = T22 * uu2;
+  w[IVZ] = T32 * uu2 + T33 * uu3;
 }
 
 void GnomonicEquiangleImpl::prim2local3_(torch::Tensor const& w) const {
   _set_face3_metric();
 
   // Extract global projected 4-velocities
-  auto uu1 = w[IVX];
-  auto uu2 = w[IVY];
-  auto uu3 = w[IVZ];
+  auto uu1 = w[IVX].clone();
+  auto uu2 = w[IVY].clone();
+  auto uu3 = w[IVZ].clone();
 
   // Calculate transformation matrix
-  auto T11 = torch::ones_like(g11);
+  auto T11 = 1.;
   auto T22 = g22.sqrt();
   auto T23 = g23 / g22.sqrt();
   auto T33 = 1.0 / gi33.sqrt();
 
   // Transform projected velocities
-  auto ux = T11 * uu1;
-  auto uy = T22 * uu2 + T23 * uu3;
-  auto uz = T33 * uu3;
-
-  // Set local projected 4-velocities
-  w[IVX] = ux;
-  w[IVY] = uy;
-  w[IVZ] = uz;
+  w[IVX] = T11 * uu1;
+  w[IVY] = T22 * uu2 + T23 * uu3;
+  w[IVZ] = T33 * uu3;
 }
 
 // de-orthonormal and transforms to covariant form
@@ -310,9 +300,9 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   _set_face2_metric();
 
   // Extract local conserved quantities and fluxes
-  auto txx = flux[IVX];
-  auto txy = flux[IVY];
-  auto txz = flux[IVZ];
+  auto txx = flux[IVX].clone();
+  auto txy = flux[IVY].clone();
+  auto txz = flux[IVZ].clone();
 
   // Calculate transformation matrix
   auto T11 = 1.0;

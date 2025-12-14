@@ -18,6 +18,7 @@ geometry:
 distribute:
   backend: gloo
   layout: cubed-sphere
+  #layout: slab
   nb2: 1
   nb3: 1
   verbose: false

@@ -183,6 +183,78 @@ TEST_P(DeviceTest, interpolate_LR) {
             << var.squeeze().transpose(0, 1).flip(0) << std::endl;
 }
 
+TEST_P(DeviceTest, flux_projection1) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->phydro->pcoord;
+
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto prim = torch::ones({5, nc3, nc2, nc1},
+                          torch::TensorOptions().dtype(dtype).device(device));
+  auto prim_ori = prim.clone();
+  pcoord->prim2local1_(prim);
+  pcoord->flux2global1_(prim);
+
+  coord_vec_raise_(prim.narrow(0, IVX, 3), pcoord->cosine_cell_kj);
+  EXPECT_TRUE(torch::allclose(prim, prim_ori));
+}
+
+TEST_P(DeviceTest, flux_projection2) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->phydro->pcoord;
+
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto prim = torch::ones({5, nc3, nc2, nc1},
+                          torch::TensorOptions().dtype(dtype).device(device));
+  auto prim_ori = prim.clone();
+  pcoord->prim2local2_(prim);
+  pcoord->flux2global2_(prim);
+
+  auto xf = pcoord->x2f.tan().unsqueeze(0).unsqueeze(-1);
+  auto y = pcoord->x3v.tan().unsqueeze(-1).unsqueeze(-1);
+  auto Cf = torch::sqrt(1. + xf * xf);
+  auto D = torch::sqrt(1. + y * y);
+  auto cthf = -xf * y / Cf / D;
+
+  coord_vec_raise_(prim.narrow(0, IVX, 3), cthf.narrow(1, 0, nc2));
+  EXPECT_TRUE(torch::allclose(prim, prim_ori));
+}
+
+TEST_P(DeviceTest, flux_projection3) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->phydro->pcoord;
+
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto prim = torch::ones({5, nc3, nc2, nc1},
+                          torch::TensorOptions().dtype(dtype).device(device));
+  auto prim_ori = prim.clone();
+  pcoord->prim2local3_(prim);
+  pcoord->flux2global3_(prim);
+
+  auto x = pcoord->x2v.tan().unsqueeze(0).unsqueeze(-1);
+  auto yf = pcoord->x3f.tan().unsqueeze(-1).unsqueeze(-1);
+  auto C = torch::sqrt(1. + x * x);
+  auto Df = torch::sqrt(1. + yf * yf);
+  auto cthf = -x * yf / C / Df;
+
+  coord_vec_raise_(prim.narrow(0, IVX, 3), cthf.narrow(0, 0, nc3));
+  EXPECT_TRUE(torch::allclose(prim, prim_ori));
+}
+
 int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
 
