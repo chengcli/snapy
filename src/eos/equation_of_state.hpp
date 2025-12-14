@@ -81,13 +81,12 @@ class EquationOfStateImpl {
 
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
-   * These four abbreviations should be supported:
+   * These file abbreviations should be supported:
    *  - "W->U": convert primitive variables to conserved variables
    *  - "U->W": convert conserved variables to primitive variables
-   *  - "W->A": compute adiabatic index from conserved variables
    *  - "WA->L": compute sound speed from primitive variables and adiabatic
-   * index
-   *
+   *  - "W->A": compute adiabatic index from conserved variables
+   *  - "W->T": compute temperature
    *
    * \param[in] ab    abbreviation for the computation
    * \param[in] args  arguments for the computation

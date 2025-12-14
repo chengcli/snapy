@@ -26,7 +26,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "dens";
-    pod->data.InitFromTensor(u, 4, Index::IDN, 1);
+    pod->data.InitFromTensor(u, 4, IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -36,7 +36,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "rho";
-    pod->data.InitFromTensor(w, 4, Index::IDN, 1);
+    pod->data.InitFromTensor(w, 4, IDN, 1);
     AppendOutputDataNode(pod);
     num_vars_++;
   }
@@ -47,7 +47,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "Etot";
-      pod->data.InitFromTensor(u, 4, Index::IPR, 1);
+      pod->data.InitFromTensor(u, 4, IPR, 1);
 
       AppendOutputDataNode(pod);
       num_vars_++;
@@ -58,7 +58,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "press";
-      pod->data.InitFromTensor(w, 4, Index::IPR, 1);
+      pod->data.InitFromTensor(w, 4, IPR, 1);
       AppendOutputDataNode(pod);
       num_vars_++;
     }
@@ -69,13 +69,13 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "mom";
-    pod->data.InitFromTensor(u, 4, Index::IVX, 3);
+    pod->data.InitFromTensor(u, 4, IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
-      src.InitFromTensor(pmb->hydro_u, 4, Index::IVX, 3);
+      src.InitFromTensor(pmb->hydro_u, 4, IVX, 3);
 
       pod = new OutputData;
       pod->type = "VECTORS";
@@ -93,7 +93,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom1";
-    pod->data.InitFromTensor(u, 4, Index::IVX, 1);
+    pod->data.InitFromTensor(u, 4, IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -102,7 +102,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom2";
-    pod->data.InitFromTensor(u, 4, Index::IVY, 1);
+    pod->data.InitFromTensor(u, 4, IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -111,7 +111,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom3";
-    pod->data.InitFromTensor(u, 4, Index::IVZ, 1);
+    pod->data.InitFromTensor(u, 4, IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -122,13 +122,13 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "vel";
-    pod->data.InitFromTensor(w, 4, Index::IVX, 3);
+    pod->data.InitFromTensor(w, 4, IVX, 3);
 
     AppendOutputDataNode(pod);
     num_vars_ += 3;
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
-      src.InitFromTensor(GET_SHARED("hydro/w"), 4, Index::IVX, 3);
+      src.InitFromTensor(GET_SHARED("hydro/w"), 4, IVX, 3);
 
       pod = new OutputData;
       pod->type = "VECTORS";
@@ -146,7 +146,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel1";
-    pod->data.InitFromTensor(w, 4, Index::IVX, 1);
+    pod->data.InitFromTensor(w, 4, IVX, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -155,7 +155,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel2";
-    pod->data.InitFromTensor(w, 4, Index::IVY, 1);
+    pod->data.InitFromTensor(w, 4, IVY, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -164,7 +164,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel3";
-    pod->data.InitFromTensor(w, 4, Index::IVZ, 1);
+    pod->data.InitFromTensor(w, 4, IVZ, 1);
 
     AppendOutputDataNode(pod);
     num_vars_++;
@@ -177,7 +177,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb);
-      pod->data.InitFromTensor(w, 4, Index::ICY, ny);
+      pod->data.InitFromTensor(w, 4, ICY, ny);
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;
@@ -187,7 +187,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb);
-      pod->data.InitFromTensor(u, 4, Index::ICY, ny);
+      pod->data.InitFromTensor(u, 4, ICY, ny);
 
       AppendOutputDataNode(pod);
       num_vars_ += ny;

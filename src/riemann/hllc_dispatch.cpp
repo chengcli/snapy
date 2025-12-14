@@ -21,7 +21,7 @@ void call_hllc_cpu(at::TensorIterator& iter, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_hllc_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ny = nhydro - Index::ICY;
+    auto ny = nhydro - ICY;
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {

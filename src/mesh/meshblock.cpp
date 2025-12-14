@@ -610,7 +610,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
     if (cycle % pintg->options->ncycle_out() == 0) {
       if (vars.count("hydro_u")) {
         compute_mass = true;
-        compute_energy = true;
+        compute_energy = phydro->peos->nvar() > IPR;
       }
 
       if (_playout->is_root()) {
@@ -711,10 +711,11 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
-  auto rho = hydro_u.index(interior)[IDN];
-  auto pres = hydro_u.index(interior)[IPR];
+  auto redo_rho = hydro_u.index(interior)[IDN].min().item<double>() <= 0.;
+  auto redo_pres = hydro_u.size(0) > IPR &&
+                   hydro_u.index(interior)[IPR].min().item<double>() <= 0.;
 
-  if (rho.min().item<double>() <= 0. || pres.min().item<double>() <= 0.) {
+  if (redo_rho || redo_pres) {
     std::cout << "Negative density/pressure detected. Redoing the step with "
                  "smaller dt."
               << std::endl;

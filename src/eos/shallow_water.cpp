@@ -24,6 +24,8 @@ torch::Tensor ShallowWaterImpl::compute(
     return w;
   } else if (ab == "W->A") {
     return torch::Tensor();
+  } else if (ab == "W->T") {
+    return torch::Tensor();
   } else if (ab == "WA->L") {
     auto w = args[0];
     return torch::sqrt(w[IDN]);

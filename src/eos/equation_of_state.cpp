@@ -27,14 +27,34 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   if (!config["dynamics"]["equation-of-state"]) return op;
 
   auto node = config["dynamics"]["equation-of-state"];
+  op->verbose() = node["verbose"].as<bool>(verbose);
 
   op->type() = node["type"].as<std::string>("moist-mixture");
+  if (op->verbose()) {
+    std::cout << "[EquationOfStateOptions] EOS type = " << op->type()
+              << std::endl;
+  }
+
   op->density_floor() = node["density-floor"].as<double>(1.e-6);
+  if (op->verbose()) {
+    std::cout << "[EquationOfStateOptions] density floor = "
+              << op->density_floor() << std::endl;
+  }
+
   op->pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
   op->temperature_floor() = node["temperature-floor"].as<double>(20.);
+
   op->limiter() = node["limiter"].as<bool>(false);
+  if (op->verbose()) {
+    std::cout << "[EquationOfStateOptions] limiter = "
+              << (op->limiter() ? "true" : "false") << std::endl;
+  }
+
   op->eos_file() = node["eos-file"].as<std::string>("");
-  op->verbose() = node["verbose"].as<bool>(verbose);
+  if (op->verbose() && !op->eos_file().empty()) {
+    std::cout << "[EquationOfStateOptions] eos file = " << op->eos_file()
+              << std::endl;
+  }
 
   op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, op->verbose());
 
