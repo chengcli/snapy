@@ -25,8 +25,8 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   auto beta = mesh[0];
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
-  hydro_w[IVZ] = lat.cos();
-  // hydro_w[IVY] = lat.cos();
+  // hydro_w[IVZ] = lat.cos();
+  hydro_w[IVY] = lat.cos();
 
   sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
   cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);
@@ -116,6 +116,29 @@ int main(int argc, char** argv) {
   block->initialize(vars);
   block->get_layout()->pg->barrier()->wait();
 
+  auto w_left = -get_rank() * torch::ones_like(vars["hydro_w"]);
+  auto w_right = get_rank() * torch::ones_like(vars["hydro_w"]);
+
+  SyncOptions sync_opts;
+  sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
+
+  Variables send_vars;
+  send_vars["hydro_wl:+"] = w_left;
+  send_vars["hydro_wr:-"] = w_right;
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  auto playout = block->get_layout();
+
+  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
+                   works);
+  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
+                   works);
+
+  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
+                    works);
+  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
+                    works);
+
   for (int i = 0; i < block->options->layout()->world_size(); ++i) {
     if (i == r) {
       std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
@@ -129,6 +152,13 @@ int main(int argc, char** argv) {
                 << vars["hydro_w"][IVY].squeeze().flip(0) << std::endl;
       std::cout << "hydro_w[IVZ] = \n"
                 << vars["hydro_w"][IVZ].squeeze().flip(0) << std::endl;
+
+      std::cout << std::endl
+                << "w_left[IDN] = \n"
+                << w_left[IDN].squeeze().flip(0) << std::endl;
+      std::cout << std::endl
+                << "w_right[IDN] = \n"
+                << w_right[IDN].squeeze().flip(0) << std::endl;
     }
     block->get_layout()->pg->barrier()->wait();
   }

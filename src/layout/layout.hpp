@@ -124,10 +124,11 @@ struct SyncOptions {
   int dy_max() const { return dim() == DIM2 || dim() == DIM1 ? 0 : 1; }
 
   ADD_ARG(bool, cross_panel_only) = false;
-  ADD_ARG(bool, skip_corner) = false;
+  ADD_ARG(bool, skip_corner) = true;
   ADD_ARG(bool, interpolate) = false;
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, dim) = 0;
+  ADD_ARG(int, id) = 0;
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
@@ -193,11 +194,14 @@ class LayoutImpl {
 
   //! Serialize variables
   virtual void serialize(MeshBlockImpl const *pmb, Variables &vars,
-                         SyncOptions opts);
+                         SyncOptions const &opts);
 
   //! Deserialize variables
   virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars,
-                           SyncOptions opts) const;
+                           SyncOptions const &opts) const;
+
+  //! fill corners after exchange
+  virtual void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const;
 
   //! \brief Perform ghost zone exchange
   /*!
@@ -206,7 +210,12 @@ class LayoutImpl {
    * operations, and deserializes received data into ghost zones.
    */
   virtual void forward(MeshBlockImpl const *pmb, Variables &vars,
-                       SyncOptions opts) {}
+                       SyncOptions const &opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+
+  void finalize(MeshBlockImpl const *pmb, Variables &vars,
+                SyncOptions const &opts,
+                std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
  protected:
   void _init_backend();
@@ -230,6 +239,7 @@ class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
     reset();
   }
   void reset() override;
+  using LayoutImpl::forward;
 
   ~SlabLayoutImpl() = default;
   void pretty_print(std::ostream &os) const override;
@@ -237,10 +247,6 @@ class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
-
-  //! \brief Perform ghost zone exchange for slab layout
-  void forward(MeshBlockImpl const *pmb, Variables &vars,
-               SyncOptions opts) override;
 };
 TORCH_MODULE(SlabLayout);
 

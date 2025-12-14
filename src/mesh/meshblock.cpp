@@ -56,6 +56,8 @@ void MeshBlockImpl::reset() {
     }
   }
 
+  _playout->pg->barrier()->wait();
+
   int px = options->layout()->px();
   int py = options->layout()->py();
   int pz = options->layout()->pz();
@@ -190,13 +192,13 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o1 == -1) {
     start1 = nghost * (1 - is_ghost);
-    len1 = nghost;
+    len1 = std::min(nghost, opts.depth());
   } else if (o1 == 0) {
     start1 = nghost - opts.extend_x1();
     len1 = nx1 + 2 * opts.extend_x1();
   } else {  // o1 == 1
-    start1 = nghost * is_ghost + nx1;
-    len1 = nghost;
+    start1 = nx1 + nghost * is_ghost;
+    len1 = std::min(nghost, opts.depth());
   }
 
   // ---- dimension 2 ---- //
@@ -204,13 +206,13 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o2 == -1) {
     start2 = nghost * (1 - is_ghost);
-    len2 = nghost;
+    len2 = std::min(nghost, opts.depth());
   } else if (o2 == 0) {
     start2 = nghost - opts.extend_x2();
     len2 = nx2 + 2 * opts.extend_x2();
   } else {  // o2 == 1
-    start2 = nghost * is_ghost + nx2;
-    len2 = nghost;
+    start2 = nx2 + nghost * is_ghost;
+    len2 = std::min(nghost, opts.depth());
   }
 
   // ---- dimension 3 ---- //
@@ -218,13 +220,13 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 
   if (o3 == -1) {
     start3 = nghost * (1 - is_ghost);
-    len3 = nghost;
+    len3 = std::min(nghost, opts.depth());
   } else if (o3 == 0) {
     start3 = nghost - opts.extend_x3();
     len3 = nx3 + 2 * opts.extend_x3();
   } else {  // o3 == 1
-    start3 = nghost * is_ghost + nx3;
-    len3 = nghost;
+    start3 = nx3 + nghost * is_ghost;
+    len3 = std::min(nghost, opts.depth());
   }
 
   auto slice1 = torch::indexing::Slice(start1, start1 + len1);
@@ -311,18 +313,21 @@ double MeshBlockImpl::initialize(Variables& vars) {
   }
 
   SyncOptions sync_opts;
-  sync_opts.interpolate(true);
+  sync_opts.interpolate(true).type(kPrimitive);
 
   Variables sync_vars;
-  sync_opts.type(kPrimitive);
   sync_vars["hydro_w"] = hydro_w;
-  _playout->forward(this, sync_vars, sync_opts);
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_r"] = scalar_r;
-    _playout->forward(this, sync_vars, sync_opts);
+    _playout->forward(this, sync_vars, sync_opts, works);
+    _playout->finalize(this, sync_vars, sync_opts, works);
   }
 
   // compute conserved
@@ -547,16 +552,23 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
   // -------- (7) ghost zone exchange --------
   SyncOptions sync_opts;
-  sync_opts.interpolate(true);
-  sync_opts.type(kConserved);
+  sync_opts.interpolate(true).type(kConserved);
 
   Variables sync_vars;
   sync_vars["hydro_u"] = vars.at("hydro_u");
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
+
   if (pscalar->nvar() > 0) {
+    sync_opts.type(kScalar);
+    sync_vars.clear();
     sync_vars["scalar_s"] = vars.at("scalar_s");
+    _playout->forward(this, sync_vars, sync_opts, works);
+    _playout->finalize(this, sync_vars, sync_opts, works);
   }
 
-  _playout->forward(this, sync_vars, sync_opts);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

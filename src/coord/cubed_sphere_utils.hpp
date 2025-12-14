@@ -99,11 +99,73 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
                                                         torch::Tensor alpha,
                                                         torch::Tensor beta);
 
-//! \brief Deproject cartesian velocities to contravariant velocities
+//! \brief Transform cartesian velocities to contravariant velocities
+/*!
+ * Common variables
+ * \f{eqnarray*}{
+ *  x & = & \tan(\alpha) \\
+ *  y & = & \tan(\beta) \\
+ *  \delta & = & \sqrt{x^2 + y^2 + 1} \\
+ *  C & = & \sqrt{1 + x^2} \\
+ *  D & = & \sqrt{1 + y^2}
+ * \f}
+ *
+ * Contravariant basis:
+ * \f{eqnarray*}{
+ *  \mathbf{b}^1 & = & \frac{1}{\delta} (x, y, 1)^T \\
+ *  \mathbf{b}^2 & = & \frac{D}{\delta} (1, 0, -x)^T \\
+ *  \mathbf{b}^3 & = & \frac{C}{\delta} (0, 1, -y)^T
+ * \f}
+ *
+ * Velocity vector expressed using cartesian basis:
+ * \f[
+ *  \mathbf{v} = v_x \hat{\mathbf{x}} + v_y \hat{\mathbf{y}} + v_z
+ * \hat{\mathbf{z}}
+ * \f]
+ *
+ * Contravariant velocity components:
+ * \f{eqnarray*}{
+ *  v^1 & = & \mathbf{v} \cdot \mathbf{b}^1 = \frac{1}{\delta} (x v_x + y v_y +
+ * v_z) \\
+ *  v^2 & = & \mathbf{v} \cdot \mathbf{b}^2 = \frac{D}{\delta} (v_x - x v_z) \\
+ *  v^3 & = & \mathbf{v} \cdot \mathbf{b}^3 = \frac{C}{\delta} (v_y - y v_z)
+ * \f}
+ */
 void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
                         torch::Tensor beta);
 
-//! \brief Project contravariant velocities to cartesian velocities
+//! \brief Transform contravariant velocities to cartesian velocities
+/*!
+ * Common variables
+ * \f{eqnarray*}{
+ *  x & = & \tan(\alpha) \\
+ *  y & = & \tan(\beta) \\
+ *  \delta & = & \sqrt{x^2 + y^2 + 1} \\
+ *  C & = & \sqrt{1 + x^2} \\
+ *  D & = & \sqrt{1 + y^2}
+ * \f}
+ *
+ * Covariant basis:
+ * \f{eqnarray*}{
+ *  \mathbf{b}_1 & = & \frac{1}{\delta} (x, y, 1)^T \\
+ *  \mathbf{b}_2 & = & \frac{1}{D \delta} (D^2, -x y, -x)^T \\
+ *  \mathbf{b}_3 & = & \frac{1}{C \delta} (-x y, C^2, -y)^T
+ * \f}
+ *
+ * Velocity vector expressed using covariant basis:
+ * \f[
+ *  \mathbf{v} = v^1 \mathbf{b}_1 + v^2 \mathbf{b}_2 + v^3 \mathbf{b}_3
+ * \f]
+ *
+ * Cartesian velocity components:
+ * \f{eqnarray*}{
+ *  v_x & = & \mathbf{v} \cdot \hat{\mathbf{x}} = \frac{1}{\delta} (v^1 x + v^2
+ * D - \frac{v^3 x y}{C}) \\
+ *  v_y & = & \mathbf{v} \cdot \hat{\mathbf{y}} = \frac{1}{\delta} (v^1 y + v^3
+ * C - \frac{v^2 x y}{D}) \\ v_z & = & \mathbf{v} \cdot \hat{\mathbf{z}} =
+ * \frac{1}{\delta} (v^1 - \frac{v^2 x}{D} - \frac{v^3 y}{C})
+ * \f}
+ */
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
                         torch::Tensor beta);
 

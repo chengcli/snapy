@@ -72,7 +72,7 @@ struct PartOptions {
   ADD_ARG(int, extend_x1) = 0;
   ADD_ARG(int, extend_x2) = 0;
   ADD_ARG(int, extend_x3) = 0;
-  ADD_ARG(int, depth) = 0;
+  ADD_ARG(int, depth) = 99;
   ADD_ARG(int, ndim) = 4;
 };
 

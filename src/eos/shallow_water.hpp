@@ -43,13 +43,6 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
    * \param[out] out  conserved variables
    */
   void _prim2cons(torch::Tensor prim, torch::Tensor& out);
-
-  //! \brief Compute the gravity wave sound speed
-  /*
-   * \param[in] prim  primitive variables
-   * \return          gravity wave speed
-   */
-  torch::Tensor _gravity_wave_speed(torch::Tensor prim) const;
 };
 TORCH_MODULE(ShallowWater);
 
