@@ -395,14 +395,18 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   }
 
   // Update flux 2
+  // std::cout << "div[IVY] = " << div[IVY].squeeze(-1).flip(0) << std::endl;
   auto src2 =
-      -x_ov_rD_kji * (pr + rho * v3 * v3 * sine2) - rho * v1 * v_2 / radius;
+      x_ov_rD_kji * (pr + rho * v3 * v3 * sine2) - rho * v1 * v_2 / radius;
   div[IVY] -= src2;
+  // std::cout << "src2 = " << src2.squeeze(-1).flip(0) << std::endl;
 
   // Update flux 3
+  // std::cout << "div[IVZ] = " << div[IVZ].squeeze(-1).flip(0) << std::endl;
   auto src3 =
-      -y_ov_rC_kji * (pr + rho * v2 * v2 * sine2) - rho * v1 * v_3 / radius;
+      y_ov_rC_kji * (pr + rho * v2 * v2 * sine2) - rho * v1 * v_3 / radius;
   div[IVZ] -= src3;
+  // std::cout << "src3 = " << src3.squeeze(-1).flip(0) << std::endl;
 
   return div;
 }
