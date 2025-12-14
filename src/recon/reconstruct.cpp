@@ -80,6 +80,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   int nghost = pinterp1->stencils() / 2 + 1;
   int il = nghost;
   int iu = dim_size - nghost;
+  int nvar = w.size(0);
 
   TORCH_CHECK(il <= iu, "il > iu");
 
@@ -121,14 +122,17 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   }
 
   // velocity/pressure
-  _apply_inplace(dim, il, iu, w.narrow(0, IVX, 4), pinterp2,
-                 result.narrow(1, IVX, 4));
+  int len = std::min((int)IPR, nvar - 1);
+  _apply_inplace(dim, il, iu, w.narrow(0, IVX, len), pinterp2,
+                 result.narrow(1, IVX, len));
   if (options->eos()->limiter()) {
     result.select(1, IPR).clamp_min_(options->eos()->pressure_floor());
   }
 
+  int ny = nvar - 5;
+  if (ny <= 0) return result;
+
   // others
-  int ny = w.size(0) - 5;
   _apply_inplace(dim, il, iu, w.narrow(0, ICY, ny), pinterp1,
                  result.narrow(1, ICY, ny));
   if (options->eos()->limiter()) {

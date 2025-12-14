@@ -7,7 +7,7 @@ namespace snap {
 
 #if NMASS > 0  // use legacy Athena++ indexing scheme
 
-enum Index {
+enum {
   // hydro variables
   IDN = 0,
   ICY = 1,
@@ -23,7 +23,7 @@ enum Index {
 
 #else  // use new indexing scheme
 
-enum Index {
+enum {
   // hydro variables
   IDN = 0,
   IVX = 1,

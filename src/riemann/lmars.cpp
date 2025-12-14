@@ -30,7 +30,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto pcoord = phydro->pcoord;
   auto peos = phydro->peos;
 
-  elr[ILT] = peos->compute("W->I", {wl}) / wl[Index::IDN];
+  elr[ILT] = peos->compute("W->I", {wl}) / wl[IDN];
 
   if (peos->options->type() == "aneos") {
     clr[ILT] = peos->compute("W->L", {wl});
@@ -39,7 +39,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
     glr[ILT] = peos->compute("W->A", {wl});
   }
 
-  elr[IRT] = peos->compute("W->I", {wr}) / wr[Index::IDN];
+  elr[IRT] = peos->compute("W->I", {wr}) / wr[IDN];
 
   if (peos->options->type() == "aneos") {
     clr = peos->compute("W->L", {wr});

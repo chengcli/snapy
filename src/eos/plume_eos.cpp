@@ -19,13 +19,11 @@ torch::Tensor PlumeEOSImpl::compute(std::string ab,
     auto w = args.size() > 1 ? args[1] : torch::empty_like(u);
     _cons2prim(u, w);
     return w;
-  } else if (ab == "W->T") {
-    auto w = args[0];
-    return torch::zeros_like(w[IDN]);
   } else if (ab == "W->A") {
-    auto w = args[0];
-    return torch::ones_like(w[IDN]);
-  } else if (ab == "W->L") {
+    return torch::Tensor();
+  } else if (ab == "W->T") {
+    return torch::Tensor();
+  } else if (ab == "WA->L") {
     auto w = args[0];
     return torch::max(w[IVX].abs(), w[IVZ].abs());
   } else {

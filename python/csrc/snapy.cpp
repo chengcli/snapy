@@ -32,12 +32,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snapy";
   m.doc() = "Python bindings for snap";
 
-  m.attr("kIDN") = (int)snap::Index::IDN;
-  m.attr("kIV1") = (int)snap::Index::IVX;
-  m.attr("kIV2") = (int)snap::Index::IVY;
-  m.attr("kIV3") = (int)snap::Index::IVZ;
-  m.attr("kIPR") = (int)snap::Index::IPR;
-  m.attr("kICY") = (int)snap::Index::ICY;
+  m.attr("kIDN") = (int)snap::IDN;
+  m.attr("kIV1") = (int)snap::IVX;
+  m.attr("kIV2") = (int)snap::IVY;
+  m.attr("kIV3") = (int)snap::IVZ;
+  m.attr("kIPR") = (int)snap::IPR;
+  m.attr("kICY") = (int)snap::ICY;
 
   bind_layout(m);
   bind_bc(m);
