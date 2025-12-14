@@ -58,7 +58,10 @@ class GnomonicEquiangleImpl
   torch::Tensor _interp_ghost_LR(torch::Tensor buf, bool flip) const;
   torch::Tensor _interp_ghost_BT(torch::Tensor buf, bool flip) const;
 
+  //! set metric terms at face 2
   void _set_face2_metric() const;
+
+  //! set metric terms at face 3
   void _set_face3_metric() const;
 };
 TORCH_MODULE(GnomonicEquiangle);

@@ -197,8 +197,8 @@ void GnomonicEquiangleImpl::interp_ghost(
 
 // TODO(cli):: CHECK
 void GnomonicEquiangleImpl::_set_face2_metric() const {
-  auto cos_theta = cosine_face2_kj;
-  auto sin_theta = sine_face2_kj;
+  auto cos_theta = cosine_face2_kj.narrow(1, 0, options->nc2());
+  auto sin_theta = sine_face2_kj.narrow(1, 0, options->nc2());
 
   g11.set_(torch::ones_like(cos_theta));
   g22.set_(torch::ones_like(cos_theta));
@@ -212,8 +212,8 @@ void GnomonicEquiangleImpl::_set_face2_metric() const {
 
 // TODO(cli):: CHECK
 void GnomonicEquiangleImpl::_set_face3_metric() const {
-  auto cos_theta = cosine_face3_kj;
-  auto sin_theta = sine_face3_kj;
+  auto cos_theta = cosine_face3_kj.narrow(0, 0, options->nc3());
+  auto sin_theta = sine_face3_kj.narrow(0, 0, options->nc3());
 
   g11.set_(torch::ones_like(cos_theta));
   g22.set_(torch::ones_like(cos_theta));
@@ -322,8 +322,8 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   auto tz = flux[IVZ].clone();
 
   // Transform to covariant fluxes
-  flux[IVY] = ty + tz * cosine_face2_kj;
-  flux[IVZ] = tz + ty * cosine_face2_kj;
+  flux[IVY] = ty + tz * cosine_face2_kj.narrow(1, 0, options->nc2());
+  flux[IVZ] = tz + ty * cosine_face2_kj.narrow(1, 0, options->nc2());
 }
 
 // de-orthonormal and transforms to covariant form
@@ -351,8 +351,8 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   auto tz = flux[IVZ].clone();
 
   // Transform to covariant fluxes
-  flux[IVY] = ty + tz * cosine_face3_kj;
-  flux[IVZ] = tz + ty * cosine_face3_kj;
+  flux[IVY] = ty + tz * cosine_face3_kj.narrow(0, 0, options->nc3());
+  flux[IVZ] = tz + ty * cosine_face3_kj.narrow(0, 0, options->nc3());
 }
 
 torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,

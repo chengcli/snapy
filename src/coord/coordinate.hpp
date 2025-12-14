@@ -180,12 +180,25 @@ class CoordinateImpl {
   virtual void interp_ghost(torch::Tensor var,
                             std::tuple<int, int, int> const &) const {}
 
+  //! project contravariant velocity to a local orthogonal frame at face 1
   virtual void prim2local1_(torch::Tensor const &prim) const {}
+
+  //! project contravariant velocity to a local orthogonal frame at face 2
   virtual void prim2local2_(torch::Tensor const &prim) const {}
+
+  //! project contravariant velocity to a local orthogonal frame at face 3
   virtual void prim2local3_(torch::Tensor const &prim) const {}
 
+  //! project fluxes from local orthogonal frame to global contravariant frame
+  //! at face 1
   virtual void flux2global1_(torch::Tensor const &flux) const {}
+
+  //! project fluxes from local orthogonal frame to global contravariant frame
+  //! at face 2
   virtual void flux2global2_(torch::Tensor const &flux) const {}
+
+  //! project fluxes from local orthogonal frame to global contravariant frame
+  //! at face 3
   virtual void flux2global3_(torch::Tensor const &flux) const {}
 
   //! fluxes -> flux divergence

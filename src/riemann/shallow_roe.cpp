@@ -10,11 +10,20 @@ namespace snap {
 
 void ShallowRoeSolverImpl::reset() {
   TORCH_CHECK(phydro, "[ShallowRoeSolver] parent is nullptr");
+  auto pcoord = phydro->pcoord;
+
+  if (pcoord->options->type() == "gnomonic_equiangle") {
+    TORCH_CHECK(options->dir() == "yz",
+                "ShallowRoeSolver with GnomonicEquiangle coordinate "
+                "only supports options->dir() = 'yz' but got options->dir() = ",
+                options->dir());
+  }
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                             int dim, torch::Tensor flx) {
   auto peos = phydro->peos;
+  auto pcoord = phydro->pcoord;
 
   int ivx, ivy;
   if (options->dir() == "xy") {
@@ -28,6 +37,23 @@ torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                 "ShallowRoeSolver takes options->dir() = 'xy' or 'yz'"
                 " but got options->dir() = ",
                 options->dir());
+  }
+
+  switch (dim) {
+    case 1:
+      pcoord->prim2local3_(wl);
+      pcoord->prim2local3_(wr);
+      break;
+    case 2:
+      pcoord->prim2local2_(wl);
+      pcoord->prim2local2_(wr);
+      break;
+    case 3:
+      pcoord->prim2local1_(wl);
+      pcoord->prim2local1_(wr);
+      break;
+    default:
+      TORCH_CHECK(false, "Invalid dimension: ", dim);
   }
 
   auto sqrtdl = torch::sqrt(wl[0]);
@@ -73,6 +99,20 @@ torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   flx[ivy] = 0.5 * (wl[0] * wl[ivx] * wl[ivy] + wr[0] * wr[ivx] * wr[ivy]);
 
   flx -= 0.5 * (speed[0] * wave0 + speed[1] * wave1 + speed[2] * wave2);
+
+  switch (dim) {
+    case 1:
+      pcoord->flux2global3_(flx);
+      break;
+    case 2:
+      pcoord->flux2global2_(flx);
+      break;
+    case 3:
+      pcoord->flux2global1_(flx);
+      break;
+    default:
+      TORCH_CHECK(false, "Invalid dimension: ", dim);
+  }
 
   return flx;
 }
