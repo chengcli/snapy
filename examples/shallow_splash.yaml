@@ -46,14 +46,14 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.7
-  nlim: 1
+  nlim: -1
   tlim: 8.64E5
-  ncycle_out: 1
+  ncycle_out: 10
 
 outputs:
   - type: netcdf
     variables: [prim]
-    dt: 0.1
+    dt: 8.64E4
 
 problem:
   phi: 500.

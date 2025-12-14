@@ -153,6 +153,14 @@ void GnomonicEquiangleImpl::reset() {
   usrc_LR += options->interp_order() / 2 - offset_y;
 }
 
+torch::Tensor GnomonicEquiangleImpl::center_width2() const {
+  return x1v.unsqueeze(0).unsqueeze(1) * dx2f_ang_kj;
+}
+
+torch::Tensor GnomonicEquiangleImpl::center_width3() const {
+  return x1v.unsqueeze(0).unsqueeze(1) * dx3f_ang_kj;
+}
+
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
   return (x1f * x1f).unsqueeze(0).unsqueeze(1) *
          (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj);
