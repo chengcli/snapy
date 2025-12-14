@@ -30,7 +30,7 @@ torch::Tensor ConstGravityImpl::forward(torch::Tensor du, torch::Tensor w,
 
   if (options->grav2() != 0.) {
     du[IVY] += dt * w[IDN] * options->grav2();
-    du[IPR] += dt * w[IDN] * w[IVY] * w[IVY];
+    du[IPR] += dt * w[IDN] * w[IVY] * options->grav2();
   }
 
   if (options->grav3() != 0.) {
