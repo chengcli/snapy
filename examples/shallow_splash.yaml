@@ -18,7 +18,6 @@ geometry:
 distribute:
   backend: gloo
   layout: cubed-sphere
-  #layout: slab
   nb2: 1
   nb3: 1
   verbose: false
@@ -46,7 +45,7 @@ boundary-condition:
 
 integration:
   type: rk3
-  cfl: 0.7
+  cfl: 0.9
   nlim: -1
   tlim: 8.64E5
   ncycle_out: 1
@@ -54,7 +53,7 @@ integration:
 outputs:
   - type: netcdf
     variables: [prim]
-    dt: 8.64E4
+    dt: 1.E4
 
 problem:
   phi: 500.

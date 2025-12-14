@@ -25,13 +25,15 @@ torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto peos = phydro->peos;
   auto pcoord = phydro->pcoord;
 
-  int ivx, ivy;
+  int ivx, ivy, ivz;
   if (options->dir() == "xy") {
     ivx = dim == 3 ? 1 : 2;
     ivy = dim == 3 ? 2 : 1;
+    ivz = 3;
   } else if (options->dir() == "yz") {
     ivx = dim == 2 ? 2 : 3;
     ivy = dim == 2 ? 3 : 2;
+    ivz = 1;
   } else {
     TORCH_CHECK(false,
                 "ShallowRoeSolver takes options->dir() = 'xy' or 'yz'"
@@ -97,6 +99,7 @@ torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   flx[ivx] = 0.5 * (wl[0] * wl[ivx].square() + 0.5 * wl[0].square() +
                     wr[0] * wr[ivx].square() + 0.5 * wr[0].square());
   flx[ivy] = 0.5 * (wl[0] * wl[ivx] * wl[ivy] + wr[0] * wr[ivx] * wr[ivy]);
+  flx[ivz] = 0.;
 
   flx -= 0.5 * (speed[0] * wave0 + speed[1] * wave1 + speed[2] * wave2);
 

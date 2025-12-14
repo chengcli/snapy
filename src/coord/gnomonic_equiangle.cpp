@@ -245,9 +245,9 @@ void GnomonicEquiangleImpl::prim2local2_(torch::Tensor const& w) const {
   _set_face2_metric();
 
   // Extract global projected 4-velocities
-  auto uu1 = w[IVX].clone();
-  auto uu2 = w[IVY].clone();
-  auto uu3 = w[IVZ].clone();
+  // auto uu1 = w[IVX].clone();
+  auto uu2 = w[IVY];
+  auto uu3 = w[IVZ];
 
   // Calculate transformation matrix
   auto T11 = 1.;
@@ -256,18 +256,18 @@ void GnomonicEquiangleImpl::prim2local2_(torch::Tensor const& w) const {
   auto T33 = g33.sqrt();
 
   // Transform projected velocities
-  w[IVX] = T11 * uu1;
-  w[IVY] = T22 * uu2;
+  // w[IVX] = T11 * uu1;
   w[IVZ] = T32 * uu2 + T33 * uu3;
+  w[IVY] = T22 * uu2;
 }
 
 void GnomonicEquiangleImpl::prim2local3_(torch::Tensor const& w) const {
   _set_face3_metric();
 
   // Extract global projected 4-velocities
-  auto uu1 = w[IVX].clone();
-  auto uu2 = w[IVY].clone();
-  auto uu3 = w[IVZ].clone();
+  // auto uu1 = w[IVX].clone();
+  auto uu2 = w[IVY];
+  auto uu3 = w[IVZ];
 
   // Calculate transformation matrix
   auto T11 = 1.;
@@ -276,7 +276,7 @@ void GnomonicEquiangleImpl::prim2local3_(torch::Tensor const& w) const {
   auto T33 = 1.0 / gi33.sqrt();
 
   // Transform projected velocities
-  w[IVX] = T11 * uu1;
+  // w[IVX] = T11 * uu1;
   w[IVY] = T22 * uu2 + T23 * uu3;
   w[IVZ] = T33 * uu3;
 }
@@ -300,9 +300,9 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   _set_face2_metric();
 
   // Extract local conserved quantities and fluxes
-  auto txx = flux[IVX].clone();
-  auto txy = flux[IVY].clone();
-  auto txz = flux[IVZ].clone();
+  // auto txx = flux[IVX].clone();
+  auto txy = flux[IVY];
+  auto txz = flux[IVZ];
 
   // Calculate transformation matrix
   auto T11 = 1.0;
@@ -311,9 +311,9 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   auto T33 = 1.0 / g33.sqrt();
 
   // Set fluxes
-  flux[IVX] = T11 * txx;
-  flux[IVY] = T22 * txy;
+  // flux[IVX] = T11 * txx;
   flux[IVZ] = T32 * txy + T33 * txz;
+  flux[IVY] = T22 * txy;
 
   // Extract contravariant fluxes
   auto ty = flux[IVY].clone();
@@ -329,7 +329,7 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   _set_face3_metric();
 
   // Extract local conserved quantities and fluxes
-  auto txx = flux[IVX];
+  // auto txx = flux[IVX];
   auto txy = flux[IVY];
   auto txz = flux[IVZ];
 
@@ -340,7 +340,7 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   auto T33 = gi33.sqrt();
 
   // Set fluxes
-  flux[IVX] = T11 * txx;
+  // flux[IVX] = T11 * txx;
   flux[IVY] = T22 * txy + T23 * txz;
   flux[IVZ] = T33 * txz;
 
@@ -385,18 +385,14 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   }
 
   // Update flux 2
-  // std::cout << "div[IVY] = " << div[IVY].squeeze(-1).flip(0) << std::endl;
   auto src2 =
       x_ov_rD_kji * (pr + rho * v3 * v3 * sine2) - rho * v1 * v_2 / radius;
   div[IVY] -= src2;
-  // std::cout << "src2 = " << src2.squeeze(-1).flip(0) << std::endl;
 
   // Update flux 3
-  // std::cout << "div[IVZ] = " << div[IVZ].squeeze(-1).flip(0) << std::endl;
   auto src3 =
       y_ov_rC_kji * (pr + rho * v2 * v2 * sine2) - rho * v1 * v_3 / radius;
   div[IVZ] -= src3;
-  // std::cout << "src3 = " << src3.squeeze(-1).flip(0) << std::endl;
 
   return div;
 }

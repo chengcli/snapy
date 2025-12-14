@@ -53,9 +53,8 @@ int main(int argc, char** argv) {
 
   auto dist = (M_PI / 2. - lat) * r_planet;
 
-  // w[IDN] = torch::where(torch::logical_and(dist < radius, lat > M_PI / 4.),
-  //                       phi + dphi, phi);
-  w[IDN] = phi;
+  w[IDN] = torch::where(torch::logical_and(dist<radius, lat> M_PI / 4.),
+                        phi + dphi, phi);
   w[IVX] = 0.;
   w[IVY] = 0.;
 
