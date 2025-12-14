@@ -35,9 +35,13 @@ class GnomonicEquiangleImpl
     print(stream);
   }
 
+  torch::Tensor center_width2() const override;
+  torch::Tensor center_width3() const override;
+
   torch::Tensor face_area1() const override;
   torch::Tensor face_area2() const override;
   torch::Tensor face_area3() const override;
+
   torch::Tensor cell_volume() const override;
 
   void interp_ghost(torch::Tensor var,
@@ -58,7 +62,10 @@ class GnomonicEquiangleImpl
   torch::Tensor _interp_ghost_LR(torch::Tensor buf, bool flip) const;
   torch::Tensor _interp_ghost_BT(torch::Tensor buf, bool flip) const;
 
+  //! set metric terms at face 2
   void _set_face2_metric() const;
+
+  //! set metric terms at face 3
   void _set_face3_metric() const;
 };
 TORCH_MODULE(GnomonicEquiangle);

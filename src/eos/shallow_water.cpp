@@ -44,7 +44,7 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   auto out = prim.narrow(0, IVX, 3);
   torch::div_out(out, cons.narrow(0, IVX, 3), cons[IDN]);
 
-  coord_vec_raise_(prim, pcoord->cosine_cell_kj);
+  coord_vec_raise_(out, pcoord->cosine_cell_kj);
 
   apply_primitive_limiter_(prim);
 }
@@ -59,7 +59,7 @@ void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   auto out = cons.narrow(0, IVX, 3);
   torch::mul_out(out, prim.narrow(0, IVX, 3), prim[IDN]);
 
-  coord_vec_lower_(cons, pcoord->cosine_cell_kj);
+  coord_vec_lower_(out, pcoord->cosine_cell_kj);
 
   apply_conserved_limiter_(cons);
 }

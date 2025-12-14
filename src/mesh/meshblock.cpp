@@ -450,6 +450,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
   _hydro_u1.copy_(hydro_u);
+
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -555,7 +556,8 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   sync_opts.interpolate(true).type(kConserved);
 
   Variables sync_vars;
-  sync_vars["hydro_u"] = vars.at("hydro_u");
+  // sync_vars["hydro_u"] = vars.at("hydro_u");
+  sync_vars["hydro_u"] = hydro_u;
 
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
   _playout->forward(this, sync_vars, sync_opts, works);
@@ -598,6 +600,8 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
+  auto pcoord = phydro->pcoord;
+
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
   bool compute_mass = false;
   bool compute_energy = false;
@@ -621,9 +625,11 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
       auto interior = part({0, 0, 0}, PartOptions().exterior(false));
 
+      auto vol = pcoord->cell_volume();
+      auto hydro_u = vars.at("hydro_u") * vol;
+
       if (compute_mass) {
-        std::vector<at::Tensor> mass = {
-            vars.at("hydro_u").index(interior)[IDN].sum()};
+        std::vector<at::Tensor> mass = {hydro_u.index(interior)[IDN].sum()};
 
         // sum across all ranks
         _playout->pg->reduce(mass, opsum)->wait();
@@ -634,8 +640,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
       }
 
       if (compute_energy) {
-        std::vector<at::Tensor> energy = {
-            vars.at("hydro_u").index(interior)[IPR].sum()};
+        std::vector<at::Tensor> energy = {hydro_u.index(interior)[IPR].sum()};
 
         // sum across all ranks
         _playout->pg->reduce(energy, opsum)->wait();

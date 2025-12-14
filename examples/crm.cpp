@@ -1,9 +1,6 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
-// fmt
-#include <fmt/format.h>
-
 // kintera
 #include <kintera/constants.h>
 
@@ -38,7 +35,8 @@ int main(int argc, char **argv) {
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block = MeshBlock(MeshBlockOptionsImpl::from_yaml(infile));
+  auto block_op = MeshBlockOptionsImpl::from_yaml(infile);
+  auto block = MeshBlock(block_op);
   block->to(device);
 
   // useful modules
@@ -91,8 +89,6 @@ int main(int argc, char **argv) {
   int is = pcoord->is();
   int ie = pcoord->ie();
   auto dz = pcoord->dx1f[is].item<double>();
-  // std::cout << fmt::format("{}\n", Func1Registrar::list_names()) <<
-  // std::endl;
   thermo_x->extrapolate_ad(temp, pres, xfrac, grav, dz / 2.);
 
   int i = is;
