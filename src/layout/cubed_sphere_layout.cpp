@@ -523,7 +523,6 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   }
 
   // get mesh
-  // FIXME: fix cosine_face2 and cosine_face3 dim
   torch::Tensor x2_coord, x3_coord, cosine_cell;
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
