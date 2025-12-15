@@ -247,9 +247,6 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
 };
 TORCH_MODULE(Cylindrical);
 
-IndexRange get_interior(torch::IntArrayRef const &shape, int nghost,
-                        int extend_x1 = 0, int extend_x2 = 0,
-                        int extend_x3 = 0);
 }  // namespace snap
 
 #undef ADD_ARG

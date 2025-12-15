@@ -449,7 +449,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
-  _hydro_u1.copy_(hydro_u);
+  phydro->peos->apply_conserved_limiter_(hydro_u);
 
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
@@ -579,6 +579,9 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
               << std::endl;
     start = std::chrono::high_resolution_clock::now();
   }
+
+  // -------- (7) save final state for next stage --------
+  _hydro_u1.copy_(hydro_u);
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,

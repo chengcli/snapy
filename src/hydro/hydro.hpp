@@ -142,16 +142,11 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 
-/// A `ModuleHolder` subclass for `HydroImpl`.
-/// See the documentation for `HydroImpl` class to learn what methods it
-/// provides, and examples of how to use `Hydro` with
-/// `torch::nn::HydroOptions`. See the documentation for `ModuleHolder`
-/// to learn about PyTorch's module storage semantics.
 TORCH_MODULE(Hydro);
 
-void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
+/*void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
                  int extend_x3);
-void check_eos(torch::Tensor w, int nghost);
+void check_eos(torch::Tensor w, int nghost);*/
 }  // namespace snap
 
 #undef ADD_ARG

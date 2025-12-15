@@ -8,6 +8,7 @@
 #include <snap/loops.cuh>
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
+#include "fix_vapor_impl.h"
 //#include "ideal_moist_impl.h"
 
 namespace snap {
@@ -48,11 +49,31 @@ void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, double gammad) {
   });
 }*/
 
+int call_fix_vapor_cuda(at::TensorIterator& iter) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+  int all_err = 0;
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cuda", [&] {
+    auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
+
+    native::gpu_kernel<2>(
+        iter, [&] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
+          auto vapor = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+          auto major = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+          int err = fix_vapor_impl(vapor, major, nx1);
+          atomicAdd(&all_err, err);
+        });
+  });
+
+  return all_err;
+}
+
 }  // namespace snap
 
 namespace at::native {
 
 REGISTER_CUDA_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_cuda);
+REGISTER_CUDA_DISPATCH(call_fix_vapor, &snap::call_fix_vapor_cuda);
 //REGISTER_CUDA_DISPATCH(call_ideal_moist, &snap::call_ideal_mosit_cuda);
 
 }  // namespace at::native
