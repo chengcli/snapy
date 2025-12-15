@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 
 #include "implicit.hpp"
@@ -29,6 +30,17 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   }
 
   auto pcoord = phydro->pcoord;
+  auto cos_theta = pcoord->cosine_cell_kj;
+  auto sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
+
+  auto du0 = du.clone();
+
+  /// (1) Project to local orthonormal frame
+  w[IVY] += w[IVZ] * cos_theta;
+  w[IVZ] *= sin_theta;
+
+  // coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
+  // pcoord->prim2local1_(du);
 
   auto vec = du.sizes().vec();
   vec.insert(vec.begin(), 2);
@@ -71,9 +83,8 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   int nc3 = pcoord->options->nc3();
 
   std::vector<int64_t> vec1 = {nc3, nc2, nc1, -1};
-
-  auto du0 = du.clone();
   std::vector<int64_t> vec2 = {3, 0, 1, 2};
+
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
@@ -92,6 +103,11 @@ torch::Tensor ImplicitCorrectionImpl::forward(torch::Tensor du, torch::Tensor w,
   } else {  // partial
     at::native::vic_solve3(du.device().type(), iter, dt, is, ie);
   }
+
+  /// (3) De-project from local orthonormal frame
+  w[IVZ] /= sin_theta;
+  w[IVY] -= w[IVZ] * cos_theta;
+  // pcoord->flux2global1_(du);
 
   return du - du0;
 }

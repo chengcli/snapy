@@ -16,6 +16,9 @@
 using namespace snap;
 
 int main(int argc, char **argv) {
+  torch::set_num_threads(1);
+  torch::set_num_interop_threads(1);
+
   // read parameters
   auto cli = CommandLine::ParseArguments(argc, argv);
   if (!cli) return 0;
@@ -141,7 +144,6 @@ int main(int argc, char **argv) {
   auto op_kinet = kintera::KineticsOptionsImpl::from_yaml(infile);
   auto kinet = kintera::Kinetics(op_kinet);
   kinet->to(device);
-  kinet->options->report(std::cout);
 
   // time loop
   double current_time = 0.;

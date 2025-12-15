@@ -33,12 +33,12 @@ species:
     u0_R: -3430.
 
   - name: NH3(s)
-    composition: {H: 2, O: 1}
+    composition: {N: 1, H: 3}
     cv_R: 9.0
     u0_R: -5520.
 
   - name: NH3(s,p)
-    composition: {H: 2, O: 1}
+    composition: {N: 1, H: 3}
     cv_R: 9.0
     u0_R: -5520.
 
@@ -53,25 +53,25 @@ species:
     u0_R: -1.2e4
 
 geometry:
-  type: cartesian
+  type: gnomonic-equiangle
 
   bounds:
-    x1min: 0.
-    x1max: 300.e3
-    x2min: 0.
-    x2max: 1200.e3
-    x3min: 0.
-    x3max: 1200.e3
+    x1min: 69911000
+    x1max: 70211000
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
 
   cells:
     nx1: 100
-    nx2: 100
-    nx3: 100
+    nx2: 48
+    nx3: 48
     nghost: 3
 
 distribute:
   backend: gloo
-  layout: slab
+  layout: cubed-sphere
   nb2: 1
   nb3: 1
   verbose: false
@@ -91,8 +91,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: weno5, scale: true, shock: false}
-    horizontal: {type: weno5, scale: true, shock: false}
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
     type: hllc
@@ -114,9 +114,17 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.45
-  implicit-scheme: 9
+  implicit-scheme: 1
   nlim: -1
-  tlim: 1.e5
+  tlim: 100.e5
+  ncycle_out: 1
+
+outputs:
+  - type: restart
+    dt: 10.E5
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 1.E5
 
 forcing:
   const-gravity:
@@ -175,13 +183,6 @@ reactions:
     type: evaporation
     rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
 
-outputs:
-  - type: restart
-    dt: 1.e4
-  - type: netcdf
-    variables: [prim, uov]
-    dt: 100.
-
 problem:
   Ps: 100.e5
   Ts: 600.
@@ -189,4 +190,3 @@ problem:
   xH2O: 3.e-3
   xNH3: 3.2e-4
   xH2S: 1.e-5
-  #init_cond: jupiter3d_init.pt

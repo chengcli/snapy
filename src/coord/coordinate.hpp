@@ -86,7 +86,7 @@ class CoordinateImpl {
       std::string const &name = "coord");
 
   //! data
-  torch::Tensor cosine_cell_kj;
+  torch::Tensor cosine_cell_kj, cosine_face2_kj, cosine_face3_kj;
 
   //! options with which this `Coordinate` was constructed
   CoordinateOptions options;
