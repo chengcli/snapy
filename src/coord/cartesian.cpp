@@ -11,13 +11,13 @@ void CartesianImpl::reset() {
   // metric
   cosine_cell_kj =
       register_buffer("cosine_cell_kj",
-                      torch::ones({op->nc3(), op->nc2(), 1}, torch::kFloat64));
+                      torch::zeros({op->nc3(), op->nc2(), 1}, torch::kFloat64));
   cosine_face2_kj = register_buffer(
       "cosine_face2_kj",
-      torch::ones({op->nc3(), op->nc2() + 1, 1}, torch::kFloat64));
+      torch::zeros({op->nc3(), op->nc2() + 1, 1}, torch::kFloat64));
   cosine_face3_kj = register_buffer(
       "cosine_face3_kj",
-      torch::ones({op->nc3() + 1, op->nc2(), 1}, torch::kFloat64));
+      torch::zeros({op->nc3() + 1, op->nc2(), 1}, torch::kFloat64));
 
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
@@ -41,7 +41,6 @@ void CartesianImpl::reset() {
   register_buffer("x1f", x1f);
   register_buffer("x2f", x2f);
   register_buffer("x3f", x3f);
-  register_buffer("cosine_cell_kj", cosine_cell_kj);
 }
 
 void CartesianImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {

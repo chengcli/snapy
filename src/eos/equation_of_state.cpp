@@ -114,11 +114,13 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   // cons.index(interior).narrow(0, ICY, nvapor) =
   //    pull_neighbors4(cons.index(interior).narrow(0, ICY, nvapor));
 
+  int ny = 0;
   if (options->thermo()) {
     auto nghost = pcoord->options->nghost();
     auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
     int nvapor = options->thermo()->vapor_ids().size() - 1;
     int ncloud = options->thermo()->cloud_ids().size();
+    ny = nvapor + ncloud;
 
     auto vapor = cons.index(interior).narrow(0, ICY, nvapor);
     auto major = cons.index(interior)[IDN].unsqueeze(0);
@@ -138,13 +140,15 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
   }
 
-  auto mom = cons.narrow(0, IVX, 3).clone();
-  coord_vec_raise_(mom, pcoord->cosine_cell_kj);
-
-  auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / cons[IDN];
-  auto min_temp = options->temperature_floor() * torch::ones_like(ke);
-  auto min_ie = compute("UT->I", {cons, min_temp});
-  cons[IPR].clamp_min_(ke + min_ie);
+  if (nvar() > IPR) {
+    auto mom = cons.narrow(0, IVX, 3).clone();
+    coord_vec_raise_(mom, pcoord->cosine_cell_kj);
+    auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);
+    auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / rho;
+    auto min_temp = options->temperature_floor() * torch::ones_like(ke);
+    auto min_ie = compute("UT->I", {cons, min_temp});
+    cons[IPR].clamp_min_(ke + min_ie);
+  }
 }
 
 void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
