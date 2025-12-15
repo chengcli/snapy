@@ -33,12 +33,12 @@ species:
     u0_R: -3430.
 
   - name: NH3(s)
-    composition: {H: 2, O: 1}
+    composition: {N: 1, H: 3}
     cv_R: 9.0
     u0_R: -5520.
 
   - name: NH3(s,p)
-    composition: {H: 2, O: 1}
+    composition: {N: 1, H: 3}
     cv_R: 9.0
     u0_R: -5520.
 
