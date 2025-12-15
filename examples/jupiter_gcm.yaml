@@ -113,11 +113,11 @@ boundary-condition:
 
 integration:
   type: rk3
-  cfl: 0.9
-  implicit-scheme: 0
+  cfl: 0.45
+  implicit-scheme: 1
   nlim: -1
   tlim: 100.e5
-  ncycle_out: 10
+  ncycle_out: 1
 
 outputs:
   - type: restart

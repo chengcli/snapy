@@ -8,6 +8,17 @@ namespace snap {
 void CartesianImpl::reset() {
   auto const &op = options;
 
+  // metric
+  cosine_cell_kj =
+      register_buffer("cosine_cell_kj",
+                      torch::ones({op->nc3(), op->nc2(), 1}, torch::kFloat64));
+  cosine_face2_kj = register_buffer(
+      "cosine_face2_kj",
+      torch::ones({op->nc3(), op->nc2() + 1, 1}, torch::kFloat64));
+  cosine_face3_kj = register_buffer(
+      "cosine_face3_kj",
+      torch::ones({op->nc3() + 1, op->nc2(), 1}, torch::kFloat64));
+
   // dimension 1
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
   dx1f = register_buffer("dx1f", torch::ones(op->nc1(), torch::kFloat64) * dx);
