@@ -9,6 +9,7 @@
 #include <snap/coord/coord_utils.hpp>
 
 #include "eos_dispatch.hpp"
+#include "fix_vapor_impl.h"
 #include "ideal_gas_impl.h"
 // #include "ideal_moist_impl.h"
 
@@ -72,13 +73,38 @@ void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   });
 }*/
 
+int call_fix_vapor_cpu(at::TensorIterator& iter) {
+  int grain_size = iter.numel() / at::get_num_threads();
+  int all_err = 0;
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cpu", [&] {
+    auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
+
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int i = 0; i < n; i++) {
+            auto vapor = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
+            auto major = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            int err = fix_vapor_impl(vapor, major, nx1);
+            all_err += err;
+          }
+        },
+        grain_size);
+  });
+
+  return all_err;
+}
+
 }  // namespace snap
 
 namespace at::native {
 
 DEFINE_DISPATCH(ideal_gas_cons2prim);
+DEFINE_DISPATCH(call_fix_vapor);
 
 REGISTER_ALL_CPU_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_cpu);
+REGISTER_ALL_CPU_DISPATCH(call_fix_vapor, &snap::call_fix_vapor_cpu);
+
 REGISTER_MPS_DISPATCH(ideal_gas_cons2prim, &snap::ideal_gas_cons2prim_mps);
 
 }  // namespace at::native

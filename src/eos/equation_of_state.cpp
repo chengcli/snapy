@@ -1,20 +1,24 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// torch
+#include <ATen/TensorIterator.h>
+
 // snap
 #include <snap/snap.h>
 
 #include <snap/coord/coord_utils.hpp>
-#include <snap/eos/aneos.hpp>
-#include <snap/eos/ideal_gas.hpp>
-#include <snap/eos/ideal_moist.hpp>
-#include <snap/eos/moist_mixture.hpp>
-#include <snap/eos/plume_eos.hpp>
-#include <snap/eos/shallow_water.hpp>
 #include <snap/hydro/hydro.hpp>
-#include <snap/utils/pull_neighbors.hpp>
+#include <snap/mesh/meshblock.hpp>
 
+#include "aneos.hpp"
+#include "eos_dispatch.hpp"
 #include "equation_of_state.hpp"
+#include "ideal_gas.hpp"
+#include "ideal_moist.hpp"
+#include "moist_mixture.hpp"
+#include "plume_eos.hpp"
+#include "shallow_water.hpp"
 
 namespace snap {
 
@@ -98,29 +102,53 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   auto pcoord = phydro->pcoord;
+  auto pmb = phydro->pmb;
 
   if (!options->limiter()) return;  // no limiter
   cons.masked_fill_(torch::isnan(cons), 0.);
   cons[IDN].clamp_min_(options->density_floor());
 
-  auto nghost = pcoord->options->nghost();
-  auto interior = get_interior(cons.sizes(), nghost);
-  int nvapor = options->thermo()->vapor_ids().size() - 1;
-  int ncloud = options->thermo()->cloud_ids().size();
   // for (int i = ICY; i < ICY + nvapor; ++i)
   //   cons.index(interior)[i] = pull_neighbors3(cons.index(interior)[i]);
   //  batched
-  cons.index(interior).narrow(0, ICY, nvapor) =
-      pull_neighbors4(cons.index(interior).narrow(0, ICY, nvapor));
-  cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
+  // cons.index(interior).narrow(0, ICY, nvapor) =
+  //    pull_neighbors4(cons.index(interior).narrow(0, ICY, nvapor));
 
-  auto mom = cons.narrow(0, IVX, 3).clone();
-  coord_vec_raise_(mom, pcoord->cosine_cell_kj);
+  int ny = 0;
+  if (options->thermo()) {
+    auto nghost = pcoord->options->nghost();
+    auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+    int nvapor = options->thermo()->vapor_ids().size() - 1;
+    int ncloud = options->thermo()->cloud_ids().size();
+    ny = nvapor + ncloud;
 
-  auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / cons[IDN];
-  auto min_temp = options->temperature_floor() * torch::ones_like(ke);
-  auto min_ie = compute("UT->I", {cons, min_temp});
-  cons[IPR].clamp_min_(ke + min_ie);
+    auto vapor = cons.index(interior).narrow(0, ICY, nvapor);
+    auto major = cons.index(interior)[IDN].unsqueeze(0);
+    auto iter = at::TensorIteratorConfig()
+                    .resize_outputs(false)
+                    .declare_static_shape(vapor.sizes(),
+                                          /*squash_dim=*/vapor.dim() - 1)
+                    .add_output(vapor)
+                    .add_owned_input(major.expand_as(vapor))
+                    .build();
+
+    int err = at::native::call_fix_vapor(cons.device().type(), iter);
+    TORCH_CHECK(err == 0,
+                "[EquationOfState] apply_conserved_limiter_: "
+                "Failed to fix vapor mass fractions.");
+
+    cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
+  }
+
+  if (nvar() > IPR) {
+    auto mom = cons.narrow(0, IVX, 3).clone();
+    coord_vec_raise_(mom, pcoord->cosine_cell_kj);
+    auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);
+    auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / rho;
+    auto min_temp = options->temperature_floor() * torch::ones_like(ke);
+    auto min_ie = compute("UT->I", {cons, min_temp});
+    cons[IPR].clamp_min_(ke + min_ie);
+  }
 }
 
 void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {

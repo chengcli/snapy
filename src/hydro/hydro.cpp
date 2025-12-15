@@ -372,7 +372,7 @@ std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
   return p->register_module(name, Hydro(opts, p));
 }
 
-void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
+/*void check_recon(torch::Tensor wlr, int nghost, int extend_x1, int extend_x2,
                  int extend_x3) {
   auto interior =
       get_interior(wlr.sizes(), nghost, extend_x1, extend_x2, extend_x3);
@@ -396,6 +396,6 @@ void check_eos(torch::Tensor w, int nghost) {
               "Negative pressure detected after EOS. ",
               "Suggestions: 1) Reducting the CFL number; ",
               " 2) Activate EOS limiter and set the pressure floor");
-}
+}*/
 
 }  // namespace snap
