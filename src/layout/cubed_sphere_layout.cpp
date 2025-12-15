@@ -523,8 +523,26 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
   }
 
   // get mesh
-  auto x3_coord = opts.dim() == SyncOptions::DIM3 ? pcoord->x3f : pcoord->x3v;
-  auto x2_coord = opts.dim() == SyncOptions::DIM2 ? pcoord->x2f : pcoord->x2v;
+  // FIXME: fix cosine_face2 and cosine_face3 dim
+  torch::Tensor x2_coord, x3_coord, cosine_cell;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  if (opts.dim() == SyncOptions::DIM3) {
+    x3_coord = pcoord->x3f;
+    x2_coord = pcoord->x2v;
+    cosine_cell = pcoord->cosine_face3_kj.expand({nc3 + 1, nc2, nc1});
+  } else if (opts.dim() == SyncOptions::DIM2) {
+    x3_coord = pcoord->x3v;
+    x2_coord = pcoord->x2f;
+    cosine_cell = pcoord->cosine_face2_kj.expand({nc3, nc2 + 1, nc1});
+  } else {
+    x3_coord = pcoord->x3v;
+    x2_coord = pcoord->x2v;
+    cosine_cell = pcoord->cosine_cell_kj.expand({nc3, nc2, nc1});
+  }
+
   auto mesh = torch::meshgrid({x3_coord, x2_coord, pcoord->x1v}, "ij");
 
   // Serialize over all inter-panel neighbors
@@ -585,7 +603,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
 
         switch (opts.type()) {
           case kConserved:
-            coord_vec_raise_(vel, pcoord->cosine_cell_kj.index(sub3));
+            coord_vec_raise_(vel, cosine_cell.index(sub3));
             cs_contra_to_cart_(vel, alpha, beta);
             break;
           case kPrimitive:
@@ -677,8 +695,25 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   }
 
   // get mesh
-  auto x3_coord = opts.dim() == SyncOptions::DIM3 ? pcoord->x3f : pcoord->x3v;
-  auto x2_coord = opts.dim() == SyncOptions::DIM2 ? pcoord->x2f : pcoord->x2v;
+  torch::Tensor x2_coord, x3_coord, cosine_cell;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  if (opts.dim() == SyncOptions::DIM3) {
+    x3_coord = pcoord->x3f;
+    x2_coord = pcoord->x2v;
+    cosine_cell = pcoord->cosine_face3_kj.expand({nc3 + 1, nc2, nc1});
+  } else if (opts.dim() == SyncOptions::DIM2) {
+    x3_coord = pcoord->x3v;
+    x2_coord = pcoord->x2f;
+    cosine_cell = pcoord->cosine_face2_kj.expand({nc3, nc2 + 1, nc1});
+  } else {
+    x3_coord = pcoord->x3v;
+    x2_coord = pcoord->x2v;
+    cosine_cell = pcoord->cosine_cell_kj.expand({nc3, nc2, nc1});
+  }
+
   auto mesh = torch::meshgrid({x3_coord, x2_coord, pcoord->x1v}, "ij");
 
   // Deserialize over all inter-panel neighbors
@@ -731,7 +766,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         switch (opts.type()) {
           case kConserved:
             cs_cart_to_contra_(vel, alpha, beta);
-            coord_vec_lower_(vel, pcoord->cosine_cell_kj.index(sub3));
+            coord_vec_lower_(vel, cosine_cell.index(sub3));
             break;
           case kPrimitive:
             cs_cart_to_contra_(vel, alpha, beta);
