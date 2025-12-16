@@ -1,8 +1,7 @@
 #pragma once
 
-// C/C++
-#include <cstdarg>
-#include <cstdio>
+// Eigen
+#include <Eigen/Dense>
 
 // base
 #include <configure.h>
@@ -11,174 +10,109 @@
 #include <snap/snap.h>
 
 #define SQR(x) ((x) * (x))
-#define PRIM(i) prim[(i) * stride]
-#define WL(i) wl[(i) * stride]
-#define WR(i) wr[(i) * stride]
 
 namespace snap {
 
-constexpr int ROWS = 5;
-constexpr int COLS = 5;
-
-template <typename T, int N>
-DISPATCH_MACRO inline void init_matrix(T *mat, const double (&values)[N]) {
-#pragma unroll
-  for (int i = 0; i < N; ++i) {
-    mat[i] = values[i];
+template <typename T>
+void CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1, int stride2) {
+  for (int n = 0; n < 5; ++n) {
+    wl[n] = prim[n * stride1 + (i - 1) * stride2];
+    wr[n] = prim[n * stride1 + i * stride2];
   }
 }
 
-//! Roe average scheme
-/*
- * Flux in the interface between i-th and i+1-th cells:
- * A(i+1/2) = [sqrt(rho(i))*A(i) + sqrt(rho(i+1))*A(i+1)]/(sqrt(rho(i)) +
- * sqrt(rho(i+1)))
- */
 template <typename T>
-DISPATCH_MACRO void roe_average_impl(T *prim, T const *wl, T const *wr, T gamma,
-                                     int stride) {
-  auto sqrtdl = sqrt(WL(IDN));
-  auto sqrtdr = sqrt(WR(IDN));
-  auto isdlpdr = 1.0 / (sqrtdl + sqrtdr);
+void RoeAverage(T *prim, T gm1, T *wl, T *wr) {
+  T sqrtdl = sqrt(wl[IDN]);
+  T sqrtdr = sqrt(wr[IDN]);
+  T isdlpdr = 1.0 / (sqrtdl + sqrtdr);
 
-  PRIM(IDN) = sqrtdl * sqrtdr;
-  PRIM(IVX) = (sqrtdl * WL(IVX) + sqrtdr * WR(IVX)) * isdlpdr;
-  PRIM(IVY) = (sqrtdl * WL(IVY) + sqrtdr * WR(IVY)) * isdlpdr;
-  PRIM(IVZ) = (sqrtdl * WL(IVZ) + sqrtdr * WR(IVZ)) * isdlpdr;
+  // Roe average scheme
+  // Flux in the interface between i-th and i+1-th cells:
+  // A(i+1/2) = [sqrt(rho(i))*A(i) + sqrt(rho(i+1))*A(i+1)]/(sqrt(rho(i)) +
+  // sqrt(rho(i+1)))
 
-  auto gm1 = gamma - 1;
+  prim[IDN] = sqrtdl * sqrtdr;
+  prim[IVX] = (sqrtdl * wl[IVX] + sqrtdr * wr[IVX]) * isdlpdr;
+  prim[IVY] = (sqrtdl * wl[IVY] + sqrtdr * wr[IVY]) * isdlpdr;
+  prim[IVZ] = (sqrtdl * wl[IVZ] + sqrtdr * wr[IVZ]) * isdlpdr;
 
-  auto el = WL(IPR) / gm1 +
-            0.5 * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  // Etot of the left side.
+  T el = wl[IPR] / gm1 +
+         0.5 * wl[IDN] * (SQR(wl[IVX]) + SQR(wl[IVY]) + SQR(wl[IVZ]));
 
-  auto er = WR(IPR) / gm1 +
-            0.5 * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
+  // Etot of the right side.
+  T er = wr[IPR] / gm1 +
+         0.5 * wr[IDN] * (SQR(wr[IVX]) + SQR(wr[IVY]) + SQR(wr[IVZ]));
 
-  // enthalpy divided by the density.
-  auto hbar = ((el + WL(IPR)) / sqrtdl + (er + WR(IPR)) / sqrtdr) * isdlpdr;
+  // Enthalpy divided by the density.
+  T hbar = ((el + wl[IPR]) / sqrtdl + (er + wr[IPR]) / sqrtdr) * isdlpdr;
 
   // Roe averaged pressure
-  PRIM(IPR) =
-      (hbar - 0.5 * (SQR(PRIM(IVX)) + SQR(PRIM(IVY)) + SQR(PRIM(IVZ)))) * gm1 /
-      (gm1 + 1.) * PRIM(IDN);
+  prim[IPR] =
+      (hbar - 0.5 * (SQR(prim[IVX]) + SQR(prim[IVY]) + SQR(prim[IVZ]))) * gm1 /
+      (gm1 + 1.) * prim[IDN];
 }
 
 template <typename T>
-DISPATCH_MACRO void eigen_system_impl(T *left, T *right, T *val, T const *prim,
-                                      T gamma, int dim, int stride) {
-  auto ivx = IPR - dim;
-  auto ivy = IVX + ((ivx - IVX) + 1) % 3;
-  auto ivz = IVX + ((ivx - IVX) + 2) % 3;
-
-  auto r = PRIM(IDN);
-  auto u = PRIM(ivx);
-  auto v = PRIM(ivy);
-  auto w = PRIM(ivz);
-  auto p = PRIM(IPR);
-
-  auto gm1 = gamma - 1.;
-  auto ke = 0.5 * (SQR(u) + SQR(v) + SQR(w));
-  auto hp = (gm1 + 1.) / gm1 * p / r;
-  auto h = hp + ke;
-
-  auto cs = sqrt(gamma * p / r);  // sound speed
-
-  double arr1[] = {1.,         1., 1.,         0., 0.,  //
-                   u - cs,     u,  u + cs,     0., 0.,  //
-                   v,          v,  v,          1., 0.,  //
-                   w,          w,  w,          0., 1.,  //
-                   h - u * cs, ke, h + u * cs, v,  w};
-
-  init_matrix(left, arr1);
-
-  double arr2[] = {(cs * ke + u * hp) / (2. * cs * hp),
-                   (-hp - cs * u) / (2. * cs * hp),
-                   -v / (2. * hp),
-                   -w / (2. * hp),
-                   1. / (2. * hp),  //
-                   (hp - ke) / hp,
-                   u / hp,
-                   v / hp,
-                   w / hp,
-                   -1. / hp,  //
-                   (cs * ke - u * hp) / (2. * cs * hp),
-                   (hp - cs * u) / (2. * cs * hp),
-                   -v / (2. * hp),
-                   -w / (2. * hp),
-                   1. / (2. * hp),  //
-                   -v,
-                   0.,
-                   1.,
-                   0.,
-                   0.,  //
-                   -w,
-                   0.,
-                   0.,
-                   1.,
-                   0.};
-
-  init_matrix(right, arr2);
-
-  double arr3[] = {u - cs, 0., 0.,     0., 0.,  //
-                   0.,     u,  0.,     0., 0.,  //
-                   0.,     0., u + cs, 0., 0.,  //
-                   0.,     0., 0.,     u,  0.,  //
-                   0.,     0., 0.,     0., u};
-
-  init_matrix(val, arr3);
+void Eigenvalue(Eigen::Matrix<T, 5, 5> &Lambda, T u, T cs) {
+  Lambda << fabs(u - cs), 0., 0., 0., 0.,  //
+      0., fabs(u), 0., 0., 0.,             //
+      0., 0., fabs(u + cs), 0., 0.,        //
+      0., 0., 0., fabs(u), 0.,             //
+      0., 0., 0., 0., fabs(u);
 }
 
 template <typename T>
-DISPATCH_MACRO void flux_jacobian_impl(T *dfdq, T const *prim, T gamma, int dim,
-                                       int stride) {
-  auto ivx = IPR - dim;
-  auto ivy = IVX + ((ivx - IVX) + 1) % 3;
-  auto ivz = IVX + ((ivx - IVX) + 2) % 3;
+void Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat, Eigen::Matrix<T, 5, 5> &Rimat,
+                 T *prim, T cs, T gm1, int dir) {
+  T r = prim[IDN];
+  T u = prim[IVX + dir];
+  T v = prim[IVX + (IVY - IVX + dir) % 3];
+  T w = prim[IVX + (IVZ - IVX + dir) % 3];
+  T p = prim[IPR];
 
-  auto rho = PRIM(IDN);
-  auto v1 = PRIM(ivx);
-  auto v2 = PRIM(ivy);
-  auto v3 = PRIM(ivz);
-  auto pres = PRIM(IPR);
+  T ke = 0.5 * (u * u + v * v + w * w);
+  T hp = (gm1 + 1.) / gm1 * p / r;
+  T h = hp + ke;
 
-  auto s2 = SQR(v1) + SQR(v2) + SQR(v3);
-  auto gm1 = gamma - 1;
+  Rmat << 1., 1., 1., 0., 0.,     //
+      u - cs, u, u + cs, 0., 0.,  //
+      v, v, v, 1., 0.,            //
+      w, w, w, 0., 1.,            //
+      h - u * cs, ke, h + u * cs, v, w;
 
-  auto c1 = ((gm1 - 1.) * s2 / 2. - (gm1 + 1.) / gm1 * pres / rho) * v1;
-  auto c2 = (gm1 + 1.) / gm1 * pres / rho + s2 / 2. - gm1 * v1 * v1;
+  Rimat << (cs * ke + u * hp) / (2. * cs * hp),
+      (-hp - cs * u) / (2. * cs * hp),  //
+      -v / (2. * hp), -w / (2. * hp), 1. / (2. * hp), (hp - ke) / hp,
+      u / hp,                                                          //
+      v / hp, w / hp, -1. / hp, (cs * ke - u * hp) / (2. * cs * hp),   //
+      (hp - cs * u) / (2. * cs * hp), -v / (2. * hp), -w / (2. * hp),  //
+      1. / (2. * hp), -v, 0., 1., 0., 0., -w, 0., 0., 1., 0.;
+}
 
-  double arr[] = {0,
-                  1.,
-                  0.,
-                  0.,
-                  0.,  //
-                  gm1 * s2 / 2. - v1 * v1,
-                  (2. - gm1) * v1,
-                  -gm1 * v2,
-                  -gm1 * v3,
-                  gm1,  //
-                  -v1 * v2,
-                  v2,
-                  v1,
-                  0.,
-                  0.,  //
-                  -v1 * v3,
-                  v3,
-                  0.,
-                  v1,
-                  0.,  //
-                  c1,
-                  c2,
-                  -gm1 * v2 * v1,
-                  -gm1 * v3 * v1,
-                  (gm1 + 1.) * v1};
+template <typename T>
+void FluxJacobian(Eigen::Matrix<T, 5, 5> &dfdq, T gm1, T *w, int dir) {
+  // flux derivative
+  // Input variables are density, velocity field and energy.
+  // The primitives of cell (n,i)
+  T v1 = w[IVX + dir];
+  T v2 = w[IVX + (IVY - IVX + dir) % 3];
+  T v3 = w[IVX + (IVZ - IVX + dir) % 3];
+  T rho = w[IDN];
+  T pres = w[IPR];
+  T s2 = v1 * v1 + v2 * v2 + v3 * v3;
 
-  init_matrix(dfdq, arr);
+  T c1 = ((gm1 - 1) * s2 / 2 - (gm1 + 1) / gm1 * pres / rho) * v1;
+  T c2 = (gm1 + 1) / gm1 * pres / rho + s2 / 2 - gm1 * v1 * v1;
+
+  dfdq << 0, 1., 0., 0., 0.,                                               //
+      gm1 * s2 / 2 - v1 * v1, (2. - gm1) * v1, -gm1 * v2, -gm1 * v3, gm1,  //
+      -v1 * v2, v2, v1, 0., 0.,                                            //
+      -v1 * v3, v3, 0., v1, 0., c1,                                        //
+      c2, -gm1 * v2 * v1, -gm1 * v3 * v1, (gm1 + 1) * v1;
 }
 
 }  // namespace snap
 
-#undef PRIM
 #undef SQR
-#undef WL
-#undef WR

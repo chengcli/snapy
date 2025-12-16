@@ -72,7 +72,7 @@ void HydroImpl::reset() {
 
   //// ---- (8) set up implicit solver ---- ////
   if (options->icorr()) {
-    picorr = ImplicitCorrectionImpl::create(options->icorr(), this);
+    picorr = ImplicitHydroImpl::create(options->icorr(), this);
     if (options->verbose() && rank == 0) {
       std::cout << "[Hydro] Implicit correction type: "
                 << picorr->options->type() << "\n";

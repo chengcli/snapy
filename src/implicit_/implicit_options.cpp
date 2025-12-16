@@ -2,7 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include "implicit_hydro.hpp"
+#include "implicit.hpp"
 
 namespace snap {
 
