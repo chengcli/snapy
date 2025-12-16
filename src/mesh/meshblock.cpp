@@ -279,7 +279,7 @@ double MeshBlockImpl::initialize(Variables& vars) {
 
   // exchange buffers
   _init_buffers_2d(vars, {"hydro_u", "scalar_s"});
-  exchange(vars);
+  // exchange(vars);
 
   // start timing
   _time_start = clock();
@@ -398,7 +398,7 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   // -------- (7) ghost zone exchange --------
-  exchange(vars);
+  // exchange(vars);
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,

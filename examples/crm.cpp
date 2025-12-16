@@ -11,6 +11,7 @@
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/kinetics/kinetics_formatter.hpp>
 #include <kintera/thermo/relative_humidity.hpp>
+#include <kintera/utils/serialize.hpp>
 
 // snap
 #include <snap/input/command_line.hpp>
@@ -131,8 +132,17 @@ int main(int argc, char **argv) {
   w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 
   // initialize
+  std::map<std::string, torch::Tensor> vars_all;
+  vars_all["hydro_w"] = torch::zeros({4, nvar, nc3, nc2, nc1},
+                                     torch::TensorOptions().device(device));
+  kintera::load_tensors(vars_all,
+                        "regridded_white-sands_20241002_block_0_0.restart");
+
   std::map<std::string, torch::Tensor> vars;
-  vars["hydro_w"] = w;
+
+  // hardcode: read from restart file
+  vars["hydro_w"] = vars_all["hydro_w"][0].to(device).to(torch::kFloat64);
+
   block->initialize(vars);
 
   // user output variables
