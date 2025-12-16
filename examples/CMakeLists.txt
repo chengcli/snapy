@@ -4,7 +4,7 @@
 
 setup_problem(shock)
 setup_problem(straka)
-setup_problem(crm)
+setup_problem(run_hydro)
 setup_problem(shallow_xy)
 setup_problem(shallow_splash)
 

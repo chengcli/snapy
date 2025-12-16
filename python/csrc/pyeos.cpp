@@ -6,6 +6,9 @@
 
 // snap
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/eos/ideal_gas.hpp>
+#include <snap/eos/ideal_moist.hpp>
+#include <snap/eos/moist_mixture.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -36,8 +39,13 @@ void bind_eos(py::module &m) {
       .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptionsImpl,
                   thermo);
 
-  py::class_<snap::EquationOfStateImpl, snap::EquationOfState>(
-      m, "EquationOfState")
+  auto pyEquationOfState =
+      py::class_<snap::EquationOfStateImpl, snap::EquationOfState>(
+          m, "Coordinate");
+
+  pyEquationOfState.def(py::init<>())
+      .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("phydro") = nullptr)
       .def("__repr__",
            [](const snap::EquationOfStateImpl &a) {
              std::stringstream ss;
@@ -45,6 +53,47 @@ void bind_eos(py::module &m) {
              return fmt::format("EquationOfState(\n{})", ss.str());
            })
       .def("nvar", &snap::EquationOfStateImpl::nvar)
-      .def("compute", &snap::EquationOfStateImpl::compute)
-      .def("forward", &snap::EquationOfStateImpl::forward);
+      .def("compute", &snap::EquationOfStateImpl::compute);
+
+  /*auto pyIdealGas = py::class_<
+    snap::IdealGasImpl, snap::EquationOfStateImpl,
+    std::shared_ptr<snap::IdealGasImpl>(m, "IdealGas");
+
+  pyIdealGas.def(py::init<>())
+      .def("__repr__",
+           [](const snap::IdealGasImpl &a) {
+             std::stringstream ss;
+             a.options->report(ss);
+             return fmt::format("IdealGas(\n{})", ss.str());
+           })
+      .def("nvar", &snap::IdealGasImpl::nvar)
+      .def("compute", &snap::IdealGasImpl::compute);
+
+  auto pyIdealMoist = py::class_<
+    snap::IdealMoistImpl, snap::EquationOfStateImpl,
+    std::shared_ptr<snap::IdealMoistImpl>(m, "IdealMoist");
+
+  pyIdealMoist.def(py::init<>())
+      .def("__repr__",
+           [](const snap::IdealMoistImpl &a) {
+             std::stringstream ss;
+             a.options->report(ss);
+             return fmt::format("IdealMoist(\n{})", ss.str());
+           })
+      .def("nvar", &snap::IdealMoistImpl::nvar)
+      .def("compute", &snap::IdealMoistImpl::compute);
+
+  auto pyMoistMixture = py::class_<
+    snap::MoistMixtureImpl, snap::EquationOfStateImpl,
+    std::shared_ptr<snap::MoistMixtureImpl>(m, "MoistMixture");
+
+  pyMoistMixture.def(py::init<>())
+      .def("__repr__",
+           [](const snap::MoistMixtureImpl &a) {
+             std::stringstream ss;
+             a.options->report(ss);
+             return fmt::format("MoistMixture(\n{})", ss.str());
+           })
+      .def("nvar", &snap::MoistMixtureImpl::nvar)
+      .def("compute", &snap::MoistMixtureImpl::compute);*/
 }
