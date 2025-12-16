@@ -120,6 +120,7 @@ void BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
       DU(IDN, i) = delta[i](0);
       for (int n = 0; n < ny; ++n) {
         DU(ICY + n, i) += dens * W(ICY + n, i);
+        DU(IDN, i) -= dens * W(ICY + n, i);
       }
       DU(IVX + dir, i) = delta[i](1);
       DU(IPR, i) = delta[i](2);
@@ -127,13 +128,13 @@ void BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
       DU(IDN, i) = delta[i](0);
       for (int n = 0; n < ny; ++n) {
         DU(ICY + n, i) += dens * W(ICY + n, i);
+        DU(IDN, i) -= dens * W(ICY + n, i);
       }
       DU(IVX + dir, i) = delta[i](1);
       DU(IVX + (IVY - IVX + dir) % 3, i) = delta[i](2);
       DU(IVX + (IVZ - IVX + dir) % 3, i) = delta[i](3);
       DU(IPR, i) = delta[i](4);
     }
-    for (int n = 0; n < ny; ++n) DU(IDN, i) -= DU(ICY + n, i);
   }
 
   // if (!first_block) SendBuffer(delta[il], bblock);
