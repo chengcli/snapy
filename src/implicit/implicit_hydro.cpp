@@ -55,7 +55,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   auto b = torch::zeros_like(a);
   auto c = torch::zeros_like(a);
   auto delta = torch::zeros({1, nc3, nc2, nc1 * m}, w.options());
-  auto dfdq = torch::zeros_like(a);
 
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
@@ -70,7 +69,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                   .add_input(b)
                   .add_input(c)
                   .add_input(delta)
-                  .add_input(dfdq)
                   .build();
 
   // if ((options->scheme() >> 3) & 1) {  // full

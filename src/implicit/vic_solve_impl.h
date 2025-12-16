@@ -5,6 +5,8 @@
 #include "forward_backward_impl.h"
 // #include "periodic_forward_backward_impl.h"
 
+#define GAMMA(n) gamma[(n) * stride2]
+
 namespace snap {
 
 template <typename T>
@@ -13,18 +15,19 @@ T SoundSpeed(T *prim, T gm1) {
 }
 
 template <typename T>
-void vic_partial_solve_impl(
-    T *du, T *w, T *gamma, T *area, T *vol, double dt, double grav, int is,
-    int ie, int dir, int ny, int stride1, int stride2, bool first_block,
-    bool last_block, bool periodic, Eigen::Matrix<T, 3, 3> *a,
-    Eigen::Matrix<T, 3, 3> *b, Eigen::Matrix<T, 3, 3> *c,
-    Eigen::Matrix<T, 3, 1> *delta, Eigen::Matrix<T, 3, 3> *dfdq) {
+void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
+                            double grav, int is, int ie, int dir, int ny,
+                            int stride1, int stride2, bool first_block,
+                            bool last_block, bool periodic,
+                            Eigen::Matrix<T, 3, 3> *a,
+                            Eigen::Matrix<T, 3, 3> *b,
+                            Eigen::Matrix<T, 3, 3> *c,
+                            Eigen::Matrix<T, 3, 1> *delta) {
   // reduced diffusion matrix |A_{i-1/2}|, |A_{i+1/2}|
-  Eigen::Matrix<T, 5, 5> Am, Ap, dfdq1;
+  Eigen::Matrix<T, 5, 5> Am, Ap, dfdqf;
   Eigen::Matrix<T, 3, 2> Am1, Ap1;
   Eigen::Matrix<T, 3, 3> Am2, Ap2;
-
-  // int nc = ie - is + 1 + 2 * NGHOST;
+  Eigen::Matrix<T, 3, 3> dfdq[3];
 
   Eigen::Matrix<T, 3, 3> Phi, Dt, Bnd;
 
@@ -42,15 +45,18 @@ void vic_partial_solve_impl(
 
   T prim[5];       // Roe averaged primitive variables of cell i-1/2
   T wl[5], wr[5];  // left/right primitive variables of cell i-1 and i
+  T gm1, cs;
 
   // calculate and save flux Jacobian matrix
-  for (int i = is - 2; i <= ie + 1; ++i) {
-    CopyPrimitives(wl, wr, w, i, stride1, stride2);
-    FluxJacobian(dfdq1, static_cast<T>(gamma[i * stride2] - 1.), wr, dir);
+  for (int i = 0; i < 2; ++i) {
+    int j = is - 2 + i;
+    CopyPrimitives(wl, wr, w, j, stride1, stride2);
+    gm1 = GAMMA(j) - 1.;
+    FluxJacobian(dfdqf, gm1, wr, dir);
 
-    dfdq[i] << dfdq1(IDN, IDN), dfdq1(IDN, IVX), dfdq1(IDN, IPR),  //
-        dfdq1(IVX, IDN), dfdq1(IVX, IVX), dfdq1(IVX, IPR),         //
-        dfdq1(IPR, IDN), dfdq1(IPR, IVX), dfdq1(IPR, IPR);
+    dfdq[i] << dfdqf(IDN, IDN), dfdqf(IDN, IVX), dfdqf(IDN, IPR),  //
+        dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),         //
+        dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
   }
 
   // set up diffusion matrix and tridiagonal coefficients
@@ -59,11 +65,14 @@ void vic_partial_solve_impl(
 
   // left edge
   CopyPrimitives(wl, wr, w, is - 1, stride1, stride2);
-  T gm1 = 0.5 * (gamma[(is - 2) * stride2] + gamma[(is - 1) * stride2]) - 1.;
+
+  gm1 = 0.5 * (GAMMA(is - 2) + GAMMA(is - 1)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
-  T cs = SoundSpeed(prim, gm1);
+
+  cs = SoundSpeed(prim, gm1);
   Eigenvalue(Lambda, prim[IVX + dir], cs);
   Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
+
   Am = Rmat * Lambda * Rimat;
 
   Am1 << Am(IDN, IVY), Am(IDN, IVZ), Am(IVX, IVY),  //
@@ -75,11 +84,20 @@ void vic_partial_solve_impl(
 
   for (int i = is - 1; i <= ie; ++i) {
     CopyPrimitives(wl, wr, w, i + 1, stride1, stride2);
-    gm1 = 0.5 * (gamma[i * stride2] + gamma[(i + 1) * stride2]) - 1.;
+    gm1 = GAMMA(i + 1) - 1.;
+    FluxJacobian(dfdqf, gm1, wr, dir);
+
+    dfdq[2] << dfdqf(IDN, IDN), dfdqf(IDN, IVX), dfdqf(IDN, IPR),  //
+        dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),         //
+        dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
+
+    gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
     RoeAverage(prim, gm1, wl, wr);
-    T cs = SoundSpeed(prim, gm1);
+
+    cs = SoundSpeed(prim, gm1);
     Eigenvalue(Lambda, prim[IVX + dir], cs);
     Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
+
     Ap = Rmat * Lambda * Rimat;
 
     Ap1 << Ap(IDN, IVY), Ap(IDN, IVZ), Ap(IVX, IVY),  //
@@ -91,15 +109,18 @@ void vic_partial_solve_impl(
 
     // set up diagonals a, b, c.
     a[i] = (Am2 * area[i] + Ap2 * area[i + 1] +
-            (area[i + 1] - area[i]) * dfdq[i]) /
+            (area[i + 1] - area[i]) * dfdq[0]) /
                (2. * vol[i]) +
            Dt - Phi;
-    b[i] = -(Am2 + dfdq[i - 1]) * area[i] / (2. * vol[i]);
-    c[i] = -(Ap2 - dfdq[i + 1]) * area[i + 1] / (2. * vol[i]);
+    b[i] = -(Am2 + dfdq[1]) * area[i] / (2. * vol[i]);
+    c[i] = -(Ap2 - dfdq[2]) * area[i + 1] / (2. * vol[i]);
 
     // Shift one cell: i -> i+1
     Am1 = Ap1;
     Am2 = Ap2;
+
+    dfdq[0] = dfdq[1];
+    dfdq[1] = dfdq[2];
   }
 
   // 5. fix boundary condition
@@ -123,3 +144,5 @@ void vic_partial_solve_impl(
 }
 
 }  // namespace snap
+
+#undef GAMMA

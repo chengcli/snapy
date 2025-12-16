@@ -44,14 +44,11 @@ void vic_solve_cpu(at::TensorIterator &iter, double dt, double grav, int il,
                 data[7] + i * strides[7]);
             auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, N, 1> *>(
                 data[8] + i * strides[8]);
-            auto dfdq = reinterpret_cast<Eigen::Matrix<scalar_t, N, N> *>(
-                data[9] + i * strides[9]);
 
             if (N == 3) {
-              vic_partial_solve_impl(du, w, gamma, area, vol, dt, grav, il, iu,
+              vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, il, iu,
                                      dir, ny, stride1, stride2, first_block,
-                                     last_block, periodic, a, b, c, delta,
-                                     dfdq);
+                                     last_block, periodic, a, b, c, delta);
             }
           }
         },
