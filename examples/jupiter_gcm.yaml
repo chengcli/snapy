@@ -114,7 +114,7 @@ boundary-condition:
 integration:
   type: rk3
   cfl: 0.45
-  implicit-scheme: 1
+  implicit-scheme: 9
   nlim: -1
   tlim: 100.e5
   ncycle_out: 1
@@ -124,10 +124,10 @@ outputs:
     dt: 10.E5
   - type: netcdf
     variables: [prim, uov]
-    dt: 1.E5
+    dt: 1.
   - type: netcdf
     variables: [thermo]
-    dt: 1.E5
+    dt: 1.
 
 forcing:
   const-gravity:
