@@ -10,21 +10,23 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
+#include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/layout/layout.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 // python
 #include "pyoptions.hpp"
 
 namespace py = pybind11;
 
-void bind_layout(py::module& m) {
+void bind_layout(py::module &m) {
   auto pyLayoutOptions =
       py::class_<snap::LayoutOptionsImpl, snap::LayoutOptions>(m,
                                                                "LayoutOptions");
 
   pyLayoutOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::LayoutOptions& a) {
+           [](const snap::LayoutOptions &a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("LayoutOptions(\n{})", ss.str());
@@ -46,72 +48,84 @@ void bind_layout(py::module& m) {
       .ADD_OPTION(int, snap::LayoutOptionsImpl, rank)
       .ADD_OPTION(int, snap::LayoutOptionsImpl, local_rank);
 
-  /*auto pySlabLayout = py::class_<snap::SlabLayout>(m, "SlabLayout");
-
-  pySlabLayout
-      .def(py::init<int, int, bool, bool>(), py::arg("px"), py::arg("py"),
-           py::arg("periodic_x") = false, py::arg("periodic_y") = false)
+  py::class_<snap::LayoutImpl, snap::Layout>(m, "Layout")
+      .def(py::init<snap::LayoutOptions>(), py::arg("options"))
       .def("__repr__",
-           [](const snap::SlabLayout& a) {
+           [](const snap::LayoutImpl &self) {
              std::stringstream ss;
-             a.report(ss);
-             return fmt::format("SlabLayout(\n{})", ss.str());
+             self.options->report(ss);
+             return fmt::format("Layout(\n{})", ss.str());
            })
-      .def("get_procs", &snap::SlabLayout::get_procs)
-      .def("rank_of", &snap::SlabLayout::rank_of, py::arg("rx"), py::arg("ry"))
-      .def("loc_of", &snap::SlabLayout::loc_of, py::arg("rank"))
-      .def(
-          "neighbor_rank",
-          [](const snap::SlabLayout& self, int rx, int ry, int dx, int dy,
-             int dz) { return self.neighbor_rank(rx, ry, dx, dy); },
-          py::arg("rx"), py::arg("ry"), py::arg("dx"), py::arg("dy"),
-          py::arg("dz") = 0);
+      .def("get_procs", &snap::LayoutImpl::get_procs)
+      .def("rank_of", &snap::LayoutImpl::rank_of)
+      .def("loc_of", &snap::LayoutImpl::loc_of)
+      .def("neighbor_rank", &snap::LayoutImpl::neighbor_rank);
 
-  auto pyCubedLayout = py::class_<snap::CubedLayout>(m, "CubedLayout");
+  auto pySlabLayout =
+      py::class_<snap::SlabLayoutImpl, snap::LayoutImpl,
+                 std::shared_ptr<snap::SlabLayoutImpl>>(m, "SlabLayout");
 
-  pyCubedLayout
-      .def(py::init<int, int, int, bool, bool, bool>(), py::arg("px"),
-           py::arg("py"), py::arg("pz"), py::arg("periodic_x") = false,
-           py::arg("periodic_y") = false, py::arg("periodic_z") = false)
-      .def("__repr__",
-           [](const snap::CubedLayout& a) {
-             std::stringstream ss;
-             a.report(ss);
-             return fmt::format("CubedLayout(\n{})", ss.str());
+  pySlabLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def("__repr__", [](const snap::SlabLayoutImpl &self) {
+        std::stringstream ss;
+        self.pretty_print(ss);
+        return fmt::format("SlabLayout(\n{})", ss.str());
+      });
+
+  torch::python::add_module_bindings(pySlabLayout)
+      .def("buffer",
+           [](snap::SlabLayoutImpl &self, std::string name) {
+             return self.named_buffers()[name];
            })
-      .def("get_procs", &snap::CubedLayout::get_procs)
-      .def("rank_of", &snap::CubedLayout::rank_of, py::arg("rx"), py::arg("ry"),
-           py::arg("rz"))
-      .def("loc_of", &snap::CubedLayout::loc_of, py::arg("rank"))
-      .def("neighbor_rank", &snap::CubedLayout::neighbor_rank, py::arg("rx"),
-           py::arg("ry"), py::arg("rz"), py::arg("dx"), py::arg("dy"),
-           py::arg("dz"));
+      .def("module", [](snap::SlabLayoutImpl &self, std::string name) {
+        return self.named_modules()[name];
+      });
+
+  auto pyCubedLayout =
+      py::class_<snap::CubedLayoutImpl, snap::LayoutImpl,
+                 std::shared_ptr<snap::CubedLayoutImpl>>(m, "CubedLayout");
+
+  pyCubedLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def("__repr__", [](const snap::SlabLayoutImpl &self) {
+        std::stringstream ss;
+        self.pretty_print(ss);
+        return fmt::format("SlabLayout(\n{})", ss.str());
+      });
+
+  torch::python::add_module_bindings(pyCubedLayout)
+      .def("buffer",
+           [](snap::CubedLayoutImpl &self, std::string name) {
+             return self.named_buffers()[name];
+           })
+      .def("module", [](snap::CubedLayoutImpl &self, std::string name) {
+        return self.named_modules()[name];
+      });
 
   auto pyCubedSphereLayout =
-      py::class_<snap::CubedSphereLayout>(m, "CubedSphereLayout");
+      py::class_<snap::CubedSphereLayoutImpl, snap::LayoutImpl,
+                 std::shared_ptr<snap::CubedSphereLayoutImpl>>(
+          m, "CubedSphereLayout");
 
-  pyCubedSphereLayout.def(py::init<int>(), py::arg("pxy"))
-      .def("__repr__",
-           [](const snap::CubedSphereLayout& a) {
-             std::stringstream ss;
-             a.report(ss);
-             return fmt::format("CubedSphereLayout(\n{})", ss.str());
+  pyCubedSphereLayout.def(py::init<>())
+      .def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def("__repr__", [](const snap::CubedSphereLayoutImpl &self) {
+        std::stringstream ss;
+        self.pretty_print(ss);
+        return fmt::format("CubedSphereLayout(\n{})", ss.str());
+      });
+
+  torch::python::add_module_bindings(pyCubedSphereLayout)
+      .def("buffer",
+           [](snap::CubedSphereLayoutImpl &self, std::string name) {
+             return self.named_buffers()[name];
            })
-      .def("get_procs", &snap::CubedSphereLayout::get_procs)
-      .def("rank_of", &snap::CubedSphereLayout::rank_of, py::arg("face"),
-           py::arg("rx"), py::arg("ry"))
-      .def("loc_of", &snap::CubedSphereLayout::loc_of, py::arg("rank"))
-      .def(
-          "neighbor_rank",
-          [](const snap::CubedSphereLayout& self, int face, int rx, int ry,
-             int dx, int dy,
-             int dz) { return self.neighbor_rank(face, rx, ry, dx, dy); },
-          py::arg("face"), py::arg("rx"), py::arg("ry"), py::arg("dx"),
-          py::arg("dy"), py::arg("dz") = 0);
-  */
+      .def("module", [](snap::CubedSphereLayoutImpl &self, std::string name) {
+        return self.named_modules()[name];
+      });
 
   // distribution functions
-  m.def("get_buffer_id", &snap::get_buffer_id)
-      .def("get_rank_from_env", &snap::get_rank)
-      .def("get_local_rank", &snap::get_local_rank);
+  auto m_dist = m.def_submodule("distributed", "Distributed module");
+  m_dist.def("get_rank", &snap::get_rank)
+      .def("get_local_rank", &snap::get_local_rank)
+      .def("get_layout", &snap::MeshBlockImpl::get_layout);
 }
