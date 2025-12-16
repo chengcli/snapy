@@ -14,6 +14,11 @@
 namespace snap {
 
 template <typename T>
+T SoundSpeed(T *prim, T gm1) {
+  return sqrt(prim[IPR] * (gm1 + 1.) / prim[IDN]);
+}
+
+template <typename T>
 void CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1, int stride2) {
   for (int n = 0; n < 5; ++n) {
     wl[n] = prim[n * stride1 + (i - 1) * stride2];

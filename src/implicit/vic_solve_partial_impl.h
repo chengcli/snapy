@@ -6,13 +6,10 @@
 // #include "periodic_forward_backward_impl.h"
 
 #define GAMMA(n) gamma[(n) * stride2]
+#define AREA(n) area[(n) * stride2]
+#define VOL(n) vol[(n) * stride2]
 
 namespace snap {
-
-template <typename T>
-T SoundSpeed(T *prim, T gm1) {
-  return sqrt(prim[IPR] * (gm1 + 1.) / prim[IDN]);
-}
 
 template <typename T>
 void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
@@ -23,6 +20,9 @@ void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
                             Eigen::Matrix<T, 3, 3> *b,
                             Eigen::Matrix<T, 3, 3> *c,
                             Eigen::Matrix<T, 3, 1> *delta) {
+  // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
+  Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat;
+
   // reduced diffusion matrix |A_{i-1/2}|, |A_{i+1/2}|
   Eigen::Matrix<T, 5, 5> Am, Ap, dfdqf;
   Eigen::Matrix<T, 3, 2> Am1, Ap1;
@@ -58,10 +58,6 @@ void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
         dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),         //
         dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
   }
-
-  // set up diffusion matrix and tridiagonal coefficients
-  // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
-  Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat;
 
   // left edge
   CopyPrimitives(wl, wr, w, is - 1, stride1, stride2);
@@ -108,12 +104,12 @@ void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
         Ap(IPR, IDN), Ap(IPR, IVX), Ap(IPR, IPR);
 
     // set up diagonals a, b, c.
-    a[i] = (Am2 * area[i] + Ap2 * area[i + 1] +
-            (area[i + 1] - area[i]) * dfdq[0]) /
-               (2. * vol[i]) +
+    a[i] = (Am2 * AREA(i) + Ap2 * AREA(i + 1) +
+            (AREA(i + 1) - AREA(i)) * dfdq[0]) /
+               (2. * VOL(i)) +
            Dt - Phi;
-    b[i] = -(Am2 + dfdq[1]) * area[i] / (2. * vol[i]);
-    c[i] = -(Ap2 - dfdq[2]) * area[i + 1] / (2. * vol[i]);
+    b[i] = -(Am2 + dfdq[1]) * AREA(i) / (2. * VOL(i));
+    c[i] = -(Ap2 - dfdq[2]) * AREA(i + 1) / (2. * VOL(i));
 
     // Shift one cell: i -> i+1
     Am1 = Ap1;
@@ -146,3 +142,5 @@ void vic_solve_partial_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
 }  // namespace snap
 
 #undef GAMMA
+#undef AREA
+#undef VOL

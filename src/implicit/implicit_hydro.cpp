@@ -71,14 +71,13 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                   .add_input(delta)
                   .build();
 
-  // if ((options->scheme() >> 3) & 1) {  // full
-  //   at::native::vic_solve5(du.device().type(), iter,
-  //                          dt, options->grav()->grav1(),
-  //                          is, ie, 0);
-  // } else {  // partial
-  at::native::vic_solve3(du.device().type(), iter, dt, options->grav()->grav1(),
-                         is, ie, 0);
-  //}
+  if ((options->scheme() >> 3) & 1) {
+    at::native::vic_solve_full(du.device().type(), iter, dt,
+                               options->grav()->grav1(), is, ie, 0);
+  } else {
+    at::native::vic_solve_partial(du.device().type(), iter, dt,
+                                  options->grav()->grav1(), is, ie, 0);
+  }
 
   /// (3) De-project from local orthonormal frame
   w[IVZ] /= sin_theta;
