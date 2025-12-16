@@ -10,7 +10,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
-#include <snap/implicit/implicit.hpp>
+#include <snap/implicit/implicit_hydro.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
@@ -115,7 +115,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   Reconstruct precon23 = nullptr;
 
   InternalBoundary pib = nullptr;
-  ImplicitCorrection picorr = nullptr;
+  ImplicitHydro picorr = nullptr;
 
   SedHydro psed = nullptr;
 

@@ -11,154 +11,95 @@
 // snap
 #include <snap/utils/cuda_utils.h>
 #include <snap/loops.cuh>
-#include "flux_decomposition_impl.h"
-#include "tridiag_thomas_impl.h"
+
 #include "implicit_dispatch.hpp"
+#include "vic_solve_full_impl.h"
+#include "vic_solve_partial_impl.h"
 
 namespace snap {
 
-void call_roe_average_cuda(at::TensorIterator &iter) {
-  at::cuda::CUDAGuard device_guard(iter.device());
-
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_roe_average_cuda", [&] {
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-
-    native::gpu_kernel<4>(iter, [=] GPU_LAMBDA(
-        char * const data[4], unsigned int strides[4]) {
-          auto wroe = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
-          auto wl = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
-          auto wr = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
-          auto gamma = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
-          roe_average_impl(wroe, wl, wr, *gamma, stride);
-        });
-  });
-}
-
-void call_eigen_system_cuda(at::TensorIterator &iter, int dim) {
-  at::cuda::CUDAGuard device_guard(iter.device());
-
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_eigen_system_cuda", [&] {
-    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
-
-    native::gpu_kernel<5>(iter, [=] GPU_LAMBDA(
-        char * const data[5], unsigned int strides[5]) {
-          auto Rmat = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
-          auto Rimat = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
-          auto EV = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
-          auto wroe = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
-          auto gamma = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
-          eigen_system_impl(Rmat, Rimat, EV, wroe, *gamma, dim, stride);
-        });
-  });
-}
-
-void call_flux_jacobian_cuda(at::TensorIterator &iter, int dim) {
-  at::cuda::CUDAGuard device_guard(iter.device());
-
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_flux_jacobian_cuda", [&] {
-    auto stride = at::native::ensure_nonempty_stride(iter.input(), 0);
-
-    native::gpu_kernel<3>(iter, [=] GPU_LAMBDA(
-        char * const data[3], unsigned int strides[3]) {
-          auto dfdq = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
-          auto wroe = reinterpret_cast<scalar_t *>(data[1] + strides[1]);
-          auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
-          flux_jacobian_impl(dfdq, wroe, *gamma, dim, stride);
-        });
-  });
-}
-
 template <int N>
-void vic_solve_cuda(at::TensorIterator& iter, double dt, int il, int iu) {
+void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
+                            int il, int iu, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ny = nhydro - Index::ICY;
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+    bool first_block = true;
+    bool last_block = true;
+    bool periodic = false;
 
     native::gpu_kernel<7>(iter, [=] GPU_LAMBDA(
                                               char* const data[7],
                                               unsigned int strides[7]) {
       auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
       auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-      auto a =
-          reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>*>(
-              data[2] + strides[2]);
-      auto b =
-          reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>*>(
-              data[3] + strides[3]);
-      auto c =
-          reinterpret_cast<Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>*>(
-              data[4] + strides[4]);
-      auto delta =
-          reinterpret_cast<Eigen::Vector<scalar_t, N>*>(data[5] + strides[5]);
-      auto corr =
-          reinterpret_cast<Eigen::Vector<scalar_t, N>*>(data[6] + strides[6]);
-
-      forward_sweep_impl(a, b, c, delta, corr, du, dt, ny, stride, il, iu);
-      backward_substitution_impl(a, delta, w, du, ny, stride, il, iu);
+      auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
+      auto area = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
+      auto vol = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
+      auto a = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[5] + strides[5]);
+      auto b = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[6] + strides[6]);
+      auto c = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[7] + strides[7]);
+      auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 1>*>(
+          data[8] + strides[8]);
+      vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, il, iu,
+                             dir, ny, stride1, stride2, first_block,
+                             periodic, a, b, c, delta);
     });
   });
 }
 
 template <int N>
-void alloc_eigen_cuda(c10::ScalarType dtype,
-                      char *&a, char *&b, char *&c, char *&delta, char *&corr,
-                      int ncol, int nlayer) {
-  AT_DISPATCH_FLOATING_TYPES(dtype, "alloc_eigen_cuda", [&]() {
-    cudaMalloc(
-        (void **)&a,
-        sizeof(Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>) * ncol * nlayer);
-    int err = checkCudaError("alloc_eigen_cuda::a");
-    TORCH_CHECK(err == 0, "eigen memory allocation error");
+void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
+                         int il, int iu, int dir) {
+  at::cuda::CUDAGuard device_guard(iter.device());
 
-    cudaMalloc(
-        (void **)&b,
-        sizeof(Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>) * ncol * nlayer);
-    err = checkCudaError("alloc_eigen_cuda::b");
-    TORCH_CHECK(err == 0, "eigen memory allocation error");
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
 
-    cudaMalloc(
-        (void **)&c,
-        sizeof(Eigen::Matrix<scalar_t, N, N, Eigen::RowMajor>) * ncol * nlayer);
-    err = checkCudaError("alloc_eigen_cuda::c");
-    TORCH_CHECK(err == 0, "eigen memory allocation error");
+    int ny = nhydro - ICY;
+    bool first_block = true;
+    bool last_block = true;
+    bool periodic = false;
 
-    cudaMalloc((void **)&delta,
-               sizeof(Eigen::Vector<scalar_t, N>) * ncol * nlayer);
-    err = checkCudaError("alloc_eigen_cuda::delta");
-    TORCH_CHECK(err == 0, "eigen memory allocation error");
+    native::gpu_kernel<9>(iter, [=] GPU_LAMBDA(
+                                              char* const data[7],
+                                              unsigned int strides[7]) {
+      auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+      auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+      auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
+      auto area = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
+      auto vol = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
+      auto a = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[5] + strides[5]);
+      auto b = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[6] + strides[6]);
+      auto c = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+          data[7] + strides[7]);
+      auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 1>*>(
+          data[8] + strides[8]);
 
-    cudaMalloc((void **)&corr,
-               sizeof(Eigen::Vector<scalar_t, N>) * ncol * nlayer);
-    err = checkCudaError("alloc_eigen_cuda::corr");
-    TORCH_CHECK(err == 0, "eigen memory allocation error");
+      vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, il, iu,
+                          dir, ny, stride1, stride2, first_block,
+                          periodic, a, b, c, delta);
+    });
   });
-}
-
-void free_eigen_cuda(char *&a, char *&b, char *&c, char *&delta, char *&corr) {
-  cudaDeviceSynchronize();
-  cudaFree(a);
-  cudaFree(b);
-  cudaFree(c);
-  cudaFree(delta);
-  cudaFree(corr);
 }
 
 }  // namespace snap
 
 namespace at::native {
 
-REGISTER_CUDA_DISPATCH(call_roe_average, &snap::call_roe_average_cuda);
-REGISTER_CUDA_DISPATCH(call_eigen_system, &snap::call_eigen_system_cuda);
-REGISTER_CUDA_DISPATCH(call_flux_jacobian, &snap::call_flux_jacobian_cuda);
-
-REGISTER_CUDA_DISPATCH(vic_solve3, &snap::vic_solve_cuda<3>);
-REGISTER_CUDA_DISPATCH(vic_solve5, &snap::vic_solve_cuda<5>);
-
-REGISTER_CUDA_DISPATCH(alloc_eigen3, &snap::alloc_eigen_cuda<3>);
-REGISTER_CUDA_DISPATCH(alloc_eigen5, &snap::alloc_eigen_cuda<5>);
-REGISTER_CUDA_DISPATCH(free_eigen, &snap::free_eigen_cuda);
+REGISTER_CUDA_DISPATCH(vic_solve_partial, &snap::vic_solve_partial_cuda);
+REGISTER_CUDA_DISPATCH(vic_solve_full, &snap::vic_solve_full_cuda);
 
 }  // namespace at::native

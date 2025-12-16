@@ -72,7 +72,7 @@ void HydroImpl::reset() {
 
   //// ---- (8) set up implicit solver ---- ////
   if (options->icorr()) {
-    picorr = ImplicitCorrectionImpl::create(options->icorr(), this);
+    picorr = ImplicitHydroImpl::create(options->icorr(), this);
     if (options->verbose() && rank == 0) {
       std::cout << "[Hydro] Implicit correction type: "
                 << picorr->options->type() << "\n";
@@ -136,6 +136,8 @@ void HydroImpl::reset() {
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
+  auto sub3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+
   torch::Tensor cs;
   if (options->eos()->type() == "aneos") {
     cs = peos->compute("W->L", {w});
@@ -154,32 +156,44 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   if (icorr) {
     if ((cs.size(2) > 1) &&
         (!(icorr->scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
-      dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
+      dt1 = (pcoord->center_width1() / (w[IVX].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
 
     if ((cs.size(1) > 1) && (!((icorr->scheme() >> 1) & 1))) {
-      dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
+      dt2 = (pcoord->center_width2() / (w[IVY].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
 
     if ((cs.size(0) > 1) && (!((icorr->scheme() >> 2) & 1))) {
-      dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
+      dt3 = (pcoord->center_width3() / (w[IVZ].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
   } else {
     if (cs.size(2) > 1) {
-      dt1 = torch::min(pcoord->center_width1() / (w[IVX].abs() + cs))
+      dt1 = (pcoord->center_width1() / (w[IVX].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
 
     if (cs.size(1) > 1) {
-      dt2 = torch::min(pcoord->center_width2() / (w[IVY].abs() + cs))
+      dt2 = (pcoord->center_width2() / (w[IVY].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
 
     if (cs.size(0) > 1) {
-      dt3 = torch::min(pcoord->center_width3() / (w[IVZ].abs() + cs))
+      dt3 = (pcoord->center_width3() / (w[IVZ].abs() + cs))
+                .index(sub3)
+                .min()
                 .item<double>();
     }
   }

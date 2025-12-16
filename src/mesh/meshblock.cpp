@@ -538,7 +538,10 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     auto m = named_modules()["hydro.eos.thermo"];
     auto pthermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
 
-    pthermo->forward(rho, ie, yfrac, /*warm_start=*/true);
+    auto sub = part({0, 0, 0}, PartOptions().exterior(false));
+    auto sub3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+    pthermo->forward(rho.index(sub3), ie.index(sub3), yfrac.index(sub),
+                     /*warm_start=*/true);
 
     hydro_u.narrow(0, ICY, ny) = yfrac * rho;
     if (options->verbose()) {

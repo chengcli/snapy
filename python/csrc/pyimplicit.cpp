@@ -6,7 +6,7 @@
 #include <torch/nn/modules/container/any.h>
 
 // snap
-#include <snap/implicit/implicit.hpp>
+#include <snap/implicit/implicit_hydro.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -34,10 +34,6 @@ void bind_implicit(py::module &m) {
       .ADD_OPTION(snap::ConstGravityOptions, snap::ImplicitOptionsImpl, grav);
 
   ADD_SNAP_MODULE(ImplicitHydro, ImplicitOptions)
-      .def(py::init<snap::ImplicitOptions, torch::nn::Module *>(),
-           py::arg("options"), py::arg("icorr") = nullptr);
-
-  ADD_SNAP_MODULE(ImplicitCorrection, ImplicitOptions)
       .def(py::init<snap::ImplicitOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("hydro") = nullptr);
 }
