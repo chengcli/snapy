@@ -41,7 +41,7 @@ void bind_eos(py::module &m) {
 
   auto pyEquationOfState =
       py::class_<snap::EquationOfStateImpl, snap::EquationOfState>(
-          m, "Coordinate");
+          m, "EquationOfState");
 
   pyEquationOfState.def(py::init<>())
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
