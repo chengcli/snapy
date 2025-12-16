@@ -39,8 +39,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   w[IVY] += w[IVZ] * cos_theta;
   w[IVZ] *= sin_theta;
 
-  // coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
-  // pcoord->prim2local1_(du);
+  coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
+  pcoord->prim2local1_(du);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
   int nc1 = pcoord->options->nc1();
@@ -82,7 +82,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   /// (3) De-project from local orthonormal frame
   w[IVZ] /= sin_theta;
   w[IVY] -= w[IVZ] * cos_theta;
-  // pcoord->flux2global1_(du);
+  pcoord->flux2global1_(du);
 
   return du - du0;
 }
