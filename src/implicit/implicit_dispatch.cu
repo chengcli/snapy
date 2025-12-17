@@ -18,7 +18,6 @@
 
 namespace snap {
 
-template <int N>
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
                             int il, int iu, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -33,9 +32,8 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
     bool last_block = true;
     bool periodic = false;
 
-    native::gpu_kernel<7>(iter, [=] GPU_LAMBDA(
-                                              char* const data[7],
-                                              unsigned int strides[7]) {
+    native::gpu_kernel<9>(
+        iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
       auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
       auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
       auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
@@ -49,14 +47,15 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
           data[7] + strides[7]);
       auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 1>*>(
           data[8] + strides[8]);
+
       vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, il, iu,
-                             dir, ny, stride1, stride2, first_block,
+                             dir, ny, stride1, stride2,
+                             first_block, last_block,
                              periodic, a, b, c, delta);
     });
   });
 }
 
-template <int N>
 void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
                          int il, int iu, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -71,25 +70,24 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
     bool last_block = true;
     bool periodic = false;
 
-    native::gpu_kernel<9>(iter, [=] GPU_LAMBDA(
-                                              char* const data[7],
-                                              unsigned int strides[7]) {
+    native::gpu_kernel<9>(iter,
+        [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
       auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
       auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
       auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
       auto area = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
       auto vol = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
-      auto a = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+      auto a = reinterpret_cast<Eigen::Matrix<scalar_t, 5, 5>*>(
           data[5] + strides[5]);
-      auto b = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+      auto b = reinterpret_cast<Eigen::Matrix<scalar_t, 5, 5>*>(
           data[6] + strides[6]);
-      auto c = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 3>*>(
+      auto c = reinterpret_cast<Eigen::Matrix<scalar_t, 5, 5>*>(
           data[7] + strides[7]);
-      auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 1>*>(
+      auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 5, 1>*>(
           data[8] + strides[8]);
 
       vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, il, iu,
-                          dir, ny, stride1, stride2, first_block,
+                          dir, ny, stride1, stride2, first_block, last_block,
                           periodic, a, b, c, delta);
     });
   });

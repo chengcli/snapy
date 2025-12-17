@@ -59,20 +59,20 @@ geometry:
     x1min: 0.
     x1max: 300.e3
     x2min: 0.
-    x2max: 1200.e3
-    x3min: -0.5
-    x3max: 0.5
+    x2max: 2400.e3
+    x3min: 0.
+    x3max: 2400.e3
 
   cells:
     nx1: 100
-    nx2: 200
-    nx3: 1
+    nx2: 100
+    nx3: 100
     nghost: 3
 
 distribute:
   backend: gloo
   layout: slab
-  nb2: 4
+  nb2: 1
   nb3: 1
   verbose: false
 
@@ -98,32 +98,30 @@ dynamics:
     type: hllc
 
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.e9
-    max-iter: 5
-
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: periodic
-    x2-outer: periodic
-    x3-inner: periodic
-    x3-outer: periodic
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
 
 integration:
   type: rk3
-  cfl: 0.9
+  cfl: 0.45
   implicit-scheme: 1
   nlim: -1
-  tlim: 1.e5
-  ncycle_out: 10
+  tlim: 100.e5
+  ncycle_out: 1
 
 outputs:
   - type: restart
-    dt: 1.E5
+    dt: 10.E5
   - type: netcdf
     variables: [prim, uov]
+    dt: 1.E3
+  - type: netcdf
+    variables: [thermo]
     dt: 1.E3
 
 forcing:
@@ -142,9 +140,9 @@ sedimentation:
     NH4SH(s,p): 1500.
 
   const-vsed:
-    H2O(l,p): -200.0
-    NH3(s,p): -200.0
-    NH4SH(s,p): -200.0
+    H2O(l,p): -20.0
+    NH3(s,p): -20.0
+    NH4SH(s,p): -20.0
 
 reactions:
   - equation: H2O => H2O(l)

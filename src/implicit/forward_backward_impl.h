@@ -17,10 +17,13 @@
 namespace snap {
 
 template <typename T, int N>
-void ForwardSweep(Eigen::Matrix<T, N, N> *a, Eigen::Matrix<T, N, N> *b,
-                  Eigen::Matrix<T, N, N> *c, Eigen::Matrix<T, N, 1> *delta,
-                  T *du, double dt, int il, int iu, int dir, int ny,
-                  int stride1, int stride2, bool first_block, bool last_block) {
+void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
+                                 Eigen::Matrix<T, N, N> *b,
+                                 Eigen::Matrix<T, N, N> *c,
+                                 Eigen::Matrix<T, N, 1> *delta, T *du,
+                                 double dt, int il, int iu, int dir, int ny,
+                                 int stride1, int stride2, bool first_block,
+                                 bool last_block) {
   Eigen::Matrix<T, N, 1> rhs;
 
   if (N == 3) {  // partial matrix
@@ -48,17 +51,13 @@ void ForwardSweep(Eigen::Matrix<T, N, N> *a, Eigen::Matrix<T, N, N> *b,
   // delta[il] = a[il] * (rhs - b[il] * delta[il - 1]);
   // a[il] *= c[il];
   //} else {
-  if (N > 4) {
-    A = a[il].transpose();
-    ludcmp(A, indx);
-    luminv(A, indx, Y);
-    a[il] = Y.transpose();
-  } else {  // Eigen small matrix inverse (N <= 4)
-    a[il] = a[il].inverse().eval();
-  }
+  A = a[il].transpose();
+  ludcmp(A, indx);
+  luminv(A, indx, Y);
+  a[il] = Y.transpose();
 
   delta[il] = a[il] * rhs;
-  a[il] *= c[il];
+  a[il] = a[il] * c[il];
   //}
 
   for (int i = il + 1; i <= iu; ++i) {
@@ -78,18 +77,14 @@ void ForwardSweep(Eigen::Matrix<T, N, N> *a, Eigen::Matrix<T, N, N> *b,
       rhs(4) = DU(IPR, i) / dt;
     }
 
-    if (N > 4) {
-      a[i] -= b[i] * a[i - 1];
-      A = a[i].transpose();
-      ludcmp(A, indx);
-      luminv(A, indx, Y);
-      a[i] = Y.transpose();
-    } else {  // Eigen small matrix inverse (N <= 4)
-      a[i] = (a[i] - b[i] * a[i - 1]).inverse().eval();
-    }
+    a[i] -= b[i] * a[i - 1];
+    A = a[i].transpose();
+    ludcmp(A, indx);
+    luminv(A, indx, Y);
+    a[i] = Y.transpose();
 
     delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
-    a[i] *= c[i];
+    a[i] = a[i] * c[i];
   }
 
   // SaveCoefficients(a, delta, il, iu);
@@ -97,10 +92,11 @@ void ForwardSweep(Eigen::Matrix<T, N, N> *a, Eigen::Matrix<T, N, N> *b,
 }
 
 template <typename T, int N>
-void BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
-                          Eigen::Matrix<T, N, 1> *delta, int il, int iu,
-                          int dir, int ny, int stride1, int stride2,
-                          bool first_block, bool last_block) {
+void DISPATCH_MACRO BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
+                                         Eigen::Matrix<T, N, 1> *delta, int il,
+                                         int iu, int dir, int ny, int stride1,
+                                         int stride2, bool first_block,
+                                         bool last_block) {
   // LoadCoefficients(a, delta, il, iu);
   // if (!last_block) {
   //   RecvBuffer(delta[iu + 1], tblock);

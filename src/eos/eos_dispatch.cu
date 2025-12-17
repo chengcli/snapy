@@ -57,11 +57,11 @@ int call_fix_vapor_cuda(at::TensorIterator& iter) {
     auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
 
     native::gpu_kernel<2>(
-        iter, [&] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
-          auto vapor = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-          auto major = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+        iter, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
+          auto vapor = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto major = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           int err = fix_vapor_impl(vapor, major, nx1);
-          atomicAdd(&all_err, err);
+          //atomicAdd(&all_err, err);
         });
   });
 
