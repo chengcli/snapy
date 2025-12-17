@@ -25,6 +25,9 @@ void BotHeatImpl::reset() {
 
 torch::Tensor BotHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
+  int is = pcoord->is();
+  auto dz = pcoord->dx1f[is];
+  du[IPR].select(-1, is) += options->flux() / dz;
   return du;
 }
 

@@ -128,6 +128,12 @@ forcing:
   const-gravity:
     grav1: -22.
 
+  top-cool:
+    flux: -100.
+
+  bot-heat:
+    flux: 100
+
 sedimentation:
   radius:
     H2O(l,p): 1.0e-10

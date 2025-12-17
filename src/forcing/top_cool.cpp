@@ -25,6 +25,9 @@ void TopCoolImpl::reset() {
 
 torch::Tensor TopCoolImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
+  int ie = pcoord->ie();
+  auto dz = pcoord->dx1f[ie];
+  du[IPR].select(-1, ie) += options->flux() / dz;
   return du;
 }
 
