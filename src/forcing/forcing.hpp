@@ -258,9 +258,13 @@ struct TopCoolOptionsImpl {
       YAML::Node const& forcing);
 
   TopCoolOptionsImpl() = default;
-  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
+  void report(std::ostream& os) const {
+    os << "* flux = " << flux() << "\n"
+       << "* depth = " << depth() << "\n";
+  }
 
   ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(int, depth) = 1;
   ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
 using TopCoolOptions = std::shared_ptr<TopCoolOptionsImpl>;
@@ -295,9 +299,13 @@ struct BotHeatOptionsImpl {
       YAML::Node const& forcing);
 
   BotHeatOptionsImpl() = default;
-  void report(std::ostream& os) const { os << "* flux = " << flux() << "\n"; }
+  void report(std::ostream& os) const {
+    os << "* flux = " << flux() << "\n"
+       << "* depth = " << depth() << "\n";
+  }
 
   ADD_ARG(double, flux) = 0.0;
+  ADD_ARG(int, depth) = 1;
   ADD_ARG(CoordinateOptions, coord);
 };
 using BotHeatOptions = std::shared_ptr<BotHeatOptionsImpl>;
