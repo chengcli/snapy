@@ -195,6 +195,12 @@ void MetadataTable::Destroy() {
 
 std::string MetadataTable::GetGridType(std::string name) const {
   int nouts = table_.size();
+
+  // if leading 5 characgers is 'path_', grid type is '-CC'
+  if (name.size() >= 5 && name.substr(0, 5) == "path_") {
+    return "-CC";
+  }
+
   for (int i = 0; i < nouts; ++i) {
     if (table_[i][0] == name) {
       return table_[i][3];
@@ -205,6 +211,11 @@ std::string MetadataTable::GetGridType(std::string name) const {
 }
 
 std::string MetadataTable::GetUnits(std::string name) const {
+  // if leading 5 characgers is 'path_', unit is 'kg/m^2'
+  if (name.size() >= 5 && name.substr(0, 5) == "path_") {
+    return "kg/m^2";
+  }
+
   int nouts = table_.size();
   for (int i = 0; i < nouts; ++i) {
     if (table_[i][0] == name) {
@@ -238,6 +249,13 @@ std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend) {
   std::string result = prepend + species[1];
   for (int i = 2; i < species.size(); ++i) {
     result += ";" + prepend + species[i];
+  }
+
+  // replace special characters '(' ')' and ',' with '_'
+  for (char& c : result) {
+    if (c == '(' || c == ')' || c == ',') {
+      c = '_';
+    }
   }
 
   return result;

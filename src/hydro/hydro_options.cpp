@@ -15,7 +15,7 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename,
   if (!forcing) return;
 
   grav() = ConstGravityOptionsImpl::from_yaml(forcing);
-  if (grav() && verbose) {
+  if (grav()) {
     std::cout << "[HydroOptions] gravity options:" << std::endl;
     grav()->report(std::cout);
   }
@@ -23,20 +23,18 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename,
   coriolis() = CoriolisOptionsImpl::from_yaml(forcing);
   if (coriolis()) {
     coriolis()->coord() = coord();
-    if (verbose) {
-      std::cout << "[HydroOptions] coriolis options:" << std::endl;
-      coriolis()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] coriolis options:" << std::endl;
+    coriolis()->report(std::cout);
   }
 
   visc() = DiffusionOptionsImpl::from_yaml(forcing);
-  if (visc() && verbose) {
+  if (visc()) {
     std::cout << "[HydroOptions] diffusion options:" << std::endl;
     visc()->report(std::cout);
   }
 
   fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
-  if (fricHeat() && verbose) {
+  if (fricHeat()) {
     std::cout << "[HydroOptions] frictional heating options:" << std::endl;
     fricHeat()->report(std::cout);
   }
@@ -44,46 +42,40 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename,
   bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
   if (bodyHeat()) {
     bodyHeat()->thermo() = eos()->thermo();
-    if (verbose) {
-      std::cout << "[HydroOptions] body heating options:" << std::endl;
-      bodyHeat()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] body heating options:" << std::endl;
+    bodyHeat()->report(std::cout);
   }
 
   topCool() = TopCoolOptionsImpl::from_yaml(forcing);
   if (topCool()) {
     topCool()->coord() = coord();
-    if (verbose) {
-      std::cout << "[HydroOptions] top cooling options:" << std::endl;
-      topCool()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] top cooling options:" << std::endl;
+    topCool()->report(std::cout);
   }
 
   botHeat() = BotHeatOptionsImpl::from_yaml(forcing);
   if (botHeat()) {
     botHeat()->coord() = coord();
-    if (verbose) {
-      std::cout << "[HydroOptions] bottom heating options:" << std::endl;
-      botHeat()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] bottom heating options:" << std::endl;
+    botHeat()->report(std::cout);
   }
 
   relaxBotComp() = RelaxBotCompOptionsImpl::from_yaml(forcing);
-  if (relaxBotComp() && verbose) {
+  if (relaxBotComp()) {
     std::cout << "[HydroOptions] bottom composition relaxation options:"
               << std::endl;
     relaxBotComp()->report(std::cout);
   }
 
   relaxBotTemp() = RelaxBotTempOptionsImpl::from_yaml(forcing);
-  if (relaxBotTemp() && verbose) {
+  if (relaxBotTemp()) {
     std::cout << "[HydroOptions] bottom temperature relaxation options:"
               << std::endl;
     relaxBotTemp()->report(std::cout);
   }
 
   relaxBotVelo() = RelaxBotVeloOptionsImpl::from_yaml(forcing);
-  if (relaxBotVelo() && verbose) {
+  if (relaxBotVelo()) {
     std::cout << "[HydroOptions] bottom velocity relaxation options:"
               << std::endl;
     relaxBotVelo()->report(std::cout);
@@ -92,24 +84,20 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename,
   topSpongeLyr() = TopSpongeLyrOptionsImpl::from_yaml(forcing);
   if (topSpongeLyr()) {
     topSpongeLyr()->coord() = coord();
-    if (verbose) {
-      std::cout << "[HydroOptions] top sponge layer options:" << std::endl;
-      topSpongeLyr()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] top sponge layer options:" << std::endl;
+    topSpongeLyr()->report(std::cout);
   }
 
   botSpongeLyr() = BotSpongeLyrOptionsImpl::from_yaml(forcing);
   if (botSpongeLyr()) {
     botSpongeLyr()->coord() = coord();
-    if (verbose) {
-      std::cout << "[HydroOptions] bottom sponge layer options:" << std::endl;
-      botSpongeLyr()->report(std::cout);
-    }
+    std::cout << "[HydroOptions] bottom sponge layer options:" << std::endl;
+    botSpongeLyr()->report(std::cout);
   }
 
   if (eos()->type() == "plume-eos") {
     plumeForcing() = PlumeForcingOptionsImpl::from_yaml(forcing);
-    if (plumeForcing() && verbose) {
+    if (plumeForcing()) {
       std::cout << "[HydroOptions] plume forcing options:" << std::endl;
       plumeForcing()->report(std::cout);
     }

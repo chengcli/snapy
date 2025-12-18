@@ -28,7 +28,7 @@ torch::Tensor TopCoolImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
   int ie = pcoord->ie();
   auto dz = pcoord->dx1f[ie];
-  du[IPR].narrow(-1, ie, options->depth()) +=
+  du[IPR].slice(-1, ie + 1 - options->depth(), ie + 1) +=
       options->flux() / (dz * options->depth());
   return du;
 }

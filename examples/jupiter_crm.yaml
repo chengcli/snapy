@@ -116,12 +116,12 @@ integration:
 
 outputs:
   - type: restart
-    dt: 10.E5
+    dt: 1.E5
   - type: netcdf
     variables: [prim, uov]
     dt: 1.E3
   - type: netcdf
-    variables: [thermo]
+    variables: [thermo, path]
     dt: 1.E3
 
 forcing:
@@ -130,9 +130,11 @@ forcing:
 
   top-cool:
     flux: -100.
+    depth: 5
 
   bot-heat:
     flux: 100
+    depth: 5
 
 sedimentation:
   radius:
