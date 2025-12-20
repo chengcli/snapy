@@ -76,18 +76,14 @@ struct CoriolisOptionsImpl {
     os << "* omega1 = " << omega1() << "\n"
        << "* omega2 = " << omega2() << "\n"
        << "* omega3 = " << omega3() << "\n"
-       << "* omegax = " << omegax() << "\n"
-       << "* omegay = " << omegay() << "\n"
-       << "* omegaz = " << omegaz() << "\n";
+       << "* type = " << type() << "\n";
   }
 
   ADD_ARG(double, omega1) = 0.;
   ADD_ARG(double, omega2) = 0.;
   ADD_ARG(double, omega3) = 0.;
 
-  ADD_ARG(double, omegax) = 0.;
-  ADD_ARG(double, omegay) = 0.;
-  ADD_ARG(double, omegaz) = 0.;
+  ADD_ARG(std::string, type) = "xyz";
 
   ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
@@ -113,6 +109,9 @@ TORCH_MODULE(Coriolis123);
 
 class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
  public:
+  //! data
+  torch::Tensor omega1, omega2, omega3;
+
   //! submodules
   Coordinate pcoord = nullptr;
 

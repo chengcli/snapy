@@ -12,7 +12,13 @@ std::vector<std::string> HydroImpl::register_forcings_module() {
   }
 
   if (options->coriolis()) {
-    forcings.push_back(torch::nn::AnyModule(Coriolis123(options->coriolis())));
+    if (options->coriolis()->type() == "xyz") {
+      forcings.push_back(
+          torch::nn::AnyModule(CoriolisXYZ(options->coriolis())));
+    } else {
+      forcings.push_back(
+          torch::nn::AnyModule(Coriolis123(options->coriolis())));
+    }
     forcing_names.push_back("coriolis");
   }
 

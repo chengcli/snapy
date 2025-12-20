@@ -48,6 +48,7 @@ torch::Tensor calcglobal(double lat, double time) {  // return costheta
   double sindelta = sin(obliquity) * sin(Ls);
   double cosdelta = std::sqrt(1 - sindelta * sindelta);
 
+  // 2: flux, cos(zenith-angle)
   if (sin(lat) * sindelta + cos(lat) * cosdelta <= 0) {  // polar night
     return torch::tensor({normalize_standard(0.0, fluxmean, fluxstd),
                           normalize_standard(0.5, umumean, umustd)},
