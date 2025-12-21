@@ -18,7 +18,7 @@ void bind_coord(py::module &m) {
       py::class_<snap::CoordinateOptionsImpl, snap::CoordinateOptions>(
           m, "CoordinateOptions");
 
-  pyCoordinateOptions.def(py::init<>())
+  pyCoordinateOptions.def(py::init<>(&snap::CoordinateOptionsImpl::create))
       .def("__repr__",
            [](const snap::CoordinateOptions &a) {
              std::stringstream ss;
@@ -39,7 +39,9 @@ void bind_coord(py::module &m) {
   auto pyCoordinate =
       py::class_<snap::CoordinateImpl, snap::Coordinate>(m, "Coordinate");
 
-  pyCoordinate.def(py::init<snap::CoordinateOptions>(), py::arg("options"))
+  pyCoordinate
+      .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("hydro") = nullptr)
       .def("__repr__",
            [](const snap::CoordinateImpl &self) {
              std::stringstream ss;
@@ -70,7 +72,7 @@ void bind_coord(py::module &m) {
       .def("cell_volume", &snap::CoordinateImpl::cell_volume);
 
   auto pyCartesian =
-      py::class_<snap::CartesianImpl, snap::CoordinateImpl,
+      py::class_<snap::CartesianImpl, snap::CoordinateImpl, torch::nn::Module,
                  std::shared_ptr<snap::CartesianImpl>>(m, "Cartesian");
 
   torch::python::add_module_bindings(pyCartesian)
@@ -86,6 +88,7 @@ void bind_coord(py::module &m) {
 
   auto pyGnomonicEquiangle =
       py::class_<snap::GnomonicEquiangleImpl, snap::CoordinateImpl,
+                 torch::nn::Module,
                  std::shared_ptr<snap::GnomonicEquiangleImpl>>(
           m, "GnomonicEquiangle");
 

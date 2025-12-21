@@ -69,8 +69,5 @@ void bind_hydro(py::module &m) {
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def(py::init<snap::HydroOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("mb") = nullptr)
-      .def("max_time_step", &snap::HydroImpl::max_time_step)
-      .def(
-          "get_eos", [](snap::HydroImpl &self) { return self.peos; },
-          py::return_value_policy::reference_internal);
+      .def("max_time_step", &snap::HydroImpl::max_time_step);
 }
