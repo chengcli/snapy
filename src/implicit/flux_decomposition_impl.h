@@ -14,12 +14,13 @@
 namespace snap {
 
 template <typename T>
-T SoundSpeed(T *prim, T gm1) {
+T DISPATCH_MACRO SoundSpeed(T *prim, T gm1) {
   return sqrt(prim[IPR] * (gm1 + 1.) / prim[IDN]);
 }
 
 template <typename T>
-void CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1, int stride2) {
+void DISPATCH_MACRO CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1,
+                                   int stride2) {
   for (int n = 0; n < 5; ++n) {
     wl[n] = prim[n * stride1 + (i - 1) * stride2];
     wr[n] = prim[n * stride1 + i * stride2];
@@ -27,7 +28,7 @@ void CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1, int stride2) {
 }
 
 template <typename T>
-void RoeAverage(T *prim, T gm1, T *wl, T *wr) {
+void DISPATCH_MACRO RoeAverage(T *prim, T gm1, T *wl, T *wr) {
   T sqrtdl = sqrt(wl[IDN]);
   T sqrtdr = sqrt(wr[IDN]);
   T isdlpdr = 1.0 / (sqrtdl + sqrtdr);
@@ -60,7 +61,7 @@ void RoeAverage(T *prim, T gm1, T *wl, T *wr) {
 }
 
 template <typename T>
-void Eigenvalue(Eigen::Matrix<T, 5, 5> &Lambda, T u, T cs) {
+void DISPATCH_MACRO Eigenvalue(Eigen::Matrix<T, 5, 5> &Lambda, T u, T cs) {
   Lambda << fabs(u - cs), 0., 0., 0., 0.,  //
       0., fabs(u), 0., 0., 0.,             //
       0., 0., fabs(u + cs), 0., 0.,        //
@@ -69,8 +70,9 @@ void Eigenvalue(Eigen::Matrix<T, 5, 5> &Lambda, T u, T cs) {
 }
 
 template <typename T>
-void Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat, Eigen::Matrix<T, 5, 5> &Rimat,
-                 T *prim, T cs, T gm1, int dir) {
+void DISPATCH_MACRO Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat,
+                                Eigen::Matrix<T, 5, 5> &Rimat, T *prim, T cs,
+                                T gm1, int dir) {
   T r = prim[IDN];
   T u = prim[IVX + dir];
   T v = prim[IVX + (IVY - IVX + dir) % 3];
@@ -97,7 +99,8 @@ void Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat, Eigen::Matrix<T, 5, 5> &Rimat,
 }
 
 template <typename T>
-void FluxJacobian(Eigen::Matrix<T, 5, 5> &dfdq, T gm1, T *w, int dir) {
+void DISPATCH_MACRO FluxJacobian(Eigen::Matrix<T, 5, 5> &dfdq, T gm1, T *w,
+                                 int dir) {
   // flux derivative
   // Input variables are density, velocity field and energy.
   // The primitives of cell (n,i)

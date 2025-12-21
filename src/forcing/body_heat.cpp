@@ -26,6 +26,9 @@ void BodyHeatImpl::reset() {
 
 torch::Tensor BodyHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                     torch::Tensor temp, double dt) {
+  // auto wtop = w.select(-1, ie);
+  // auto ivol = pthermo->compute("DY->V", {wtop[IDN], wtop.narrow(0, 1, ny)});
+  // auto cv = pthermo->compute("VT->cv", {ivol, temp});
   return du;
 }
 

@@ -28,12 +28,12 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
   bool use_x2_fluxes = options->nx2() > 1;
 
-  int si = is();
-  int ei = ie() + 1;
-  int sj = js();
-  int ej = je() + 1;
-  int sk = ks();
-  int ek = ke() + 1;
+  int si = il();
+  int ei = iu() + 1;
+  int sj = jl();
+  int ej = ju() + 1;
+  int sk = kl();
+  int ek = ku() + 1;
 
   // src_1 = < M_{theta theta} + M_{phi phi} ><1/r>
   auto m_ii = prim[IDN] * (SQR(prim[IVY]) + SQR(prim[IVZ]));

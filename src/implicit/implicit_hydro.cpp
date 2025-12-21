@@ -47,8 +47,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   int nc2 = pcoord->options->nc2();
   int nc3 = pcoord->options->nc3();
 
-  int is = pcoord->is();
-  int ie = pcoord->ie();
+  int il = pcoord->il();
+  int iu = pcoord->iu();
 
   int m = options->size();
   auto a = torch::zeros({1, nc3, nc2, nc1 * m * m}, w.options());
@@ -73,10 +73,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_solve_full(du.device().type(), iter, dt,
-                               options->grav()->grav1(), is, ie, 0);
+                               options->grav()->grav1(), il, iu, 0);
   } else {
     at::native::vic_solve_partial(du.device().type(), iter, dt,
-                                  options->grav()->grav1(), is, ie, 0);
+                                  options->grav()->grav1(), il, iu, 0);
   }
 
   /// (3) De-project from local orthonormal frame

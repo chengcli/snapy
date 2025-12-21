@@ -1,5 +1,8 @@
 #pragma once
 
+// base
+#include <configure.h>
+
 // snap
 #include "flux_decomposition_impl.h"
 #include "forward_backward_impl.h"
@@ -11,13 +14,12 @@
 namespace snap {
 
 template <typename T>
-void vic_solve_full_impl(T *du, T *w, T *gamma, T *area, T *vol, double dt,
-                         double grav, int is, int ie, int dir, int ny,
-                         int stride1, int stride2, bool first_block,
-                         bool last_block, bool periodic,
-                         Eigen::Matrix<T, 5, 5> *a, Eigen::Matrix<T, 5, 5> *b,
-                         Eigen::Matrix<T, 5, 5> *c,
-                         Eigen::Matrix<T, 5, 1> *delta) {
+void DISPATCH_MACRO vic_solve_full_impl(
+    T *du, T *w, T *gamma, T *area, T *vol, double dt, double grav, int is,
+    int ie, int dir, int ny, int stride1, int stride2, bool first_block,
+    bool last_block, bool periodic, Eigen::Matrix<T, 5, 5> *a,
+    Eigen::Matrix<T, 5, 5> *b, Eigen::Matrix<T, 5, 5> *c,
+    Eigen::Matrix<T, 5, 1> *delta) {
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat;
 

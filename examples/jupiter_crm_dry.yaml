@@ -12,23 +12,23 @@ geometry:
 
   bounds:
     x1min: 0.
-    x1max: 300.E3
+    x1max: 300.e3
     x2min: 0.
-    x2max: 3000.E3
+    x2max: 2400.e3
     x3min: 0.
-    x3max: 3000.E3
+    x3max: 2400.e3
 
   cells:
     nx1: 100
-    nx2: 48
-    nx3: 48
+    nx2: 200
+    nx3: 200
     nghost: 3
 
 distribute:
   backend: gloo
   layout: slab
-  nb2: 2
-  nb3: 2
+  nb2: 1
+  nb3: 1
   verbose: false
 
 dynamics:
@@ -50,7 +50,7 @@ dynamics:
     horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
-    type: lmars
+    type: hllc
 
 boundary-condition:
   external:
@@ -63,8 +63,8 @@ boundary-condition:
 
 integration:
   type: rk3
-  cfl: 0.9
-  implicit-scheme: 0
+  cfl: 0.45
+  implicit-scheme: 1
   nlim: -1
   tlim: 100.e5
   ncycle_out: 1
@@ -73,11 +73,11 @@ outputs:
   - type: restart
     dt: 10.E5
   - type: netcdf
-    variables: [prim]
-    dt: 1.
+    variables: [prim, uov]
+    dt: 1.E4
   - type: netcdf
     variables: [thermo]
-    dt: 1.
+    dt: 1.E4
 
 forcing:
   const-gravity:
@@ -87,3 +87,6 @@ problem:
   Ps: 100.e5
   Ts: 600.
   Tmin: 110.
+  xH2O: 3.e-3
+  xNH3: 3.2e-4
+  xH2S: 1.e-5

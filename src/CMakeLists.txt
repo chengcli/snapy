@@ -64,14 +64,14 @@ set_target_properties(${namel}_${buildl}
 
 target_link_libraries(${namel}_${buildl}
     PUBLIC
+    ${DISORT_LIBRARY}
+    ${HARP_LIBRARY}
+    ${KINTERA_LIBRARY}
     ${NETCDF_LIBRARIES}
     ${PNETCDF_LIBRARIES}
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}
-    ${DISORT_LIBRARY}
-    ${HARP_LIBRARY}
-    ${KINTERA_LIBRARY}
     fmt::fmt
     yaml-cpp::yaml-cpp
     )
@@ -82,13 +82,13 @@ add_library(snapy::snap ALIAS ${namel}_${buildl})
 if (CUDAToolkit_FOUND)
   file(GLOB cu_src_files
       bc/*.cu
-      #eos/*.cu
-      #eos/aneos/*.cu
-      #intg/*.cu
-      #recon/*.cu
-      #riemann/*.cu
-      #implicit/*.cu
-      #utils/*.cu
+      eos/*.cu
+      eos/aneos/*.cu
+      coord/*.cu
+      recon/*.cu
+      riemann/*.cu
+      implicit/*.cu
+      utils/*.cu
       )
 
   add_library(${namel}_cuda_${buildl}
@@ -105,9 +105,9 @@ if (CUDAToolkit_FOUND)
       PUBLIC
       CUDA::cudart
       CUDA::cudart_static
+      ${KINTERA_CUDA_LIBRARY}
       ${TORCH_CUDA_LIBRARY}
       ${C10_CUDA_LIBRARY}
-      ${KINTERA_CUDA_LIBRARY}
       )
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})

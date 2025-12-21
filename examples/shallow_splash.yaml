@@ -55,6 +55,10 @@ outputs:
     variables: [prim]
     dt: 1.E4
 
+forcing:
+  coriolis:
+    omega1: 1.e-4
+
 problem:
   phi: 500.
   dphi: 10.

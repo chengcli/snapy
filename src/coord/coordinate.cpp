@@ -125,12 +125,6 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   }
 
   op->interp_order() = node["cells"]["interp_order"].as<int>(2);
-  TORCH_CHECK(op->interp_order() == 2,
-              "Only 2nd order interpolation is supported");
-  TORCH_CHECK(
-      op->interp_order() <= 2 * op->nghost(),
-      "Ghost zone size must be at least half of the interpolation order");
-
   return op;
 }
 
@@ -305,12 +299,12 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
     TORCH_CHECK(false, "At least one flux tensor must be defined");
   }
 
-  int si = is();
-  int ei = ie() + 1;
-  int sj = js();
-  int ej = je() + 1;
-  int sk = ks();
-  int ek = ke() + 1;
+  int si = il();
+  int ei = iu() + 1;
+  int sj = jl();
+  int ej = ju() + 1;
+  int sk = kl();
+  int ek = ku() + 1;
 
   if (flux1.defined() > 0) {
     dflx.slice(DIM1, si, ei) +=

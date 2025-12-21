@@ -17,6 +17,7 @@ namespace snap {
 void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   OutputData* pod;
   auto peos = pmb->phydro->peos;
+  auto pcoord = pmb->phydro->pcoord;
 
   if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo()) {
     auto const& w = vars.at("hydro_w");
@@ -89,6 +90,12 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = fmt::format("rh_{}", reactions[i].products().begin()->first);
+      // replace special characters '(' ')' and ',' with '_'
+      for (char& c : pod->name) {
+        if (c == '(' || c == ')' || c == ',') {
+          c = '_';
+        }
+      }
       pod->data.CopyFromTensor(rh.select(-1, i));
 
       AppendOutputDataNode(pod);
@@ -134,6 +141,26 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       pod->name = get_hydro_names(pmb, "ic_");
       pod->data.InitFromTensor(du, 4, ICY, ny);
 
+      AppendOutputDataNode(pod);
+      num_vars_ += ny;
+    }
+  }
+
+  // vapor and cloud paths
+  if (ContainVariable("path")) {
+    auto const& u = vars.at("hydro_u");
+    auto vol = pcoord->cell_volume();
+    auto area = pcoord->face_area1();
+    auto ny = peos->nvar() - 5;
+    int il = pcoord->il();
+
+    if (ny > 0) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = get_hydro_names(pmb, "path_");
+      auto u_sum = (u * vol).narrow(0, ICY, ny).sum(-1) / area.select(-1, il);
+
+      pod->data.CopyFromTensor(u_sum);
       AppendOutputDataNode(pod);
       num_vars_ += ny;
     }

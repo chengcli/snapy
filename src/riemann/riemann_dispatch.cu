@@ -18,7 +18,7 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_lmars_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ny = nhydro - Index::ICY;
+    auto ny = nhydro - ICY;
 
     native::gpu_kernel<5>(
         iter, [=] GPU_LAMBDA(char* const data[5], unsigned int strides[5]) {
@@ -39,7 +39,7 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim) {
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_hllc_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
-    auto ny = nhydro - Index::ICY;
+    auto ny = nhydro - ICY;
 
     native::gpu_kernel<6>(
         iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {

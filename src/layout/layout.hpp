@@ -180,7 +180,7 @@ class LayoutImpl {
     return _rankof[rz * (px * py) + ry * px + rx];
   }
 
-  virtual std::tuple<int, int, int> loc_of(int rank) const = 0;
+  virtual std::tuple<int, int, int> loc_of(int rank) const { return {0, 0, 0}; }
 
   //! \brief Neighbor -> Z-order rank (3D)
   /*!
@@ -190,7 +190,9 @@ class LayoutImpl {
    * Morton code).
    */
   virtual int neighbor_rank(std::tuple<int, int, int> iloc,
-                            std::tuple<int, int, int> offset) const = 0;
+                            std::tuple<int, int, int> offset) const {
+    return -1;
+  }
 
   //! Serialize variables
   virtual void serialize(MeshBlockImpl const *pmb, Variables &vars,
