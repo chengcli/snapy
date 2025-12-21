@@ -86,10 +86,10 @@ void bind_layout(py::module &m) {
                  std::shared_ptr<snap::CubedLayoutImpl>>(m, "CubedLayout");
 
   pyCubedLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
-      .def("__repr__", [](const snap::SlabLayoutImpl &self) {
+      .def("__repr__", [](const snap::CubedSphereLayoutImpl &self) {
         std::stringstream ss;
         self.pretty_print(ss);
-        return fmt::format("SlabLayout(\n{})", ss.str());
+        return fmt::format("CubedSphereLayout(\n{})", ss.str());
       });
 
   torch::python::add_module_bindings(pyCubedLayout)

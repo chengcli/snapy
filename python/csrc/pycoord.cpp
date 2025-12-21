@@ -46,33 +46,32 @@ void bind_coord(py::module &m) {
              self.options->report(ss);
              return fmt::format("Coordinate(\n{})", ss.str());
            })
-      .def("ifirst", [](snap::CoordinateImpl &self) { return self.is(); })
-      .def("ilast", [](snap::CoordinateImpl &self) { return self.ie() + 1; })
-      .def("jfirst", [](snap::CoordinateImpl &self) { return self.js(); })
-      .def("jlast", [](snap::CoordinateImpl &self) { return self.je() + 1; })
-      .def("kfirst", [](snap::CoordinateImpl &self) { return self.ks(); })
-      .def("klast", [](snap::CoordinateImpl &self) { return self.ke() + 1; })
-      .def("center_width1",
-           [](snap::CoordinateImpl &self) { return self.center_width1(); })
-      .def("center_width2",
-           [](snap::CoordinateImpl &self) { return self.center_width2(); })
-      .def("center_width3",
-           [](snap::CoordinateImpl &self) { return self.center_width3(); })
+      .def("il", &snap::CoordinateImpl::il)
+      .def("iu", &snap::CoordinateImpl::iu)
+      .def("jl", &snap::CoordinateImpl::jl)
+      .def("ju", &snap::CoordinateImpl::ju)
+      .def("kl", &snap::CoordinateImpl::kl)
+      .def("ku", &snap::CoordinateImpl::ku)
+      .def(
+          "center_width1",
+          py::overload_cast<>(&snap::CoordinateImpl::center_width1, py::const_))
+      .def(
+          "center_width2",
+          py::overload_cast<>(&snap::CoordinateImpl::center_width2, py::const_))
+      .def(
+          "center_width3",
+          py::overload_cast<>(&snap::CoordinateImpl::center_width3, py::const_))
       .def("face_area1",
-           [](snap::CoordinateImpl &self) { return self.face_area1(); })
+           py::overload_cast<>(&snap::CoordinateImpl::face_area1, py::const_))
       .def("face_area2",
-           [](snap::CoordinateImpl &self) { return self.face_area2(); })
+           py::overload_cast<>(&snap::CoordinateImpl::face_area2, py::const_))
       .def("face_area3",
-           [](snap::CoordinateImpl &self) { return self.face_area3(); })
-      .def("cell_volume",
-           [](snap::CoordinateImpl &self) { return self.cell_volume(); });
+           py::overload_cast<>(&snap::CoordinateImpl::face_area3, py::const_))
+      .def("cell_volume", &snap::CoordinateImpl::cell_volume);
 
   auto pyCartesian =
       py::class_<snap::CartesianImpl, snap::CoordinateImpl,
                  std::shared_ptr<snap::CartesianImpl>>(m, "Cartesian");
-
-  pyCartesian.def("ifirst", [](snap::CartesianImpl &self) { return self.is(); })
-      .def("ilast", [](snap::CartesianImpl &self) { return self.ie() + 1; });
 
   torch::python::add_module_bindings(pyCartesian)
       .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),
@@ -89,12 +88,6 @@ void bind_coord(py::module &m) {
       py::class_<snap::GnomonicEquiangleImpl, snap::CoordinateImpl,
                  std::shared_ptr<snap::GnomonicEquiangleImpl>>(
           m, "GnomonicEquiangle");
-
-  pyGnomonicEquiangle
-      .def("ifirst",
-           [](snap::GnomonicEquiangleImpl &self) { return self.is(); })
-      .def("ilast",
-           [](snap::GnomonicEquiangleImpl &self) { return self.ie() + 1; });
 
   torch::python::add_module_bindings(pyGnomonicEquiangle)
       .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),

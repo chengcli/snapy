@@ -105,21 +105,21 @@ class CoordinateImpl {
 
   virtual ~CoordinateImpl() = default;
 
-  int is() const { return options->nx1() > 1 ? options->nghost() : 0; }
+  int il() const { return options->nx1() > 1 ? options->nghost() : 0; }
 
-  int ie() const {
+  int iu() const {
     return options->nx1() > 1 ? options->nghost() + options->nx1() - 1 : 0;
   }
 
-  int js() const { return options->nx2() > 1 ? options->nghost() : 0; }
+  int jl() const { return options->nx2() > 1 ? options->nghost() : 0; }
 
-  int je() const {
+  int ju() const {
     return options->nx2() > 1 ? options->nghost() + options->nx2() - 1 : 0;
   }
 
-  int ks() const { return options->nx3() > 1 ? options->nghost() : 0; }
+  int kl() const { return options->nx3() > 1 ? options->nghost() : 0; }
 
-  int ke() const {
+  int ku() const {
     return options->nx3() > 1 ? options->nghost() + options->nx3() - 1 : 0;
   }
 
@@ -128,24 +128,18 @@ class CoordinateImpl {
 
   //! module methods
   virtual torch::Tensor center_width1() const;
-  torch::Tensor center_width1(IndexRange const &r) const {
-    auto len = r.size();
-    auto all = torch::indexing::Slice();
-    return center_width1().index({all, all, r[len - 1]});
+  virtual torch::Tensor center_width1(int is, int ie) const {
+    return center_width1().slice(2, is, ie);
   }
 
   virtual torch::Tensor center_width2() const;
-  torch::Tensor center_width2(IndexRange const &r) const {
-    auto len = r.size();
-    auto all = torch::indexing::Slice();
-    return center_width2().index({all, r[len - 2], all});
+  virtual torch::Tensor center_width2(int is, int ie) const {
+    return center_width2().slice(1, is, ie);
   }
 
   virtual torch::Tensor center_width3() const;
-  torch::Tensor center_width3(IndexRange const &r) const {
-    auto len = r.size();
-    auto all = torch::indexing::Slice();
-    return center_width3().index({r[len - 3], all, all});
+  virtual torch::Tensor center_width3(int is, int ie) const {
+    return center_width3().slice(0, is, ie);
   }
 
   virtual torch::Tensor face_area1() const;
@@ -164,11 +158,6 @@ class CoordinateImpl {
   }
 
   virtual torch::Tensor cell_volume() const;
-  torch::Tensor cell_volume(IndexRange const &r) const {
-    auto len = r.size();
-    auto all = torch::indexing::Slice();
-    return cell_volume().index({r[len - 3], r[len - 2], r[len - 1]});
-  }
 
   virtual torch::Tensor find_cell_index(torch::Tensor const &coords) const;
 

@@ -196,7 +196,7 @@ void MetadataTable::Destroy() {
 std::string MetadataTable::GetGridType(std::string name) const {
   int nouts = table_.size();
 
-  // if leading 5 characgers is 'path_', grid type is '-CC'
+  // if leading 5 characters is 'path_', grid type is '-CC'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "-CC";
   }
@@ -211,7 +211,7 @@ std::string MetadataTable::GetGridType(std::string name) const {
 }
 
 std::string MetadataTable::GetUnits(std::string name) const {
-  // if leading 5 characgers is 'path_', unit is 'kg/m^2'
+  // if leading 5 characters is 'path_', unit is 'kg/m^2'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "kg/m^2";
   }

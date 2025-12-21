@@ -17,6 +17,9 @@ BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
   op->flux() = node["flux"].as<double>(0.0);
   op->depth() = node["depth"].as<int>(1);
 
+  TORCH_CHECK(op->flux() >= 0., "BotHeat flux must be positive");
+  TORCH_CHECK(op->depth() > 0., "BotHeat depth must be greater than zero");
+
   return op;
 }
 
@@ -26,9 +29,9 @@ void BotHeatImpl::reset() {
 
 torch::Tensor BotHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
-  int is = pcoord->is();
-  auto dz = pcoord->dx1f[is];
-  du[IPR].narrow(-1, is, options->depth()) +=
+  int il = pcoord->il();
+  auto dz = pcoord->dx1f[il];
+  du[IPR].narrow(-1, il, options->depth()) +=
       options->flux() / (dz * options->depth());
   return du;
 }

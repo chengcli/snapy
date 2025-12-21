@@ -39,8 +39,5 @@ void bind_forcing(py::module &m) {
            })
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega1)
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega2)
-      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega3)
-      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omegax)
-      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omegay)
-      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omegaz);
+      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega3);
 }

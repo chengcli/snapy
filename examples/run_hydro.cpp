@@ -89,17 +89,17 @@ int main(int argc, char **argv) {
   xfrac.select(2, 0) = 1. - xfrac.narrow(-1, 1, ny).sum(-1);
 
   // adiabatic extrapolate half a grid to cell center
-  int is = pcoord->is();
-  int ie = pcoord->ie();
-  auto dz = pcoord->dx1f[is].item<double>();
+  int il = pcoord->il();
+  int iu = pcoord->iu();
+  auto dz = pcoord->dx1f[il].item<double>();
   thermo_x->extrapolate_dz(
       temp, pres, xfrac,
       kintera::ExtrapOptions().dz(dz / 2.).grav(grav).ds_dz(0.));
 
-  int i = is;
+  int i = il;
   int nvapor = thermo_x->options->vapor_ids().size();
   int ncloud = thermo_x->options->cloud_ids().size();
-  for (; i <= ie; ++i) {
+  for (; i <= iu; ++i) {
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
 
     w[IPR].select(2, i) = pres;
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
   }
 
   // isothermal extrapolation
-  for (; i <= ie; ++i) {
+  for (; i <= iu; ++i) {
     auto mu = (thermo_x->mu * xfrac).sum(-1);
     dz = pcoord->dx1f[i].item<double>();
     pres *= exp(-grav * mu * dz / (kintera::constants::Rgas * temp));

@@ -3,6 +3,7 @@
 
 // snap
 #include <snap/forcing/forcing.hpp>
+#include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
 
@@ -16,90 +17,87 @@ void HydroOptionsImpl::register_forcings_options(std::string const& filename,
 
   grav() = ConstGravityOptionsImpl::from_yaml(forcing);
   if (grav()) {
-    std::cout << "[HydroOptions] gravity options:" << std::endl;
-    grav()->report(std::cout);
+    SINFO(HydroOptions) << "gravity options:";
+    grav()->report(SINFO());
   }
 
   coriolis() = CoriolisOptionsImpl::from_yaml(forcing);
   if (coriolis()) {
     coriolis()->coord() = coord();
-    std::cout << "[HydroOptions] coriolis options:" << std::endl;
-    coriolis()->report(std::cout);
+    SINFO(HydroOptions) << "coriolis options:";
+    coriolis()->report(SINFO());
   }
 
   visc() = DiffusionOptionsImpl::from_yaml(forcing);
   if (visc()) {
-    std::cout << "[HydroOptions] diffusion options:" << std::endl;
-    visc()->report(std::cout);
+    SINFO(HydroOptions) << "diffusion options:";
+    visc()->report(SINFO());
   }
 
   fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
   if (fricHeat()) {
-    std::cout << "[HydroOptions] frictional heating options:" << std::endl;
-    fricHeat()->report(std::cout);
+    SINFO(HydroOptions) << "frictional heating options:";
+    fricHeat()->report(SINFO());
   }
 
   bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
   if (bodyHeat()) {
     bodyHeat()->thermo() = eos()->thermo();
-    std::cout << "[HydroOptions] body heating options:" << std::endl;
-    bodyHeat()->report(std::cout);
+    SINFO(HydroOptions) << "body heating options:";
+    bodyHeat()->report(SINFO());
   }
 
   topCool() = TopCoolOptionsImpl::from_yaml(forcing);
   if (topCool()) {
     topCool()->coord() = coord();
-    std::cout << "[HydroOptions] top cooling options:" << std::endl;
-    topCool()->report(std::cout);
+    SINFO(HydroOptions) << "top cooling options:";
+    topCool()->report(SINFO());
   }
 
   botHeat() = BotHeatOptionsImpl::from_yaml(forcing);
   if (botHeat()) {
     botHeat()->coord() = coord();
-    std::cout << "[HydroOptions] bottom heating options:" << std::endl;
-    botHeat()->report(std::cout);
+    SINFO(HydroOptions) << "bottom heating options:";
+    botHeat()->report(SINFO());
   }
 
   relaxBotComp() = RelaxBotCompOptionsImpl::from_yaml(forcing);
   if (relaxBotComp()) {
-    std::cout << "[HydroOptions] bottom composition relaxation options:"
-              << std::endl;
-    relaxBotComp()->report(std::cout);
+    SINFO(HydroOptions) << "bottom composition relaxation options:";
+    relaxBotComp()->report(SINFO());
   }
 
   relaxBotTemp() = RelaxBotTempOptionsImpl::from_yaml(forcing);
   if (relaxBotTemp()) {
-    std::cout << "[HydroOptions] bottom temperature relaxation options:"
-              << std::endl;
-    relaxBotTemp()->report(std::cout);
+    SINFO(HydroOptions) << "bottom temperature relaxation options:";
+    relaxBotTemp()->report(SINFO());
   }
 
   relaxBotVelo() = RelaxBotVeloOptionsImpl::from_yaml(forcing);
   if (relaxBotVelo()) {
-    std::cout << "[HydroOptions] bottom velocity relaxation options:"
-              << std::endl;
-    relaxBotVelo()->report(std::cout);
+    SINFO(HydroOptions) << "bottom velocity relaxation options:";
+    relaxBotVelo()->report(SINFO());
   }
 
   topSpongeLyr() = TopSpongeLyrOptionsImpl::from_yaml(forcing);
   if (topSpongeLyr()) {
     topSpongeLyr()->coord() = coord();
-    std::cout << "[HydroOptions] top sponge layer options:" << std::endl;
-    topSpongeLyr()->report(std::cout);
+    SINFO(HydroOptions) << "top sponge layer options:";
+    topSpongeLyr()->report(SINFO());
   }
 
   botSpongeLyr() = BotSpongeLyrOptionsImpl::from_yaml(forcing);
   if (botSpongeLyr()) {
     botSpongeLyr()->coord() = coord();
-    std::cout << "[HydroOptions] bottom sponge layer options:" << std::endl;
-    botSpongeLyr()->report(std::cout);
+    SINFO(HydroOptions) << "bottom sponge layer options:";
+    botSpongeLyr()->report(SINFO());
   }
 
   if (eos()->type() == "plume-eos") {
     plumeForcing() = PlumeForcingOptionsImpl::from_yaml(forcing);
     if (plumeForcing()) {
-      std::cout << "[HydroOptions] plume forcing options:" << std::endl;
-      plumeForcing()->report(std::cout);
+      SINFO(HydroOptions) << "plume forcing options:";
+      plumeForcing()->report(SINFO());
     }
   }
 }
@@ -111,15 +109,15 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   // equation of state
   op->eos() = EquationOfStateOptionsImpl::from_yaml(filename, verbose);
   if (verbose) {
-    std::cout << "[HydroOptions] equation of state options:" << std::endl;
-    op->eos()->report(std::cout);
+    SINFO(HydroOptions) << "equation of state options:";
+    op->eos()->report(SINFO());
   }
 
   // coordinate system
   op->coord() = CoordinateOptionsImpl::from_yaml(filename);
   if (verbose) {
-    std::cout << "[HydroOptions] coordinate options:" << std::endl;
-    op->coord()->report(std::cout);
+    SINFO(HydroOptions) << "coordinate options:";
+    op->coord()->report(SINFO());
   }
   op->coord()->eos() = op->eos();
 
@@ -128,8 +126,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   if (op->ib()) {
     op->ib()->coord() = op->coord();
     if (verbose) {
-      std::cout << "[HydroOptions] internal boundary options:" << std::endl;
-      op->ib()->report(std::cout);
+      SINFO(HydroOptions) << "internal boundary options:";
+      op->ib()->report(SINFO());
     }
   }
 
@@ -143,8 +141,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->proj()->grav() = op->grav();
 
     if (verbose) {
-      std::cout << "[HydroOptions] primitive projector options:" << std::endl;
-      op->proj()->report(std::cout);
+      SINFO(HydroOptions) << "primitive projector options:";
+      op->proj()->report(SINFO());
     }
   }
 
@@ -153,25 +151,24 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   op->recon1()->eos() = op->eos();
 
   if (verbose) {
-    std::cout << "[HydroOptions] vertical reconstruction options:" << std::endl;
-    op->recon1()->report(std::cout);
+    SINFO(HydroOptions) << "vertical reconstruction options:";
+    op->recon1()->report(SINFO());
   }
 
   op->recon23() = ReconstructOptionsImpl::from_yaml(filename, "horizontal");
   op->recon23()->eos() = op->eos();
 
   if (verbose) {
-    std::cout << "[HydroOptions] horizontal reconstruction options:"
-              << std::endl;
-    op->recon23()->report(std::cout);
+    SINFO(HydroOptions) << "horizontal reconstruction options:";
+    op->recon23()->report(SINFO());
   }
 
   // riemann solver
   op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename, "dynamics");
 
   if (verbose) {
-    std::cout << "[HydroOptions] riemann solver options:" << std::endl;
-    op->riemann()->report(std::cout);
+    SINFO(HydroOptions) << "riemann solver options:";
+    op->riemann()->report(SINFO());
   }
 
   // implicit options
@@ -180,8 +177,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->icorr()->grav() = op->grav();
 
     if (verbose) {
-      std::cout << "[HydroOptions] implicit correction options:" << std::endl;
-      op->icorr()->report(std::cout);
+      SINFO(HydroOptions) << "implicit correction options:";
+      op->icorr()->report(SINFO());
     }
   }
 
@@ -195,8 +192,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     }
 
     if (verbose) {
-      std::cout << "[HydroOptions] sedimentation options:" << std::endl;
-      op->sed()->report(std::cout);
+      SINFO(HydroOptions) << "sedimentation options:";
+      op->sed()->report(SINFO());
     }
   }
 

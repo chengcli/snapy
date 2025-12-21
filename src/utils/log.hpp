@@ -4,7 +4,20 @@
 #include <iostream>
 #include <sstream>
 
+// snap
+#include <snap/layout/layout.hpp>
+
 namespace snap {
+
+//! Get filename from path
+std::string get_filename(std::string path) {
+  size_t pos = path.find_last_of("/\\");
+  if (pos == std::string::npos) {
+    return path;
+  } else {
+    return path.substr(pos + 1);
+  }
+}
 
 class LogMessage {
  public:
@@ -20,7 +33,9 @@ class LogMessage {
 
  private:
   void Flush() {
-    std::cerr << "[" << msg_ << "] ";
+    if (!msg_.empty()) {
+      std::cerr << "[" << msg_ << "] ";
+    }
     std::cerr << stream_.str() << std::endl;
   }
 
@@ -32,4 +47,4 @@ class LogMessage {
 }  // namespace snap
 
 // Macro to mimic glog style
-#define LOG(msg) LogMessage(#msg).stream()
+#define SINFO(msg) LogMessage(#msg).stream()
