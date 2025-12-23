@@ -652,7 +652,8 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         // sum across all ranks
         _playout->pg->reduce(mass, opsum)->wait();
 
-        SINFO() << " mass=" << mass[0].item<double>();
+        SINFO() << std::scientific << std::setprecision(dt_precision)
+                << " mass=" << mass[0].item<double>();
       }
 
       if (compute_energy) {
@@ -661,7 +662,8 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         // sum across all ranks
         _playout->pg->reduce(energy, opsum)->wait();
 
-        SINFO() << " energy=" << energy[0].item<double>();
+        SINFO() << std::scientific << std::setprecision(dt_precision)
+                << " energy=" << energy[0].item<double>();
       }
 
       SINFO() << std::endl;

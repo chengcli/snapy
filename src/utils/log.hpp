@@ -36,7 +36,7 @@ class LogMessage {
     if (!msg_.empty()) {
       std::cerr << "[" << msg_ << "] ";
     }
-    std::cerr << stream_.str() << std::endl;
+    std::cerr << stream_.str();
   }
 
   std::string msg_;

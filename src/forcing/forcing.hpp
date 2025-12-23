@@ -7,7 +7,7 @@
 #include <torch/nn/modules/container/any.h>
 
 // kintera
-#include <kintera/thermo/thermo.hpp>
+#include <kintera/utils/format.hpp>
 
 // arg
 #include <snap/add_arg.h>
@@ -221,23 +221,21 @@ struct BodyHeatOptionsImpl {
   ADD_ARG(double, dTdt) = 0.0;
   ADD_ARG(double, pmin) = 0.0;
   ADD_ARG(double, pmax) = 1.0;
-  ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
 };
 using BodyHeatOptions = std::shared_ptr<BodyHeatOptionsImpl>;
 
 class BodyHeatImpl : public torch::nn::Cloneable<BodyHeatImpl> {
  public:
-  //! submodules
-  kintera::ThermoY pthermo = nullptr;
-
   //! options with which this `BodyHeat` was constructed
   BodyHeatOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
   // Constructor to initialize the layers
   BodyHeatImpl() : options(BodyHeatOptionsImpl::create()) {}
-  explicit BodyHeatImpl(BodyHeatOptions const& options_) : options(options_) {
-    reset();
-  }
+  explicit BodyHeatImpl(BodyHeatOptions const& options_,
+                        torch::nn::Module* p = nullptr);
   void reset() override;
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,

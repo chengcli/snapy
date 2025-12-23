@@ -76,7 +76,7 @@ void HydroImpl::reset() {
   }
 
   //// ---- (8) set up forcings ---- ////
-  auto forcing_names = register_forcings_module();
+  auto forcing_names = _register_forcings_module();
   if (options->verbose()) {
     SINFO(Hydro) << "Forcings: " << fmt::format("{}", forcing_names) << "\n";
   }

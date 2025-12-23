@@ -53,6 +53,7 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   // --------------- forcings --------------- //
   auto forcing = config["forcing"];
   if (!forcing) return op;
+
   op->grav() = ConstGravityOptionsImpl::from_yaml(forcing);
   if (op->grav()) op->grav()->report(SINFO(HydroOptions));
 
@@ -66,10 +67,7 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   if (op->fricHeat()) op->fricHeat()->report(SINFO(HydroOptions));
 
   op->bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
-  if (op->bodyHeat()) {
-    op->bodyHeat()->thermo() = op->eos()->thermo();
-    op->bodyHeat()->report(SINFO(HydroOptions));
-  }
+  if (op->bodyHeat()) op->bodyHeat()->report(SINFO(HydroOptions));
 
   op->topCool() = TopCoolOptionsImpl::from_yaml(forcing);
   if (op->topCool()) op->topCool()->report(SINFO(HydroOptions));
