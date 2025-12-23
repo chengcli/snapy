@@ -19,6 +19,8 @@ HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
 }
 
 void HydroImpl::reset() {
+  TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
+
   //// ---- (1) set up equation-of-state model ---- ////
   peos = EquationOfStateImpl::create(options->eos(), this);
   if (options->verbose()) {
@@ -192,7 +194,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
 
-  TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
   auto playout = MeshBlockImpl::get_layout();
 
   //// ------------ (1) Calculate Primitives ------------ ////

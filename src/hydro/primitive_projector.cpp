@@ -51,6 +51,8 @@ PrimitiveProjectorImpl::PrimitiveProjectorImpl(
 }
 
 void PrimitiveProjectorImpl::reset() {
+  TORCH_CHECK(phydro, "[PrimitiveProjector] Parent Hydro is null");
+
   // populate buffer
   _psf = register_buffer("psf", torch::empty({0}, torch::kFloat64));
 }
