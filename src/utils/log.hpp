@@ -10,7 +10,7 @@
 namespace snap {
 
 //! Get filename from path
-std::string get_filename(std::string path) {
+inline std::string get_filename(std::string path) {
   size_t pos = path.find_last_of("/\\");
   if (pos == std::string::npos) {
     return path;

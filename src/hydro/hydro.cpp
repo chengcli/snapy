@@ -6,6 +6,7 @@
 
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
 
@@ -18,93 +19,77 @@ HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
 }
 
 void HydroImpl::reset() {
-  int rank = get_rank();
-
-  //// ---- (1) set up coordinate model ---- ////
-  pcoord = CoordinateImpl::create(options->coord(), this);
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Coordinate type: " << pcoord->options->type() << "\n";
-  }
-
-  //// ---- (2) set up equation-of-state model ---- ////
+  //// ---- (1) set up equation-of-state model ---- ////
   peos = EquationOfStateImpl::create(options->eos(), this);
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] EOS type: " << peos->options->type() << "\n";
+  if (options->verbose()) {
+    SINFO(Hydro) << "EOS type: " << peos->options->type() << "\n";
   }
 
-  //// ---- (3) set up primitive projector model ---- ////
+  //// ---- (2) set up primitive projector model ---- ////
   if (options->proj() != nullptr) {
     pproj = PrimitiveProjectorImpl::create(options->proj(), this);
 
-    if (options->verbose() && rank == 0) {
-      std::cout << "[Hydro] Primitive projector type: "
-                << pproj->options->type() << "\n";
+    if (options->verbose()) {
+      SINFO(Hydro) << "Primitive projector type: " << pproj->options->type()
+                   << "\n";
     }
   }
 
-  //// ---- (4) set up reconstruction-x1 model ---- ////
+  //// ---- (3) set up reconstruction-x1 model ---- ////
   precon1 = ReconstructImpl::create(options->recon1(), this, "recon1");
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Reconstruction-x1 type: "
-              << precon1->pinterp1->options->type() << "\n";
+  if (options->verbose()) {
+    SINFO(Hydro) << "Reconstruction-x1 type: "
+                 << precon1->pinterp1->options->type() << "\n";
   }
 
-  //// ---- (5) set up reconstruction-x23 model ---- ////
+  //// ---- (4) set up reconstruction-x23 model ---- ////
   precon23 = ReconstructImpl::create(options->recon23(), this, "recon23");
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Reconstruction-x2/x3 type: "
-              << precon23->pinterp1->options->type() << "\n";
+  if (options->verbose()) {
+    SINFO(Hydro) << "Reconstruction-x2/x3 type: "
+                 << precon23->pinterp1->options->type() << "\n";
   }
 
-  //// ---- (6) set up riemann-solver model ---- ////
+  //// ---- (5) set up riemann-solver model ---- ////
   priemann = RiemannSolverImpl::create(options->riemann(), this);
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Riemann solver type: " << priemann->options->type()
-              << "\n";
+  if (options->verbose()) {
+    SINFO(Hydro) << "Riemann solver type: " << priemann->options->type()
+                 << "\n";
   }
 
-  //// ---- (7) set up internal boundary ---- ////
-  pib = InternalBoundaryImpl::create(options->ib(), this);
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Internal boundary max-iter: "
-              << pib->options->max_iter() << "\n";
-  }
-
-  //// ---- (8) set up implicit solver ---- ////
+  //// ---- (6) set up implicit solver ---- ////
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
-    if (options->verbose() && rank == 0) {
-      std::cout << "[Hydro] Implicit correction type: "
-                << picorr->options->type() << "\n";
+    if (options->verbose()) {
+      SINFO(Hydro) << "Implicit correction type: " << picorr->options->type()
+                   << "\n";
     }
   }
 
-  //// ---- (9) set up sedimentation ---- ////
+  //// ---- (7) set up sedimentation ---- ////
   if (options->sed() != nullptr) {
     psed = SedHydroImpl::create(options->sed(), this);
-    if (options->verbose() && rank == 0) {
-      std::cout << "[Hydro] Sedimentation particle ids: "
-                << fmt::format("{}", psed->options->sedvel()->particle_ids())
-                << "\n";
+    if (options->verbose()) {
+      SINFO(Hydro) << "Sedimentation particle ids: "
+                   << fmt::format("{}", psed->options->sedvel()->particle_ids())
+                   << "\n";
     }
   }
 
-  //// ---- (10) set up forcings ---- ////
+  //// ---- (8) set up forcings ---- ////
   auto forcing_names = register_forcings_module();
-  if (options->verbose() && rank == 0) {
-    std::cout << "[Hydro] Forcings: " << fmt::format("{}", forcing_names)
-              << "\n";
+  if (options->verbose()) {
+    SINFO(Hydro) << "Forcings: " << fmt::format("{}", forcing_names) << "\n";
   }
 
-  //// ---- (11) register all forcings ---- ////
+  //// ---- (9) register all forcings ---- ////
   for (auto i = 0; i < forcings.size(); i++) {
     register_module(forcing_names[i], forcings[i].ptr());
   }
 
-  //// ---- (12) populate buffers ---- ////
-  int nc1 = options->coord()->nc1();
-  int nc2 = options->coord()->nc2();
-  int nc3 = options->coord()->nc3();
+  //// ---- (10) populate buffers ---- ////
+  int nc1 = pmb->pcoord->options->nc1();
+  int nc2 = pmb->pcoord->options->nc2();
+  int nc3 = pmb->pcoord->options->nc3();
   int nvar = peos->nvar();
 
   if (nc1 > 1) {
@@ -156,42 +141,42 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   if (icorr) {
     if ((cs.size(2) > 1) &&
         (!(icorr->scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
-      dt1 = (pcoord->center_width1() / (w[IVX].abs() + cs))
+      dt1 = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
     }
 
     if ((cs.size(1) > 1) && (!((icorr->scheme() >> 1) & 1))) {
-      dt2 = (pcoord->center_width2() / (w[IVY].abs() + cs))
+      dt2 = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
     }
 
     if ((cs.size(0) > 1) && (!((icorr->scheme() >> 2) & 1))) {
-      dt3 = (pcoord->center_width3() / (w[IVZ].abs() + cs))
+      dt3 = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
     }
   } else {
     if (cs.size(2) > 1) {
-      dt1 = (pcoord->center_width1() / (w[IVX].abs() + cs))
+      dt1 = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
     }
 
     if (cs.size(1) > 1) {
-      dt2 = (pcoord->center_width2() / (w[IVY].abs() + cs))
+      dt2 = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
     }
 
     if (cs.size(0) > 1) {
-      dt3 = (pcoord->center_width3() / (w[IVZ].abs() + cs))
+      dt3 = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
                 .index(sub3)
                 .min()
                 .item<double>();
@@ -207,6 +192,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
 
+  TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
+  auto playout = MeshBlockImpl::get_layout();
+
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
 
@@ -214,39 +202,34 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] EOS time (s): " << elapsed.count() << "\n";
+    SINFO(Hydro) << "EOS time (s): " << elapsed.count() << "\n";
     start = std::chrono::high_resolution_clock::now();
   }
 
   if (has_solid) {
-    pib->mark_prim_solid_(w, other.at("solid"));
-  }
-
-  auto playout = MeshBlockImpl::get_layout();
-
-  if (playout->options->type() == "cubed-sphere") {
-    TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
+    pmb->pib->mark_prim_solid_(w, other.at("solid"));
   }
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
     torch::Tensor wtmp;
     if (pproj) {
-      auto wp = pproj->forward(w, pcoord->dx1f);
+      auto wp = pproj->forward(w, pmb->pcoord->dx1f);
       wtmp = precon1->forward(wp, DIM1);
       pproj->restore_inplace(wtmp);
     } else {
       wtmp = precon1->forward(w, DIM1);
     }
 
-    auto wlr1 = has_solid ? pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
+    auto wlr1 =
+        has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
     if (!options->disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x1 time (s): " << elapsed.count() << "\n";
+        SINFO(Hydro) << "Flux-x1 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
@@ -299,13 +282,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (4.A) Calculate dimension 2 flux ------------ ////
   if (u.size(DIM2) > 1) {
     auto wlr2 =
-        has_solid ? pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
+        has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
     if (!options->disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x2 time (s): " << elapsed.count() << "\n";
+        SINFO(Hydro) << "Flux-x2 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
@@ -314,24 +297,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (4.B) Calculate dimension 3 flux ------------ ////
   if (u.size(DIM3) > 1) {
     auto wlr3 =
-        has_solid ? pib->forward(wtmp3, DIM3, other.at("solid")) : wtmp3;
+        has_solid ? pmb->pib->forward(wtmp3, DIM3, other.at("solid")) : wtmp3;
     if (!options->disable_flux_x3()) {
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "[Hydro] Flux-x3 time (s): " << elapsed.count() << "\n";
+        SINFO(Hydro) << "Flux-x3 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
     }
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
-  _div.set_(pcoord->forward(w, _flux1, _flux2, _flux3));
+  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] Divergence time (s): " << elapsed.count() << "\n";
+    SINFO(Hydro) << "Divergence time (s): " << elapsed.count() << "\n";
     start = std::chrono::high_resolution_clock::now();
   }
 
@@ -342,7 +325,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[Hydro] Forcing time (s): " << elapsed.count() << "\n";
+    SINFO(Hydro) << "Forcing time (s): " << elapsed.count() << "\n";
     start = std::chrono::high_resolution_clock::now();
   }
 
@@ -369,7 +352,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
-      std::cout << "[Hydro] Implicit time (s): " << elapsed.count() << "\n";
+      SINFO(Hydro) << "Implicit time (s): " << elapsed.count() << "\n";
       start = std::chrono::high_resolution_clock::now();
     }
   }

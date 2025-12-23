@@ -470,7 +470,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
     std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
   }
 
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
 
   // Get my logical location
   auto iloc = loc_of(options->rank());
@@ -648,7 +648,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         << "[CubedSphereLayout] deserializing data from receive buffers\n";
   }
 
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
 
   // Get my logical location
   auto iloc = loc_of(options->rank());
@@ -779,7 +779,7 @@ void CubedSphereLayoutImpl::_interpolate_to_local(
     MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
     torch::Tensor var) const {
   // my coordinates
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v},
                               /*indexing=*/"ij");
 

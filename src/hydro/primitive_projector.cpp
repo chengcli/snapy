@@ -11,6 +11,8 @@
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/forcing/forcing.hpp>
+#include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "primitive_projector.hpp"
 
@@ -42,15 +44,13 @@ PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(
 }
 
 PrimitiveProjectorImpl::PrimitiveProjectorImpl(
-    PrimitiveProjectorOptions options_)
+    PrimitiveProjectorOptions options_, torch::nn::Module *p)
     : options(options_) {
+  phydro = dynamic_cast<HydroImpl const *>(p);
   reset();
 }
 
 void PrimitiveProjectorImpl::reset() {
-  TORCH_CHECK(options->coord(), "[PrimitiveProjector] coord module is nullptr");
-  TORCH_CHECK(options->grav(), "[PrimitiveProjector] grav module is nullptr");
-
   // populate buffer
   _psf = register_buffer("psf", torch::empty({0}, torch::kFloat64));
 }
@@ -61,9 +61,11 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
     return w;
   }
 
-  int is = options->coord()->nghost();
-  int ie = w.size(3) - options->coord()->nghost();
-  auto grav = -options->grav()->grav1();
+  auto pcoord = phydro->pmb->pcoord;
+
+  int is = pcoord->il();
+  int ie = pcoord->iu() + 1;
+  auto grav = -phydro->options->grav()->grav1();
   _psf.set_(calc_hydrostatic_pressure(w, grav, dz, is, ie));
 
   auto result = w.clone();
@@ -87,8 +89,10 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
     return;
   }
 
-  int is = options->coord()->nghost();
-  int ie = wlr.size(4) - options->coord()->nghost();
+  auto pcoord = phydro->pmb->pcoord;
+
+  int is = pcoord->il();
+  int ie = pcoord->iu() + 1;
 
   // restore pressure
   wlr.select(1, IPR).slice(3, is, ie + 1) += _psf.slice(2, is, ie + 1);
@@ -109,9 +113,11 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
 std::shared_ptr<PrimitiveProjectorImpl> PrimitiveProjectorImpl::create(
     PrimitiveProjectorOptions const &opts, torch::nn::Module *p,
     std::string const &name) {
-  TORCH_CHECK(opts != nullptr, "PrimitiveProjectorOptions is nullptr");
-  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
-  return p->register_module(name, PrimitiveProjector(opts));
+  TORCH_CHECK(p != nullptr, "[PrimitiveProjector] Parent module is nullptr");
+  TORCH_CHECK(opts != nullptr,
+              "[PrimitiveProjector] Options pointer is nullptr");
+
+  return p->register_module(name, PrimitiveProjector(opts, p));
 }
 
 torch::Tensor calc_hydrostatic_pressure(torch::Tensor w, double grav,

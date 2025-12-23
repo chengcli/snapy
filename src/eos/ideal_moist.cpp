@@ -9,6 +9,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "ideal_moist.hpp"
 
@@ -95,7 +96,7 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
 
 void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
 
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
@@ -126,7 +127,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
 void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
 
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
@@ -196,7 +197,7 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
 }
 
 torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
@@ -221,7 +222,7 @@ torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
 }
 
 torch::Tensor IdealMoistImpl::_cons2ke(torch::Tensor cons) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
   auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);

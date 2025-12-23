@@ -7,6 +7,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coordinate.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "output_type.hpp"
@@ -17,7 +18,7 @@ namespace snap {
 void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   OutputData* pod;
   auto peos = pmb->phydro->peos;
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
 
   if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo()) {
     auto const& w = vars.at("hydro_w");

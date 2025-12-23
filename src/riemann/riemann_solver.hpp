@@ -24,6 +24,7 @@ struct RiemannSolverOptionsImpl {
 
   RiemannSolverOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- riemann solver options --\n";
     os << "* type = " << type() << "\n"
        << "* dir = " << dir() << "\n";
   }

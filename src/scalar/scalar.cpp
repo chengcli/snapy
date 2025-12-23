@@ -8,7 +8,6 @@ ScalarImpl::ScalarImpl(const ScalarOptions& options_) : options(options_) {
 
 void ScalarImpl::reset() {
   if (nvar() > 0) {
-    pcoord = CoordinateImpl::create(options->coord(), this);
     precon = ReconstructImpl::create(options->recon(), this);
     priemann = RiemannSolverImpl::create(options->riemann(), this);
     pthermo = kintera::ThermoXImpl::create(options->thermo(), this);

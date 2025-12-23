@@ -23,7 +23,7 @@ using IndexRange = std::vector<torch::indexing::TensorIndex>;
 struct EquationOfStateOptionsImpl;
 using EquationOfStateOptions = std::shared_ptr<EquationOfStateOptionsImpl>;
 
-class HydroImpl;
+class MeshBlockImpl;
 
 struct CoordinateOptionsImpl {
   static std::shared_ptr<CoordinateOptionsImpl> create() {
@@ -35,6 +35,7 @@ struct CoordinateOptionsImpl {
 
   CoordinateOptionsImpl() = default;
   void report(std::ostream &os) const {
+    os << "-- coordinate options --\n";
     os << "* type = " << type() << "\n"
        << "* x1min = " << x1min() << "\n"
        << "* x2min = " << x2min() << "\n"
@@ -64,8 +65,6 @@ struct CoordinateOptionsImpl {
   ADD_ARG(int, nx3) = 1;
   ADD_ARG(int, nghost) = 1;
   ADD_ARG(int, interp_order) = 2;
-
-  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
 using CoordinateOptions = std::shared_ptr<CoordinateOptionsImpl>;
 
@@ -92,7 +91,7 @@ class CoordinateImpl {
   CoordinateOptions options;
 
   //! non-owning reference to parent
-  HydroImpl const *phydro = nullptr;
+  MeshBlockImpl const *pmb = nullptr;
 
   CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
   explicit CoordinateImpl(const CoordinateOptions &options_,

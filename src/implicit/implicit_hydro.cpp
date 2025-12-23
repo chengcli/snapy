@@ -6,6 +6,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "implicit_dispatch.hpp"
 #include "implicit_hydro.hpp"
@@ -20,7 +21,7 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions const& options_,
 }
 
 void ImplicitHydroImpl::reset() {
-  TORCH_CHECK(phydro, "[ImplicitHydro] phydro is nullptr");
+  TORCH_CHECK(phydro, "[ImplicitHydro] Parent Hydro is null");
 }
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
@@ -29,7 +30,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     return torch::zeros_like(du);
   }
 
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   auto cos_theta = pcoord->cosine_cell_kj;
   auto sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
 
@@ -73,10 +74,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_solve_full(du.device().type(), iter, dt,
-                               options->grav()->grav1(), il, iu, 0);
+                               phydro->options->grav()->grav1(), il, iu, 0);
   } else {
     at::native::vic_solve_partial(du.device().type(), iter, dt,
-                                  options->grav()->grav1(), il, iu, 0);
+                                  phydro->options->grav()->grav1(), il, iu, 0);
   }
 
   /// (3) De-project from local orthonormal frame
@@ -90,8 +91,9 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(
     ImplicitOptions const& opts, torch::nn::Module* p,
     std::string const& name) {
-  TORCH_CHECK(opts != nullptr, "ImplicitHydro options is nullptr");
-  TORCH_CHECK(p != nullptr, "Parent module is nullptr");
+  TORCH_CHECK(p != nullptr, "[ImplicitHydro] Parent module is nullptr");
+  TORCH_CHECK(opts != nullptr, "[ImplicitHydro] Options pointer is nullptr");
+
   return p->register_module(name, ImplicitHydro(opts, p));
 }
 

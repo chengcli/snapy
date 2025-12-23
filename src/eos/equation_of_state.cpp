@@ -101,8 +101,8 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
 }
 
 void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
-  auto pcoord = phydro->pcoord;
   auto pmb = phydro->pmb;
+  auto pcoord = pmb->pcoord;
 
   if (!options->limiter()) return;  // no limiter
   cons.masked_fill_(torch::isnan(cons), 0.);

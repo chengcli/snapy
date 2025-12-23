@@ -26,6 +26,7 @@ struct ScalarOptionsImpl {
       std::string const& filename, bool verbose = false);
   ScalarOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- scalar options --\n";
     if (thermo()) {
       os << "-- thermo options --\n";
       thermo()->report(os);
@@ -45,7 +46,6 @@ struct ScalarOptionsImpl {
   ADD_ARG(kintera::KineticsOptions, kinetics) = nullptr;
 
   //! submodules options
-  ADD_ARG(CoordinateOptions, coord) = nullptr;
   ADD_ARG(ReconstructOptions, recon) = nullptr;
   ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 };

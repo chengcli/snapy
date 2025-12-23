@@ -4,7 +4,6 @@
 // snap
 #include <snap/snap.h>
 
-#include <snap/eos/equation_of_state.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -131,7 +130,7 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
 CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
                                torch::nn::Module* p)
     : options(options_) {
-  phydro = dynamic_cast<HydroImpl const*>(p);
+  pmb = dynamic_cast<MeshBlockImpl const*>(p);
 
   auto const& op = options;
 
@@ -325,50 +324,6 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
   }
 
   return dflx / vol;
-}
-
-IndexRange get_interior(torch::IntArrayRef const& shape, int nghost,
-                        int extend_x1, int extend_x2, int extend_x3) {
-  int len = shape.size();
-  int nc1 = shape[len - 1];
-  int nc2 = shape[len - 2];
-  int nc3 = shape[len - 3];
-  int start1, len1, start2, len2, start3, len3;
-
-  if (nc1 > 1) {
-    start1 = nghost;
-    len1 = nc1 - 2 * nghost;
-  } else {
-    start1 = 0;
-    len1 = 1;
-  }
-
-  if (nc2 > 1) {
-    start2 = nghost;
-    len2 = nc2 - 2 * nghost;
-  } else {
-    start2 = 0;
-    len2 = 1;
-  }
-
-  if (nc3 > 1) {
-    start3 = nghost;
-    len3 = nc3 - 2 * nghost;
-  } else {
-    start3 = 0;
-    len3 = 1;
-  }
-
-  IndexRange result;
-  result.push_back(torch::indexing::Slice(start3, start3 + len3 + extend_x3));
-  result.push_back(torch::indexing::Slice(start2, start2 + len2 + extend_x2));
-  result.push_back(torch::indexing::Slice(start1, start1 + len1 + extend_x1));
-
-  for (int n = 3; n < shape.size(); ++n) {
-    result.insert(result.begin(), torch::indexing::Slice());
-  }
-
-  return result;
 }
 
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,

@@ -22,6 +22,7 @@ struct EquationOfStateOptionsImpl {
 
   EquationOfStateOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- equation of state options --\n";
     os << "* type = " << type() << "\n"
        << "* density_floor = " << density_floor() << "\n"
        << "* pressure_floor = " << pressure_floor() << "\n"

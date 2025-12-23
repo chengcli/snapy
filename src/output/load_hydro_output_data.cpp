@@ -16,7 +16,7 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
   OutputData* pod;
 
   auto peos = pmb->phydro->peos;
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
 
   auto const& w = vars.at("hydro_w");
   auto const& u = vars.at("hydro_u");

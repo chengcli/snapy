@@ -23,6 +23,7 @@ struct ImplicitOptionsImpl {
 
   ImplicitOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- implicit hydro options --\n";
     os << "* type = " << type() << "\n"
        << "* scheme = " << scheme() << "\n";
   }
@@ -37,9 +38,6 @@ struct ImplicitOptionsImpl {
 
   ADD_ARG(std::string, type) = "none";
   ADD_ARG(int, scheme) = 0;
-
-  //! submodules options
-  ADD_ARG(ConstGravityOptions, grav) = nullptr;
 };
 using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
 

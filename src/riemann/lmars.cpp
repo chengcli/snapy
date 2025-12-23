@@ -1,7 +1,9 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "riemann_dispatch.hpp"
 #include "riemann_solver.hpp"
@@ -9,8 +11,8 @@
 namespace snap {
 
 void LmarsSolverImpl::reset() {
-  TORCH_CHECK(phydro, "[LmarsSolver] phydro is nullptr");
-  auto pcoord = phydro->pcoord;
+  TORCH_CHECK(phydro, "[LmarsSolver] Parent Hydro is null");
+  auto pcoord = phydro->pmb->pcoord;
 
   // register buffers
   auto nc1 = pcoord->options->nc1();
@@ -27,7 +29,7 @@ void LmarsSolverImpl::reset() {
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
 
   elr[ILT] = peos->compute("W->I", {wl}) / wl[IDN];

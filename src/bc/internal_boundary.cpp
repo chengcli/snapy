@@ -4,6 +4,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/mesh/meshblock.hpp>
+
 #include "internal_boundary.hpp"
 
 namespace snap {
@@ -30,16 +32,17 @@ InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
   return op;
 }
 
-InternalBoundaryImpl::InternalBoundaryImpl(InternalBoundaryOptions options_)
+InternalBoundaryImpl::InternalBoundaryImpl(
+    InternalBoundaryOptions const &options_, torch::nn::Module *p)
     : options(options_) {
-  TORCH_CHECK(options->coord(), "[InternalBoundary] coord is null");
+  pmb = dynamic_cast<MeshBlockImpl *>(p);
   reset();
 }
 
 void InternalBoundaryImpl::reset() {}
 
 void InternalBoundaryImpl::mark_prim_solid_(torch::Tensor w,
-                                            torch::Tensor solid) {
+                                            torch::Tensor solid) const {
   if (!solid.defined()) return;
 
   w[IDN].masked_fill_(solid, options->solid_density());
@@ -55,14 +58,14 @@ void InternalBoundaryImpl::mark_prim_solid_(torch::Tensor w,
 
 void InternalBoundaryImpl::fill_cons_solid_(torch::Tensor u,
                                             torch::Tensor solid,
-                                            torch::Tensor fill) {
+                                            torch::Tensor fill) const {
   if (!solid.defined()) return;
 
   u.set_(torch::where(solid.unsqueeze(0).expand_as(u), fill, u));
 }
 
 torch::Tensor InternalBoundaryImpl::forward(torch::Tensor wlr, int dim,
-                                            torch::Tensor solid) {
+                                            torch::Tensor solid) const {
   if (!solid.defined()) return wlr;
 
   auto solidl = solid;
@@ -90,9 +93,10 @@ torch::Tensor InternalBoundaryImpl::forward(torch::Tensor wlr, int dim,
 std::shared_ptr<InternalBoundaryImpl> InternalBoundaryImpl::create(
     InternalBoundaryOptions const &opts, torch::nn::Module *p,
     std::string const &name) {
-  TORCH_CHECK(opts != nullptr, "InternalBoundary options is null");
-  TORCH_CHECK(p != nullptr, "Parent module pointer is null");
-  return p->register_module(name, InternalBoundary(opts));
+  TORCH_CHECK(p != nullptr, "[InternalBoundary] Parent module is null");
+  TORCH_CHECK(opts != nullptr, "[InternalBoundary] Options pointer is null");
+
+  return p->register_module(name, InternalBoundary(opts, p));
 }
 
 }  // namespace snap
