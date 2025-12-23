@@ -6,7 +6,6 @@
 #include <torch/torch.h>
 
 // snap
-#include <snap/eos/equation_of_state.hpp>
 #include <snap/recon/reconstruct.hpp>
 
 // tests
@@ -35,7 +34,6 @@ TEST_P(DeviceTest, test_dc) {
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
   auto op = ReconstructOptionsImpl::create();
   op->interp()->type("dc");
-  op->eos() = EquationOfStateOptionsImpl::create();
 
   Reconstruct precon(op);
   precon->to(device, dtype);
@@ -55,7 +53,6 @@ TEST_P(DeviceTest, test_plm) {
       torch::randn({nhydro, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
   auto op = ReconstructOptionsImpl::create();
   op->interp()->type("plm");
-  op->eos() = EquationOfStateOptionsImpl::create();
 
   Reconstruct precon(op);
   precon->to(device, dtype);
@@ -80,7 +77,6 @@ TEST_P(DeviceTest, test_small) {
 
   auto op =
       ReconstructOptionsImpl::from_yaml(YAML::Load(recon_config), "horizontal");
-  op->eos() = EquationOfStateOptionsImpl::create();
   op->report(std::cout);
 
   Reconstruct precon(op);
@@ -106,7 +102,6 @@ TEST_P(DeviceTest, test_large) {
 
   auto op =
       ReconstructOptionsImpl::from_yaml(YAML::Load(recon_config), "horizontal");
-  op->eos() = EquationOfStateOptionsImpl::create();
 
   Reconstruct precon(op);
   precon->to(device, dtype);

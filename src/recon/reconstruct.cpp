@@ -73,8 +73,6 @@ void ReconstructImpl::reset() {
 }
 
 torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
-  TORCH_CHECK(phydro, "[Reconstruct] Parent Hydro is null");
-
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 
@@ -118,7 +116,8 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   auto wlr_ = result.narrow(1, index::IVX, 4);
   _apply_inplace(dim, il, iu, w_, pinterp2, wlr_);*/
 
-  auto eos = phydro->options->eos();
+  auto eos =
+      phydro ? phydro->options->eos() : EquationOfStateOptionsImpl::create();
 
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
@@ -131,7 +130,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   int len = std::min((int)IPR, nvar - 1);
   _apply_inplace(dim, il, iu, w.narrow(0, IVX, len), pinterp2,
                  result.narrow(1, IVX, len));
-  if (eos->limiter()) {
+  if (eos->limiter() && result.size(1) > IPR) {
     result.select(1, IPR).clamp_min_(eos->pressure_floor());
   }
 

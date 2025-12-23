@@ -7,7 +7,6 @@
 
 // snap
 #include <snap/bc/internal_boundary.hpp>
-#include <snap/coord/coordinate.hpp>
 
 #include "device_testing.hpp"
 
@@ -21,7 +20,6 @@ max-iter: 5
 
 TEST_P(DeviceTest, mark_solid) {
   auto op = InternalBoundaryOptionsImpl::from_yaml(YAML::Load(bc_config));
-  op->coord() = CoordinateOptionsImpl::create();
   auto pib = InternalBoundary(op);
 
   auto w = torch::randn({5, 1, 5, 5}, torch::device(device).dtype(dtype));

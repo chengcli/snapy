@@ -10,7 +10,7 @@
 #include <snap/utils/flip_zero.h>
 
 #include <snap/bc/internal_boundary.hpp>
-#include <snap/coord/coordinate.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
 
@@ -97,9 +97,9 @@ void test2() {
 
   // std::cout << "solid = " << solid << std::endl;
 
-  auto op = InternalBoundaryOptionsImpl::create();
-  op->coord() = CoordinateOptionsImpl::create();
-  InternalBoundary pib(op);
+  auto op_mb = MeshBlockOptionsImpl::create();
+  auto pmb = MeshBlock(op_mb);
+  auto pib = pmb->pib;
 
   auto out = pib->rectify_solid(solid, flips);
   std::cout << "out = " << out << std::endl;
