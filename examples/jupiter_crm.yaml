@@ -193,6 +193,6 @@ problem:
   Ps: 100.e5
   Ts: 600.
   Tmin: 110.
-  xH2O: 3.e-2
+  xH2O: 3.e-3
   xNH3: 3.2e-4
   xH2S: 1.e-5
