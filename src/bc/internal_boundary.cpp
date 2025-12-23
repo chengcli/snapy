@@ -35,7 +35,7 @@ InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
 InternalBoundaryImpl::InternalBoundaryImpl(
     InternalBoundaryOptions const &options_, torch::nn::Module *p)
     : options(options_) {
-  pmb = dynamic_cast<MeshBlockImpl *>(p);
+  pmb = dynamic_cast<MeshBlockImpl const *>(p);
   reset();
 }
 

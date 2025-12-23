@@ -78,8 +78,10 @@ void bind_mesh(py::module &m) {
           },
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
       .ADD_OPTION(harp::IntegratorOptions, snap::MeshBlockOptionsImpl, intg)
+      .ADD_OPTION(snap::CoordinateOptions, snap::MeshBlockOptionsImpl, coord)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptionsImpl, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptionsImpl, scalar)
+      .ADD_OPTION(snap::InternalBoundaryOptions, snap::MeshBlockOptionsImpl, ib)
       .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptionsImpl, bfuncs)
       .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptionsImpl, layout);
 

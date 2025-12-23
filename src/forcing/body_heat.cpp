@@ -24,7 +24,7 @@ BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
 BodyHeatImpl::BodyHeatImpl(BodyHeatOptions const& options_,
                            torch::nn::Module* p)
     : options(options_) {
-  phydro = dynamic_cast<HydroImpl*>(p);
+  phydro = dynamic_cast<HydroImpl const*>(p);
   reset();
 }
 

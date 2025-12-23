@@ -14,6 +14,8 @@
 namespace snap {
 
 void SphericalPolarImpl::reset() {
+  TORCH_CHECK(pmb, "[SphericalPolar] Parent MeshBlock is null");
+
   // register buffers defined in the base class
   register_buffer("x1f", x1f);
   register_buffer("x2f", x2f);
@@ -25,7 +27,6 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
                                           torch::Tensor flux1,
                                           torch::Tensor flux2,
                                           torch::Tensor flux3) {
-  TORCH_CHECK(pmb, "GnomonicEquiangleImpl::forward(): pmb is null");
   std::string eos_type = pmb->phydro->peos->options->type();
 
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
