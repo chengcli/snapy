@@ -87,9 +87,9 @@ void HydroImpl::reset() {
   }
 
   //// ---- (10) populate buffers ---- ////
-  int nc1 = pmb->pcoord->options->nc1();
-  int nc2 = pmb->pcoord->options->nc2();
-  int nc3 = pmb->pcoord->options->nc3();
+  int nc1 = pmb->options->coord()->nc1();
+  int nc2 = pmb->options->coord()->nc2();
+  int nc3 = pmb->options->coord()->nc3();
   int nvar = peos->nvar();
 
   if (nc1 > 1) {
