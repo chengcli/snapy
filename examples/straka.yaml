@@ -46,8 +46,8 @@ boundary-condition:
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: reflecting
-    x2-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
     x3-inner: reflecting
     x3-outer: reflecting
 
@@ -55,7 +55,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: -1
+  nlim: 1
   tlim: 900
   ncycle_out: 10
 
