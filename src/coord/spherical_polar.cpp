@@ -1,10 +1,12 @@
 // snap
-#include "spherical_polar.hpp"
-
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
+// snap
+#include "spherical_polar.hpp"
 #include "spherical_utils.hpp"
 
 #define SQR(x) ((x) * (x))
@@ -12,6 +14,8 @@
 namespace snap {
 
 void SphericalPolarImpl::reset() {
+  TORCH_CHECK(pmb, "[SphericalPolar] Parent MeshBlock is null");
+
   // register buffers defined in the base class
   register_buffer("x1f", x1f);
   register_buffer("x2f", x2f);
@@ -23,6 +27,8 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
                                           torch::Tensor flux1,
                                           torch::Tensor flux2,
                                           torch::Tensor flux3) {
+  std::string eos_type = pmb->phydro->peos->options->type();
+
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
 
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
@@ -38,7 +44,7 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
   // src_1 = < M_{theta theta} + M_{phi phi} ><1/r>
   auto m_ii = prim[IDN] * (SQR(prim[IVY]) + SQR(prim[IVZ]));
 
-  if (options->eos()->type() == "shallow-water") {
+  if (eos_type == "shallow-water") {
     // m_ii += 2.0*(iso_cs*iso_cs)*prim[IDN];
   } else {
     m_ii += 2.0 * prim[IPR];
@@ -60,7 +66,7 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
 
   // src_2 = < M_{phi phi} ><cot theta/r>
   auto m_pp = prim[IDN] * SQR(prim[IVZ]);
-  if (options->eos()->type() == "shallow-water") {
+  if (eos_type == "shallow-water") {
     // m_pp += (iso_cs*iso_cs)*prim[IDN];
   } else {
     m_pp += prim[IPR];

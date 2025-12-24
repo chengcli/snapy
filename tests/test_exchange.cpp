@@ -13,7 +13,7 @@ using namespace snap;
 
 // u = cos(lat)
 void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
-  auto pcoord = pmb->phydro->pcoord;
+  auto pcoord = pmb->pcoord;
   auto playout = pmb->get_layout();
 
   int r = get_rank();
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
   //   device = torch::kCUDA;
   // }
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();

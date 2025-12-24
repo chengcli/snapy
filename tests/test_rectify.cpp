@@ -10,7 +10,6 @@
 #include <snap/utils/flip_zero.h>
 
 #include <snap/bc/internal_boundary.hpp>
-#include <snap/coord/coordinate.hpp>
 
 using namespace snap;
 
@@ -98,7 +97,6 @@ void test2() {
   // std::cout << "solid = " << solid << std::endl;
 
   auto op = InternalBoundaryOptionsImpl::create();
-  op->coord() = CoordinateOptionsImpl::create();
   InternalBoundary pib(op);
 
   auto out = pib->rectify_solid(solid, flips);

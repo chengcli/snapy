@@ -39,10 +39,10 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;
 
-  int nc1 = pmb->options->hydro()->coord()->nc1();
-  int nc2 = pmb->options->hydro()->coord()->nc2();
-  int nc3 = pmb->options->hydro()->coord()->nc3();
-  int nghost = pmb->options->hydro()->coord()->nghost();
+  int nc1 = pmb->options->coord()->nc1();
+  int nc2 = pmb->options->coord()->nc2();
+  int nc3 = pmb->options->coord()->nc3();
+  int nghost = pmb->options->coord()->nghost();
 
   // set start/end array indices depending on whether ghost zones are included
   out_is = nc1 > 1 ? nghost : 0;
@@ -324,39 +324,39 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   nc_put_vara_float(ifile, ivt, start, count, &timef);
 
   for (int i = out_is; i <= out_ie; ++i)
-    data[i - out_is] = phydro->pcoord->x1v[i].item<float>();
+    data[i - out_is] = pmb->pcoord->x1v[i].item<float>();
   nc_put_var_float(ifile, ivx1, data);
 
   if (ncells1 > 1) {
     for (int i = out_is; i <= out_ie + 1; ++i)
-      data[i - out_is] = phydro->pcoord->x1f[i].item<float>();
+      data[i - out_is] = pmb->pcoord->x1f[i].item<float>();
     nc_put_var_float(ifile, ivx1f, data);
   }
 
   for (int j = out_js; j <= out_je; ++j) {
     data[j - out_js] =
-        phydro->pcoord->x2v[j].item<float>() + (face % 3) * M_PI / 2.;
+        pmb->pcoord->x2v[j].item<float>() + (face % 3) * M_PI / 2.;
   }
   nc_put_var_float(ifile, ivx2, data);
 
   if (ncells2 > 1) {
     for (int j = out_js; j <= out_je + 1; ++j) {
       data[j - out_js] =
-          phydro->pcoord->x2f[j].item<float>() + (face % 3) * M_PI / 2.;
+          pmb->pcoord->x2f[j].item<float>() + (face % 3) * M_PI / 2.;
     }
     nc_put_var_float(ifile, ivx2f, data);
   }
 
   for (int k = out_ks; k <= out_ke; ++k) {
     data[k - out_ks] =
-        phydro->pcoord->x3v[k].item<float>() + (face / 3) * M_PI / 2.;
+        pmb->pcoord->x3v[k].item<float>() + (face / 3) * M_PI / 2.;
   }
   nc_put_var_float(ifile, ivx3, data);
 
   if (ncells3 > 1) {
     for (int k = out_ks; k <= out_ke + 1; ++k) {
       data[k - out_ks] =
-          phydro->pcoord->x3f[k].item<float>() + (face / 3) * M_PI / 2.;
+          pmb->pcoord->x3f[k].item<float>() + (face / 3) * M_PI / 2.;
     }
     nc_put_var_float(ifile, ivx3f, data);
   }

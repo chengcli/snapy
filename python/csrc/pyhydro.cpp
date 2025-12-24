@@ -33,13 +33,11 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptionsImpl, grav)
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptionsImpl, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptionsImpl, visc)
-      .ADD_OPTION(snap::CoordinateOptions, snap::HydroOptionsImpl, coord)
       .ADD_OPTION(snap::EquationOfStateOptions, snap::HydroOptionsImpl, eos)
       .ADD_OPTION(snap::PrimitiveProjectorOptions, snap::HydroOptionsImpl, proj)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon1)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon23)
       .ADD_OPTION(snap::RiemannSolverOptions, snap::HydroOptionsImpl, riemann)
-      .ADD_OPTION(snap::InternalBoundaryOptions, snap::HydroOptionsImpl, ib)
       .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptionsImpl, icorr);
 
   auto pyPrimitiveProjectorOptions =
@@ -60,14 +58,10 @@ void bind_hydro(py::module &m) {
            })
       .ADD_OPTION(std::string, snap::PrimitiveProjectorOptionsImpl, type)
       .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, margin)
-      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, Rd)
-      .ADD_OPTION(snap::ConstGravityOptions,
-                  snap::PrimitiveProjectorOptionsImpl, grav)
-      .ADD_OPTION(snap::CoordinateOptions, snap::PrimitiveProjectorOptionsImpl,
-                  coord);
+      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, Rd);
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def(py::init<snap::HydroOptions, torch::nn::Module *>(),
-           py::arg("options"), py::arg("mb") = nullptr)
+           py::arg("options"), py::arg("block") = nullptr)
       .def("max_time_step", &snap::HydroImpl::max_time_step);
 }

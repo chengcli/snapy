@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
   block->to(device);
 
   // initial conditions
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
   auto peos = block->phydro->peos;
 
   // coordinates

@@ -1,7 +1,9 @@
 // base
 #include <configure.h>
 
+#include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 // snap
 #include "riemann_solver.hpp"
@@ -9,8 +11,8 @@
 namespace snap {
 
 void ShallowRoeSolverImpl::reset() {
-  TORCH_CHECK(phydro, "[ShallowRoeSolver] parent is nullptr");
-  auto pcoord = phydro->pcoord;
+  TORCH_CHECK(phydro, "[ShallowRoeSolver] Parent Hydro is null");
+  auto pcoord = phydro->pmb->pcoord;
 
   if (pcoord->options->type() == "gnomonic_equiangle") {
     TORCH_CHECK(options->dir() == "yz",
@@ -23,7 +25,7 @@ void ShallowRoeSolverImpl::reset() {
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                             int dim, torch::Tensor flx) {
   auto peos = phydro->peos;
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
 
   int ivx, ivy, ivz;
   if (options->dir() == "xy") {

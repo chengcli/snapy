@@ -18,7 +18,7 @@ TEST(GnomonicEquiangle, area_vol) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
   auto block = MeshBlock(op);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
   auto area1 = pcoord->face_area1();
   std::cout << "area1 = \n" << area1 << std::endl;
 
@@ -48,7 +48,7 @@ TEST_P(DeviceTest, vec_lower_raise) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -69,7 +69,7 @@ TEST_P(DeviceTest, contra_cart) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -94,8 +94,7 @@ TEST_P(DeviceTest, usrc) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord =
-      std::dynamic_pointer_cast<GnomonicEquiangleImpl>(block->phydro->pcoord);
+  auto pcoord = std::dynamic_pointer_cast<GnomonicEquiangleImpl>(block->pcoord);
   std::cout << "usrc_LR = \n" << pcoord->usrc_LR << std::endl;
   std::cout << "usrc_BT = \n" << pcoord->usrc_BT << std::endl;
 }
@@ -105,7 +104,7 @@ TEST_P(DeviceTest, interpolate_LR) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -188,7 +187,7 @@ TEST_P(DeviceTest, flux_projection1) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -208,7 +207,7 @@ TEST_P(DeviceTest, flux_projection2) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -234,7 +233,7 @@ TEST_P(DeviceTest, flux_projection3) {
   auto block = MeshBlock(op);
   block->to(device, dtype);
 
-  auto pcoord = block->phydro->pcoord;
+  auto pcoord = block->pcoord;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();

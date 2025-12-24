@@ -37,6 +37,7 @@ struct OutputOptionsImpl {
   std::string file_id() const { return "out" + std::to_string(fid()); }
 
   void report(std::ostream &os) const {
+    os << "-- output options --\n";
     os << "* fid = " << fid() << "\n"
        << "* dt = " << dt() << "\n"
        << "* output_slicex1 = " << output_slicex1() << "\n"

@@ -4,7 +4,9 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
+#include <snap/hydro/hydro.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -12,7 +14,7 @@
 
 namespace snap {
 
-CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const& forcing) {
+CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const &forcing) {
   if (!forcing["coriolis"]) return nullptr;
 
   auto node = forcing["coriolis"];
@@ -27,6 +29,17 @@ CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const& forcing) {
   op->omega3() = node["omega3"].as<double>(0.);
 
   return op;
+}
+
+Coriolis123Impl::Coriolis123Impl(CoriolisOptions const &options_,
+                                 torch::nn::Module *p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const *>(p);
+  reset();
+}
+
+void Coriolis123Impl::reset() {
+  TORCH_CHECK(phydro, "[Coriolis123] Parent Hydro is null");
 }
 
 torch::Tensor Coriolis123Impl::forward(torch::Tensor du, torch::Tensor w,
@@ -47,8 +60,17 @@ torch::Tensor Coriolis123Impl::forward(torch::Tensor du, torch::Tensor w,
   return du;
 }
 
+CoriolisXYZImpl::CoriolisXYZImpl(CoriolisOptions const &options_,
+                                 torch::nn::Module *p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const *>(p);
+  reset();
+}
+
 void CoriolisXYZImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
+  TORCH_CHECK(phydro, "[CoriolisXYZ] Parent Hydro is null");
+  auto pcoord = phydro->pmb->pcoord;
+
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
   auto omegaz = options->omega1();

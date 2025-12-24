@@ -11,6 +11,8 @@
 
 // snap
 #include <snap/bc/bc_func.hpp>
+#include <snap/bc/internal_boundary.hpp>
+#include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/scalar/scalar.hpp>
@@ -51,8 +53,10 @@ struct MeshBlockOptionsImpl {
 
   //! submodule options
   ADD_ARG(harp::IntegratorOptions, intg) = nullptr;
+  ADD_ARG(CoordinateOptions, coord) = nullptr;
   ADD_ARG(HydroOptions, hydro) = nullptr;
   ADD_ARG(ScalarOptions, scalar) = nullptr;
+  ADD_ARG(InternalBoundaryOptions, ib) = nullptr;
 
   //! boundary functions
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
@@ -92,6 +96,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   //! submodules
   harp::Integrator pintg = nullptr;
+  Coordinate pcoord = nullptr;
+  InternalBoundary pib = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 

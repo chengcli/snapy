@@ -51,6 +51,7 @@ struct PrimitiveProjectorOptionsImpl {
 
   PrimitiveProjectorOptionsImpl() = default;
   void report(std::ostream &os) const {
+    os << "-- primitive projector options --\n";
     os << "* type = " << type() << "\n"
        << "* pressure-margin = " << margin() << "\n"
        << "* Rd = " << Rd() << "\n";
@@ -67,6 +68,8 @@ struct PrimitiveProjectorOptionsImpl {
 };
 using PrimitiveProjectorOptions =
     std::shared_ptr<PrimitiveProjectorOptionsImpl>;
+
+class HydroImpl;
 
 class PrimitiveProjectorImpl
     : public torch::nn::Cloneable<PrimitiveProjectorImpl> {
@@ -88,9 +91,13 @@ class PrimitiveProjectorImpl
   //! options with which this `PrimitiveProjector` was constructed
   PrimitiveProjectorOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const *phydro = nullptr;
+
   //! Constructor to initialize the layer
   PrimitiveProjectorImpl() : options(PrimitiveProjectorOptionsImpl::create()) {}
-  explicit PrimitiveProjectorImpl(PrimitiveProjectorOptions options_);
+  explicit PrimitiveProjectorImpl(PrimitiveProjectorOptions options_,
+                                  torch::nn::Module *p = nullptr);
   void reset() override;
 
   //! decompose the total pressure into hydrostatic and non-hydrostatic parts

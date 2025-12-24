@@ -16,6 +16,8 @@
 namespace snap {
 
 void GnomonicEquiangleImpl::reset() {
+  TORCH_CHECK(pmb, "[GnomonicEquiangle] Parent MeshBlock is null");
+
   auto const& op = options;
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
@@ -131,23 +133,14 @@ void GnomonicEquiangleImpl::reset() {
   // build global ghost cell usrc
   int N, offset_x, offset_y;
   torch::Tensor usrc;
-  if (phydro && phydro->pmb) {
-    auto pmb = phydro->pmb;
-    N = op->nx2() * pmb->options->layout()->px();
-    usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
-    cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
+  N = op->nx2() * pmb->options->layout()->px();
+  usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
+  cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
 
-    int my_rank = pmb->options->layout()->rank();
-    auto [rx, ry, _] = pmb->get_layout()->loc_of(my_rank);
-    offset_x = op->nx2() * rx;
-    offset_y = op->nx3() * ry;
-  } else {
-    N = op->nx2();
-    usrc = torch::empty({op->nghost(), N}, torch::kFloat64);
-    cs_build_ghost_usrc(usrc.data_ptr<double>(), N, op->nghost());
-    offset_x = 0;
-    offset_y = 0;
-  }
+  int my_rank = pmb->options->layout()->rank();
+  auto [rx, ry, _] = pmb->get_layout()->loc_of(my_rank);
+  offset_x = op->nx2() * rx;
+  offset_y = op->nx3() * ry;
 
   // register local ghost cell usrc
   usrc_BT =
@@ -187,12 +180,7 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
 
 void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
-  if (!phydro) return;
-
   auto [dy, dx, dz] = offset;
-  auto pmb = phydro->pmb;
-  if (!pmb) return;
-
   auto sub = pmb->part(offset, PartOptions().exterior(true).ndim(var.dim()));
   auto order = options->interp_order() / 2;
 
@@ -363,6 +351,8 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
                                              torch::Tensor flux1,
                                              torch::Tensor flux2,
                                              torch::Tensor flux3) {
+  std::string eos_type = pmb->phydro->peos->options->type();
+
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
 
   auto cosine = cosine_cell_kj;
@@ -379,7 +369,7 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   auto v_2 = v2 + v3 * cosine;
   auto v_3 = v3 + v2 * cosine;
 
-  if (options->eos()->type() == "shallow-water") {
+  if (eos_type == "shallow-water") {
     pr = 0.5 * prim[IDN].square();
     rho = prim[IDN];
   } else {

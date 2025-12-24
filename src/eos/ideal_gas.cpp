@@ -8,6 +8,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "eos_dispatch.hpp"
 #include "ideal_gas.hpp"
@@ -59,7 +60,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
 
 void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_primitive_limiter_(prim);
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
 
   // den -> den
   cons[IDN] = prim[IDN];
@@ -82,7 +83,7 @@ void IdealGasImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
 
 void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
 
   auto gammad =
       (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];

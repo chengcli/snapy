@@ -21,6 +21,8 @@ namespace snap {
 struct CoordinateOptionsImpl;
 using CoordinateOptions = std::shared_ptr<CoordinateOptionsImpl>;
 
+class MeshBlockImpl;
+
 struct InternalBoundaryOptionsImpl {
   static constexpr int MAXRUN = 4;
 
@@ -34,6 +36,7 @@ struct InternalBoundaryOptionsImpl {
 
   InternalBoundaryOptionsImpl() = default;
   void report(std::ostream &os) const {
+    os << "-- internal boundary options --\n";
     os << "* MAXRUN = " << MAXRUN << "\n"
        << "* max_iter = " << max_iter() << "\n"
        << "* solid_density = " << solid_density() << "\n"
@@ -43,8 +46,6 @@ struct InternalBoundaryOptionsImpl {
   ADD_ARG(int, max_iter) = 5;
   ADD_ARG(double, solid_density) = 1.e3;
   ADD_ARG(double, solid_pressure) = 1.e9;
-
-  ADD_ARG(CoordinateOptions, coord) = nullptr;
 };
 using InternalBoundaryOptions = std::shared_ptr<InternalBoundaryOptionsImpl>;
 
@@ -67,9 +68,13 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
   //! options with which this `InternalBoundary` was constructed
   InternalBoundaryOptions options;
 
+  //! non-owning reference to parent
+  MeshBlockImpl const *pmb = nullptr;
+
   //! Constructor to initialize the layers
   InternalBoundaryImpl() : options(InternalBoundaryOptionsImpl::create()) {}
-  explicit InternalBoundaryImpl(InternalBoundaryOptions options);
+  explicit InternalBoundaryImpl(InternalBoundaryOptions const &options,
+                                torch::nn::Module *p = nullptr);
   void reset() override;
 
   //! Mark the solid cells
@@ -77,7 +82,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param w       primitive states
    * \param solid   internal solid boundary in [0, 1]
    */
-  void mark_prim_solid_(torch::Tensor w, torch::Tensor solid);
+  void mark_prim_solid_(torch::Tensor w, torch::Tensor solid) const;
 
   //! Mark the solid cells
   /*!
@@ -85,7 +90,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid   internal solid boundary in [0, 1]
    */
   void fill_cons_solid_(torch::Tensor u, torch::Tensor solid,
-                        torch::Tensor fill);
+                        torch::Tensor fill) const;
 
   //! Rectify the solid cells
   /*!
@@ -95,7 +100,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \return rectified internal solid boundary
    */
   torch::Tensor rectify_solid(torch::Tensor solid_in, int &total_num_flips,
-                              std::vector<bcfunc_t> const &bfuncs = {});
+                              std::vector<bcfunc_t> const &bfuncs = {}) const;
 
   //! Revise the left/right states
   /*!
@@ -103,7 +108,7 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \param solid internal solid boundary in [0, 1]
    * \return revised primitive left/right states
    */
-  torch::Tensor forward(torch::Tensor wlr, int dim, torch::Tensor solid);
+  torch::Tensor forward(torch::Tensor wlr, int dim, torch::Tensor solid) const;
 };
 TORCH_MODULE(InternalBoundary);
 

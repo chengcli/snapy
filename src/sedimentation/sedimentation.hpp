@@ -33,6 +33,7 @@ struct SedVelOptionsImpl {
   static std::shared_ptr<SedVelOptionsImpl> from_yaml(YAML::Node const& node);
 
   void report(std::ostream& os) const {
+    os << "-- sedimentation velocity options --\n";
     os << "* particle_ids = " << fmt::format("{}", particle_ids()) << "\n"
        << "* radius = " << fmt::format("{}", radius()) << "\n"
        << "* density = " << fmt::format("{}", density()) << "\n"
@@ -68,9 +69,6 @@ struct SedVelOptionsImpl {
 
   //! upper limit of sedimentation velocity [m/s]
   ADD_ARG(double, upper_limit) = 5.e3;
-
-  //! submodules options
-  ADD_ARG(ConstGravityOptions, grav) = nullptr;
 };
 using SedVelOptions = std::shared_ptr<SedVelOptionsImpl>;
 
@@ -82,6 +80,7 @@ struct SedHydroOptionsImpl {
       std::string const& filename);
 
   void report(std::ostream& os) const {
+    os << "-- sedimentation hydro options --\n";
     os << "* hydro_ids = " << fmt::format("{}", hydro_ids()) << "\n";
     sedvel()->report(os);
   }
@@ -96,6 +95,7 @@ struct SedHydroOptionsImpl {
 using SedHydroOptions = std::shared_ptr<SedHydroOptionsImpl>;
 
 class HydroImpl;
+class SedHydroImpl;
 
 class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
  public:
@@ -121,11 +121,13 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
   //! options with which this `SedVel` was constructed
   SedVelOptions options;
 
+  //! non-owning reference to parent
+  SedHydroImpl const* psed = nullptr;
+
   //! Constructor to initialize the layers
   SedVelImpl() : options(SedVelOptionsImpl::create()) {}
-  explicit SedVelImpl(SedVelOptions const& options_) : options(options_) {
-    reset();
-  }
+  explicit SedVelImpl(SedVelOptions const& options_,
+                      torch::nn::Module* p = nullptr);
   void reset() override;
 
   //! Calculate sedimentation velocites
@@ -137,7 +139,7 @@ class SedVelImpl : public torch::nn::Cloneable<SedVelImpl> {
    *                The first dimension is the number of particles.
    */
   torch::Tensor forward(torch::Tensor dens, torch::Tensor pres,
-                        torch::Tensor temp);
+                        torch::Tensor temp) const;
 };
 TORCH_MODULE(SedVel);
 

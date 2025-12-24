@@ -60,6 +60,7 @@ struct LayoutOptionsImpl {
   LayoutOptionsImpl();
 
   void report(std::ostream &os) const {
+    os << "-- layout options --\n";
     os << "* type = " << type() << "\n"
        << "* px = " << px() << "\n"
        << "* py = " << py() << "\n"

@@ -3,7 +3,7 @@
 
 namespace snap {
 
-std::vector<std::string> HydroImpl::register_forcings_module() {
+std::vector<std::string> HydroImpl::_register_forcings_module() {
   std::vector<std::string> forcing_names;
 
   if (options->grav()) {
@@ -14,16 +14,17 @@ std::vector<std::string> HydroImpl::register_forcings_module() {
   if (options->coriolis()) {
     if (options->coriolis()->type() == "xyz") {
       forcings.push_back(
-          torch::nn::AnyModule(CoriolisXYZ(options->coriolis())));
+          torch::nn::AnyModule(CoriolisXYZ(options->coriolis(), this)));
     } else {
       forcings.push_back(
-          torch::nn::AnyModule(Coriolis123(options->coriolis())));
+          torch::nn::AnyModule(Coriolis123(options->coriolis(), this)));
     }
     forcing_names.push_back("coriolis");
   }
 
   if (options->fricHeat()) {
-    forcings.push_back(torch::nn::AnyModule(FricHeat(options->fricHeat())));
+    forcings.push_back(
+        torch::nn::AnyModule(FricHeat(options->fricHeat(), this)));
     forcing_names.push_back("fric-heat");
   }
 
@@ -33,12 +34,12 @@ std::vector<std::string> HydroImpl::register_forcings_module() {
   }
 
   if (options->topCool()) {
-    forcings.push_back(torch::nn::AnyModule(TopCool(options->topCool())));
+    forcings.push_back(torch::nn::AnyModule(TopCool(options->topCool(), this)));
     forcing_names.push_back("top-cool");
   }
 
   if (options->botHeat()) {
-    forcings.push_back(torch::nn::AnyModule(BotHeat(options->botHeat())));
+    forcings.push_back(torch::nn::AnyModule(BotHeat(options->botHeat(), this)));
     forcing_names.push_back("bot-heat");
   }
 
@@ -62,13 +63,13 @@ std::vector<std::string> HydroImpl::register_forcings_module() {
 
   if (options->topSpongeLyr()) {
     forcings.push_back(
-        torch::nn::AnyModule(TopSpongeLyr(options->topSpongeLyr())));
+        torch::nn::AnyModule(TopSpongeLyr(options->topSpongeLyr(), this)));
     forcing_names.push_back("top-sponge-lyr");
   }
 
   if (options->botSpongeLyr()) {
     forcings.push_back(
-        torch::nn::AnyModule(BotSpongeLyr(options->botSpongeLyr())));
+        torch::nn::AnyModule(BotSpongeLyr(options->botSpongeLyr(), this)));
     forcing_names.push_back("bot-sponge-lyr");
   }
 

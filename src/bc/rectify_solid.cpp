@@ -4,6 +4,7 @@
 
 // snap
 #include <snap/coord/coordinate.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "bc.hpp"
 #include "bc_dispatch.hpp"
@@ -107,16 +108,17 @@ int run_flip_dim3(torch::Tensor& solid, int dir) {
 
 torch::Tensor InternalBoundaryImpl::rectify_solid(
     torch::Tensor solid_in, int& total_num_flips,
-    std::vector<bcfunc_t> const& bfuncs) {
+    std::vector<bcfunc_t> const& bfuncs) const {
   int nc3 = solid_in.size(0);
   int nc2 = solid_in.size(1);
   int nc1 = solid_in.size(2);
 
   auto solid = solid_in.contiguous();
+  int nghost = pmb ? pmb->options->coord()->nghost() : 1;
 
   ///-----  set all ghost zones to 1  -----///
   BoundaryFuncOptions op;
-  op.nghost(options->coord()->nghost());
+  op.nghost(nghost);
   op.type(kScalar);
 
   auto solid_inner = get_bc_func()["solid_inner"];

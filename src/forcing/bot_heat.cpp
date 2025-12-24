@@ -4,6 +4,10 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coordinate.hpp>
+#include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
+
 #include "forcing.hpp"
 
 namespace snap {
@@ -23,12 +27,20 @@ BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
   return op;
 }
 
+BotHeatImpl::BotHeatImpl(BotHeatOptions const& options_, torch::nn::Module* p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+  reset();
+}
+
 void BotHeatImpl::reset() {
-  pcoord = CoordinateImpl::create(options->coord(), this);
+  TORCH_CHECK(phydro, "[BotHeat] Parent Hydro is null");
 }
 
 torch::Tensor BotHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
+  auto pcoord = phydro->pmb->pcoord;
+
   int il = pcoord->il();
   auto dz = pcoord->dx1f[il];
   du[IPR].narrow(-1, il, options->depth()) +=

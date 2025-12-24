@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
   // useful modules
   auto phydro = block->phydro;
-  auto pcoord = phydro->pcoord;
+  auto pcoord = block->pcoord;
   auto peos = phydro->peos;
   auto m = block->named_modules()["hydro.eos.thermo"];
   auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);

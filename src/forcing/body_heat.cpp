@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/hydro/hydro.hpp>
+
 #include "forcing.hpp"
 
 namespace snap {
@@ -14,14 +16,20 @@ BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
 
   op->dTdt() = node["dTdt"].as<double>(0.0);
   op->pmin() = node["pmin"].as<double>(0.0);
-  op->pmax() = node["pmax"].as<double>(1.0e6);
+  op->pmax() = node["pmax"].as<double>(1.0);
 
   return op;
 }
 
+BodyHeatImpl::BodyHeatImpl(BodyHeatOptions const& options_,
+                           torch::nn::Module* p)
+    : options(options_) {
+  phydro = dynamic_cast<HydroImpl const*>(p);
+  reset();
+}
+
 void BodyHeatImpl::reset() {
-  TORCH_CHECK(options->thermo(), "[BodyHeat] thermo is null.");
-  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
+  TORCH_CHECK(phydro, "[BodyHeat] Parent Hydro is null");
 }
 
 torch::Tensor BodyHeatImpl::forward(torch::Tensor du, torch::Tensor w,

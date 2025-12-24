@@ -33,6 +33,7 @@ struct ReconstructOptionsImpl {
 
   ReconstructOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- reconstruction options --\n";
     interp()->report(os);
     os << "* is_boundary_lower = " << (is_boundary_lower() ? "true" : "false")
        << "\n"
@@ -54,9 +55,10 @@ struct ReconstructOptionsImpl {
 
   //! abstract submodules
   ADD_ARG(InterpOptions, interp) = nullptr;
-  ADD_ARG(EquationOfStateOptions, eos) = nullptr;
 };
 using ReconstructOptions = std::shared_ptr<ReconstructOptionsImpl>;
+
+class HydroImpl;
 
 class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
  public:
@@ -77,13 +79,17 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
   //! options with which this `Reconstruction` was constructed
   ReconstructOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
   //! concrete submodules
   Interp pinterp1 = nullptr;
   Interp pinterp2 = nullptr;
 
   //! Constructor to initialize the layers
   ReconstructImpl() : options(ReconstructOptionsImpl::create()) {}
-  explicit ReconstructImpl(const ReconstructOptions& options_);
+  explicit ReconstructImpl(const ReconstructOptions& options_,
+                           torch::nn::Module* p = nullptr);
   void reset() override;
 
   //! w -> [wl, wr]

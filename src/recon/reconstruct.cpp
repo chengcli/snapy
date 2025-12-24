@@ -5,6 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/hydro/hydro.hpp>
 
 #include "reconstruct.hpp"
 
@@ -59,13 +60,14 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
   wlr[ILT].slice(dim, iu + 1) = wlr[ILT].select(dim, iu).unsqueeze(dim);
 }
 
-ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_)
+ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_,
+                                 torch::nn::Module *p)
     : options(options_) {
+  phydro = dynamic_cast<HydroImpl const *>(p);
   reset();
 }
 
 void ReconstructImpl::reset() {
-  TORCH_CHECK(options->eos(), "[Reconstruct] eos is nullptr");
   pinterp1 = InterpImpl::create(options->interp(), this, "interp1");
   pinterp2 = InterpImpl::create(options->interp(), this, "interp2");
 }
@@ -114,19 +116,22 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   auto wlr_ = result.narrow(1, index::IVX, 4);
   _apply_inplace(dim, il, iu, w_, pinterp2, wlr_);*/
 
+  auto eos =
+      phydro ? phydro->options->eos() : EquationOfStateOptionsImpl::create();
+
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
                  result.narrow(1, IDN, 1));
-  if (options->eos()->limiter()) {
-    result.select(1, IDN).clamp_min_(options->eos()->density_floor());
+  if (eos->limiter()) {
+    result.select(1, IDN).clamp_min_(eos->density_floor());
   }
 
   // velocity/pressure
   int len = std::min((int)IPR, nvar - 1);
   _apply_inplace(dim, il, iu, w.narrow(0, IVX, len), pinterp2,
                  result.narrow(1, IVX, len));
-  if (options->eos()->limiter()) {
-    result.select(1, IPR).clamp_min_(options->eos()->pressure_floor());
+  if (eos->limiter() && result.size(1) > IPR) {
+    result.select(1, IPR).clamp_min_(eos->pressure_floor());
   }
 
   int ny = nvar - 5;
@@ -135,7 +140,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   // others
   _apply_inplace(dim, il, iu, w.narrow(0, ICY, ny), pinterp1,
                  result.narrow(1, ICY, ny));
-  if (options->eos()->limiter()) {
+  if (eos->limiter()) {
     result.narrow(1, ICY, ny).clamp_min_(0.);
   }
 
@@ -147,7 +152,8 @@ std::shared_ptr<ReconstructImpl> ReconstructImpl::create(
     std::string const &name) {
   TORCH_CHECK(p, "[Reconstruct] Parent module is null");
   TORCH_CHECK(opts, "[Reconstruct] Options pointer is null");
-  return p->register_module(name, Reconstruct(opts));
+
+  return p->register_module(name, Reconstruct(opts, p));
 }
 
 }  // namespace snap

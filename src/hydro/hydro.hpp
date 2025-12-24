@@ -6,8 +6,6 @@
 #include <torch/nn/modules/common.h>
 
 // snap
-#include <snap/bc/internal_boundary.hpp>
-#include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/implicit/implicit_hydro.hpp>
@@ -34,14 +32,12 @@ struct HydroOptionsImpl {
 
   HydroOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- hydro options --\n";
     os << "* verbose = " << verbose() << "\n"
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
-
-  void register_forcings_options(std::string const& filename,
-                                 bool verbose = false);
 
   //! verbose
   ADD_ARG(bool, verbose) = false;
@@ -66,7 +62,6 @@ struct HydroOptionsImpl {
   ADD_ARG(PlumeForcingOptions, plumeForcing) = nullptr;
 
   //! submodule options
-  ADD_ARG(CoordinateOptions, coord) = nullptr;
   ADD_ARG(EquationOfStateOptions, eos) = nullptr;
   ADD_ARG(PrimitiveProjectorOptions, proj) = nullptr;
 
@@ -74,9 +69,7 @@ struct HydroOptionsImpl {
   ADD_ARG(ReconstructOptions, recon23) = nullptr;
   ADD_ARG(RiemannSolverOptions, riemann) = nullptr;
 
-  ADD_ARG(InternalBoundaryOptions, ib) = nullptr;
   ADD_ARG(ImplicitOptions, icorr) = nullptr;
-
   ADD_ARG(SedHydroOptions, sed) = nullptr;
 };
 
@@ -106,7 +99,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   MeshBlockImpl const* pmb = nullptr;
 
   //! owning submodules
-  Coordinate pcoord = nullptr;
   EquationOfState peos = nullptr;
   RiemannSolver priemann = nullptr;
   PrimitiveProjector pproj = nullptr;
@@ -114,7 +106,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   Reconstruct precon1 = nullptr;
   Reconstruct precon23 = nullptr;
 
-  InternalBoundary pib = nullptr;
   ImplicitHydro picorr = nullptr;
 
   SedHydro psed = nullptr;
@@ -135,10 +126,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor forward(double dt, torch::Tensor hydro_u,
                         Variables const& other);
 
-  //! Register all forcing modules
-  std::vector<std::string> register_forcings_module();
-
  private:
+  //! Register all forcing modules
+  std::vector<std::string> _register_forcings_module();
+
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };
 

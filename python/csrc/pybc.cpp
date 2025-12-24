@@ -50,12 +50,11 @@ void bind_bc(py::module &m) {
            })
       .ADD_OPTION(int, snap::InternalBoundaryOptionsImpl, max_iter)
       .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_density)
-      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_pressure)
-      .ADD_OPTION(snap::CoordinateOptions, snap::InternalBoundaryOptionsImpl,
-                  coord);
+      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_pressure);
 
   ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
-      .def(py::init<snap::InternalBoundaryOptions>(), py::arg("options"))
+      .def(py::init<snap::InternalBoundaryOptions, torch::nn::Module *>(),
+           py::arg("options"), py::arg("block") = nullptr)
       .def("mark_prim_solid_", &snap::InternalBoundaryImpl::mark_prim_solid_)
       .def("fill_cons_solid_", &snap::InternalBoundaryImpl::fill_cons_solid_)
       .def(

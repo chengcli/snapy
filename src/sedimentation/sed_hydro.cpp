@@ -3,6 +3,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "sedimentation.hpp"
 
@@ -16,7 +17,7 @@ SedHydroImpl::SedHydroImpl(SedHydroOptions const& options_,
 }
 
 void SedHydroImpl::reset() {
-  TORCH_CHECK(phydro, "Parent Hydro module is nullptr");
+  TORCH_CHECK(phydro, "[SedHydro] Parent Hydro is null");
 
   psedvel = SedVelImpl::create(options->sedvel(), this);
 
@@ -28,13 +29,13 @@ void SedHydroImpl::reset() {
 
 torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
                                     torch::optional<torch::Tensor> out) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
 
   auto flux = out.value_or(torch::zeros_like(wr));
 
   // null-op
-  if (options->sedvel()->grav()->grav1() == 0. ||
+  if (phydro->options->grav()->grav1() == 0. ||
       options->sedvel()->species().size() == 0) {
     return flux;
   }

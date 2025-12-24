@@ -5,6 +5,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 namespace snap {
 
@@ -35,7 +36,7 @@ torch::Tensor ShallowWaterImpl::compute(
 }
 
 void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   apply_conserved_limiter_(cons);
 
   prim[IDN] = cons[IDN];
@@ -50,7 +51,7 @@ void ShallowWaterImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 }
 
 void ShallowWaterImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
-  auto pcoord = phydro->pcoord;
+  auto pcoord = phydro->pmb->pcoord;
   apply_primitive_limiter_(prim);
 
   cons[IDN] = prim[IDN];
