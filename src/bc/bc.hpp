@@ -25,6 +25,7 @@ enum BoundaryFace {
 
 struct BoundaryFuncOptions {
   void report(std::ostream &os) const {
+    os << "-- boundary func options --\n";
     os << "* type: " << type() << "\n"
        << "* nghost: " << nghost() << "\n";
   }

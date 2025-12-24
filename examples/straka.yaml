@@ -15,7 +15,7 @@ geometry:
 distribute:
   backend: gloo
   layout: slab
-  nb2: 2
+  nb2: 1
   nb3: 1
   verbose: false
 
@@ -55,7 +55,7 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 1
+  nlim: -1
   tlim: 900
   ncycle_out: 10
 

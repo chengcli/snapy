@@ -32,18 +32,18 @@ BC_FUNCTION(reflecting_outer, var, dim, op) {
 
 BC_FUNCTION(periodic_inner, var, dim, op) {
   if (var.size(dim) == 1) return;
-  int nc1 = var.size(dim);
+  int nc = var.size(dim);
   int nghost = op.nghost();
 
-  var.narrow(dim, 0, nghost) = var.narrow(dim, nc1 - 2 * nghost, nghost);
+  var.narrow(dim, 0, nghost) = var.narrow(dim, nc - 2 * nghost, nghost);
 }
 
 BC_FUNCTION(periodic_outer, var, dim, op) {
   if (var.size(dim) == 1) return;
-  int nc1 = var.size(dim);
+  int nc = var.size(dim);
   int nghost = op.nghost();
 
-  var.narrow(dim, nc1 - nghost, nghost) = var.narrow(dim, nghost, nghost);
+  var.narrow(dim, nc - nghost, nghost) = var.narrow(dim, nghost, nghost);
 }
 
 BC_FUNCTION(outflow_inner, var, dim, op) {

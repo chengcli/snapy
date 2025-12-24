@@ -76,41 +76,29 @@ void MeshBlockImpl::reset() {
   //// ---- (2) reset internal block boundaries ---- ////
   auto [lx2, lx3, lx1] = _playout->loc_of(rank);
   // x1-dir
-  if (lx1 != 0) {
-    options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
-  } else if (options->layout()->pz() > 1 && options->layout()->periodic_z()) {
+  if ((lx1 != 0) || options->layout()->periodic_z()) {
     options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
   }
 
-  if (lx1 != pz - 1) {
-    options->bfuncs()[BoundaryFace::kOuterX1] = nullptr;
-  } else if (options->layout()->pz() > 1 && options->layout()->periodic_z()) {
+  if ((lx1 != pz - 1) || options->layout()->periodic_z()) {
     options->bfuncs()[BoundaryFace::kOuterX1] = nullptr;
   }
 
   // x2-dir
-  if (lx2 != 0) {
-    options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
-  } else if (options->layout()->px() > 1 && options->layout()->periodic_x()) {
+  if ((lx2 != 0) || options->layout()->periodic_x()) {
     options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
   }
 
-  if (lx2 != px - 1) {
-    options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
-  } else if (options->layout()->px() > 1 && options->layout()->periodic_x()) {
+  if ((lx2 != px - 1) || options->layout()->periodic_x()) {
     options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
   }
 
   // x3-dir
-  if (lx3 != 0) {
-    options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
-  } else if (options->layout()->py() > 1 && options->layout()->periodic_y()) {
+  if ((lx3 != 0) || options->layout()->periodic_y()) {
     options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
   }
 
-  if (lx3 != py - 1) {
-    options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
-  } else if (options->layout()->py() > 1 && options->layout()->periodic_y()) {
+  if ((lx3 != py - 1) || options->layout()->periodic_y()) {
     options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
   }
 

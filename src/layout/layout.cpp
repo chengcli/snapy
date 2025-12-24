@@ -10,6 +10,7 @@
 
 // snap
 #include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
 
 #include "cubed_sphere_layout.hpp"
 #include "layout.hpp"
@@ -42,10 +43,7 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   op->backend() = node["backend"].as<std::string>("gloo");
   op->verbose() = node["verbose"].as<bool>(verbose);
 
-  if (op->verbose() && get_rank() == 0) {
-    std::cout << "[LayoutOptions] layout options:" << std::endl;
-    op->report(std::cout);
-  }
+  if (op->verbose()) op->report(SINFO(LayoutOptions));
 
   return op;
 }
@@ -80,8 +78,8 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
                            SyncOptions const& opts) {
-  if (options->verbose() && is_root()) {
-    std::cout << "[Layout] serializing data into send buffers\n";
+  if (options->verbose()) {
+    SINFO(Layout) << "serializing data into send buffers\n";
   }
 
   // Get my logical location
@@ -128,8 +126,8 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   // Serialize data into send buffers
   serialize(pmb, vars, opts);
 
-  if (options->verbose() && is_root()) {
-    std::cout << "[Layout] performing communication\n";
+  if (options->verbose()) {
+    SINFO(Layout) << "performing communication\n";
   }
 
   // Get my rank
@@ -164,16 +162,17 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
         auto recv_work = pg->recv(recv_bufs[r], nb, opts.id());
         works.push_back(recv_work);
       } else {  // self-send
+        int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
         for (int n = 0; n < recv_bufs[r].size(); ++n)
-          recv_bufs[r][n].copy_(send_bufs[r][n]);
+          recv_bufs[r1][n].copy_(send_bufs[r][n]);
       }
     }
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
                              SyncOptions const& opts) const {
-  if (options->verbose() && is_root()) {
-    std::cout << "[Layout] deserializing data from receive buffers\n";
+  if (options->verbose()) {
+    SINFO(Layout) << "deserializing data from receive buffers\n";
   }
 
   // Get my logical location
