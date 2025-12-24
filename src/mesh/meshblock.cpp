@@ -74,34 +74,43 @@ void MeshBlockImpl::reset() {
               ") does not match layout partitioning (", nranks, ").");
 
   //// ---- (2) reset internal block boundaries ---- ////
-  if (options->layout()->type() != "cubed-sphere") {  // slab or cubed layout
-    auto [lx2, lx3, lx1] = _playout->loc_of(rank);
-    // x1-dir
-    if (lx1 != 0) {
-      options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
-    }
-    if (lx1 != pz - 1) {
-      options->bfuncs()[BoundaryFace::kOuterX1] = nullptr;
-    }
+  auto [lx2, lx3, lx1] = _playout->loc_of(rank);
+  // x1-dir
+  if ((lx1 != 0) || options->layout()->periodic_z()) {
+    options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
+  }
 
-    // x2-dir
-    if (lx2 != 0) {
-      options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
-    }
-    if (lx2 != px - 1) {
-      options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
-    }
+  if ((lx1 != pz - 1) || options->layout()->periodic_z()) {
+    options->bfuncs()[BoundaryFace::kOuterX1] = nullptr;
+  }
 
-    // x3-dir
-    if (lx3 != 0) {
-      options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
-    }
-    if (lx3 != py - 1) {
-      options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
-    }
+  // x2-dir
+  if ((lx2 != 0) || options->layout()->periodic_x()) {
+    options->bfuncs()[BoundaryFace::kInnerX2] = nullptr;
+  }
 
-    if (options->verbose()) {
-      SINFO(MeshBlock) << "setting up rank bcs" << std::endl;
+  if ((lx2 != px - 1) || options->layout()->periodic_x()) {
+    options->bfuncs()[BoundaryFace::kOuterX2] = nullptr;
+  }
+
+  // x3-dir
+  if ((lx3 != 0) || options->layout()->periodic_y()) {
+    options->bfuncs()[BoundaryFace::kInnerX3] = nullptr;
+  }
+
+  if ((lx3 != py - 1) || options->layout()->periodic_y()) {
+    options->bfuncs()[BoundaryFace::kOuterX3] = nullptr;
+  }
+
+  if (options->verbose()) {
+    SINFO(MeshBlock) << "setting up rank bcs" << std::endl;
+    for (int i = 0; i < options->bfuncs().size(); ++i) {
+      if (options->bfuncs()[i] == nullptr) {
+        SINFO(MeshBlock) << "  bc func " << i << ": internal/custom"
+                         << std::endl;
+      } else {
+        SINFO(MeshBlock) << "  bc func " << i << ": external" << std::endl;
+      }
     }
   }
 

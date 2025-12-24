@@ -15,7 +15,6 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
   // -------------- layout -------------- //
   op->layout() = LayoutOptionsImpl::from_yaml(input_file);
-  if (verbose) op->layout()->report(SINFO(MeshBlockOptions));
 
   // ------------- basename ------------- //
   op->basename() = input_file.substr(0, input_file.find_last_of('.'));
@@ -103,7 +102,7 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   if (op->coord()->nc2() > 1) {
     // x2-inner
     auto ix2 = external_bc["x2-inner"].as<std::string>("reflecting");
-    if (ix2 == "periodic") op->layout()->periodic_y(true);
+    if (ix2 == "periodic") op->layout()->periodic_x(true);
 
     ix2 += "_inner";
     TORCH_CHECK(get_bc_func().find(ix2) != get_bc_func().end(),
@@ -117,7 +116,7 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
     // x2-outer
     auto ox2 = external_bc["x2-outer"].as<std::string>("reflecting");
-    if (ox2 == "periodic") op->layout()->periodic_y(true);
+    if (ox2 == "periodic") op->layout()->periodic_x(true);
 
     ox2 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox2) != get_bc_func().end(),
@@ -136,7 +135,7 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   if (op->coord()->nc3() > 1) {
     // x3-inner
     auto ix3 = external_bc["x3-inner"].as<std::string>("reflecting");
-    if (ix3 == "periodic") op->layout()->periodic_x(true);
+    if (ix3 == "periodic") op->layout()->periodic_y(true);
 
     ix3 += "_inner";
     TORCH_CHECK(get_bc_func().find(ix3) != get_bc_func().end(),
@@ -150,7 +149,7 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
     // x3-outer
     auto ox3 = external_bc["x3-outer"].as<std::string>("reflecting");
-    if (ox3 == "periodic") op->layout()->periodic_x(true);
+    if (ox3 == "periodic") op->layout()->periodic_y(true);
 
     ox3 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox3) != get_bc_func().end(),
@@ -162,6 +161,8 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
       SINFO(MeshBlockOptions) << "x3-outer BC: " << ox3 << std::endl;
     }
   }
+
+  if (verbose) op->layout()->report(SINFO(MeshBlockOptions));
 
   return op;
 }

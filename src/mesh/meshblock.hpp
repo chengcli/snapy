@@ -40,6 +40,7 @@ struct MeshBlockOptionsImpl {
 
   MeshBlockOptionsImpl() = default;
   void report(std::ostream& os) const {
+    os << "-- meshblock options --\n";
     os << "* verbose = " << (verbose() ? "true" : "false") << "\n"
        << "* basename = " << basename() << "\n";
   }

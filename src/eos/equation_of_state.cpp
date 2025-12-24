@@ -10,6 +10,7 @@
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
 
 #include "aneos.hpp"
 #include "eos_dispatch.hpp"
@@ -35,14 +36,13 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
 
   op->type() = node["type"].as<std::string>("moist-mixture");
   if (op->verbose()) {
-    std::cout << "[EquationOfStateOptions] EOS type = " << op->type()
-              << std::endl;
+    SINFO(EquationOfStateOptions) << "EOS type = " << op->type() << std::endl;
   }
 
   op->density_floor() = node["density-floor"].as<double>(1.e-6);
   if (op->verbose()) {
-    std::cout << "[EquationOfStateOptions] density floor = "
-              << op->density_floor() << std::endl;
+    SINFO(EquationOfStateOptions)
+        << "density floor = " << op->density_floor() << std::endl;
   }
 
   op->pressure_floor() = node["pressure-floor"].as<double>(1.e-3);
@@ -50,14 +50,14 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
 
   op->limiter() = node["limiter"].as<bool>(false);
   if (op->verbose()) {
-    std::cout << "[EquationOfStateOptions] limiter = "
-              << (op->limiter() ? "true" : "false") << std::endl;
+    SINFO(EquationOfStateOptions)
+        << "limiter = " << (op->limiter() ? "true" : "false") << std::endl;
   }
 
   op->eos_file() = node["eos-file"].as<std::string>("");
   if (op->verbose() && !op->eos_file().empty()) {
-    std::cout << "[EquationOfStateOptions] eos file = " << op->eos_file()
-              << std::endl;
+    SINFO(EquationOfStateOptions)
+        << "eos file = " << op->eos_file() << std::endl;
   }
 
   op->thermo() = kintera::ThermoOptionsImpl::from_yaml(filename, op->verbose());
@@ -85,12 +85,12 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
 
 torch::Tensor EquationOfStateImpl::compute(
     std::string ab, std::vector<torch::Tensor> const& args) {
-  TORCH_CHECK(false, "EquationOfStateImpl::compute() is not implemented.",
+  TORCH_CHECK(false, "[EquationOfState] compute() is not implemented.",
               "Please use this method in a derived class.");
 }
 
 torch::Tensor EquationOfStateImpl::get_buffer(std::string) const {
-  TORCH_CHECK(false, "EquationOfStateImpl::get_buffer() is not implemented.",
+  TORCH_CHECK(false, "[EquationOfState] get_buffer() is not implemented.",
               "Please use this method in a derived class.");
 }
 
