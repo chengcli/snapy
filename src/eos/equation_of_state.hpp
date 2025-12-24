@@ -37,6 +37,9 @@ struct EquationOfStateOptionsImpl {
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";
+  ADD_ARG(double, gammad) = 1.4;
+  ADD_ARG(double, weight) = 29.e-3;
+
   ADD_ARG(double, density_floor) = 1.e-10;
   ADD_ARG(double, pressure_floor) = 1.e-10;
   ADD_ARG(double, temperature_floor) = 20.;
@@ -80,6 +83,9 @@ class EquationOfStateImpl {
 
   virtual int nvar() const { return 5; }
 
+  virtual double species_weight(int n = 0) const { return 0.; }
+  virtual double species_cv_ref(int n = 0) const { return 0.; }
+
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
    * These five abbreviations should be supported:
@@ -96,7 +102,7 @@ class EquationOfStateImpl {
   virtual torch::Tensor compute(std::string ab,
                                 std::vector<torch::Tensor> const& args = {});
 
-  virtual torch::Tensor get_buffer(std::string) const;
+  // virtual torch::Tensor get_buffer(std::string) const;
 
   torch::Tensor forward(torch::Tensor cons,
                         torch::optional<torch::Tensor> out = torch::nullopt);

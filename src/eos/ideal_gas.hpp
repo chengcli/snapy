@@ -8,9 +8,6 @@ namespace snap {
 class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
                            public EquationOfStateImpl {
  public:
-  //! submodules
-  kintera::ThermoY pthermo = nullptr;
-
   // Constructor to initialize the layers
   IdealGasImpl() = default;
   explicit IdealGasImpl(EquationOfStateOptions const& options_,
@@ -23,10 +20,12 @@ class IdealGasImpl final : public torch::nn::Cloneable<IdealGasImpl>,
   using EquationOfStateImpl::forward;
 
   int nvar() const override { return 5; }
+  double species_weight(int n = 0) const override;
+  double species_cv_ref(int n = 0) const override;
 
-  torch::Tensor get_buffer(std::string var) const override {
+  /*torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
-  }
+  }*/
 
   //! \brief Implementation of ideal gasequation of state.
   torch::Tensor compute(std::string ab,

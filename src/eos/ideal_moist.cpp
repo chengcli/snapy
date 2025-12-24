@@ -16,7 +16,12 @@
 namespace snap {
 
 void IdealMoistImpl::reset() {
+  TORCH_CHECK(options->thermo(), "[IdealMoist] thermo pointer is null");
   pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
+
+  // make gammad and weight consistent
+  options->gammad(1. + 1. / options->thermo()->cref_R()[0]);
+  options->weight(1. / pthermo->inv_mu[0].item<double>());
 
   // populate buffers
   int ny = pthermo->options->vapor_ids().size() +
@@ -35,15 +40,24 @@ void IdealMoistImpl::reset() {
   auto Rd = kintera::constants::Rgas * pthermo->inv_mu[0];
   for (int i = 0; i < ny; ++i) {
     auto Ri = kintera::constants::Rgas * pthermo->inv_mu[i + 1];
-    cv_ratio_m1[i] = (pthermo->options->cref_R()[1 + i] * Ri) /
-                         (pthermo->options->cref_R()[0] * Rd) -
+    cv_ratio_m1[i] = (options->thermo()->cref_R()[1 + i] * Ri) /
+                         (options->thermo()->cref_R()[0] * Rd) -
                      1.;
   }
 
   u0 = register_buffer(
-      "u0", torch::tensor(pthermo->options->uref_R(), torch::kFloat64));
+      "u0", torch::tensor(options->thermo()->uref_R(), torch::kFloat64));
 
   u0 *= kintera::constants::Rgas * pthermo->inv_mu;
+}
+
+double IdealMoistImpl::species_weight(int n) const {
+  return 1. / pthermo->inv_mu[n].item<double>();
+}
+
+double IdealMoistImpl::species_cv_ref(int n) const {
+  auto Ri = kintera::constants::Rgas * pthermo->inv_mu[n];
+  return (options->thermo()->cref_R()[n] * Ri).item<double>();
 }
 
 torch::Tensor IdealMoistImpl::compute(std::string ab,

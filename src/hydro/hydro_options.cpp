@@ -55,6 +55,9 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   if (!forcing) return op;
 
   op->grav() = ConstGravityOptionsImpl::from_yaml(forcing);
+  if (op->disable_flux_x1()) op->grav()->grav1(0.);
+  if (op->disable_flux_x2()) op->grav()->grav2(0.);
+  if (op->disable_flux_x3()) op->grav()->grav3(0.);
   if (op->grav()) op->grav()->report(SINFO(HydroOptions));
 
   op->coriolis() = CoriolisOptionsImpl::from_yaml(forcing);

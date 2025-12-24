@@ -21,9 +21,9 @@ class ShallowWaterImpl final : public torch::nn::Cloneable<ShallowWaterImpl>,
 
   int nvar() const override { return 4; }
 
-  torch::Tensor get_buffer(std::string var) const override {
+  /*torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
-  }
+  }*/
 
   //! \brief Implementation of shallow water equation of state.
   torch::Tensor compute(std::string ab,

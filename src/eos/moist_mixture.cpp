@@ -16,12 +16,26 @@
 namespace snap {
 
 void MoistMixtureImpl::reset() {
+  TORCH_CHECK(options->thermo(), "[MoistMixture] thermo pointer is null");
   pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
+
+  // make gammad and weight consistent
+  options->gammad(1. + 1. / options->thermo()->cref_R()[0]);
+  options->weight(1. / pthermo->inv_mu[0].item<double>());
 
   // populate buffers
   ivol = register_buffer("ivol", torch::empty({0}, torch::kFloat64));
   temp = register_buffer("temp", torch::empty({0}, torch::kFloat64));
   w1 = register_buffer("w1", torch::empty({0}, torch::kFloat64));
+}
+
+double MoistMixtureImpl::species_weight(int n) const {
+  return 1. / pthermo->inv_mu[n].item<double>();
+}
+
+double MoistMixtureImpl::species_cv_ref(int n) const {
+  auto Ri = kintera::constants::Rgas * pthermo->inv_mu[n];
+  return (options->thermo()->cref_R()[n] * Ri).item<double>();
 }
 
 torch::Tensor MoistMixtureImpl::compute(

@@ -15,7 +15,7 @@ geometry:
 distribute:
   backend: gloo
   layout: slab
-  nb2: 2
+  nb2: 4
   nb3: 1
   verbose: false
 
@@ -56,7 +56,7 @@ integration:
   cfl: 0.9
   implicit-scheme: 0
   nlim: -1
-  tlim: 900
+  tlim: 9000
   ncycle_out: 10
 
 outputs:
@@ -69,6 +69,22 @@ outputs:
 forcing:
   const-gravity:
     grav1: -9.8
+
+  top-sponge-lyr:
+    width: 500
+    tau: 100
+
+  bot-sponge-lyr:
+    width: 500
+    tau: 100
+
+  bot-heat:
+    depth: 5
+    flux: 1000
+
+  top-cool:
+    depth: 5
+    flux: -1000
 
 problem:
   p0: 1.e5
