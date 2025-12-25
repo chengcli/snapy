@@ -85,7 +85,21 @@ class EquationOfStateImpl {
 
   virtual int nvar() const { return 5; }
 
+  //! \brief Return the molecular weight of species \p n.
+  //!
+  //! \param[in] n Index of the species for which to return the molecular
+  //!              weight (defaults to 0).
+  //! \return Molecular weight of the requested species, in kg/mol (or the
+  //!         units consistent with the underlying thermodynamic model).
   virtual double species_weight(int n = 0) const { return 0.; }
+
+  //! \brief Return the reference specific heat at constant volume of species \p n.
+  //!
+  //! \param[in] n Index of the species for which to return the reference
+  //!              specific heat (defaults to 0).
+  //! \return Reference specific heat at constant volume for the requested
+  //!         species, in J/(kg·K) (or the units consistent with the underlying
+  //!         thermodynamic model).
   virtual double species_cv_ref(int n = 0) const { return 0.; }
 
   //! \brief Computes hydrodynamic variables from the given abbreviation
