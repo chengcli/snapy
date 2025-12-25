@@ -45,7 +45,7 @@ torch::Tensor BotSpongeLyrImpl::forward(torch::Tensor du, torch::Tensor w,
   auto x1min = pcoord->x1f[il];
   auto eta = (options->width() - (pcoord->x1f.slice(0, 0, -1) - x1min)) /
              options->width();
-  eta.clamp_(0.0, 1.0);
+  eta.clamp_(0., 1.0);
   auto scale = torch::sin(M_PI / 2. * eta).pow(2).unsqueeze(0).unsqueeze(0);
 
   du[IVX] -= w[IDN] * w[IVX] / options->tau() * scale * dt;
