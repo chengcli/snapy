@@ -1,6 +1,6 @@
 # run_straka_test.cmake
 
-set(download_link "https://zenodo.org/records/18054072/files/straka-ref.nc")
+set(download_link "https://zenodo.org/records/18055337/files/straka-ref.nc")
 
 execute_process(
   COMMAND curl -L -o straka-ref.nc ${download_link}
@@ -26,10 +26,8 @@ if(NOT res EQUAL 0)
   message(FATAL_ERROR "pd-combine failed with exit code ${res}")
 endif()
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
 execute_process(
-  COMMAND ${Python3_EXECUTABLE} test_straka.py straka-main.nc straka-ref.nc
+  COMMAND python test_straka.py straka-main.nc straka-ref.nc
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)

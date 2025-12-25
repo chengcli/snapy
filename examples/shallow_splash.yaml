@@ -53,11 +53,11 @@ integration:
 outputs:
   - type: netcdf
     variables: [prim]
-    dt: 1.E4
+    dt: 1.E5
 
 forcing:
   coriolis:
-    omega1: 1.e-4
+    omega1: 0.e-4
 
 problem:
   phi: 500.
