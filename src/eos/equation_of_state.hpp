@@ -39,8 +39,8 @@ struct EquationOfStateOptionsImpl {
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";
-  ADD_ARG(double, gammad) = 1.4;
-  ADD_ARG(double, weight) = 29.e-3;
+  ADD_ARG(double, gammad) = 1.4;      // ratio of specific heats (cp/cv)
+  ADD_ARG(double, weight) = 29.e-3;   // mean molecular weight in kg/mol
 
   ADD_ARG(double, density_floor) = 1.e-10;
   ADD_ARG(double, pressure_floor) = 1.e-10;
