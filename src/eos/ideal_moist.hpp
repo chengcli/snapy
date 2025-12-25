@@ -36,7 +36,7 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
     return named_buffers()[var];
   }*/
 
-  //! \brief Implementation of ideal gasequation of state.
+  //! \brief Implementation of ideal gas equation of state.
   torch::Tensor compute(std::string ab,
                         std::vector<torch::Tensor> const& args) override;
 
