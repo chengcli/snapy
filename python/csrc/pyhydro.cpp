@@ -57,8 +57,7 @@ void bind_hydro(py::module &m) {
              return fmt::format("PrimitiveProjectorOptions(\n{})", ss.str());
            })
       .ADD_OPTION(std::string, snap::PrimitiveProjectorOptionsImpl, type)
-      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, margin)
-      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, Rd);
+      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, margin);
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def(py::init<snap::HydroOptions, torch::nn::Module *>(),

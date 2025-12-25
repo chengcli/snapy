@@ -55,6 +55,10 @@ void bind_eos(py::module &m) {
              return fmt::format("EquationOfState(\n{})", ss.str());
            })
       .def("nvar", &snap::EquationOfStateImpl::nvar)
+      .def("species_weight", &snap::EquationOfStateImpl::species_weight,
+           py::arg("n") = 0)
+      .def("species_cv_ref", &snap::EquationOfStateImpl::species_cv_ref,
+           py::arg("n") = 0)
       .def("compute", &snap::EquationOfStateImpl::compute);
 
   auto pyIdealGas =

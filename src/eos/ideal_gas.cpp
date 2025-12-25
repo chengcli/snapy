@@ -18,7 +18,8 @@ void IdealGasImpl::reset() {}
 double IdealGasImpl::species_weight(int n) const { return options->weight(); }
 
 double IdealGasImpl::species_cv_ref(int n) const {
-  return kintera::constants::Rgas / (options->gammad() - 1.);
+  auto Ri = kintera::constants::Rgas / options->weight();
+  return Ri / (options->gammad() - 1.);
 }
 
 torch::Tensor IdealGasImpl::compute(std::string ab,
@@ -38,7 +39,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
     return _prim2intEng(w);
   } else if (ab == "W->T") {
     auto w = args[0];
-    auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
+    auto Rd = kintera::constants::Rgas / options->weight();
     return w[IPR] / (w[IDN] * Rd);
   } else if (ab == "UT->I") {
     auto w = args[0];
@@ -108,10 +109,7 @@ torch::Tensor IdealGasImpl::_prim2intEng(torch::Tensor prim) {
 
 torch::Tensor IdealGasImpl::_temp2intEng(torch::Tensor cons,
                                          torch::Tensor temp) {
-  auto mud = kintera::species_weights[0];
-  auto Rd = kintera::constants::Rgas / mud;
-  auto cvd = kintera::species_cref_R[0] * Rd;
-  return cons[IDN] * cvd * temp;
+  return cons[IDN] * species_cv_ref() * temp;
 }
 
 }  // namespace snap

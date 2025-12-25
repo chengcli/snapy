@@ -24,6 +24,8 @@ struct EquationOfStateOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- equation of state options --\n";
     os << "* type = " << type() << "\n"
+       << "* gammad = " << gammad() << "\n"
+       << "* weight = " << weight() << "\n"
        << "* density_floor = " << density_floor() << "\n"
        << "* pressure_floor = " << pressure_floor() << "\n"
        << "* temperature_floor = " << temperature_floor() << "\n"

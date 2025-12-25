@@ -53,14 +53,12 @@ struct PrimitiveProjectorOptionsImpl {
   void report(std::ostream &os) const {
     os << "-- primitive projector options --\n";
     os << "* type = " << type() << "\n"
-       << "* pressure-margin = " << margin() << "\n"
-       << "* Rd = " << Rd() << "\n";
+       << "* pressure-margin = " << margin() << "\n";
   }
 
   //! choose from ["none", "temperature"]
   ADD_ARG(std::string, type) = "none";
   ADD_ARG(double, margin) = 1.e-6;
-  ADD_ARG(double, Rd) = 287.05;  // specific gas constant for dry air
 
   //! submodule options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;

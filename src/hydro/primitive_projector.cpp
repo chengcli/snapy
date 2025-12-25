@@ -10,6 +10,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/coordinate.hpp>
+#include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -32,13 +33,6 @@ PrimitiveProjectorOptions PrimitiveProjectorOptionsImpl::from_yaml(
 
   op->type() = node["type"].as<std::string>("none");
   op->margin() = node["pressure-margin"].as<double>(1.e-6);
-
-  TORCH_CHECK(kintera::species_weights.size() > 0,
-              "PrimitiveProjectorOptions: species is not initialized. ",
-              "Please initialize it first.");
-
-  auto mu = kintera::species_weights[0];
-  op->Rd() = kintera::constants::Rgas / mu;
 
   return op;
 }
@@ -75,7 +69,8 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
   result[IPR] = calc_nonhydrostatic_pressure(w[IPR], _psf, options->margin());
 
   if (options->type() == "temperature") {
-    result[IDN] = w[IPR] / (w[IDN] * options->Rd());
+    auto Rd = kintera::constants::Rgas / phydro->peos->species_weight();
+    result[IDN] = w[IPR] / (w[IDN] * Rd);
   } else if (options->type() == "density") {
     // do nothing
   } else {
@@ -101,9 +96,10 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
 
   // restore density
   if (options->type() == "temperature") {
+    auto Rd = kintera::constants::Rgas / phydro->peos->species_weight();
     wlr.select(1, IDN).slice(3, is, ie + 1) =
         wlr.select(1, IPR).slice(3, is, ie + 1) /
-        (wlr.select(1, IDN).slice(3, is, ie + 1) * options->Rd());
+        (wlr.select(1, IDN).slice(3, is, ie + 1) * Rd);
   } else if (options->type() == "density") {
     // do nothing
   } else {
