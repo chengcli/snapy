@@ -39,8 +39,8 @@ struct EquationOfStateOptionsImpl {
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";
-  ADD_ARG(double, gammad) = 1.4;      // ratio of specific heats (cp/cv)
-  ADD_ARG(double, weight) = 29.e-3;   // mean molecular weight in kg/mol
+  ADD_ARG(double, gammad) = 1.4;     // ratio of specific heats (cp/cv)
+  ADD_ARG(double, weight) = 29.e-3;  // mean molecular weight in kg/mol
 
   ADD_ARG(double, density_floor) = 1.e-10;
   ADD_ARG(double, pressure_floor) = 1.e-10;
@@ -93,7 +93,8 @@ class EquationOfStateImpl {
   //!         units consistent with the underlying thermodynamic model).
   virtual double species_weight(int n = 0) const { return 0.; }
 
-  //! \brief Return the reference specific heat at constant volume of species \p n.
+  //! \brief Return the reference specific heat at constant volume of species \p
+  //! n.
   //!
   //! \param[in] n Index of the species for which to return the reference
   //!              specific heat (defaults to 0).
