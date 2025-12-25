@@ -1,6 +1,6 @@
-# ==========
-# Unit Tests
-# ==========
+# ========== #
+# Unit Tests #
+# ========== #
 
 enable_testing()
 
@@ -28,3 +28,17 @@ foreach(input ${inputs})
 endforeach()
 
 setup_parallel_test(test_exchange 6)
+
+# ============= #
+# Example Tests #
+# ============= #
+add_test(
+  NAME test_straka
+  COMMAND ${CMAKE_COMMAND}
+          -Dbuildl=release
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_test.cmake
+)
+
+set_tests_properties(test_straka PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)

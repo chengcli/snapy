@@ -57,7 +57,7 @@ outputs:
     dt: 300.
   - type: netcdf
     variables: [prim, uov]
-    dt: 30.
+    dt: 300.
 
 forcing:
   const-gravity:
