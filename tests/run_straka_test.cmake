@@ -26,8 +26,10 @@ if(NOT res EQUAL 0)
   message(FATAL_ERROR "pd-combine failed with exit code ${res}")
 endif()
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 execute_process(
-  COMMAND python test_straka.py straka-main.nc straka-ref.nc
+  COMMAND ${Python3_EXECUTABLE} test_straka.py straka-main.nc straka-ref.nc
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
