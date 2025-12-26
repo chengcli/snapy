@@ -1,5 +1,8 @@
 // C/C++
+#include <fstream>
+#include <iostream>
 #include <regex>
+#include <sstream>
 
 // external
 #include <gtest/gtest.h>
@@ -7,6 +10,7 @@
 
 // snap
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/mesh/meshblock.hpp>
 #include <snap/recon/reconstruct.hpp>
 #include <snap/riemann/riemann_solver.hpp>
 
@@ -19,14 +23,7 @@ enum {
   DIM3 = 1,
 };
 
-const char *eos_config = R"(
-type: moist-mixture
-density-floor:  1.e-10
-pressure-floor: 1.e-10
-limiter: false
-)";
-
-const char *thermo_config = R"(
+const char *block_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -35,51 +32,63 @@ species:
   - name: dry
     composition: {O: 0.42, N: 1.56, Ar: 0.01}
     cv_R: 2.5
-)";
 
-const char *coord_config = R"(
-type: cartesian
-bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 200, nx2: 200, nx3: 200, nghost: 3}
-)";
+dynamics:
+  equation-of-state:
+    type: moist-mixture
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    limiter: false
 
-const char *recon_config = R"(
-vertical: {type: weno5, scale: false, shock: false}
-horizontal: {type: weno5, scale: false, shock: false}
-)";
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
 
-const char *riemann_config = R"(
-type: lmars
-max-iter: 5
-tol: 1.e-6
+  riemann-solver:
+    type: lmars
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 200, nx2: 200, nx3: 200, nghost: 3}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
 )";
 
 using namespace snap;
 
 TEST_P(DeviceTest, test_lmars) {
-  auto op_riemann = RiemannSolverOptions::from_yaml(YAML::Load(riemann_config));
+  // create a temporary file
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << block_config;
+  outfile.close();
 
-  op_riemann.eos() = EquationOfStateOptions::from_yaml(YAML::Load(eos_config));
-  op_riemann.eos().coord() =
-      CoordinateOptions::from_yaml(YAML::Load(coord_config));
-  op_riemann.eos().thermo() =
-      kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op_block);
+  block->to(device, dtype);
 
-  LmarsSolver prsolver(op_riemann);
-  prsolver->to(device, dtype);
+  auto pcoord = block->pcoord;
+  auto phydro = block->phydro;
+  auto peos = phydro->peos;
+  auto precon = phydro->precon1;
+  auto prsolver = phydro->priemann;
 
-  auto op_recon =
-      ReconstructOptions::from_yaml(YAML::Load(recon_config), "vertical");
-
-  Reconstruct precon(op_recon);
-  precon->to(device, dtype);
-
-  auto peos = prsolver->peos;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = peos->nvar();
 
   auto w =
-      torch::randn({peos->nvar(), peos->options.coord().nc3(),
-                    peos->options.coord().nc2(), peos->options.coord().nc1()},
-                   torch::device(device).dtype(dtype))
+      torch::randn({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype))
           .abs();
 
   std::cout << "w.sizes(): " << w.sizes() << std::endl;
@@ -96,33 +105,34 @@ TEST_P(DeviceTest, test_lmars) {
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Time taken by test body: " << elapsed.count() << " seconds"
             << std::endl;
+  std::remove(fname);
 }
 
 TEST_P(DeviceTest, test_hllc) {
-  auto config = std::regex_replace(riemann_config, std::regex("lmars"), "hllc");
-  auto op_riemann = RiemannSolverOptions::from_yaml(YAML::Load(config));
+  auto config = std::regex_replace(block_config, std::regex("lmars"), "hllc");
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
 
-  op_riemann.eos() = EquationOfStateOptions::from_yaml(YAML::Load(eos_config));
-  op_riemann.eos().coord() =
-      CoordinateOptions::from_yaml(YAML::Load(coord_config));
-  op_riemann.eos().thermo() =
-      kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op_block);
+  block->to(device, dtype);
 
-  HLLCSolver prsolver(op_riemann);
-  prsolver->to(device, dtype);
+  auto pcoord = block->pcoord;
+  auto phydro = block->phydro;
+  auto peos = phydro->peos;
+  auto precon = phydro->precon1;
+  auto prsolver = phydro->priemann;
 
-  auto op_recon =
-      ReconstructOptions::from_yaml(YAML::Load(recon_config), "vertical");
-
-  Reconstruct precon(op_recon);
-  precon->to(device, dtype);
-
-  auto peos = prsolver->peos;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = peos->nvar();
 
   auto w =
-      torch::randn({peos->nvar(), peos->options.coord().nc3(),
-                    peos->options.coord().nc2(), peos->options.coord().nc1()},
-                   torch::device(device).dtype(dtype))
+      torch::randn({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype))
           .abs();
 
   std::cout << "w.sizes(): " << w.sizes() << std::endl;
@@ -139,6 +149,7 @@ TEST_P(DeviceTest, test_hllc) {
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Time taken by test body: " << elapsed.count() << " seconds"
             << std::endl;
+  std::remove(fname);
 }
 
 int main(int argc, char **argv) {

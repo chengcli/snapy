@@ -8,17 +8,14 @@
 // torch
 #include <torch/torch.h>
 
-// base
-#include <globals.h>
-
 // fvm
-#include <fvm/recon/interp_simple.hpp>
-#include <fvm/recon/interpolation.hpp>
+#include <snap/recon/interp_simple.hpp>
+#include <snap/recon/interpolation.hpp>
 
 // tests
 #include "device_testing.hpp"
 
-using namespace canoe;
+using namespace snap;
 
 TEST_P(DeviceTest, interp_plm) {
   double phim1 = 1.0;
@@ -41,19 +38,19 @@ TEST_P(DeviceTest, interp_plm_torch1) {
       auto result1r = interp_plm(phi[2].item<float>(), phi[1].item<float>(),
                                  phi[0].item<float>());
 
-      auto result2 = interp->forward(phi);
+      auto [resultl, resultr] = interp->forward(phi, 0);
 
-      EXPECT_NEAR(result1l, result2[0].item<float>(), 2.E-6);
-      EXPECT_NEAR(result1r, result2[1].item<float>(), 2.E-6);
+      EXPECT_NEAR(result1l, resultl.item<float>(), 2.E-6);
+      EXPECT_NEAR(result1r, resultr.item<float>(), 2.E-6);
     } else {
       auto result1l = interp_plm(phi[0].item<double>(), phi[1].item<double>(),
                                  phi[2].item<double>());
       auto result1r = interp_plm(phi[2].item<double>(), phi[1].item<double>(),
                                  phi[0].item<double>());
 
-      auto result2 = interp->forward(phi);
-      EXPECT_NEAR(result1l, result2[0].item<double>(), 1.E-6);
-      EXPECT_NEAR(result1r, result2[1].item<double>(), 1.E-6);
+      auto [resultl, resultr] = interp->forward(phi, 0);
+      EXPECT_NEAR(result1l, resultl.item<double>(), 1.E-6);
+      EXPECT_NEAR(result1r, resultr.item<double>(), 1.E-6);
     }
   }
 }
@@ -79,13 +76,13 @@ TEST_P(DeviceTest, interp_plm_torch2) {
           interp_plm(phi[1][2].item<float>(), phi[1][1].item<float>(),
                      phi[1][0].item<float>());
 
-      auto result = interp->forward(phi);
+      auto [resultl, resultr] = interp->forward(phi, 1);
 
-      EXPECT_NEAR(result1l, result[0][0].item<float>(), 2.E-6);
-      EXPECT_NEAR(result1r, result[1][0].item<float>(), 2.E-6);
+      EXPECT_NEAR(result1l, resultl[0].item<float>(), 2.E-6);
+      EXPECT_NEAR(result1r, resultr[0].item<float>(), 2.E-6);
 
-      EXPECT_NEAR(result2l, result[0][1].item<float>(), 2.E-6);
-      EXPECT_NEAR(result2r, result[1][1].item<float>(), 2.E-6);
+      EXPECT_NEAR(result2l, resultl[1].item<float>(), 2.E-6);
+      EXPECT_NEAR(result2r, resultr[1].item<float>(), 2.E-6);
     } else {
       auto result1l =
           interp_plm(phi[0][0].item<double>(), phi[0][1].item<double>(),
@@ -100,13 +97,13 @@ TEST_P(DeviceTest, interp_plm_torch2) {
           interp_plm(phi[1][2].item<double>(), phi[1][1].item<double>(),
                      phi[1][0].item<double>());
 
-      auto result = interp->forward(phi);
+      auto [resultl, resultr] = interp->forward(phi, 1);
 
-      EXPECT_NEAR(result1l, result[0][0].item<double>(), 2.E-6);
-      EXPECT_NEAR(result1r, result[1][0].item<double>(), 2.E-6);
+      EXPECT_NEAR(result1l, resultl[0].item<double>(), 2.E-6);
+      EXPECT_NEAR(result1r, resultr[0].item<double>(), 2.E-6);
 
-      EXPECT_NEAR(result2l, result[0][1].item<double>(), 2.E-6);
-      EXPECT_NEAR(result2r, result[1][1].item<double>(), 2.E-6);
+      EXPECT_NEAR(result2l, resultl[1].item<double>(), 2.E-6);
+      EXPECT_NEAR(result2r, resultr[1].item<double>(), 2.E-6);
     }
   }
 }
@@ -135,14 +132,13 @@ TEST_P(DeviceTest, interp_plm_torch3) {
           interp_plm(phi[2][1].item<float>(), phi[1][1].item<float>(),
                      phi[0][1].item<float>());
 
-      auto phiu = phi.unfold(0, 3, 1);
-      auto result = interp->forward(phiu);
+      auto [resultl, resultr] = interp->forward(phi, 0);
 
-      EXPECT_NEAR(result1l, result[0][0][0].item<float>(), 2.E-6);
-      EXPECT_NEAR(result1r, result[1][0][0].item<float>(), 2.E-6);
+      EXPECT_NEAR(result1l, resultl[0][0].item<float>(), 2.E-6);
+      EXPECT_NEAR(result1r, resultr[0][0].item<float>(), 2.E-6);
 
-      EXPECT_NEAR(result2l, result[0][0][1].item<float>(), 2.E-6);
-      EXPECT_NEAR(result2r, result[1][0][1].item<float>(), 2.E-6);
+      EXPECT_NEAR(result2l, resultl[0][1].item<float>(), 2.E-6);
+      EXPECT_NEAR(result2r, resultr[0][1].item<float>(), 2.E-6);
     } else {
       auto result1l =
           interp_plm(phi[0][0].item<double>(), phi[1][0].item<double>(),
@@ -160,21 +156,18 @@ TEST_P(DeviceTest, interp_plm_torch3) {
           interp_plm(phi[2][1].item<double>(), phi[1][1].item<double>(),
                      phi[0][1].item<double>());
 
-      auto phiu = phi.unfold(0, 3, 1);
-      auto result = interp->forward(phiu);
+      auto [resultl, resultr] = interp->forward(phi, 0);
 
-      EXPECT_NEAR(result1l, result[0][0][0].item<double>(), 2.E-6);
-      EXPECT_NEAR(result1r, result[1][0][0].item<double>(), 2.E-6);
+      EXPECT_NEAR(result1l, resultl[0][0].item<double>(), 2.E-6);
+      EXPECT_NEAR(result1r, resultr[0][0].item<double>(), 2.E-6);
 
-      EXPECT_NEAR(result2l, result[0][0][1].item<double>(), 2.E-6);
-      EXPECT_NEAR(result2r, result[1][0][1].item<double>(), 2.E-6);
+      EXPECT_NEAR(result2l, resultl[0][1].item<double>(), 2.E-6);
+      EXPECT_NEAR(result2r, resultr[0][1].item<double>(), 2.E-6);
     }
   }
 }
 
 int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
-  start_logging(argc, argv);
-
   return RUN_ALL_TESTS();
 }

@@ -5,52 +5,34 @@
 // torch
 #include <torch/torch.h>
 
+// kintera
+#include <kintera/thermo/thermo.hpp>
+
 // snapy
 #include <snap/snap.h>
 
-#include <snap/eos/moist_mixture.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 // tests
 #include "device_testing.hpp"
 
-const char *eos_config = R"(
-type: moist-mixture
-density-floor:  1.e-10
-pressure-floor: 1.e-10
-limiter: false
-)";
-
-const char *thermo_config = R"(
-reference-state:
-  Tref: 300.
-  Pref: 1.e5
-
-species:
-  - name: dry
-    composition: {O: 0.42, N: 1.56, Ar: 0.01}
-    cv_R: 2.5
-)";
-
-const char *coord_config = R"(
-type: cartesian
-bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-cells: {nx1: 400, nx2: 400, nx3: 100, nghost: 1}
-)";
-
 using namespace snap;
 
 TEST_P(DeviceTest, moist_mixture) {
-  auto op = EquationOfStateOptions::from_yaml(YAML::Load(eos_config));
+  auto op_block = MeshBlockOptionsImpl::from_yaml("test_eos.yaml");
+  auto block = MeshBlock(op_block);
+  block->to(device, dtype);
 
-  op.coord() = CoordinateOptions::from_yaml(YAML::Load(coord_config));
-  op.thermo() = kintera::ThermoOptions::from_yaml(YAML::Load(thermo_config));
+  auto peos = block->phydro->peos;
+  auto pcoord = block->pcoord;
 
-  auto peos = MoistMixture(op);
-  peos->to(device, dtype);
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = peos->nvar();
 
-  std::cout << "molecular weight = " << 1. / peos->pthermo->inv_mu << std::endl;
-
-  auto const &cons = peos->get_buffer("U");
+  auto cons =
+      torch::empty({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
   cons.uniform_(0., 1.);
 
