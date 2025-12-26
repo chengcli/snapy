@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include <snap/loops.cuh>
+#include <snap/utils/loops.cuh>
 #include "flip_zero_impl.h"
 #include "bc_dispatch.hpp"
 

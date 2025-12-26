@@ -10,7 +10,7 @@
 
 // snap
 #include <snap/utils/cuda_utils.h>
-#include <snap/loops.cuh>
+#include <snap/utils/loops.cuh>
 
 #include "implicit_dispatch.hpp"
 #include "vic_solve_full_impl.h"

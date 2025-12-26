@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include <snap/loops.cuh>
+#include <snap/utils/loops.cuh>
 #include "lmars_impl.h"
 #include "hllc_impl.h"
 #include "riemann_dispatch.hpp"

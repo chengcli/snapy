@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include <snap/loops.cuh>
+#include "loops.cuh"
 #include "utils_dispatch.hpp"
 
 #define INP1(j, i) (inp1[(j) * stride_in2 + (i) * stride_in1])

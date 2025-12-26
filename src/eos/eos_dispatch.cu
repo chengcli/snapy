@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include <snap/loops.cuh>
+#include <snap/utils/loops.cuh>
 #include "eos_dispatch.hpp"
 #include "ideal_gas_impl.h"
 #include "fix_vapor_impl.h"
