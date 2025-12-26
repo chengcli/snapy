@@ -45,8 +45,8 @@ int main(int argc, char** argv) {
   auto peos = block->phydro->peos;
 
   // thermodynamics
-  auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
-  auto cv = kintera::species_cref_R[0] * Rd;
+  auto Rd = kintera::constants::Rgas / peos->species_weight();
+  auto cv = peos->species_cv_ref();
   auto cp = cv + Rd;
 
   // coordinates

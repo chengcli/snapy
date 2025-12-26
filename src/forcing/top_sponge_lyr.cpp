@@ -6,6 +6,7 @@
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
 
@@ -37,8 +38,20 @@ void TopSpongeLyrImpl::reset() {
 
 torch::Tensor TopSpongeLyrImpl::forward(torch::Tensor du, torch::Tensor w,
                                         torch::Tensor temp, double dt) {
-  // Implement the top sponge layer logic here
-  // For now, just return the input tensor
+  auto pcoord = phydro->pmb->pcoord;
+  int il = pcoord->il();
+  int iu = pcoord->iu();
+
+  auto x1max = pcoord->x1f[iu + 1];
+  auto eta = (options->width() - (x1max - pcoord->x1f.slice(0, 0, -1))) /
+             options->width();
+  eta.clamp_(0., 1.0);
+  auto scale = torch::sin(M_PI / 2. * eta).pow(2).unsqueeze(0).unsqueeze(0);
+
+  du[IVX] -= w[IDN] * w[IVX] / options->tau() * scale * dt;
+  du[IVY] -= w[IDN] * w[IVY] / options->tau() * scale * dt;
+  du[IVZ] -= w[IDN] * w[IVZ] / options->tau() * scale * dt;
+
   return du;
 }
 

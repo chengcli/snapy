@@ -24,6 +24,8 @@ struct EquationOfStateOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- equation of state options --\n";
     os << "* type = " << type() << "\n"
+       << "* gammad = " << gammad() << "\n"
+       << "* weight = " << weight() << "\n"
        << "* density_floor = " << density_floor() << "\n"
        << "* pressure_floor = " << pressure_floor() << "\n"
        << "* temperature_floor = " << temperature_floor() << "\n"
@@ -37,6 +39,9 @@ struct EquationOfStateOptionsImpl {
   }
 
   ADD_ARG(std::string, type) = "moist-mixture";
+  ADD_ARG(double, gammad) = 1.4;     // ratio of specific heats (cp/cv)
+  ADD_ARG(double, weight) = 29.e-3;  // mean molecular weight in kg/mol
+
   ADD_ARG(double, density_floor) = 1.e-10;
   ADD_ARG(double, pressure_floor) = 1.e-10;
   ADD_ARG(double, temperature_floor) = 20.;
@@ -80,6 +85,24 @@ class EquationOfStateImpl {
 
   virtual int nvar() const { return 5; }
 
+  //! \brief Return the molecular weight of species \p n.
+  //!
+  //! \param[in] n Index of the species for which to return the molecular
+  //!              weight (defaults to 0).
+  //! \return Molecular weight of the requested species, in kg/mol (or the
+  //!         units consistent with the underlying thermodynamic model).
+  virtual double species_weight(int n = 0) const { return 0.; }
+
+  //! \brief Return the reference specific heat at constant volume of species \p
+  //! n.
+  //!
+  //! \param[in] n Index of the species for which to return the reference
+  //!              specific heat (defaults to 0).
+  //! \return Reference specific heat at constant volume for the requested
+  //!         species, in J/(kg·K) (or the units consistent with the underlying
+  //!         thermodynamic model).
+  virtual double species_cv_ref(int n = 0) const { return 0.; }
+
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
    * These five abbreviations should be supported:
@@ -96,7 +119,7 @@ class EquationOfStateImpl {
   virtual torch::Tensor compute(std::string ab,
                                 std::vector<torch::Tensor> const& args = {});
 
-  virtual torch::Tensor get_buffer(std::string) const;
+  // virtual torch::Tensor get_buffer(std::string) const;
 
   torch::Tensor forward(torch::Tensor cons,
                         torch::optional<torch::Tensor> out = torch::nullopt);

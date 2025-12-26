@@ -39,6 +39,9 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
     SINFO(EquationOfStateOptions) << "EOS type = " << op->type() << std::endl;
   }
 
+  op->gammad() = node["gammad"].as<double>(1.4);
+  op->weight() = node["weight"].as<double>(29.e-3);
+
   op->density_floor() = node["density-floor"].as<double>(1.e-6);
   if (op->verbose()) {
     SINFO(EquationOfStateOptions)
@@ -89,10 +92,10 @@ torch::Tensor EquationOfStateImpl::compute(
               "Please use this method in a derived class.");
 }
 
-torch::Tensor EquationOfStateImpl::get_buffer(std::string) const {
+/*torch::Tensor EquationOfStateImpl::get_buffer(std::string) const {
   TORCH_CHECK(false, "[EquationOfState] get_buffer() is not implemented.",
               "Please use this method in a derived class.");
-}
+}*/
 
 torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
                                            torch::optional<torch::Tensor> out) {

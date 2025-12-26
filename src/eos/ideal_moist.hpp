@@ -29,12 +29,14 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
     return 4 + pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size();
   }
+  double species_weight(int n = 0) const override;
+  double species_cv_ref(int n = 0) const override;
 
-  torch::Tensor get_buffer(std::string var) const override {
+  /*torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
-  }
+  }*/
 
-  //! \brief Implementation of ideal gasequation of state.
+  //! \brief Implementation of ideal gas equation of state.
   torch::Tensor compute(std::string ab,
                         std::vector<torch::Tensor> const& args) override;
 

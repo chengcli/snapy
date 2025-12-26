@@ -57,16 +57,16 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install numpy pytest 'kintera>=1.2.6' 'torch==2.7.1'
+          pip install numpy pytest netcdf4 'kintera>=1.2.6' 'torch==2.7.1'
 
       - name: Install NetCDF
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
-            sudo apt-get install -y libnetcdf-dev
+            sudo apt-get install -y libnetcdf-dev nco
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             brew update
-            brew install netcdf
+            brew install netcdf nco
           fi
 
      #- name: Cache CMake build

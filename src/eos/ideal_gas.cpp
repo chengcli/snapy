@@ -1,8 +1,6 @@
 // kintere
 #include <kintera/constants.h>
 
-#include <kintera/thermo/thermo.hpp>
-
 // snap
 #include <snap/snap.h>
 
@@ -15,8 +13,13 @@
 
 namespace snap {
 
-void IdealGasImpl::reset() {
-  pthermo = kintera::ThermoYImpl::create(options->thermo(), this);
+void IdealGasImpl::reset() {}
+
+double IdealGasImpl::species_weight(int n) const { return options->weight(); }
+
+double IdealGasImpl::species_cv_ref(int n) const {
+  auto Ri = kintera::constants::Rgas / options->weight();
+  return Ri / (options->gammad() - 1.);
 }
 
 torch::Tensor IdealGasImpl::compute(std::string ab,
@@ -36,7 +39,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
     return _prim2intEng(w);
   } else if (ab == "W->T") {
     auto w = args[0];
-    auto Rd = kintera::constants::Rgas / kintera::species_weights[0];
+    auto Rd = kintera::constants::Rgas / options->weight();
     return w[IPR] / (w[IDN] * Rd);
   } else if (ab == "UT->I") {
     auto w = args[0];
@@ -44,9 +47,7 @@ torch::Tensor IdealGasImpl::compute(std::string ab,
     return _temp2intEng(w, temp);
   } else if (ab == "W->A") {
     auto w = args[0];
-    auto gammad =
-        (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
-    return gammad * torch::ones_like(w[IDN]);
+    return options->gammad() * torch::ones_like(w[IDN]);
   } else if (ab == "WA->L") {
     auto w = args[0];
     auto gamma = args[1];
@@ -85,8 +86,7 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   apply_conserved_limiter_(cons);
   auto pcoord = phydro->pmb->pcoord;
 
-  auto gammad =
-      (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
+  auto gammad = options->gammad();
 
   auto iter =
       at::TensorIteratorConfig()
@@ -104,17 +104,12 @@ void IdealGasImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
 }
 
 torch::Tensor IdealGasImpl::_prim2intEng(torch::Tensor prim) {
-  auto gammad =
-      (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
-  return prim[IPR] / (gammad - 1);
+  return prim[IPR] / (options->gammad() - 1);
 }
 
 torch::Tensor IdealGasImpl::_temp2intEng(torch::Tensor cons,
                                          torch::Tensor temp) {
-  auto mud = kintera::species_weights[0];
-  auto Rd = kintera::constants::Rgas / mud;
-  auto cvd = kintera::species_cref_R[0] * Rd;
-  return cons[IDN] * cvd * temp;
+  return cons[IDN] * species_cv_ref() * temp;
 }
 
 }  // namespace snap
