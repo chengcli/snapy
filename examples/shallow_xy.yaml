@@ -33,13 +33,13 @@ integration:
   type: rk3
   cfl: 0.9
   nlim: -1
-  tlim: 10
+  tlim: 9
   ncycle_out: 10
 
 outputs:
   - type: netcdf
     variables: [prim]
-    dt: 0.1
+    dt: 3.
 
 problem:
   phi: 10.
