@@ -59,6 +59,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
 
 #include "connectivity.hpp"
 #include "cubed_sphere_layout.hpp"
@@ -771,6 +772,58 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             cs_cart_to_contra_(vel, alpha, beta);
             break;
         }
+      }
+    }
+}
+
+void CubedSphereLayoutImpl::forward(
+    MeshBlockImpl const *pmb, Variables &vars, SyncOptions const &opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>> &works) {
+  TORCH_CHECK(!options->no_backend(),
+              "[CubedSphereLayout:forward] backend is disabled");
+  TORCH_CHECK(pmb != nullptr,
+              "[CubedSphereLayout:forward] MeshBlock pointer is null");
+
+  // Serialize data into send buffers
+  serialize(pmb, vars, opts);
+
+  if (options->verbose()) {
+    SINFO(CubedSphereLayout) << "performing communication\n";
+  }
+
+  // Get my rank
+  auto rank = options->rank();
+
+  // Get my logical location
+  auto iloc = loc_of(rank);
+
+  int dy_min = opts.dy_min();
+  int dy_max = opts.dy_max();
+  int dx_min = opts.dx_min();
+  int dx_max = opts.dx_max();
+
+  for (int dy = dy_min; dy <= dy_max; ++dy)
+    for (int dx = dx_min; dx <= dx_max; ++dx) {
+      // skip the center (self)
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+
+      std::tuple<int, int, int> offset(dy, dx, 0);
+      int nb = neighbor_rank(iloc, offset);
+      if (nb < 0) continue;  // no neighbor
+
+      int r = get_buffer_id(offset);
+
+      if (nb != rank) {  // different ranks
+        // Send operation
+        auto send_work = pg->send(send_bufs[r], nb, opts.phyid());
+        works.push_back(send_work);
+
+        // Receive operation
+        auto recv_work = pg->recv(recv_bufs[r], nb, opts.phyid());
+        works.push_back(recv_work);
+      } else {  // self-send
+        TORCH_CHECK(false, "I should not be here");
       }
     }
 }

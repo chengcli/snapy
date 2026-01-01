@@ -154,14 +154,15 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
       int r = get_buffer_id(offset);
 
       if (nb != rank) {  // different ranks
-        int id = opts.phyid() + ((dx + 1) << 1) + ((dy + 1) << 2);
+        int send_id = opts.phyid() + ((1 + dx) << 1) + ((1 + dy) << 2);
+        int recv_id = opts.phyid() + ((1 - dx) << 1) + ((1 - dy) << 2);
+
         // Send operation
-        auto send_work = pg->send(send_bufs[r], nb, id);
+        auto send_work = pg->send(send_bufs[r], nb, send_id);
         works.push_back(send_work);
 
         // Receive operation
-        id = opts.phyid() + ((-dx + 1) << 1) + ((-dy + 1) << 2);
-        auto recv_work = pg->recv(recv_bufs[r], nb, id);
+        auto recv_work = pg->recv(recv_bufs[r], nb, recv_id);
         works.push_back(recv_work);
       } else {  // self-send
         int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
