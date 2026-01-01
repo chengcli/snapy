@@ -44,6 +44,17 @@ set_tests_properties(test_straka PROPERTIES
 )
 
 add_test(
+  NAME test_shallow_xy
+  COMMAND ${CMAKE_COMMAND}
+          -Dbuildl=release
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy.cmake
+)
+
+set_tests_properties(test_shallow_xy PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_test(
   NAME test_shallow_splash
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release

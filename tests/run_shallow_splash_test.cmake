@@ -2,10 +2,15 @@
 
 set(download_link "https://zenodo.org/records/18055337/files/shallow_splash-ref.nc")
 
-execute_process(
-  COMMAND curl -L -o shallow_splash-ref.nc ${download_link}
-  RESULT_VARIABLE res
-)
+if(EXISTS "shallow_splash-ref.nc")
+  set(res 0)
+else()
+  execute_process(
+    COMMAND curl -L -o shallow_splash-ref.nc ${download_link}
+    RESULT_VARIABLE res
+  )
+endif()
+
 if(NOT res EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
 endif()
