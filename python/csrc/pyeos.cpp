@@ -37,6 +37,8 @@ void bind_eos(py::module &m) {
       .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, temperature_floor)
       .ADD_OPTION(bool, snap::EquationOfStateOptionsImpl, limiter)
       .ADD_OPTION(bool, snap::EquationOfStateOptionsImpl, verbose)
+      .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, gammad)
+      .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, weight)
       .ADD_OPTION(std::string, snap::EquationOfStateOptionsImpl, eos_file)
       .ADD_OPTION(kintera::ThermoOptions, snap::EquationOfStateOptionsImpl,
                   thermo);
@@ -69,6 +71,7 @@ void bind_eos(py::module &m) {
   torch::python::add_module_bindings(pyIdealGas)
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
+      .def_readonly("options", &snap::IdealGasImpl::options)
       .def("__repr__",
            [](const snap::IdealGasImpl &a) {
              std::stringstream ss;
@@ -86,6 +89,7 @@ void bind_eos(py::module &m) {
   torch::python::add_module_bindings(pyIdealMoist)
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
+      .def_readonly("options", &snap::IdealMoistImpl::options)
       .def("__repr__",
            [](const snap::IdealMoistImpl &a) {
              std::stringstream ss;
@@ -102,6 +106,7 @@ void bind_eos(py::module &m) {
   torch::python::add_module_bindings(pyMoistMixture)
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
+      .def_readonly("options", &snap::MoistMixtureImpl::options)
       .def("__repr__",
            [](const snap::MoistMixtureImpl &a) {
              std::stringstream ss;
@@ -119,6 +124,7 @@ void bind_eos(py::module &m) {
   torch::python::add_module_bindings(pyShallowWater)
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
+      .def_readonly("options", &snap::ShallowWaterImpl::options)
       .def("__repr__",
            [](const snap::ShallowWaterImpl &a) {
              std::stringstream ss;
