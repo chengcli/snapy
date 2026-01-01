@@ -129,7 +129,7 @@ struct SyncOptions {
   ADD_ARG(bool, interpolate) = false;
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, dim) = 0;
-  ADD_ARG(int, id) = 0;
+  ADD_ARG(int, phyid) = 0;
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
