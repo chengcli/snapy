@@ -72,8 +72,8 @@ geometry:
 distribute:
   backend: gloo
   layout: slab
-  nb2: 1
-  nb3: 1
+  nb2: 2
+  nb3: 2
   verbose: false
 
 dynamics:
@@ -83,7 +83,7 @@ dynamics:
     pressure-floor: 1.e-10
     tracer-floor: 1.e-10
     limiter: true
-    max-iter: 10
+    max-iter: 20
     ftol: 1.e-6
 
   vertical-projection:
