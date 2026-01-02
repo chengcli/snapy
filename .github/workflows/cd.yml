@@ -142,6 +142,8 @@ jobs:
           sudo apt-get clean || true
           sudo rm -rf /var/lib/apt/lists/* || true
           python -m pip cache purge || true
+          docker system prune -af || true
+          sudo rm -rf /tmp/* || true
 
       - name: Build Linux wheel
         env:
