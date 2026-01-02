@@ -69,7 +69,9 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   if (op->coord()->nc1() > 1) {
     // x1-inner
     auto ix1 = external_bc["x1-inner"].as<std::string>("reflecting");
-    if (ix1 == "periodic") op->layout()->periodic_z(true);
+    if (ix1 == "periodic" && op->layout()->type() == "cubed") {
+      op->layout()->periodic_z(true);
+    }
 
     ix1 += "_inner";
     TORCH_CHECK(get_bc_func().find(ix1) != get_bc_func().end(),
@@ -83,7 +85,9 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
     // x1-outer
     auto ox1 = external_bc["x1-outer"].as<std::string>("reflecting");
-    if (ox1 == "periodic") op->layout()->periodic_z(true);
+    if (ox1 == "periodic" && op->layout()->type() == "cubed") {
+      op->layout()->periodic_z(true);
+    }
 
     ox1 += "_outer";
     TORCH_CHECK(get_bc_func().find(ox1) != get_bc_func().end(),

@@ -5,7 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 // snap
-#include <snap/loops.cuh>
+#include <snap/utils/loops.cuh>
 #include "coord_dispatch.hpp"
 #include "coord_utils_impl.h"
 

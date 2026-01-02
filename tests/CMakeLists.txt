@@ -4,10 +4,11 @@
 
 enable_testing()
 
-#setup_test(test_eos)
+setup_test(test_eos)
+setup_test(test_plm)
 setup_test(test_weno)
 setup_test(test_reconstruct)
-#setup_test(test_riemann)
+setup_test(test_riemann)
 setup_test(test_internal_boundary)
 setup_test(test_rectify)
 setup_test(test_pull_2d)
@@ -16,7 +17,6 @@ setup_test(test_slab)
 setup_test(test_cubed)
 setup_test(test_cubed_sphere)
 setup_test(test_coordinate)
-#setup_test(test_torchrun)
 #setup_test(test_read_topo)
 #setup_cuda_test(test_thomas_solver)
 #setup_test(test_aneos)
@@ -40,6 +40,17 @@ add_test(
 )
 
 set_tests_properties(test_straka PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_test(
+  NAME test_shallow_xy
+  COMMAND ${CMAKE_COMMAND}
+          -Dbuildl=release
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy.cmake
+)
+
+set_tests_properties(test_shallow_xy PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 

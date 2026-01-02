@@ -1,12 +1,12 @@
-# run_shallow_splash_test.cmake
+# run_shallow_xy_test.cmake
 
-set(download_link "https://zenodo.org/records/18121953/files/shallow_splash-ref.nc")
+set(download_link "https://zenodo.org/records/18121953/files/shallow_xy-ref.nc")
 
-if(EXISTS "shallow_splash-ref.nc")
+if(EXISTS "shallow_xy-ref.nc")
   set(res 0)
 else()
   execute_process(
-    COMMAND curl -L -o shallow_splash-ref.nc ${download_link}
+    COMMAND curl -L -o shallow_xy-ref.nc ${download_link}
     RESULT_VARIABLE res
   )
 endif()
@@ -16,7 +16,7 @@ if(NOT res EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND pd-run 6 ./shallow_splash.${buildl}
+  COMMAND pd-run 4 ./shallow_xy.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
@@ -32,9 +32,9 @@ if(NOT res EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND python test_shallow_splash.py shallow_splash-main.nc shallow_splash-ref.nc
+  COMMAND python test_shallow_xy.py shallow_xy-main.nc shallow_xy-ref.nc
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
-  message(FATAL_ERROR "test_shallow_splash failed with exit code ${res}")
+  message(FATAL_ERROR "test_shallow_xy failed with exit code ${res}")
 endif()

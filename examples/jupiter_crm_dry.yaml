@@ -27,13 +27,13 @@ geometry:
 distribute:
   backend: gloo
   layout: slab
-  nb2: 1
-  nb3: 1
+  nb2: 2
+  nb3: 2
   verbose: false
 
 dynamics:
   equation-of-state:
-    type: ideal-gas
+    type: ideal-moist
     density-floor:  1.e-10
     pressure-floor: 1.e-10
     tracer-floor: 1.e-10
@@ -56,10 +56,10 @@ boundary-condition:
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: reflecting
-    x2-outer: reflecting
-    x3-inner: reflecting
-    x3-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
 
 integration:
   type: rk3

@@ -37,7 +37,6 @@ class CubedSphereLayoutImpl
     reset();
   }
   void reset() override;
-  using LayoutImpl::forward;
 
   ~CubedSphereLayoutImpl() = default;
   void pretty_print(std::ostream &os) const override;
@@ -55,6 +54,19 @@ class CubedSphereLayoutImpl
 
   void deserialize(MeshBlockImpl const *pmb, Variables &vars,
                    SyncOptions const &opts) const override;
+
+  //! \brief Perform ghost zone exchange
+  /*!
+   * Needs specialization because cubed sphere layout will not have
+   * two ranks execute exchange two along sides, which is possible in slab
+   * layout with periodic boundary and with exactly two meshblocks
+   * next to each other.
+   * Therefore, send_id and recv_id do not need special treatment.
+   * Infact, calculating a matching send_id and recv_id is challenging.
+   */
+  void forward(MeshBlockImpl const *pmb, Variables &vars,
+               SyncOptions const &opts,
+               std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
 
  private:
   //! \brief Interpolate transmitted variable to local ghost zones
