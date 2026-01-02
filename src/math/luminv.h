@@ -6,10 +6,16 @@
 // snap
 #include "lubksb.h"
 
-/*! Using the above LU decomposition and backsubstitution routines,
- * it is completely straightforward to find the inverse of a matrix
- * column by column.
- */
+//! \brief Compute matrix inverse using LU decomposition
+//!
+//! Using LU decomposition and backsubstitution routines, this function finds
+//! the inverse of a matrix column by column.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \tparam N Matrix dimension
+//! \param[in] a LU decomposition of the matrix (from ludcmp), not modified
+//! \param[in] indx Permutation vector from ludcmp, not modified
+//! \param[out] y Output matrix containing the inverse
 template <typename T, int N>
 inline DISPATCH_MACRO void luminv(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> const &a, int const *indx,

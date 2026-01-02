@@ -1,0 +1,10 @@
+# Doxygen generated output
+output/
+
+# Doxygen warnings log
+doxygen_warnings.log
+
+# Temporary files
+*.tmp
+*~
+.DS_Store

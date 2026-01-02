@@ -6,15 +6,22 @@
 // base
 #include <configure.h>
 
-/*! Given a matrix a[0..n-1][0..n-1], this routine replaces it by the LU
- * decomposition of a rowwise permutation of itself. a and n are input. a is
- * output, arranged as in NRIC equation (2.3.14) ; indx[0..n-1] is an output
- * vector that records the row permutation effected by the partial pivoting; d
- * is output as +/- 1 depending on whether the number of row interchanges was
- * evenor odd, respectively. This routine is used in combination with lubksbto
- * solve linear equationsor invert a matrix. adapted from Numerical Recipes in
- * C, 2nd Ed., p. 46.
- */
+//! \brief Perform LU decomposition with partial pivoting
+//!
+//! Given a matrix a, this routine replaces it by the LU decomposition of a
+//! rowwise permutation of itself. The decomposition is used with lubksb to
+//! solve linear equations or invert a matrix.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \tparam N Matrix dimension
+//! \param[in,out] a Input matrix, replaced by LU decomposition on output
+//! \param[out] indx Output vector recording row permutation from partial
+//! pivoting
+//! \return +1 or -1 depending on whether row interchanges were even or odd;
+//!         1 indicates error (singular matrix)
+//!
+//! \note Adapted from Numerical Recipes in C, 2nd Ed., p. 46.
+//! \note Returns 1 if matrix is singular
 template <typename T, int N>
 inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
                                  int *indx) {
