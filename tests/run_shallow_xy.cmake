@@ -1,6 +1,6 @@
 # run_shallow_xy_test.cmake
 
-set(download_link "https://zenodo.org/records/18055337/files/shallow_xy-ref.nc")
+set(download_link "https://zenodo.org/records/18121953/files/shallow_xy-ref.nc")
 
 if(EXISTS "shallow_xy-ref.nc")
   set(res 0)

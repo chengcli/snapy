@@ -1,6 +1,6 @@
 # run_straka_test.cmake
 
-set(download_link "https://zenodo.org/records/18055337/files/straka-ref.nc")
+set(download_link "https://zenodo.org/records/18121953/files/straka-ref.nc")
 
 if(EXISTS "straka-ref.nc")
   set(res 0)

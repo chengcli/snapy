@@ -1,6 +1,6 @@
 # run_shallow_splash_test.cmake
 
-set(download_link "https://zenodo.org/records/18055337/files/shallow_splash-ref.nc")
+set(download_link "https://zenodo.org/records/18121953/files/shallow_splash-ref.nc")
 
 if(EXISTS "shallow_splash-ref.nc")
   set(res 0)
