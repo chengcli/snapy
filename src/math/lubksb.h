@@ -6,19 +6,20 @@
 // snap
 #include "ludcmp.h"
 
-/*! Solves the set of n linear equations A X = B. Here
- * a[0..n-1][0..n-1] is input, not as the matrix A but rather as its LU
- decomposition, determined by the routine ludcmp.
- * indx[0..n-1] is input as the permutation vector returned by ludcmp.
- * b[0..n-1] is input as the right-hand side vector B, and returns with the
- solution vector X.
- * a, n, and indx are not modified by this routine and can be left in place for
- * successive calls with different right-hand sides b.
- * This routine takes into account the possibility that b will begin with many
- zero elements,
- * so it is efficient for use in matrix inversion.
- * adapted from Numerical Recipes in C, 2nd Ed., p. 47.
- */
+//! \brief Solve linear equations using LU decomposition backsubstitution
+//!
+//! Solves the set of n linear equations A X = B using LU decomposition.
+//! This routine takes into account the possibility that b will begin with many
+//! zero elements, so it is efficient for use in matrix inversion.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \tparam N Matrix dimension
+//! \param[in] a LU decomposition of matrix A (from ludcmp), not modified
+//! \param[in] indx Permutation vector from ludcmp, not modified
+//! \param[in,out] b Right-hand side vector B on input, solution vector X on output
+//!
+//! \note Adapted from Numerical Recipes in C, 2nd Ed., p. 47.
+//! \note a, n, and indx are not modified and can be reused for successive calls
 template <typename T, int N>
 inline DISPATCH_MACRO void lubksb(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> const &a, int const *indx,

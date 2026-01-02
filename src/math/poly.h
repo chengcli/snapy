@@ -8,15 +8,20 @@
 #include <configure.h>
 
 // -----------------------------------------------------------------------------
-// Computes all coefficients of P(x) = (x1 - x)*(x2 - x)*...*(xn - x),
-// storing them in 'coeff' (size n+1) IN PLACE.
-//
-// After calling, coeff[j] will be the coefficient of x^j.
-//
-// Requirements:
-//   - 'coeff' must be an array of length n+1 (allocated by the caller).
-//   - 'xs' is an array of length n holding x1,...,xn.
-//   - All memory must be pre-allocated; function returns void.
+//! \brief Compute polynomial coefficients from roots
+//!
+//! Computes all coefficients of P(x) = (x1 - x)*(x2 - x)*...*(xn - x),
+//! storing them in 'coeff' (size n+1) IN PLACE.
+//!
+//! After calling, coeff[j] will be the coefficient of x^j.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \param[out] coeff Array of length n+1 to store polynomial coefficients
+//! \param[in] xs Array of length n holding roots x1,...,xn
+//! \param[in] n Number of roots
+//!
+//! \note 'coeff' must be an array of length n+1 (allocated by the caller)
+//! \note All memory must be pre-allocated; function returns void
 // -----------------------------------------------------------------------------
 template <typename T>
 inline DISPATCH_MACRO void poly_coeffs_from_elementary_symmetric(T* coeff,
@@ -52,13 +57,16 @@ inline DISPATCH_MACRO void poly_coeffs_from_elementary_symmetric(T* coeff,
   }
 }
 
-// Evaluate the polynomial f(x) = a_n x^n + ... + a_1 x + a_0
-//   coeff[0] = a_0
-//   coeff[1] = a_1
-//   ...
-//   coeff[n] = a_n
-//   So the polynomial is sum_{k=0..n} [ coeff[k] * x^k ].
-// But if you prefer storing in reverse, just adapt accordingly.
+//! \brief Evaluate polynomial at given point
+//!
+//! Evaluate the polynomial f(x) = a_n x^n + ... + a_1 x + a_0
+//! where coeff[k] is the coefficient of x^k.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \param[in] coeff Array of coefficients where coeff[k] = coefficient of x^k
+//! \param[in] n Degree of polynomial
+//! \param[in] x Point at which to evaluate polynomial
+//! \return Value of polynomial at x
 template <typename T>
 inline DISPATCH_MACRO T poly_eval(T const* coeff, int n, T x) {
   T val = 0.0;
@@ -69,12 +77,16 @@ inline DISPATCH_MACRO T poly_eval(T const* coeff, int n, T x) {
   return val;
 }
 
-// Evaluate the derivative f'(x) = n*a_n x^(n-1) + (n-1)*a_{n-1} x^(n-2) + ...
-// In the same ordering:
-//   coeff[0] = a_0
-//   coeff[1] = a_1
-//   ...
-//   coeff[n] = a_n
+//! \brief Evaluate polynomial derivative at given point
+//!
+//! Evaluate the derivative f'(x) = n*a_n x^(n-1) + (n-1)*a_{n-1} x^(n-2) + ...
+//! where coeff[k] is the coefficient of x^k in the original polynomial.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \param[in] coeff Array of coefficients where coeff[k] = coefficient of x^k
+//! \param[in] n Degree of polynomial
+//! \param[in] x Point at which to evaluate derivative
+//! \return Value of derivative at x
 template <typename T>
 inline DISPATCH_MACRO T poly_ddx(T const* coeff, int n, T x) {
   // If n=0, the polynomial is a constant => derivative is 0
@@ -90,6 +102,19 @@ inline DISPATCH_MACRO T poly_ddx(T const* coeff, int n, T x) {
   return val;
 }
 
+//! \brief Solve polynomial equation using Newton's method
+//!
+//! Find a root of the polynomial using Newton's method starting from x0.
+//!
+//! \tparam T Scalar type (e.g., float, double)
+//! \param[in] coeff Array of coefficients where coeff[k] = coefficient of x^k
+//! \param[in] n Degree of polynomial
+//! \param[in] x0 Initial guess for root
+//! \param[in] maxIter Maximum number of iterations (default: 100)
+//! \param[in] tol Convergence tolerance (default: 1e-12)
+//! \return Approximate root of the polynomial
+//!
+//! \note Prints warning if derivative is near zero or maximum iterations reached
 template <typename T>
 inline DISPATCH_MACRO T poly_solve(T const* coeff, int n, T x0,
                                    int maxIter = 100, T tol = 1e-12) {
