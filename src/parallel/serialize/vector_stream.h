@@ -50,7 +50,7 @@ class VectorStream : public std::streambuf {
   //! \return The character written, or EOF on error
   int overflow(int c) override {
     if (c != EOF) {
-      ExpandBuffer(buffer_, 1);
+      ExpandBuffer(1);
       *pptr() = static_cast<char>(c);
       pbump(1);
     }

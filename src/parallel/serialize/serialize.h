@@ -11,7 +11,7 @@
 //! \note The returned buffer is managed by the VectorStream object
 char const* serialize(const torch::Tensor& tensor) {
   VectorStream vs(tensor.numel() * tensor.element_size());
-  std::ostream os(&vsbuf);
+  std::ostream os(&vs);
   torch::save(tensor, os);
   return vs.buffer();
 }

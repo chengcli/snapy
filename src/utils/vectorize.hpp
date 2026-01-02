@@ -10,12 +10,14 @@ namespace snap {
 //! \brief Split a string into a vector of values
 //!
 //! Parses a C-string and splits it into a vector based on the given delimiter.
-//! Values are converted to type A using std::stof.
+//! Values are parsed as floats using std::stof and then cast to type A.
 //!
-//! \tparam A Target type for vector elements (e.g., float, double)
+//! \tparam A Target type for vector elements (e.g., float, double, int)
 //! \param[in] cstr Input C-string to parse
 //! \param[in] delimiter Delimiter string for splitting (default: " ")
 //! \return Vector of parsed values of type A
+//!
+//! \note Values are parsed as float then cast to type A, which may lose precision
 template <typename A>
 std::vector<A> Vectorize(const char* cstr, const char* delimiter = " ") {
   std::vector<A> arr;
