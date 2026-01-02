@@ -17,7 +17,8 @@ namespace snap {
 //! \param[in] delimiter Delimiter string for splitting (default: " ")
 //! \return Vector of parsed values of type A
 //!
-//! \note Values are parsed as float then cast to type A, which may lose precision
+//! \note Values are parsed as float then cast to type A, which may lose
+//! precision
 template <typename A>
 std::vector<A> Vectorize(const char* cstr, const char* delimiter = " ") {
   std::vector<A> arr;

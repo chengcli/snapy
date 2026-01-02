@@ -100,7 +100,8 @@ class KEpsilonTurbulence : public TurbulenceModel {
   Real cmu_, c1_, c2_, sigk_, sige_;  //!< K-epsilon model constants
 };
 
-using TurbulenceModelPtr = std::shared_ptr<TurbulenceModel>;  //!< Shared pointer to turbulence model
+using TurbulenceModelPtr =
+    std::shared_ptr<TurbulenceModel>;  //!< Shared pointer to turbulence model
 
 //! \brief Factory class for creating turbulence models
 class TurbulenceFactory {

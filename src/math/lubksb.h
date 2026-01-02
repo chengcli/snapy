@@ -16,7 +16,8 @@
 //! \tparam N Matrix dimension
 //! \param[in] a LU decomposition of matrix A (from ludcmp), not modified
 //! \param[in] indx Permutation vector from ludcmp, not modified
-//! \param[in,out] b Right-hand side vector B on input, solution vector X on output
+//! \param[in,out] b Right-hand side vector B on input, solution vector X on
+//! output
 //!
 //! \note Adapted from Numerical Recipes in C, 2nd Ed., p. 47.
 //! \note a, n, and indx are not modified and can be reused for successive calls

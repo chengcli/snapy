@@ -119,7 +119,8 @@ size_t build_zorder_coords2(int px, int py, Coord2 *coords);
 //! \param[in] px Number of tiles in X direction
 //! \param[in] py Number of tiles in Y direction
 //! \param[in] pz Number of tiles in Z direction
-//! \param[out] coords Output array of coordinates (must have length >= pz*py*px)
+//! \param[out] coords Output array of coordinates (must have length >=
+//! pz*py*px)
 //! \return Number of coordinates generated (pz*py*px)
 size_t build_zorder_coords3(int px, int py, int pz, Coord3 *coords);
 
@@ -162,7 +163,8 @@ inline size_t linear_index3(int px, int py, int z, int y, int x) {
 //! \param[in] px Number of tiles in X direction
 //! \param[in] py Number of tiles in Y direction
 //! \param[in] coords Array of coordinates in Z-order
-//! \param[out] rank_of_out Output array (length py*px) storing rank at each (y,x)
+//! \param[out] rank_of_out Output array (length py*px) storing rank at each
+//! (y,x)
 void build_rank_of2(int px, int py, const Coord2 *coords, int *rank_of_out);
 
 /* rank_of3: array length pz*py*px, filled with rank at (z,y,x) */
@@ -172,7 +174,8 @@ void build_rank_of2(int px, int py, const Coord2 *coords, int *rank_of_out);
 //! \param[in] py Number of tiles in Y direction
 //! \param[in] pz Number of tiles in Z direction
 //! \param[in] coords Array of coordinates in Z-order
-//! \param[out] rank_of_out Output array (length pz*py*px) storing rank at each (z,y,x)
+//! \param[out] rank_of_out Output array (length pz*py*px) storing rank at each
+//! (z,y,x)
 void build_rank_of3(int px, int py, int pz, const Coord3 *coords,
                     int *rank_of_out);
 

@@ -13,12 +13,12 @@ namespace snap {
 //! hydrodynamic and reconstruction variables in legacy Athena++ format.
 enum {
   // hydro variables
-  IDN = 0,              //!< Density index
-  ICY = 1,              //!< Composition/species index (first mass fraction)
-  IVX = 1 + NMASS,      //!< X-velocity index
-  IVY = 2 + NMASS,      //!< Y-velocity index
-  IVZ = 3 + NMASS,      //!< Z-velocity index
-  IPR = 4 + NMASS,      //!< Pressure index
+  IDN = 0,          //!< Density index
+  ICY = 1,          //!< Composition/species index (first mass fraction)
+  IVX = 1 + NMASS,  //!< X-velocity index
+  IVY = 2 + NMASS,  //!< Y-velocity index
+  IVZ = 3 + NMASS,  //!< Z-velocity index
+  IPR = 4 + NMASS,  //!< Pressure index
 
   // reconstruction variables
   ILT = 0,  //!< Left interface
@@ -64,7 +64,7 @@ enum {
 //! \brief Velocity component enumeration
 //!
 //! Indices for accessing velocity components.
-enum { 
+enum {
   VEL1 = 0,  //!< First velocity component
   VEL2 = 1,  //!< Second velocity component
   VEL3 = 2   //!< Third velocity component

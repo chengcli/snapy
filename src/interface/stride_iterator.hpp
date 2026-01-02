@@ -9,18 +9,23 @@ namespace snap {
 //! \brief Iterator with custom stride for accessing strided memory
 //!
 //! A random-access iterator that steps through memory with a custom stride.
-//! Useful for accessing elements in multi-dimensional arrays with non-unit strides.
+//! Useful for accessing elements in multi-dimensional arrays with non-unit
+//! strides.
 //!
 //! \tparam T Iterator type (typically a pointer type)
 template <typename T>
 class StrideIterator {
  public:
   // public typedefs
-  typedef typename std::iterator_traits<T>::value_type value_type;       //!< Value type
-  typedef typename std::iterator_traits<T>::reference reference;         //!< Reference type
-  typedef typename std::iterator_traits<T>::difference_type difference_type;  //!< Difference type
-  typedef typename std::iterator_traits<T>::pointer pointer;             //!< Pointer type
-  typedef std::random_access_iterator_tag iterator_category;             //!< Iterator category
+  typedef
+      typename std::iterator_traits<T>::value_type value_type;  //!< Value type
+  typedef typename std::iterator_traits<T>::reference
+      reference;  //!< Reference type
+  typedef typename std::iterator_traits<T>::difference_type
+      difference_type;  //!< Difference type
+  typedef typename std::iterator_traits<T>::pointer pointer;  //!< Pointer type
+  typedef std::random_access_iterator_tag
+      iterator_category;  //!< Iterator category
 
   // constructors
   //! \brief Default constructor
@@ -129,7 +134,7 @@ class StrideIterator {
   }
 
  private:
-  T data;                  //!< Pointer to current data element
-  difference_type step;    //!< Stride between consecutive elements
+  T data;                //!< Pointer to current data element
+  difference_type step;  //!< Stride between consecutive elements
 };
 }  // namespace snap

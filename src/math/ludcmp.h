@@ -15,7 +15,8 @@
 //! \tparam T Scalar type (e.g., float, double)
 //! \tparam N Matrix dimension
 //! \param[in,out] a Input matrix, replaced by LU decomposition on output
-//! \param[out] indx Output vector recording row permutation from partial pivoting
+//! \param[out] indx Output vector recording row permutation from partial
+//! pivoting
 //! \return +1 or -1 depending on whether row interchanges were even or odd;
 //!         1 indicates error (singular matrix)
 //!

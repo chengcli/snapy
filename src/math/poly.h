@@ -114,7 +114,8 @@ inline DISPATCH_MACRO T poly_ddx(T const* coeff, int n, T x) {
 //! \param[in] tol Convergence tolerance (default: 1e-12)
 //! \return Approximate root of the polynomial
 //!
-//! \note Prints warning if derivative is near zero or maximum iterations reached
+//! \note Prints warning if derivative is near zero or maximum iterations
+//! reached
 template <typename T>
 inline DISPATCH_MACRO T poly_solve(T const* coeff, int n, T x0,
                                    int maxIter = 100, T tol = 1e-12) {

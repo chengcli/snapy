@@ -9,17 +9,18 @@ class MeshBlockImpl;
 //!
 //! Singleton class that handles system signals (SIGTERM, SIGINT, SIGALRM)
 //! for graceful termination and wall-time limits in the simulation.
-//! Used to catch interrupts and time-limit signals during long-running simulations.
+//! Used to catch interrupts and time-limit signals during long-running
+//! simulations.
 class SignalHandler {
  protected:
   //! \brief Protected constructor (Singleton pattern)
   SignalHandler();  // disable direct instantiation
 
  public:
-  static constexpr int nsignal = 3;      //!< Number of signals handled
-  static constexpr int ITERM = 0,        //!< SIGTERM signal index
-      IINT = 1,                          //!< SIGINT signal index
-      IALRM = 2;                         //!< SIGALRM signal index
+  static constexpr int nsignal = 3;  //!< Number of signals handled
+  static constexpr int ITERM = 0,    //!< SIGTERM signal index
+      IINT = 1,                      //!< SIGINT signal index
+      IALRM = 2;                     //!< SIGALRM signal index
 
   //! \brief Get the singleton instance
   //!
@@ -58,9 +59,9 @@ class SignalHandler {
   void CancelWallTimeAlarm();
 
  private:
-  static SignalHandler *mysignal_;           //!< Singleton instance pointer
-  static int signalflag_[nsignal];           //!< Array of signal flags
-  static sigset_t mask_;                     //!< Signal mask for blocking
+  static SignalHandler *mysignal_;  //!< Singleton instance pointer
+  static int signalflag_[nsignal];  //!< Array of signal flags
+  static sigset_t mask_;            //!< Signal mask for blocking
 };
 
 }  // namespace snap

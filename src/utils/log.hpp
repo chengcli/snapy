@@ -25,7 +25,8 @@ inline std::string get_filename(std::string path) {
 //! \brief Simple logging message class
 //!
 //! Provides a lightweight logging mechanism that only outputs on rank 0
-//! in distributed environments. Messages are buffered and flushed on destruction.
+//! in distributed environments. Messages are buffered and flushed on
+//! destruction.
 class LogMessage {
  public:
   //! \brief Constructor
