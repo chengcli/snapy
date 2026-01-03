@@ -2,7 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 // base
-#include <configure.h>  // gloo
+#include <configure.h>  // gloo and nccl
 
 // torch
 #include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
@@ -316,6 +316,8 @@ void LayoutImpl::_init_gloo() {
                                                 options->world_size(), opts);
 }
 
-__attribute__((weak)) void LayoutImpl::_init_nccl() {}
+#ifdef NOT_USE_C10D_NCCL
+void LayoutImpl::_init_nccl() {}
+#endif
 
 }  // namespace snap

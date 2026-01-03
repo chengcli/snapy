@@ -18,10 +18,12 @@ int main(int argc, char** argv) {
 
   auto block_op = MeshBlockOptionsImpl::from_yaml("shallow_xy.yaml");
   auto block = MeshBlock(block_op);
-  auto device = torch::kCPU;
+  torch::Device device(torch::kCPU);
   if (torch::cuda::is_available()) {
     std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
+    TORCH_CHECK(block_op->layout()->backend() == "nccl",
+                "CUDA layout backend must be nccl");
+    device = block->get_layout()->pg->getBoundDeviceId().value();
   }
 
   block->to(device);
