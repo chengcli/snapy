@@ -727,7 +727,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   SINFO() << std::endl
           << "million cells-per-cycle = " << cellcycles / 1e6 << std::endl;
   SINFO() << "cpu time used (s) = " << cpu_time << std::endl;
-  SINFO() << "million cell-updates/cpu-second = " << zc_cpus / 1e6 << std::endl;
+  SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
 
   // ------ shutdown processing group ------
   _playout->pg->barrier()->wait();

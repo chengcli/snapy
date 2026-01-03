@@ -37,10 +37,8 @@ int main(int argc, char **argv) {
   auto block = MeshBlock(op_block);
 
   torch::Device device(torch::kCPU);
-  if (torch::cuda::is_available()) {
+  if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    TORCH_CHECK(op_block->layout()->backend() == "nccl",
-                "CUDA layout backend must be nccl");
     device = block->get_layout()->pg->getBoundDeviceId().value();
   }
 
