@@ -15,6 +15,8 @@ if(NOT res EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
 endif()
 
+execute_process(COMMAND ln -sf ../bin/shallow_xy.yaml shallow_xy.yaml)
+
 execute_process(
   COMMAND pd-run 4 ../bin/shallow_xy.${buildl}
   RESULT_VARIABLE res
@@ -30,8 +32,6 @@ execute_process(
 if(NOT res EQUAL 0)
   message(FATAL_ERROR "pd-combine failed with exit code ${res}")
 endif()
-
-execute_process(COMMAND ln -sf ../bin/shallow_xy.yaml shallow_xy.yaml)
 
 execute_process(
   COMMAND python test_shallow_xy.py shallow_xy-main.nc shallow_xy-ref.nc
