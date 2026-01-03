@@ -15,8 +15,10 @@ if(NOT res EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
 endif()
 
+execute_process(COMMAND ln -sf ../bin/shallow_splash.yaml shallow_splash.yaml)
+
 execute_process(
-  COMMAND pd-run 6 ./shallow_splash.${buildl}
+  COMMAND pd-run 6 ../bin/shallow_splash.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)

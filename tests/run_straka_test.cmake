@@ -15,8 +15,10 @@ if(NOT res EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
 endif()
 
+execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)
+
 execute_process(
-  COMMAND pd-run 2 ./straka.${buildl}
+  COMMAND pd-run 2 ../bin/straka.${buildl}
   RESULT_VARIABLE res
 )
 
