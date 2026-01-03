@@ -23,6 +23,7 @@ include_directories(
   SYSTEM ${TORCH_INCLUDE_DIR}
   SYSTEM ${KINTERA_INCLUDE_DIR}
   SYSTEM ${HARP_INCLUDE_DIR}
+  SYSTEM ${NCCL_INCLUDE_DIR}
   SYSTEM ${CMAKE_SOURCE_DIR}/external/gloo
   )
 
@@ -109,6 +110,7 @@ if (CUDAToolkit_FOUND)
       ${KINTERA_CUDA_LIBRARY}
       ${TORCH_CUDA_LIBRARY}
       ${C10_CUDA_LIBRARY}
+      ${NCCL_LIBRARY}
       )
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})
