@@ -122,7 +122,8 @@ void HydroImpl::reset() {
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 }
 
-double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
+torch::Tensor HydroImpl::max_time_step(torch::Tensor w,
+                                       torch::Tensor solid) const {
   auto sub3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
 
   torch::Tensor cs;
@@ -137,55 +138,50 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
     cs = torch::where(solid, 1.e-8, cs);
   }
 
-  double dt1 = 1.e9, dt2 = 1.e9, dt3 = 1.e9;
+  auto dt_min = torch::tensor({1.e9, 1.e9, 1.e9},
+                              torch::dtype(torch::kFloat64).device(w.device()));
   auto icorr = options->icorr();
 
   if (icorr) {
     if ((cs.size(2) > 1) &&
         (!(icorr->scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
-      dt1 = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[0] = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
 
     if ((cs.size(1) > 1) && (!((icorr->scheme() >> 1) & 1))) {
-      dt2 = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[1] = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
 
     if ((cs.size(0) > 1) && (!((icorr->scheme() >> 2) & 1))) {
-      dt3 = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[2] = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
   } else {
     if (cs.size(2) > 1) {
-      dt1 = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[0] = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
 
     if (cs.size(1) > 1) {
-      dt2 = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[1] = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
 
     if (cs.size(0) > 1) {
-      dt3 = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
-                .index(sub3)
-                .min()
-                .item<double>();
+      dt_min[2] = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
+                      .index(sub3)
+                      .min();
     }
   }
 
-  return std::min({dt1, dt2, dt3});
+  return torch::min(dt_min);
 }
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,

@@ -2,6 +2,13 @@
 
 set_if_empty(NMASS 0)
 
+# nccl options
+if(NOT CUDA OR NOT DEFINED CUDA)
+  set(NCCL_OPTION "NOT_USE_C10D_NCCL")
+else()
+  set(NCCL_OPTION "USE_C10D_NCCL")
+endif()
+
 # netcdf options
 if(NOT NETCDF OR NOT DEFINED NETCDF)
   set(NETCDF_OPTION "NO_NETCDFOUTPUT")

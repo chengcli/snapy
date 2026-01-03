@@ -32,10 +32,10 @@ int main(int argc, char** argv) {
 
   auto op_block = MeshBlockOptionsImpl::from_yaml("straka.yaml");
   auto block = MeshBlock(op_block);
-  auto device = torch::kCPU;
-  if (torch::cuda::is_available()) {
+  torch::Device device(torch::kCPU);
+  if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
+    device = block->get_layout()->pg->getBoundDeviceId().value();
   }
 
   block->to(device);

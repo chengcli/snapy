@@ -25,11 +25,6 @@ int main(int argc, char **argv) {
 
   // input file
   auto infile = std::string(cli->input_filename);
-  auto device = torch::kCPU;
-  if (torch::cuda::is_available()) {
-    std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
-  }
 
   auto config = YAML::LoadFile(infile);
   auto Ps = config["problem"]["Ps"].as<double>(1.e5);
@@ -38,8 +33,15 @@ int main(int argc, char **argv) {
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   // initialize the block
-  auto block_op = MeshBlockOptionsImpl::from_yaml(infile);
-  auto block = MeshBlock(block_op);
+  auto op_block = MeshBlockOptionsImpl::from_yaml(infile);
+  auto block = MeshBlock(op_block);
+
+  torch::Device device(torch::kCPU);
+  if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
+    std::cout << "Running on CUDA" << std::endl;
+    device = block->get_layout()->pg->getBoundDeviceId().value();
+  }
+
   block->to(device);
 
   // useful modules

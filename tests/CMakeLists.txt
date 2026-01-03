@@ -22,9 +22,10 @@ setup_test(test_coordinate)
 #setup_test(test_aneos)
 
 file(GLOB inputs *.yaml *.py)
+# create tests folder if does not exist
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 foreach(input ${inputs})
   execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${inp})
-  #configure_file(${input} ${CMAKE_BINARY_DIR}/tests/${inp} @COPY)
 endforeach()
 
 setup_parallel_test(test_exchange 6)
@@ -40,7 +41,7 @@ add_test(
 )
 
 set_tests_properties(test_straka PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 
 add_test(
@@ -51,7 +52,7 @@ add_test(
 )
 
 set_tests_properties(test_shallow_xy PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 
 add_test(
@@ -62,5 +63,5 @@ add_test(
 )
 
 set_tests_properties(test_shallow_splash PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )

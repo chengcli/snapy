@@ -86,6 +86,16 @@ pip install numpy kintera torch==2.7.1
      brew install netcdf
      ```
 
+4. Install NCCL (if enables GPU)
+  - **Linux (Ubuntu/Debian):**
+    ```bash
+    sudo apt-get install libnccl2 libnccl-dev
+    ```
+  - **Linux (CentOS/RHEL):**
+    ```bash
+    sudo yum install libnccl libnccl-devel libnccl-static
+    ```
+
 4. Configure and build:
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DNETCDF=ON

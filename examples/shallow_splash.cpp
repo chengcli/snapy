@@ -19,10 +19,10 @@ int main(int argc, char** argv) {
 
   auto block_op = MeshBlockOptionsImpl::from_yaml("shallow_splash.yaml");
   auto block = MeshBlock(block_op);
-  auto device = torch::kCPU;
-  if (torch::cuda::is_available()) {
+  torch::Device device(torch::kCPU);
+  if (torch::cuda::is_available() && block_op->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
+    device = block->get_layout()->pg->getBoundDeviceId().value();
   }
 
   block->to(device);

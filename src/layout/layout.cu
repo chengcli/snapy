@@ -1,5 +1,9 @@
+// base
+#include <configure.h>  // nccl
+
 // torch
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
+#include <c10/cuda/CUDAGuard.h>
 
 // snap
 #include "layout.hpp"
@@ -7,16 +11,15 @@
 namespace snap {
 
 void LayoutImpl::_init_nccl() {
-  c10d::ProcessGroupNCCL::Options opts;
-  opts.isHighPriorityStream = false;
+  auto opts = c10d::ProcessGroupNCCL::Options::create();
 
   // Rank -> GPU mapping
   int device_index = options->local_rank() % torch::cuda::device_count();
   torch::Device device(torch::kCUDA, device_index);
-  torch::cuda::set_device(device);
 
   pg = std::make_shared<c10d::ProcessGroupNCCL>(store, options->rank(),
                                                 options->world_size(), opts);
+  pg->setBoundDeviceId(device);
 
   if (options->verbose()) {
     std::cout << "[Rank " << options->rank()

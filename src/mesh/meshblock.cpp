@@ -56,7 +56,6 @@ void MeshBlockImpl::reset() {
       _playout = LayoutImpl::create(options->layout(), this);
     }
   }
-
   _playout->pg->barrier()->wait();
 
   int px = options->layout()->px();
@@ -400,25 +399,25 @@ double MeshBlockImpl::initialize(Variables& vars) {
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
-  double dt = 1.e9;
-
   auto const& w = vars.at("hydro_w");
+  auto dt_min =
+      torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
 
   // hyperbolic hydro time step
   if (vars.count("solid")) {
-    dt = std::min(dt, phydro->max_time_step(w, vars.at("solid")));
+    dt_min[0] = phydro->max_time_step(w, vars.at("solid"));
   } else {
-    dt = std::min(dt, phydro->max_time_step(w));
+    dt_min[0] = phydro->max_time_step(w);
   }
 
   // gather the minimum dt across all ranks
-  std::vector<at::Tensor> dt_reduce = {torch::tensor({dt}, torch::kFloat64)};
+  std::vector<at::Tensor> dt_reduce = {dt_min};
 
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
   _playout->pg->allreduce(dt_reduce, op)->wait();
 
-  dt = dt_reduce[0].item<double>();
+  auto dt = dt_reduce[0].item<double>();
 
   if (options->verbose()) {
     SINFO(MeshBlock) << "suggested dt from hydro: " << std::scientific
@@ -714,7 +713,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   std::vector<at::Tensor> cells = {
       torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
-                    torch::kInt64)};
+                    torch::dtype(torch::kInt64).device(device()))};
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
@@ -726,9 +725,13 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
 
   SINFO() << std::endl
-          << "M cells-per-cycle = " << cellcycles / 1e6 << std::endl;
+          << "million cells-per-cycle = " << cellcycles / 1e6 << std::endl;
   SINFO() << "cpu time used (s) = " << cpu_time << std::endl;
-  SINFO() << "M cell-updates/cpu-second = " << zc_cpus / 1e6 << std::endl;
+  SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
+
+  // ------ shutdown processing group ------
+  _playout->pg->barrier()->wait();
+  _playout->pg->shutdown();
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
