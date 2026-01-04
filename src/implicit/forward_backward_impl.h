@@ -26,7 +26,7 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
                                  bool last_block) {
   Eigen::Matrix<T, N, 1> rhs;
 
-  if (N == 3) {  // partial matrix
+  if constexpr (N == 3) {  // partial matrix
     rhs(0) = DU(IDN, il);
     for (int n = 0; n < ny; ++n) rhs(0) += DU(ICY + n, il);
     rhs(0) /= dt;
@@ -51,17 +51,22 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
   // delta[il] = a[il] * (rhs - b[il] * delta[il - 1]);
   // a[il] *= c[il];
   //} else {
-  A = a[il].transpose();
-  ludcmp(A, indx);
-  luminv(A, indx, Y);
-  a[il] = Y.transpose();
+  if constexpr (N > 4) {
+    A = a[il].transpose();
+    for (int n = 0; n < N; ++n) indx[n] = n;
+    ludcmp(A, indx);
+    luminv(A, indx, Y);
+    a[il] = Y.transpose();
+  } else {  // small matrix
+    a[il] = a[il].inverse().eval();
+  }
 
   delta[il] = a[il] * rhs;
   a[il] = a[il] * c[il];
   //}
 
   for (int i = il + 1; i <= iu; ++i) {
-    if (N == 3) {  // partial matrix
+    if constexpr (N == 3) {  // partial matrix
       rhs(0) = DU(IDN, i);
       for (int n = 0; n < ny; ++n) rhs(0) += DU(ICY + n, i);
       rhs(0) /= dt;
@@ -78,10 +83,16 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
     }
 
     a[i] -= b[i] * a[i - 1];
-    A = a[i].transpose();
-    ludcmp(A, indx);
-    luminv(A, indx, Y);
-    a[i] = Y.transpose();
+
+    if constexpr (N > 4) {
+      A = a[i].transpose();
+      for (int n = 0; n < N; ++n) indx[n] = n;
+      ludcmp(A, indx);
+      luminv(A, indx, Y);
+      a[i] = Y.transpose();
+    } else {  // small matrix
+      a[i] = a[i].inverse().eval();
+    }
 
     delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
     a[i] = a[i] * c[i];
@@ -112,7 +123,7 @@ void DISPATCH_MACRO BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
     for (int n = 0; n < ny; ++n) dens += DU(ICY + n, i);
     dens = delta[i](0) - dens;
 
-    if (N == 3) {  // partial matrix
+    if constexpr (N == 3) {  // partial matrix
       DU(IDN, i) = delta[i](0);
       for (int n = 0; n < ny; ++n) {
         DU(ICY + n, i) += dens * W(ICY + n, i);

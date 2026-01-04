@@ -20,10 +20,19 @@ T DISPATCH_MACRO SoundSpeed(T *prim, T gm1) {
 
 template <typename T>
 void DISPATCH_MACRO CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1,
-                                   int stride2) {
-  for (int n = 0; n < 5; ++n) {
+                                   int stride2, int ny) {
+  wl[IDN] = prim[(i - 1) * stride2];
+  wr[IDN] = prim[i * stride2];
+
+  for (int n = IVX; n <= IPR; ++n) {
     wl[n] = prim[n * stride1 + (i - 1) * stride2];
     wr[n] = prim[n * stride1 + i * stride2];
+  }
+
+  for (int n = 0; n < ny; ++n) {
+    wl[IDN] +=
+        prim[(i - 1) * stride2] * prim[(ICY + n) * stride1 + (i - 1) * stride2];
+    wr[IDN] += prim[i * stride2] * prim[(ICY + n) * stride1 + i * stride2];
   }
 }
 

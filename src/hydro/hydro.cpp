@@ -316,7 +316,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   //// ------------ (6) Calculate external forcing ------------ ////
-  auto du = -dt * _div;
+  auto du = torch::zeros_like(_div);
+  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  du.index(interior) = -dt * _div.index(interior);
+
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
   if (options->verbose()) {

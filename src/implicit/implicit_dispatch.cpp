@@ -15,11 +15,12 @@
 namespace snap {
 
 void vic_solve_partial_cpu(at::TensorIterator &iter, double dt, double grav,
-                           int il, int iu, int dir) {
+                           int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
     auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
 
@@ -45,9 +46,10 @@ void vic_solve_partial_cpu(at::TensorIterator &iter, double dt, double grav,
             auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 3, 1> *>(
                 data[8] + i * strides[8]);
 
-            vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, il, iu,
-                                   dir, ny, stride1, stride2, first_block,
-                                   last_block, periodic, a, b, c, delta);
+            vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                   nlayer - 1, dir, ny, stride1, stride2,
+                                   first_block, last_block, periodic, a, b, c,
+                                   delta);
           }
         },
         grain_size);
@@ -55,11 +57,12 @@ void vic_solve_partial_cpu(at::TensorIterator &iter, double dt, double grav,
 }
 
 void vic_solve_full_cpu(at::TensorIterator &iter, double dt, double grav,
-                        int il, int iu, int dir) {
+                        int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cpu", [&] {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
     auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
 
@@ -85,9 +88,10 @@ void vic_solve_full_cpu(at::TensorIterator &iter, double dt, double grav,
             auto delta = reinterpret_cast<Eigen::Matrix<scalar_t, 5, 1> *>(
                 data[8] + i * strides[8]);
 
-            vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, il, iu, dir,
-                                ny, stride1, stride2, first_block, last_block,
-                                periodic, a, b, c, delta);
+            vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                nlayer - 1, dir, ny, stride1, stride2,
+                                first_block, last_block, periodic, a, b, c,
+                                delta);
           }
         },
         grain_size);

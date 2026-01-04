@@ -297,9 +297,10 @@ double MeshBlockImpl::initialize(Variables& vars) {
               phydro->peos->nvar(), ", ", nc3, ", ", nc2, ", ", nc1,
               "] but got ", hydro_w.sizes());
 
-  //// -------- (3) Apply hydro boundary condition -------- ////
+  //// -------- (3) Apply hydro primitive boundary condition -------- ////
   if (options->verbose()) {
-    SINFO(MeshBlock) << "applying hydro boundary conditions." << std::endl;
+    SINFO(MeshBlock) << "applying hydro primitive boundary conditions."
+                     << std::endl;
   }
 
   bops.type(kPrimitive);
@@ -319,9 +320,10 @@ double MeshBlockImpl::initialize(Variables& vars) {
                 pscalar->nvar(), ", ", nc3, ", ", nc2, ", ", nc1, "] but got ",
                 scalar_r.sizes());
 
-    //// ------- (5) Apply scalar boundary condition -------- ////
+    //// ------- (5) Apply scalar primitive boundary condition -------- ////
     if (options->verbose()) {
-      SINFO(MeshBlock) << "applying scalar boundary conditions." << std::endl;
+      SINFO(MeshBlock) << "applying scalar primitive boundary conditions."
+                       << std::endl;
     }
 
     bops.type(kScalar);
@@ -388,7 +390,33 @@ double MeshBlockImpl::initialize(Variables& vars) {
     vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
 
-  //// ---------------- (9) Start timing ----------------- ////
+  //// -------- (9) Apply hydro conservd boundary condition -------- ////
+  if (options->verbose()) {
+    SINFO(MeshBlock) << "applying hydro conserved boundary conditions."
+                     << std::endl;
+  }
+
+  bops.type(kConserved);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, bops);
+  }
+
+  //// ------- (10) Apply scalar conserved boundary condition -------- ////
+  if (pscalar->nvar() > 0) {
+    if (options->verbose()) {
+      SINFO(MeshBlock) << "applying scalar conserved boundary conditions."
+                       << std::endl;
+    }
+
+    bops.type(kScalar);
+    for (int i = 0; i < options->bfuncs().size(); ++i) {
+      if (options->bfuncs()[i] == nullptr) continue;
+      options->bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, bops);
+    }
+  }
+
+  //// ---------------- (11) Start timing ----------------- ////
   _time_start = clock();
 
   if (options->verbose()) {
@@ -655,26 +683,30 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
       auto interior = part({0, 0, 0}, PartOptions().exterior(false));
 
       auto vol = pcoord->cell_volume();
-      auto hydro_u = vars.at("hydro_u") * vol;
+      auto hydro_u_tol = vars.at("hydro_u") * vol;
+
+      std::vector<at::Tensor> sum = {
+          hydro_u_tol.index(interior).sum({1, 2, 3})};
+      _playout->pg->reduce(sum, opsum)->wait();
 
       if (compute_mass) {
-        std::vector<at::Tensor> mass = {hydro_u.index(interior)[IDN].sum()};
-
-        // sum across all ranks
-        _playout->pg->reduce(mass, opsum)->wait();
-
+        auto mass = sum[0][IDN];
         SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " mass=" << mass[0].item<double>();
+                << " mass0=" << mass.item<double>();
+
+        int ny = hydro_u_tol.size(0) - 5;  // number of species
+        if (ny > 0) {
+          for (int n = 0; n < ny; ++n) {
+            mass += sum[0][ICY + n];
+          }
+          SINFO() << std::scientific << std::setprecision(dt_precision)
+                  << " masst=" << mass.item<double>();
+        }
       }
 
       if (compute_energy) {
-        std::vector<at::Tensor> energy = {hydro_u.index(interior)[IPR].sum()};
-
-        // sum across all ranks
-        _playout->pg->reduce(energy, opsum)->wait();
-
         SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " energy=" << energy[0].item<double>();
+                << " energy=" << sum[0][IPR].item<double>();
       }
 
       SINFO() << std::endl;

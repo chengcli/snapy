@@ -21,7 +21,7 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
   master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
-  master_port(std::stoi(get_env("MASTER_PORT", "29500")));
+  master_port(std::stoi(get_env("MASTER_PORT", "29501")));
   rank(std::stoi(get_env("RANK", "0")));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));

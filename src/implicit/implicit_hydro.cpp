@@ -31,8 +31,13 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }
 
   auto pcoord = phydro->pmb->pcoord;
+  auto interior = phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
   auto cos_theta = pcoord->cosine_cell_kj;
   auto sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
+
+  /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
+    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered before implicit solve");
+  }*/
 
   auto du0 = du.clone();
 
@@ -44,46 +49,49 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   pcoord->prim2local1_(du);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  int nc1 = pcoord->options->nc1();
-  int nc2 = pcoord->options->nc2();
-  int nc3 = pcoord->options->nc3();
-
-  int il = pcoord->il();
-  int iu = pcoord->iu();
+  int nx1 = pcoord->options->nx1();
+  int nx2 = pcoord->options->nx2();
+  int nx3 = pcoord->options->nx3();
 
   int m = options->size();
-  auto a = torch::zeros({1, nc3, nc2, nc1 * m * m}, w.options());
+  auto a = torch::zeros({1, nx3, nx2, nx1 * m * m}, w.options());
   auto b = torch::zeros_like(a);
   auto c = torch::zeros_like(a);
-  auto delta = torch::zeros({1, nc3, nc2, nc1 * m}, w.options());
+  auto delta = torch::zeros({1, nx3, nx2, nx1 * m}, w.options());
 
-  auto iter = at::TensorIteratorConfig()
-                  .resize_outputs(false)
-                  .check_all_same_dtype(true)
-                  .declare_static_shape(du.sizes(), /*squash_dims=*/{0, 3})
-                  .add_output(du)
-                  .add_input(w)
-                  .add_owned_input(gamma.unsqueeze(0))
-                  .add_owned_input(pcoord->face_area1().unsqueeze(0))
-                  .add_owned_input(pcoord->cell_volume().unsqueeze(0))
-                  .add_input(a)
-                  .add_input(b)
-                  .add_input(c)
-                  .add_input(delta)
-                  .build();
+  auto iter =
+      at::TensorIteratorConfig()
+          .resize_outputs(false)
+          .check_all_same_dtype(true)
+          .declare_static_shape(du.index(interior).sizes(),
+                                /*squash_dims=*/{0, 3})
+          .add_owned_output(du.index(interior))
+          .add_owned_input(w.index(interior))
+          .add_owned_input(gamma.unsqueeze(0).index(interior))
+          .add_owned_input(pcoord->face_area1().unsqueeze(0).index(interior))
+          .add_owned_input(pcoord->cell_volume().unsqueeze(0).index(interior))
+          .add_input(a)
+          .add_input(b)
+          .add_input(c)
+          .add_input(delta)
+          .build();
 
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_solve_full(du.device().type(), iter, dt,
-                               phydro->options->grav()->grav1(), il, iu, 0);
+                               phydro->options->grav()->grav1(), 0);
   } else {
     at::native::vic_solve_partial(du.device().type(), iter, dt,
-                                  phydro->options->grav()->grav1(), il, iu, 0);
+                                  phydro->options->grav()->grav1(), 0);
   }
 
   /// (3) De-project from local orthonormal frame
   w[IVZ] /= sin_theta;
   w[IVY] -= w[IVZ] * cos_theta;
   pcoord->flux2global1_(du);
+
+  /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
+    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered after implicit solve");
+  }*/
 
   return du - du0;
 }
