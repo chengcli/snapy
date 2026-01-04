@@ -50,8 +50,8 @@ void DISPATCH_MACRO vic_solve_partial_impl(
 
   // calculate and save flux Jacobian matrix
   for (int i = 0; i < 2; ++i) {
-    int j = is - 2 + i;
-    CopyPrimitives(wl, wr, w, j, stride1, stride2);
+    int j = is - 1 + i;
+    CopyPrimitives(wl, wr, w, j, stride1, stride2, ny);
     gm1 = GAMMA(j) - 1.;
     FluxJacobian(dfdqf, gm1, wr, dir);
 
@@ -61,9 +61,9 @@ void DISPATCH_MACRO vic_solve_partial_impl(
   }
 
   // left edge
-  CopyPrimitives(wl, wr, w, is - 1, stride1, stride2);
+  CopyPrimitives(wl, wr, w, is, stride1, stride2, ny);
 
-  gm1 = 0.5 * (GAMMA(is - 2) + GAMMA(is - 1)) - 1.;
+  gm1 = 0.5 * (GAMMA(is - 1) + GAMMA(is)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -79,8 +79,8 @@ void DISPATCH_MACRO vic_solve_partial_impl(
       Am(IVX, IDN), Am(IVX, IVX), Am(IVX, IPR),     //
       Am(IPR, IDN), Am(IPR, IVX), Am(IPR, IPR);
 
-  for (int i = is - 1; i <= ie; ++i) {
-    CopyPrimitives(wl, wr, w, i + 1, stride1, stride2);
+  for (int i = is; i <= ie; ++i) {
+    CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
     gm1 = GAMMA(i + 1) - 1.;
     FluxJacobian(dfdqf, gm1, wr, dir);
 
@@ -106,10 +106,10 @@ void DISPATCH_MACRO vic_solve_partial_impl(
 
     // set up diagonals a, b, c.
     a[i] = (Am2 * AREA(i) + Ap2 * AREA(i + 1) +
-            (AREA(i + 1) - AREA(i)) * dfdq[0]) /
+            (AREA(i + 1) - AREA(i)) * dfdq[1]) /
                (2. * VOL(i)) +
            Dt - Phi;
-    b[i] = -(Am2 + dfdq[1]) * AREA(i) / (2. * VOL(i));
+    b[i] = -(Am2 + dfdq[0]) * AREA(i) / (2. * VOL(i));
     c[i] = -(Ap2 - dfdq[2]) * AREA(i + 1) / (2. * VOL(i));
 
     // Shift one cell: i -> i+1

@@ -25,7 +25,7 @@
 template <typename T, int N>
 inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
                                  int *indx) {
-  int i, imax, j, k, d;
+  int i, imax = 0, j, k, d;
   T big, dum, sum, temp;
   T vv[N];
 

@@ -174,8 +174,10 @@ torch::Tensor GnomonicEquiangleImpl::face_area3() const {
 }
 
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
-  return (x1v * x1v * dx1f).unsqueeze(0).unsqueeze(1) *
-         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj);
+  auto area = face_area1();
+  int nlev = area.size(-1);
+  return 0.5 * (area.narrow(-1, 0, nlev - 1) + area.narrow(-1, 1, nlev - 1)) *
+         dx1f.unsqueeze(0).unsqueeze(1);
 }
 
 void GnomonicEquiangleImpl::interp_ghost(
