@@ -35,6 +35,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   auto cos_theta = pcoord->cosine_cell_kj;
   auto sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
 
+  if (torch::isnan(du.index(interior)).any().item<bool>()) {
+    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered before implicit solve");
+  }
+
   auto du0 = du.clone();
 
   /// (1) Project to local orthonormal frame
@@ -85,8 +89,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   w[IVY] -= w[IVZ] * cos_theta;
   pcoord->flux2global1_(du);
 
-  if (torch::isnan(du).any().item<bool>()) {
-    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered in implicit solve");
+  if (torch::isnan(du.index(interior)).any().item<bool>()) {
+    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered after implicit solve");
   }
 
   return du - du0;
