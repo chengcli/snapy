@@ -56,7 +56,6 @@ void MeshBlockImpl::reset() {
       _playout = LayoutImpl::create(options->layout(), this);
     }
   }
-  _playout->pg->barrier()->wait();
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -270,6 +269,8 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars) {
+  _playout->pg->barrier()->wait();
+
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
 
@@ -804,6 +805,14 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   // good to go
   pintg->current_redo = 0;
   return 0;
+}
+
+torch::Device MeshBlockImpl::device() const {
+  if (_playout->pg->getBoundDeviceId().has_value()) {
+    return _playout->pg->getBoundDeviceId().value();
+  } else {
+    return torch::Device("cpu");
+  }
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars) {

@@ -266,6 +266,7 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     fill_corners(pmb, vars);
   }
 
+  pg->barrier()->wait();
   works.clear();
 }
 

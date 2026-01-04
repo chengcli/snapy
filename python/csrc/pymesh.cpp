@@ -137,5 +137,6 @@ void bind_mesh(py::module &m) {
            })
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
+      .def("device", &snap::MeshBlockImpl::device)
       .def("check_redo", &snap::MeshBlockImpl::check_redo);
 }
