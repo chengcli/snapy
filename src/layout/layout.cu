@@ -14,7 +14,15 @@ void LayoutImpl::_init_nccl() {
   auto opts = c10d::ProcessGroupNCCL::Options::create();
 
   // Rank -> GPU mapping
-  int device_index = options->local_rank() % torch::cuda::device_count();
+  int device_index;
+  if (options->device_id() < 0) {
+    device_index = options->local_rank() % torch::cuda::device_count();
+    options->device_id(device_index);
+  } else {
+    device_index = options->device_id();
+    TORCH_CHECK(device_index < torch::cuda::device_count(), "[Layout] device_id error");
+  }
+
   torch::Device device(torch::kCUDA, device_index);
 
   pg = std::make_shared<c10d::ProcessGroupNCCL>(store, options->rank(),

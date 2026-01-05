@@ -106,6 +106,7 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, local_rank) = 0;
   ADD_ARG(int, world_size) = 1;
   ADD_ARG(int, master_port) = 29501;
+  ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
   ADD_ARG(bool, no_backend) = false;
 };
