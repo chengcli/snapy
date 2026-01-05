@@ -169,7 +169,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   int check_redo(Variables& vars);
 
   // device
-  torch::Device device() const { return _hydro_u0.device(); }
+  torch::Device device() const;
 
  protected:
   //! initialize from restart file

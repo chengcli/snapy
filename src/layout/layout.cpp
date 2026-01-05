@@ -25,6 +25,7 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   rank(std::stoi(get_env("RANK", "0")));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));
+  device_id(std::stoi(get_env("DEVICE_ID", "-1")));
 }
 
 LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
@@ -266,6 +267,7 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     fill_corners(pmb, vars);
   }
 
+  pg->barrier()->wait();
   works.clear();
 }
 
