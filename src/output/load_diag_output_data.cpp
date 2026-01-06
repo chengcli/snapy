@@ -167,7 +167,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     }
   }
 
-  // vertical mean profiles
+  // zonal mean profiles
   if (ContainVariable("avg")) {
     auto layout = MeshBlockImpl::get_layout();
     c10d::ReduceOptions opsum;
