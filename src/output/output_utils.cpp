@@ -203,7 +203,7 @@ std::string MetadataTable::GetGridType(std::string name) const {
   }
 
   // if leading 4 characters is 'avg_', grid type is '--C'
-  if (name.size() >= 3 && name.substr(0, 4) == "avg_") {
+  if (name.size() >= 4 && name.substr(0, 4) == "avg_") {
     return "--C";
   }
 
