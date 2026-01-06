@@ -286,11 +286,20 @@ class AthenaArray {
   //! \brief interface to 4D torch::Tensor
   void initFromTensor4D(torch::Tensor const &tensor, int index, int nvar);
 
+  //! \brief interface to 3D torch::Tensor
+  void initFromTensor3D(torch::Tensor const &tensor, int index, int nvar);
+
+  //! \brief interface to 2D torch::Tensor
+  void initFromTensor2D(torch::Tensor const &tensor, int index, int nvar);
+
   //! \brief copy from 3D torch::Tensor
   void copyFromTensor3D(torch::Tensor const &tensor);
 
   //! \brief copy from 2D torch::Tensor
   void copyFromTensor2D(torch::Tensor const &tensor);
+
+  //! \brief copy from 1D torch::Tensor
+  void copyFromTensor1D(torch::Tensor const &tensor);
 };
 
 // destructor

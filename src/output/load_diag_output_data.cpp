@@ -148,9 +148,9 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   }
 
   // vapor and cloud paths
+  auto vol = pcoord->cell_volume();
   if (ContainVariable("path")) {
     auto const& u = vars.at("hydro_u");
-    auto vol = pcoord->cell_volume();
     auto area = pcoord->face_area1();
     auto ny = peos->nvar() - 5;
     int il = pcoord->il();
@@ -162,6 +162,56 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
       auto u_sum = (u * vol).narrow(0, ICY, ny).sum(-1) / area.select(-1, il);
 
       pod->data.CopyFromTensor(u_sum);
+      AppendOutputDataNode(pod);
+      num_vars_ += ny;
+    }
+  }
+
+  // vertical mean profiles
+  if (ContainVariable("avg")) {
+    auto layout = MeshBlockImpl::get_layout();
+    c10d::ReduceOptions opsum;
+    opsum.reduceOp = c10d::ReduceOp::SUM;
+    opsum.rootRank = layout->options->root_rank();
+
+    auto hydro_w_tol = vars.at("hydro_w") * vol;
+    std::vector<at::Tensor> sum1 = {hydro_w_tol.sum({1, 2})};
+    layout->pg->reduce(sum1, opsum)->wait();
+
+    std::vector<at::Tensor> sum2 = {vol.unsqueeze(0).sum({1, 2})};
+    layout->pg->reduce(sum2, opsum)->wait();
+    auto avg_w = sum1[0] / sum2[0];
+
+    // density
+    pod = new OutputData;
+    pod->type = "SCALARS";
+    pod->name = "avg_rho";
+    pod->data.InitFromTensor(avg_w, 2, IDN, 1);
+    AppendOutputDataNode(pod);
+    num_vars_++;
+
+    // velocity vector
+    pod = new OutputData;
+    pod->type = "VECTORS";
+    pod->name = "avg_vel";
+    pod->data.InitFromTensor(avg_w, 2, IVX, 3);
+    AppendOutputDataNode(pod);
+    num_vars_ += 3;
+
+    // pressure
+    pod = new OutputData;
+    pod->type = "SCALARS";
+    pod->name = "avg_press";
+    pod->data.InitFromTensor(avg_w, 2, IPR, 1);
+    AppendOutputDataNode(pod);
+    num_vars_++;
+
+    auto ny = peos->nvar() - 5;
+    if (ny > 0) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = get_hydro_names(pmb, "avg_");
+      pod->data.CopyFromTensor(avg_w.narrow(0, ICY, ny));
       AppendOutputDataNode(pod);
       num_vars_ += ny;
     }
