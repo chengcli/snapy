@@ -54,7 +54,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"avg_press", "zonal mean pressure", "pa", "--C"},
       {"avg_vel1", "zonal mean vertical velocity", "m/s", "--C"},
       {"avg_vel2", "zonal mean horizontal velocity", "m/s", "--C"},
-      {"avg_vel3", "zonal mean hirozontal velocity", "m/s", "--C"},
+      {"avg_vel3", "zonal mean horizontal velocity", "m/s", "--C"},
       {"q1_bar", "mean vapor1 mixing ratio", "kg/kg", "CCC"},
       {"q2_bar", "mean vapor2 mixing ratio", "kg/kg", "CCC"},
       {"q3_bar", "mean vapor3 mixing ratio", "kg/kg", "CCC"},
