@@ -58,6 +58,9 @@ outputs:
   - type: netcdf
     variables: [prim, uov]
     dt: 300.
+  - type: netcdf
+    variables: [avg]
+    dt: 300.
 
 forcing:
   const-gravity:

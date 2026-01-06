@@ -50,13 +50,14 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       // buoyancy
       {"b", "buoyancy", "m/s^2", "CCC"},
       // hydro mean
-      {"rho_bar", "mean density", "kg/m^3", "CCC"},
+      {"avg_rho", "zonal mean density", "kg/m^3", "--C"},
+      {"avg_press", "zonal mean pressure", "pa", "--C"},
+      {"avg_vel1", "zonal mean vertical velocity", "m/s", "--C"},
+      {"avg_vel2", "zonal mean horizontal velocity", "m/s", "--C"},
+      {"avg_vel3", "zonal mean horizontal velocity", "m/s", "--C"},
       {"q1_bar", "mean vapor1 mixing ratio", "kg/kg", "CCC"},
       {"q2_bar", "mean vapor2 mixing ratio", "kg/kg", "CCC"},
       {"q3_bar", "mean vapor3 mixing ratio", "kg/kg", "CCC"},
-      {"vel1_bar", "mean velocity 1", "m/s", "CCC"},
-      {"vel2_bar", "mean velocity 2", "m/s", "CCC"},
-      {"vel3_bar", "mean velocity 3", "m/s", "CCC"},
       {"T_bar", "mean temperature", "K", "CCC"},
       // anomalies
       {"rhoa", "horizontal density anomaly", "kg/m^3", "CCC"},
@@ -199,6 +200,11 @@ std::string MetadataTable::GetGridType(std::string name) const {
   // if leading 5 characters is 'path_', grid type is '-CC'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "-CC";
+  }
+
+  // if leading 4 characters is 'avg_', grid type is '--C'
+  if (name.size() >= 4 && name.substr(0, 4) == "avg_") {
+    return "--C";
   }
 
   for (int i = 0; i < nouts; ++i) {

@@ -45,12 +45,12 @@ class LogMessage {
   std::ostream& stream() { return stream_; }
 
  private:
-  //! \brief Flush message to stderr
+  //! \brief Flush message to stdout
   void Flush() {
     if (!msg_.empty()) {
-      std::cerr << "[" << msg_ << "] ";
+      std::cout << "[" << msg_ << "] ";
     }
-    std::cerr << stream_.str();
+    std::cout << stream_.str();
   }
 
   std::string msg_;           //!< Message prefix/tag
