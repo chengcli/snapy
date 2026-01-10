@@ -4,6 +4,7 @@
 // torch
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
 #include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
 
 // snap
 #include <snap/utils/log.hpp>
@@ -40,15 +41,22 @@ void LayoutImpl::_init_nccl() {
   }
 }
 
-void LayoutImpl::_group_start() {
+void LayoutImpl::_group_start() const {
   if (options->backend() == "nccl") {
     std::dynamic_pointer_cast<c10d::ProcessGroupNCCL>(pg)->groupStart();
   }
 }
 
-void LayoutImpl::_group_end() {
+void LayoutImpl::_group_end() const {
   if (options->backend() == "nccl") {
     std::dynamic_pointer_cast<c10d::ProcessGroupNCCL>(pg)->groupEnd();
+  }
+}
+
+void LayoutImpl::_sync_device() const {
+  if (options->backend() == "nccl") {
+    //at::cuda::getCurrentCUDAStream().synchronize();
+    cudaDeviceSynchronize();
   }
 }
 

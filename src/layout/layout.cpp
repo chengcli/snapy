@@ -97,6 +97,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       // Skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -116,6 +117,8 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         count++;
       }
     }
+
+  _sync_device();
 }
 
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
@@ -161,11 +164,9 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
         int send_id = opts.phyid() + ((1 + dx) << 1) + ((1 + dy) << 2);
         int recv_id = opts.phyid() + ((1 - dx) << 1) + ((1 - dy) << 2);
 
-        // Send operation
         auto send_work = pg->send(send_bufs[r], nb, send_id);
         works.push_back(send_work);
 
-        // Receive operation
         auto recv_work = pg->recv(recv_bufs[r], nb, recv_id);
         works.push_back(recv_work);
       } else {  // self-send
@@ -184,6 +185,8 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
     SINFO(Layout) << "deserializing data from receive buffers\n";
   }
 
+  _sync_device();
+
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
@@ -198,6 +201,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
       // Skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -333,9 +337,10 @@ void LayoutImpl::_init_gloo() {
 }
 
 #ifdef NOT_USE_C10D_NCCL
-void LayoutImpl::_init_nccl() {}
-void LayoutImpl::_group_start() {}
-void LayoutImpl::_group_end() {}
+void LayoutImpl::_init_nccl() const {}
+void LayoutImpl::_group_start() const {}
+void LayoutImpl::_group_end() const {}
+void LayoutImpl::_sync_device() const {}
 #endif
 
 }  // namespace snap

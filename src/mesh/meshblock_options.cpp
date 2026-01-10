@@ -178,6 +178,7 @@ bool MeshBlockOptionsImpl::is_physical_boundary(int dy, int dx, int dz) const {
   if (dx == 1) return bfuncs()[BoundaryFace::kOuterX2] != nullptr;
   if (dz == -1) return bfuncs()[BoundaryFace::kInnerX1] != nullptr;
   if (dz == 1) return bfuncs()[BoundaryFace::kOuterX1] != nullptr;
+  return false;
 }
 
 }  // namespace snap
