@@ -171,4 +171,13 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   return op;
 }
 
+bool MeshBlockOptionsImpl::is_physical_boundary(int dy, int dx, int dz) const {
+  if (dy == -1) return bfuncs()[BoundaryFace::kInnerX3] != nullptr;
+  if (dy == 1) return bfuncs()[BoundaryFace::kOuterX3] != nullptr;
+  if (dx == -1) return bfuncs()[BoundaryFace::kInnerX2] != nullptr;
+  if (dx == 1) return bfuncs()[BoundaryFace::kOuterX2] != nullptr;
+  if (dz == -1) return bfuncs()[BoundaryFace::kInnerX1] != nullptr;
+  if (dz == 1) return bfuncs()[BoundaryFace::kOuterX1] != nullptr;
+}
+
 }  // namespace snap

@@ -802,6 +802,8 @@ void CubedSphereLayoutImpl::forward(
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
 
+  _group_start();
+
   for (int dy = dy_min; dy <= dy_max; ++dy)
     for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
@@ -826,6 +828,8 @@ void CubedSphereLayoutImpl::forward(
         TORCH_CHECK(false, "I should not be here");
       }
     }
+
+  _group_end();
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(

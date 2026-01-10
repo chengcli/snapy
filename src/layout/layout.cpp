@@ -149,6 +149,7 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
       // skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
