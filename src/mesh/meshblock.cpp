@@ -776,7 +776,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   _playout->recv_bufs.clear();
   _playout->recv_bufs.shrink_to_fit();
-  
+
   _playout->pg->shutdown();
 }
 
