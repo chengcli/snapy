@@ -144,11 +144,25 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
+  int dx_sgn = 1;
+  int dy_sgn = 1;
+
+  // swap the order of first block for periodic condition
+  if (options->periodic_x() && options->px() == 2 && std::get<0>(iloc) == 0) {
+    dx_sgn = -1;
+  }
+
+  if (options->periodic_y() && options->py() == 2 && std::get<1>(iloc) == 0) {
+    dy_sgn = -1;
+  }
 
   _group_start();
 
-  for (int dy = dy_min; dy <= dy_max; ++dy)
-    for (int dx = dx_min; dx <= dx_max; ++dx) {
+  for (int dy_ = dy_min; dy_ <= dy_max; ++dy_)
+    for (int dx_ = dx_min; dx_ <= dx_max; ++dx_) {
+      int dy = dy_sgn * dy_;
+      int dx = dx_sgn * dx_;
+
       // skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
