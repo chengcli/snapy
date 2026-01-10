@@ -21,10 +21,15 @@ namespace snap {
 void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
-  pmb->get_layout()->pg->barrier()->wait();
+  auto layout = pmb->get_layout();
+  /*c10d::BarrierOptions op;
+  op.device_ids = {layout->options->local_rank()};
+  layout->pg->barrier(op)->wait();*/
+  layout->pg->barrier()->wait();
+
   std::stringstream msg;
 
-  if (pmb->get_layout()->is_root()) {
+  if (layout->is_root()) {
     char number[64];
     snprintf(number, sizeof(number), "%05d", file_number);
 

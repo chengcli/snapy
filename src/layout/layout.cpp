@@ -142,6 +142,8 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
 
+  _group_start();
+
   for (int dy = dy_min; dy <= dy_max; ++dy)
     for (int dx = dx_min; dx <= dx_max; ++dx) {
       // skip the center (self)
@@ -171,6 +173,8 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
           recv_bufs[r1][n].copy_(send_bufs[r][n]);
       }
     }
+
+  _group_end();
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
@@ -267,7 +271,11 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     fill_corners(pmb, vars);
   }
 
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->local_rank()};
+  pg->barrier(op)->wait();*/
   pg->barrier()->wait();
+
   works.clear();
 }
 
@@ -297,6 +305,11 @@ void LayoutImpl::_init_backend() {
     throw std::runtime_error("Unsupported BACKEND=" + options->backend());
   }
 
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->local_rank()};
+  pg->barrier(op)->wait();*/
+  pg->barrier()->wait();
+
   if (options->verbose()) {
     std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
               << "] Distributed environment initialized with backend="
@@ -320,6 +333,8 @@ void LayoutImpl::_init_gloo() {
 
 #ifdef NOT_USE_C10D_NCCL
 void LayoutImpl::_init_nccl() {}
+void LayoutImpl::_group_start() {}
+void LayoutImpl::_group_end() {}
 #endif
 
 }  // namespace snap
