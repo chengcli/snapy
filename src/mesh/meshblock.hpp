@@ -45,6 +45,8 @@ struct MeshBlockOptionsImpl {
        << "* basename = " << basename() << "\n";
   }
 
+  bool is_physical_boundary(int dy, int dx, int dz) const;
+
   //! verbose
   ADD_ARG(bool, verbose) = false;
 

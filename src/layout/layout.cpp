@@ -97,6 +97,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       // Skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -116,6 +117,8 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         count++;
       }
     }
+
+  _sync_device();
 }
 
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
@@ -141,12 +144,29 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
+  int dx_sgn = 1;
+  int dy_sgn = 1;
 
-  for (int dy = dy_min; dy <= dy_max; ++dy)
-    for (int dx = dx_min; dx <= dx_max; ++dx) {
+  // swap the order of first block for periodic condition
+  if (options->periodic_x() && options->px() == 2 && std::get<0>(iloc) == 0) {
+    dx_sgn = -1;
+  }
+
+  if (options->periodic_y() && options->py() == 2 && std::get<1>(iloc) == 0) {
+    dy_sgn = -1;
+  }
+
+  _group_start();
+
+  for (int dy_ = dy_min; dy_ <= dy_max; ++dy_)
+    for (int dx_ = dx_min; dx_ <= dx_max; ++dx_) {
+      int dy = dy_sgn * dy_;
+      int dx = dx_sgn * dx_;
+
       // skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -158,11 +178,9 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
         int send_id = opts.phyid() + ((1 + dx) << 1) + ((1 + dy) << 2);
         int recv_id = opts.phyid() + ((1 - dx) << 1) + ((1 - dy) << 2);
 
-        // Send operation
         auto send_work = pg->send(send_bufs[r], nb, send_id);
         works.push_back(send_work);
 
-        // Receive operation
         auto recv_work = pg->recv(recv_bufs[r], nb, recv_id);
         works.push_back(recv_work);
       } else {  // self-send
@@ -171,6 +189,8 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
           recv_bufs[r1][n].copy_(send_bufs[r][n]);
       }
     }
+
+  _group_end();
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
@@ -178,6 +198,8 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
   if (options->verbose()) {
     SINFO(Layout) << "deserializing data from receive buffers\n";
   }
+
+  _sync_device();
 
   // Get my logical location
   auto iloc = loc_of(options->rank());
@@ -193,6 +215,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
       // Skip the center (self)
       if (dy == 0 && dx == 0) continue;
       if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+      if (pmb->options->is_physical_boundary(dy, dx, 0)) continue;
 
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
@@ -267,7 +290,11 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     fill_corners(pmb, vars);
   }
 
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->local_rank()};
+  pg->barrier(op)->wait();*/
   pg->barrier()->wait();
+
   works.clear();
 }
 
@@ -297,6 +324,11 @@ void LayoutImpl::_init_backend() {
     throw std::runtime_error("Unsupported BACKEND=" + options->backend());
   }
 
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->local_rank()};
+  pg->barrier(op)->wait();*/
+  pg->barrier()->wait();
+
   if (options->verbose()) {
     std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
               << "] Distributed environment initialized with backend="
@@ -320,6 +352,9 @@ void LayoutImpl::_init_gloo() {
 
 #ifdef NOT_USE_C10D_NCCL
 void LayoutImpl::_init_nccl() {}
+void LayoutImpl::_group_start() const {}
+void LayoutImpl::_group_end() const {}
+void LayoutImpl::_sync_device() const {}
 #endif
 
 }  // namespace snap

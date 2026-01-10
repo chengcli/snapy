@@ -223,9 +223,17 @@ class LayoutImpl {
 
  protected:
   void _init_backend();
+
   // --- Backend initializers ---
   void _init_gloo();
   void _init_nccl();
+
+  // --- NCCL specific ---
+  void _group_start() const;
+  void _group_end() const;
+
+  // --- GPU specific ---
+  void _sync_device() const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;

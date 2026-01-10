@@ -269,6 +269,9 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars) {
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->layout()->local_rank()};
+  _playout->pg->barrier(op)->wait();*/
   _playout->pg->barrier()->wait();
 
   //// ------------ (1) Set up a signal handler ------------ ////
@@ -763,7 +766,17 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
 
   // ------ shutdown processing group ------
+  /*c10d::BarrierOptions op;
+  op.device_ids = {options->layout()->local_rank()};
+  _playout->pg->barrier(op)->wait();*/
   _playout->pg->barrier()->wait();
+
+  _playout->send_bufs.clear();
+  _playout->send_bufs.shrink_to_fit();
+
+  _playout->recv_bufs.clear();
+  _playout->recv_bufs.shrink_to_fit();
+
   _playout->pg->shutdown();
 }
 
