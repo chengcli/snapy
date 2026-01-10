@@ -351,7 +351,7 @@ void LayoutImpl::_init_gloo() {
 }
 
 #ifdef NOT_USE_C10D_NCCL
-void LayoutImpl::_init_nccl() const {}
+void LayoutImpl::_init_nccl() {}
 void LayoutImpl::_group_start() const {}
 void LayoutImpl::_group_end() const {}
 void LayoutImpl::_sync_device() const {}
