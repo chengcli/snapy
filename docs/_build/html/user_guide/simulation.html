@@ -1,0 +1,393 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Running Simulations &mdash; snapy 1.2.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=fd7cadf9"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Distributed Simulations" href="distributed.html" />
+    <link rel="prev" title="Configuration" href="configuration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            snapy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Running Simulations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#basic-simulation-loop">Basic Simulation Loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-stage-time-integration">Multi-Stage Time Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#initial-conditions">Initial Conditions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#setting-custom-initial-conditions">Setting Custom Initial Conditions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#loading-from-file">Loading from File</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#adaptive-time-stepping">Adaptive Time Stepping</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#monitoring-and-diagnostics">Monitoring and Diagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-output-functions">Custom Output Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gpu-acceleration">GPU Acceleration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#restart-from-checkpoint">Restart from Checkpoint</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Output and Postprocessing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">Examples</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">snapy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">User Guide</a></li>
+      <li class="breadcrumb-item active">Running Simulations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user_guide/simulation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="running-simulations">
+<h1>Running Simulations<a class="headerlink" href="#running-simulations" title="Link to this heading"></a></h1>
+<p>This guide covers how to run Snapy simulations, from initialization to time integration.</p>
+<section id="basic-simulation-loop">
+<h2>Basic Simulation Loop<a class="headerlink" href="#basic-simulation-loop" title="Link to this heading"></a></h2>
+<p>A typical simulation follows this pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="c1"># Load configuration</span>
+<span class="n">options</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlockOptions</span><span class="o">.</span><span class="n">from_yaml</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
+
+<span class="c1"># Create mesh block</span>
+<span class="n">block</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlock</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+
+<span class="c1"># Initialize variables</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">({})</span>
+
+<span class="c1"># Main time integration loop</span>
+<span class="n">dt</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">max_time</span> <span class="o">=</span> <span class="mf">10.0</span>
+<span class="n">output_interval</span> <span class="o">=</span> <span class="mf">0.1</span>
+<span class="n">next_output</span> <span class="o">=</span> <span class="n">output_interval</span>
+
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="c1"># Calculate time step</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">))</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">max_time</span> <span class="o">-</span> <span class="n">time</span><span class="p">)</span>
+
+    <span class="c1"># Forward integration (single step)</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+
+    <span class="c1"># Output</span>
+    <span class="k">if</span> <span class="n">time</span> <span class="o">&gt;=</span> <span class="n">next_output</span><span class="p">:</span>
+        <span class="n">block</span><span class="o">.</span><span class="n">make_outputs</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+        <span class="n">next_output</span> <span class="o">+=</span> <span class="n">output_interval</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time: </span><span class="si">{</span><span class="n">time</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, dt: </span><span class="si">{</span><span class="n">dt</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Final output</span>
+<span class="n">block</span><span class="o">.</span><span class="n">make_outputs</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">final_write</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">block</span><span class="o">.</span><span class="n">finalize</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="multi-stage-time-integration">
+<h2>Multi-Stage Time Integration<a class="headerlink" href="#multi-stage-time-integration" title="Link to this heading"></a></h2>
+<p>For Runge-Kutta schemes with multiple stages:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+
+<span class="n">options</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlockOptions</span><span class="o">.</span><span class="n">from_yaml</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
+<span class="n">block</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlock</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">({})</span>
+
+<span class="c1"># RK3 integration</span>
+<span class="n">num_stages</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">dt</span> <span class="o">=</span> <span class="mf">0.01</span>
+
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+
+    <span class="c1"># Multi-stage integration</span>
+    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_stages</span><span class="p">):</span>
+        <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+
+    <span class="k">if</span> <span class="n">time</span> <span class="o">&gt;=</span> <span class="n">next_output</span><span class="p">:</span>
+        <span class="n">block</span><span class="o">.</span><span class="n">make_outputs</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+        <span class="n">next_output</span> <span class="o">+=</span> <span class="n">output_interval</span>
+</pre></div>
+</div>
+</section>
+<section id="initial-conditions">
+<h2>Initial Conditions<a class="headerlink" href="#initial-conditions" title="Link to this heading"></a></h2>
+<section id="setting-custom-initial-conditions">
+<h3>Setting Custom Initial Conditions<a class="headerlink" href="#setting-custom-initial-conditions" title="Link to this heading"></a></h3>
+<p>You can set custom initial conditions before starting the simulation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="n">options</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlockOptions</span><span class="o">.</span><span class="n">from_yaml</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
+<span class="n">block</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlock</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+
+<span class="c1"># Get domain size</span>
+<span class="n">nx3</span><span class="p">,</span> <span class="n">nx2</span><span class="p">,</span> <span class="n">nx1</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">64</span>
+<span class="n">nvar</span> <span class="o">=</span> <span class="mi">5</span>  <span class="c1"># density, vel1, vel2, vel3, pressure</span>
+
+<span class="c1"># Create initial condition tensor</span>
+<span class="n">hydro_w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nvar</span><span class="p">,</span> <span class="n">nx3</span><span class="p">,</span> <span class="n">nx2</span><span class="p">,</span> <span class="n">nx1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+<span class="c1"># Set uniform density</span>
+<span class="n">hydro_w</span><span class="p">[</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIDN</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+<span class="c1"># Set uniform pressure</span>
+<span class="n">hydro_w</span><span class="p">[</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIPR</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+<span class="c1"># Set velocity field (e.g., shear flow)</span>
+<span class="n">x2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">nx2</span><span class="p">)</span>
+<span class="n">hydro_w</span><span class="p">[</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIV2</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">x2</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span>
+
+<span class="c1"># Initialize with custom state</span>
+<span class="nb">vars</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">:</span> <span class="n">hydro_w</span><span class="p">}</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="loading-from-file">
+<h3>Loading from File<a class="headerlink" href="#loading-from-file" title="Link to this heading"></a></h3>
+<p>Load initial conditions from a TorchScript file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="c1"># Load saved state</span>
+<span class="n">module</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;initial_state.pt&quot;</span><span class="p">)</span>
+<span class="n">hydro_w</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">hydro_w</span>
+
+<span class="c1"># Initialize simulation</span>
+<span class="nb">vars</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">:</span> <span class="n">hydro_w</span><span class="p">}</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="adaptive-time-stepping">
+<h2>Adaptive Time Stepping<a class="headerlink" href="#adaptive-time-stepping" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">max_time_step</span></code> method calculates the maximum stable time step based on the CFL condition:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Automatic time step control</span>
+<span class="n">dt_max</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># Maximum allowed time step</span>
+
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="c1"># Get CFL-limited time step</span>
+    <span class="n">dt_cfl</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+
+    <span class="c1"># Use the minimum of CFL limit and user limit</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">dt_cfl</span><span class="p">,</span> <span class="n">dt_max</span><span class="p">)</span>
+
+    <span class="c1"># Don&#39;t overshoot end time</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">max_time</span> <span class="o">-</span> <span class="n">time</span><span class="p">)</span>
+
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+</pre></div>
+</div>
+</section>
+<section id="monitoring-and-diagnostics">
+<h2>Monitoring and Diagnostics<a class="headerlink" href="#monitoring-and-diagnostics" title="Link to this heading"></a></h2>
+<p>Monitor simulation progress:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+
+<span class="k">def</span> <span class="nf">print_diagnostics</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print diagnostic information.&quot;&quot;&quot;</span>
+    <span class="n">rho</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIDN</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="n">press</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIPR</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time: </span><span class="si">{</span><span class="n">time</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Density: min=</span><span class="si">{</span><span class="n">rho</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">, max=</span><span class="si">{</span><span class="n">rho</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Pressure: min=</span><span class="si">{</span><span class="n">press</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">, max=</span><span class="si">{</span><span class="n">press</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Main loop with diagnostics</span>
+<span class="n">diag_interval</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">next_diag</span> <span class="o">=</span> <span class="n">diag_interval</span>
+
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+
+    <span class="k">if</span> <span class="n">time</span> <span class="o">&gt;=</span> <span class="n">next_diag</span><span class="p">:</span>
+        <span class="n">print_diagnostics</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+        <span class="n">next_diag</span> <span class="o">+=</span> <span class="n">diag_interval</span>
+</pre></div>
+</div>
+</section>
+<section id="custom-output-functions">
+<h2>Custom Output Functions<a class="headerlink" href="#custom-output-functions" title="Link to this heading"></a></h2>
+<p>Register custom output callbacks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">user_output</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Custom output function.&quot;&quot;&quot;</span>
+    <span class="c1"># Calculate derived quantities</span>
+    <span class="n">rho</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIDN</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="n">vel1</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIV1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="n">vel2</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIV2</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="n">vel3</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">][</span><span class="n">snapy</span><span class="o">.</span><span class="n">kIV3</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+    <span class="c1"># Kinetic energy</span>
+    <span class="n">ke</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">rho</span> <span class="o">*</span> <span class="p">(</span><span class="n">vel1</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">vel2</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">vel3</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="c1"># Save to file</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">({</span><span class="s2">&quot;kinetic_energy&quot;</span><span class="p">:</span> <span class="n">ke</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">time</span><span class="p">},</span>
+               <span class="sa">f</span><span class="s2">&quot;ke_</span><span class="si">{</span><span class="n">time</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">.pt&quot;</span><span class="p">)</span>
+
+<span class="c1"># Register callback</span>
+<span class="n">block</span><span class="o">.</span><span class="n">set_user_output_func</span><span class="p">(</span><span class="n">user_output</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="gpu-acceleration">
+<h2>GPU Acceleration<a class="headerlink" href="#gpu-acceleration" title="Link to this heading"></a></h2>
+<p>Run on GPU by configuring the device:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="c1"># Set default device to GPU</span>
+<span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">set_default_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+<span class="c1"># Load configuration</span>
+<span class="n">options</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlockOptions</span><span class="o">.</span><span class="n">from_yaml</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
+<span class="n">block</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlock</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+
+<span class="c1"># All tensors will be on GPU</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">({})</span>
+
+<span class="c1"># Run simulation on GPU</span>
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+</pre></div>
+</div>
+</section>
+<section id="restart-from-checkpoint">
+<h2>Restart from Checkpoint<a class="headerlink" href="#restart-from-checkpoint" title="Link to this heading"></a></h2>
+<p>Save and restart simulations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">snapy</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="c1"># Save checkpoint</span>
+<span class="k">def</span> <span class="nf">save_checkpoint</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">cycle</span><span class="p">):</span>
+    <span class="n">checkpoint</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;vars&quot;</span><span class="p">:</span> <span class="nb">vars</span><span class="p">,</span>
+        <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">time</span><span class="p">,</span>
+        <span class="s2">&quot;cycle&quot;</span><span class="p">:</span> <span class="n">cycle</span>
+    <span class="p">}</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">checkpoint</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;checkpoint_</span><span class="si">{</span><span class="n">cycle</span><span class="si">:</span><span class="s2">05d</span><span class="si">}</span><span class="s2">.pt&quot;</span><span class="p">)</span>
+
+<span class="c1"># Load checkpoint</span>
+<span class="k">def</span> <span class="nf">load_checkpoint</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+    <span class="n">checkpoint</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">checkpoint</span><span class="p">[</span><span class="s2">&quot;vars&quot;</span><span class="p">],</span> <span class="n">checkpoint</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">],</span> <span class="n">checkpoint</span><span class="p">[</span><span class="s2">&quot;cycle&quot;</span><span class="p">]</span>
+
+<span class="c1"># Restart simulation</span>
+<span class="k">if</span> <span class="n">restart</span><span class="p">:</span>
+    <span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">cycle</span> <span class="o">=</span> <span class="n">load_checkpoint</span><span class="p">(</span><span class="s2">&quot;checkpoint_00100.pt&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">({})</span>
+    <span class="n">cycle</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="c1"># Continue simulation</span>
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+    <span class="n">cycle</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># Save checkpoint every 100 cycles</span>
+    <span class="k">if</span> <span class="n">cycle</span> <span class="o">%</span> <span class="mi">100</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">save_checkpoint</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="configuration.html" class="btn btn-neutral float-left" title="Configuration" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="distributed.html" class="btn btn-neutral float-right" title="Distributed Simulations" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Cheng Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

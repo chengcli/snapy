@@ -1,0 +1,405 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distributed Simulations &mdash; snapy 1.2.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=fd7cadf9"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Output and Postprocessing" href="output.html" />
+    <link rel="prev" title="Running Simulations" href="simulation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            snapy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="simulation.html">Running Simulations</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Distributed Simulations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#distributed-architecture">Distributed Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#setup">Setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-code">Python Code</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#domain-layouts">Domain Layouts</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#slab-layout">Slab Layout</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cubed-layout">Cubed Layout</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cubed-sphere-layout">Cubed Sphere Layout</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#communication-patterns">Communication Patterns</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#manual-exchange">Manual Exchange</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#collective-operations">Collective Operations</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#performance-optimization">Performance Optimization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#communication-overlap">Communication Overlap</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gpu-direct-communication">GPU-Direct Communication</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#load-balancing">Load Balancing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#slurm-integration">Slurm Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#debugging">Debugging</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Output and Postprocessing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">Examples</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">snapy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">User Guide</a></li>
+      <li class="breadcrumb-item active">Distributed Simulations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user_guide/distributed.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="distributed-simulations">
+<h1>Distributed Simulations<a class="headerlink" href="#distributed-simulations" title="Link to this heading"></a></h1>
+<p>Snapy supports distributed parallel simulations using PyTorch’s distributed communication backend.</p>
+<section id="distributed-architecture">
+<h2>Distributed Architecture<a class="headerlink" href="#distributed-architecture" title="Link to this heading"></a></h2>
+<p>Snapy uses domain decomposition to split the computational domain across multiple processes. Each process owns a subdomain and communicates with neighbors to exchange boundary (halo) data.</p>
+</section>
+<section id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Link to this heading"></a></h2>
+<p>Basic distributed setup using <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Single node, 4 GPUs</span>
+torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>simulation.py
+
+<span class="c1"># Multi-node (2 nodes, 4 GPUs each)</span>
+torchrun<span class="w"> </span>--nnodes<span class="o">=</span><span class="m">2</span><span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>--node_rank<span class="o">=</span><span class="m">0</span><span class="w"> </span><span class="se">\</span>
+<span class="w">         </span>--master_addr<span class="o">=</span><span class="s2">&quot;master_node&quot;</span><span class="w"> </span>--master_port<span class="o">=</span><span class="m">29500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">         </span>simulation.py
+</pre></div>
+</div>
+</section>
+<section id="python-code">
+<h2>Python Code<a class="headerlink" href="#python-code" title="Link to this heading"></a></h2>
+<p>Basic distributed simulation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">from</span> <span class="nn">snapy</span> <span class="kn">import</span> <span class="n">exchange</span>
+<span class="kn">import</span> <span class="nn">snapy</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+
+<span class="c1"># Parse arguments</span>
+<span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--device&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">])</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--layout&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;slab&quot;</span><span class="p">,</span>
+                   <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;slab&quot;</span><span class="p">,</span> <span class="s2">&quot;cubed&quot;</span><span class="p">,</span> <span class="s2">&quot;cubed_sphere&quot;</span><span class="p">])</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--px3&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--px2&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--px1&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+<span class="c1"># Initialize distributed environment</span>
+<span class="n">layout</span><span class="p">,</span> <span class="n">ranks</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">exchange</span><span class="o">.</span><span class="n">init_dist</span><span class="p">(</span>
+    <span class="n">args</span><span class="p">,</span>
+    <span class="n">periodic_x3</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">periodic_x2</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+<span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+
+<span class="c1"># Load configuration</span>
+<span class="n">options</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlockOptions</span><span class="o">.</span><span class="n">from_yaml</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
+<span class="n">block</span> <span class="o">=</span> <span class="n">snapy</span><span class="o">.</span><span class="n">MeshBlock</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+
+<span class="c1"># Initialize variables</span>
+<span class="nb">vars</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">initialize</span><span class="p">({})</span>
+
+<span class="c1"># Initialize communication buffers</span>
+<span class="n">send_bufs</span><span class="p">,</span> <span class="n">recv_bufs</span> <span class="o">=</span> <span class="n">exchange</span><span class="o">.</span><span class="n">init_buffers_2d</span><span class="p">(</span>
+    <span class="n">layout</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="nb">vars</span>
+<span class="p">)</span>
+
+<span class="c1"># Main simulation loop</span>
+<span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">max_time</span><span class="p">:</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">max_time_step</span><span class="p">(</span><span class="nb">vars</span><span class="p">)</span>
+
+    <span class="c1"># Exchange halo data</span>
+    <span class="n">exchange</span><span class="o">.</span><span class="n">slab_exchange</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="nb">vars</span><span class="p">,</span> <span class="n">ranks</span><span class="p">,</span> <span class="n">send_bufs</span><span class="p">,</span> <span class="n">recv_bufs</span><span class="p">)</span>
+
+    <span class="c1"># Forward integration</span>
+    <span class="nb">vars</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">vars</span><span class="p">)</span>
+    <span class="n">time</span> <span class="o">+=</span> <span class="n">dt</span>
+
+    <span class="c1"># Output (rank 0 only)</span>
+    <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">time</span> <span class="o">&gt;=</span> <span class="n">next_output</span><span class="p">:</span>
+        <span class="n">block</span><span class="o">.</span><span class="n">make_outputs</span><span class="p">(</span><span class="nb">vars</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+        <span class="n">next_output</span> <span class="o">+=</span> <span class="n">output_interval</span>
+
+<span class="c1"># Cleanup</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="domain-layouts">
+<h2>Domain Layouts<a class="headerlink" href="#domain-layouts" title="Link to this heading"></a></h2>
+<section id="slab-layout">
+<h3>Slab Layout<a class="headerlink" href="#slab-layout" title="Link to this heading"></a></h3>
+<p>2D decomposition in the x2-x3 plane:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">snapy</span> <span class="kn">import</span> <span class="n">SlabLayout</span>
+
+<span class="c1"># Create slab layout: 4x2 = 8 processes</span>
+<span class="n">layout</span> <span class="o">=</span> <span class="n">SlabLayout</span><span class="p">(</span>
+    <span class="n">nb3</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>  <span class="c1"># 4 blocks in x3 direction</span>
+    <span class="n">nb2</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># 2 blocks in x2 direction</span>
+    <span class="n">periodic_x3</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">periodic_x2</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="c1"># Get location of rank 5</span>
+<span class="n">x3</span><span class="p">,</span> <span class="n">x2</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">loc_of</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>  <span class="c1"># Returns (1, 1)</span>
+
+<span class="c1"># Get neighbor rank</span>
+<span class="n">neighbor</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">neighbor_rank</span><span class="p">(</span><span class="n">x3</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">dx3</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dx2</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cubed-layout">
+<h3>Cubed Layout<a class="headerlink" href="#cubed-layout" title="Link to this heading"></a></h3>
+<p>3D decomposition:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">snapy</span> <span class="kn">import</span> <span class="n">CubedLayout</span>
+
+<span class="c1"># Create cubed layout: 4x2x2 = 16 processes</span>
+<span class="n">layout</span> <span class="o">=</span> <span class="n">CubedLayout</span><span class="p">(</span>
+    <span class="n">nb3</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>  <span class="c1"># 4 blocks in x3 direction</span>
+    <span class="n">nb2</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># 2 blocks in x2 direction</span>
+    <span class="n">nb1</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># 2 blocks in x1 direction</span>
+    <span class="n">periodic_x3</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">periodic_x2</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">periodic_x1</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">)</span>
+
+<span class="c1"># Get location</span>
+<span class="n">x3</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">x1</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">loc_of</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+
+<span class="c1"># Get neighbor</span>
+<span class="n">neighbor</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">neighbor_rank</span><span class="p">(</span><span class="n">x3</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">x1</span><span class="p">,</span> <span class="n">dx3</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dx2</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dx1</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cubed-sphere-layout">
+<h3>Cubed Sphere Layout<a class="headerlink" href="#cubed-sphere-layout" title="Link to this heading"></a></h3>
+<p>For global atmospheric simulations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">snapy</span> <span class="kn">import</span> <span class="n">CubedSphereLayout</span>
+
+<span class="c1"># Create cubed sphere layout: 6 faces × 4×4 = 96 processes</span>
+<span class="n">layout</span> <span class="o">=</span> <span class="n">CubedSphereLayout</span><span class="p">(</span><span class="n">nb_per_face</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+<span class="c1"># Get location (face, x3, x2)</span>
+<span class="n">face</span><span class="p">,</span> <span class="n">x3</span><span class="p">,</span> <span class="n">x2</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">loc_of</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+
+<span class="c1"># Get neighbor</span>
+<span class="n">neighbor</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">neighbor_rank</span><span class="p">(</span><span class="n">face</span><span class="p">,</span> <span class="n">x3</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">dx3</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dx2</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="communication-patterns">
+<h2>Communication Patterns<a class="headerlink" href="#communication-patterns" title="Link to this heading"></a></h2>
+<section id="manual-exchange">
+<h3>Manual Exchange<a class="headerlink" href="#manual-exchange" title="Link to this heading"></a></h3>
+<p>For custom communication patterns:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+
+<span class="c1"># Send to neighbor</span>
+<span class="k">if</span> <span class="n">right_rank</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+    <span class="n">req_send</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">send_buffer</span><span class="p">,</span> <span class="n">right_rank</span><span class="p">)</span>
+    <span class="n">req_recv</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">recv_buffer</span><span class="p">,</span> <span class="n">right_rank</span><span class="p">)</span>
+    <span class="n">req_send</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="n">req_recv</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="collective-operations">
+<h3>Collective Operations<a class="headerlink" href="#collective-operations" title="Link to this heading"></a></h3>
+<p>Use PyTorch’s collective operations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+
+<span class="c1"># All-reduce (sum across all processes)</span>
+<span class="n">total_energy</span> <span class="o">=</span> <span class="n">local_energy</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">total_energy</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+
+<span class="c1"># Broadcast from rank 0</span>
+<span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">config_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">dt</span><span class="p">,</span> <span class="n">time</span><span class="p">])</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">config_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">config_tensor</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-optimization">
+<h2>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h2>
+<section id="communication-overlap">
+<h3>Communication Overlap<a class="headerlink" href="#communication-overlap" title="Link to this heading"></a></h3>
+<p>Overlap communication with computation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start non-blocking communication</span>
+<span class="n">exchange</span><span class="o">.</span><span class="n">slab_exchange</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="nb">vars</span><span class="p">,</span> <span class="n">ranks</span><span class="p">,</span> <span class="n">send_bufs</span><span class="p">,</span> <span class="n">recv_bufs</span><span class="p">)</span>
+
+<span class="c1"># Compute interior cells while communication is in progress</span>
+<span class="c1"># (requires manual implementation of interior-only update)</span>
+
+<span class="c1"># Wait for communication to complete</span>
+<span class="c1"># (handled internally by slab_exchange)</span>
+</pre></div>
+</div>
+</section>
+<section id="gpu-direct-communication">
+<h3>GPU-Direct Communication<a class="headerlink" href="#gpu-direct-communication" title="Link to this heading"></a></h3>
+<p>For NCCL backend with GPU-direct support:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Set NCCL environment variables</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_IB_DISABLE</span><span class="o">=</span><span class="m">0</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_SOCKET_IFNAME</span><span class="o">=</span>ib0
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_DEBUG</span><span class="o">=</span>INFO
+</pre></div>
+</div>
+</section>
+</section>
+<section id="load-balancing">
+<h2>Load Balancing<a class="headerlink" href="#load-balancing" title="Link to this heading"></a></h2>
+<p>The domain decomposition should balance work across processes. For uniform grids, equal subdivision works well. For non-uniform grids or adaptive refinement, consider dynamic load balancing.</p>
+</section>
+<section id="slurm-integration">
+<h2>Slurm Integration<a class="headerlink" href="#slurm-integration" title="Link to this heading"></a></h2>
+<p>Example Slurm script:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1">#SBATCH --job-name=snapy_sim</span>
+<span class="c1">#SBATCH --nodes=4</span>
+<span class="c1">#SBATCH --ntasks-per-node=4</span>
+<span class="c1">#SBATCH --gpus-per-node=4</span>
+<span class="c1">#SBATCH --time=24:00:00</span>
+
+<span class="c1"># Load modules</span>
+module<span class="w"> </span>load<span class="w"> </span>cuda/12.1
+module<span class="w"> </span>load<span class="w"> </span>nccl/2.18
+
+<span class="c1"># Set environment</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_IB_DISABLE</span><span class="o">=</span><span class="m">0</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_DEBUG</span><span class="o">=</span>WARN
+
+<span class="c1"># Run simulation</span>
+srun<span class="w"> </span>torchrun<span class="w"> </span>--nnodes<span class="o">=</span><span class="nv">$SLURM_NNODES</span><span class="w"> </span><span class="se">\</span>
+<span class="w">              </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">              </span>--master_addr<span class="o">=</span><span class="k">$(</span>scontrol<span class="w"> </span>show<span class="w"> </span>hostname<span class="w"> </span><span class="nv">$SLURM_NODELIST</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n1<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">              </span>--master_port<span class="o">=</span><span class="m">29500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">              </span>simulation.py<span class="w"> </span>--device<span class="o">=</span>cuda<span class="w"> </span>--layout<span class="o">=</span>slab<span class="w"> </span>--px3<span class="o">=</span><span class="m">4</span><span class="w"> </span>--px2<span class="o">=</span><span class="m">4</span>
+</pre></div>
+</div>
+</section>
+<section id="debugging">
+<h2>Debugging<a class="headerlink" href="#debugging" title="Link to this heading"></a></h2>
+<p>Debug distributed simulations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+
+<span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+
+<span class="c1"># Print from all ranks</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">] Initialized successfully&quot;</span><span class="p">)</span>
+
+<span class="c1"># Synchronize all processes</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+
+<span class="c1"># Check for NaN values</span>
+<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="nb">vars</span><span class="p">[</span><span class="s2">&quot;hydro_w&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">] NaN detected!&quot;</span><span class="p">)</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NaN detected&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Enable NCCL debugging:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_DEBUG</span><span class="o">=</span>INFO
+<span class="nb">export</span><span class="w"> </span><span class="nv">NCCL_DEBUG_SUBSYS</span><span class="o">=</span>ALL
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="simulation.html" class="btn btn-neutral float-left" title="Running Simulations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="output.html" class="btn btn-neutral float-right" title="Output and Postprocessing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Cheng Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
