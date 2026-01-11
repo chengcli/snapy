@@ -16,7 +16,7 @@ kIV1: int   # Velocity index in X1 direction
 kIV2: int   # Velocity index in X2 direction
 kIV3: int   # Velocity index in X3 direction
 kIPR: int   # Pressure (or internal energy) index
-KICY: int   # Tracer index start
+kICY: int   # Tracer index start
 
 kInnerX1: int   # Inner boundary in the X1 direction (bottom)
 kOuterX1: int   # Outer boundary in the X1 direction (top)

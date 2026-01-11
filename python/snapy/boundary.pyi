@@ -8,6 +8,15 @@ import torch
 # Type aliases
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
 
+# Boundary face constants
+kUnknown: int
+kInnerX1: int
+kOuterX1: int
+kInnerX2: int
+kOuterX2: int
+kInnerX3: int
+kOuterX3: int
+
 # Boundary Conditions
 class BoundaryFuncOptions:
     """
@@ -56,16 +65,6 @@ class InternalBoundaryOptions:
     def __repr__(self) -> str: ...
 
     @overload
-    def nghost(self) -> int:
-        """Get the number of ghost zones."""
-        ...
-
-    @overload
-    def nghost(self, value: int) -> "InternalBoundaryOptions":
-        """Set the number of ghost zones."""
-        ...
-
-    @overload
     def max_iter(self) -> int:
         """Get the maximum number of iterations."""
         ...
@@ -108,12 +107,13 @@ class InternalBoundary:
         ...
 
     @overload
-    def __init__(self, options: InternalBoundaryOptions) -> None:
+    def __init__(self, options: InternalBoundaryOptions, block = None) -> None:
         """
         Construct an InternalBoundary module.
 
         Args:
             options: Internal boundary configuration options
+            block: Parent block module (optional)
         """
         ...
 

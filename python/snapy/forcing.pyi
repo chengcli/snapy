@@ -91,33 +91,3 @@ class CoriolisOptions:
     def omega3(self, value: float) -> "CoriolisOptions":
         """Set rotation rate omega3."""
         ...
-
-    @overload
-    def omegax(self) -> float:
-        """Get rotation rate omegax."""
-        ...
-
-    @overload
-    def omegax(self, value: float) -> "CoriolisOptions":
-        """Set rotation rate omegax."""
-        ...
-
-    @overload
-    def omegay(self) -> float:
-        """Get rotation rate omegay."""
-        ...
-
-    @overload
-    def omegay(self, value: float) -> "CoriolisOptions":
-        """Set rotation rate omegay."""
-        ...
-
-    @overload
-    def omegaz(self) -> float:
-        """Get rotation rate omegaz."""
-        ...
-
-    @overload
-    def omegaz(self, value: float) -> "CoriolisOptions":
-        """Set rotation rate omegaz."""
-        ...
