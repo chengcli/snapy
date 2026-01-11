@@ -26,3 +26,6 @@ data/
 
 # restart file
 *.restart
+
+# Documentation builds
+docs/_build/
