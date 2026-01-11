@@ -6,343 +6,330 @@ from typing import Callable, Dict, List, Optional, Tuple, overload
 import torch
 
 # Layout
-class DistributeInfo:
+class LayoutOptions:
     """
-    Domain distribution information.
+    Layout configuration options.
 
     This class manages domain decomposition parameters.
     """
 
     def __init__(self) -> None:
-        """Initialize DistributeInfo with default values."""
+        """Initialize LayoutOptions with default values."""
         ...
 
     def __repr__(self) -> str: ...
 
     @overload
-    def face(self) -> int:
-        """Get the face index."""
+    def type(self) -> str:
+        """Get the layout type."""
         ...
 
     @overload
-    def face(self, value: int) -> "DistributeInfo":
-        """Set the face index."""
+    def type(self, value: str) -> "LayoutOptions":
+        """Set the layout type."""
         ...
 
     @overload
-    def level(self) -> int:
-        """Get the refinement level."""
+    def px(self) -> int:
+        """Get the number of processes in x direction."""
         ...
 
     @overload
-    def level(self, value: int) -> "DistributeInfo":
-        """Set the refinement level."""
+    def px(self, value: int) -> "LayoutOptions":
+        """Set the number of processes in x direction."""
         ...
 
     @overload
-    def gid(self) -> int:
-        """Get the global ID."""
+    def py(self) -> int:
+        """Get the number of processes in y direction."""
         ...
 
     @overload
-    def gid(self, value: int) -> "DistributeInfo":
-        """Set the global ID."""
+    def py(self, value: int) -> "LayoutOptions":
+        """Set the number of processes in y direction."""
         ...
 
     @overload
-    def lx1(self) -> int:
-        """Get the local x1 index."""
+    def pz(self) -> int:
+        """Get the number of processes in z direction."""
         ...
 
     @overload
-    def lx1(self, value: int) -> "DistributeInfo":
-        """Set the local x1 index."""
+    def pz(self, value: int) -> "LayoutOptions":
+        """Set the number of processes in z direction."""
         ...
 
     @overload
-    def lx2(self) -> int:
-        """Get the local x2 index."""
+    def periodic_x(self) -> bool:
+        """Get periodic x flag."""
         ...
 
     @overload
-    def lx2(self, value: int) -> "DistributeInfo":
-        """Set the local x2 index."""
+    def periodic_x(self, value: bool) -> "LayoutOptions":
+        """Set periodic x flag."""
         ...
 
     @overload
-    def lx3(self) -> int:
-        """Get the local x3 index."""
+    def periodic_y(self) -> bool:
+        """Get periodic y flag."""
         ...
 
     @overload
-    def lx3(self, value: int) -> "DistributeInfo":
-        """Set the local x3 index."""
+    def periodic_y(self, value: bool) -> "LayoutOptions":
+        """Set periodic y flag."""
         ...
 
     @overload
-    def nb1(self) -> int:
-        """Get the number of blocks in x1."""
+    def periodic_z(self) -> bool:
+        """Get periodic z flag."""
         ...
 
     @overload
-    def nb1(self, value: int) -> "DistributeInfo":
-        """Set the number of blocks in x1."""
+    def periodic_z(self, value: bool) -> "LayoutOptions":
+        """Set periodic z flag."""
         ...
 
     @overload
-    def nb2(self) -> int:
-        """Get the number of blocks in x2."""
+    def verbose(self) -> bool:
+        """Get verbose flag."""
         ...
 
     @overload
-    def nb2(self, value: int) -> "DistributeInfo":
-        """Set the number of blocks in x2."""
+    def verbose(self, value: bool) -> "LayoutOptions":
+        """Set verbose flag."""
         ...
 
     @overload
-    def nb3(self) -> int:
-        """Get the number of blocks in x3."""
+    def no_backend(self) -> bool:
+        """Get no backend flag."""
         ...
 
     @overload
-    def nb3(self, value: int) -> "DistributeInfo":
-        """Set the number of blocks in x3."""
+    def no_backend(self, value: bool) -> "LayoutOptions":
+        """Set no backend flag."""
         ...
 
-class SlabLayout:
+    @overload
+    def backend(self) -> str:
+        """Get backend name."""
+        ...
+
+    @overload
+    def backend(self, value: str) -> "LayoutOptions":
+        """Set backend name."""
+        ...
+
+    @overload
+    def master_addr(self) -> str:
+        """Get master address."""
+        ...
+
+    @overload
+    def master_addr(self, value: str) -> "LayoutOptions":
+        """Set master address."""
+        ...
+
+    @overload
+    def master_port(self) -> int:
+        """Get master port."""
+        ...
+
+    @overload
+    def master_port(self, value: int) -> "LayoutOptions":
+        """Set master port."""
+        ...
+
+    @overload
+    def root_rank(self) -> int:
+        """Get root rank."""
+        ...
+
+    @overload
+    def root_rank(self, value: int) -> "LayoutOptions":
+        """Set root rank."""
+        ...
+
+    @overload
+    def world_size(self) -> int:
+        """Get world size."""
+        ...
+
+    @overload
+    def world_size(self, value: int) -> "LayoutOptions":
+        """Set world size."""
+        ...
+
+    @overload
+    def rank(self) -> int:
+        """Get rank."""
+        ...
+
+    @overload
+    def rank(self, value: int) -> "LayoutOptions":
+        """Set rank."""
+        ...
+
+    @overload
+    def local_rank(self) -> int:
+        """Get local rank."""
+        ...
+
+    @overload
+    def local_rank(self, value: int) -> "LayoutOptions":
+        """Set local rank."""
+        ...
+
+class Layout:
+    """
+    Layout base class.
+
+    This class manages domain decomposition.
+    """
+
+    def __init__(self, options: LayoutOptions) -> None:
+        """
+        Initialize Layout.
+
+        Args:
+            options: Layout configuration options
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+    def get_procs(self) -> int:
+        """Get total number of processes."""
+        ...
+
+    def rank_of(self, *args) -> int:
+        """
+        Get rank for given process coordinates.
+
+        Returns:
+            Process rank
+        """
+        ...
+
+    def loc_of(self, rank: int) -> Tuple:
+        """
+        Get process coordinates for given rank.
+
+        Args:
+            rank: Process rank
+
+        Returns:
+            Tuple of process coordinates
+        """
+        ...
+
+    def neighbor_rank(self, *args) -> int:
+        """
+        Get neighbor rank.
+
+        Returns:
+            Neighbor rank
+        """
+        ...
+
+class SlabLayout(Layout):
     """
     2D slab domain layout.
 
     This class manages 2D domain decomposition.
     """
 
-    def __init__(
-        self,
-        px: int,
-        py: int,
-        periodic_x: bool = False,
-        periodic_y: bool = False
-    ) -> None:
+    def __init__(self, options: LayoutOptions) -> None:
         """
         Initialize SlabLayout.
 
         Args:
-            px: Number of processes in x direction
-            py: Number of processes in y direction
-            periodic_x: Whether x direction is periodic
-            periodic_y: Whether y direction is periodic
+            options: Layout configuration options
         """
         ...
 
     def __repr__(self) -> str: ...
 
-    def get_procs(self) -> int:
-        """Get total number of processes."""
+    def buffer(self, name: str) -> torch.Tensor:
+        """Get a named buffer."""
         ...
 
-    def rank_of(self, rx: int, ry: int) -> int:
-        """
-        Get rank for given process coordinates.
-
-        Args:
-            rx: Process x coordinate
-            ry: Process y coordinate
-
-        Returns:
-            Process rank
-        """
+    def module(self, name: str) -> torch.nn.Module:
+        """Get a named sub-module."""
         ...
 
-    def loc_of(self, rank: int) -> Tuple[int, int]:
-        """
-        Get process coordinates for given rank.
-
-        Args:
-            rank: Process rank
-
-        Returns:
-            Tuple of (rx, ry) process coordinates
-        """
-        ...
-
-    def neighbor_rank(
-        self,
-        rx: int,
-        ry: int,
-        dx: int,
-        dy: int,
-        dz: int = 0
-    ) -> int:
-        """
-        Get neighbor rank.
-
-        Args:
-            rx: Current process x coordinate
-            ry: Current process y coordinate
-            dx: Offset in x direction
-            dy: Offset in y direction
-            dz: Offset in z direction (unused for slab)
-
-        Returns:
-            Neighbor rank
-        """
-        ...
-
-class CubedLayout:
+class CubedLayout(Layout):
     """
     3D cubed domain layout.
 
     This class manages 3D domain decomposition.
     """
 
-    def __init__(
-        self,
-        px: int,
-        py: int,
-        pz: int,
-        periodic_x: bool = False,
-        periodic_y: bool = False,
-        periodic_z: bool = False
-    ) -> None:
+    def __init__(self, options: LayoutOptions) -> None:
         """
         Initialize CubedLayout.
 
         Args:
-            px: Number of processes in x direction
-            py: Number of processes in y direction
-            pz: Number of processes in z direction
-            periodic_x: Whether x direction is periodic
-            periodic_y: Whether y direction is periodic
-            periodic_z: Whether z direction is periodic
+            options: Layout configuration options
         """
         ...
 
     def __repr__(self) -> str: ...
 
-    def get_procs(self) -> int:
-        """Get total number of processes."""
+    def buffer(self, name: str) -> torch.Tensor:
+        """Get a named buffer."""
         ...
 
-    def rank_of(self, rx: int, ry: int, rz: int) -> int:
-        """
-        Get rank for given process coordinates.
-
-        Args:
-            rx: Process x coordinate
-            ry: Process y coordinate
-            rz: Process z coordinate
-
-        Returns:
-            Process rank
-        """
+    def module(self, name: str) -> torch.nn.Module:
+        """Get a named sub-module."""
         ...
 
-    def loc_of(self, rank: int) -> Tuple[int, int, int]:
-        """
-        Get process coordinates for given rank.
-
-        Args:
-            rank: Process rank
-
-        Returns:
-            Tuple of (rx, ry, rz) process coordinates
-        """
-        ...
-
-    def neighbor_rank(
-        self,
-        rx: int,
-        ry: int,
-        rz: int,
-        dx: int,
-        dy: int,
-        dz: int
-    ) -> int:
-        """
-        Get neighbor rank.
-
-        Args:
-            rx: Current process x coordinate
-            ry: Current process y coordinate
-            rz: Current process z coordinate
-            dx: Offset in x direction
-            dy: Offset in y direction
-            dz: Offset in z direction
-
-        Returns:
-            Neighbor rank
-        """
-        ...
-
-class CubedSphereLayout:
+class CubedSphereLayout(Layout):
     """
     Cubed sphere domain layout.
 
     This class manages cubed sphere domain decomposition.
     """
 
-    def __init__(self, pxy: int) -> None:
+    @overload
+    def __init__(self) -> None:
+        """Initialize CubedSphereLayout with default values."""
+        ...
+
+    @overload
+    def __init__(self, options: LayoutOptions) -> None:
         """
         Initialize CubedSphereLayout.
 
         Args:
-            pxy: Number of processes per face dimension
+            options: Layout configuration options
         """
         ...
 
     def __repr__(self) -> str: ...
 
-    def get_procs(self) -> int:
-        """Get total number of processes."""
+    def buffer(self, name: str) -> torch.Tensor:
+        """Get a named buffer."""
         ...
 
-    def rank_of(self, face: int, rx: int, ry: int) -> int:
-        """
-        Get rank for given face and process coordinates.
-
-        Args:
-            face: Cube face index
-            rx: Process x coordinate on face
-            ry: Process y coordinate on face
-
-        Returns:
-            Process rank
-        """
+    def module(self, name: str) -> torch.nn.Module:
+        """Get a named sub-module."""
         ...
 
-    def loc_of(self, rank: int) -> Tuple[int, int, int]:
-        """
-        Get face and process coordinates for given rank.
+# Distributed submodule functions
+class distributed:
+    """Distributed utility functions."""
 
-        Args:
-            rank: Process rank
-
-        Returns:
-            Tuple of (face, rx, ry)
-        """
+    @staticmethod
+    def get_rank() -> int:
+        """Get the current process rank."""
         ...
 
-    def neighbor_rank(
-        self,
-        face: int,
-        rx: int,
-        ry: int,
-        dx: int,
-        dy: int,
-        dz: int = 0
-    ) -> int:
-        """
-        Get neighbor rank on cubed sphere.
+    @staticmethod
+    def get_local_rank() -> int:
+        """Get the current local process rank."""
+        ...
 
-        Args:
-            face: Current cube face
-            rx: Current process x coordinate
-            ry: Current process y coordinate
-            dx: Offset in x direction
-            dy: Offset in y direction
-            dz: Offset in z direction (unused)
-
-        Returns:
-            Neighbor rank
-        """
+    @staticmethod
+    def get_layout(*args):  # Returns Layout
+        """Get the layout object."""
         ...

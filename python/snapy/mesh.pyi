@@ -5,8 +5,7 @@ Stub file for snapy.mesh module
 from typing import Callable, Dict, List, Optional, Tuple, overload
 import torch
 from .hydro import HydroOptions
-from .integrator import IntegratorOptions
-from .layout import DistributeInfo
+from .layout import LayoutOptions
 
 
 # Type aliases
@@ -31,13 +30,13 @@ class MeshBlockOptions:
     def __repr__(self) -> str: ...
 
     @staticmethod
-    def from_yaml(filename: str, dist: DistributeInfo = ...) -> "MeshBlockOptions":
+    def from_yaml(filename: str, verbose: bool = False) -> "MeshBlockOptions":
         """
         Load MeshBlockOptions from a YAML file.
 
         Args:
             filename: Path to YAML file
-            dist: Distribution info (optional)
+            verbose: Enable verbose output
 
         Returns:
             MeshBlockOptions loaded from file
@@ -63,23 +62,23 @@ class MeshBlockOptions:
         ...
 
     @overload
-    def dist(self) -> DistributeInfo:
-        """Get distribution info."""
-        ...
-
-    @overload
-    def dist(self, value: DistributeInfo) -> "MeshBlockOptions":
-        """Set distribution info."""
-        ...
-
-    @overload
-    def intg(self) -> IntegratorOptions:
+    def intg(self):  # IntegratorOptions
         """Get integrator options."""
         ...
 
     @overload
-    def intg(self, value: IntegratorOptions) -> "MeshBlockOptions":
+    def intg(self, value) -> "MeshBlockOptions":  # IntegratorOptions
         """Set integrator options."""
+        ...
+
+    @overload
+    def coord(self):  # CoordinateOptions
+        """Get coordinate options."""
+        ...
+
+    @overload
+    def coord(self, value) -> "MeshBlockOptions":  # CoordinateOptions
+        """Set coordinate options."""
         ...
 
     @overload
@@ -103,6 +102,16 @@ class MeshBlockOptions:
         ...
 
     @overload
+    def ib(self):  # InternalBoundaryOptions
+        """Get internal boundary options."""
+        ...
+
+    @overload
+    def ib(self, value) -> "MeshBlockOptions":  # InternalBoundaryOptions
+        """Set internal boundary options."""
+        ...
+
+    @overload
     def bfuncs(self) -> List[bcfunc_t]:
         """Get boundary functions."""
         ...
@@ -110,6 +119,16 @@ class MeshBlockOptions:
     @overload
     def bfuncs(self, value: List[bcfunc_t]) -> "MeshBlockOptions":
         """Set boundary functions."""
+        ...
+
+    @overload
+    def layout(self) -> LayoutOptions:
+        """Get layout options."""
+        ...
+
+    @overload
+    def layout(self, value: LayoutOptions) -> "MeshBlockOptions":
+        """Set layout options."""
         ...
 
 class MeshBlock:
@@ -165,10 +184,56 @@ class MeshBlock:
         """Get a named buffer."""
         ...
 
+    def inc_cycle(self) -> int:
+        """
+        Increment and return the cycle number.
+
+        Returns:
+            Previous cycle number
+        """
+        ...
+
+    def set_user_output_func(self, func: Callable) -> None:
+        """
+        Set user output callback function.
+
+        Args:
+            func: User output function
+        """
+        ...
+
+    def max_time_step(self, vars: Dict[str, torch.Tensor]) -> float:
+        """
+        Calculate maximum stable time step.
+
+        Args:
+            vars: Dictionary of variable tensors
+
+        Returns:
+            Maximum stable time step
+        """
+        ...
+
+    def make_outputs(
+        self,
+        vars: Dict[str, torch.Tensor],
+        time: float,
+        final_write: bool = False
+    ) -> None:
+        """
+        Generate output files.
+
+        Args:
+            vars: Dictionary of variable tensors
+            time: Current simulation time
+            final_write: Whether this is a final write
+        """
+        ...
+
     def part(
         self,
         offset: Tuple[int, int, int],
-        exterior: bool = False,
+        exterior: bool = True,
         extend_x1: int = 0,
         extend_x2: int = 0,
         extend_x3: int = 0
@@ -188,18 +253,40 @@ class MeshBlock:
         """
         ...
 
-    def initialize(self, *args) -> None:
-        """Initialize the mesh block."""
-        ...
-
-    def max_time_step(self, vars: Dict[str, torch.Tensor]) -> float:
+    def initialize(self, vars) -> Tuple:
         """
-        Calculate maximum stable time step.
+        Initialize the mesh block.
 
         Args:
-            vars: Dictionary of variable tensors
+            vars: Variables dictionary
 
         Returns:
-            Maximum stable time step
+            Tuple of (vars, time)
+        """
+        ...
+
+    def print_cycle_info(self, *args) -> None:
+        """Print cycle information."""
+        ...
+
+    def finalize(self, *args) -> None:
+        """Finalize the mesh block."""
+        ...
+
+    def device(self) -> torch.device:
+        """
+        Get the device of the mesh block.
+
+        Returns:
+            PyTorch device
+        """
+        ...
+
+    def check_redo(self, *args) -> bool:
+        """
+        Check if step needs to be redone.
+
+        Returns:
+            True if redo is needed
         """
         ...

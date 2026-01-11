@@ -42,12 +42,13 @@ class UpwindSolver:
         ...
 
     @overload
-    def __init__(self, options: RiemannSolverOptions) -> None:
+    def __init__(self, options: RiemannSolverOptions, hydro = None) -> None:
         """
         Construct an UpwindSolver module.
 
         Args:
             options: Riemann solver configuration options
+            hydro: Parent hydro module
         """
         ...
 
@@ -80,12 +81,13 @@ class RoeSolver:
         ...
 
     @overload
-    def __init__(self, options: RiemannSolverOptions) -> None:
+    def __init__(self, options: RiemannSolverOptions, hydro = None) -> None:
         """
         Construct a RoeSolver module.
 
         Args:
             options: Riemann solver configuration options
+            hydro: Parent hydro module
         """
         ...
 
@@ -118,12 +120,13 @@ class LmarsSolver:
         ...
 
     @overload
-    def __init__(self, options: RiemannSolverOptions) -> None:
+    def __init__(self, options: RiemannSolverOptions, hydro = None) -> None:
         """
         Construct an LmarsSolver module.
 
         Args:
             options: Riemann solver configuration options
+            hydro: Parent hydro module
         """
         ...
 
@@ -156,12 +159,13 @@ class ShallowRoeSolver:
         ...
 
     @overload
-    def __init__(self, options: RiemannSolverOptions) -> None:
+    def __init__(self, options: RiemannSolverOptions, hydro = None) -> None:
         """
         Construct a ShallowRoeSolver module.
 
         Args:
             options: Riemann solver configuration options
+            hydro: Parent hydro module
         """
         ...
 

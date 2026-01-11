@@ -119,66 +119,47 @@ class CoordinateOptions:
         """Set the number of ghost zones."""
         ...
 
-class Cartesian:
+class Coordinate:
     """
-    Cartesian coordinate system implementation.
+    Coordinate system base class.
 
-    This module handles Cartesian grid operations.
+    This class handles coordinate system operations.
     """
 
-    @overload
-    def __init__(self) -> None:
-        """Construct a new default module."""
-        ...
-
-    @overload
-    def __init__(self, options: CoordinateOptions) -> None:
+    def __init__(self, options: CoordinateOptions, hydro = None) -> None:
         """
-        Construct a Cartesian module.
+        Initialize Coordinate system.
 
         Args:
             options: Coordinate configuration options
+            hydro: Parent hydro module (optional)
         """
         ...
 
     def __repr__(self) -> str: ...
 
-    options: CoordinateOptions
-
-    def forward(self, *args) -> torch.Tensor:
-        """Forward pass through the module."""
+    def il(self) -> int:
+        """Get the lower i index."""
         ...
 
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
+    def iu(self) -> int:
+        """Get the upper i index."""
         ...
 
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
+    def jl(self) -> int:
+        """Get the lower j index."""
         ...
 
-    def ifirst(self) -> int:
-        """Get the first i index (inclusive)."""
+    def ju(self) -> int:
+        """Get the upper j index."""
         ...
 
-    def ilast(self) -> int:
-        """Get the last i index (exclusive)."""
+    def kl(self) -> int:
+        """Get the lower k index."""
         ...
 
-    def jfirst(self) -> int:
-        """Get the first j index (inclusive)."""
-        ...
-
-    def jlast(self) -> int:
-        """Get the last j index (exclusive)."""
-        ...
-
-    def kfirst(self) -> int:
-        """Get the first k index (inclusive)."""
-        ...
-
-    def klast(self) -> int:
-        """Get the last k index (exclusive)."""
+    def ku(self) -> int:
+        """Get the upper k index."""
         ...
 
     def center_width1(self) -> torch.Tensor:
@@ -207,4 +188,113 @@ class Cartesian:
 
     def cell_volume(self) -> torch.Tensor:
         """Get cell volumes."""
+        ...
+
+class Cartesian(Coordinate):
+    """
+    Cartesian coordinate system implementation.
+
+    This module handles Cartesian grid operations.
+    """
+
+    def __init__(self, options: CoordinateOptions, hydro = None) -> None:
+        """
+        Construct a Cartesian module.
+
+        Args:
+            options: Coordinate configuration options
+            hydro: Parent hydro module (optional)
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+    def forward(self, *args) -> torch.Tensor:
+        """Forward pass through the module."""
+        ...
+
+    def module(self, name: str) -> torch.nn.Module:
+        """Get a named sub-module."""
+        ...
+
+    def buffer(self, name: str) -> torch.Tensor:
+        """Get a named buffer."""
+        ...
+
+class GnomonicEquiangle(Coordinate):
+    """
+    Gnomonic equiangle coordinate system implementation.
+
+    This module handles gnomonic equiangle projection for cubed sphere grids.
+    """
+
+    def __init__(self, options: CoordinateOptions, hydro = None) -> None:
+        """
+        Construct a GnomonicEquiangle module.
+
+        Args:
+            options: Coordinate configuration options
+            hydro: Parent hydro module (optional)
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+    def forward(self, *args) -> torch.Tensor:
+        """Forward pass through the module."""
+        ...
+
+    def module(self, name: str) -> torch.nn.Module:
+        """Get a named sub-module."""
+        ...
+
+    def buffer(self, name: str) -> torch.Tensor:
+        """Get a named buffer."""
+        ...
+
+# Coordinate submodule functions
+class coord:
+    """Coordinate utility functions."""
+
+    @staticmethod
+    def coord_vec_lower_(*args) -> None:
+        """Lower vector indices in coordinate system."""
+        ...
+
+    @staticmethod
+    def coord_vec_raise_(*args) -> None:
+        """Raise vector indices in coordinate system."""
+        ...
+
+    @staticmethod
+    def cs_cart_to_contra_(*args) -> None:
+        """Convert Cartesian to contravariant coordinates on cubed sphere."""
+        ...
+
+    @staticmethod
+    def cs_contra_to_cart_(*args) -> None:
+        """Convert contravariant to Cartesian coordinates on cubed sphere."""
+        ...
+
+    @staticmethod
+    def cs_ab_to_lonlat(*args) -> Tuple[float, float]:
+        """
+        Convert cubed sphere (a, b) coordinates to longitude/latitude.
+
+        Returns:
+            Tuple of (longitude, latitude)
+        """
+        ...
+
+    @staticmethod
+    def get_cs_face_name(face_id: int) -> str:
+        """
+        Get the name of a cubed sphere face.
+
+        Args:
+            face_id: Face index
+
+        Returns:
+            Face name string
+        """
         ...

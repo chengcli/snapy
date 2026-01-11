@@ -56,16 +56,6 @@ class InternalBoundaryOptions:
     def __repr__(self) -> str: ...
 
     @overload
-    def nghost(self) -> int:
-        """Get the number of ghost zones."""
-        ...
-
-    @overload
-    def nghost(self, value: int) -> "InternalBoundaryOptions":
-        """Set the number of ghost zones."""
-        ...
-
-    @overload
     def max_iter(self) -> int:
         """Get the maximum number of iterations."""
         ...
@@ -108,12 +98,13 @@ class InternalBoundary:
         ...
 
     @overload
-    def __init__(self, options: InternalBoundaryOptions) -> None:
+    def __init__(self, options: InternalBoundaryOptions, block = None) -> None:
         """
         Construct an InternalBoundary module.
 
         Args:
             options: Internal boundary configuration options
+            block: Parent block module (optional)
         """
         ...
 

@@ -28,6 +28,20 @@ class PrimitiveProjectorOptions:
         """Initialize PrimitiveProjectorOptions with default values."""
         ...
 
+    @staticmethod
+    def from_yaml(filename: str, verbose: bool = False) -> "PrimitiveProjectorOptions":
+        """
+        Load PrimitiveProjectorOptions from a YAML file.
+
+        Args:
+            filename: Path to YAML file
+            verbose: Enable verbose output
+
+        Returns:
+            PrimitiveProjectorOptions loaded from file
+        """
+        ...
+
     def __repr__(self) -> str: ...
 
     @overload
@@ -50,36 +64,6 @@ class PrimitiveProjectorOptions:
         """Set the margin value."""
         ...
 
-    @overload
-    def nghost(self) -> int:
-        """Get the number of ghost zones."""
-        ...
-
-    @overload
-    def nghost(self, value: int) -> "PrimitiveProjectorOptions":
-        """Set the number of ghost zones."""
-        ...
-
-    @overload
-    def grav(self) -> float:
-        """Get the gravity value."""
-        ...
-
-    @overload
-    def grav(self, value: float) -> "PrimitiveProjectorOptions":
-        """Set the gravity value."""
-        ...
-
-    @overload
-    def Rd(self) -> float:
-        """Get the gas constant Rd."""
-        ...
-
-    @overload
-    def Rd(self, value: float) -> "PrimitiveProjectorOptions":
-        """Set the gas constant Rd."""
-        ...
-
 class HydroOptions:
     """
     Hydrodynamics configuration options.
@@ -94,17 +78,57 @@ class HydroOptions:
     def __repr__(self) -> str: ...
 
     @staticmethod
-    def from_yaml(filename: str, dist: "DistributeInfo" = ...) -> "HydroOptions":
+    def from_yaml(filename: str, verbose: bool = False) -> "HydroOptions":
         """
         Load HydroOptions from a YAML file.
 
         Args:
             filename: Path to YAML file
-            dist: Distribution info (optional)
+            verbose: Enable verbose output (optional)
 
         Returns:
             HydroOptions loaded from file
         """
+        ...
+
+    @overload
+    def verbose(self) -> bool:
+        """Get verbose flag."""
+        ...
+
+    @overload
+    def verbose(self, value: bool) -> "HydroOptions":
+        """Set verbose flag."""
+        ...
+
+    @overload
+    def disable_flux_x1(self) -> bool:
+        """Get disable flux x1 flag."""
+        ...
+
+    @overload
+    def disable_flux_x1(self, value: bool) -> "HydroOptions":
+        """Set disable flux x1 flag."""
+        ...
+
+    @overload
+    def disable_flux_x2(self) -> bool:
+        """Get disable flux x2 flag."""
+        ...
+
+    @overload
+    def disable_flux_x2(self, value: bool) -> "HydroOptions":
+        """Set disable flux x2 flag."""
+        ...
+
+    @overload
+    def disable_flux_x3(self) -> bool:
+        """Get disable flux x3 flag."""
+        ...
+
+    @overload
+    def disable_flux_x3(self, value: bool) -> "HydroOptions":
+        """Set disable flux x3 flag."""
         ...
 
     @overload
@@ -138,22 +162,12 @@ class HydroOptions:
         ...
 
     @overload
-    def coord(self) -> CoordinateOptions:
-        """Get coordinate options."""
-        ...
-
-    @overload
-    def coord(self, value: CoordinateOptions) -> "HydroOptions":
-        """Set coordinate options."""
-        ...
-
-    @overload
-    def eos(self) -> EquationOfStateOptions:
+    def eos(self) -> "EquationOfStateOptions":
         """Get equation of state options."""
         ...
 
     @overload
-    def eos(self, value: EquationOfStateOptions) -> "HydroOptions":
+    def eos(self, value: "EquationOfStateOptions") -> "HydroOptions":
         """Set equation of state options."""
         ...
 
@@ -198,23 +212,13 @@ class HydroOptions:
         ...
 
     @overload
-    def ib(self) -> InternalBoundaryOptions:
-        """Get internal boundary options."""
+    def icorr(self) -> "ImplicitOptions":
+        """Get implicit correction options."""
         ...
 
     @overload
-    def ib(self, value: InternalBoundaryOptions) -> "HydroOptions":
-        """Set internal boundary options."""
-        ...
-
-    @overload
-    def imp(self) -> "ImplicitOptions":
-        """Get implicit solver options."""
-        ...
-
-    @overload
-    def imp(self, value: "ImplicitOptions") -> "HydroOptions":
-        """Set implicit solver options."""
+    def icorr(self, value: "ImplicitOptions") -> "HydroOptions":
+        """Set implicit correction options."""
         ...
 
 class Hydro:
@@ -230,12 +234,13 @@ class Hydro:
         ...
 
     @overload
-    def __init__(self, options: HydroOptions) -> None:
+    def __init__(self, options: HydroOptions, block = None) -> None:
         """
         Construct a Hydro module.
 
         Args:
             options: Hydrodynamics configuration options
+            block: Parent block module (optional)
         """
         ...
 
@@ -257,16 +262,4 @@ class Hydro:
 
     def max_time_step(self, *args) -> float:
         """Calculate maximum stable time step."""
-        ...
-
-    def reset_timer(self) -> None:
-        """Reset performance timers."""
-        ...
-
-    def get_eos(self) -> EquationOfState:
-        """Get the equation of state object."""
-        ...
-
-    def report_timer(self) -> str:
-        """Get performance timer report."""
         ...
