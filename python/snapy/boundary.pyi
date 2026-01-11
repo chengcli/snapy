@@ -8,6 +8,15 @@ import torch
 # Type aliases
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
 
+# Boundary face constants
+kUnknown: int
+kInnerX1: int
+kOuterX1: int
+kInnerX2: int
+kOuterX2: int
+kInnerX3: int
+kOuterX3: int
+
 # Boundary Conditions
 class BoundaryFuncOptions:
     """
