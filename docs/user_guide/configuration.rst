@@ -42,7 +42,7 @@ The mesh section defines the computational domain:
       nx1: 100
       nx2: 100
       nx3: 50
-      
+
       # Domain extent
       x1min: 0.0
       x1max: 10.0
@@ -50,7 +50,7 @@ The mesh section defines the computational domain:
       x2max: 10.0
       x3min: 0.0
       x3max: 5.0
-      
+
       # Boundary conditions
       bc_x1: periodic
       bc_x2: periodic
@@ -94,13 +94,13 @@ Hydrodynamic solver configuration:
       # Equation of state
       gamma: 1.4            # Adiabatic index
       eos: ideal            # EOS type (ideal, real)
-      
+
       # Riemann solver
       riemann: hllc         # Solver type (hllc, roe, hll)
-      
+
       # Reconstruction
       reconstruction: plm    # Scheme (plm, ppm, weno)
-      
+
       # Flux calculation
       disable_flux_x1: false
       disable_flux_x2: false
@@ -118,7 +118,7 @@ Add gravitational and Coriolis forcing:
         enabled: true
         g: 9.81             # Gravitational acceleration
         direction: -1       # Direction (-1 for downward in x1)
-      
+
       coriolis:
         enabled: true
         omega: 7.27e-5      # Rotation rate (rad/s)
@@ -149,14 +149,14 @@ Control simulation output:
       # Basic output settings
       dt: 0.1               # Output interval
       format: netcdf        # Output format (netcdf, hdf5)
-      
+
       # Variables to output
       variables:
         - density
         - velocity
         - pressure
         - temperature
-      
+
       # Output file settings
       basename: simulation
       directory: output/
@@ -173,11 +173,11 @@ Configure multiple output streams:
         - id: 1
           dt: 0.1
           variables: [density, velocity, pressure]
-          
+
         - id: 2
           dt: 1.0
           variables: [temperature, energy]
-          
+
         - id: 3
           dt: 10.0
           variables: [diagnostics]
@@ -190,10 +190,10 @@ Load configuration in Python:
 .. code-block:: python
 
     import snapy
-    
+
     # Load from YAML file
     options = snapy.MeshBlockOptions.from_yaml("config.yaml")
-    
+
     # Create mesh block
     block = snapy.MeshBlock(options)
 
@@ -205,7 +205,7 @@ You can also configure individual components:
     hydro_opts = snapy.HydroOptions.from_yaml("config.yaml")
     hydro_opts.riemann().type("hllc")
     hydro_opts.eos().gamma(1.4)
-    
+
     # Configure EOS separately
     eos_opts = snapy.EquationOfStateOptions()
     eos_opts.type("ideal")

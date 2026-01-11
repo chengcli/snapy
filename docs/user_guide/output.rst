@@ -14,11 +14,11 @@ The default output format is NetCDF4:
 .. code-block:: python
 
     import snapy
-    
+
     options = snapy.MeshBlockOptions.from_yaml("config.yaml")
     block = snapy.MeshBlock(options)
     vars, time = block.initialize({})
-    
+
     # Generate output
     block.make_outputs(vars, time)
 
@@ -40,20 +40,20 @@ Read output files using netCDF4-python:
 
     from netCDF4 import Dataset
     import numpy as np
-    
+
     # Open output file
     nc = Dataset("simulation.out1.00001.nc", "r")
-    
+
     # Read variables
     time = nc.variables["time"][:]
     density = nc.variables["rho"][:]
     velocity = nc.variables["vel1"][:]
     pressure = nc.variables["press"][:]
-    
+
     # Print dimensions
     print(f"Time steps: {len(time)}")
     print(f"Density shape: {density.shape}")
-    
+
     nc.close()
 
 TorchScript Output
@@ -64,18 +64,18 @@ For internal use, Snapy can save tensors in TorchScript format:
 .. code-block:: python
 
     import torch
-    
+
     # Save tensors
     class TensorModule(torch.nn.Module):
         def __init__(self, tensors):
             super().__init__()
             for name, tensor in tensors.items():
                 self.register_buffer(name, tensor)
-    
+
     module = TensorModule({"hydro_w": vars["hydro_w"]})
     scripted = torch.jit.script(module)
     scripted.save("output.pt")
-    
+
     # Load tensors
     loaded = torch.jit.load("output.pt")
     hydro_w = loaded.hydro_w
@@ -111,30 +111,30 @@ You can compute derived quantities in postprocessing:
 
     from netCDF4 import Dataset
     import numpy as np
-    
+
     nc = Dataset("simulation.out1.00001.nc", "r")
-    
+
     # Read primitive variables
     rho = nc.variables["rho"][:]
     vel1 = nc.variables["vel1"][:]
     vel2 = nc.variables["vel2"][:]
     vel3 = nc.variables["vel3"][:]
     press = nc.variables["press"][:]
-    
+
     # Compute kinetic energy
     ke = 0.5 * rho * (vel1**2 + vel2**2 + vel3**2)
-    
+
     # Compute Mach number (gamma = 1.4)
     gamma = 1.4
     sound_speed = np.sqrt(gamma * press / rho)
     velocity_mag = np.sqrt(vel1**2 + vel2**2 + vel3**2)
     mach = velocity_mag / sound_speed
-    
+
     # Compute vorticity (2D example)
     dvdx = np.gradient(vel2, axis=2)
     dudy = np.gradient(vel1, axis=1)
     vorticity = dvdx - dudy
-    
+
     nc.close()
 
 Combining Output Files
@@ -149,10 +149,10 @@ Combine time series and multiple output streams:
 
     # Combine output streams 1, 2, 3
     pd-combine 1,2,3
-    
+
     # Combine with custom name
     pd-combine 1,2,3 -o results
-    
+
     # Combine in a specific directory
     pd-combine 1,2,3 -d output/
 
@@ -162,11 +162,11 @@ Python API
 .. code-block:: python
 
     from snapy.api.pd_combine import CombineTimeseries, CombineFields
-    
+
     # Combine time series for a field
     stamps = ["00001", "00002", "00003", "00004", "00005"]
     CombineTimeseries("simulation", "out1", stamps, path="./output")
-    
+
     # Combine multiple fields
     CombineFields("simulation", "1,2,3", "combined", path="./output")
 
@@ -182,10 +182,10 @@ Inspect TorchScript .pt files:
 
     # Inspect a single file
     pd-inspect output.pt
-    
+
     # Inspect all files in a tar archive
     pd-inspect archive.tar.gz
-    
+
     # Inspect multiple files
     pd-inspect output1.pt output2.pt output3.pt
 
@@ -195,7 +195,7 @@ Python API
 .. code-block:: python
 
     from snapy.api.pd_inspect import inspect_pt_file
-    
+
     # Inspect file
     inspect_pt_file("output.pt")
 
@@ -212,13 +212,13 @@ Basic 2D visualization:
     from netCDF4 import Dataset
     import matplotlib.pyplot as plt
     import numpy as np
-    
+
     # Read data
     nc = Dataset("simulation.out1.00001.nc", "r")
     time = nc.variables["time"][:]
     density = nc.variables["rho"][:]
     nc.close()
-    
+
     # Plot snapshot at last time step
     plt.figure(figsize=(10, 8))
     plt.imshow(density[-1, :, :, 0], origin="lower", aspect="auto")
@@ -239,30 +239,30 @@ Create animation of time evolution:
     import matplotlib.pyplot as plt
     import matplotlib.animation as animation
     import numpy as np
-    
+
     # Read data
     nc = Dataset("simulation.out1.nc", "r")
     time = nc.variables["time"][:]
     density = nc.variables["rho"][:]
-    
+
     # Create figure
     fig, ax = plt.subplots(figsize=(10, 8))
-    
+
     # Initial frame
     im = ax.imshow(density[0, :, :, 0], origin="lower", aspect="auto",
                    vmin=density.min(), vmax=density.max())
     plt.colorbar(im, ax=ax, label="Density (kg/m³)")
     title = ax.set_title(f"t = {time[0]:.3f} s")
-    
+
     def update(frame):
         im.set_data(density[frame, :, :, 0])
         title.set_text(f"t = {time[frame]:.3f} s")
         return [im, title]
-    
+
     anim = animation.FuncAnimation(fig, update, frames=len(time),
                                   interval=50, blit=True)
     anim.save("density_evolution.mp4", fps=20, dpi=150)
-    
+
     nc.close()
 
 Using ParaView
@@ -292,17 +292,17 @@ Time-Averaged Statistics
 
     from netCDF4 import Dataset
     import numpy as np
-    
+
     nc = Dataset("simulation.out1.nc", "r")
     density = nc.variables["rho"][:]
-    
+
     # Time-averaged density
     rho_mean = np.mean(density, axis=0)
-    
+
     # RMS fluctuations
     rho_fluct = density - rho_mean[np.newaxis, :, :, :]
     rho_rms = np.sqrt(np.mean(rho_fluct**2, axis=0))
-    
+
     nc.close()
 
 Spatial Statistics
@@ -312,7 +312,7 @@ Spatial Statistics
 
     # Horizontal average
     rho_horz_mean = np.mean(density, axis=(2, 3))
-    
+
     # Vertical profile
     rho_vert_profile = np.mean(density, axis=(0, 2, 3))
 
@@ -323,25 +323,25 @@ Power Spectra
 
     import numpy as np
     from scipy import fft
-    
+
     # 2D power spectrum
     rho_2d = density[-1, :, :, 0]
-    
+
     # FFT
     rho_fft = fft.fft2(rho_2d)
     power = np.abs(rho_fft)**2
-    
+
     # Radially averaged spectrum
     ny, nx = rho_2d.shape
     ky = fft.fftfreq(ny)
     kx = fft.fftfreq(nx)
     kx, ky = np.meshgrid(kx, ky)
     k = np.sqrt(kx**2 + ky**2)
-    
+
     # Bin by wavenumber
     k_bins = np.linspace(0, k.max(), 50)
     power_spectrum = np.zeros(len(k_bins) - 1)
-    
+
     for i in range(len(k_bins) - 1):
         mask = (k >= k_bins[i]) & (k < k_bins[i+1])
         power_spectrum[i] = np.mean(power[mask])
@@ -356,7 +356,7 @@ Register custom output:
     import snapy
     import torch
     from netCDF4 import Dataset
-    
+
     def custom_output(block, vars, time):
         """Save custom derived quantities."""
         # Extract variables
@@ -365,33 +365,33 @@ Register custom output:
         vel2 = vars["hydro_w"][snapy.kIV2, :, :, :]
         vel3 = vars["hydro_w"][snapy.kIV3, :, :, :]
         press = vars["hydro_w"][snapy.kIPR, :, :, :]
-        
+
         # Compute derived quantities
         ke = 0.5 * rho * (vel1**2 + vel2**2 + vel3**2)
         gamma = 1.4
         ie = press / (gamma - 1.0)
         total_energy = ke + ie
-        
+
         # Save to NetCDF
         filename = f"custom_output_{time:.6f}.nc"
         nc = Dataset(filename, "w")
-        
+
         # Create dimensions
         nc.createDimension("x3", ke.shape[0])
         nc.createDimension("x2", ke.shape[1])
         nc.createDimension("x1", ke.shape[2])
-        
+
         # Create variables
         ke_var = nc.createVariable("kinetic_energy", "f8", ("x3", "x2", "x1"))
         ie_var = nc.createVariable("internal_energy", "f8", ("x3", "x2", "x1"))
         te_var = nc.createVariable("total_energy", "f8", ("x3", "x2", "x1"))
-        
+
         # Write data
         ke_var[:] = ke.cpu().numpy()
         ie_var[:] = ie.cpu().numpy()
         te_var[:] = total_energy.cpu().numpy()
-        
+
         nc.close()
-    
+
     # Register callback
     block.set_user_output_func(custom_output)

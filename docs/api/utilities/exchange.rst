@@ -93,7 +93,7 @@ Initialize distributed environment::
 
     from snapy import exchange
     import argparse
-    
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--layout", default="slab")
@@ -101,7 +101,7 @@ Initialize distributed environment::
     parser.add_argument("--px2", type=int, default=2)
     parser.add_argument("--px1", type=int, default=1)
     args = parser.parse_args()
-    
+
     layout, ranks, device, info = exchange.init_dist(
         args,
         periodic_x3=True,

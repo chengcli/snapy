@@ -97,10 +97,10 @@ Combine without removing original files::
 Using the Python API::
 
     from snapy.api.pd_combine import CombineTimeseries, CombineFields
-    
+
     # Combine time series
     CombineTimeseries("mycase", "out1", ["00001", "00002", "00003"])
-    
+
     # Combine fields
     CombineFields("mycase", "1,2,3", "main")
 

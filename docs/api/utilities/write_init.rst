@@ -34,10 +34,10 @@ Examples
 Read initial conditions from NetCDF and save to TorchScript::
 
     from snapy.write_init import read_hydro, save_tensors
-    
+
     # Read from NetCDF
     w = read_hydro('config.yaml', 'initial_state.nc')
-    
+
     # Save to TorchScript format
     data = {'hydro_w': w}
     save_tensors(data, 'initial_state.pt')

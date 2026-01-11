@@ -60,7 +60,7 @@ Inspect all .part files in a tar archive::
 Using the Python API::
 
     from snapy.api.pd_inspect import inspect_pt_file
-    
+
     inspect_pt_file("output.part")
 
 File Format

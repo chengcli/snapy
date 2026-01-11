@@ -27,11 +27,11 @@ Here's a minimal example showing how to set up and run a simulation:
     for step in range(100):
         # Forward integration
         vars = block.forward(dt, 0, vars)
-        
+
         # Generate outputs
         if step % 10 == 0:
             block.make_outputs(vars, time)
-        
+
         time += dt
 
 Configuration
