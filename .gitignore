@@ -3,6 +3,8 @@ build*/
 
 # cache
 .cache
+__pycache__/
+*.pyc
 
 # nc
 *.nc
