@@ -862,6 +862,13 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
 
   auto current_time = vars.at("last_time").item<double>();
 
+  // move to device
+  for (auto& [name, tensor] : vars) {
+    if (tensor.defined()) {
+      tensor.set_(tensor.to(device()));
+    }
+  }
+
   // remove timing data
   vars.erase("last_time");
   vars.erase("last_cycle");
