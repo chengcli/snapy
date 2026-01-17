@@ -5,10 +5,8 @@
 #include <limits>
 #include <mutex>
 
-// kintera
-#include <kintera/utils/serialize.hpp>
-
 // snap
+#include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
@@ -268,7 +266,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   }
 }
 
-double MeshBlockImpl::initialize(Variables& vars) {
+double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
@@ -277,8 +275,8 @@ double MeshBlockImpl::initialize(Variables& vars) {
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
 
-  if (pintg->options->restart() != "") {
-    return _init_from_restart(vars);
+  if (restart_file != nullptr) {
+    return _init_from_restart(vars, std::string(restart_file));
   }
 
   BoundaryFuncOptions bops;
@@ -828,46 +826,49 @@ torch::Device MeshBlockImpl::device() const {
   }
 }
 
-double MeshBlockImpl::_init_from_restart(Variables& vars) {
-  // create filename: <file_basename>.<block_id>.<fid>.restart
-  std::string fid = pintg->options->restart();
+double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
+  // timing data
+  vars["last_time"] = torch::Tensor();
+  vars["last_cycle"] = torch::Tensor();
+  vars["file_number"] = torch::Tensor();
+  vars["next_time"] = torch::Tensor();
 
-  std::string fname;
-  char bid[12];
-  snprintf(bid, sizeof(bid), "block%d", options->layout()->rank());
+  // hydro data
+  vars["hydro_u"] = torch::Tensor();
+  vars["hydro_w"] = torch::Tensor();
 
-  fname.append(options->basename());
-  fname.append(".");
-  fname.append(bid);
-  fname.append(".");
-  fname.append(fid);
-  fname.append(".restart");
+  // solid data
+  vars["solid"] = torch::Tensor();
+  vars["fill_solid_hydro_w"] = torch::Tensor();
+  vars["fill_solid_hydro_u"] = torch::Tensor();
 
-  // load variables from disk
-  kintera::load_tensors(vars, fname);
+  // scalar data
+  if (pscalar->nvar() > 0) {
+    vars["scalar_s"] = torch::Tensor();
+    vars["scalar_r"] = torch::Tensor();
+  }
 
-  // load auxiliary timing data from disk
-  Variables timing_vars;
+  load_restart(vars, fname);
 
-  timing_vars["last_time"] = torch::Tensor();
-  timing_vars["last_cycle"] = torch::Tensor();
-  timing_vars["file_number"] = torch::Tensor();
-  timing_vars["next_time"] = torch::Tensor();
-
-  kintera::load_tensors(timing_vars, fname);
-
-  cycle = timing_vars.at("last_cycle").item<int64_t>();
+  cycle = vars.at("last_cycle").item<int64_t>() - 1;
   for (int n = 0; n < output_types.size(); ++n) {
-    output_types[n]->file_number =
-        timing_vars.at("file_number")[n].item<int64_t>();
-    output_types[n]->next_time = timing_vars.at("next_time")[n].item<double>();
+    output_types[n]->file_number = vars.at("file_number")[n].item<int64_t>();
+    output_types[n]->next_time = vars.at("next_time")[n].item<double>();
   }
 
   // start timing
   _time_start = clock();
   _cycle_start = cycle;
 
-  return timing_vars.at("last_time").item<double>();
+  auto current_time = vars.at("last_time").item<double>();
+
+  // remove timing data
+  vars.erase("last_time");
+  vars.erase("last_cycle");
+  vars.erase("file_number");
+  vars.erase("next_time");
+
+  return current_time;
 }
 
 }  // namespace snap

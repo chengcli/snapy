@@ -74,7 +74,8 @@ int main(int argc, char** argv) {
   // initialize
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  block->initialize(vars);
+  char const* restart = nullptr;
+  double current_time = block->initialize(vars, restart);
 
   block->user_output_callback = [Rd, cp, p0](Variables const& vars) {
     auto w = vars.at("hydro_w");
@@ -86,8 +87,9 @@ int main(int argc, char** argv) {
     return out;
   };
 
-  double current_time = 0.;
-  block->make_outputs(vars, current_time);
+  if (restart == nullptr) {
+    block->make_outputs(vars, current_time);
+  }
 
   while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);

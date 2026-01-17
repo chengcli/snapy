@@ -126,7 +126,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    * \param vars: variables to initialize
    * \return: initial simulation time
    */
-  double initialize(Variables& vars);
+  double initialize(Variables& vars, char const* restart_file = nullptr);
 
   //! compute the maximum allowable time step
   /*!
@@ -177,9 +177,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! initialize from restart file
   /*!
    * \param vars: variables to initialize
-   * \return: simulation time from the restart file
+   * \param fname: restart filename
+   * \return: last simulation time from the restart file
    */
-  double _init_from_restart(Variables& vars);
+  double _init_from_restart(Variables& vars, std::string fname);
 
  private:
   //! clock and cycle at time start
