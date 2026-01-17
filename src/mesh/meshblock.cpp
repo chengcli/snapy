@@ -865,7 +865,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   // move to device
   for (auto& [name, tensor] : vars) {
     if (tensor.defined()) {
-      tensor.set_(tensor.to(device()));
+      tensor = tensor.to(device());
     }
   }
 
