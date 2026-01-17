@@ -40,7 +40,7 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   torch::Tensor compute(std::string ab,
                         std::vector<torch::Tensor> const& args) override;
 
-  //! \brief Inverse of the mean molecular weight
+  //! \brief Virtual factor
   /*!
    *! Eq.16 in Li2019
    *! $ \frac{R}{R_d} = \frac{\mu_d}{\mu}$
