@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
   // initialize
   std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  block->initialize(vars);
+  double current_time = block->initialize(vars, cli->restart_filename);
 
   // user output variables
   // (1) total precipitable mass fraction [kg/kg]
@@ -152,8 +152,9 @@ int main(int argc, char **argv) {
   kinet->to(device);
 
   // time loop
-  double current_time = 0.;
-  block->make_outputs(vars, current_time);
+  if (cli->restart_filename == nullptr) {
+    block->make_outputs(vars, current_time);
+  }
 
   while (!block->pintg->stop(block->cycle++, current_time)) {
     auto dt = block->max_time_step(vars);

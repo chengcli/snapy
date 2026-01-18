@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include <snap/input/parameter_input.hpp>
+#include <snap/input/read_restart_file.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -38,6 +39,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("kIV3") = (int)snap::IVZ;
   m.attr("kIPR") = (int)snap::IPR;
   m.attr("kICY") = (int)snap::ICY;
+
+  m.def(
+      "load_restart",
+      [](snap::Variables &vars, std::string const &path) {
+        snap::load_restart(vars, path);
+        return vars;
+      },
+      py::arg("vars"), py::arg("path"));
 
   bind_layout(m);
   bind_bc(m);

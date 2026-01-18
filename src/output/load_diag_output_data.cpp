@@ -30,8 +30,10 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
     int ny = thermo_y->options->species().size() - 1;
     auto temp = peos->compute("W->T", {w});
+    auto dens = w[IDN];
     auto pres = w[IPR];
-    auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
+    auto yfrac = w.narrow(0, ICY, ny);
+    auto xfrac = thermo_y->compute("Y->X", {yfrac});
 
     // mole concentration [mol/m^3]
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
@@ -57,6 +59,11 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     // potential temperature [K]
     auto theta = (entropy_vol / cp_vol).exp();
 
+    // virtual potential temperature [K]
+    auto Rgas = kintera::constants::Rgas / mu;
+    auto feps = pres / (dens * Rgas * temp);
+    auto theta_v = theta * feps;
+
     // relative humidity
     auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
                                          thermo_x->options->nucleation());
@@ -73,6 +80,14 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "theta";
+    pod->data.CopyFromTensor(theta);
+    AppendOutputDataNode(pod);
+    num_vars_ += 1;
+
+    // virtual potential temperature
+    pod = new OutputData;
+    pod->type = "SCALARS";
+    pod->name = "theta_v";
     pod->data.CopyFromTensor(theta);
     AppendOutputDataNode(pod);
     num_vars_ += 1;
