@@ -74,7 +74,7 @@ target_link_libraries(${namel}_${buildl}
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}
-    archive
+    archive_static
     fmt::fmt
     yaml-cpp::yaml-cpp
     )
