@@ -28,7 +28,7 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
 }
 
 std::string ImplicitOptionsImpl::type() const {
-  switch (op->scheme()) {
+  switch (scheme()) {
     case 0:
       return "none";
       break;
