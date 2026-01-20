@@ -13,6 +13,36 @@
 
 namespace snap {
 
+ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
+                                               bool /*verbose*/) {
+  auto config = YAML::LoadFile(filename);
+  if (!config["integration"]) return nullptr;
+  if (!config["integration"]["implicit-scheme"]) return nullptr;
+  return from_yaml(config["integration"]["implicit-scheme"]);
+}
+
+ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
+  auto op = ImplicitOptionsImpl::create();
+  op->scheme(node.as<int>());
+  return op;
+}
+
+std::string ImplicitOptionsImpl::type() const {
+  switch (op->scheme()) {
+    case 0:
+      return "none";
+      break;
+    case 1:
+      return "vic-partial";
+      break;
+    case 9:
+      return "vic-full";
+      break;
+    default:
+      TORCH_CHECK(false, "Unsupported implicit scheme");
+  }
+}
+
 ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions const& options_,
                                      torch::nn::Module* p)
     : options(options_) {

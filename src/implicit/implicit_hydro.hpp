@@ -36,7 +36,7 @@ struct ImplicitOptionsImpl {
     }
   }
 
-  ADD_ARG(std::string, type) = "none";
+  std::string type() const;
   ADD_ARG(int, scheme) = 0;
 };
 using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
