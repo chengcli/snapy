@@ -123,7 +123,7 @@ class CoordinateImpl {
   }
 
   void print(std::ostream &stream) const;
-  virtual void reset_coordinates(std::array<MeshGenerator, 3> meshgens);
+  void reset_coordinates();
 
   //! module methods
   virtual torch::Tensor center_width1() const;
@@ -192,6 +192,9 @@ class CoordinateImpl {
   //! fluxes -> flux divergence
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                                 torch::Tensor flux2, torch::Tensor flux3);
+
+  virtual void refine();
+  virtual void coarsen();
 };
 using Coordinate = std::shared_ptr<CoordinateImpl>;
 
@@ -212,7 +215,15 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
     print(stream);
   }
 
-  void reset_coordinates(std::array<MeshGenerator, 3> meshgens) override;
+  void refine() override {
+    CoordinateImpl::refine();
+    reset();
+  }
+
+  void coarsen() override {
+    CoordinateImpl::coarsen();
+    reset();
+  }
 };
 TORCH_MODULE(Cartesian);
 
@@ -231,6 +242,16 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
   void pretty_print(std::ostream &stream) const override {
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);
+  }
+
+  void refine() override {
+    CoordinateImpl::refine();
+    reset();
+  }
+
+  void coarsen() override {
+    CoordinateImpl::coarsen();
+    reset();
   }
 };
 TORCH_MODULE(Cylindrical);

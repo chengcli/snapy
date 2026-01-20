@@ -43,7 +43,7 @@ void CartesianImpl::reset() {
   register_buffer("x3f", x3f);
 }
 
-void CartesianImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
+/*void CartesianImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
   CoordinateImpl::reset_coordinates(meshgens);
 
   // dimension 1
@@ -63,5 +63,5 @@ void CartesianImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
              x3f.slice(0, 0, options->nc3()));
   x3v.copy_(0.5 * (x3f.slice(0, 0, options->nc3()) +
                    x3f.slice(0, 1, options->nc3() + 1)));
-}
+}*/
 }  // namespace snap

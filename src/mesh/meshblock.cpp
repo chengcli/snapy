@@ -778,6 +778,124 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   _playout->pg->shutdown();
 }
 
+void MeshBlockImpl::refine() {
+  _playout->pg->barrier()->wait();
+  pcoord->refine();
+  phydro->refine();
+  pscalar->refine();
+
+  int nvar = phydro->peos->nvar();
+  int nc3 = pcoord->options->nc3();
+  int nc2 = pcoord->options->nc2();
+  int nc1 = pcoord->options->nc1();
+
+  auto new_hydro_u0 = torch::empty({nvar, nc3, nc2, nc1}, _hydro_u0.options());
+  auto new_hydro_u1 = torch::empty({nvar, nc3, nc2, nc1}, _hydro_u1.options());
+
+  auto int_opts = torch::nn::functional::InterpolateFuncOptions()
+                      .scale_factor(std::vector<double>({2.0, 2.0, 1.0}))
+                      .mode(torch::kTrilinear)
+                      .align_corners(false);
+
+  auto interior = part({0, 0, 0}, PartOptions().exterior(false));
+
+  //// ------------- (1) Perform interpolation ------------- ////
+  new_hydro_u0.index(interior).copy_(
+      torch::nn::functional::interpolate(_hydro_u0.index(interior), int_opts));
+  new_hydro_u1.index(interior).copy_(
+      torch::nn::functional::interpolate(_hydro_u1.index(interior), int_opts));
+
+  //// ------------- (2) Apply conserved physical BC ----------- ////
+  BoundaryFuncOptions bops;
+  bops.nghost(options->coord()->nghost());
+  bops.type(kConserved);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](new_hydro_u0, 3 - i / 2, bops);
+    options->bfuncs()[i](new_hydro_u1, 3 - i / 2, bops);
+  }
+
+  //// ------------- (3) Sync ghost zones ----------- ////
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true).type(kConserved);
+
+  Variables sync_vars;
+  sync_vars["hydro_u0"] = new_hydro_u0;
+  sync_vars["hydro_u1"] = new_hydro_u1;
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
+
+  //// ------------- (4) Reset registered buffers ----------- ////
+  _hydro_u0.set_(new_hydro_u0);
+  _hydro_u1.set_(new_hydro_u1);
+
+  if (pscalar->nvar() > 0) {
+    _scalar_s0.set_(torch::nn::functional::interpolate(_scalar_s0, int_opts));
+    _scalar_s1.set_(torch::nn::functional::interpolate(_scalar_s1, int_opts));
+  }
+}
+
+void MeshBlockImpl::coarsen() {
+  _playout->pg->barrier()->wait();
+  pcoord->coarsen();
+  phydro->coarsen();
+  pscalar->coarsen();
+
+  int nvar = phydro->peos->nvar();
+  int nc3 = pcoord->options->nc3();
+  int nc2 = pcoord->options->nc2();
+  int nc1 = pcoord->options->nc1();
+
+  auto new_hydro_u0 = torch::empty({nvar, nc3, nc2, nc1}, _hydro_u0.options());
+  auto new_hydro_u1 = torch::empty({nvar, nc3, nc2, nc1}, _hydro_u1.options());
+
+  auto int_opts = torch::nn::functional::InterpolateFuncOptions()
+                      .scale_factor(std::vector<double>({0.5, 0.5, 1.0}))
+                      .mode(torch::kArea)
+                      .align_corners(false);
+
+  auto interior = part({0, 0, 0}, PartOptions().exterior(false));
+
+  //// ------------- (1) Perform interpolation ------------- ////
+  new_hydro_u0.index(interior).copy_(
+      torch::nn::functional::interpolate(_hydro_u0.index(interior), int_opts));
+  new_hydro_u1.index(interior).copy_(
+      torch::nn::functional::interpolate(_hydro_u1.index(interior), int_opts));
+
+  //// ------------- (2) Apply conserved physical BC ----------- ////
+  BoundaryFuncOptions bops;
+  bops.nghost(options->coord()->nghost());
+  bops.type(kConserved);
+  for (int i = 0; i < options->bfuncs().size(); ++i) {
+    if (options->bfuncs()[i] == nullptr) continue;
+    options->bfuncs()[i](new_hydro_u0, 3 - i / 2, bops);
+    options->bfuncs()[i](new_hydro_u1, 3 - i / 2, bops);
+  }
+
+  //// ------------- (3) Sync ghost zones ----------- ////
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true).type(kConserved);
+
+  Variables sync_vars;
+  sync_vars["hydro_u0"] = new_hydro_u0;
+  sync_vars["hydro_u1"] = new_hydro_u1;
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
+
+  //// ------------- (4) Reset registered buffers ----------- ////
+  _hydro_u0.set_(new_hydro_u0);
+  _hydro_u1.set_(new_hydro_u1);
+
+  if (pscalar->nvar() > 0) {
+    _scalar_s0.set_(torch::nn::functional::interpolate(_scalar_s0, int_opts));
+    _scalar_s1.set_(torch::nn::functional::interpolate(_scalar_s1, int_opts));
+  }
+}
+
 int MeshBlockImpl::check_redo(Variables& vars) {
   auto sig = snap::SignalHandler::GetInstance();
   if (sig->CheckSignalFlags(this)) return -1;  // terminate

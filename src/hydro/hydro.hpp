@@ -126,6 +126,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor forward(double dt, torch::Tensor hydro_u,
                         Variables const& other);
 
+  //! refine this mesh grid
+  void refine();
+
+  //! coarsen this mesh grid
+  void coarsen();
+
  private:
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();

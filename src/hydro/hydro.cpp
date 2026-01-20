@@ -360,6 +360,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   return du;
 }
 
+void HydroImpl::refine() {}
+
+void HydroImpl::coarsen() {}
+
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              torch::nn::Module* p,
                                              std::string const& name) {

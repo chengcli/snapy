@@ -163,6 +163,12 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! make final output and print diagnostics
   void finalize(Variables const& vars, double time);
 
+  //! refine this mesh grid
+  void refine();
+
+  //! coarsen this mesh grid
+  void coarsen();
+
   //! check if redo is needed
   /*!
    * \param vars: current variables

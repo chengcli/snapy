@@ -131,7 +131,10 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
                                torch::nn::Module* p)
     : options(options_) {
   pmb = dynamic_cast<MeshBlockImpl const*>(p);
+  reset_coordinates();
+}
 
+void CoordinateImpl::reset_coordinates() {
   auto const& op = options;
 
   auto dx = (op->x1max() - op->x1min()) / op->nx1();
@@ -148,10 +151,8 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
   auto x3min = op->nx3() > 1 ? op->x3min() - op->nghost() * dx : op->x3min();
   auto x3max = op->nx3() > 1 ? op->x3max() + op->nghost() * dx : op->x3max();
   x3f = torch::linspace(x3min, x3max, op->nc3() + 1, torch::kFloat64);
-}
 
-void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
-  auto const& op = options;
+  /*auto const& op = options;
 
   if (meshgens[0] != nullptr) {
     int nx1f = x1f.size(0);
@@ -172,7 +173,7 @@ void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
     auto rx = compute_logical_position(
         torch::linspace(0, nx3f, nx3f, torch::kFloat64), nx3f, true);
     x3f.copy_(meshgens[2](rx, op->x3min(), op->x3max()));
-  }
+  }*/
 }
 
 void CoordinateImpl::print(std::ostream& stream) const {
@@ -324,6 +325,28 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
   }
 
   return dflx / vol;
+}
+
+void CoordinateImpl::refine() {
+  options->nx2() = options->nx2() > 1 ? options->nx2() * 2 : 1;
+  options->nx3() = options->nx3() > 1 ? options->nx3() * 2 : 1;
+  reset_coordinates();
+}
+
+void CoordinateImpl::coarsen() {
+  TORCH_CHECK(options->nx2() % 2 == 0 || options->nx2() == 1,
+              "Cannot coarsen x2 direction with odd number of cells");
+  TORCH_CHECK(options->nx3() % 2 == 0 || options->nx3() == 1,
+              "Cannot coarsen x3 direction with odd number of cells");
+
+  options->nx2() = options->nx2() > 1 ? options->nx2() / 2 : 1;
+  TORCH_CHECK(options->nx2() > options->nghost() || options->nx2() == 1,
+              "Number of x2 grids must be greater than the ghost zone size");
+
+  options->nx3() = options->nx3() > 1 ? options->nx3() / 2 : 1;
+  TORCH_CHECK(options->nx3() > options->nghost() || options->nx3() == 1,
+              "Number of x3 grids must be greater than the ghost zone size");
+  reset_coordinates();
 }
 
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,

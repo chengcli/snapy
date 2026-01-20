@@ -95,6 +95,12 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(double dt, torch::Tensor scalar_u,
                         Variables const& other);
+
+  //! refine this mesh grid
+  void refine() {}
+
+  //! coarsen this mesh grid
+  void coarsen() {}
 };
 
 TORCH_MODULE(Scalar);

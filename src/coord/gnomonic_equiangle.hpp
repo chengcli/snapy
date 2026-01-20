@@ -56,6 +56,16 @@ class GnomonicEquiangleImpl
   torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                         torch::Tensor flux2, torch::Tensor flux3) override;
 
+  void refine() override {
+    CoordinateImpl::refine();
+    reset();
+  }
+
+  void coarsen() override {
+    CoordinateImpl::coarsen();
+    reset();
+  }
+
  private:
   torch::Tensor _interp_ghost_LR(torch::Tensor buf, bool flip) const;
   torch::Tensor _interp_ghost_BT(torch::Tensor buf, bool flip) const;

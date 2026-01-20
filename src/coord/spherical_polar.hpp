@@ -26,6 +26,16 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
 
   torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                         torch::Tensor flux2, torch::Tensor flux3) override;
+
+  void refine() override {
+    CoordinateImpl::refine();
+    reset();
+  }
+
+  void coarsen() override {
+    CoordinateImpl::coarsen();
+    reset();
+  }
 };
 TORCH_MODULE(SphericalPolar);
 
