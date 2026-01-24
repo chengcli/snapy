@@ -41,7 +41,9 @@ void bind_output(py::module &m) {
       .ADD_OPTION(std::string, snap::OutputOptionsImpl, file_type)
       .ADD_OPTION(std::string, snap::OutputOptionsImpl, data_format);
 
-  auto pyOutputType = py::class_<snap::OutputType>(m, "OutputType");
+  auto pyOutputType =
+      py::class_<snap::OutputType, std::shared_ptr<snap::OutputType>>(
+          m, "OutputType");
 
   pyOutputType.def(py::init<>())
       .def(py::init<snap::OutputOptions>())
@@ -50,11 +52,12 @@ void bind_output(py::module &m) {
              return fmt::format("OutputType(file_number = {}; next_time = {})",
                                 a.file_number, a.next_time);
            })
-      .def("increment_file_number",
-           [](snap::OutputType &a) { return ++a.file_number; });
+      .def_readwrite("file_number", &snap::OutputType::file_number)
+      .def_readwrite("next_time", &snap::OutputType::next_time);
 
   auto pyNetcdfOutput =
-      py::class_<snap::NetcdfOutput, snap::OutputType>(m, "NetcdfOutput");
+      py::class_<snap::NetcdfOutput, snap::OutputType,
+                 std::shared_ptr<snap::NetcdfOutput>>(m, "NetcdfOutput");
 
   pyNetcdfOutput.def(py::init<snap::OutputOptions>())
       .def("__repr__",
