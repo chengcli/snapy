@@ -95,19 +95,14 @@ MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
           pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(var.dim()));
       auto vec = var.sizes().vec();
 
-      // dim 1
-      if (vec[vec.size() - 1] > 1) {
-        vec[vec.size() - 1] *= 2 * vec[vec.size() - 1] - nghost;
-      }
-
       // dim 2
       if (vec.size() > 1 && vec[vec.size() - 2] > 1) {
-        vec[vec.size() - 2] = 2 * vec[vec.size() - 2] - nghost;
+        vec[vec.size() - 2] = 2 * (vec[vec.size() - 2] - nghost);
       }
 
       // dim 3
       if (vec.size() > 2 && vec[vec.size() - 3] > 1) {
-        vec[vec.size() - 3] = 2 * vec[vec.size() - 3] - nghost;
+        vec[vec.size() - 3] = 2 * (vec[vec.size() - 3] - nghost);
       }
 
       vars[name] = torch::zeros(vec, var.options());
