@@ -31,6 +31,7 @@ struct HydroOptionsImpl {
       std::string const& filename, bool verbose = false);
 
   HydroOptionsImpl() = default;
+  std::shared_ptr<HydroOptionsImpl> clone() const;
   void report(std::ostream& os) const {
     os << "-- hydro options --\n";
     os << "* verbose = " << verbose() << "\n"

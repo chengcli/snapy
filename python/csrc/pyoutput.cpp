@@ -39,7 +39,10 @@ void bind_output(py::module &m) {
       .ADD_OPTION(double, snap::OutputOptionsImpl, x3_slice)
       .ADD_OPTION(std::vector<std::string>, snap::OutputOptionsImpl, variables)
       .ADD_OPTION(std::string, snap::OutputOptionsImpl, file_type)
-      .ADD_OPTION(std::string, snap::OutputOptionsImpl, data_format);
+      .ADD_OPTION(std::string, snap::OutputOptionsImpl, data_format)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, combine)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, verbose)
+      .ADD_OPTION(bool, snap::OutputOptionsImpl, super_resolution);
 
   auto pyOutputType =
       py::class_<snap::OutputType, std::shared_ptr<snap::OutputType>>(

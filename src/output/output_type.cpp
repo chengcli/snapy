@@ -3,6 +3,9 @@
 #include <stdexcept>
 
 // snap
+#include <snap/mesh/meshblock.hpp>
+#include <snap/utils/refine.hpp>
+
 #include "output_formats.hpp"
 #include "output_type.hpp"
 
@@ -49,6 +52,7 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   }
 
   options->verbose() = node["verbose"].as<bool>(false);
+  options->super_resolution() = node["super-resolution"].as<bool>(false);
 
   return options;
 }
@@ -61,16 +65,69 @@ OutputType::OutputType(OutputOptions const &options_)
       plast_data_() {  // Initialize tail node to nullptr
 }
 
-void OutputType::LoadOutputData(MeshBlockImpl *pmb, Variables const &vars) {
+MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
+                                          Variables const &vars_in) {
   num_vars_ = 0;
   OutputData *pod;
+  MeshBlockImpl *pmb;
+  Variables vars;
+  // set ptrs to data in OutputData linked list, then slice/sum as needed
+
+  // create a refined output meshblock if super resolution is requested
+  if (options->super_resolution()) {
+    auto op = std::make_shared<MeshBlockOptionsImpl>(*(pmb_in->options));
+    op->coord() = pmb_in->options->coord()->clone();
+    if (op->coord()->nx2() > 1) op->coord()->nx2() *= 2;
+    if (op->coord()->nx3() > 1) op->coord()->nx3() *= 2;
+
+    pmb = new MeshBlockImpl(op);
+    // shall be deleted by caller of LoadOutputData
+
+    auto peos = pmb->phydro->peos;
+    auto pscalar = pmb->pscalar;
+
+    int nghost = pmb->options->coord()->nghost();
+
+    for (auto &[name, var] : vars_in) {
+      auto interior_in = pmb_in->part(
+          {0, 0, 0}, PartOptions().exterior(false).ndim(var.dim()));
+      auto interior_out =
+          pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(var.dim()));
+      auto vec = var.sizes().vec();
+
+      // dim 1
+      if (vec[vec.size() - 1] > 1) {
+        vec[vec.size() - 1] *= 2 * vec[vec.size() - 1] - nghost;
+      }
+
+      // dim 2
+      if (vec.size() > 1 && vec[vec.size() - 2] > 1) {
+        vec[vec.size() - 2] = 2 * vec[vec.size() - 2] - nghost;
+      }
+
+      // dim 3
+      if (vec.size() > 2 && vec[vec.size() - 3] > 1) {
+        vec[vec.size() - 3] = 2 * vec[vec.size() - 3] - nghost;
+      }
+
+      vars[name] = torch::zeros(vec, var.options());
+      vars[name]
+          .index(interior_out)
+          .copy_(conservative_refine(var.index(interior_in)));
+    }
+    // vars["hydro_w"] = peos->compute("U->W", {vars["hydro_u"]});
+    // scalar eos?
+  } else {
+    pmb = pmb_in;
+    vars = vars_in;
+  }
 
   loadHydroOutputData(pmb, vars);
   loadDiagOutputData(pmb, vars);
   loadScalarOutputData(pmb, vars);
-  loadUserOutputData(pmb, vars);
+  loadUserOutputData(pmb_in, vars);
 
-  return;
+  return pmb;
 }
 
 void OutputType::AppendOutputDataNode(OutputData *pnew_data) {

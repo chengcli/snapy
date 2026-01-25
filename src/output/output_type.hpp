@@ -82,6 +82,7 @@ struct OutputOptionsImpl {
 
   ADD_ARG(bool, combine) = true;
   ADD_ARG(bool, verbose) = false;
+  ADD_ARG(bool, super_resolution) = false;
 };
 using OutputOptions = std::shared_ptr<OutputOptionsImpl>;
 
@@ -138,7 +139,7 @@ class OutputType {
   // functions
   //! \brief Create doubly linked list of OutputData's containing requested
   //! variables
-  void LoadOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  MeshBlockImpl *LoadOutputData(MeshBlockImpl *pmb, Variables const &vars);
 
   void AppendOutputDataNode(OutputData *pdata);
   void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
