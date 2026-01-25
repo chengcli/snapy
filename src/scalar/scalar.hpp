@@ -24,6 +24,7 @@ struct ScalarOptionsImpl {
   }
   static std::shared_ptr<ScalarOptionsImpl> from_yaml(
       std::string const& filename, bool verbose = false);
+
   ScalarOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "-- scalar options --\n";

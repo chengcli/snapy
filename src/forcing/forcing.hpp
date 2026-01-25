@@ -30,6 +30,10 @@ struct ConstGravityOptionsImpl {
       YAML::Node const& forcing);
 
   ConstGravityOptionsImpl() = default;
+  std::shared_ptr<ConstGravityOptionsImpl> clone() const {
+    return std::make_shared<ConstGravityOptionsImpl>(*this);
+  }
+
   void report(std::ostream& os) const {
     os << "-- constant gravity options --\n";
     os << "* grav1 = " << grav1() << "\n"
@@ -71,6 +75,9 @@ struct CoriolisOptionsImpl {
       YAML::Node const& forcing);
 
   CoriolisOptionsImpl() = default;
+  std::shared_ptr<CoriolisOptionsImpl> clone() const {
+    return std::make_shared<CoriolisOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- coriolis options --\n";
     os << "* omega1 = " << omega1() << "\n"
@@ -138,6 +145,9 @@ struct DiffusionOptionsImpl {
       YAML::Node const& forcing);
 
   DiffusionOptionsImpl() = default;
+  std::shared_ptr<DiffusionOptionsImpl> clone() const {
+    return std::make_shared<DiffusionOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- diffusion options --\n";
     os << "* K = " << K() << "\n"
@@ -176,6 +186,9 @@ struct FricHeatOptionsImpl {
       YAML::Node const& forcing);
 
   FricHeatOptionsImpl() = default;
+  std::shared_ptr<FricHeatOptionsImpl> clone() const {
+    return std::make_shared<FricHeatOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- frictional heating options --\n";
   }
@@ -211,6 +224,9 @@ struct BodyHeatOptionsImpl {
       YAML::Node const& forcing);
 
   BodyHeatOptionsImpl() = default;
+  std::shared_ptr<BodyHeatOptionsImpl> clone() const {
+    return std::make_shared<BodyHeatOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- body heating options --\n";
     os << "* dTdt = " << dTdt() << "\n"
@@ -253,6 +269,9 @@ struct TopCoolOptionsImpl {
       YAML::Node const& forcing);
 
   TopCoolOptionsImpl() = default;
+  std::shared_ptr<TopCoolOptionsImpl> clone() const {
+    return std::make_shared<TopCoolOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- top cooling options --\n";
     os << "* flux = " << flux() << "\n"
@@ -293,6 +312,9 @@ struct BotHeatOptionsImpl {
       YAML::Node const& forcing);
 
   BotHeatOptionsImpl() = default;
+  std::shared_ptr<BotHeatOptionsImpl> clone() const {
+    return std::make_shared<BotHeatOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- bottom heating options --\n";
     os << "* flux = " << flux() << "\n"
@@ -333,6 +355,9 @@ struct RelaxBotCompOptionsImpl {
       YAML::Node const& forcing);
 
   RelaxBotCompOptionsImpl() = default;
+  std::shared_ptr<RelaxBotCompOptionsImpl> clone() const {
+    return std::make_shared<RelaxBotCompOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- relax bottom composition options --\n";
     os << "* tau = " << tau() << "\n"
@@ -374,6 +399,9 @@ struct RelaxBotTempOptionsImpl {
       YAML::Node const& forcing);
 
   RelaxBotTempOptionsImpl() = default;
+  std::shared_ptr<RelaxBotTempOptionsImpl> clone() const {
+    return std::make_shared<RelaxBotTempOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- relax bottom temperature options --\n";
     os << "* tau = " << tau() << "\n"
@@ -413,6 +441,9 @@ struct RelaxBotVeloOptionsImpl {
       YAML::Node const& forcing);
 
   RelaxBotVeloOptionsImpl() = default;
+  std::shared_ptr<RelaxBotVeloOptionsImpl> clone() const {
+    return std::make_shared<RelaxBotVeloOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- relax bottom velocity options --\n";
     os << "* tau = " << tau() << "\n"
@@ -456,6 +487,9 @@ struct TopSpongeLyrOptionsImpl {
       YAML::Node const& forcing);
 
   TopSpongeLyrOptionsImpl() = default;
+  std::shared_ptr<TopSpongeLyrOptionsImpl> clone() const {
+    return std::make_shared<TopSpongeLyrOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- top sponge layer options --\n";
     os << "* tau = " << tau() << "\n"
@@ -496,6 +530,9 @@ struct BotSpongeLyrOptionsImpl {
       YAML::Node const& forcing);
 
   BotSpongeLyrOptionsImpl() = default;
+  std::shared_ptr<BotSpongeLyrOptionsImpl> clone() const {
+    return std::make_shared<BotSpongeLyrOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- bottom sponge layer options --\n";
     os << "* tau = " << tau() << "\n"
@@ -536,6 +573,9 @@ struct PlumeForcingOptionsImpl {
       YAML::Node const& forcing);
 
   PlumeForcingOptionsImpl() = default;
+  std::shared_ptr<PlumeForcingOptionsImpl> clone() const {
+    return std::make_shared<PlumeForcingOptionsImpl>(*this);
+  }
   void report(std::ostream& os) const {
     os << "-- plume forcing options --\n";
     os << "* entrainment = " << entrainment() << "\n"

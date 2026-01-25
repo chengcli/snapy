@@ -257,12 +257,16 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   auto slice3 = torch::indexing::Slice(start3, start3 + len3);
   auto slice4 = torch::indexing::Slice();
 
-  if (opts.ndim() == 3) {
+  if (opts.ndim() == 1) {
+    return {slice1};
+  } else if (opts.ndim() == 2) {
+    return {slice2, slice1};
+  } else if (opts.ndim() == 3) {
     return {slice3, slice2, slice1};
   } else if (opts.ndim() == 4) {
     return {slice4, slice3, slice2, slice1};
   } else {
-    throw std::runtime_error("part: ndim must be 3 or 4.");
+    throw std::runtime_error("part: ndim must be 1-4.");
   }
 }
 

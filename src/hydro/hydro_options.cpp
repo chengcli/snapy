@@ -103,4 +103,38 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   return op;
 }
 
+HydroOptions HydroOptionsImpl::clone() const {
+  auto op = HydroOptionsImpl::create();
+
+  op->verbose() = verbose();
+  op->disable_flux_x1() = disable_flux_x1();
+  op->disable_flux_x2() = disable_flux_x2();
+  op->disable_flux_x3() = disable_flux_x3();
+
+  if (grav()) op->grav() = grav()->clone();
+  if (coriolis()) op->coriolis() = coriolis()->clone();
+  if (visc()) op->visc() = visc()->clone();
+  if (fricHeat()) op->fricHeat() = fricHeat()->clone();
+  if (bodyHeat()) op->bodyHeat() = bodyHeat()->clone();
+  if (topCool()) op->topCool() = topCool()->clone();
+  if (botHeat()) op->botHeat() = botHeat()->clone();
+  if (relaxBotComp()) op->relaxBotComp() = relaxBotComp()->clone();
+  if (relaxBotTemp()) op->relaxBotTemp() = relaxBotTemp()->clone();
+  if (relaxBotVelo()) op->relaxBotVelo() = relaxBotVelo()->clone();
+  if (topSpongeLyr()) op->topSpongeLyr() = topSpongeLyr()->clone();
+  if (botSpongeLyr()) op->botSpongeLyr() = botSpongeLyr()->clone();
+  if (plumeForcing()) op->plumeForcing() = plumeForcing()->clone();
+
+  // TODO(cli)
+  /*if (eos()) op->eos() = eos()->clone();
+  if (proj()) op->proj() = proj()->clone();
+  if (recon1()) op->recon1() = recon1()->clone();
+  if (recon23()) op->recon23() = recon23()->clone();
+  if (riemann()) op->riemann() = riemann()->clone();
+  if (icorr()) op->icorr() = icorr()->clone();
+  if (sed()) op->sed() = sed()->clone();*/
+
+  return op;
+}
+
 }  // namespace snap

@@ -35,6 +35,9 @@ struct InternalBoundaryOptionsImpl {
       const YAML::Node &node);
 
   InternalBoundaryOptionsImpl() = default;
+  std::shared_ptr<InternalBoundaryOptionsImpl> clone() const {
+    return std::make_shared<InternalBoundaryOptionsImpl>(*this);
+  }
   void report(std::ostream &os) const {
     os << "-- internal boundary options --\n";
     os << "* MAXRUN = " << MAXRUN << "\n"

@@ -77,6 +77,10 @@ void bind_mesh(py::module &m) {
             }
           },
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
+      .ADD_OPTION(bool, snap::MeshBlockOptionsImpl, verbose)
+      .ADD_OPTION(std::string, snap::MeshBlockOptionsImpl, basename)
+      .ADD_OPTION(std::vector<snap::OutputOptions>, snap::MeshBlockOptionsImpl,
+                  outputs)
       .ADD_OPTION(harp::IntegratorOptions, snap::MeshBlockOptionsImpl, intg)
       .ADD_OPTION(snap::CoordinateOptions, snap::MeshBlockOptionsImpl, coord)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptionsImpl, hydro)
@@ -146,5 +150,7 @@ void bind_mesh(py::module &m) {
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
       .def("device", &snap::MeshBlockImpl::device)
-      .def("check_redo", &snap::MeshBlockImpl::check_redo);
+      .def("check_redo", &snap::MeshBlockImpl::check_redo)
+      .def("get_outputs",
+           [](snap::MeshBlockImpl &self) { return self.output_types; });
 }

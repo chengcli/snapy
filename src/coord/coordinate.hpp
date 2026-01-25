@@ -34,6 +34,10 @@ struct CoordinateOptionsImpl {
       std::string const &filename);
 
   CoordinateOptionsImpl() = default;
+  std::shared_ptr<CoordinateOptionsImpl> clone() const {
+    return std::make_shared<CoordinateOptionsImpl>(*this);
+  }
+
   void report(std::ostream &os) const {
     os << "-- coordinate options --\n";
     os << "* type = " << type() << "\n"

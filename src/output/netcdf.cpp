@@ -30,12 +30,16 @@ namespace snap {
 NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
-                                     double current_time, bool final_write) {
+void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
+                                     Variables const &vars, double current_time,
+                                     bool final_write) {
   // skip final write if specified
   if (final_write) return;
 
 #ifdef NETCDFOUTPUT
+  auto pmb = LoadOutputData(pmb_in, vars);
+  int rank = pmb->options->layout()->rank();
+
   auto pmeta = MetadataTable::GetInstance();
   auto phydro = pmb->phydro;
 
@@ -70,10 +74,6 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
       out_ke += nghost;
     }
   }
-
-  // set ptrs to data in OutputData linked list, then slice/sum as needed
-  LoadOutputData(pmb, vars);
-  int rank = pmb->options->layout()->rank();
 
   // create filename: <basename>.<blockid>.<fileid>.<XXXXX>.nc
   // file_number
@@ -447,6 +447,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   if (options->combine()) {
     combine_blocks(pmb, final_write);
   }
+
+  if (pmb != pmb_in) delete pmb;
 #endif  // NETCDFOUTPUT
 }
 }  // namespace snap
