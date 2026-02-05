@@ -21,9 +21,16 @@ def parse_library_names(libdir):
     library_names.extend(['netcdf'])
 
     # move current library name to first
-    current = [item for item in library_names if item.startswith('snap')]
-    other = [item for item in library_names if not item.startswith('snap')]
-    return current + other
+    #current = [item for item in library_names if item.startswith('snap')]
+    #other = [item for item in library_names if not item.startswith('snap')]
+
+    # 1) non-cuda libs first (consumers)
+    snap_non_cuda = [l for l in library_names if l.startswith("snap") and "cuda" not in l]
+    # 2) cuda libs last (providers)
+    snap_cuda = [l for l in library_names if l.startswith("snap") and "cuda" in l]
+    # 3) everything else
+    other = [l for l in library_names if not l.startswith("snap")]
+    return snap_non_cuda + other + snap_cuda
 
 site_dir = sysconfig.get_paths()["purelib"]
 
@@ -58,11 +65,13 @@ if sys.platform == "darwin":
     ]
 else:
     extra_link_args = [
+        "-Wl,--no-as-needed",
         "-Wl,-rpath,$ORIGIN/lib",
         "-Wl,-rpath,$ORIGIN/../torch/lib",
         "-Wl,-rpath,$ORIGIN/../pydisort/lib",
         "-Wl,-rpath,$ORIGIN/../pyharp/lib",
         "-Wl,-rpath,$ORIGIN/../kintera/lib",
+        "-Wl,--as-needed",
     ]
 
 ext_module = cpp_extension.CppExtension(

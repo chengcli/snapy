@@ -23,4 +23,8 @@ macro(setup_problem namel)
     ${namel}.${buildl}
     PRIVATE snapy::snap
             $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>)
+
+  if (UNIX AND NOT APPLE)
+    target_link_options(${namel}.${buildl} PRIVATE -Wl,--no-as-needed)
+  endif()
 endmacro()
