@@ -64,14 +64,12 @@ if sys.platform == "darwin":
         "-Wl,-rpath,@loader_path/../kintera/lib",
     ]
 else:
-    # ubuntu system has an aggressive linker that removes unused shared libs
-    # add cuda library explicitly if built with cuda
-    cuda_linker = []
-    if 'snap_cuda_release' in libraries:
-        libraries.remove('snap_cuda_release')
-        cuda_linker = ["-Wl,--no-as-needed",
-                       "-lsnap_cuda_release",
-                       "-Wl,--as-needed"]
+    cuda_linker = ["-Wl,--no-as-needed"]
+    for libname in libraries:
+        if 'cuda' in libname:
+            libraries.remove(libname)
+            cuda_linker.append(f"-l{libname}")
+    cuda_linker.append("-Wl,--as-needed")
 
     extra_link_args = [
         "-Wl,-rpath,$ORIGIN/lib",
