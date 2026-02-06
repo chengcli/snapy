@@ -70,11 +70,9 @@ else:
     if cuda_libraries:
         for lib in cuda_libraries:
             libraries.remove(lib)
-        cuda_linker = (
-            ["-Wl,--no-as-needed"]
+        cuda_linker = ["-Wl,--no-as-needed"]
             + [f"-l{lib}" for lib in cuda_libraries]
             + ["-Wl,--as-needed"]
-        )
 
     extra_link_args = [
         "-Wl,-rpath,$ORIGIN/lib",
