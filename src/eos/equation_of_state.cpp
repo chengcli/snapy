@@ -117,6 +117,15 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   // cons.index(interior).narrow(0, ICY, nvapor) =
   //    pull_neighbors4(cons.index(interior).narrow(0, ICY, nvapor));
 
+  int ny = 0;
+  int nvapor = 0;
+  int ncloud = 0;
+  if (options->thermo()) {
+    nvapor = options->thermo()->vapor_ids().size() - 1;
+    ncloud = options->thermo()->cloud_ids().size();
+    ny = nvapor + ncloud;
+  }
+
   if (nvar() > IPR) {
     auto mom = cons.narrow(0, IVX, 3).clone();
     coord_vec_raise_(mom, pcoord->cosine_cell_kj);
@@ -127,13 +136,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     cons[IPR].clamp_min_(ke + min_ie);
   }
 
-  int ny = 0;
-  if (options->thermo()) {
-    int nvapor = options->thermo()->vapor_ids().size() - 1;
-    int ncloud = options->thermo()->cloud_ids().size();
-    ny = nvapor + ncloud;
-    if (ny == 0) return;
-
+  if (options->thermo() && ny > 0) {
     auto nghost = pcoord->options->nghost();
     auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
 
