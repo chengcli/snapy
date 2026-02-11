@@ -136,17 +136,19 @@ void bind_mesh(py::module &m) {
           py::arg("extend_x3") = 0)
       .def(
           "initialize",
+          [](snap::MeshBlockImpl &self, snap::Variables &vars) {
+            self.initialize(vars);
+            return std::make_pair(vars, 0.);
+          },
+          py::arg("vars"))
+      .def(
+          "initialize_from_restart",
           [](snap::MeshBlockImpl &self, snap::Variables &vars,
              std::string restart_file) {
-            double time;
-            if (restart_file.empty()) {
-              time = self.initialize(vars);
-            } else {
-              time = self.initialize(vars, restart_file.c_str());
-            }
+            double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
           },
-          py::arg("vars"), py::arg("restart_file") = "")
+          py::arg("vars"), py::arg("restart_file"))
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
       .def("device", &snap::MeshBlockImpl::device)
