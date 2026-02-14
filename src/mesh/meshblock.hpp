@@ -52,6 +52,7 @@ struct MeshBlockOptionsImpl {
 
   //! output
   ADD_ARG(std::string, basename) = "";
+  ADD_ARG(std::string, output_dir) = ".";
   ADD_ARG(std::vector<OutputOptions>, outputs);
 
   //! submodule options

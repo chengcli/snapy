@@ -53,6 +53,8 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   char blockid[12];
   snprintf(blockid, sizeof(blockid), "block%d", pmb->options->layout()->rank());
 
+  fname.assign(pmb->options->output_dir());
+  fname.append("/");
   fname.append(pmb->options->basename());
   fname.append(".");
   fname.append(blockid);

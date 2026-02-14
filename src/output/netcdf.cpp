@@ -83,6 +83,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   char blockid[12];
   snprintf(blockid, sizeof(blockid), "block%d", rank);
 
+  fname.assign(pmb->options->output_dir());
+  fname.append("/");
   fname.assign(pmb->options->basename());
   fname.append(".");
   fname.append(blockid);
