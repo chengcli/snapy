@@ -94,6 +94,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   fname.append(number);
   fname.append(".nc");
 
+  std::cout << "#### FNAME = " << fname << std::endl;
+
   // 1. open file for output
   std::stringstream msg;
   int ifile;

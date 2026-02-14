@@ -34,6 +34,8 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     snprintf(number, sizeof(number), "%05d", file_number);
 
     std::string infile;
+    infile.assign(pmb->options->output_dir());
+    infile.assign("/");
     infile.assign(pmb->options->basename());
     infile.append(".block*.");
     if (final_write) {
