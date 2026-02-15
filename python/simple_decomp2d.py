@@ -66,8 +66,8 @@ def get_buffer_id_2d(x3_offset: int, x2_offset: int):
 
 def get_neighbor_rank_2d(nblock3: int, nblock2: int,
                          x3_offset: int, x2_offset: int,
-                         periodic_x3 = False: bool,
-                         periodic_x2 = False: bool):
+                         periodic_x3:bool = False,
+                         periodic_x2:bool = False):
     rank = dist.get_rank()
     r3, r2 = cart_coords(rank, nblock2)
     rank_x2 = rank + x2_offset
