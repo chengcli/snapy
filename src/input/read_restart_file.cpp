@@ -139,8 +139,8 @@ static fs::path make_temp_path(std::string_view suffix) {
   return dir / ("tmp_fallback" + std::string(suffix));
 }
 
-static void load_pt_from_tar(Variables& vars, struct archive* ar,
-                             struct archive_entry* entry) {
+static Variables load_pt_from_tar(struct archive* ar,
+                                  struct archive_entry* entry) {
   const char* name_c = archive_entry_pathname(entry);
   std::string member_name =
       name_c ? std::string{name_c} : std::string{"<unknown>"};
@@ -155,7 +155,7 @@ static void load_pt_from_tar(Variables& vars, struct archive* ar,
               << "\n";
     // Must still consume/skip entry data:
     archive_read_data_skip(ar);
-    return;
+    return {};
   }
 
   std::vector<char> buf(1 << 20);
@@ -169,7 +169,7 @@ static void load_pt_from_tar(Variables& vars, struct archive* ar,
       out.close();
       std::error_code ec;
       fs::remove(tmp_path, ec);
-      return;
+      return {};
     }
     out.write(buf.data(), static_cast<std::streamsize>(n));
     if (!out) {
@@ -178,7 +178,7 @@ static void load_pt_from_tar(Variables& vars, struct archive* ar,
       out.close();
       std::error_code ec;
       fs::remove(tmp_path, ec);
-      return;
+      return {};
     }
   }
 
@@ -186,7 +186,7 @@ static void load_pt_from_tar(Variables& vars, struct archive* ar,
   out.close();
 
   // load the extracted .part
-  kintera::load_tensors(vars, tmp_path.string());
+  auto vars = kintera::load_tensors(tmp_path.string());
 
   // remove empty tensors (if any)
   for (auto it = vars.begin(); it != vars.end();) {
@@ -200,15 +200,17 @@ static void load_pt_from_tar(Variables& vars, struct archive* ar,
   // Cleanup
   std::error_code ec;
   fs::remove(tmp_path, ec);
+
+  return vars;
 }
 
-void load_restart(Variables& vars, std::string const& path) {
+Variables load_restart(std::string const& path) {
   // Dispatch based on whether `path` is a .part file or a tar archive.
   if (is_tar_archive(path)) {
     struct archive* ar = archive_read_new();
     if (!ar) {
       std::cerr << path << ": failed to allocate archive reader\n";
-      return;
+      return {};
     }
 
     archive_read_support_filter_all(ar);
@@ -220,7 +222,7 @@ void load_restart(Variables& vars, std::string const& path) {
                 << ": failed to open archive: " << archive_error_string(ar)
                 << "\n";
       archive_read_free(ar);
-      return;
+      return {};
     }
 
     bool found_part = false;
@@ -240,8 +242,7 @@ void load_restart(Variables& vars, std::string const& path) {
           // Not for this rank; skip
           archive_read_data_skip(ar);
         } else {
-          load_pt_from_tar(vars, ar, entry);
-          return;
+          return load_pt_from_tar(ar, entry);
         }
 
         // Note: consume the entry data (via archive_read_data*)
@@ -267,8 +268,10 @@ void load_restart(Variables& vars, std::string const& path) {
   } else {
     // Treat as a single .part TorchScript file
     std::cout << "single .part file detected\n";
-    kintera::load_tensors(vars, path);
+    return kintera::load_tensors(path);
   }
+
+  return {};
 }
 
 }  // namespace snap

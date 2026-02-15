@@ -79,6 +79,7 @@ void bind_mesh(py::module &m) {
           py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
       .ADD_OPTION(bool, snap::MeshBlockOptionsImpl, verbose)
       .ADD_OPTION(std::string, snap::MeshBlockOptionsImpl, basename)
+      .ADD_OPTION(std::string, snap::MeshBlockOptionsImpl, output_dir)
       .ADD_OPTION(std::vector<snap::OutputOptions>, snap::MeshBlockOptionsImpl,
                   outputs)
       .ADD_OPTION(harp::IntegratorOptions, snap::MeshBlockOptionsImpl, intg)

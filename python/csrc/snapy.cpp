@@ -40,13 +40,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("kIPR") = (int)snap::IPR;
   m.attr("kICY") = (int)snap::ICY;
 
-  m.def(
-      "load_restart",
-      [](snap::Variables &vars, std::string const &path) {
-        snap::load_restart(vars, path);
-        return vars;
-      },
-      py::arg("vars"), py::arg("path"));
+  m.def("load_restart", &snap::load_restart);
 
   bind_layout(m);
   bind_bc(m);

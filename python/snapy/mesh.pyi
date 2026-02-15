@@ -159,17 +159,17 @@ class MeshBlock:
 
     def forward(
         self,
+        vars: Dict[str, torch.Tensor]
         dt: float,
         stage: int,
-        vars: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         """
         Forward integration step.
 
         Args:
+            vars: Dictionary of variable tensors
             dt: Time step size
             stage: Integration stage
-            vars: Dictionary of variable tensors
 
         Returns:
             Updated variables dictionary

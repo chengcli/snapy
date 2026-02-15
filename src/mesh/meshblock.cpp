@@ -831,46 +831,40 @@ torch::Device MeshBlockImpl::device() const {
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
-  // timing data
-  vars["last_time"] = torch::Tensor();
-  vars["last_cycle"] = torch::Tensor();
-  vars["file_number"] = torch::Tensor();
-  vars["next_time"] = torch::Tensor();
+  std::string restart_file;
+  restart_file.assign(options->output_dir());
+  restart_file.append("/");
+  restart_file.append(fname);
 
-  // hydro data
-  vars["hydro_u"] = torch::Tensor();
-  vars["hydro_w"] = torch::Tensor();
+  auto data = load_restart(restart_file);
 
-  // solid data
-  vars["solid"] = torch::Tensor();
-  vars["fill_solid_hydro_w"] = torch::Tensor();
-  vars["fill_solid_hydro_u"] = torch::Tensor();
+  // check required variables
+  TORCH_CHECK(data.count("hydro_u"),
+              "Restart file is missing required variable: hydro_u");
+  TORCH_CHECK(data.count("last_time"),
+              "Restart file is missing required variable: last_time");
+  TORCH_CHECK(data.count("last_cycle"),
+              "Restart file is missing required variable: last_cycle");
+  TORCH_CHECK(data.count("file_number"),
+              "Restart file is missing required variable: file_number");
+  TORCH_CHECK(data.count("next_time"),
+              "Restart file is missing required variable: next_time");
 
-  // scalar data
-  if (pscalar->nvar() > 0) {
-    vars["scalar_s"] = torch::Tensor();
-    vars["scalar_r"] = torch::Tensor();
-  }
-
-  load_restart(vars, fname);
-
-  cycle = vars.at("last_cycle").item<int64_t>() - 1;
+  cycle = data.at("last_cycle").item<int64_t>() - 1;
   for (int n = 0; n < output_types.size(); ++n) {
-    output_types[n]->file_number = vars.at("file_number")[n].item<int64_t>();
-    output_types[n]->next_time = vars.at("next_time")[n].item<double>();
+    output_types[n]->file_number = data.at("file_number")[n].item<int64_t>();
+    output_types[n]->next_time = data.at("next_time")[n].item<double>();
   }
 
   // start timing
   _time_start = clock();
   _cycle_start = cycle;
 
-  auto current_time = vars.at("last_time").item<double>();
+  auto current_time = data.at("last_time").item<double>();
 
   // move to device
-  for (auto& [name, tensor] : vars) {
-    if (tensor.defined()) {
-      tensor = tensor.to(device());
-    }
+  for (auto& [name, tensor] : data) {
+    vars[name] = tensor.to(device());
   }
 
   // remove timing data
