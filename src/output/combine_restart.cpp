@@ -35,8 +35,8 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
 
     std::string infile;
     infile.assign(pmb->options->output_dir());
-    infile.assign("/");
-    infile.assign(pmb->options->basename());
+    infile.append("/");
+    infile.append(pmb->options->basename());
     infile.append(".block*.");
     if (final_write) {
       infile.append("final");
@@ -56,7 +56,9 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     }
 
     std::string outfile;
-    outfile.assign(pmb->options->basename());
+    outfile.assign(pmb->options->output_dir());
+    outfile.append("/");
+    outfile.append(pmb->options->basename());
     outfile.append(".");
     if (final_write) {
       outfile.append("final");

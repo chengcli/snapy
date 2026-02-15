@@ -35,8 +35,8 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 
     std::string infile;
     infile.assign(pmb->options->output_dir());
-    infile.assign("/");
-    infile.assign(pmb->options->basename());
+    infile.append("/");
+    infile.append(pmb->options->basename());
     infile.append(".block*.");
     infile.append(options->file_id());
     infile.append(".");
@@ -54,7 +54,9 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
     }
 
     std::string outfile;
-    outfile.assign(pmb->options->basename());
+    outfile.assign(pmb->options->output_dir());
+    outfile.append("/");
+    outfile.append(pmb->options->basename());
     outfile.append(".");
     outfile.append(options->file_id());
     outfile.append(".");
