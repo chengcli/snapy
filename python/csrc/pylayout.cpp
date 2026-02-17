@@ -50,6 +50,7 @@ void bind_layout(py::module &m) {
 
   py::class_<snap::LayoutImpl, snap::Layout>(m, "Layout")
       .def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def_readonly("options", &snap::LayoutImpl::options)
       .def("__repr__",
            [](const snap::LayoutImpl &self) {
              std::stringstream ss;
@@ -66,6 +67,10 @@ void bind_layout(py::module &m) {
                  std::shared_ptr<snap::SlabLayoutImpl>>(m, "SlabLayout");
 
   pySlabLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def_readonly("options", &snap::SlabLayoutImpl::options)
+      .def("rank_of", &snap::SlabLayoutImpl::rank_of)
+      .def("loc_of", &snap::SlabLayoutImpl::loc_of)
+      .def("neighbor_rank", &snap::SlabLayoutImpl::neighbor_rank)
       .def("__repr__", [](const snap::SlabLayoutImpl &self) {
         std::stringstream ss;
         self.pretty_print(ss);
@@ -86,7 +91,11 @@ void bind_layout(py::module &m) {
                  std::shared_ptr<snap::CubedLayoutImpl>>(m, "CubedLayout");
 
   pyCubedLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
-      .def("__repr__", [](const snap::CubedSphereLayoutImpl &self) {
+      .def_readonly("options", &snap::CubedLayoutImpl::options)
+      .def("rank_of", &snap::CubedLayoutImpl::rank_of)
+      .def("loc_of", &snap::CubedLayoutImpl::loc_of)
+      .def("neighbor_rank", &snap::CubedLayoutImpl::neighbor_rank)
+      .def("__repr__", [](const snap::CubedLayoutImpl &self) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("CubedSphereLayout(\n{})", ss.str());
@@ -108,6 +117,10 @@ void bind_layout(py::module &m) {
 
   pyCubedSphereLayout.def(py::init<>())
       .def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def_readonly("options", &snap::CubedSphereLayoutImpl::options)
+      .def("rank_of", &snap::CubedSphereLayoutImpl::rank_of)
+      .def("loc_of", &snap::CubedSphereLayoutImpl::loc_of)
+      .def("neighbor_rank", &snap::CubedSphereLayoutImpl::neighbor_rank)
       .def("__repr__", [](const snap::CubedSphereLayoutImpl &self) {
         std::stringstream ss;
         self.pretty_print(ss);
