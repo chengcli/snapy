@@ -688,7 +688,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                 (suffix == "-" && (dy < 0 || dx < 0)))
               continue;
           }
-          var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
+          //var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
         }
       }
   }
@@ -756,7 +756,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             continue;
         }
 
-        var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
+        //var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
