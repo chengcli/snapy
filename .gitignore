@@ -32,3 +32,6 @@ docs/_build/
 
 # swap files
 *.swp
+
+# codeql
+_codeql_detected_source_root
