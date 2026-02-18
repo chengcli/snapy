@@ -467,8 +467,8 @@ int CubedSphereLayoutImpl::neighbor_rank(
 
 void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
                                       SyncOptions const &opts) {
-  if (options->verbose() && is_root()) {
-    std::cout << "[CubedSphereLayout] serializing data into send buffers\n";
+  if (options->verbose()) {
+    SINFO(CubedSphereLayout) << "serializing data into send buffers\n";
   }
 
   auto pcoord = pmb->pcoord;
@@ -639,15 +639,18 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
       }
     }
+
+  _sync_device();
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                                         Variables &vars,
                                         SyncOptions const &opts) const {
-  if (options->verbose() && is_root()) {
-    std::cout
-        << "[CubedSphereLayout] deserializing data from receive buffers\n";
+  if (options->verbose()) {
+    SINFO(CubedSphereLayout) << "deserializing data from receive buffers\n";
   }
+
+  _sync_device();
 
   auto pcoord = pmb->pcoord;
 
@@ -817,13 +820,14 @@ void CubedSphereLayoutImpl::forward(
       int r = get_buffer_id(offset);
 
       if (nb != rank) {  // different ranks
-        // Send operation
-        auto send_work = pg->send(send_bufs[r], nb, opts.phyid());
-        works.push_back(send_work);
-
-        // Receive operation
-        auto recv_work = pg->recv(recv_bufs[r], nb, opts.phyid());
-        works.push_back(recv_work);
+        // rank-based ordering
+        if (rank < nb) {
+          works.push_back(pg->send(send_bufs[r], nb, opts.phyid()));
+          works.push_back(pg->recv(recv_bufs[r], nb, opts.phyid()));
+        } else {
+          works.push_back(pg->recv(recv_bufs[r], nb, opts.phyid()));
+          works.push_back(pg->send(send_bufs[r], nb, opts.phyid()));
+        }
       } else {  // self-send
         TORCH_CHECK(false, "I should not be here");
       }
