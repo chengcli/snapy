@@ -23,7 +23,10 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
                          ? input_file 
                          : input_file.substr(last_slash + 1);
   // Remove file extension
-  op->basename() = filename.substr(0, filename.find_last_of('.'));
+  size_t last_dot = filename.find_last_of('.');
+  op->basename() = (last_dot == std::string::npos) 
+                   ? filename 
+                   : filename.substr(0, last_dot);
   if (verbose) {
     SINFO(MeshBlockOptions) << "basename = " << op->basename() << std::endl;
   }
