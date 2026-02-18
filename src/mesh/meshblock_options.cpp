@@ -17,11 +17,8 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   op->layout() = LayoutOptionsImpl::from_yaml(input_file);
 
   // ------------- basename ------------- //
-  // Extract filename from path (handles both absolute and relative paths)
-  size_t last_slash = input_file.find_last_of("/\\");
-  std::string filename = (last_slash == std::string::npos)
-                             ? input_file
-                             : input_file.substr(last_slash + 1);
+  // Extract filename from path using utility function, then remove extension
+  std::string filename = get_filename(input_file);
   // Remove file extension
   size_t last_dot = filename.find_last_of('.');
   op->basename() =
