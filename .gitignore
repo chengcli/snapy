@@ -29,3 +29,6 @@ data/
 
 # Documentation builds
 docs/_build/
+
+# swap files
+*.swp

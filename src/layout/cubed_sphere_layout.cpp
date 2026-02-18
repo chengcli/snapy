@@ -517,7 +517,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
                 (suffix == "-" && (dy > 0 || dx > 0)))
               continue;
           }
-          send_bufs[bid].push_back(var.index(sub).clone().flatten());
+          send_bufs[bid].push_back(var.index(sub).clone());
           recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
         }
       }
@@ -635,7 +635,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
           var_send = var_send.transpose(-2, -3).reshape(sizes);
         }
 
-        send_bufs[bid].push_back(var_send.flatten());
+        send_bufs[bid].push_back(var_send);
         recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
       }
     }
@@ -692,7 +692,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                 (suffix == "-" && (dy < 0 || dx < 0)))
               continue;
           }
-          var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
+          var.index_put_(sub, recv_bufs[bid][count++]);
         }
       }
   }
@@ -760,7 +760,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             continue;
         }
 
-        var.index_put_(sub, recv_bufs[bid][count++].view(var.index(sub).sizes()));
+        var.index_put_(sub, recv_bufs[bid][count++]);
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
