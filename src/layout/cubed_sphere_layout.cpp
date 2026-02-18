@@ -639,6 +639,8 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
       }
     }
+
+  _sync_device();
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
@@ -647,6 +649,8 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
   if (options->verbose()) {
     SINFO(CubedSphereLayout) << "deserializing data from receive buffers\n";
   }
+
+  _sync_device();
 
   auto pcoord = pmb->pcoord;
 
