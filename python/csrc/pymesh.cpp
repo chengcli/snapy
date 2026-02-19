@@ -145,11 +145,11 @@ void bind_mesh(py::module &m) {
       .def(
           "initialize_from_restart",
           [](snap::MeshBlockImpl &self, std::string restart_file) {
-            Variables vars;
+            snap::Variables vars;
             double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
           },
-          py::arg("vars"), py::arg("restart_file"))
+          py::arg("restart_file"))
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
       .def("device", &snap::MeshBlockImpl::device)
