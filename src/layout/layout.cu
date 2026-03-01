@@ -5,6 +5,7 @@
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAFunctions.h>
 
 // snap
 #include <snap/utils/log.hpp>
@@ -24,7 +25,7 @@ void LayoutImpl::_init_nccl() {
     device_index = options->device_id();
   }
 
-  TORCH_CHECK(device_index < torch::cuda::device_count(), "[Layout] device_id error");
+  TORCH_CHECK(device_index < c10::cuda::device_count(), "[Layout] device_id error");
 
   torch::Device device(torch::kCUDA, device_index);
   c10::cuda::set_device(device_index);
