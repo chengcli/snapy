@@ -1,6 +1,7 @@
 // C/C++
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -98,6 +99,12 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   std::stringstream msg;
   int ifile;
 
+  std::error_code ec;
+  std::filesystem::create_directories(pmb->options->output_dir(), ec);
+  if (ec) {
+    throw std::runtime_error("Failed to create output directory '" +
+                             pmb->options->output_dir() + "': " + ec.message());
+  }
   nc_create(fname.c_str(), NC_NETCDF4, &ifile);
 
   // 2. coordinate structure
