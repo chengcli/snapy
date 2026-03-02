@@ -1,6 +1,7 @@
 // C/C++
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 
 // kintera
@@ -67,6 +68,12 @@ void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
   fname.append(".part");
 
   // save to disk
+  std::error_code ec;
+  std::filesystem::create_directories(pmb->options->output_dir(), ec);
+  if (ec) {
+    throw std::runtime_error("Failed to create output directory '" +
+                             pmb->options->output_dir() + "': " + ec.message());
+  }
   kintera::save_tensors(out_vars, fname);
 
   if (options->combine()) {
