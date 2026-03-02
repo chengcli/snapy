@@ -84,6 +84,7 @@ find_library(NCCL_LIBRARY
     PATH_SUFFIXES
         lib
         lib64
+    NO_DEFAULT_PATH
 )
 
 # Standard handling
