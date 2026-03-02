@@ -12,10 +12,39 @@
 
 include(FindPackageHandleStandardArgs)
 
+set(_nccl_python_hint_root "")
+set(_nccl_python_hint_inc "")
+set(_nccl_python_hint_lib "")
+
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+      "import sys, sysconfig, pathlib
+try:
+    import nvidia.nccl as m
+    p = pathlib.Path(m.__file__).resolve().parent
+except Exception:
+    pure = sysconfig.get_paths().get('purelib') or sysconfig.get_paths().get('platlib')
+    p = pathlib.Path(pure).resolve() / 'nvidia' / 'nccl'
+print(str(p))"
+    OUTPUT_VARIABLE _nccl_python_hint_root
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(_nccl_python_hint_root)
+  set(_nccl_python_hint_inc "${_nccl_python_hint_root}/include")
+  set(_nccl_python_hint_lib "${_nccl_python_hint_root}/lib")
+endif()
+
+#message(STATUS "NCCL Python hint root: ${_nccl_python_hint_root}")
+#message(STATUS "NCCL Python hint include: ${_nccl_python_hint_inc}")
+#message(STATUS "NCCL Python hint lib: ${_nccl_python_hint_lib}")
+
 # Allow user hints
 set(_NCCL_HINT_DIRS
     ${NCCL_ROOT}
     $ENV{NCCL_ROOT}
+    ${_nccl_python_hint_root}
     /usr
     /usr/local
     /opt/nccl
@@ -27,6 +56,7 @@ find_path(NCCL_INCLUDE_DIR
     NAMES nccl.h
     HINTS ${_NCCL_HINT_DIRS}
     PATHS
+        ${_nccl_python_hint_inc}
         $ENV{HOME}/opt/include
         /usr/include
         /usr/local/include
@@ -39,9 +69,10 @@ find_path(NCCL_INCLUDE_DIR
 
 # Library search
 find_library(NCCL_LIBRARY
-    NAMES nccl
+    NAMES nccl libnccl.so libnccl.so.2
     HINTS ${_NCCL_HINT_DIRS}
     PATHS
+        ${_nccl_python_hint_lib}
         $ENV{HOME}/opt/lib
         /usr/lib
         /usr/lib64
@@ -53,6 +84,7 @@ find_library(NCCL_LIBRARY
     PATH_SUFFIXES
         lib
         lib64
+    NO_DEFAULT_PATH
 )
 
 # Standard handling
