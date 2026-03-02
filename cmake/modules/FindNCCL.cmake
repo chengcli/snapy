@@ -65,7 +65,7 @@ find_path(NCCL_INCLUDE_DIR
 
 # Library search
 find_library(NCCL_LIBRARY
-    NAMES nccl
+    NAMES nccl libnccl.so libnccl.so.2
     HINTS ${_NCCL_HINT_DIRS}
     PATHS
         ${_nccl_python_hint_lib}
