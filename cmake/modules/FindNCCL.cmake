@@ -36,6 +36,10 @@ if(_nccl_python_hint_root)
   set(_nccl_python_hint_lib "${_nccl_python_hint_root}/lib")
 endif()
 
+message(STATUS "NCCL Python hint root: ${_nccl_python_hint_root}")
+message(STATUS "NCCL Python hint include: ${_nccl_python_hint_inc}")
+message(STATUS "NCCL Python hint lib: ${_nccl_python_hint_lib}")
+
 # Allow user hints
 set(_NCCL_HINT_DIRS
     ${NCCL_ROOT}
