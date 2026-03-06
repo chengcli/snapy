@@ -330,6 +330,16 @@ class distributed:
         ...
 
     @staticmethod
+    def sync_process_group() -> None:
+        """Bind the default torch.distributed process group/store to snapy."""
+        ...
+
+    @staticmethod
+    def has_process_group() -> bool:
+        """Check whether snapy has a bound distributed process group."""
+        ...
+
+    @staticmethod
     def get_layout(*args):  # Returns Layout
         """Get the layout object."""
         ...

@@ -1,12 +1,11 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// C/C++
+#include <mutex>
+
 // base
 #include <configure.h>  // gloo and nccl
-
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
 
 // snap
 #include <snap/mesh/meshblock.hpp>
@@ -16,6 +15,42 @@
 #include "layout.hpp"
 
 namespace snap {
+
+namespace {
+struct DistributedState {
+  at::intrusive_ptr<c10d::Store> store;
+  c10::intrusive_ptr<c10d::ProcessGroup> process_group;
+};
+
+DistributedState& global_distributed_state() {
+  static DistributedState state;
+  return state;
+}
+
+std::mutex& global_distributed_state_mutex() {
+  static std::mutex mu;
+  return mu;
+}
+}  // namespace
+
+void LayoutImpl::set_distributed_state(
+    const at::intrusive_ptr<c10d::Store>& store_,
+    const c10::intrusive_ptr<c10d::ProcessGroup>& process_group_) {
+  TORCH_CHECK(store_ != nullptr, "[Layout] store must not be null");
+  TORCH_CHECK(process_group_ != nullptr,
+              "[Layout] process_group must not be null");
+
+  std::lock_guard<std::mutex> guard(global_distributed_state_mutex());
+  auto& state = global_distributed_state();
+  state.store = store_;
+  state.process_group = process_group_;
+}
+
+bool LayoutImpl::has_distributed_state() {
+  std::lock_guard<std::mutex> guard(global_distributed_state_mutex());
+  auto& state = global_distributed_state();
+  return state.store != nullptr && state.process_group != nullptr;
+}
 
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
@@ -306,16 +341,23 @@ void LayoutImpl::_init_backend() {
               << "] Initializing distributed environment\n";
   }
 
-  // 1. Build the store
-  c10d::TCPStoreOptions store_op;
+  {
+    std::lock_guard<std::mutex> guard(global_distributed_state_mutex());
+    auto& state = global_distributed_state();
+    TORCH_CHECK(
+        state.store != nullptr && state.process_group != nullptr,
+        "[Layout] distributed state is not initialized. Call "
+        "`torch.distributed.init_process_group(...)` in Python and then "
+        "`snapy.distributed.sync_process_group()` before creating layout "
+        "objects.");
+    store = state.store;
+    process_group = state.process_group;
+  }
 
-  store_op.port = options->master_port();
-  store_op.numWorkers = options->world_size();
-  store_op.isServer = is_root();
+  options->rank(process_group->getRank());
+  options->world_size(process_group->getSize());
 
-  store = at::make_intrusive<c10d::TCPStore>(options->master_addr(), store_op);
-
-  // 2. Create ProcessGroup based on backend
+  // Resolve backend from the process group initialized in Python.
   if (options->backend() == "gloo") {
     _init_gloo();
   } else if (options->backend() == "nccl") {
@@ -323,6 +365,8 @@ void LayoutImpl::_init_backend() {
   } else {
     throw std::runtime_error("Unsupported BACKEND=" + options->backend());
   }
+  TORCH_CHECK(pg != nullptr, "[Layout] failed to resolve backend=",
+              options->backend());
 
   /*c10d::BarrierOptions op;
   op.device_ids = {options->local_rank()};
@@ -343,11 +387,11 @@ void LayoutImpl::_init_gloo() {
               << "] Using Gloo backend on CPU\n";
   }
 
-  auto opts = c10d::ProcessGroupGloo::Options::create();
-  opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-
-  pg = std::make_shared<c10d::ProcessGroupGloo>(store, options->rank(),
-                                                options->world_size(), opts);
+  TORCH_CHECK(process_group != nullptr,
+              "[Layout] process group is not available for gloo backend");
+  pg = process_group->getBackend(c10::DeviceType::CPU);
+  TORCH_CHECK(pg != nullptr, "[Layout] gloo backend is unavailable in the "
+                             "process group initialized from Python");
 }
 
 #ifdef NOT_USE_C10D_NCCL

@@ -2,6 +2,9 @@
 #include <pybind11/functional.h>
 #include <pybind11/stl.h>
 
+// C/C++
+#include <memory>
+
 // fmt
 #include <fmt/format.h>
 
@@ -18,6 +21,28 @@
 #include "pyoptions.hpp"
 
 namespace py = pybind11;
+
+namespace {
+
+void sync_layout_distributed_state_from_torch() {
+  auto c10d = py::module::import("torch.distributed.distributed_c10d");
+
+  auto process_group =
+      c10d.attr("_get_default_group")()
+          .cast<c10::intrusive_ptr<c10d::ProcessGroup>>();
+  auto store =
+      c10d.attr("_get_default_store")().cast<at::intrusive_ptr<c10d::Store>>();
+
+  snap::LayoutImpl::set_distributed_state(store, process_group);
+}
+
+void ensure_layout_distributed_state(const snap::LayoutOptions& options) {
+  if (options != nullptr && !options->no_backend()) {
+    sync_layout_distributed_state_from_torch();
+  }
+}
+
+}  // namespace
 
 void bind_layout(py::module &m) {
   auto pyLayoutOptions =
@@ -66,7 +91,11 @@ void bind_layout(py::module &m) {
       py::class_<snap::SlabLayoutImpl, snap::LayoutImpl,
                  std::shared_ptr<snap::SlabLayoutImpl>>(m, "SlabLayout");
 
-  pySlabLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
+  pySlabLayout.def(py::init([](const snap::LayoutOptions& options) {
+                     ensure_layout_distributed_state(options);
+                     return std::make_shared<snap::SlabLayoutImpl>(options);
+                   }),
+                   py::arg("options"))
       .def_readonly("options", &snap::SlabLayoutImpl::options)
       .def("rank_of", &snap::SlabLayoutImpl::rank_of)
       .def("loc_of", &snap::SlabLayoutImpl::loc_of)
@@ -90,7 +119,11 @@ void bind_layout(py::module &m) {
       py::class_<snap::CubedLayoutImpl, snap::LayoutImpl,
                  std::shared_ptr<snap::CubedLayoutImpl>>(m, "CubedLayout");
 
-  pyCubedLayout.def(py::init<snap::LayoutOptions>(), py::arg("options"))
+  pyCubedLayout.def(py::init([](const snap::LayoutOptions& options) {
+                      ensure_layout_distributed_state(options);
+                      return std::make_shared<snap::CubedLayoutImpl>(options);
+                    }),
+                    py::arg("options"))
       .def_readonly("options", &snap::CubedLayoutImpl::options)
       .def("rank_of", &snap::CubedLayoutImpl::rank_of)
       .def("loc_of", &snap::CubedLayoutImpl::loc_of)
@@ -116,7 +149,11 @@ void bind_layout(py::module &m) {
           m, "CubedSphereLayout");
 
   pyCubedSphereLayout.def(py::init<>())
-      .def(py::init<snap::LayoutOptions>(), py::arg("options"))
+      .def(py::init([](const snap::LayoutOptions& options) {
+             ensure_layout_distributed_state(options);
+             return std::make_shared<snap::CubedSphereLayoutImpl>(options);
+           }),
+           py::arg("options"))
       .def_readonly("options", &snap::CubedSphereLayoutImpl::options)
       .def("rank_of", &snap::CubedSphereLayoutImpl::rank_of)
       .def("loc_of", &snap::CubedSphereLayoutImpl::loc_of)
@@ -140,5 +177,7 @@ void bind_layout(py::module &m) {
   auto m_dist = m.def_submodule("distributed", "Distributed module");
   m_dist.def("get_rank", &snap::get_rank)
       .def("get_local_rank", &snap::get_local_rank)
+      .def("sync_process_group", &sync_layout_distributed_state_from_torch)
+      .def("has_process_group", &snap::LayoutImpl::has_distributed_state)
       .def("get_layout", &snap::MeshBlockImpl::get_layout);
 }

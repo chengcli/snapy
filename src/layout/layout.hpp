@@ -11,8 +11,8 @@
 #include <torch/nn/modules/common.h>
 
 #include <torch/csrc/distributed/c10d/Store.hpp>
-// #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
+#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 
 // snap
 #include <snap/snap.h>
@@ -139,6 +139,11 @@ class MeshBlockImpl;
 
 class LayoutImpl {
  public:
+  static void set_distributed_state(
+      const at::intrusive_ptr<c10d::Store> &store,
+      const c10::intrusive_ptr<c10d::ProcessGroup> &process_group);
+  static bool has_distributed_state();
+
   static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts,
                                             torch::nn::Module *p = nullptr,
                                             std::string const &name = "layout");
@@ -152,7 +157,8 @@ class LayoutImpl {
 
   //! submodules
   at::intrusive_ptr<c10d::Store> store;
-  std::shared_ptr<c10d::Backend> pg;
+  c10::intrusive_ptr<c10d::Backend> pg;
+  c10::intrusive_ptr<c10d::ProcessGroup> process_group;
 
   //! options with which this `Layout` was constructed
   LayoutOptions options;
