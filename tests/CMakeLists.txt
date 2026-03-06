@@ -30,11 +30,13 @@ foreach(input ${inputs})
   execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${inp})
 endforeach()
 
-setup_parallel_test(test_exchange 6)
+#setup_parallel_test(test_exchange 6)
 
 # ============= #
 # Example Tests #
 # ============= #
+
+# These are gone now as the distributed tests will be moved to Python (paddle)
 add_test(
   NAME test_straka
   COMMAND ${CMAKE_COMMAND}
@@ -53,17 +55,17 @@ add_test(
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy.cmake
 )
 
-set_tests_properties(test_shallow_xy PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-)
+#set_tests_properties(test_shallow_xy PROPERTIES
+#  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+#)
 
-add_test(
-  NAME test_shallow_splash
-  COMMAND ${CMAKE_COMMAND}
-          -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_test.cmake
-)
+#add_test(
+#  NAME test_shallow_splash
+#  COMMAND ${CMAKE_COMMAND}
+#          -Dbuildl=release
+#          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_test.cmake
+#)
 
-set_tests_properties(test_shallow_splash PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-)
+#set_tests_properties(test_shallow_splash PROPERTIES
+#  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+#)

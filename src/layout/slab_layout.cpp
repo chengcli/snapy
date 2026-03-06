@@ -18,9 +18,6 @@ void SlabLayoutImpl::reset() {
   _coords2.resize(px * py);
   build_zorder_coords2(px, py, _coords2.data());
   build_rank_of2(px, py, _coords2.data(), _rankof.data());
-
-  // build backend
-  _init_backend();
 }
 
 void SlabLayoutImpl::pretty_print(std::ostream& os) const {

@@ -16,9 +16,6 @@ void CubedLayoutImpl::reset() {
   _coords3.resize(px * py * pz);
   build_zorder_coords3(px, py, pz, _coords3.data());
   build_rank_of3(px, py, pz, _coords3.data(), _rankof.data());
-
-  // build backend
-  _init_backend();
 }
 
 void CubedLayoutImpl::pretty_print(std::ostream &os) const {

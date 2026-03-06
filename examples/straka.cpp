@@ -1,6 +1,9 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// base
+#include <configure.h>
+
 // kintera
 #include <kintera/constants.h>
 
@@ -10,6 +13,7 @@
 #include <snap/snap.h>
 
 #include <snap/eos/ideal_gas.hpp>
+#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -32,10 +36,11 @@ int main(int argc, char** argv) {
 
   auto op_block = MeshBlockOptionsImpl::from_yaml("straka.yaml");
   auto block = MeshBlock(op_block);
+
   torch::Device device(torch::kCPU);
   if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = block->get_layout()->pg->getBoundDeviceId().value();
+    device = torch::kCUDA;
   }
 
   block->to(device);

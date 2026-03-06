@@ -4,15 +4,12 @@
 // base
 #include <configure.h>  // gloo and nccl
 
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
-
 // snap
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
 #include "cubed_sphere_layout.hpp"
+#include "distributed.hpp"
 #include "layout.hpp"
 
 namespace snap {
@@ -20,8 +17,6 @@ namespace snap {
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
-  master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
-  master_port(std::stoi(get_env("MASTER_PORT", "29501")));
   rank(std::stoi(get_env("RANK", "0")));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));
@@ -52,8 +47,6 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
 std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
                                                torch::nn::Module* p,
                                                std::string const& name) {
-  if (p == nullptr) options->no_backend(true);
-
   std::shared_ptr<LayoutImpl> pl;
   if (options->type() == "slab") {
     pl = p ? p->register_module(name, SlabLayout(options))
@@ -124,8 +117,18 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
                          SyncOptions const& opts,
                          std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
-  TORCH_CHECK(!options->no_backend(), "[Layout:forward] backend is disabled");
+  if (options->px() * options->py() * options->pz() == 1) {
+    // No communication needed for single process
+    return;
+  }
+
   TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
+  TORCH_CHECK(is_process_group_initialized(),
+              "[Layout:forward] process group not initialized; call "
+              "torch.distributed.init_process_group() and then "
+              "snapy.distributed.set_process_group() first");
+
+  auto pg = snap::get_process_group();
 
   // Serialize data into send buffers
   serialize(pmb, vars, opts);
@@ -279,6 +282,11 @@ void LayoutImpl::fill_corners(MeshBlockImpl const* pmb, Variables& vars) const {
 void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
                           SyncOptions const& opts,
                           std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  if (options->px() * options->py() * options->pz() == 1) {
+    // No communication needed for single process
+    return;
+  }
+
   // Wait for all operations to complete
   for (auto& work : works) work->wait();
 
@@ -290,68 +298,12 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     fill_corners(pmb, vars);
   }
 
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->local_rank()};
-  pg->barrier(op)->wait();*/
-  pg->barrier()->wait();
+  snap::get_process_group()->barrier()->wait();
 
   works.clear();
 }
 
-void LayoutImpl::_init_backend() {
-  if (options->no_backend()) return;
-
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Initializing distributed environment\n";
-  }
-
-  // 1. Build the store
-  c10d::TCPStoreOptions store_op;
-
-  store_op.port = options->master_port();
-  store_op.numWorkers = options->world_size();
-  store_op.isServer = is_root();
-
-  store = at::make_intrusive<c10d::TCPStore>(options->master_addr(), store_op);
-
-  // 2. Create ProcessGroup based on backend
-  if (options->backend() == "gloo") {
-    _init_gloo();
-  } else if (options->backend() == "nccl") {
-    _init_nccl();
-  } else {
-    throw std::runtime_error("Unsupported BACKEND=" + options->backend());
-  }
-
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->local_rank()};
-  pg->barrier(op)->wait();*/
-  pg->barrier()->wait();
-
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Distributed environment initialized with backend="
-              << options->backend() << ", world_size=" << options->world_size()
-              << "\n";
-  }
-}
-
-void LayoutImpl::_init_gloo() {
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Using Gloo backend on CPU\n";
-  }
-
-  auto opts = c10d::ProcessGroupGloo::Options::create();
-  opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-
-  pg = std::make_shared<c10d::ProcessGroupGloo>(store, options->rank(),
-                                                options->world_size(), opts);
-}
-
 #ifdef NOT_USE_C10D_NCCL
-void LayoutImpl::_init_nccl() {}
 void LayoutImpl::_group_start() const {}
 void LayoutImpl::_group_end() const {}
 void LayoutImpl::_sync_device() const {}

@@ -7,6 +7,7 @@
 
 // snap
 #include <snap/input/read_restart_file.hpp>
+#include <snap/layout/distributed.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
@@ -270,17 +271,18 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   }
 }
 
-double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->layout()->local_rank()};
-  _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+double MeshBlockImpl::initialize(Variables& vars, char const* restart_file,
+                                 char const* device_str) {
+  if (is_process_group_initialized()) {
+    get_process_group()->barrier()->wait();
+  }
 
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
 
   if (restart_file != nullptr) {
-    return _init_from_restart(vars, std::string(restart_file));
+    return _init_from_restart(vars, std::string(restart_file),
+                              std::string(device_str));
   }
 
   BoundaryFuncOptions bops;
@@ -434,22 +436,23 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
   auto const& w = vars.at("hydro_w");
-  auto dt_min =
-      torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
+  auto dt_min = torch::tensor({1.e9}, torch::dtype(torch::kFloat64));
 
   // hyperbolic hydro time step
   if (vars.count("solid")) {
-    dt_min[0] = phydro->max_time_step(w, vars.at("solid"));
+    dt_min[0] = phydro->max_time_step(w, vars.at("solid")).item<double>();
   } else {
-    dt_min[0] = phydro->max_time_step(w);
+    dt_min[0] = phydro->max_time_step(w).item<double>();
   }
 
   // gather the minimum dt across all ranks
   std::vector<at::Tensor> dt_reduce = {dt_min};
 
-  c10d::AllreduceOptions op;
-  op.reduceOp = c10d::ReduceOp::MIN;
-  _playout->pg->allreduce(dt_reduce, op)->wait();
+  if (is_process_group_initialized()) {
+    c10d::AllreduceOptions op;
+    op.reduceOp = c10d::ReduceOp::MIN;
+    get_process_group()->allreduce(dt_reduce, op)->wait();
+  }
 
   auto dt = dt_reduce[0].item<double>();
 
@@ -457,6 +460,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
     SINFO(MeshBlock) << "suggested dt from hydro: " << std::scientific
                      << std::setprecision(6) << dt << std::endl;
   }
+
   return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
 }
 
@@ -693,7 +697,10 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
       std::vector<at::Tensor> sum = {
           hydro_u_tol.index(interior).sum({1, 2, 3})};
-      _playout->pg->reduce(sum, opsum)->wait();
+
+      if (is_process_group_initialized()) {
+        get_process_group()->reduce(sum, opsum)->wait();
+      }
 
       if (compute_mass) {
         auto mass = sum[0][IDN];
@@ -751,13 +758,14 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   std::vector<at::Tensor> cells = {
       torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
-                    torch::dtype(torch::kInt64).device(device()))};
+                    torch::dtype(torch::kInt64))};
 
-  c10d::ReduceOptions opsum;
-  opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->root_rank();
-
-  _playout->pg->reduce(cells, opsum)->wait();
+  if (is_process_group_initialized()) {
+    c10d::ReduceOptions opsum;
+    opsum.reduceOp = c10d::ReduceOp::SUM;
+    opsum.rootRank = options->layout()->root_rank();
+    get_process_group()->reduce(cells, opsum)->wait();
+  }
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
@@ -768,18 +776,17 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
 
   // ------ shutdown processing group ------
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->layout()->local_rank()};
-  _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  if (is_process_group_initialized()) {
+    get_process_group()->barrier()->wait();
 
-  _playout->send_bufs.clear();
-  _playout->send_bufs.shrink_to_fit();
+    _playout->send_bufs.clear();
+    _playout->send_bufs.shrink_to_fit();
 
-  _playout->recv_bufs.clear();
-  _playout->recv_bufs.shrink_to_fit();
+    _playout->recv_bufs.clear();
+    _playout->recv_bufs.shrink_to_fit();
 
-  _playout->pg->shutdown();
+    get_process_group()->shutdown();
+  }
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
@@ -822,15 +829,8 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   return 0;
 }
 
-torch::Device MeshBlockImpl::device() const {
-  if (_playout->pg->getBoundDeviceId().has_value()) {
-    return _playout->pg->getBoundDeviceId().value();
-  } else {
-    return torch::Device("cpu");
-  }
-}
-
-double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
+double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname,
+                                         std::string device_str) {
   std::string restart_file;
   restart_file.assign(options->output_dir());
   restart_file.append("/");
@@ -864,7 +864,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
 
   // move to device
   for (auto& [name, tensor] : data) {
-    vars[name] = tensor.to(device());
+    vars[name] = tensor.to(torch::device(device_str));
   }
 
   // remove timing data
