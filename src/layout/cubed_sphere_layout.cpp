@@ -780,8 +780,6 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 void CubedSphereLayoutImpl::forward(
     MeshBlockImpl const *pmb, Variables &vars, SyncOptions const &opts,
     std::vector<c10::intrusive_ptr<c10d::Work>> &works) {
-  TORCH_CHECK(!options->no_backend(),
-              "[CubedSphereLayout:forward] backend is disabled");
   TORCH_CHECK(pmb != nullptr,
               "[CubedSphereLayout:forward] MeshBlock pointer is null");
   TORCH_CHECK(snap::is_process_group_initialized(),

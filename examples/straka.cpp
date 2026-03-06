@@ -9,10 +9,6 @@
 
 #include <kintera/species.hpp>
 
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
-
 // snap
 #include <snap/snap.h>
 
@@ -39,26 +35,12 @@ int main(int argc, char** argv) {
   auto grav = -config["forcing"]["const-gravity"]["grav1"].as<double>();
 
   auto op_block = MeshBlockOptionsImpl::from_yaml("straka.yaml");
-  if (!op_block->layout()->no_backend()) {
-    auto lop = op_block->layout();
-    c10d::TCPStoreOptions store_opts;
-    store_opts.port = lop->master_port();
-    store_opts.numWorkers = lop->world_size();
-    store_opts.isServer = (lop->rank() == lop->root_rank());
-    auto store =
-        c10::make_intrusive<c10d::TCPStore>(lop->master_addr(), store_opts);
-    auto gloo_opts = c10d::ProcessGroupGloo::Options::create();
-    gloo_opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-    auto pg = c10::make_intrusive<c10d::ProcessGroupGloo>(
-        store, lop->rank(), lop->world_size(), gloo_opts);
-    snap::set_process_group(pg);
-    snap::get_process_group()->barrier()->wait();
-  }
   auto block = MeshBlock(op_block);
+
   torch::Device device(torch::kCPU);
   if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = snap::get_process_group()->getBoundDeviceId().value();
+    device = torch::kCUDA;
   }
 
   block->to(device);

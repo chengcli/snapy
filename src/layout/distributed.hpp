@@ -18,6 +18,8 @@ struct LayoutOptionsImpl;
  * This should be called from Python after
  * torch.distributed.init_process_group() and before creating any Layout objects
  * that require distributed communication.
+ * Python side owns and manages the processor group
+ * C++ side only references it
  *
  * Python usage:
  * \code{.py}
@@ -26,28 +28,19 @@ struct LayoutOptionsImpl;
  *   dist.init_process_group(backend="gloo", init_method="env://")
  *   pg = dist.distributed_c10d._get_default_group()
  *   snapy.distributed.set_process_group(pg)
+ *   ...
+ *   dist.destroy_process_group()
  * \endcode
  */
-void set_process_group(c10::intrusive_ptr<c10d::Backend> pg);
+void set_process_group(c10::intrusive_ptr<c10d::ProcessGroup> pg);
 
 //! \brief Get the globally set process group
 /*!
  * \return intrusive_ptr to the global ProcessGroup, or null if not set
  */
-c10::intrusive_ptr<c10d::Backend> get_process_group();
+c10::intrusive_ptr<c10d::ProcessGroup> get_process_group();
 
 //! \brief Check whether the process group has been set
 bool is_process_group_initialized();
-
-//! \brief Clear the global process group reference
-void destroy_process_group();
-
-void init_distributed(std::shared_ptr<LayoutOptionsImpl> const& options);
-
-void _init_distributed_gloo(std::shared_ptr<LayoutOptionsImpl> const& options,
-                            c10::intrusive_ptr<c10d::Store> const& store);
-
-void _init_distributed_nccl(std::shared_ptr<LayoutOptionsImpl> const& options,
-                            c10::intrusive_ptr<c10d::Store> const& store);
 
 }  // namespace snap

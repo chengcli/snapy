@@ -1,10 +1,6 @@
 // snap
 #include <snap/snap.h>
 
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
-
 // snap
 #include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -13,21 +9,6 @@ using namespace snap;
 
 int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("shock.yaml");
-  if (!op->layout()->no_backend()) {
-    auto lop = op->layout();
-    c10d::TCPStoreOptions store_opts;
-    store_opts.port = lop->master_port();
-    store_opts.numWorkers = lop->world_size();
-    store_opts.isServer = (lop->rank() == lop->root_rank());
-    auto store =
-        c10::make_intrusive<c10d::TCPStore>(lop->master_addr(), store_opts);
-    auto gloo_opts = c10d::ProcessGroupGloo::Options::create();
-    gloo_opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-    auto pg = c10::make_intrusive<c10d::ProcessGroupGloo>(
-        store, lop->rank(), lop->world_size(), gloo_opts);
-    snap::set_process_group(pg);
-    snap::get_process_group()->barrier()->wait();
-  }
   auto block = MeshBlock(op);
 
   auto device = torch::kCPU;

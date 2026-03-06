@@ -18,6 +18,9 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
+// Static member variable definitions
+Layout MeshBlockImpl::_playout = nullptr;
+
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
@@ -46,7 +49,12 @@ MeshBlockImpl::~MeshBlockImpl() {
 
 void MeshBlockImpl::reset() {
   //// ---- (1) set up distributed environment ---- ////
-  playout = LayoutImpl::create(options->layout(), this);
+  if (_playout == nullptr) {
+    std::unique_lock<std::mutex> lock(meshblock_mutex);
+    if (_playout == nullptr) {  // Check again after acquiring lock
+      _playout = LayoutImpl::create(options->layout(), this);
+    }
+  }
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -348,15 +356,15 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   sync_vars["hydro_w"] = hydro_w;
 
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  playout->forward(this, sync_vars, sync_opts, works);
-  playout->finalize(this, sync_vars, sync_opts, works);
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_r"] = scalar_r;
-    playout->forward(this, sync_vars, sync_opts, works);
-    playout->finalize(this, sync_vars, sync_opts, works);
+    _playout->forward(this, sync_vars, sync_opts, works);
+    _playout->finalize(this, sync_vars, sync_opts, works);
   }
 
   //// ------ (7) Computer hydro and scalar conserved -------- ////
@@ -618,15 +626,15 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   sync_vars["hydro_u"] = hydro_u;
 
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  playout->forward(this, sync_vars, sync_opts, works);
-  playout->finalize(this, sync_vars, sync_opts, works);
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
-    playout->forward(this, sync_vars, sync_opts, works);
-    playout->finalize(this, sync_vars, sync_opts, works);
+    _playout->forward(this, sync_vars, sync_opts, works);
+    _playout->finalize(this, sync_vars, sync_opts, works);
   }
 
   if (options->verbose()) {
@@ -770,11 +778,11 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   snap::get_process_group()->barrier(op)->wait();*/
   snap::get_process_group()->barrier()->wait();
 
-  playout->send_bufs.clear();
-  playout->send_bufs.shrink_to_fit();
+  _playout->send_bufs.clear();
+  _playout->send_bufs.shrink_to_fit();
 
-  playout->recv_bufs.clear();
-  playout->recv_bufs.shrink_to_fit();
+  _playout->recv_bufs.clear();
+  _playout->recv_bufs.shrink_to_fit();
 
   snap::get_process_group()->shutdown();
 }

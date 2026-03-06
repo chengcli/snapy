@@ -104,7 +104,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   InternalBoundary pib = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
-  Layout playout = nullptr;
+
+  static Layout get_layout() { return _playout; }
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
@@ -186,6 +187,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! clock and cycle at time start
   clock_t _time_start;
   int _cycle_start = 0;
+
+  //! distribution layout
+  static Layout _playout;
 
   //! stage registers
   torch::Tensor _hydro_u0, _hydro_u1;

@@ -67,12 +67,9 @@ struct LayoutOptionsImpl {
        << "* periodic_y = " << (periodic_y() ? "true" : "false") << "\n"
        << "* periodic_z = " << (periodic_z() ? "true" : "false") << "\n"
        << "* backend = " << backend() << "\n"
-       << "* master_addr = " << master_addr() << "\n"
        << "* rank = " << rank() << "\n"
        << "* local_rank = " << local_rank() << "\n"
        << "* world_size = " << world_size() << "\n"
-       << "* master_port = " << master_port() << "\n"
-       << "* no_backend = " << (no_backend() ? "true" : "false") << "\n"
        << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
 
@@ -98,15 +95,12 @@ struct LayoutOptionsImpl {
   ADD_ARG(bool, periodic_z) = false;
 
   ADD_ARG(std::string, backend) = "gloo";
-  ADD_ARG(std::string, master_addr) = "127.0.0.1";
   ADD_ARG(int, rank) = 0;
   ADD_ARG(int, root_rank) = 0;
   ADD_ARG(int, local_rank) = 0;
   ADD_ARG(int, world_size) = 1;
-  ADD_ARG(int, master_port) = 29501;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
-  ADD_ARG(bool, no_backend) = false;
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 

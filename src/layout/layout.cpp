@@ -17,8 +17,6 @@ namespace snap {
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
-  master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
-  master_port(std::stoi(get_env("MASTER_PORT", "29501")));
   rank(std::stoi(get_env("RANK", "0")));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));
@@ -49,8 +47,6 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
 std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
                                                torch::nn::Module* p,
                                                std::string const& name) {
-  if (p == nullptr) options->no_backend(true);
-
   std::shared_ptr<LayoutImpl> pl;
   if (options->type() == "slab") {
     pl = p ? p->register_module(name, SlabLayout(options))
@@ -121,7 +117,6 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
                          SyncOptions const& opts,
                          std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
-  TORCH_CHECK(!options->no_backend(), "[Layout:forward] backend is disabled");
   TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
   TORCH_CHECK(snap::is_process_group_initialized(),
               "[Layout:forward] process group not initialized; call "
