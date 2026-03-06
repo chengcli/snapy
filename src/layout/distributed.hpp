@@ -5,6 +5,7 @@
 
 // torch
 #include <c10/util/intrusive_ptr.h>
+
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 
@@ -12,8 +13,9 @@ namespace snap {
 
 //! \brief Set the global process group from an already-initialized backend.
 /*!
- * This should be called from Python after torch.distributed.init_process_group()
- * and before creating any Layout objects that require distributed communication.
+ * This should be called from Python after
+ * torch.distributed.init_process_group() and before creating any Layout objects
+ * that require distributed communication.
  *
  * Python usage:
  * \code{.py}
@@ -24,13 +26,13 @@ namespace snap {
  *   snapy.distributed.set_process_group(pg)
  * \endcode
  */
-void set_process_group(c10::intrusive_ptr<c10d::ProcessGroup> pg);
+void set_process_group(c10::intrusive_ptr<c10d::Backend> pg);
 
 //! \brief Get the globally set process group
 /*!
  * \return intrusive_ptr to the global ProcessGroup, or null if not set
  */
-c10::intrusive_ptr<c10d::ProcessGroup> get_process_group();
+c10::intrusive_ptr<c10d::Backend> get_process_group();
 
 //! \brief Check whether the process group has been set
 bool is_process_group_initialized();

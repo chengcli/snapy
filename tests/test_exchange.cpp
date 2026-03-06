@@ -4,6 +4,9 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// base
+#include <configure.h>
+
 // torch
 #include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
 #include <torch/csrc/distributed/c10d/TCPStore.hpp>
@@ -40,8 +43,9 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
 int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
 
-  // Initialize the distributed process group using torch.distributed C++ classes
-  // (mirroring what torch.distributed.init_process_group() does from Python)
+  // Initialize the distributed process group using torch.distributed C++
+  // classes (mirroring what torch.distributed.init_process_group() does from
+  // Python)
   if (!op->layout()->no_backend()) {
     auto layout_op = op->layout();
 
@@ -55,8 +59,7 @@ int main(int argc, char** argv) {
 
     // Build ProcessGroupGloo
     auto gloo_opts = c10d::ProcessGroupGloo::Options::create();
-    gloo_opts->devices.push_back(
-        c10d::ProcessGroupGloo::createDefaultDevice());
+    gloo_opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
     auto pg = c10::make_intrusive<c10d::ProcessGroupGloo>(
         store, layout_op->rank(), layout_op->world_size(), gloo_opts);
 
