@@ -139,9 +139,9 @@ void bind_layout(py::module &m) {
       .def("get_local_rank", &snap::get_local_rank)
       .def("get_layout", &snap::MeshBlockImpl::get_layout)
       .def("set_process_group", &snap::set_process_group,
-          "Pass an initialized torch.distributed.ProcessGroup to snapy. "
-          "Must be called after torch.distributed.init_process_group() and "
-          "before creating Layout objects that use distributed communication.")
+           "Pass an initialized torch.distributed.ProcessGroup to snapy. "
+           "Must be called after torch.distributed.init_process_group() and "
+           "before creating Layout objects that use distributed communication.")
       .def("is_process_group_initialized", &snap::is_process_group_initialized,
            "Return True if a process group has been set via "
            "set_process_group().");

@@ -18,9 +18,7 @@ c10::intrusive_ptr<c10d::ProcessGroup> g_pg;
 
 }  // anonymous namespace
 
-void set_process_group(c10::intrusive_ptr<c10d::ProcessGroup> pg) {
-  g_pg = pg;
-}
+void set_process_group(c10::intrusive_ptr<c10d::ProcessGroup> pg) { g_pg = pg; }
 
 c10::intrusive_ptr<c10d::ProcessGroup> get_process_group() { return g_pg; }
 
