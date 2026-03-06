@@ -23,10 +23,9 @@ int make_tar_archive(std::string const &archive_name,
 
 void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
   auto layout = pmb->get_layout();
-  /*c10d::BarrierOptions op;
-  op.device_ids = {layout->options->local_rank()};
-  snap::get_process_group()->barrier(op)->wait();*/
-  snap::get_process_group()->barrier()->wait();
+  if (is_process_group_initialized()) {
+    get_process_group()->barrier()->wait();
+  }
 
   std::stringstream msg;
 

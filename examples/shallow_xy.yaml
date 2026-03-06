@@ -3,13 +3,6 @@ geometry:
   bounds: {x1min: -10., x1max: 10., x2min: -5, x2max: 5.}
   cells: {nx1: 512, nx2: 256, nx3: 1, nghost: 3}
 
-distribute:
-  backend: gloo
-  layout: slab
-  nb2: 1
-  nb3: 1
-  verbose: false
-
 dynamics:
   equation-of-state:
     type: shallow-water
