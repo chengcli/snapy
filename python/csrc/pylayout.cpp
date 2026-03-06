@@ -11,12 +11,12 @@
 
 // snap
 #include <snap/layout/cubed_sphere_layout.hpp>
+#include <snap/layout/distributed.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 // python
 #include "pyoptions.hpp"
-
 namespace py = pybind11;
 
 void bind_layout(py::module &m) {
@@ -140,5 +140,19 @@ void bind_layout(py::module &m) {
   auto m_dist = m.def_submodule("distributed", "Distributed module");
   m_dist.def("get_rank", &snap::get_rank)
       .def("get_local_rank", &snap::get_local_rank)
-      .def("get_layout", &snap::MeshBlockImpl::get_layout);
+      .def("get_layout", &snap::MeshBlockImpl::get_layout)
+      .def("set_process_group",
+           [](c10::intrusive_ptr<c10d::ProcessGroup> pg) {
+             snap::set_process_group(std::move(pg));
+           },
+           py::arg("process_group"),
+           "Pass an initialized torch.distributed.ProcessGroup to snapy. "
+           "Must be called after torch.distributed.init_process_group() and "
+           "before creating Layout objects that use distributed communication.")
+      .def("destroy_process_group", &snap::destroy_process_group,
+           "Clear the global process group reference.")
+      .def("is_process_group_initialized",
+           &snap::is_process_group_initialized,
+           "Return True if a process group has been set via "
+           "set_process_group().");
 }

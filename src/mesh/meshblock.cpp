@@ -7,6 +7,7 @@
 
 // snap
 #include <snap/input/read_restart_file.hpp>
+#include <snap/layout/distributed.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
@@ -271,10 +272,14 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
+  TORCH_CHECK(snap::is_process_group_initialized(),
+              "[MeshBlock::initialize] process group not initialized; call "
+              "torch.distributed.init_process_group() and then "
+              "snapy.distributed.set_process_group() before initializing.");
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
-  _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  snap::get_process_group()->barrier(op)->wait();*/
+  snap::get_process_group()->barrier()->wait();
 
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
@@ -449,7 +454,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  _playout->pg->allreduce(dt_reduce, op)->wait();
+  snap::get_process_group()->allreduce(dt_reduce, op)->wait();
 
   auto dt = dt_reduce[0].item<double>();
 
@@ -693,7 +698,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
       std::vector<at::Tensor> sum = {
           hydro_u_tol.index(interior).sum({1, 2, 3})};
-      _playout->pg->reduce(sum, opsum)->wait();
+      snap::get_process_group()->reduce(sum, opsum)->wait();
 
       if (compute_mass) {
         auto mass = sum[0][IDN];
@@ -757,7 +762,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   opsum.reduceOp = c10d::ReduceOp::SUM;
   opsum.rootRank = options->layout()->root_rank();
 
-  _playout->pg->reduce(cells, opsum)->wait();
+  snap::get_process_group()->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
@@ -770,8 +775,8 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   // ------ shutdown processing group ------
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
-  _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  snap::get_process_group()->barrier(op)->wait();*/
+  snap::get_process_group()->barrier()->wait();
 
   _playout->send_bufs.clear();
   _playout->send_bufs.shrink_to_fit();
@@ -779,7 +784,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   _playout->recv_bufs.clear();
   _playout->recv_bufs.shrink_to_fit();
 
-  _playout->pg->shutdown();
+  snap::get_process_group()->shutdown();
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
@@ -823,8 +828,9 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 torch::Device MeshBlockImpl::device() const {
-  if (_playout->pg->getBoundDeviceId().has_value()) {
-    return _playout->pg->getBoundDeviceId().value();
+  auto pg = snap::get_process_group();
+  if (pg.defined() && pg->getBoundDeviceId().has_value()) {
+    return pg->getBoundDeviceId().value();
   } else {
     return torch::Device("cpu");
   }

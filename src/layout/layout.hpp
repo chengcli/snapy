@@ -10,8 +10,6 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
-#include <torch/csrc/distributed/c10d/Store.hpp>
-// #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 
 // snap
@@ -150,10 +148,6 @@ class LayoutImpl {
    */
   std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
 
-  //! submodules
-  at::intrusive_ptr<c10d::Store> store;
-  std::shared_ptr<c10d::Backend> pg;
-
   //! options with which this `Layout` was constructed
   LayoutOptions options;
 
@@ -222,12 +216,6 @@ class LayoutImpl {
                 std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
  protected:
-  void _init_backend();
-
-  // --- Backend initializers ---
-  void _init_gloo();
-  void _init_nccl();
-
   // --- NCCL specific ---
   void _group_start() const;
   void _group_end() const;
