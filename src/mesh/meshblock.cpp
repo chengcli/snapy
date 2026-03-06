@@ -272,10 +272,11 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
-  TORCH_CHECK(snap::is_process_group_initialized(),
+  TORCH_CHECK(is_process_group_initialized(),
               "[MeshBlock::initialize] process group not initialized; call "
               "torch.distributed.init_process_group() and then "
               "snapy.distributed.set_process_group() before initializing.");
+
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   snap::get_process_group()->barrier(op)->wait();*/
@@ -776,15 +777,24 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   snap::get_process_group()->barrier(op)->wait();*/
-  snap::get_process_group()->barrier()->wait();
+  if (options->layout()->px() * options->layout()->py() *
+          options->layout()->pz() >
+      1) {
+    TORCH_CHECK(is_process_group_initialized(),
+                "[Layout:forward] process group not initialized; call "
+                "torch.distributed.init_process_group() and then "
+                "snapy.distributed.set_process_group() first");
 
-  _playout->send_bufs.clear();
-  _playout->send_bufs.shrink_to_fit();
+    snap::get_process_group()->barrier()->wait();
 
-  _playout->recv_bufs.clear();
-  _playout->recv_bufs.shrink_to_fit();
+    _playout->send_bufs.clear();
+    _playout->send_bufs.shrink_to_fit();
 
-  snap::get_process_group()->shutdown();
+    _playout->recv_bufs.clear();
+    _playout->recv_bufs.shrink_to_fit();
+
+    // snap::get_process_group()->shutdown();
+  }
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {

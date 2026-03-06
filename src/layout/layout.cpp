@@ -117,8 +117,13 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
                          SyncOptions const& opts,
                          std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  if (options->px() * options->py() * options->pz() == 1) {
+    // No communication needed for single process
+    return;
+  }
+
   TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
-  TORCH_CHECK(snap::is_process_group_initialized(),
+  TORCH_CHECK(is_process_group_initialized(),
               "[Layout:forward] process group not initialized; call "
               "torch.distributed.init_process_group() and then "
               "snapy.distributed.set_process_group() first");
@@ -277,6 +282,11 @@ void LayoutImpl::fill_corners(MeshBlockImpl const* pmb, Variables& vars) const {
 void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
                           SyncOptions const& opts,
                           std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  if (options->px() * options->py() * options->pz() == 1) {
+    // No communication needed for single process
+    return;
+  }
+
   // Wait for all operations to complete
   for (auto& work : works) work->wait();
 
