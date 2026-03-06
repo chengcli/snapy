@@ -104,7 +104,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   InternalBoundary pib = nullptr;
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
-  Layout playout;
+  Layout playout = nullptr;
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
