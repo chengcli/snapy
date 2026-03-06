@@ -11,6 +11,8 @@
 
 namespace snap {
 
+struct LayoutOptionsImpl;
+
 //! \brief Set the global process group from an already-initialized backend.
 /*!
  * This should be called from Python after
@@ -39,5 +41,13 @@ bool is_process_group_initialized();
 
 //! \brief Clear the global process group reference
 void destroy_process_group();
+
+void init_distributed(std::shared_ptr<LayoutOptionsImpl> const& options);
+
+void _init_distributed_gloo(std::shared_ptr<LayoutOptionsImpl> const& options,
+                            c10::intrusive_ptr<c10d::Store> const& store);
+
+void _init_distributed_nccl(std::shared_ptr<LayoutOptionsImpl> const& options,
+                            c10::intrusive_ptr<c10d::Store> const& store);
 
 }  // namespace snap
