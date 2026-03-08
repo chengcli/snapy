@@ -1,9 +1,6 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
-// base
-#include <configure.h>
-
 // kintera
 #include <kintera/constants.h>
 
@@ -14,7 +11,6 @@
 
 // snap
 #include <snap/input/command_line.hpp>
-#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -43,7 +39,7 @@ int main(int argc, char **argv) {
   torch::Device device(torch::kCPU);
   if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
+    device = block->get_layout()->pg->getBoundDeviceId().value();
   }
 
   block->to(device);

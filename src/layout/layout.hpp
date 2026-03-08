@@ -10,6 +10,8 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
+#include <torch/csrc/distributed/c10d/Store.hpp>
+// #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 
 // snap
@@ -67,9 +69,12 @@ struct LayoutOptionsImpl {
        << "* periodic_y = " << (periodic_y() ? "true" : "false") << "\n"
        << "* periodic_z = " << (periodic_z() ? "true" : "false") << "\n"
        << "* backend = " << backend() << "\n"
+       << "* master_addr = " << master_addr() << "\n"
        << "* rank = " << rank() << "\n"
        << "* local_rank = " << local_rank() << "\n"
        << "* world_size = " << world_size() << "\n"
+       << "* master_port = " << master_port() << "\n"
+       << "* no_backend = " << (no_backend() ? "true" : "false") << "\n"
        << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
 
@@ -95,12 +100,15 @@ struct LayoutOptionsImpl {
   ADD_ARG(bool, periodic_z) = false;
 
   ADD_ARG(std::string, backend) = "gloo";
+  ADD_ARG(std::string, master_addr) = "127.0.0.1";
   ADD_ARG(int, rank) = 0;
   ADD_ARG(int, root_rank) = 0;
   ADD_ARG(int, local_rank) = 0;
   ADD_ARG(int, world_size) = 1;
+  ADD_ARG(int, master_port) = 29501;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
+  ADD_ARG(bool, no_backend) = false;
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
@@ -141,6 +149,10 @@ class LayoutImpl {
    * The second index indicates the variable group
    */
   std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
+
+  //! submodules
+  at::intrusive_ptr<c10d::Store> store;
+  std::shared_ptr<c10d::Backend> pg;
 
   //! options with which this `Layout` was constructed
   LayoutOptions options;
@@ -210,6 +222,12 @@ class LayoutImpl {
                 std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
  protected:
+  void _init_backend();
+
+  // --- Backend initializers ---
+  void _init_gloo();
+  void _init_nccl();
+
   // --- NCCL specific ---
   void _group_start() const;
   void _group_end() const;

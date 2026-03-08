@@ -11,7 +11,6 @@
 
 // snap
 #include <snap/input/command_line.hpp>
-#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;

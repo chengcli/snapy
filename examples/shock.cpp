@@ -2,7 +2,6 @@
 #include <snap/snap.h>
 
 // snap
-#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
