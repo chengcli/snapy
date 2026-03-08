@@ -48,6 +48,9 @@ inline int get_rank() { return std::stoi(get_env("RANK", "0")); }
 //! get local rank from environment variable
 inline int get_local_rank() { return std::stoi(get_env("LOCAL_RANK", "0")); }
 
+//! get world size from environment variable
+inline int get_world_size() { return std::stoi(get_env("WORLD_SIZE", "1")); }
+
 struct LayoutOptionsImpl {
   static std::shared_ptr<LayoutOptionsImpl> create() {
     return std::make_shared<LayoutOptionsImpl>();

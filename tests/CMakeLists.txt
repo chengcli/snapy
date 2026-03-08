@@ -20,8 +20,8 @@ setup_test(test_coordinate)
 setup_test(test_output_dir)
 setup_test(test_refine)
 #setup_test(test_read_topo)
-#setup_cuda_test(test_thomas_solver)
 #setup_test(test_aneos)
+setup_cuda_test(test_cuda_ipc)
 
 file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist

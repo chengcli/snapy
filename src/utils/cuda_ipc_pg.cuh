@@ -4,6 +4,7 @@
 #include <c10/core/Device.h>
 #include <c10/util/intrusive_ptr.h>
 #include <torch/csrc/distributed/c10d/Work.hpp>
+#include <torch/csrc/distributed/c10d/Types.hpp>
 
 #include <cuda_runtime.h>
 
@@ -35,7 +36,7 @@ class CudaIpcWork : public c10d::Work {
 
   bool isCompleted() override;
   bool isSuccess() const override;
-  bool wait(std::chrono::milliseconds timeout = kUnsetTimeout) override;
+  bool wait(std::chrono::milliseconds timeout = c10d::kUnsetTimeout) override;
   c10::intrusive_ptr<c10::ivalue::Future> getFuture() override;
 
  private:

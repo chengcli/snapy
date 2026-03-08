@@ -29,7 +29,7 @@ bool CudaIpcWork::isSuccess() const {
 }
 
 bool CudaIpcWork::wait(std::chrono::milliseconds timeout) {
-  if (timeout == kUnsetTimeout) {
+  if (timeout == c10d::kUnsetTimeout) {
     fut_.wait();
     return true;
   }
@@ -427,7 +427,7 @@ void CudaIpcProcessGroup::handle_ctrl_msg(const CtrlMsg& msg) {
 }
 
 void CudaIpcProcessGroup::progress_loop() {
-  while (running_.load()) {
+  /*while (running_.load()) {
     CtrlMsg msg{};
     {
       std::lock_guard<std::mutex> g(sock_mu_);
@@ -441,10 +441,24 @@ void CudaIpcProcessGroup::progress_loop() {
       sys_check(n == static_cast<ssize_t>(sizeof(msg)), "recv control");
     }
     handle_ctrl_msg(msg);
+  }*/
+  while (running_.load()) {
+    CtrlMsg msg{};
+    if (!sock_.valid()) {
+      break;
+    }
+
+    ssize_t n = ::recv(sock_.fd(), &msg, sizeof(msg), MSG_WAITALL);
+    if (n == 0) {
+      break;
+    }
+    sys_check(n == static_cast<ssize_t>(sizeof(msg)), "recv control");
+
+    handle_ctrl_msg(msg);
   }
 }
 
-c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
+/*c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
     std::vector<at::Tensor>& tensors,
     int dst,
     int tag) {
@@ -456,7 +470,10 @@ c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
 
   std::vector<at::Tensor> result = tensors;
 
-  std::thread([this, tensors, dst, tag, promise]() mutable {
+  // Capture the caller's current PyTorch CUDA stream.
+  auto caller_stream = at::cuda::getCurrentCUDAStream(device_index_);
+
+  std::thread([this, tensors, dst, tag, promise, caller_stream]() mutable {
     try {
       const size_t nbytes = total_nbytes(tensors);
       TORCH_CHECK(nbytes <= slot_bytes_, "message exceeds slot capacity");
@@ -465,8 +482,28 @@ c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
       auto& s = local_slots_[slot];
       uint64_t seq = s.next_seq++;
 
-      pack_batch_cuda(tensors, s.ptr);
-      cuda_check(cudaEventRecord(s.event, stream_), "cudaEventRecord");
+      // Use the caller stream directly for correctness.
+      cudaStream_t stream = caller_stream.stream();
+
+      char* base = static_cast<char*>(s.ptr);
+      size_t offset = 0;
+      for (const auto& t : tensors) {
+        const size_t nb = tensor_nbytes(t);
+        cuda_check(
+            cudaMemcpyAsync(
+                base + offset,
+                t.data_ptr(),
+                nb,
+                cudaMemcpyDeviceToDevice,
+                stream),
+            "cudaMemcpyAsync pack");
+        offset += nb;
+      }
+
+      cuda_check(cudaEventRecord(s.event, stream), "cudaEventRecord");
+
+      // Make sure the event/copy are actually visible before the peer acts on ctrl.
+      cuda_check(cudaStreamSynchronize(stream), "cudaStreamSynchronize send");
 
       CtrlMsg msg{};
       msg.type = CtrlType::kData;
@@ -484,7 +521,119 @@ c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
   }).detach();
 
   return c10::make_intrusive<CudaIpcWork>(c10d::OpType::SEND, fut, std::move(result));
+}*/
+
+c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::send(
+    std::vector<at::Tensor>& tensors,
+    int dst,
+    int tag) {
+  check_tensor_list(tensors);
+  TORCH_CHECK(dst == other_rank(), "only one peer supported");
+
+  auto promise = std::make_shared<std::promise<void>>();
+  auto fut = promise->get_future().share();
+
+  std::vector<at::Tensor> result = tensors;
+
+  try {
+    cuda_check(cudaSetDevice(device_index_), "cudaSetDevice in send");
+
+    const size_t nbytes = total_nbytes(tensors);
+    TORCH_CHECK(nbytes <= slot_bytes_, "message exceeds slot capacity");
+
+    int slot = acquire_send_slot();
+    auto& s = local_slots_[slot];
+    uint64_t seq = s.next_seq++;
+
+    // Use the current PyTorch stream on this thread.
+    auto stream = at::cuda::getCurrentCUDAStream(device_index_).stream();
+
+    char* base = static_cast<char*>(s.ptr);
+    size_t offset = 0;
+    for (const auto& t : tensors) {
+      const size_t nb = tensor_nbytes(t);
+      cuda_check(
+          cudaMemcpyAsync(
+              base + offset,
+              t.data_ptr(),
+              nb,
+              cudaMemcpyDeviceToDevice,
+              stream),
+          "cudaMemcpyAsync pack");
+      offset += nb;
+    }
+
+    cuda_check(cudaEventRecord(s.event, stream), "cudaEventRecord send");
+    cuda_check(cudaStreamSynchronize(stream), "cudaStreamSynchronize send");
+
+    CtrlMsg msg{};
+    msg.type = CtrlType::kData;
+    msg.slot = static_cast<uint32_t>(slot);
+    msg.seq = seq;
+    msg.nbytes = nbytes;
+    msg.tag = tag;
+    msg.peer = rank_;
+    send_ctrl(msg);
+
+    promise->set_value();
+  } catch (...) {
+    promise->set_exception(std::current_exception());
+  }
+
+  return c10::make_intrusive<CudaIpcWork>(c10d::OpType::SEND, fut, std::move(result));
 }
+
+/*c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::recv(
+    std::vector<at::Tensor>& tensors,
+    int src,
+    int tag) {
+  check_tensor_list(tensors);
+  TORCH_CHECK(src == other_rank(), "only one peer supported");
+
+  auto promise = std::make_shared<std::promise<void>>();
+  auto fut = promise->get_future().share();
+
+  std::vector<at::Tensor> result = tensors;
+
+  auto caller_stream = at::cuda::getCurrentCUDAStream(device_index_);
+
+  std::thread([this, tensors, src, tag, promise, caller_stream]() mutable {
+    try {
+      PendingMsg msg = pop_matching_msg(src, tag);
+      TORCH_CHECK(msg.slot < static_cast<uint32_t>(num_slots_), "bad recv slot");
+      TORCH_CHECK(msg.nbytes <= total_nbytes(tensors), "destination tensors too small");
+
+      auto& s = remote_slots_[msg.slot];
+      cudaStream_t stream = caller_stream.stream();
+
+      cuda_check(cudaStreamWaitEvent(stream, s.event, 0), "cudaStreamWaitEvent");
+
+      const char* base = static_cast<const char*>(s.ptr);
+      size_t offset = 0;
+      for (const auto& t : tensors) {
+        const size_t nb = tensor_nbytes(t);
+        cuda_check(
+            cudaMemcpyAsync(
+                t.data_ptr(),
+                base + offset,
+                nb,
+                cudaMemcpyDeviceToDevice,
+                stream),
+            "cudaMemcpyAsync unpack");
+        offset += nb;
+      }
+
+      cuda_check(cudaStreamSynchronize(stream), "cudaStreamSynchronize recv");
+
+      send_ack(src, msg.slot, msg.seq, tag);
+      promise->set_value();
+    } catch (...) {
+      promise->set_exception(std::current_exception());
+    }
+  }).detach();
+
+  return c10::make_intrusive<CudaIpcWork>(c10d::OpType::RECV, fut, std::move(result));
+}*/
 
 c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::recv(
     std::vector<at::Tensor>& tensors,
@@ -498,23 +647,40 @@ c10::intrusive_ptr<c10d::Work> CudaIpcProcessGroup::recv(
 
   std::vector<at::Tensor> result = tensors;
 
-  std::thread([this, tensors, src, tag, promise]() mutable {
-    try {
-      PendingMsg msg = pop_matching_msg(src, tag);
-      TORCH_CHECK(msg.slot < static_cast<uint32_t>(num_slots_), "bad recv slot");
-      TORCH_CHECK(msg.nbytes <= total_nbytes(tensors), "destination tensors too small");
+  try {
+    cuda_check(cudaSetDevice(device_index_), "cudaSetDevice in recv");
 
-      auto& s = remote_slots_[msg.slot];
-      cuda_check(cudaStreamWaitEvent(stream_, s.event, 0), "cudaStreamWaitEvent");
-      unpack_batch_cuda(s.ptr, tensors);
-      cuda_check(cudaStreamSynchronize(stream_), "cudaStreamSynchronize recv");
+    PendingMsg msg = pop_matching_msg(src, tag);
+    TORCH_CHECK(msg.slot < static_cast<uint32_t>(num_slots_), "bad recv slot");
+    TORCH_CHECK(msg.nbytes <= total_nbytes(tensors), "destination tensors too small");
 
-      send_ack(src, msg.slot, msg.seq, tag);
-      promise->set_value();
-    } catch (...) {
-      promise->set_exception(std::current_exception());
+    auto& s = remote_slots_[msg.slot];
+    auto stream = at::cuda::getCurrentCUDAStream(device_index_).stream();
+
+    cuda_check(cudaStreamWaitEvent(stream, s.event, 0), "cudaStreamWaitEvent recv");
+
+    const char* base = static_cast<const char*>(s.ptr);
+    size_t offset = 0;
+    for (const auto& t : tensors) {
+      const size_t nb = tensor_nbytes(t);
+      cuda_check(
+          cudaMemcpyAsync(
+              t.data_ptr(),
+              base + offset,
+              nb,
+              cudaMemcpyDeviceToDevice,
+              stream),
+          "cudaMemcpyAsync unpack");
+      offset += nb;
     }
-  }).detach();
+
+    cuda_check(cudaStreamSynchronize(stream), "cudaStreamSynchronize recv");
+
+    send_ack(src, msg.slot, msg.seq, tag);
+    promise->set_value();
+  } catch (...) {
+    promise->set_exception(std::current_exception());
+  }
 
   return c10::make_intrusive<CudaIpcWork>(c10d::OpType::RECV, fut, std::move(result));
 }
