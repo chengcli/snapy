@@ -36,8 +36,8 @@ int main() {
   std::cout << "rank " << rank << " send = " << send_data[0] << std::endl;
   std::cout << "rank " << rank << " recv = " << recv_data[0] << std::endl;
 
-  // Temporary debugging delay to reduce teardown race
-  //std::this_thread::sleep_for(std::chrono::seconds(1));
+  //pg->barrier();
+  //pg->close();
 
   return 0;
 }
