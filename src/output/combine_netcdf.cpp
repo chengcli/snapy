@@ -11,7 +11,6 @@
 #include <configure.h>
 
 // snap
-#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "output_formats.hpp"
@@ -23,9 +22,10 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
   auto layout = pmb->get_layout();
-  if (is_process_group_initialized()) {
-    get_process_group()->barrier()->wait();
-  }
+  /*c10d::BarrierOptions op;
+  op.device_ids = {layout->options->local_rank()};
+  layout->pg->barrier(op)->wait();*/
+  layout->pg->barrier()->wait();
 
   std::stringstream msg;
 

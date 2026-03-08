@@ -15,14 +15,9 @@ macro(setup_problem namel)
 
   target_include_directories(
     ${namel}.${buildl}
-    PRIVATE ${CMAKE_BINARY_DIR}
-            ${KINTERA_INCLUDE_DIR}
-            ${SNAP_INCLUDE_DIR}
+    PRIVATE ${CMAKE_BINARY_DIR} ${KINTERA_INCLUDE_DIR} ${SNAP_INCLUDE_DIR}
             ${HARP_INCLUDE_DIR}
-            ${NETCDF_INCLUDES}
-            ${TORCH_INCLUDE_DIR}
-            ${TORCH_API_INCLUDE_DIR}
-            ${CMAKE_SOURCE_DIR}/external/gloo)
+            ${NETCDF_INCLUDES} ${TORCH_INCLUDE_DIR} ${TORCH_API_INCLUDE_DIR})
 
   target_link_libraries(
     ${namel}.${buildl}

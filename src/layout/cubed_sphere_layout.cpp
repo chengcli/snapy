@@ -63,7 +63,6 @@
 
 #include "connectivity.hpp"
 #include "cubed_sphere_layout.hpp"
-#include "distributed.hpp"
 
 namespace snap {
 
@@ -344,6 +343,9 @@ void CubedSphereLayoutImpl::reset() {
   _coords2.resize(px * py);
   build_zorder_coords2(pxy(), pxy(), _coords2.data());
   build_rank_of2(pxy(), pxy(), _coords2.data(), _rankof.data());
+
+  // build backend
+  _init_backend();
 }
 
 void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
@@ -780,14 +782,10 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
 void CubedSphereLayoutImpl::forward(
     MeshBlockImpl const *pmb, Variables &vars, SyncOptions const &opts,
     std::vector<c10::intrusive_ptr<c10d::Work>> &works) {
+  TORCH_CHECK(!options->no_backend(),
+              "[CubedSphereLayout:forward] backend is disabled");
   TORCH_CHECK(pmb != nullptr,
               "[CubedSphereLayout:forward] MeshBlock pointer is null");
-  TORCH_CHECK(snap::is_process_group_initialized(),
-              "[CubedSphereLayout:forward] process group not initialized; call "
-              "torch.distributed.init_process_group() and then "
-              "snapy.distributed.set_process_group() first");
-
-  auto pg = snap::get_process_group();
 
   // Serialize data into send buffers
   serialize(pmb, vars, opts);

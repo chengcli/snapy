@@ -19,8 +19,7 @@ macro(setup_parallel_test namel cores)
             ${HARP_INCLUDE_DIR}
             ${NETCDF_INCLUDES}
             ${TORCH_INCLUDE_DIR}
-            ${TORCH_API_INCLUDE_DIR}
-            ${CMAKE_SOURCE_DIR}/external/gloo)
+            ${TORCH_API_INCLUDE_DIR})
 
   target_link_libraries(${namel}.${buildl}
     PRIVATE snapy::snap

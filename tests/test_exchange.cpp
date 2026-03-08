@@ -4,17 +4,9 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
-// base
-#include <configure.h>
-
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
-
 // snap
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/spherical_utils.hpp>
-#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -42,32 +34,6 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
 
 int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
-
-  // Initialize the distributed process group using torch.distributed C++
-  // classes (mirroring what torch.distributed.init_process_group() does from
-  // Python)
-  if (!op->layout()->no_backend()) {
-    auto layout_op = op->layout();
-
-    // Build TCPStore
-    c10d::TCPStoreOptions store_opts;
-    store_opts.port = layout_op->master_port();
-    store_opts.numWorkers = layout_op->world_size();
-    store_opts.isServer = (layout_op->rank() == layout_op->root_rank());
-    auto store = c10::make_intrusive<c10d::TCPStore>(layout_op->master_addr(),
-                                                     store_opts);
-
-    // Build ProcessGroupGloo
-    auto gloo_opts = c10d::ProcessGroupGloo::Options::create();
-    gloo_opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-    auto pg = c10::make_intrusive<c10d::ProcessGroupGloo>(
-        store, layout_op->rank(), layout_op->world_size(), gloo_opts);
-
-    // Register the process group with snap's distributed state
-    snap::set_process_group(pg);
-    snap::get_process_group()->barrier()->wait();
-  }
-
   auto block = MeshBlock(op);
 
   auto device = torch::kCPU;
@@ -148,7 +114,7 @@ int main(int argc, char** argv) {
   set_zonal_velocity(block, vars["hydro_w"]);
 
   block->initialize(vars);
-  snap::get_process_group()->barrier()->wait();
+  block->get_layout()->pg->barrier()->wait();
 
   auto w_left = -get_rank() * torch::ones_like(vars["hydro_w"]);
   auto w_right = get_rank() * torch::ones_like(vars["hydro_w"]);
@@ -194,7 +160,7 @@ int main(int argc, char** argv) {
                 << "w_right[IDN] = \n"
                 << w_right[IDN].squeeze().flip(0) << std::endl;
     }
-    snap::get_process_group()->barrier()->wait();
+    block->get_layout()->pg->barrier()->wait();
   }
 
   block->make_outputs(vars, 0.);

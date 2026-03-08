@@ -18,12 +18,12 @@ endif()
 execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)
 
 execute_process(
-  COMMAND ../bin/straka.${buildl}
+  COMMAND pd-run 2 ../bin/straka.${buildl}
   RESULT_VARIABLE res
 )
 
 if(NOT res EQUAL 0)
-  message(FATAL_ERROR "straka test failed with exit code ${res}")
+  message(FATAL_ERROR "pd-run failed with exit code ${res}")
 endif()
 
 execute_process(
