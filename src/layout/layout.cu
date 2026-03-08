@@ -18,8 +18,9 @@ void LayoutImpl::_group_start() const {
   if (options->backend() == "nccl") {
     auto pg = snap::get_process_group();
     auto nccl = c10::dynamic_intrusive_pointer_cast<c10d::ProcessGroupNCCL>(
-      pg->getDefaultBackend());
-    if (nccl) nccl->groupStart();
+      pg->getBackend(c10::DeviceType::CUDA));
+    TORCH_CHECK(nccl, "CUDA tensor must use NCCL backend");
+    nccl->groupStart();
   }
 }
 
@@ -27,8 +28,9 @@ void LayoutImpl::_group_end() const {
   if (options->backend() == "nccl") {
     auto pg = snap::get_process_group();
     auto nccl = c10::dynamic_intrusive_pointer_cast<c10d::ProcessGroupNCCL>(
-      pg->getDefaultBackend());
-    if (nccl) nccl->groupEnd();
+      pg->getBackend(c10::DeviceType::CUDA));
+    TORCH_CHECK(nccl, "CUDA tensor must use NCCL backend");
+    nccl->groupEnd();
   }
 }
 
