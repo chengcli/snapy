@@ -193,7 +193,11 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
       }
     }
 
-  _group_end();
+  auto work = _group_end();
+  if (work) {
+    std::cout << "calling work->wait()" << std::endl;
+    work->wait();
+  }
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
@@ -305,7 +309,9 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
 
 #ifdef NOT_USE_C10D_NCCL
 void LayoutImpl::_group_start() const {}
-void LayoutImpl::_group_end() const {}
+c10::intrusive_ptr<c10d::Work> _group_end() const {
+  return nullptr;
+}
 void LayoutImpl::_sync_device() const {}
 #endif
 
