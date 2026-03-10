@@ -98,8 +98,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
           .add_owned_output(du.index(interior))
           .add_owned_input(w.index(interior))
           .add_owned_input(gamma.unsqueeze(0).index(interior))
-          .add_owned_input(pcoord->face_area1().unsqueeze(0).index(interior))
-          .add_owned_input(pcoord->cell_volume().unsqueeze(0).index(interior))
+          .add_owned_input(
+              pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
+          .add_owned_input(
+              pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
           .add_input(a)
           .add_input(b)
           .add_input(c)
