@@ -155,5 +155,20 @@ void bind_mesh(py::module &m) {
       .def("device", &snap::MeshBlockImpl::device)
       .def("check_redo", &snap::MeshBlockImpl::check_redo)
       .def("get_outputs",
-           [](snap::MeshBlockImpl &self) { return self.output_types; });
+           [](snap::MeshBlockImpl &self) { return self.output_types; })
+      .def(
+          "apply_hydro_bc",
+          [](snap::MeshBlockImpl &self, torch::Tensor var, int type) {
+            snap::BoundaryFuncOptions bops;
+            bops.nghost(self.options->coord()->nghost());
+            if (type != snap::kPrimitive && type != snap::kConserved) {
+              throw std::runtime_error("Invalid type for apply_hydro_bc.");
+            }
+            bops.type(type);
+            for (int i = 0; i < self.options->bfuncs().size(); ++i) {
+              if (self.options->bfuncs()[i] == nullptr) continue;
+              self.options->bfuncs()[i](var, 3 - i / 2, bops);
+            }
+          },
+          py::arg("var"), py::arg("type") = (int)snap::kConserved);
 }
