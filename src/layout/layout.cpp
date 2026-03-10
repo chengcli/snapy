@@ -309,7 +309,7 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
 
 #ifdef NOT_USE_C10D_NCCL
 void LayoutImpl::_group_start() const {}
-c10::intrusive_ptr<c10d::Work> _group_end() const {
+c10::intrusive_ptr<c10d::Work> LayoutImpl::_group_end() const {
   return nullptr;
 }
 void LayoutImpl::_sync_device() const {}

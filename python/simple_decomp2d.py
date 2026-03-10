@@ -73,7 +73,7 @@ def get_neighbor_rank_2d(nblock3: int, nblock2: int,
     rank_x2 = rank + x2_offset
     if periodic_x2:
         rank_x2 = (rank_x2 + nblock2) % nblock2
-    elif:
+    else:
         pass
 
     rank_x3 = rank_x2 + x3_offset * nblock2
