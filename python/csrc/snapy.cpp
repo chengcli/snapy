@@ -40,6 +40,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("kIPR") = (int)snap::IPR;
   m.attr("kICY") = (int)snap::ICY;
 
+  m.attr("kPrimitive") = (int)snap::kPrimitive;
+  m.attr("kConserved") = (int)snap::kConserved;
+  m.attr("kScalar") = (int)snap::kScalar;
+
   m.def("load_restart", &snap::load_restart);
 
   bind_layout(m);
