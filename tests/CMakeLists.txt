@@ -76,6 +76,22 @@ set_tests_properties(test_shallow_xy PROPERTIES
 )
 
 add_test(
+  NAME test_shallow_xy_decomp
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy_decomp.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+)
+
+set_tests_properties(test_shallow_xy_decomp PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  PROCESSORS 4
+  RUN_SERIAL TRUE
+  TIMEOUT 1200
+  LABELS "decomp;gloo"
+)
+
+add_test(
   NAME test_shallow_splash
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
