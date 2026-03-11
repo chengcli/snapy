@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# arguments
-# -n: number of processes (world size)
-# must have at least 2 arguments: world size and executable
-
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <world_size> <executable>"
   exit 1
@@ -12,33 +8,130 @@ fi
 
 WORLD_SIZE=${1:-2}
 EXECUTABLE=${2}
-ALL_OHTER_ARGS=${@:3}
+ALL_OTHER_ARGS=("${@:3}")
 BACKEND=${BACKEND:-gloo}
 MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
-MASTER_PORT=${MASTER_PORT:-29500}
+MASTER_PORT=${MASTER_PORT:-}
+BLOCKS_PER_PROCESS=${BLOCKS_PER_PROCESS:-1}
+NODE_RANK=${NODE_RANK:-0}
+LOCAL_WORLD_SIZE=${LOCAL_WORLD_SIZE:-$WORLD_SIZE}
+LAUNCH_TIMEOUT=${PD_RUN_TIMEOUT:-10}
 
 # If using NCCL, specify GPUs
 CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3}
-
 IFS=',' read -r -a GPU_LIST <<< "${CUDA_VISIBLE_DEVICES}"
 
-#echo "Launching WORLD_SIZE=$WORLD_SIZE BACKEND=$BACKEND"
+if [ "${WORLD_SIZE}" -le 0 ]; then
+  echo "WORLD_SIZE must be positive"
+  exit 1
+fi
+
+if [ "${BLOCKS_PER_PROCESS}" -le 0 ]; then
+  echo "BLOCKS_PER_PROCESS must be positive"
+  exit 1
+fi
+
+choose_master_port() {
+  local candidate
+  if command -v ss >/dev/null 2>&1; then
+    for _ in $(seq 1 32); do
+      candidate=$((20000 + RANDOM % 20000))
+      if ! ss -ltn "( sport = :${candidate} )" 2>/dev/null | grep -q LISTEN; then
+        echo "${candidate}"
+        return
+      fi
+    done
+  fi
+  echo $((20000 + $$ % 20000))
+}
+
+if [ -z "${MASTER_PORT}" ]; then
+  MASTER_PORT=$(choose_master_port)
+fi
+
+PIDS=()
+REMAINING=0
+EXIT_CODE=0
+STOPPING=0
+
+cleanup() {
+  local signal_name=${1:-EXIT}
+  if [ "${STOPPING}" -ne 0 ]; then
+    return
+  fi
+  STOPPING=1
+
+  for pid in "${PIDS[@]:-}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done
+
+  local deadline=$((SECONDS + LAUNCH_TIMEOUT))
+  while [ "${SECONDS}" -lt "${deadline}" ]; do
+    local alive=0
+    for pid in "${PIDS[@]:-}"; do
+      if kill -0 "${pid}" 2>/dev/null; then
+        alive=1
+        break
+      fi
+    done
+    if [ "${alive}" -eq 0 ]; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  for pid in "${PIDS[@]:-}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill -9 "${pid}" 2>/dev/null || true
+    fi
+  done
+
+  wait 2>/dev/null || true
+}
+
+on_signal() {
+  EXIT_CODE=130
+  cleanup "${1}"
+  exit "${EXIT_CODE}"
+}
+
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
+trap 'cleanup EXIT' EXIT
 
 for (( RANK=0; RANK<${WORLD_SIZE}; RANK++ )); do
   LOCAL_RANK=$(( RANK % ${#GPU_LIST[@]} ))
-  DEV=${GPU_LIST[$LOCAL_RANK]}
-
-  #echo "Launching RANK=$RANK LOCAL_RANK=$LOCAL_RANK GPU=$DEV"
+  DEV=${GPU_LIST[$LOCAL_RANK]:-0}
 
   RANK=$RANK \
   WORLD_SIZE=$WORLD_SIZE \
+  PROCESS_RANK=$RANK \
+  PROCESS_WORLD_SIZE=$WORLD_SIZE \
   LOCAL_RANK=$LOCAL_RANK \
+  LOCAL_WORLD_SIZE=$LOCAL_WORLD_SIZE \
+  NODE_RANK=$NODE_RANK \
+  BLOCKS_PER_PROCESS=$BLOCKS_PER_PROCESS \
   BACKEND=$BACKEND \
   MASTER_ADDR=$MASTER_ADDR \
   MASTER_PORT=$MASTER_PORT \
   CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES \
-  ${EXECUTABLE} ${ALL_OHTER_ARGS} &
+  DEVICE_ID=$DEV \
+  "${EXECUTABLE}" "${ALL_OTHER_ARGS[@]}" &
+  PIDS+=("$!")
+  REMAINING=$((REMAINING + 1))
 done
 
-wait
-#echo "All ranks finished."
+while [ "${REMAINING}" -gt 0 ]; do
+  WAIT_STATUS=0
+  wait -n || WAIT_STATUS=$?
+  if [ "${WAIT_STATUS}" -ne 0 ]; then
+    EXIT_CODE=${WAIT_STATUS}
+    cleanup FAIL
+    exit "${EXIT_CODE}"
+  fi
+  REMAINING=$((REMAINING - 1))
+done
+
+trap - EXIT INT TERM
