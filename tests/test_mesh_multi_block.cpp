@@ -1,6 +1,9 @@
 // gtest
 #include <gtest/gtest.h>
 
+// torch
+#include <c10/cuda/CUDAFunctions.h>
+
 // snap
 #include <snap/mesh/mesh.hpp>
 
@@ -18,7 +21,19 @@ TEST(Mesh, multi_block_exchange) {
   mesh_opts->block(block_opts);
   mesh_opts->blocks_per_process(2);
 
+  auto device = torch::Device(torch::kCPU);
+  if (block_opts->layout()->backend() == "nccl") {
+    ASSERT_TRUE(torch::cuda::is_available());
+    int device_index = block_opts->layout()->device_id();
+    if (device_index < 0) device_index = block_opts->layout()->local_rank();
+    c10::cuda::set_device(device_index);
+    device = torch::Device(torch::kCUDA, device_index);
+  }
+
   auto mesh = Mesh(mesh_opts);
+  if (device.is_cuda()) {
+    mesh->to(device);
+  }
   MeshVariables vars(mesh->blocks.size());
 
   bool saw_local_neighbor = false;
@@ -32,7 +47,8 @@ TEST(Mesh, multi_block_exchange) {
     int nc3 = pcoord->options->nc3();
 
     auto hydro_w =
-        torch::zeros({5, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
+        torch::zeros({5, nc3, nc2, nc1},
+                     torch::TensorOptions().dtype(torch::kFloat64).device(device));
     hydro_w[IDN].fill_(block->options->layout()->rank() + 1.0);
     hydro_w[IPR].fill_(1.0);
     vars[i]["hydro_w"] = hydro_w;

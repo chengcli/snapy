@@ -1,6 +1,9 @@
 // C/C++
 #include <cstdio>
 
+// torch
+#include <c10/cuda/CUDAFunctions.h>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -24,6 +27,11 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   auto alpha = mesh[1];
   auto beta = mesh[0];
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+  auto device = hydro_w.device();
+  alpha = alpha.to(device);
+  beta = beta.to(device);
+  lon = lon.to(device);
+  lat = lat.to(device);
 
   // hydro_w[IVZ] = lat.cos();
   hydro_w[IVY] = lat.cos();
@@ -36,11 +44,18 @@ int main(int argc, char** argv) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
   auto block = MeshBlock(op);
 
-  auto device = torch::kCPU;
-  // if (torch::cuda::is_available()) {
-  //  std::cout << "Running on CUDA" << std::endl;
-  //   device = torch::kCUDA;
-  // }
+  auto device = torch::Device(torch::kCPU);
+  if (op->layout()->backend() == "nccl") {
+    TORCH_CHECK(torch::cuda::is_available(),
+                "CUDA is required for backend=nccl");
+    int device_index = op->layout()->device_id();
+    if (device_index < 0) device_index = op->layout()->local_rank();
+    c10::cuda::set_device(device_index);
+    device = torch::Device(torch::kCUDA, device_index);
+  }
+  if (device.is_cuda()) {
+    block->to(device);
+  }
 
   auto pcoord = block->pcoord;
 

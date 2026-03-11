@@ -16,13 +16,16 @@ namespace snap {
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
+  auto process_rank_env = get_env("PROCESS_RANK", get_env("RANK", "0"));
+  auto process_world_size_env =
+      get_env("PROCESS_WORLD_SIZE", get_env("WORLD_SIZE", "1"));
   master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
   master_port(std::stoi(get_env("MASTER_PORT", "29501")));
-  process_rank(std::stoi(get_env("RANK", "0")));
-  rank(std::stoi(get_env("RANK", "0")));
+  process_rank(std::stoi(process_rank_env));
+  rank(std::stoi(get_env("RANK", process_rank_env)));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
-  process_world_size(std::stoi(get_env("WORLD_SIZE", "1")));
-  world_size(std::stoi(get_env("WORLD_SIZE", "1")));
+  process_world_size(std::stoi(process_world_size_env));
+  world_size(std::stoi(get_env("WORLD_SIZE", process_world_size_env)));
   device_id(std::stoi(get_env("DEVICE_ID", "-1")));
 }
 
@@ -39,7 +42,7 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   op->py(node["nb3"].as<int>(1));
   op->px(node["nb2"].as<int>(1));
   op->pz(node["nb1"].as<int>(1));
-  op->backend() = node["backend"].as<std::string>("gloo");
+  op->backend() = get_env("BACKEND", node["backend"].as<std::string>("gloo"));
   op->verbose() = node["verbose"].as<bool>(verbose);
 
   if (op->verbose()) op->report(SINFO(LayoutOptions));
