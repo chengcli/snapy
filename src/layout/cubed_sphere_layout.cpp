@@ -833,10 +833,8 @@ void CubedSphereLayoutImpl::exchange_remote(
       if (is_remote) {
         int remote_local_block = options->local_block_index(nb);
         int local_block = options->local_block_index(rank);
-        int send_tag = make_comm_tag(
-            remote_local_block, std::tuple<int, int, int>(-dy, -dx, 0),
-            opts.phyid());
-        int recv_tag = make_comm_tag(local_block, offset, opts.phyid());
+        int send_tag = opts.phyid() * 1024 + local_block;
+        int recv_tag = opts.phyid() * 1024 + remote_local_block;
         // rank-based ordering
         if (rank < nb) {
           works.push_back(pg->send(send_bufs[r], remote_process, send_tag));

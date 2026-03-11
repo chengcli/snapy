@@ -54,12 +54,6 @@ int main(int argc, char** argv) {
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
   int r = block->options->layout()->rank();
 
-  if (r == 0) {
-    block->named_modules()["layout"]->pretty_print(std::cout);
-  }
-
-  auto [rx, ry, face] = block->get_layout()->loc_of(r);
-
   auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
   auto left = block->part({-1, 0, 0}, PartOptions().exterior(false));
   auto right = block->part({1, 0, 0}, PartOptions().exterior(false));
@@ -118,6 +112,8 @@ int main(int argc, char** argv) {
 
   auto w_left = -get_rank() * torch::ones_like(vars["hydro_w"]);
   auto w_right = get_rank() * torch::ones_like(vars["hydro_w"]);
+  auto w_left_before = w_left.clone();
+  auto w_right_before = w_right.clone();
 
   SyncOptions sync_opts;
   sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
@@ -139,31 +135,19 @@ int main(int argc, char** argv) {
   playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
                     works);
 
-  for (int i = 0; i < block->options->layout()->world_size(); ++i) {
-    if (i == r) {
-      std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
-                               face, r)
-                << std::endl;
-      std::cout << "hydro_w[IDN] = \n"
-                << vars["hydro_w"][IDN].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVX] = \n"
-                << vars["hydro_w"][IVX].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVY] = \n"
-                << vars["hydro_w"][IVY].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVZ] = \n"
-                << vars["hydro_w"][IVZ].squeeze().flip(0) << std::endl;
+  bool ok = true;
+  ok = ok && torch::isfinite(vars["hydro_w"]).all().item<bool>();
+  ok = ok && torch::isfinite(w_left).all().item<bool>();
+  ok = ok && torch::isfinite(w_right).all().item<bool>();
+  ok = ok && !torch::allclose(w_left, w_left_before);
+  ok = ok && !torch::allclose(w_right, w_right_before);
+  block->get_layout()->pg->barrier()->wait();
 
-      std::cout << std::endl
-                << "w_left[IDN] = \n"
-                << w_left[IDN].squeeze().flip(0) << std::endl;
-      std::cout << std::endl
-                << "w_right[IDN] = \n"
-                << w_right[IDN].squeeze().flip(0) << std::endl;
-    }
-    block->get_layout()->pg->barrier()->wait();
+  if (!ok) {
+    std::cerr << "legacy cubed-sphere exchange regression failed on rank " << r
+              << std::endl;
+    return 1;
   }
-
-  block->make_outputs(vars, 0.);
 
   return 0;
 }

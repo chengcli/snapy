@@ -15,9 +15,9 @@ distribute:
   backend: gloo
   layout: cubed-sphere
   #layout: slab
-  nb2: 2
-  nb3: 2
-  verbose: true
+  nb2: 1
+  nb3: 1
+  verbose: false
 
 geometry:
   type: gnomonic-equiangle
@@ -38,8 +38,3 @@ boundary-condition:
     x2-outer: custom
     x3-inner: custom
     x3-outer: custom
-
-outputs:
-  - type: netcdf
-    variables: [prim]
-    dt: 30.
