@@ -190,7 +190,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
 
-  auto playout = MeshBlockImpl::get_layout();
+  auto playout = pmb->get_layout();
 
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");

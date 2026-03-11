@@ -31,6 +31,7 @@ foreach(input ${inputs})
 endforeach()
 
 setup_parallel_test(test_exchange 6)
+setup_parallel_test(test_mesh_multi_block 2)
 
 # ============= #
 # Example Tests #

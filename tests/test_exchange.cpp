@@ -29,7 +29,7 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   hydro_w[IVY] = lat.cos();
 
   sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
-  cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);
+  cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta, face_id);
 }
 
 int main(int argc, char** argv) {

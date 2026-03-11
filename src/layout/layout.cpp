@@ -4,10 +4,6 @@
 // base
 #include <configure.h>  // gloo and nccl
 
-// torch
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
-#include <torch/csrc/distributed/c10d/TCPStore.hpp>
-
 // snap
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
@@ -22,8 +18,10 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   // Override by them if they are present
   master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
   master_port(std::stoi(get_env("MASTER_PORT", "29501")));
+  process_rank(std::stoi(get_env("RANK", "0")));
   rank(std::stoi(get_env("RANK", "0")));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
+  process_world_size(std::stoi(get_env("WORLD_SIZE", "1")));
   world_size(std::stoi(get_env("WORLD_SIZE", "1")));
   device_id(std::stoi(get_env("DEVICE_ID", "-1")));
 }
@@ -118,7 +116,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       }
     }
 
-  _sync_device();
+  comm->sync_device();
 }
 
 void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
@@ -127,8 +125,16 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   TORCH_CHECK(!options->no_backend(), "[Layout:forward] backend is disabled");
   TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
 
-  // Serialize data into send buffers
   serialize(pmb, vars, opts);
+  exchange_remote(pmb, opts, works);
+}
+
+void LayoutImpl::exchange_remote(
+    MeshBlockImpl const* pmb, SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  TORCH_CHECK(!options->no_backend(),
+              "[Layout:exchange_remote] backend is disabled");
+  TORCH_CHECK(pmb != nullptr, "[Layout:exchange_remote] MeshBlock pointer is null");
 
   if (options->verbose()) {
     SINFO(Layout) << "performing communication\n";
@@ -156,7 +162,7 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
     dy_sgn = -1;
   }
 
-  _group_start();
+  comm->group_start();
 
   for (int dy_ = dy_min; dy_ <= dy_max; ++dy_)
     for (int dx_ = dx_min; dx_ <= dx_max; ++dx_) {
@@ -173,24 +179,30 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
       if (nb < 0) continue;  // no neighbor
 
       int r = get_buffer_id(offset);
+      int remote_process = options->owner_process_rank(nb);
+      bool is_remote = remote_process != options->process_rank();
 
-      if (nb != rank) {  // different ranks
-        int send_id = opts.phyid() + ((1 + dx) << 1) + ((1 + dy) << 2);
-        int recv_id = opts.phyid() + ((1 - dx) << 1) + ((1 - dy) << 2);
+      if (is_remote) {
+        int remote_local_block = options->local_block_index(nb);
+        int local_block = options->local_block_index(rank);
+        int send_id =
+            make_comm_tag(remote_local_block, std::tuple<int, int, int>(-dy, -dx, 0),
+                          opts.phyid());
+        int recv_id = make_comm_tag(local_block, offset, opts.phyid());
 
-        auto send_work = pg->send(send_bufs[r], nb, send_id);
+        auto send_work = pg->send(send_bufs[r], remote_process, send_id);
         works.push_back(send_work);
 
-        auto recv_work = pg->recv(recv_bufs[r], nb, recv_id);
+        auto recv_work = pg->recv(recv_bufs[r], remote_process, recv_id);
         works.push_back(recv_work);
-      } else {  // self-send
+      } else if (nb == rank) {  // self-send
         int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
         for (int n = 0; n < recv_bufs[r].size(); ++n)
           recv_bufs[r1][n].copy_(send_bufs[r][n]);
       }
     }
 
-  _group_end();
+  comm->group_end();
 }
 
 void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
@@ -199,7 +211,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
     SINFO(Layout) << "deserializing data from receive buffers\n";
   }
 
-  _sync_device();
+  comm->sync_device();
 
   // Get my logical location
   auto iloc = loc_of(options->rank());
@@ -298,63 +310,14 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   works.clear();
 }
 
-void LayoutImpl::_init_backend() {
+void LayoutImpl::_init_process_group() {
   if (options->no_backend()) return;
-
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Initializing distributed environment\n";
-  }
-
-  // 1. Build the store
-  c10d::TCPStoreOptions store_op;
-
-  store_op.port = options->master_port();
-  store_op.numWorkers = options->world_size();
-  store_op.isServer = is_root();
-
-  store = at::make_intrusive<c10d::TCPStore>(options->master_addr(), store_op);
-
-  // 2. Create ProcessGroup based on backend
-  if (options->backend() == "gloo") {
-    _init_gloo();
-  } else if (options->backend() == "nccl") {
-    _init_nccl();
-  } else {
-    throw std::runtime_error("Unsupported BACKEND=" + options->backend());
-  }
-
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->local_rank()};
-  pg->barrier(op)->wait();*/
-  pg->barrier()->wait();
-
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Distributed environment initialized with backend="
-              << options->backend() << ", world_size=" << options->world_size()
-              << "\n";
-  }
-}
-
-void LayoutImpl::_init_gloo() {
-  if (options->verbose()) {
-    std::cout << "[Rank " << options->rank() << ":" << options->local_rank()
-              << "] Using Gloo backend on CPU\n";
-  }
-
-  auto opts = c10d::ProcessGroupGloo::Options::create();
-  opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
-
-  pg = std::make_shared<c10d::ProcessGroupGloo>(store, options->rank(),
-                                                options->world_size(), opts);
+  comm = ProcessGroupContext::create(options);
+  pg = comm->pg;
 }
 
 #ifdef NOT_USE_C10D_NCCL
-void LayoutImpl::_init_nccl() {}
-void LayoutImpl::_group_start() const {}
-void LayoutImpl::_group_end() const {}
-void LayoutImpl::_sync_device() const {}
+void LayoutImpl::_init_process_group() {}
 #endif
 
 }  // namespace snap

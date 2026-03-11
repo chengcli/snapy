@@ -20,7 +20,7 @@ void SlabLayoutImpl::reset() {
   build_rank_of2(px, py, _coords2.data(), _rankof.data());
 
   // build backend
-  _init_backend();
+  _init_process_group();
 }
 
 void SlabLayoutImpl::pretty_print(std::ostream& os) const {

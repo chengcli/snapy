@@ -204,7 +204,7 @@ static Variables load_pt_from_tar(struct archive* ar,
   return vars;
 }
 
-Variables load_restart(std::string const& path) {
+Variables load_restart(std::string const& path, int block_rank) {
   // Dispatch based on whether `path` is a .part file or a tar archive.
   if (is_tar_archive(path)) {
     struct archive* ar = archive_read_new();
@@ -237,8 +237,7 @@ Variables load_restart(std::string const& path) {
         auto out = parse_part_filename(name);
         // find the block rank number after "block"
         int rank = std::stoi(out.blockid.substr(5, out.blockid.size() - 5));
-        int my_rank = get_rank();
-        if (rank != my_rank) {
+        if (rank != block_rank) {
           // Not for this rank; skip
           archive_read_data_skip(ar);
         } else {

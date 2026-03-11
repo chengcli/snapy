@@ -132,7 +132,7 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
  * \f}
  */
 void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
-                        torch::Tensor beta);
+                        torch::Tensor beta, int face_id);
 
 //! \brief Transform contravariant velocities to cartesian velocities
 /*!
@@ -167,6 +167,6 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
  * \f}
  */
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
-                        torch::Tensor beta);
+                        torch::Tensor beta, int face_id);
 
 }  // namespace snap

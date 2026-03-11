@@ -184,10 +184,10 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
   // zonal mean profiles
   if (ContainVariable("avg")) {
-    auto layout = MeshBlockImpl::get_layout();
+    auto layout = pmb->get_layout();
     c10d::ReduceOptions opsum;
     opsum.reduceOp = c10d::ReduceOp::SUM;
-    opsum.rootRank = layout->options->root_rank();
+    opsum.rootRank = layout->options->process_root_rank();
 
     auto hydro_w_tol = vars.at("hydro_w") * vol;
     std::vector<at::Tensor> sum1 = {hydro_w_tol.sum({1, 2})};

@@ -18,7 +18,21 @@ namespace snap {
 static std::mutex meshblock_mutex;
 
 // Static member variable definitions
-Layout MeshBlockImpl::_playout = nullptr;
+thread_local Layout MeshBlockImpl::_tls_layout = nullptr;
+
+namespace {
+class LayoutGuard {
+ public:
+  explicit LayoutGuard(Layout layout) : prev_(MeshBlockImpl::current_layout()) {
+    MeshBlockImpl::set_current_layout(std::move(layout));
+  }
+
+  ~LayoutGuard() { MeshBlockImpl::set_current_layout(prev_); }
+
+ private:
+  Layout prev_;
+};
+}  // namespace
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
@@ -50,10 +64,11 @@ void MeshBlockImpl::reset() {
   //// ---- (1) set up distributed environment ---- ////
   if (_playout == nullptr) {
     std::unique_lock<std::mutex> lock(meshblock_mutex);
-    if (_playout == nullptr) {  // Check again after acquiring lock
+    if (_playout == nullptr) {
       _playout = LayoutImpl::create(options->layout(), this);
     }
   }
+  LayoutGuard layout_guard(_playout);
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -271,6 +286,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
+  LayoutGuard layout_guard(_playout);
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
@@ -433,20 +449,13 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
+  LayoutGuard layout_guard(_playout);
+  auto dt_local = local_max_time_step(vars);
   auto const& w = vars.at("hydro_w");
   auto dt_min =
-      torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
+      torch::tensor({dt_local}, torch::dtype(torch::kFloat64).device(w.device()));
 
-  // hyperbolic hydro time step
-  if (vars.count("solid")) {
-    dt_min[0] = phydro->max_time_step(w, vars.at("solid"));
-  } else {
-    dt_min[0] = phydro->max_time_step(w);
-  }
-
-  // gather the minimum dt across all ranks
   std::vector<at::Tensor> dt_reduce = {dt_min};
-
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
   _playout->pg->allreduce(dt_reduce, op)->wait();
@@ -460,7 +469,29 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
   return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
 }
 
+double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
+  LayoutGuard layout_guard(_playout);
+  auto const& w = vars.at("hydro_w");
+  auto dt_min =
+      torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
+
+  // hyperbolic hydro time step
+  if (vars.count("solid")) {
+    dt_min[0] = phydro->max_time_step(w, vars.at("solid"));
+  } else {
+    dt_min[0] = phydro->max_time_step(w);
+  }
+
+  return dt_min.item<double>();
+}
+
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
+  advance_local(vars, dt, stage);
+  exchange_ghost_zones(vars);
+}
+
+void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
+  LayoutGuard layout_guard(_playout);
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
@@ -613,7 +644,18 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     }
   }
 
-  // -------- (7) ghost zone exchange --------
+  // -------- (7) save final state for next stage --------
+  _hydro_u1.copy_(hydro_u);
+  if (pscalar->nvar() > 0) {
+    _scalar_s1.copy_(scalar_s);
+  }
+}
+
+void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
+  LayoutGuard layout_guard(_playout);
+  auto hydro_u = vars.at("hydro_u");
+  auto scalar_s = vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
+
   SyncOptions sync_opts;
   sync_opts.interpolate(true).type(kConserved);
 
@@ -633,23 +675,13 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   }
 
   if (options->verbose()) {
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    SINFO(MeshBlock) << "stage " << stage
-                     << " ghost zone exchange time (s): " << elapsed.count()
-                     << std::endl;
-    start = std::chrono::high_resolution_clock::now();
-  }
-
-  // -------- (8) save final state for next stage --------
-  _hydro_u1.copy_(hydro_u);
-  if (pscalar->nvar() > 0) {
-    _scalar_s1.copy_(scalar_s);
+    SINFO(MeshBlock) << "ghost zone exchange completed." << std::endl;
   }
 }
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
                                  bool final_write) {
+  LayoutGuard layout_guard(_playout);
   for (auto& output_type : output_types) {
     if (final_write) {
       output_type->write_output_file(this, vars, current_time, final_write);
@@ -667,14 +699,16 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
+  LayoutGuard layout_guard(_playout);
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
+
   bool compute_mass = false;
   bool compute_ie = false;
   bool compute_ke = false;
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->root_rank();
+  opsum.rootRank = options->layout()->process_root_rank();
 
   if (pintg->options->ncycle_out() != 0) {
     if (cycle % pintg->options->ncycle_out() == 0) {
@@ -738,6 +772,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 }
 
 void MeshBlockImpl::finalize(Variables const& vars, double time) {
+  LayoutGuard layout_guard(_playout);
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
@@ -772,7 +807,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->root_rank();
+  opsum.rootRank = options->layout()->process_root_rank();
 
   _playout->pg->reduce(cells, opsum)->wait();
 
@@ -800,6 +835,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
+  LayoutGuard layout_guard(_playout);
   auto sig = snap::SignalHandler::GetInstance();
   if (sig->CheckSignalFlags(this)) return -1;  // terminate
 
@@ -840,6 +876,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 torch::Device MeshBlockImpl::device() const {
+  LayoutGuard layout_guard(_playout);
   if (_playout->pg->getBoundDeviceId().has_value()) {
     return _playout->pg->getBoundDeviceId().value();
   } else {
@@ -848,12 +885,13 @@ torch::Device MeshBlockImpl::device() const {
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
+  LayoutGuard layout_guard(_playout);
   std::string restart_file;
   restart_file.assign(options->output_dir());
   restart_file.append("/");
   restart_file.append(fname);
 
-  auto data = load_restart(restart_file);
+  auto data = load_restart(restart_file, options->layout()->rank());
 
   // check required variables
   TORCH_CHECK(data.count("hydro_u"),

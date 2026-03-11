@@ -67,6 +67,9 @@ class CubedSphereLayoutImpl
   void forward(MeshBlockImpl const *pmb, Variables &vars,
                SyncOptions const &opts,
                std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
+  void exchange_remote(
+      MeshBlockImpl const *pmb, SyncOptions const &opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
 
  private:
   //! \brief Interpolate transmitted variable to local ghost zones

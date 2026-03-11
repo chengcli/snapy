@@ -105,7 +105,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 
-  static Layout get_layout() { return _playout; }
+  Layout get_layout() const { return _playout; }
+  static Layout current_layout() { return _tls_layout; }
+  static void set_current_layout(Layout layout) { _tls_layout = std::move(layout); }
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
@@ -135,6 +137,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    * \return: maximum time step
    */
   double max_time_step(Variables const& vars);
+  double local_max_time_step(Variables const& vars) const;
 
   //! advance the variables by one time step
   /*!
@@ -143,6 +146,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    * \param stage: current stage of the integrator
    */
   void forward(Variables& vars, double dt, int stage);
+  void advance_local(Variables& vars, double dt, int stage);
+  void exchange_ghost_zones(Variables& vars);
 
   //! make write outputs at the current time
   /*!
@@ -189,7 +194,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   int _cycle_start = 0;
 
   //! distribution layout
-  static Layout _playout;
+  Layout _playout;
+  static thread_local Layout _tls_layout;
 
   //! stage registers
   torch::Tensor _hydro_u0, _hydro_u1;

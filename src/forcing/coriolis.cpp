@@ -97,8 +97,8 @@ void CoriolisXYZImpl::reset() {
              theta.cos() * phi.sin() * omegay - theta.sin() * omegaz;
     omega3 = -phi.sin() * omegax + phi.cos() * omegay;
   } else if (pcoord->options->type() == "gnomonic-equiangle") {
-    int r = get_rank();
-    auto layout = MeshBlockImpl::get_layout();
+    int r = phydro->pmb->options->layout()->rank();
+    auto layout = phydro->pmb->get_layout();
     auto [rx, ry, face_id] = layout->loc_of(r);
     auto face = CS_FACE_NAMES[face_id];
 
