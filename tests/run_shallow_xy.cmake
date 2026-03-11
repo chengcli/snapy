@@ -3,16 +3,18 @@
 set(download_link "https://zenodo.org/records/18121953/files/shallow_xy-ref.nc")
 
 if(EXISTS "shallow_xy-ref.nc")
-  set(res 0)
+  set(_status 0)
 else()
-  execute_process(
-    COMMAND curl -L -o shallow_xy-ref.nc ${download_link}
-    RESULT_VARIABLE res
+  file(DOWNLOAD
+    "${download_link}"
+    "shallow_xy-ref.nc"
+    STATUS _status
+    SHOW_PROGRESS
   )
 endif()
 
-if(NOT res EQUAL 0)
-  message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
+if(NOT _status EQUAL 0)
+  message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
 execute_process(COMMAND ln -sf ../bin/shallow_xy.yaml shallow_xy.yaml)

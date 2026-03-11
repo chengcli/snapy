@@ -3,11 +3,13 @@
 set(download_link "https://zenodo.org/records/18121953/files/straka-ref.nc")
 
 if(EXISTS "straka-ref.nc")
-  set(res 0)
+  set(_status 0)
 else()
-  execute_process(
-    COMMAND curl -L -o straka-ref.nc ${download_link}
-    RESULT_VARIABLE res
+  file(DOWNLOAD
+    "${download_link}"
+    "shallow_xy-ref.nc"
+    STATUS _status
+    SHOW_PROGRESS
   )
 endif()
 
