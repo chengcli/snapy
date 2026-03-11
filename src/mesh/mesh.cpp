@@ -12,6 +12,9 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   auto dst = std::make_shared<MeshBlockOptionsImpl>(*src);
   auto layout = std::make_shared<LayoutOptionsImpl>(*src->layout());
   dst->layout(layout);
+  if (src->coord() != nullptr) {
+    dst->coord(src->coord()->clone());
+  }
   return dst;
 }
 }  // namespace
@@ -39,6 +42,9 @@ void MeshImpl::reset() {
     layout->world_size(layout->process_world_size() *
                        options->blocks_per_process());
     layout->rank(layout->global_block_rank(layout->process_rank(), i));
+    if (block_opts->coord() != nullptr) {
+      block_opts->coord()->repartition(layout);
+    }
     auto block = register_module("block" + std::to_string(i), MeshBlock(block_opts));
     blocks.push_back(block);
   }

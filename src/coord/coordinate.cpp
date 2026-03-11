@@ -55,7 +55,21 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
     }
   }
 
-  auto playout = LayoutImpl::create(LayoutOptionsImpl::from_yaml(filename));
+  op->global_x1min() = x1min;
+  op->global_x2min() = x2min;
+  op->global_x3min() = x3min;
+  op->global_x1max() = x1max;
+  op->global_x2max() = x2max;
+  op->global_x3max() = x3max;
+
+  if (!node["cells"]) return op;
+
+  op->global_nx1() = node["cells"]["nx1"].as<int>(1);
+  op->global_nx2() = node["cells"]["nx2"].as<int>(1);
+  op->global_nx3() = node["cells"]["nx3"].as<int>(1);
+
+  auto layout = LayoutOptionsImpl::from_yaml(filename);
+  auto playout = LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
   int rank = playout->options->rank();
   auto [lx2, lx3, lx1] = playout->loc_of(rank);
 
@@ -65,45 +79,25 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   int nb2 = playout->options->px();
   int nb3 = playout->options->py();
 
-  op->x1min() = x1min + lx1 * (x1max - x1min) / nb1;
-  op->x1max() = op->x1min() + (x1max - x1min) / nb1;
-
-  op->x2min() = x2min + lx2 * (x2max - x2min) / nb2;
-  op->x2max() = op->x2min() + (x2max - x2min) / nb2;
-
-  op->x3min() = x3min + lx3 * (x3max - x3min) / nb3;
-  op->x3max() = op->x3min() + (x3max - x3min) / nb3;
-
-  if (!node["cells"]) return op;
-
-  op->nx1() = node["cells"]["nx1"].as<int>(1);
-  if (op->nx1() % nb1 != 0) {
+  if (op->global_nx1() % nb1 != 0) {
     TORCH_CHECK(
         false,
         "Number of total x1 grids must be divisible by the number of mesh "
         "blocks in x1 direction");
-  } else {
-    op->nx1() /= nb1;
   }
 
-  op->nx2() = node["cells"]["nx2"].as<int>(1);
-  if (op->nx2() % nb2 != 0) {
+  if (op->global_nx2() % nb2 != 0) {
     TORCH_CHECK(
         false,
         "Number of total x2 grids must be divisible by the number of mesh "
         "blocks in x2 direction");
-  } else {
-    op->nx2() /= nb2;
   }
 
-  op->nx3() = node["cells"]["nx3"].as<int>(1);
-  if (op->nx3() % nb3 != 0) {
+  if (op->global_nx3() % nb3 != 0) {
     TORCH_CHECK(
         false,
         "Number of totla x3 grids must be divisible by the number of mesh "
         "blocks in x3 direction");
-  } else {
-    op->nx3() /= nb3;
   }
 
   op->nghost() = node["cells"]["nghost"].as<int>(1);
@@ -124,7 +118,33 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   }
 
   op->interp_order() = node["cells"]["interp_order"].as<int>(2);
+  op->repartition(layout);
   return op;
+}
+
+void CoordinateOptionsImpl::repartition(LayoutOptions const& layout) {
+  auto playout = LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
+  int rank = layout->rank();
+  auto [lx2, lx3, lx1] = playout->loc_of(rank);
+
+  if (layout->type() == "cubed-sphere") lx1 = 0;
+
+  int nb1 = layout->pz();
+  int nb2 = layout->px();
+  int nb3 = layout->py();
+
+  x1min(global_x1min() + lx1 * (global_x1max() - global_x1min()) / nb1);
+  x1max(x1min() + (global_x1max() - global_x1min()) / nb1);
+
+  x2min(global_x2min() + lx2 * (global_x2max() - global_x2min()) / nb2);
+  x2max(x2min() + (global_x2max() - global_x2min()) / nb2);
+
+  x3min(global_x3min() + lx3 * (global_x3max() - global_x3min()) / nb3);
+  x3max(x3min() + (global_x3max() - global_x3min()) / nb3);
+
+  nx1(global_nx1() / nb1);
+  nx2(global_nx2() / nb2);
+  nx3(global_nx3() / nb3);
 }
 
 CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
