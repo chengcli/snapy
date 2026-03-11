@@ -128,8 +128,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   /*!
    * \param vars: variables to initialize
    * \return: initial simulation time
-   */
+  */
   double initialize(Variables& vars, char const* restart_file = nullptr);
+  void initialize_local(Variables& vars);
+  void finalize_initialization(Variables& vars);
 
   //! compute the maximum allowable time step
   /*!

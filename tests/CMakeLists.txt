@@ -30,7 +30,7 @@ foreach(input ${inputs})
   execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${inp})
 endforeach()
 
-setup_parallel_test(test_exchange 6)
+setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_mesh_multi_block 2)
 
 # ============= #

@@ -1,26 +1,19 @@
-// C/C++
-#include <cstdio>
-
 // torch
 #include <c10/cuda/CUDAFunctions.h>
-
-// yaml
-#include <yaml-cpp/yaml.h>
 
 // snap
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/spherical_utils.hpp>
-#include <snap/mesh/meshblock.hpp>
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
-// u = cos(lat)
-void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
-  auto pcoord = pmb->pcoord;
-  auto playout = pmb->get_layout();
+namespace {
 
-  int r = get_rank();
-  auto [rx, ry, face_id] = playout->loc_of(r);
+void set_zonal_velocity(MeshBlock block, torch::Tensor const& hydro_w) {
+  auto pcoord = block->pcoord;
+  auto layout = block->get_layout();
+  auto [rx, ry, face_id] = layout->loc_of(layout->options->rank());
   auto face = CS_FACE_NAMES[face_id];
 
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
@@ -33,41 +26,34 @@ void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
   lon = lon.to(device);
   lat = lat.to(device);
 
-  // hydro_w[IVZ] = lat.cos();
   hydro_w[IVY] = lat.cos();
-
   sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
   cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta, face_id);
 }
 
-int main(int argc, char** argv) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
-  auto block = MeshBlock(op);
-
+torch::Device select_device(LayoutOptions const& layout) {
   auto device = torch::Device(torch::kCPU);
-  if (op->layout()->backend() == "nccl") {
+  if (layout->backend() == "nccl") {
     TORCH_CHECK(torch::cuda::is_available(),
                 "CUDA is required for backend=nccl");
-    int device_index = op->layout()->device_id();
-    if (device_index < 0) device_index = op->layout()->local_rank();
+    int device_index = layout->device_id();
+    if (device_index < 0) device_index = layout->local_rank();
     c10::cuda::set_device(device_index);
     device = torch::Device(torch::kCUDA, device_index);
   }
-  if (device.is_cuda()) {
-    block->to(device);
-  }
+  return device;
+}
 
+void seed_hydro_state(MeshBlock block, Variables& vars, torch::Device device) {
   auto pcoord = block->pcoord;
-
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
   int nc3 = pcoord->options->nc3();
-  int nghost = pcoord->options->nghost();
+  int rank = block->options->layout()->rank();
 
-  auto w = torch::zeros(
+  auto hydro_w = torch::zeros(
       {5, nc3, nc2, nc1},
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
-  int r = block->options->layout()->rank();
 
   auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
   auto left = block->part({-1, 0, 0}, PartOptions().exterior(false));
@@ -75,18 +61,14 @@ int main(int argc, char** argv) {
   auto bot = block->part({0, -1, 0}, PartOptions().exterior(false));
   auto top = block->part({0, 1, 0}, PartOptions().exterior(false));
 
-  w.index(interior)[IDN] = r + 1.0;
-  w.index(interior)[IPR] = r + 1.0;
+  hydro_w.index(interior)[IDN] = rank + 1.0;
+  hydro_w.index(interior)[IPR] = rank + 1.0;
+  hydro_w.index(left)[IDN] += 0.1 * 1;
+  hydro_w.index(right)[IDN] += 0.1 * 2;
+  hydro_w.index(bot)[IDN] += 0.1 * 3;
+  hydro_w.index(top)[IDN] += 0.1 * 6;
 
-  // set up internal density as <face>.0 + <side> * 0.1
-  // for cells within nghost zones
-  w.index(interior)[IDN] = r + 1.0;
-  w.index(left)[IDN] += 0.1 * 1;
-  w.index(right)[IDN] += 0.1 * 2;
-  w.index(bot)[IDN] += 0.1 * 3;
-  w.index(top)[IDN] += 0.1 * 6;
-
-  auto wleft = w.index(left)[IDN];
+  auto wleft = hydro_w.index(left)[IDN];
   for (int k = 0; k < wleft.size(0); ++k)
     for (int j = 0; j < wleft.size(1); ++j)
       for (int i = 0; i < wleft.size(2); ++i) {
@@ -94,7 +76,7 @@ int main(int argc, char** argv) {
         wleft.index({k, j, i}) += 0.001 * k;
       }
 
-  auto wright = w.index(right)[IDN];
+  auto wright = hydro_w.index(right)[IDN];
   for (int k = 0; k < wright.size(0); ++k)
     for (int j = 0; j < wright.size(1); ++j)
       for (int i = 0; i < wright.size(2); ++i) {
@@ -102,7 +84,7 @@ int main(int argc, char** argv) {
         wright.index({k, j, i}) += 0.001 * (wright.size(0) - 1 - k);
       }
 
-  auto wbot = w.index(bot)[IDN];
+  auto wbot = hydro_w.index(bot)[IDN];
   for (int k = 0; k < wbot.size(0); ++k)
     for (int j = 0; j < wbot.size(1); ++j)
       for (int i = 0; i < wbot.size(2); ++i) {
@@ -110,7 +92,7 @@ int main(int argc, char** argv) {
         wbot.index({k, j, i}) += 0.001 * j;
       }
 
-  auto wtop = w.index(top)[IDN];
+  auto wtop = hydro_w.index(top)[IDN];
   for (int k = 0; k < wtop.size(0); ++k)
     for (int j = 0; j < wtop.size(1); ++j)
       for (int i = 0; i < wtop.size(2); ++i) {
@@ -118,49 +100,81 @@ int main(int argc, char** argv) {
         wtop.index({k, j, i}) += 0.001 * (wtop.size(1) - 1 - j);
       }
 
-  std::map<std::string, torch::Tensor> vars;
-  vars["hydro_w"] = w;
-  set_zonal_velocity(block, vars["hydro_w"]);
+  set_zonal_velocity(block, hydro_w);
+  vars["hydro_w"] = hydro_w;
+}
 
-  block->initialize(vars);
-  block->get_layout()->pg->barrier()->wait();
+bool ghosts_changed(MeshBlock block, torch::Tensor const& before,
+                    torch::Tensor const& after) {
+  for (auto offset : {std::tuple<int, int, int>{-1, 0, 0},
+                      std::tuple<int, int, int>{1, 0, 0},
+                      std::tuple<int, int, int>{0, -1, 0},
+                      std::tuple<int, int, int>{0, 1, 0}}) {
+    auto ghost = block->part(offset, PartOptions().exterior(true));
+    if (!torch::allclose(before.index(ghost), after.index(ghost))) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  auto w_left = -get_rank() * torch::ones_like(vars["hydro_w"]);
-  auto w_right = get_rank() * torch::ones_like(vars["hydro_w"]);
-  auto w_left_before = w_left.clone();
-  auto w_right_before = w_right.clone();
+}  // namespace
 
-  SyncOptions sync_opts;
-  sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
+int main(int argc, char** argv) {
+  auto block_opts = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
+  auto mesh_opts = MeshOptionsImpl::create();
+  mesh_opts->block(block_opts);
+  mesh_opts->blocks_per_process(3);
 
-  Variables send_vars;
-  send_vars["hydro_wl:+"] = w_left;
-  send_vars["hydro_wr:-"] = w_right;
+  auto device = select_device(block_opts->layout());
+  auto mesh = Mesh(mesh_opts);
+  if (device.is_cuda()) {
+    mesh->to(device);
+  }
 
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  auto playout = block->get_layout();
+  MeshVariables vars(mesh->blocks.size());
+  std::vector<torch::Tensor> before(mesh->blocks.size());
+  bool saw_local_neighbor = false;
+  bool saw_remote_neighbor = false;
 
-  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
-                   works);
-  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
-                   works);
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    seed_hydro_state(mesh->blocks[i], vars[i], device);
+    before[i] = vars[i]["hydro_w"].clone();
+  }
 
-  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
-                    works);
-  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
-                    works);
+  mesh->initialize(vars);
+  mesh->blocks.front()->get_layout()->pg->barrier()->wait();
 
   bool ok = true;
-  ok = ok && torch::isfinite(vars["hydro_w"]).all().item<bool>();
-  ok = ok && torch::isfinite(w_left).all().item<bool>();
-  ok = ok && torch::isfinite(w_right).all().item<bool>();
-  ok = ok && !torch::allclose(w_left, w_left_before);
-  ok = ok && !torch::allclose(w_right, w_right_before);
-  block->get_layout()->pg->barrier()->wait();
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    auto block = mesh->blocks[i];
+    auto layout = block->get_layout();
+    auto iloc = layout->loc_of(layout->options->rank());
+
+    ok = ok && torch::isfinite(vars[i]["hydro_w"]).all().item<bool>();
+    ok = ok && ghosts_changed(block, before[i], vars[i]["hydro_w"]);
+
+    for (auto offset : {std::tuple<int, int, int>{-1, 0, 0},
+                        std::tuple<int, int, int>{1, 0, 0},
+                        std::tuple<int, int, int>{0, -1, 0},
+                        std::tuple<int, int, int>{0, 1, 0}}) {
+      int nb = layout->neighbor_rank(iloc, offset);
+      if (nb < 0) continue;
+      if (layout->options->owner_process_rank(nb) ==
+          layout->options->process_rank()) {
+        saw_local_neighbor = true;
+      } else {
+        saw_remote_neighbor = true;
+      }
+    }
+  }
+
+  ok = ok && saw_local_neighbor && saw_remote_neighbor;
+  mesh->blocks.front()->get_layout()->pg->barrier()->wait();
 
   if (!ok) {
-    std::cerr << "legacy cubed-sphere exchange regression failed on rank " << r
-              << std::endl;
+    std::cerr << "legacy cubed-sphere exchange regression failed on process "
+              << block_opts->layout()->process_rank() << std::endl;
     return 1;
   }
 

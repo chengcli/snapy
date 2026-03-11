@@ -3,6 +3,7 @@
 
 // snap
 #include <snap/mesh/mesh.hpp>
+#include <snap/utils/signal_handler.hpp>
 
 namespace snap {
 
@@ -47,10 +48,30 @@ void MeshImpl::initialize(MeshVariables& vars,
                           std::vector<char const*> const& restart_files) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::initialize expects one Variables map per local MeshBlock");
+
+  bool has_restart = false;
   for (int i = 0; i < blocks.size(); ++i) {
-    char const* restart = nullptr;
-    if (i < restart_files.size()) restart = restart_files[i];
-    blocks[i]->initialize(vars[i], restart);
+    if (i < restart_files.size() && restart_files[i] != nullptr) {
+      has_restart = true;
+      break;
+    }
+  }
+
+  if (has_restart) {
+    for (int i = 0; i < blocks.size(); ++i) {
+      char const* restart = nullptr;
+      if (i < restart_files.size()) restart = restart_files[i];
+      blocks[i]->initialize(vars[i], restart);
+    }
+    return;
+  }
+
+  auto pg = blocks.front()->get_layout()->pg;
+  pg->barrier()->wait();
+  SignalHandler::GetInstance();
+
+  for (int i = 0; i < blocks.size(); ++i) {
+    blocks[i]->initialize_local(vars[i]);
   }
 
   SyncOptions prim_opts;
@@ -64,10 +85,7 @@ void MeshImpl::initialize(MeshVariables& vars,
   }
 
   for (int i = 0; i < blocks.size(); ++i) {
-    vars[i]["hydro_u"] = blocks[i]->phydro->peos->compute("W->U", {vars[i]["hydro_w"]});
-    if (blocks[i]->pscalar->nvar() > 0 && vars[i].count("scalar_r")) {
-      vars[i]["scalar_s"] = vars[i]["hydro_w"][IDN] * vars[i]["scalar_r"];
-    }
+    blocks[i]->finalize_initialization(vars[i]);
   }
 }
 

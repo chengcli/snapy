@@ -299,6 +299,39 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
     return _init_from_restart(vars, std::string(restart_file));
   }
 
+  initialize_local(vars);
+
+  //// ------ (6) Exchange hydro and scalar buffers -------- ////
+  if (options->verbose()) {
+    SINFO(MeshBlock) << "exchanging ghost zones." << std::endl;
+  }
+
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true).type(kPrimitive);
+
+  Variables sync_vars;
+  sync_vars["hydro_w"] = vars.at("hydro_w");
+
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  _playout->forward(this, sync_vars, sync_opts, works);
+  _playout->finalize(this, sync_vars, sync_opts, works);
+
+  if (pscalar->nvar() > 0) {
+    sync_opts.type(kScalar);
+    sync_vars.clear();
+    sync_vars["scalar_r"] = vars.at("scalar_r");
+    _playout->forward(this, sync_vars, sync_opts, works);
+    _playout->finalize(this, sync_vars, sync_opts, works);
+  }
+
+  finalize_initialization(vars);
+
+  return 0.;  // default start time is 0.0
+}
+
+void MeshBlockImpl::initialize_local(Variables& vars) {
+  LayoutGuard layout_guard(_playout);
+
   BoundaryFuncOptions bops;
   bops.nghost(options->coord()->nghost());
 
@@ -355,28 +388,19 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
     }
   }
 
-  //// ------ (6) Exchange hydro and scalar buffers -------- ////
-  if (options->verbose()) {
-    SINFO(MeshBlock) << "exchanging ghost zones." << std::endl;
-  }
+}
 
-  SyncOptions sync_opts;
-  sync_opts.interpolate(true).type(kPrimitive);
-
-  Variables sync_vars;
-  sync_vars["hydro_w"] = hydro_w;
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  _playout->forward(this, sync_vars, sync_opts, works);
-  _playout->finalize(this, sync_vars, sync_opts, works);
-
-  if (pscalar->nvar() > 0) {
-    sync_opts.type(kScalar);
-    sync_vars.clear();
-    sync_vars["scalar_r"] = scalar_r;
-    _playout->forward(this, sync_vars, sync_opts, works);
-    _playout->finalize(this, sync_vars, sync_opts, works);
-  }
+void MeshBlockImpl::finalize_initialization(Variables& vars) {
+  LayoutGuard layout_guard(_playout);
+  auto hydro_w = vars.at("hydro_w");
+  auto scalar_r =
+      vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
+  auto solid = vars.count("solid") ? vars.at("solid") : torch::Tensor();
+  int64_t nc3 = options->coord()->nc3();
+  int64_t nc2 = options->coord()->nc2();
+  int64_t nc1 = options->coord()->nc1();
+  BoundaryFuncOptions bops;
+  bops.nghost(options->coord()->nghost());
 
   //// ------ (7) Computer hydro and scalar conserved -------- ////
   if (options->verbose()) {
@@ -445,7 +469,6 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
     SINFO(MeshBlock) << "initialization completed." << std::endl;
   }
 
-  return 0.;  // default start time is 0.0
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
