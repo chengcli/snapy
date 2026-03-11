@@ -121,6 +121,7 @@ add_subdirectory(src)
 
 if (BUILD_TESTS)
   message(STATUS "${Blue}${PROJECT_NAME}-5. Setting up unit tests ...${ColorReset}")
+  enable_testing()
   add_subdirectory(tests)
 endif()
 

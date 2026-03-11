@@ -48,6 +48,23 @@ set_tests_properties(test_straka PROPERTIES
 )
 
 add_test(
+  NAME test_straka_nccl_decomp
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_nccl_decomp.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+)
+
+set_tests_properties(test_straka_nccl_decomp PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  SKIP_RETURN_CODE 125
+  PROCESSORS 2
+  RUN_SERIAL TRUE
+  TIMEOUT 2400
+  LABELS "gpu;nccl;long"
+)
+
+add_test(
   NAME test_shallow_xy
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
