@@ -715,10 +715,12 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
       if (compute_ke) {
         auto w = vars.at("hydro_w");
         auto u = vars.at("hydro_u");
-        auto ke = 0.5 * (w.narrow(0, IVX, 3) * u.narrow(0, IVX, 3) / w[IDN]).sum(0,/*keepdim=*/true);
+        auto ke = 0.5 * (w.narrow(0, IVX, 3) * u.narrow(0, IVX, 3) / w[IDN])
+                            .sum(0, /*keepdim=*/true);
         auto ke_tol = ke * vol;
 
-        std::vector<at::Tensor> ke_sum = {ke_tol.index(interior).sum({1, 2, 3})};
+        std::vector<at::Tensor> ke_sum = {
+            ke_tol.index(interior).sum({1, 2, 3})};
         _playout->pg->reduce(ke_sum, opsum)->wait();
 
         SINFO() << std::scientific << std::setprecision(dt_precision)
@@ -866,18 +868,13 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
               "Restart file is missing required variable: next_time");
 
   cycle = data.at("last_cycle").item<int64_t>() - 1;
-  
+
   // user may add outputs after restart
-  int existing_output_size = std::min(output_types.sizes(), data.at("file_number"));
-  for (int n = 0; n < existing_output_size; ++n) {
+  int current_output_size =
+      std::min((int)output_types.size(), (int)data.at("file_number").size(0));
+  for (int n = 0; n < current_output_size; ++n) {
     output_types[n]->file_number = data.at("file_number")[n].item<int64_t>();
     output_types[n]->next_time = data.at("next_time")[n].item<double>();
-  }
-
-  // set the file_number and next_time of remaining fields to the last one
-  for (int n = existing_output_size; n < output_types.size(); ++n) {
-    output_types[n]->file_number = data.at("file_number").back().item<int64_t>();
-    output_types[n]->next_time = data.at("next_time").back().item<double>();
   }
 
   // start timing
