@@ -181,7 +181,6 @@ class LayoutImpl {
 
   //! communication
   std::shared_ptr<ProcessGroupContext> comm;
-  std::shared_ptr<c10d::Backend> pg;
 
   //! options with which this `Layout` was constructed
   LayoutOptions options;

@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
   SyncOptions opts;
   opts.interpolate(false).type(kPrimitive);
   mesh->exchange(vars, opts, "hydro_w");
-  mesh->blocks.front()->get_layout()->pg->barrier()->wait();
+  mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
 
   bool ok = true;
   bool saw_local_neighbor = false;
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
   ok = ok && (saw_local_neighbor == expect_local);
   ok = ok && (saw_remote_neighbor == expect_remote);
 
-  mesh->blocks.front()->get_layout()->pg->barrier()->wait();
+  mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
 
   if (!ok) {
     std::cerr << "cubed-sphere exchange regression failed on process "

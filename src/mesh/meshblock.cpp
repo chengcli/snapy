@@ -290,7 +290,7 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  _playout->comm->pg->barrier()->wait();
 
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
@@ -481,7 +481,7 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
   std::vector<at::Tensor> dt_reduce = {dt_min};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  _playout->pg->allreduce(dt_reduce, op)->wait();
+  _playout->comm->pg->allreduce(dt_reduce, op)->wait();
 
   auto dt = dt_reduce[0].item<double>();
 
@@ -752,7 +752,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
       std::vector<at::Tensor> sum = {
           hydro_u_tol.index(interior).sum({1, 2, 3})};
-      _playout->pg->reduce(sum, opsum)->wait();
+      _playout->comm->pg->reduce(sum, opsum)->wait();
 
       if (compute_mass) {
         auto mass = sum[0][IDN];
@@ -832,7 +832,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   opsum.reduceOp = c10d::ReduceOp::SUM;
   opsum.rootRank = options->layout()->process_root_rank();
 
-  _playout->pg->reduce(cells, opsum)->wait();
+  _playout->comm->pg->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
@@ -846,7 +846,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  _playout->comm->pg->barrier()->wait();
 
   _playout->send_bufs.clear();
   _playout->send_bufs.shrink_to_fit();
@@ -854,7 +854,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   _playout->recv_bufs.clear();
   _playout->recv_bufs.shrink_to_fit();
 
-  _playout->pg->shutdown();
+  _playout->comm->pg->shutdown();
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
@@ -900,8 +900,8 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 
 torch::Device MeshBlockImpl::device() const {
   LayoutGuard layout_guard(_playout);
-  if (_playout->pg->getBoundDeviceId().has_value()) {
-    return _playout->pg->getBoundDeviceId().value();
+  if (_playout->comm->pg->getBoundDeviceId().has_value()) {
+    return _playout->comm->pg->getBoundDeviceId().value();
   } else {
     return torch::Device("cpu");
   }

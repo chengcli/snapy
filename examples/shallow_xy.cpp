@@ -17,7 +17,8 @@ torch::Device select_device(Mesh& mesh, MeshBlockOptions const& block_opts) {
   auto device = torch::Device(torch::kCPU);
   if (torch::cuda::is_available() && block_opts->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = mesh->blocks.front()->get_layout()->pg->getBoundDeviceId().value();
+    device =
+        mesh->blocks.front()->get_layout()->comm->pg->getBoundDeviceId().value();
   }
   return device;
 }

@@ -58,7 +58,7 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
   /*c10d::BarrierOptions op;
   op.device_ids = {layout->options->local_rank()};
   layout->pg->barrier(op)->wait();*/
-  layout->pg->barrier()->wait();
+  layout->comm->pg->barrier()->wait();
 
   std::stringstream msg;
 

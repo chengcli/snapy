@@ -41,6 +41,29 @@ std::tuple<int, int, int> remap_exchange_offset(Layout const& layout,
 
   return std::tuple<int, int, int>(dy_sgn * dy, dx_sgn * dx, 0);
 }
+
+std::tuple<int, int, int> peer_exchange_offset(Layout const& layout,
+                                               int peer_rank,
+                                               int target_rank,
+                                               std::tuple<int, int, int> offset) {
+  if (layout->options->type() != "cubed-sphere") {
+    auto [dy, dx, dz] = offset;
+    return std::tuple<int, int, int>(-dy, -dx, -dz);
+  }
+
+  auto peer_iloc = layout->loc_of(peer_rank);
+  for (auto candidate : {std::tuple<int, int, int>{-1, 0, 0},
+                         std::tuple<int, int, int>{1, 0, 0},
+                         std::tuple<int, int, int>{0, -1, 0},
+                         std::tuple<int, int, int>{0, 1, 0}}) {
+    if (layout->neighbor_rank(peer_iloc, candidate) == target_rank) {
+      return candidate;
+    }
+  }
+
+  TORCH_CHECK(false, "failed to find reverse exchange offset from rank ",
+              peer_rank, " to rank ", target_rank);
+}
 }  // namespace
 
 MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
@@ -105,7 +128,7 @@ double MeshImpl::initialize(MeshVariables& vars,
     return current_time;
   }
 
-  auto pg = blocks.front()->get_layout()->pg;
+  auto pg = blocks.front()->get_layout()->comm->pg;
   pg->barrier()->wait();
   SignalHandler::GetInstance();
 
@@ -145,7 +168,7 @@ double MeshImpl::max_time_step(MeshVariables const& vars) {
   std::vector<at::Tensor> dt_reduce = {dt_tensor};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
-  blocks.front()->get_layout()->pg->allreduce(dt_reduce, op)->wait();
+  blocks.front()->get_layout()->comm->pg->allreduce(dt_reduce, op)->wait();
 
   auto dt = dt_reduce[0].item<double>();
   auto redo = blocks.front()->pintg->current_redo;
@@ -240,7 +263,7 @@ void MeshImpl::print_cycle_info(MeshVariables const& vars, double time,
 
   if (local_sum.defined()) {
     std::vector<at::Tensor> sum = {local_sum};
-    root->get_layout()->pg->reduce(sum, opsum)->wait();
+    root->get_layout()->comm->pg->reduce(sum, opsum)->wait();
 
     if (compute_mass) {
       auto mass = sum[0][IDN];
@@ -325,8 +348,8 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
     layout->recv_bufs.shrink_to_fit();
   }
 
-  root->get_layout()->pg->barrier()->wait();
-  root->get_layout()->pg->shutdown();
+  root->get_layout()->comm->pg->barrier()->wait();
+  root->get_layout()->comm->pg->shutdown();
 }
 
 void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
@@ -372,7 +395,7 @@ void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
         if (neighbor_process == local_process) {
           int neighbor_local = layout->options->local_block_index(nb);
           auto peer = blocks[neighbor_local]->get_layout();
-          auto peer_offset = std::tuple<int, int, int>(-dy, -dx, 0);
+          auto peer_offset = peer_exchange_offset(layout, nb, rank, offset);
           int peer_bid = get_buffer_id(peer_offset);
           for (int n = 0; n < layout->send_bufs[bid].size(); ++n) {
             TORCH_CHECK(

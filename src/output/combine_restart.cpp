@@ -55,7 +55,7 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
   /*c10d::BarrierOptions op;
   op.device_ids = {layout->options->local_rank()};
   layout->pg->barrier(op)->wait();*/
-  layout->pg->barrier()->wait();
+  layout->comm->pg->barrier()->wait();
 
   std::stringstream msg;
 

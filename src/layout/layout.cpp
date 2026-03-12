@@ -193,10 +193,10 @@ void LayoutImpl::exchange_remote(
                           opts.phyid());
         int recv_id = make_comm_tag(local_block, offset, opts.phyid());
 
-        auto send_work = pg->send(send_bufs[r], remote_process, send_id);
+        auto send_work = comm->pg->send(send_bufs[r], remote_process, send_id);
         works.push_back(send_work);
 
-        auto recv_work = pg->recv(recv_bufs[r], remote_process, recv_id);
+        auto recv_work = comm->pg->recv(recv_bufs[r], remote_process, recv_id);
         works.push_back(recv_work);
       } else if (nb == rank) {  // self-send
         int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
@@ -308,7 +308,7 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   /*c10d::BarrierOptions op;
   op.device_ids = {options->local_rank()};
   pg->barrier(op)->wait();*/
-  pg->barrier()->wait();
+  comm->pg->barrier()->wait();
 
   works.clear();
 }
@@ -316,7 +316,6 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
 void LayoutImpl::_init_process_group() {
   if (options->no_backend()) return;
   comm = ProcessGroupContext::create(options);
-  pg = comm->pg;
 }
 
 #ifdef NOT_USE_C10D_NCCL

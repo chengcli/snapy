@@ -858,8 +858,8 @@ void CubedSphereLayoutImpl::exchange_remote(
             make_comm_tag(remote_local_block, remote_offset, opts.phyid());
         int recv_tag = make_comm_tag(local_block, offset, opts.phyid());
 
-        works.push_back(pg->send(send_bufs[r], remote_process, send_tag));
-        works.push_back(pg->recv(recv_bufs[r], remote_process, recv_tag));
+        works.push_back(comm->pg->send(send_bufs[r], remote_process, send_tag));
+        works.push_back(comm->pg->recv(recv_bufs[r], remote_process, recv_tag));
       } else if (nb == rank) {  // self-send
         TORCH_CHECK(false, "I should not be here");
       }
