@@ -1,5 +1,4 @@
 // C/C++
-#include <algorithm>
 #include <string>
 
 // yaml
@@ -53,56 +52,6 @@ void initialize_block(MeshBlock block, Variables& vars, YAML::Node const& config
   vars["hydro_w"] = w;
 }
 
-int mesh_redo(Mesh& mesh, MeshVariables& vars) {
-  int redo = 0;
-  for (int i = 0; i < mesh->blocks.size(); ++i) {
-    int err = mesh->blocks[i]->check_redo(vars[i]);
-    if (err < 0) return -1;
-    redo = std::max(redo, err);
-  }
-  return redo;
-}
-
-void set_cycle(Mesh& mesh, int cycle) {
-  for (auto& block : mesh->blocks) {
-    block->cycle = cycle;
-  }
-}
-
-void make_outputs(Mesh& mesh, MeshVariables const& vars, double time) {
-  for (int i = 0; i < mesh->blocks.size(); ++i) {
-    mesh->blocks[i]->make_outputs(vars[i], time);
-  }
-}
-
-void finalize_outputs(Mesh& mesh, MeshVariables const& vars, double time) {
-  if (mesh->blocks.size() == 1) {
-    mesh->blocks.front()->finalize(vars.front(), time);
-    return;
-  }
-
-  for (int i = 0; i < mesh->blocks.size(); ++i) {
-    mesh->blocks[i]->make_outputs(vars[i], time, /*final_write=*/true);
-  }
-
-  auto root = mesh->blocks.front();
-  std::cout << std::endl << "Terminating on time limit" << std::endl;
-  std::cout << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
-  std::cout << "tlim=" << root->pintg->options->tlim()
-            << " nlim=" << root->pintg->options->nlim() << std::endl;
-
-  for (auto& block : mesh->blocks) {
-    auto layout = block->get_layout();
-    layout->send_bufs.clear();
-    layout->send_bufs.shrink_to_fit();
-    layout->recv_bufs.clear();
-    layout->recv_bufs.shrink_to_fit();
-  }
-
-  root->get_layout()->pg->barrier()->wait();
-  root->get_layout()->pg->shutdown();
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -127,30 +76,29 @@ int main(int argc, char** argv) {
     initialize_block(mesh->blocks[i], vars[i], config, device);
   }
 
-  double current_time = 0.;
-  mesh->initialize(vars);
-  make_outputs(mesh, vars, current_time);
+  double current_time = mesh->initialize(vars);
+  mesh->make_outputs(vars, current_time);
 
   int cycle = 0;
   while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
     ++cycle;
-    set_cycle(mesh, cycle);
+    mesh->set_cycle(cycle);
 
     auto dt = mesh->max_time_step(vars);
-    mesh->blocks.front()->print_cycle_info(vars.front(), current_time, dt);
+    mesh->print_cycle_info(vars, current_time, dt);
 
     for (int stage = 0; stage < mesh->blocks.front()->pintg->stages.size();
          ++stage) {
       mesh->forward(vars, dt, stage);
     }
 
-    int redo = mesh_redo(mesh, vars);
+    int redo = mesh->check_redo(vars);
     if (redo > 0) continue;
     if (redo < 0) break;
 
     current_time += dt;
-    make_outputs(mesh, vars, current_time);
+    mesh->make_outputs(vars, current_time);
   }
 
-  finalize_outputs(mesh, vars, current_time);
+  mesh->finalize(vars, current_time);
 }
