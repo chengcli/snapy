@@ -667,9 +667,10 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
-  const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
+  const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
   bool compute_mass = false;
-  bool compute_energy = false;
+  bool compute_ie = false;
+  bool compute_ke = false;
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
@@ -679,7 +680,8 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
     if (cycle % pintg->options->ncycle_out() == 0) {
       if (vars.count("hydro_u")) {
         compute_mass = true;
-        compute_energy = phydro->peos->nvar() > IPR;
+        compute_ie = phydro->peos->nvar() > IPR;
+        compute_ke = true;
       }
 
       SINFO() << "cycle=" << cycle << " redo=" << pintg->current_redo
@@ -710,9 +712,22 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
         }
       }
 
-      if (compute_energy) {
+      if (compute_ke) {
+        auto w = vars.at("hydro_w");
+        auto u = vars.at("hydro_u");
+        auto ke = 0.5 * (w.narrow(0, IVX, 3) * u.narrow(0, IVX, 3) / w[IDN]).sum(0,/*keepdim=*/true);
+        auto ke_tol = ke * vol;
+
+        std::vector<at::Tensor> ke_sum = {ke_tol.index(interior).sum({1, 2, 3})};
+        _playout->pg->reduce(ke_sum, opsum)->wait();
+
         SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " energy=" << sum[0][IPR].item<double>();
+                << " ke=" << ke_sum[0][0].item<double>();
+      }
+
+      if (compute_ie) {
+        SINFO() << std::scientific << std::setprecision(dt_precision)
+                << " ie=" << sum[0][IPR].item<double>();
       }
 
       SINFO() << std::endl;
@@ -851,9 +866,18 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
               "Restart file is missing required variable: next_time");
 
   cycle = data.at("last_cycle").item<int64_t>() - 1;
-  for (int n = 0; n < output_types.size(); ++n) {
+  
+  // user may add outputs after restart
+  int existing_output_size = std::min(output_types.sizes(), data.at("file_number"));
+  for (int n = 0; n < existing_output_size; ++n) {
     output_types[n]->file_number = data.at("file_number")[n].item<int64_t>();
     output_types[n]->next_time = data.at("next_time")[n].item<double>();
+  }
+
+  // set the file_number and next_time of remaining fields to the last one
+  for (int n = existing_output_size; n < output_types.size(); ++n) {
+    output_types[n]->file_number = data.at("file_number").back().item<int64_t>();
+    output_types[n]->next_time = data.at("next_time").back().item<double>();
   }
 
   // start timing
