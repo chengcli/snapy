@@ -1,46 +1,47 @@
+// C/C++
+#include <algorithm>
+#include <string>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
 // snap
 #include <snap/coord/cubed_sphere_utils.hpp>
-#include <snap/mesh/meshblock.hpp>
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
-int main(int argc, char** argv) {
-  torch::set_num_threads(1);
-  torch::set_num_interop_threads(1);
+namespace {
 
-  auto config = YAML::LoadFile("shallow_splash.yaml");
+torch::Device select_device(Mesh& mesh, MeshBlockOptions const& block_opts) {
+  auto device = torch::Device(torch::kCPU);
+  if (torch::cuda::is_available() && block_opts->layout()->backend() == "nccl") {
+    std::cout << "Running on CUDA" << std::endl;
+    device = mesh->blocks.front()->get_layout()->pg->getBoundDeviceId().value();
+  }
+  return device;
+}
 
+void initialize_block(MeshBlock block, Variables& vars, YAML::Node const& config,
+                      torch::Device const& device) {
   auto phi = config["problem"]["phi"].as<double>();
   auto dphi = config["problem"]["dphi"].as<double>();
   auto radius = config["problem"]["radius"].as<double>();
 
-  auto block_op = MeshBlockOptionsImpl::from_yaml("shallow_splash.yaml");
-  auto block = MeshBlock(block_op);
-  torch::Device device(torch::kCPU);
-  if (torch::cuda::is_available() && block_op->layout()->backend() == "nccl") {
-    std::cout << "Running on CUDA" << std::endl;
-    device = block->get_layout()->pg->getBoundDeviceId().value();
-  }
-
-  block->to(device);
-
-  // initial conditions
   auto pcoord = block->pcoord;
   auto peos = block->phydro->peos;
-
-  // coordinates
-  int r = get_rank();
-  auto [rx, ry, face_id] = block->get_layout()->loc_of(r);
+  auto [rx, ry, face_id] =
+      block->get_layout()->loc_of(block->get_layout()->options->rank());
+  (void)rx;
+  (void)ry;
   auto face = CS_FACE_NAMES[face_id];
 
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto alpha = mesh[1];
-  auto beta = mesh[0];
-  auto r_planet = mesh[2];
+  auto grid = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = grid[1];
+  auto beta = grid[0];
+  auto r_planet = grid[2];
   auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+  (void)lon;
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -58,31 +59,107 @@ int main(int argc, char** argv) {
   w[IVX] = 0.;
   w[IVY] = 0.;
 
-  // initialize
-  std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  block->initialize(vars);
+}
 
-  double current_time = 0.;
-  block->make_outputs(vars, current_time);
+int mesh_redo(Mesh& mesh, MeshVariables& vars) {
+  int redo = 0;
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    int err = mesh->blocks[i]->check_redo(vars[i]);
+    if (err < 0) return -1;
+    redo = std::max(redo, err);
+  }
+  return redo;
+}
 
-  while (!block->pintg->stop(block->cycle++, current_time)) {
-    auto dt = block->max_time_step(vars);
-    block->print_cycle_info(vars, current_time, dt);
+void set_cycle(Mesh& mesh, int cycle) {
+  for (auto& block : mesh->blocks) {
+    block->cycle = cycle;
+  }
+}
 
-    // main loop
-    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(vars, dt, stage);
-    }
+void make_outputs(Mesh& mesh, MeshVariables const& vars, double time) {
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    mesh->blocks[i]->make_outputs(vars[i], time);
+  }
+}
 
-    int err = block->check_redo(vars);
-    if (err > 0) continue;  // redo this step with smaller dt
-    if (err < 0) break;     // terminate simulation
-
-    // make outputs
-    current_time += dt;
-    block->make_outputs(vars, current_time);
+void finalize_outputs(Mesh& mesh, MeshVariables const& vars, double time) {
+  if (mesh->blocks.size() == 1) {
+    mesh->blocks.front()->finalize(vars.front(), time);
+    return;
   }
 
-  block->finalize(vars, current_time);
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    mesh->blocks[i]->make_outputs(vars[i], time, /*final_write=*/true);
+  }
+
+  auto root = mesh->blocks.front();
+  std::cout << std::endl << "Terminating on time limit" << std::endl;
+  std::cout << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
+  std::cout << "tlim=" << root->pintg->options->tlim()
+            << " nlim=" << root->pintg->options->nlim() << std::endl;
+
+  for (auto& block : mesh->blocks) {
+    auto layout = block->get_layout();
+    layout->send_bufs.clear();
+    layout->send_bufs.shrink_to_fit();
+    layout->recv_bufs.clear();
+    layout->recv_bufs.shrink_to_fit();
+  }
+
+  root->get_layout()->pg->barrier()->wait();
+  root->get_layout()->pg->shutdown();
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  torch::set_num_threads(1);
+  torch::set_num_interop_threads(1);
+
+  std::string input_file = argc > 1 ? argv[1] : "shallow_splash.yaml";
+  auto config = YAML::LoadFile(input_file);
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(input_file);
+  auto op_mesh = MeshOptionsImpl::create();
+  op_mesh->block(op_block);
+  op_mesh->blocks_per_process(
+      config["distribute"]["blocks_per_process"].as<int>(1));
+
+  auto mesh = Mesh(op_mesh);
+  auto device = select_device(mesh, op_block);
+  mesh->to(device);
+
+  MeshVariables vars(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    initialize_block(mesh->blocks[i], vars[i], config, device);
+  }
+
+  double current_time = 0.;
+  mesh->initialize(vars);
+  make_outputs(mesh, vars, current_time);
+
+  int cycle = 0;
+  while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
+    ++cycle;
+    set_cycle(mesh, cycle);
+
+    auto dt = mesh->max_time_step(vars);
+    mesh->blocks.front()->print_cycle_info(vars.front(), current_time, dt);
+
+    for (int stage = 0; stage < mesh->blocks.front()->pintg->stages.size();
+         ++stage) {
+      mesh->forward(vars, dt, stage);
+    }
+
+    int redo = mesh_redo(mesh, vars);
+    if (redo > 0) continue;
+    if (redo < 0) break;
+
+    current_time += dt;
+    make_outputs(mesh, vars, current_time);
+  }
+
+  finalize_outputs(mesh, vars, current_time);
 }

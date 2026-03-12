@@ -17,6 +17,26 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   }
   return dst;
 }
+
+std::tuple<int, int, int> find_peer_offset(Layout const& layout, int peer_rank,
+                                           int target_rank,
+                                           SyncOptions const& opts) {
+  auto peer_iloc = layout->loc_of(peer_rank);
+  for (int dy = opts.dy_min(); dy <= opts.dy_max(); ++dy) {
+    for (int dx = opts.dx_min(); dx <= opts.dx_max(); ++dx) {
+      if (dy == 0 && dx == 0) continue;
+      if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+
+      std::tuple<int, int, int> offset(dy, dx, 0);
+      if (layout->neighbor_rank(peer_iloc, offset) == target_rank) {
+        return offset;
+      }
+    }
+  }
+
+  TORCH_CHECK(false, "failed to find reverse offset from rank ", peer_rank,
+              " to rank ", target_rank);
+}
 }  // namespace
 
 MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
@@ -82,12 +102,12 @@ void MeshImpl::initialize(MeshVariables& vars,
 
   SyncOptions prim_opts;
   prim_opts.interpolate(true).type(kPrimitive);
-  _exchange_all(vars, prim_opts, "hydro_w");
+  exchange(vars, prim_opts, "hydro_w");
 
   if (blocks.front()->pscalar->nvar() > 0 && vars.front().count("scalar_r")) {
     SyncOptions scalar_opts;
     scalar_opts.interpolate(true).type(kScalar);
-    _exchange_all(vars, scalar_opts, "scalar_r");
+    exchange(vars, scalar_opts, "scalar_r");
   }
 
   for (int i = 0; i < blocks.size(); ++i) {
@@ -135,13 +155,18 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
 
   SyncOptions cons_opts;
   cons_opts.interpolate(true).type(kConserved);
-  _exchange_all(vars, cons_opts, "hydro_u");
+  exchange(vars, cons_opts, "hydro_u");
 
   if (blocks.front()->pscalar->nvar() > 0) {
     SyncOptions scalar_opts;
     scalar_opts.interpolate(true).type(kScalar);
-    _exchange_all(vars, scalar_opts, "scalar_s");
+    exchange(vars, scalar_opts, "scalar_s");
   }
+}
+
+void MeshImpl::exchange(MeshVariables& vars, SyncOptions const& opts,
+                        char const* var_name) {
+  _exchange_all(vars, opts, var_name);
 }
 
 void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
@@ -170,7 +195,10 @@ void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
       for (int dx = dx_min; dx <= dx_max; ++dx) {
         if (dy == 0 && dx == 0) continue;
         if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
-        if (block->options->is_physical_boundary(dy, dx, 0)) continue;
+        if (block->options->layout()->type() != "cubed-sphere" &&
+            block->options->is_physical_boundary(dy, dx, 0)) {
+          continue;
+        }
 
         std::tuple<int, int, int> offset(dy, dx, 0);
         int nb = layout->neighbor_rank(iloc, offset);
@@ -182,10 +210,20 @@ void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
         if (neighbor_process == local_process) {
           int neighbor_local = layout->options->local_block_index(nb);
           auto peer = blocks[neighbor_local]->get_layout();
-          int peer_bid =
-              get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
+          auto peer_offset = find_peer_offset(peer, nb, rank, opts);
+          int peer_bid = get_buffer_id(peer_offset);
           for (int n = 0; n < layout->send_bufs[bid].size(); ++n) {
-            peer->recv_bufs[peer_bid][n].copy_(layout->send_bufs[bid][n]);
+            TORCH_CHECK(
+                peer->recv_bufs[peer_bid][n].numel() ==
+                    layout->send_bufs[bid][n].numel(),
+                "local exchange size mismatch from rank ", rank, " to rank ",
+                nb, " send_offset=(", dy, ",", dx, ") recv_offset=(",
+                std::get<0>(peer_offset), ",", std::get<1>(peer_offset),
+                ") send_shape=", layout->send_bufs[bid][n].sizes(),
+                " recv_shape=", peer->recv_bufs[peer_bid][n].sizes());
+            peer->recv_bufs[peer_bid][n]
+                .view({-1})
+                .copy_(layout->send_bufs[bid][n].reshape({-1}));
           }
         } else {
           has_remote_neighbor = true;

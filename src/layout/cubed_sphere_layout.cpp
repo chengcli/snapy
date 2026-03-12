@@ -66,6 +66,26 @@
 
 namespace snap {
 
+namespace {
+
+std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
+                                           int peer_rank, int target_rank) {
+  auto peer_iloc = layout.loc_of(peer_rank);
+  for (auto offset : {std::tuple<int, int, int>{-1, 0, 0},
+                      std::tuple<int, int, int>{1, 0, 0},
+                      std::tuple<int, int, int>{0, -1, 0},
+                      std::tuple<int, int, int>{0, 1, 0}}) {
+    if (layout.neighbor_rank(peer_iloc, offset) == target_rank) {
+      return offset;
+    }
+  }
+
+  TORCH_CHECK(false, "failed to find reverse cubed-sphere offset from rank ",
+              peer_rank, " to rank ", target_rank);
+}
+
+}  // namespace
+
 /*!
  * ----------------------------
  * Global cartesian coordinates
@@ -401,7 +421,7 @@ int CubedSphereLayoutImpl::rank_of(std::tuple<int, int, int> iloc) const {
   auto [rx, ry, face] = iloc;
   if (face < 0 || face >= 6) return -1;
   if (rx < 0 || rx >= pxy() || ry < 0 || ry >= pxy()) return -1;
-  return _rankof[ry * pxy() + rx];
+  return _global_rank_from_face_local(face, _rankof[ry * pxy() + rx]);
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
@@ -833,16 +853,13 @@ void CubedSphereLayoutImpl::exchange_remote(
       if (is_remote) {
         int remote_local_block = options->local_block_index(nb);
         int local_block = options->local_block_index(rank);
-        int send_tag = opts.phyid() * 1024 + local_block;
-        int recv_tag = opts.phyid() * 1024 + remote_local_block;
-        // rank-based ordering
-        if (rank < nb) {
-          works.push_back(pg->send(send_bufs[r], remote_process, send_tag));
-          works.push_back(pg->recv(recv_bufs[r], remote_process, recv_tag));
-        } else {
-          works.push_back(pg->recv(recv_bufs[r], remote_process, recv_tag));
-          works.push_back(pg->send(send_bufs[r], remote_process, send_tag));
-        }
+        auto remote_offset = find_peer_offset(*this, nb, rank);
+        int send_tag =
+            make_comm_tag(remote_local_block, remote_offset, opts.phyid());
+        int recv_tag = make_comm_tag(local_block, offset, opts.phyid());
+
+        works.push_back(pg->send(send_bufs[r], remote_process, send_tag));
+        works.push_back(pg->recv(recv_bufs[r], remote_process, recv_tag));
       } else if (nb == rank) {  // self-send
         TORCH_CHECK(false, "I should not be here");
       }
