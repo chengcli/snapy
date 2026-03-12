@@ -74,6 +74,7 @@ def main() -> int:
     cases = (
         ("single", 1, bin_dir / "shallow_xy_single.yaml"),
         ("mesh4", 1, bin_dir / "shallow_xy_mesh4.yaml"),
+        ("proc2_mesh2", 2, bin_dir / "shallow_xy_proc2_mesh2.yaml"),
         ("proc4", 4, bin_dir / "shallow_xy_proc4.yaml"),
     )
 
@@ -96,8 +97,11 @@ def main() -> int:
         outputs[name] = output
 
     compare_pair(outputs["single"], outputs["mesh4"], "single vs mesh4")
+    compare_pair(outputs["single"], outputs["proc2_mesh2"], "single vs proc2_mesh2")
     compare_pair(outputs["single"], outputs["proc4"], "single vs proc4")
+    compare_pair(outputs["mesh4"], outputs["proc2_mesh2"], "mesh4 vs proc2_mesh2")
     compare_pair(outputs["mesh4"], outputs["proc4"], "mesh4 vs proc4")
+    compare_pair(outputs["proc2_mesh2"], outputs["proc4"], "proc2_mesh2 vs proc4")
     return 0
 
 
