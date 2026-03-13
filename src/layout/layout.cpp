@@ -46,10 +46,24 @@ struct LocalExchangeState {
   std::exception_ptr error;
 };
 
+struct OrderedPhaseKey {
+  LocalExchangeKey exchange;
+  int phase;
+
+  bool operator<(OrderedPhaseKey const& other) const {
+    return std::tie(exchange, phase) < std::tie(other.exchange, other.phase);
+  }
+};
+
+struct OrderedPhaseState {
+  int next_index = 0;
+};
+
 std::mutex g_local_exchange_mutex;
 std::condition_variable g_local_exchange_cv;
 std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
 std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
+std::map<OrderedPhaseKey, OrderedPhaseState> g_ordered_phase_states;
 std::mutex g_process_comm_mutex;
 
 std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
@@ -87,6 +101,11 @@ LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
       opts.interpolate(),
       layout.options->type(),
   };
+}
+
+OrderedPhaseKey make_ordered_phase_key(LayoutImpl const& layout,
+                                       SyncOptions const& opts, int phase) {
+  return OrderedPhaseKey{make_local_exchange_key(layout, opts), phase};
 }
 
 }  // namespace
@@ -359,6 +378,28 @@ void LayoutImpl::launch_exchange(
     MeshBlockImpl const* pmb, SyncOptions const& opts,
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
   _prepare_local_exchange(pmb, opts);
+
+  if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
+    auto key = make_ordered_phase_key(*this, opts, 0);
+    auto my_index = options->local_block_index(options->rank());
+
+    std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+    auto& state = g_ordered_phase_states[key];
+    g_local_exchange_cv.wait(lock,
+                             [&]() { return state.next_index == my_index; });
+    lock.unlock();
+
+    exchange_remote(pmb, opts, works);
+
+    lock.lock();
+    state.next_index += 1;
+    if (state.next_index == options->blocks_per_process()) {
+      g_ordered_phase_states.erase(key);
+    }
+    g_local_exchange_cv.notify_all();
+    return;
+  }
+
   exchange_remote(pmb, opts, works);
 }
 
@@ -525,6 +566,37 @@ void LayoutImpl::fill_corners(MeshBlockImpl const* pmb, Variables& vars) const {
 void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
                           SyncOptions const& opts,
                           std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
+    auto key = make_ordered_phase_key(*this, opts, 1);
+    auto my_index = options->local_block_index(options->rank());
+
+    std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+    auto& state = g_ordered_phase_states[key];
+    g_local_exchange_cv.wait(lock,
+                             [&]() { return state.next_index == my_index; });
+    lock.unlock();
+
+    for (auto& work : works) work->wait();
+    deserialize(pmb, vars, opts);
+    if (opts.skip_corner() && !opts.cross_panel_only()) {
+      fill_corners(pmb, vars);
+    }
+    {
+      std::lock_guard<std::mutex> comm_lock(g_process_comm_mutex);
+      comm->pg->barrier()->wait();
+    }
+
+    works.clear();
+
+    lock.lock();
+    state.next_index += 1;
+    if (state.next_index == options->blocks_per_process()) {
+      g_ordered_phase_states.erase(key);
+    }
+    g_local_exchange_cv.notify_all();
+    return;
+  }
+
   // Wait for all operations to complete
   for (auto& work : works) work->wait();
 
