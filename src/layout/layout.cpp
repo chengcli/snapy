@@ -288,13 +288,15 @@ void LayoutImpl::_launch_cubed_sphere_nccl_remote_ops(
   std::lock_guard<std::mutex> lock(g_process_comm_mutex);
   layouts.front()->comm->group_start();
   for (auto const& op : recv_ops) {
-    auto work = op.layout->comm->pg->recv(op.layout->recv_bufs[op.buffer_id],
-                                          op.remote_process, op.recv_tag);
+    auto work = op.layout->comm->pg->recv(
+        op.layout->owner()->recv_bufs[op.buffer_id], op.remote_process,
+        op.recv_tag);
     works_by_block[op.local_block].push_back(work);
   }
   for (auto const& op : send_ops) {
-    auto work = op.layout->comm->pg->send(op.layout->send_bufs[op.buffer_id],
-                                          op.remote_process, op.send_tag);
+    auto work = op.layout->comm->pg->send(
+        op.layout->owner()->send_bufs[op.buffer_id], op.remote_process,
+        op.send_tag);
     works_by_block[op.local_block].push_back(work);
   }
   layouts.front()->comm->group_end();
@@ -338,26 +340,18 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
 }
 
 std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
-                                               torch::nn::Module* p,
+                                               MeshBlockImpl* p,
                                                std::string const& name) {
+  (void)name;
   if (p == nullptr) options->no_backend(true);
 
   std::shared_ptr<LayoutImpl> pl;
   if (options->type() == "slab") {
-    pl = p ? p->register_module(name, SlabLayout(options))
-           : SlabLayout(options).ptr();
-    pl->send_bufs.resize(9);
-    pl->recv_bufs.resize(9);
+    pl = std::make_shared<SlabLayoutImpl>(options, p);
   } else if (options->type() == "cubed") {
-    pl = p ? p->register_module(name, CubedLayout(options))
-           : CubedLayout(options).ptr();
-    pl->send_bufs.resize(27);
-    pl->recv_bufs.resize(27);
+    pl = std::make_shared<CubedLayoutImpl>(options, p);
   } else if (options->type() == "cubed-sphere") {
-    pl = p ? p->register_module(name, CubedSphereLayout(options))
-           : CubedSphereLayout(options).ptr();
-    pl->send_bufs.resize(9);
-    pl->recv_bufs.resize(9);
+    pl = std::make_shared<CubedSphereLayoutImpl>(options, p);
   } else {
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
@@ -491,19 +485,21 @@ void LayoutImpl::_copy_local_exchange_buffers(
         auto peer_offset = layout->_peer_exchange_offset(nb, rank, opts, offset);
         int peer_bid = get_buffer_id(peer_offset);
 
-        for (int n = 0; n < layout->send_bufs[bid].size(); ++n) {
-          TORCH_CHECK(peer->recv_bufs[peer_bid][n].numel() ==
-                          layout->send_bufs[bid][n].numel(),
+        auto& send_bufs = layout->owner()->send_bufs;
+        auto& peer_recv_bufs = peer->owner()->recv_bufs;
+        for (int n = 0; n < send_bufs[bid].size(); ++n) {
+          TORCH_CHECK(peer_recv_bufs[peer_bid][n].numel() ==
+                          send_bufs[bid][n].numel(),
                       "local exchange size mismatch from rank ", rank,
                       " to rank ", nb, " send_offset=(",
                       std::get<0>(offset), ",", std::get<1>(offset),
                       ") recv_offset=(", std::get<0>(peer_offset), ",",
                       std::get<1>(peer_offset), ") send_shape=",
-                      layout->send_bufs[bid][n].sizes(), " recv_shape=",
-                      peer->recv_bufs[peer_bid][n].sizes());
-          peer->recv_bufs[peer_bid][n]
+                      send_bufs[bid][n].sizes(), " recv_shape=",
+                      peer_recv_bufs[peer_bid][n].sizes());
+          peer_recv_bufs[peer_bid][n]
               .view({-1})
-              .copy_(layout->send_bufs[bid][n].reshape({-1}));
+              .copy_(send_bufs[bid][n].reshape({-1}));
         }
       }
     }
@@ -542,11 +538,11 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
       int count = 0;
-      send_bufs[bid].resize(vars.size());
-      recv_bufs[bid].resize(vars.size());
+      pmb->send_bufs[bid].resize(vars.size());
+      pmb->recv_bufs[bid].resize(vars.size());
       for (auto& [name, var] : vars) {
-        send_bufs[bid][count] = var.index(sub).clone();
-        recv_bufs[bid][count] = torch::empty_like(send_bufs[bid][count]);
+        pmb->send_bufs[bid][count] = var.index(sub).clone();
+        pmb->recv_bufs[bid][count] = torch::empty_like(pmb->send_bufs[bid][count]);
         count++;
       }
     }
@@ -735,8 +731,8 @@ void LayoutImpl::exchange_remote(
                               peer_offset});
       } else if (nb == rank) {  // self-send
         int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
-        for (int n = 0; n < recv_bufs[r].size(); ++n)
-          recv_bufs[r1][n].copy_(send_bufs[r][n]);
+        for (int n = 0; n < pmb->recv_bufs[r].size(); ++n)
+          pmb->recv_bufs[r1][n].copy_(pmb->send_bufs[r][n]);
       }
     }
 
@@ -755,18 +751,22 @@ void LayoutImpl::exchange_remote(
 
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
+                         op.recv_tag));
     }
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
+                         op.send_tag));
     }
   } else {
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
+                         op.send_tag));
       works.push_back(
-          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
+                         op.recv_tag));
     }
   }
 
@@ -808,7 +808,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
       int bid = get_buffer_id(offset);
       int count = 0;
       for (auto& [name, var] : vars) {
-        var.index_put_(sub, recv_bufs[bid][count++]);
+        var.index_put_(sub, pmb->recv_bufs[bid][count++]);
       }
     }
 }

@@ -69,6 +69,8 @@ void MeshBlockImpl::reset() {
     }
   }
   LayoutGuard layout_guard(_playout);
+  send_bufs.resize(_playout->num_exchange_buffers());
+  recv_bufs.resize(_playout->num_exchange_buffers());
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -888,11 +890,11 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   _playout->pg->barrier(op)->wait();*/
   _playout->comm->pg->barrier()->wait();
 
-  _playout->send_bufs.clear();
-  _playout->send_bufs.shrink_to_fit();
+  send_bufs.clear();
+  send_bufs.shrink_to_fit();
 
-  _playout->recv_bufs.clear();
-  _playout->recv_bufs.shrink_to_fit();
+  recv_bufs.clear();
+  recv_bufs.shrink_to_fit();
 
   _playout->comm->pg->shutdown();
 }

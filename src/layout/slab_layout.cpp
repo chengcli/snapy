@@ -7,7 +7,7 @@
 
 namespace snap {
 
-void SlabLayoutImpl::reset() {
+void SlabLayoutImpl::_initialize() {
   // build the ranks
   TORCH_CHECK(options->pz() == 1,
               "SlabLayoutImpl: pz must be 1 for slab layout");

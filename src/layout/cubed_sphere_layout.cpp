@@ -385,7 +385,7 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
   }
 }
 
-void CubedSphereLayoutImpl::reset() {
+void CubedSphereLayoutImpl::_initialize() {
   // build the ranks
   TORCH_CHECK(options->pz() == 1,
               "CubedSphereLayoutImpl: pz must be 1 for cubed-sphere layout");
@@ -559,10 +559,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         // Copy data from mesh to send buffer
         int bid = get_buffer_id(offset);
 
-        send_bufs[bid].clear();
-        recv_bufs[bid].clear();
-        send_bufs[bid].reserve(vars.size());
-        recv_bufs[bid].reserve(vars.size());
+        pmb->send_bufs[bid].clear();
+        pmb->recv_bufs[bid].clear();
+        pmb->send_bufs[bid].reserve(vars.size());
+        pmb->recv_bufs[bid].reserve(vars.size());
 
         for (auto &[name, var] : vars) {
           // do partial send if name string contains ':'
@@ -573,8 +573,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
                 (suffix == "-" && (dy > 0 || dx > 0)))
               continue;
           }
-          send_bufs[bid].push_back(var.index(sub).clone());
-          recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
+          pmb->send_bufs[bid].push_back(var.index(sub).clone());
+          pmb->recv_bufs[bid].push_back(
+              torch::empty_like(pmb->send_bufs[bid].back()));
         }
       }
   }
@@ -629,10 +630,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
 
-      send_bufs[bid].clear();
-      recv_bufs[bid].clear();
-      send_bufs[bid].reserve(vars.size());
-      recv_bufs[bid].reserve(vars.size());
+      pmb->send_bufs[bid].clear();
+      pmb->recv_bufs[bid].clear();
+      pmb->send_bufs[bid].reserve(vars.size());
+      pmb->recv_bufs[bid].reserve(vars.size());
 
       int my_side = get_side(offset);
       int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
@@ -691,8 +692,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
           var_send = var_send.transpose(-2, -3).reshape(sizes);
         }
 
-        send_bufs[bid].push_back(var_send);
-        recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
+        pmb->send_bufs[bid].push_back(var_send);
+        pmb->recv_bufs[bid].push_back(
+            torch::empty_like(pmb->send_bufs[bid].back()));
       }
     }
 
@@ -748,7 +750,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                 (suffix == "-" && (dy < 0 || dx < 0)))
               continue;
           }
-          var.index_put_(sub, recv_bufs[bid][count++]);
+          var.index_put_(sub, pmb->recv_bufs[bid][count++]);
         }
       }
   }
@@ -816,7 +818,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             continue;
         }
 
-        var.index_put_(sub, recv_bufs[bid][count++]);
+        var.index_put_(sub, pmb->recv_bufs[bid][count++]);
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
@@ -928,18 +930,22 @@ void CubedSphereLayoutImpl::exchange_remote(
 
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
+                         op.recv_tag));
     }
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
+                         op.send_tag));
     }
   } else {
     for (auto const& op : remote_ops) {
       works.push_back(
-          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
+                         op.send_tag));
       works.push_back(
-          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
+                         op.recv_tag));
     }
   }
 

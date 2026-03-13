@@ -98,6 +98,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! current cycle number
   int cycle = 0;
 
+  //! exchange buffers owned by the mesh block rather than the layout
+  mutable std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
+
   //! submodules
   harp::Integrator pintg = nullptr;
   Coordinate pcoord = nullptr;

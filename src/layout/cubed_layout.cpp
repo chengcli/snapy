@@ -7,7 +7,7 @@
 
 namespace snap {
 
-void CubedLayoutImpl::reset() {
+void CubedLayoutImpl::_initialize() {
   // build the ranks
   int px = options->px();
   int py = options->py();

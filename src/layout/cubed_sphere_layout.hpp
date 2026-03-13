@@ -26,20 +26,19 @@ extern const CSVel CS_L2G_VEL[6][3];
 //! Given CS_G2L_VEL, populate CS_L2G_VEL
 void populate_cs_l2g_vel(CSVel l2g[6][3]);
 
-class CubedSphereLayoutImpl
-    : public torch::nn::Cloneable<CubedSphereLayoutImpl>,
-      public LayoutImpl {
+class CubedSphereLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   CubedSphereLayoutImpl() = default;
-  CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  CubedSphereLayoutImpl(const LayoutOptions &opts,
+                        MeshBlockImpl *owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("cubed-sphere");
-    reset();
+    _initialize();
   }
-  void reset() override;
 
   ~CubedSphereLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream &os) const;
 
   int pxy() const { return options->px(); }
 
@@ -70,8 +69,10 @@ class CubedSphereLayoutImpl
   void exchange_remote(
       MeshBlockImpl const *pmb, SyncOptions const &opts,
       std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
+  int num_exchange_buffers() const override { return 9; }
 
  private:
+  void _initialize();
   std::tuple<int, int, int> _remap_exchange_offset(
       std::tuple<int, int, int> iloc, int dy, int dx) const override;
   std::tuple<int, int, int> _peer_exchange_offset(
@@ -121,6 +122,5 @@ class CubedSphereLayoutImpl
   void _step_one(int face, int rx, int ry, int dx, int dy, int *out_face,
                  int *out_rx, int *out_ry) const;
 };
-TORCH_MODULE(CubedSphereLayout);
 
 }  // namespace snap

@@ -6,11 +6,7 @@
 #include <memory>
 #include <tuple>
 
-// torch
-#include <torch/nn/cloneable.h>
-#include <torch/nn/module.h>
-#include <torch/nn/modules/common.h>
-
+#include <torch/torch.h>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 
 // snap
@@ -169,15 +165,8 @@ class MeshBlockImpl;
 class LayoutImpl {
  public:
   static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts,
-                                            torch::nn::Module *p = nullptr,
+                                            MeshBlockImpl *p = nullptr,
                                             std::string const &name = "layout");
-
-  //! exchange buffers
-  /*!
-   * The first index indicates the rank
-   * The second index indicates the variable group
-   */
-  std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
 
   //! communication
   std::shared_ptr<ProcessGroupContext> comm;
@@ -186,7 +175,8 @@ class LayoutImpl {
   LayoutOptions options;
 
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
-  LayoutImpl(const LayoutOptions &opts) : options(opts) {
+  LayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+      : comm(nullptr), options(opts), _owner(owner) {
     int P = options->px() * options->py() * options->pz();
     _rankof.resize(P);
   }
@@ -198,6 +188,9 @@ class LayoutImpl {
   bool is_root() const { return options->rank() == options->root_rank(); }
 
   virtual ~LayoutImpl();
+
+  MeshBlockImpl *owner() const { return _owner; }
+  virtual int num_exchange_buffers() const { return 9; }
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
     auto [rx, ry, rz] = iloc;
@@ -277,49 +270,51 @@ class LayoutImpl {
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;
   std::vector<int> _rankof;
+  MeshBlockImpl *_owner = nullptr;
 };
 using Layout = std::shared_ptr<LayoutImpl>;
 
-class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
-                       public LayoutImpl {
+class SlabLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   SlabLayoutImpl() = default;
-  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  SlabLayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("slab");
-    reset();
+    _initialize();
   }
-  void reset() override;
-  using LayoutImpl::forward;
 
   ~SlabLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream &os) const;
 
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
-};
-TORCH_MODULE(SlabLayout);
 
-class CubedLayoutImpl : public torch::nn::Cloneable<CubedLayoutImpl>,
-                        public LayoutImpl {
+ private:
+  void _initialize();
+};
+class CubedLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   CubedLayoutImpl() = default;
-  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  CubedLayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("cubed");
-    reset();
+    _initialize();
   }
-  void reset() override;
 
   ~CubedLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream &os) const;
+  int num_exchange_buffers() const override { return 27; }
 
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
+
+ private:
+  void _initialize();
 };
-TORCH_MODULE(CubedLayout);
 
 }  // namespace snap
 

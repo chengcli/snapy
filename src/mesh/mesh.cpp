@@ -277,11 +277,10 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
             << " nlim=" << root->pintg->options->nlim() << std::endl;
 
   for (auto& block : blocks) {
-    auto layout = block->get_layout();
-    layout->send_bufs.clear();
-    layout->send_bufs.shrink_to_fit();
-    layout->recv_bufs.clear();
-    layout->recv_bufs.shrink_to_fit();
+    block->send_bufs.clear();
+    block->send_bufs.shrink_to_fit();
+    block->recv_bufs.clear();
+    block->recv_bufs.shrink_to_fit();
   }
 
   root->get_layout()->comm->pg->barrier()->wait();

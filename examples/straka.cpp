@@ -21,8 +21,15 @@ torch::Device select_device(Mesh& mesh, MeshBlockOptions const& block_opts) {
   auto device = torch::Device(torch::kCPU);
   if (torch::cuda::is_available() && block_opts->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device =
-        mesh->blocks.front()->get_layout()->comm->pg->getBoundDeviceId().value();
+    auto layout = mesh->blocks.front()->get_layout();
+    auto bound_device = layout->comm->pg->getBoundDeviceId();
+    if (bound_device.has_value()) {
+      device = *bound_device;
+    } else {
+      auto device_index = layout->options->device_id();
+      if (device_index < 0) device_index = layout->options->local_rank();
+      device = torch::Device(torch::kCUDA, device_index);
+    }
   }
   return device;
 }
