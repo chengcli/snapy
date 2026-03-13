@@ -5,6 +5,9 @@
 #include <iostream>
 #include <limits>
 
+// yaml
+#include <yaml-cpp/yaml.h>
+
 // snap
 #include <snap/mesh/mesh.hpp>
 #include <snap/utils/log.hpp>
@@ -23,6 +26,23 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   return dst;
 }
 }  // namespace
+
+MeshOptions MeshOptionsImpl::from_yaml(std::string input_file, bool verbose) {
+  auto block = MeshBlockOptionsImpl::from_yaml(input_file, verbose);
+  auto options = MeshOptionsImpl::create();
+  options->block(block);
+
+  auto config = YAML::LoadFile(input_file);
+  options->blocks_per_process(
+      config["distribute"]["blocks_per_process"].as<int>(1));
+  return options;
+}
+
+std::shared_ptr<MeshImpl> MeshImpl::from_yaml(std::string input_file,
+                                              bool verbose) {
+  return std::make_shared<MeshImpl>(
+      MeshOptionsImpl::from_yaml(input_file, verbose));
+}
 
 MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
 

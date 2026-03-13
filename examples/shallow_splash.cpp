@@ -61,13 +61,7 @@ int main(int argc, char** argv) {
   std::string input_file = argc > 1 ? argv[1] : "shallow_splash.yaml";
   auto config = YAML::LoadFile(input_file);
 
-  auto op_block = MeshBlockOptionsImpl::from_yaml(input_file);
-  auto op_mesh = MeshOptionsImpl::create();
-  op_mesh->block(op_block);
-  op_mesh->blocks_per_process(
-      config["distribute"]["blocks_per_process"].as<int>(1));
-
-  auto mesh = Mesh(op_mesh);
+  auto mesh = MeshImpl::from_yaml(input_file);
   auto device = mesh->device();
   if (device.is_cuda()) {
     std::cout << "Running on CUDA" << std::endl;
