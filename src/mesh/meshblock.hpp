@@ -131,6 +131,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   */
   double initialize(Variables& vars, char const* restart_file = nullptr);
   void initialize_local(Variables& vars);
+  void initialize_under_mesh(Variables& vars);
   void finalize_initialization(Variables& vars);
 
   //! compute the maximum allowable time step
@@ -149,6 +150,12 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   void forward(Variables& vars, double dt, int stage);
   void advance_local(Variables& vars, double dt, int stage);
+  void exchange(Variables& vars, SyncOptions const& opts) const;
+  void begin_exchange(Variables& vars, SyncOptions const& opts) const;
+  void launch_exchange(SyncOptions const& opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
+  void finalize_exchange(Variables& vars, SyncOptions const& opts,
+                         std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
   void exchange_ghost_zones(Variables& vars);
 
   //! make write outputs at the current time

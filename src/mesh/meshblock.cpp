@@ -311,17 +311,13 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
 
   Variables sync_vars;
   sync_vars["hydro_w"] = vars.at("hydro_w");
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  _playout->forward(this, sync_vars, sync_opts, works);
-  _playout->finalize(this, sync_vars, sync_opts, works);
+  exchange(sync_vars, sync_opts);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_r"] = vars.at("scalar_r");
-    _playout->forward(this, sync_vars, sync_opts, works);
-    _playout->finalize(this, sync_vars, sync_opts, works);
+    exchange(sync_vars, sync_opts);
   }
 
   finalize_initialization(vars);
@@ -388,6 +384,27 @@ void MeshBlockImpl::initialize_local(Variables& vars) {
     }
   }
 
+}
+
+void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
+  LayoutGuard layout_guard(_playout);
+  initialize_local(vars);
+
+  SyncOptions prim_opts;
+  prim_opts.interpolate(true).type(kPrimitive);
+  Variables prim_vars;
+  prim_vars["hydro_w"] = vars.at("hydro_w");
+  exchange(prim_vars, prim_opts);
+
+  if (pscalar->nvar() > 0) {
+    SyncOptions scalar_opts;
+    scalar_opts.interpolate(true).type(kScalar);
+    Variables scalar_vars;
+    scalar_vars["scalar_r"] = vars.at("scalar_r");
+    exchange(scalar_vars, scalar_opts);
+  }
+
+  finalize_initialization(vars);
 }
 
 void MeshBlockImpl::finalize_initialization(Variables& vars) {
@@ -511,6 +528,33 @@ double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   advance_local(vars, dt, stage);
   exchange_ghost_zones(vars);
+}
+
+void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
+  LayoutGuard layout_guard(_playout);
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  begin_exchange(vars, opts);
+  launch_exchange(opts, works);
+  finalize_exchange(vars, opts, works);
+}
+
+void MeshBlockImpl::begin_exchange(Variables& vars, SyncOptions const& opts) const {
+  LayoutGuard layout_guard(_playout);
+  _playout->serialize(this, vars, opts);
+}
+
+void MeshBlockImpl::launch_exchange(
+    SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+  LayoutGuard layout_guard(_playout);
+  _playout->launch_exchange(this, opts, works);
+}
+
+void MeshBlockImpl::finalize_exchange(
+    Variables& vars, SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+  LayoutGuard layout_guard(_playout);
+  _playout->finalize(this, vars, opts, works);
 }
 
 void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
@@ -684,17 +728,13 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
 
   Variables sync_vars;
   sync_vars["hydro_u"] = hydro_u;
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  _playout->forward(this, sync_vars, sync_opts, works);
-  _playout->finalize(this, sync_vars, sync_opts, works);
+  exchange(sync_vars, sync_opts);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
-    _playout->forward(this, sync_vars, sync_opts, works);
-    _playout->finalize(this, sync_vars, sync_opts, works);
+    exchange(sync_vars, sync_opts);
   }
 
   if (options->verbose()) {

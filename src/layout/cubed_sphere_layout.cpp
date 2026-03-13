@@ -48,6 +48,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 
 // fmt
 #include <fmt/format.h>
@@ -67,6 +68,8 @@
 namespace snap {
 
 namespace {
+
+std::mutex g_cubed_sphere_comm_mutex;
 
 std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
                                            int peer_rank, int target_rank) {
@@ -808,6 +811,7 @@ void CubedSphereLayoutImpl::forward(
               "[CubedSphereLayout:forward] MeshBlock pointer is null");
 
   serialize(pmb, vars, opts);
+  _prepare_local_exchange(pmb, opts);
   exchange_remote(pmb, opts, works);
 }
 
@@ -834,6 +838,7 @@ void CubedSphereLayoutImpl::exchange_remote(
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
 
+  std::lock_guard<std::mutex> lock(g_cubed_sphere_comm_mutex);
   comm->group_start();
 
   for (int dy = dy_min; dy <= dy_max; ++dy)
@@ -866,6 +871,20 @@ void CubedSphereLayoutImpl::exchange_remote(
     }
 
   comm->group_end();
+}
+
+std::tuple<int, int, int> CubedSphereLayoutImpl::_remap_exchange_offset(
+    std::tuple<int, int, int> iloc, int dy, int dx) const {
+  (void)iloc;
+  return {dy, dx, 0};
+}
+
+std::tuple<int, int, int> CubedSphereLayoutImpl::_peer_exchange_offset(
+    int peer_rank, int target_rank, SyncOptions const& opts,
+    std::tuple<int, int, int> offset) const {
+  (void)opts;
+  (void)offset;
+  return find_peer_offset(*this, peer_rank, target_rank);
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(

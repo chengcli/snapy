@@ -197,7 +197,7 @@ class LayoutImpl {
 
   bool is_root() const { return options->rank() == options->root_rank(); }
 
-  virtual ~LayoutImpl() = default;
+  virtual ~LayoutImpl();
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
     auto [rx, ry, rz] = iloc;
@@ -245,6 +245,9 @@ class LayoutImpl {
                        SyncOptions const &opts,
                        std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
+  void launch_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>>& works);
+
   virtual void exchange_remote(
       MeshBlockImpl const *pmb, SyncOptions const &opts,
       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
@@ -255,6 +258,14 @@ class LayoutImpl {
 
  protected:
   void _init_process_group();
+  void _prepare_local_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts);
+  virtual std::tuple<int, int, int> _remap_exchange_offset(
+      std::tuple<int, int, int> iloc, int dy, int dx) const;
+  virtual std::tuple<int, int, int> _peer_exchange_offset(
+      int peer_rank, int target_rank, SyncOptions const& opts,
+      std::tuple<int, int, int> offset) const;
+  virtual void _copy_local_exchange_buffers(
+      std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;

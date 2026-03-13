@@ -39,8 +39,6 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
                     std::vector<char const*> const& restart_files = {});
   double max_time_step(MeshVariables const& vars);
   void forward(MeshVariables& vars, double dt, int stage);
-  void exchange(MeshVariables& vars, SyncOptions const& opts,
-                char const* var_name);
   void make_outputs(MeshVariables const& vars, double current_time,
                     bool final_write = false);
   void print_cycle_info(MeshVariables const& vars, double time, double dt) const;
@@ -49,8 +47,6 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
   void finalize(MeshVariables const& vars, double time);
 
  private:
-  void _exchange_all(MeshVariables& vars, SyncOptions const& opts,
-                     char const* var_name);
 };
 
 TORCH_MODULE(Mesh);

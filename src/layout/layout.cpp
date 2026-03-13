@@ -1,4 +1,7 @@
 // yaml
+#include <condition_variable>
+#include <exception>
+#include <map>
 #include <yaml-cpp/yaml.h>
 
 // base
@@ -12,6 +15,81 @@
 #include "layout.hpp"
 
 namespace snap {
+
+namespace {
+
+struct LocalExchangeKey {
+  int process_rank;
+  int blocks_per_process;
+  int dim;
+  int phyid;
+  int type;
+  bool cross_panel_only;
+  bool skip_corner;
+  bool interpolate;
+  std::string layout_type;
+
+  bool operator<(LocalExchangeKey const& other) const {
+    return std::tie(process_rank, blocks_per_process, dim, phyid, type,
+                    cross_panel_only, skip_corner, interpolate, layout_type) <
+           std::tie(other.process_rank, other.blocks_per_process, other.dim,
+                    other.phyid, other.type, other.cross_panel_only,
+                    other.skip_corner, other.interpolate, other.layout_type);
+  }
+};
+
+struct LocalExchangeState {
+  int generation = 0;
+  int arrived = 0;
+  int released = 0;
+  bool ready = false;
+  std::exception_ptr error;
+};
+
+std::mutex g_local_exchange_mutex;
+std::condition_variable g_local_exchange_cv;
+std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
+std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
+std::mutex g_process_comm_mutex;
+
+std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
+  std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(), nullptr);
+
+  for (auto const& [key, local_layout] : g_local_layouts) {
+    if (key.first == layout.options->process_rank()) {
+      TORCH_CHECK(key.second >= 0 &&
+                      key.second < layout.options->blocks_per_process(),
+                  "invalid local block index ", key.second,
+                  " for process-local layout registry");
+      layouts[key.second] = local_layout;
+    }
+  }
+
+  for (int i = 0; i < layouts.size(); ++i) {
+    TORCH_CHECK(layouts[i] != nullptr,
+                "missing process-local layout registration for process ",
+                layout.options->process_rank(), " local block ", i);
+  }
+
+  return layouts;
+}
+
+LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
+                                         SyncOptions const& opts) {
+  return LocalExchangeKey{
+      layout.options->process_rank(),
+      layout.options->blocks_per_process(),
+      opts.dim(),
+      opts.phyid(),
+      opts.type(),
+      opts.cross_panel_only(),
+      opts.skip_corner(),
+      opts.interpolate(),
+      layout.options->type(),
+  };
+}
+
+}  // namespace
 
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
@@ -75,7 +153,152 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
 
+  if (!options->no_backend()) {
+    std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+    g_local_layouts[{options->process_rank(),
+                     options->local_block_index(options->rank())}] = pl.get();
+  }
+
   return pl;
+}
+
+LayoutImpl::~LayoutImpl() {
+  if (options == nullptr || options->no_backend()) return;
+
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  g_local_layouts.erase(
+      {options->process_rank(), options->local_block_index(options->rank())});
+}
+
+void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
+                                         SyncOptions const& opts) {
+  if (options->blocks_per_process() <= 1) return;
+
+  auto key = make_local_exchange_key(*this, opts);
+  int expected = options->blocks_per_process();
+  std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+  auto& state = g_local_exchange_states[key];
+  int generation = state.generation;
+
+  state.arrived += 1;
+  if (state.arrived == expected) {
+    auto layouts = local_layouts_for(*this);
+    lock.unlock();
+    std::exception_ptr error;
+    try {
+      _copy_local_exchange_buffers(layouts, opts);
+    } catch (...) {
+      error = std::current_exception();
+    }
+    lock.lock();
+    state.error = error;
+    state.ready = true;
+    state.released = expected;
+    g_local_exchange_cv.notify_all();
+  } else {
+    g_local_exchange_cv.wait(lock, [&]() {
+      return state.ready && state.generation == generation;
+    });
+  }
+
+  if (state.error != nullptr) {
+    auto error = state.error;
+    state.released -= 1;
+    if (state.released == 0) {
+      state.arrived = 0;
+      state.ready = false;
+      state.error = nullptr;
+      state.generation += 1;
+      g_local_exchange_cv.notify_all();
+    } else {
+      g_local_exchange_cv.wait(lock, [&]() {
+        return state.generation != generation;
+      });
+    }
+    std::rethrow_exception(error);
+  }
+
+  state.released -= 1;
+  if (state.released == 0) {
+    state.arrived = 0;
+    state.ready = false;
+    state.error = nullptr;
+    state.generation += 1;
+    g_local_exchange_cv.notify_all();
+  } else {
+    g_local_exchange_cv.wait(lock, [&]() {
+      return state.generation != generation;
+    });
+  }
+}
+
+std::tuple<int, int, int> LayoutImpl::_remap_exchange_offset(
+    std::tuple<int, int, int> iloc, int dy, int dx) const {
+  int dx_sgn = 1;
+  int dy_sgn = 1;
+
+  if (options->periodic_x() && options->px() == 2 && std::get<0>(iloc) == 0) {
+    dx_sgn = -1;
+  }
+
+  if (options->periodic_y() && options->py() == 2 && std::get<1>(iloc) == 0) {
+    dy_sgn = -1;
+  }
+
+  return {dy_sgn * dy, dx_sgn * dx, 0};
+}
+
+std::tuple<int, int, int> LayoutImpl::_peer_exchange_offset(
+    int peer_rank, int target_rank, SyncOptions const& opts,
+    std::tuple<int, int, int> offset) const {
+  (void)peer_rank;
+  (void)target_rank;
+  (void)opts;
+  auto [dy, dx, dz] = offset;
+  return {-dy, -dx, -dz};
+}
+
+void LayoutImpl::_copy_local_exchange_buffers(
+    std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const {
+  for (auto* layout : layouts) {
+    auto rank = layout->options->rank();
+    auto iloc = layout->loc_of(rank);
+
+    for (int dy_ = opts.dy_min(); dy_ <= opts.dy_max(); ++dy_) {
+      for (int dx_ = opts.dx_min(); dx_ <= opts.dx_max(); ++dx_) {
+        if (dy_ == 0 && dx_ == 0) continue;
+        if (opts.skip_corner() && std::abs(dy_) + std::abs(dx_) == 2) continue;
+
+        auto offset = layout->_remap_exchange_offset(iloc, dy_, dx_);
+        int nb = layout->neighbor_rank(iloc, offset);
+        if (nb < 0 || nb == rank) continue;
+        if (layout->options->owner_process_rank(nb) !=
+            layout->options->process_rank()) {
+          continue;
+        }
+
+        int bid = get_buffer_id(offset);
+        auto peer = layouts.at(layout->options->local_block_index(nb));
+        auto peer_offset = layout->_peer_exchange_offset(nb, rank, opts, offset);
+        int peer_bid = get_buffer_id(peer_offset);
+
+        for (int n = 0; n < layout->send_bufs[bid].size(); ++n) {
+          TORCH_CHECK(peer->recv_bufs[peer_bid][n].numel() ==
+                          layout->send_bufs[bid][n].numel(),
+                      "local exchange size mismatch from rank ", rank,
+                      " to rank ", nb, " send_offset=(",
+                      std::get<0>(offset), ",", std::get<1>(offset),
+                      ") recv_offset=(", std::get<0>(peer_offset), ",",
+                      std::get<1>(peer_offset), ") send_shape=",
+                      layout->send_bufs[bid][n].sizes(), " recv_shape=",
+                      peer->recv_bufs[peer_bid][n].sizes());
+          peer->recv_bufs[peer_bid][n]
+              .view({-1})
+              .copy_(layout->send_bufs[bid][n].reshape({-1}));
+        }
+      }
+    }
+  }
 }
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
@@ -129,6 +352,13 @@ void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
   TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
 
   serialize(pmb, vars, opts);
+  launch_exchange(pmb, opts, works);
+}
+
+void LayoutImpl::launch_exchange(
+    MeshBlockImpl const* pmb, SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+  _prepare_local_exchange(pmb, opts);
   exchange_remote(pmb, opts, works);
 }
 
@@ -165,6 +395,7 @@ void LayoutImpl::exchange_remote(
     dy_sgn = -1;
   }
 
+  std::lock_guard<std::mutex> lock(g_process_comm_mutex);
   comm->group_start();
 
   for (int dy_ = dy_min; dy_ <= dy_max; ++dy_)
@@ -308,7 +539,10 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   /*c10d::BarrierOptions op;
   op.device_ids = {options->local_rank()};
   pg->barrier(op)->wait();*/
-  comm->pg->barrier()->wait();
+  {
+    std::lock_guard<std::mutex> lock(g_process_comm_mutex);
+    comm->pg->barrier()->wait();
+  }
 
   works.clear();
 }

@@ -22,48 +22,6 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   }
   return dst;
 }
-
-std::tuple<int, int, int> remap_exchange_offset(Layout const& layout,
-                                                std::tuple<int, int, int> iloc,
-                                                int dy, int dx) {
-  int dx_sgn = 1;
-  int dy_sgn = 1;
-
-  if (layout->options->periodic_x() && layout->options->px() == 2 &&
-      std::get<0>(iloc) == 0) {
-    dx_sgn = -1;
-  }
-
-  if (layout->options->periodic_y() && layout->options->py() == 2 &&
-      std::get<1>(iloc) == 0) {
-    dy_sgn = -1;
-  }
-
-  return std::tuple<int, int, int>(dy_sgn * dy, dx_sgn * dx, 0);
-}
-
-std::tuple<int, int, int> peer_exchange_offset(Layout const& layout,
-                                               int peer_rank,
-                                               int target_rank,
-                                               std::tuple<int, int, int> offset) {
-  if (layout->options->type() != "cubed-sphere") {
-    auto [dy, dx, dz] = offset;
-    return std::tuple<int, int, int>(-dy, -dx, -dz);
-  }
-
-  auto peer_iloc = layout->loc_of(peer_rank);
-  for (auto candidate : {std::tuple<int, int, int>{-1, 0, 0},
-                         std::tuple<int, int, int>{1, 0, 0},
-                         std::tuple<int, int, int>{0, -1, 0},
-                         std::tuple<int, int, int>{0, 1, 0}}) {
-    if (layout->neighbor_rank(peer_iloc, candidate) == target_rank) {
-      return candidate;
-    }
-  }
-
-  TORCH_CHECK(false, "failed to find reverse exchange offset from rank ",
-              peer_rank, " to rank ", target_rank);
-}
 }  // namespace
 
 MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
@@ -132,22 +90,15 @@ double MeshImpl::initialize(MeshVariables& vars,
   pg->barrier()->wait();
   SignalHandler::GetInstance();
 
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(blocks.size());
   for (int i = 0; i < blocks.size(); ++i) {
-    blocks[i]->initialize_local(vars[i]);
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      blocks[i]->initialize_under_mesh(vars[i]);
+    }));
   }
-
-  SyncOptions prim_opts;
-  prim_opts.interpolate(true).type(kPrimitive);
-  exchange(vars, prim_opts, "hydro_w");
-
-  if (blocks.front()->pscalar->nvar() > 0 && vars.front().count("scalar_r")) {
-    SyncOptions scalar_opts;
-    scalar_opts.interpolate(true).type(kScalar);
-    exchange(vars, scalar_opts, "scalar_r");
-  }
-
-  for (int i = 0; i < blocks.size(); ++i) {
-    blocks[i]->finalize_initialization(vars[i]);
+  for (auto& job : jobs) {
+    job.get();
   }
 
   return 0.;
@@ -184,27 +135,12 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
   jobs.reserve(blocks.size());
   for (int i = 0; i < blocks.size(); ++i) {
     jobs.push_back(std::async(std::launch::async, [&, i]() {
-      blocks[i]->advance_local(vars[i], dt, stage);
+      blocks[i]->forward(vars[i], dt, stage);
     }));
   }
   for (auto& job : jobs) {
     job.get();
   }
-
-  SyncOptions cons_opts;
-  cons_opts.interpolate(true).type(kConserved);
-  exchange(vars, cons_opts, "hydro_u");
-
-  if (blocks.front()->pscalar->nvar() > 0) {
-    SyncOptions scalar_opts;
-    scalar_opts.interpolate(true).type(kScalar);
-    exchange(vars, scalar_opts, "scalar_s");
-  }
-}
-
-void MeshImpl::exchange(MeshVariables& vars, SyncOptions const& opts,
-                        char const* var_name) {
-  _exchange_all(vars, opts, var_name);
 }
 
 void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,
@@ -350,82 +286,6 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
 
   root->get_layout()->comm->pg->barrier()->wait();
   root->get_layout()->comm->pg->shutdown();
-}
-
-void MeshImpl::_exchange_all(MeshVariables& vars, SyncOptions const& opts,
-                             char const* var_name) {
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-
-  for (int i = 0; i < blocks.size(); ++i) {
-    Variables sync_vars;
-    sync_vars[var_name] = vars[i].at(var_name);
-    blocks[i]->get_layout()->serialize(blocks[i].get(), sync_vars, opts);
-  }
-
-  for (int i = 0; i < blocks.size(); ++i) {
-    auto block = blocks[i];
-    auto layout = block->get_layout();
-    auto rank = layout->options->rank();
-    auto iloc = layout->loc_of(rank);
-    bool has_remote_neighbor = false;
-
-    int dy_min = opts.dy_min();
-    int dy_max = opts.dy_max();
-    int dx_min = opts.dx_min();
-    int dx_max = opts.dx_max();
-
-    for (int dy_ = dy_min; dy_ <= dy_max; ++dy_) {
-      for (int dx_ = dx_min; dx_ <= dx_max; ++dx_) {
-        if (dy_ == 0 && dx_ == 0) continue;
-        if (opts.skip_corner() && std::abs(dy_) + std::abs(dx_) == 2) continue;
-        if (block->options->layout()->type() != "cubed-sphere" &&
-            block->options->is_physical_boundary(dy_, dx_, 0)) {
-          continue;
-        }
-
-        auto offset = remap_exchange_offset(layout, iloc, dy_, dx_);
-        auto [dy, dx, dz] = offset;
-        (void)dz;
-        int nb = layout->neighbor_rank(iloc, offset);
-        if (nb < 0) continue;
-
-        int bid = get_buffer_id(offset);
-        int local_process = layout->options->process_rank();
-        int neighbor_process = layout->options->owner_process_rank(nb);
-        if (neighbor_process == local_process) {
-          int neighbor_local = layout->options->local_block_index(nb);
-          auto peer = blocks[neighbor_local]->get_layout();
-          auto peer_offset = peer_exchange_offset(layout, nb, rank, offset);
-          int peer_bid = get_buffer_id(peer_offset);
-          for (int n = 0; n < layout->send_bufs[bid].size(); ++n) {
-            TORCH_CHECK(
-                peer->recv_bufs[peer_bid][n].numel() ==
-                    layout->send_bufs[bid][n].numel(),
-                "local exchange size mismatch from rank ", rank, " to rank ",
-                nb, " send_offset=(", dy, ",", dx, ") recv_offset=(",
-                std::get<0>(peer_offset), ",", std::get<1>(peer_offset),
-                ") send_shape=", layout->send_bufs[bid][n].sizes(),
-                " recv_shape=", peer->recv_bufs[peer_bid][n].sizes());
-            peer->recv_bufs[peer_bid][n]
-                .view({-1})
-                .copy_(layout->send_bufs[bid][n].reshape({-1}));
-          }
-        } else {
-          has_remote_neighbor = true;
-        }
-      }
-    }
-
-    if (has_remote_neighbor) {
-      layout->exchange_remote(block.get(), opts, works);
-    }
-  }
-
-  for (int i = 0; i < blocks.size(); ++i) {
-    Variables sync_vars;
-    sync_vars[var_name] = vars[i].at(var_name);
-    blocks[i]->get_layout()->finalize(blocks[i].get(), sync_vars, opts, works);
-  }
 }
 
 }  // namespace snap

@@ -72,6 +72,12 @@ class CubedSphereLayoutImpl
       std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
 
  private:
+  std::tuple<int, int, int> _remap_exchange_offset(
+      std::tuple<int, int, int> iloc, int dy, int dx) const override;
+  std::tuple<int, int, int> _peer_exchange_offset(
+      int peer_rank, int target_rank, SyncOptions const& opts,
+      std::tuple<int, int, int> offset) const override;
+
   //! \brief Interpolate transmitted variable to local ghost zones
   void _interpolate_to_local(MeshBlockImpl const *pmb,
                              std::tuple<int, int, int> offset,

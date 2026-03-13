@@ -1,5 +1,6 @@
 // C/C++
 #include <cstdlib>
+#include <future>
 #include <iostream>
 
 // torch
@@ -163,7 +164,18 @@ int main(int argc, char** argv) {
 
   SyncOptions opts;
   opts.interpolate(false).type(kPrimitive);
-  mesh->exchange(vars, opts, "hydro_w");
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      Variables sync_vars;
+      sync_vars["hydro_w"] = vars[i].at("hydro_w");
+      mesh->blocks[i]->exchange(sync_vars, opts);
+    }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
   mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
 
   bool ok = true;
