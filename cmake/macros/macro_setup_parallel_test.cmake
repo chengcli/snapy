@@ -26,5 +26,6 @@ macro(setup_parallel_test namel cores)
             $<IF:$<BOOL:${CUDAToolkit_FOUND}>,snapy::snap_cu,>
             gtest_main)
 
-  add_test(NAME ${namel}.${buildl} COMMAND pd-run ${cores} ${namel}.${buildl})
+  add_test(NAME ${namel}.${buildl}
+           COMMAND pd-run ${cores} $<TARGET_FILE:${namel}.${buildl}>)
 endmacro()

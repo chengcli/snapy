@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
   torch::Device device(torch::kCPU);
   if (torch::cuda::is_available() && op_block->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = block->get_layout()->pg->getBoundDeviceId().value();
+    device = block->get_layout()->comm->pg->getBoundDeviceId().value();
   }
 
   block->to(device);

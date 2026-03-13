@@ -13,28 +13,25 @@ dynamics:
 
 distribute:
   backend: gloo
-  layout: cubed-sphere
-  #layout: slab
-  nb2: 1
-  nb3: 1
+  layout: slab
+  nb2: 2
+  nb3: 2
   verbose: false
 
 geometry:
-  type: gnomonic-equiangle
-  #type: cartesian
-  cells: {nx1: 1, nx2: 6, nx3: 6, nghost: 2}
+  type: cartesian
+  cells: {nx1: 1, nx2: 4, nx3: 4, nghost: 1}
   bounds:
-    x2min_pi: -0.25
-    x2max_pi: 0.25
-    x3min_pi: -0.25
-    x3max_pi: 0.25
-
+    x2min: 0.
+    x2max: 1.
+    x3min: 0.
+    x3max: 1.
 
 boundary-condition:
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: custom
-    x2-outer: custom
-    x3-inner: custom
-    x3-outer: custom
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic

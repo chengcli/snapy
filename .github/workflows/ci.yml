@@ -93,4 +93,4 @@ jobs:
       - name: Run C++ & Pybind tests
         run: |
           cd ${{ github.workspace }}/build/tests
-          ctest --output-on-failure
+          ctest --output-on-failure -R '^(test_.*|test_exchange_decomp|test_straka.*|test_shallow_.*)$'

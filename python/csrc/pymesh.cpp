@@ -5,6 +5,7 @@
 #include <torch/extension.h>
 
 // snap
+#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
 
@@ -17,6 +18,8 @@ void bind_mesh(py::module &m) {
   auto pyMeshBlockOptions =
       py::class_<snap::MeshBlockOptionsImpl, snap::MeshBlockOptions>(
           m, "MeshBlockOptions");
+  auto pyMeshOptions =
+      py::class_<snap::MeshOptionsImpl, snap::MeshOptions>(m, "MeshOptions");
 
   pyMeshBlockOptions.def(py::init<>())
       .def("__repr__",
@@ -90,6 +93,15 @@ void bind_mesh(py::module &m) {
       .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptionsImpl, bfuncs)
       .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptionsImpl, layout);
 
+  pyMeshOptions.def(py::init<>())
+      .def("__repr__",
+           [](const snap::MeshOptions &a) {
+             return fmt::format("MeshOptions(blocks_per_process={})",
+                                a->blocks_per_process());
+           })
+      .ADD_OPTION(snap::MeshBlockOptions, snap::MeshOptionsImpl, block)
+      .ADD_OPTION(int, snap::MeshOptionsImpl, blocks_per_process);
+
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def(py::init<snap::MeshBlockOptions>(), py::arg("options"))
       .def("cycle", [](snap::MeshBlockImpl &self) { return self.cycle; })
@@ -150,6 +162,19 @@ void bind_mesh(py::module &m) {
             return std::make_pair(vars, time);
           },
           py::arg("restart_file"))
+      .def("initialize_local", &snap::MeshBlockImpl::initialize_local,
+           py::arg("vars"))
+      .def("initialize_under_mesh", &snap::MeshBlockImpl::initialize_under_mesh,
+           py::arg("vars"))
+      .def("finalize_initialization",
+           &snap::MeshBlockImpl::finalize_initialization, py::arg("vars"))
+      .def("local_max_time_step", &snap::MeshBlockImpl::local_max_time_step,
+           py::arg("vars"))
+      .def("advance_local", &snap::MeshBlockImpl::advance_local,
+           py::arg("vars"), py::arg("dt"), py::arg("stage"))
+      .def("exchange_ghost_zones", &snap::MeshBlockImpl::exchange_ghost_zones,
+           py::arg("vars"))
+      .def("get_layout", &snap::MeshBlockImpl::get_layout)
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
       .def("device", &snap::MeshBlockImpl::device)
@@ -165,10 +190,41 @@ void bind_mesh(py::module &m) {
               throw std::runtime_error("Invalid type for apply_hydro_bc.");
             }
             bops.type(type);
-            for (int i = 0; i < self.options->bfuncs().size(); ++i) {
+            for (size_t i = 0; i < self.options->bfuncs().size(); ++i) {
               if (self.options->bfuncs()[i] == nullptr) continue;
               self.options->bfuncs()[i](var, 3 - i / 2, bops);
             }
           },
           py::arg("var"), py::arg("type") = (int)snap::kConserved);
+
+  ADD_SNAP_MODULE(Mesh, MeshOptions)
+      .def(py::init<snap::MeshOptions>(), py::arg("options"))
+      .def_static("from_yaml", &snap::MeshImpl::from_yaml, py::arg("filename"),
+                  py::arg("verbose") = false)
+      .def_property_readonly("blocks",
+                             [](snap::MeshImpl &self) { return self.blocks; })
+      .def(
+          "initialize",
+          [](snap::MeshImpl &self, snap::MeshVariables &vars,
+             std::vector<std::string> const &restart_files) {
+            std::vector<char const *> c_restart_files;
+            c_restart_files.reserve(restart_files.size());
+            for (auto const &file : restart_files) {
+              c_restart_files.push_back(file.empty() ? nullptr : file.c_str());
+            }
+            double time = self.initialize(vars, c_restart_files);
+            return std::make_pair(vars, time);
+          },
+          py::arg("vars"),
+          py::arg("restart_files") = std::vector<std::string>{})
+      .def("device", &snap::MeshImpl::device)
+      .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
+      .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
+           py::arg("current_time"), py::arg("final_write") = false)
+      .def("print_cycle_info", &snap::MeshImpl::print_cycle_info,
+           py::arg("vars"), py::arg("time"), py::arg("dt"))
+      .def("check_redo", &snap::MeshImpl::check_redo, py::arg("vars"))
+      .def("set_cycle", &snap::MeshImpl::set_cycle, py::arg("cycle"))
+      .def("finalize", &snap::MeshImpl::finalize, py::arg("vars"),
+           py::arg("time"));
 }

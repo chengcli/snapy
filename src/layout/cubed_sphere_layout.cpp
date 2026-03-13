@@ -23,7 +23,7 @@
  *
  * Ghost zone communication:
  *   The main function to perform ghost zone communication is
- *    CubedSphereLayoutImpl::forward().
+ *    MeshBlock-owned begin/launch/finalize exchange path.
  *   The loc_of() function return a 3-item tuple (rx,ry,face) for a given rank.
  *   Position of a serialization/deserialization buffer is identified by
  *   get_buffer_id(offset), where offset is a 3-item tuple (dx,dy,0)
@@ -48,6 +48,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 
 // fmt
 #include <fmt/format.h>
@@ -65,6 +66,61 @@
 #include "cubed_sphere_layout.hpp"
 
 namespace snap {
+
+namespace {
+
+std::mutex g_cubed_sphere_comm_mutex;
+
+auto make_remote_order_key(int process_rank, int remote_process,
+                           int local_block, int remote_local_block,
+                           std::tuple<int, int, int> offset,
+                           std::tuple<int, int, int> peer_offset,
+                           SyncOptions const& opts) {
+  auto exchange_order_index = [&](std::tuple<int, int, int> off) {
+    int order = 0;
+    for (int dy = opts.dy_min(); dy <= opts.dy_max(); ++dy) {
+      for (int dx = opts.dx_min(); dx <= opts.dx_max(); ++dx) {
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+        if (off == std::tuple<int, int, int>(dy, dx, 0)) {
+          return order;
+        }
+        order += 1;
+      }
+    }
+    return order;
+  };
+
+  int lower_process = std::min(process_rank, remote_process);
+  int upper_process = std::max(process_rank, remote_process);
+  int lower_block =
+      process_rank < remote_process ? local_block : remote_local_block;
+  int upper_block =
+      process_rank < remote_process ? remote_local_block : local_block;
+  auto lower_to_upper_offset =
+      process_rank < remote_process ? offset : peer_offset;
+  return std::make_tuple(lower_process, upper_process, lower_block, upper_block,
+                         exchange_order_index(lower_to_upper_offset),
+                         opts.phyid());
+}
+
+std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
+                                           int peer_rank, int target_rank) {
+  auto peer_iloc = layout.loc_of(peer_rank);
+  for (auto offset :
+       {std::tuple<int, int, int>{-1, 0, 0}, std::tuple<int, int, int>{1, 0, 0},
+        std::tuple<int, int, int>{0, -1, 0},
+        std::tuple<int, int, int>{0, 1, 0}}) {
+    if (layout.neighbor_rank(peer_iloc, offset) == target_rank) {
+      return offset;
+    }
+  }
+
+  TORCH_CHECK(false, "failed to find reverse cubed-sphere offset from rank ",
+              peer_rank, " to rank ", target_rank);
+}
+
+}  // namespace
 
 /*!
  * ----------------------------
@@ -270,7 +326,7 @@ void populate_cs_l2g_vel(CSVel l2g[6][3]) {
   }
 }
 
-static inline int get_side(std::tuple<int, int, int> const &offset) {
+static inline int get_side(std::tuple<int, int, int> const& offset) {
   auto [dy, dx, _] = offset;
   if (dx == -1 && dy == 0)
     return SIDE_L;
@@ -284,7 +340,7 @@ static inline int get_side(std::tuple<int, int, int> const &offset) {
     return -1;  // invalid
 }
 
-static inline void cs_clamp_inside(int pxy, int *nx, int *ny) {
+static inline void cs_clamp_inside(int pxy, int* nx, int* ny) {
   if (*nx < 0)
     *nx = 0;
   else if (*nx >= pxy)
@@ -297,8 +353,8 @@ static inline void cs_clamp_inside(int pxy, int *nx, int *ny) {
 
 static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
                                              int pos /*0..k-1*/,
-                                             const CSEdge *emap, int *out_rx,
-                                             int *out_ry) {
+                                             const CSEdge* emap, int* out_rx,
+                                             int* out_ry) {
   // Map along-edge index into neighbor face border
   int pos2 = pos;
   if (emap->rev) {
@@ -329,7 +385,7 @@ static inline void cs_edge_map_into_neighbor(int pxy, int leaving_side,
   }
 }
 
-void CubedSphereLayoutImpl::reset() {
+void CubedSphereLayoutImpl::_initialize() {
   // build the ranks
   TORCH_CHECK(options->pz() == 1,
               "CubedSphereLayoutImpl: pz must be 1 for cubed-sphere layout");
@@ -345,10 +401,10 @@ void CubedSphereLayoutImpl::reset() {
   build_rank_of2(pxy(), pxy(), _coords2.data(), _rankof.data());
 
   // build backend
-  _init_backend();
+  _init_process_group();
 }
 
-void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
+void CubedSphereLayoutImpl::pretty_print(std::ostream& os) const {
   options->report(os);
   for (int f = 0; f < 6; ++f) {
     os << " Rank | (rx,ry;f)\n";
@@ -362,8 +418,8 @@ void CubedSphereLayoutImpl::pretty_print(std::ostream &os) const {
 }
 
 void CubedSphereLayoutImpl::_step_one(int face, int rx, int ry, int dx, int dy,
-                                      int *out_face, int *out_rx,
-                                      int *out_ry) const {
+                                      int* out_face, int* out_rx,
+                                      int* out_ry) const {
   /* Try to stay on-face */
   int nx = rx + dx;
   int ny = ry + dy;
@@ -401,7 +457,7 @@ int CubedSphereLayoutImpl::rank_of(std::tuple<int, int, int> iloc) const {
   auto [rx, ry, face] = iloc;
   if (face < 0 || face >= 6) return -1;
   if (rx < 0 || rx >= pxy() || ry < 0 || ry >= pxy()) return -1;
-  return _rankof[ry * pxy() + rx];
+  return _global_rank_from_face_local(face, _rankof[ry * pxy() + rx]);
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::loc_of(int global_rank) const {
@@ -465,8 +521,8 @@ int CubedSphereLayoutImpl::neighbor_rank(
   }
 }
 
-void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
-                                      SyncOptions const &opts) {
+void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
+                                      SyncOptions const& opts) {
   if (options->verbose()) {
     SINFO(CubedSphereLayout) << "serializing data into send buffers\n";
   }
@@ -503,12 +559,12 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         // Copy data from mesh to send buffer
         int bid = get_buffer_id(offset);
 
-        send_bufs[bid].clear();
-        recv_bufs[bid].clear();
-        send_bufs[bid].reserve(vars.size());
-        recv_bufs[bid].reserve(vars.size());
+        pmb->send_bufs[bid].clear();
+        pmb->recv_bufs[bid].clear();
+        pmb->send_bufs[bid].reserve(vars.size());
+        pmb->recv_bufs[bid].reserve(vars.size());
 
-        for (auto &[name, var] : vars) {
+        for (auto& [name, var] : vars) {
           // do partial send if name string contains ':'
           auto pos = name.find(":");
           if (pos != std::string::npos) {
@@ -517,8 +573,9 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
                 (suffix == "-" && (dy > 0 || dx > 0)))
               continue;
           }
-          send_bufs[bid].push_back(var.index(sub).clone());
-          recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
+          pmb->send_bufs[bid].push_back(var.index(sub).clone());
+          pmb->recv_bufs[bid].push_back(
+              torch::empty_like(pmb->send_bufs[bid].back()));
         }
       }
   }
@@ -573,10 +630,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
 
-      send_bufs[bid].clear();
-      recv_bufs[bid].clear();
-      send_bufs[bid].reserve(vars.size());
-      recv_bufs[bid].reserve(vars.size());
+      pmb->send_bufs[bid].clear();
+      pmb->recv_bufs[bid].clear();
+      pmb->send_bufs[bid].reserve(vars.size());
+      pmb->recv_bufs[bid].reserve(vars.size());
 
       int my_side = get_side(offset);
       int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
@@ -588,7 +645,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
       auto alpha = mesh[1].index(sub3);
       auto beta = mesh[0].index(sub3);
 
-      for (auto &[name, var] : vars) {
+      for (auto& [name, var] : vars) {
         // do partial send if name string contains ':'
         auto pos = name.find(":");
         if (pos != std::string::npos) {
@@ -604,10 +661,10 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
         switch (opts.type()) {
           case kConserved:
             coord_vec_raise_(vel, cosine_cell.index(sub3));
-            cs_contra_to_cart_(vel, alpha, beta);
+            cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
             break;
           case kPrimitive:
-            cs_contra_to_cart_(vel, alpha, beta);
+            cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
             break;
         }
 
@@ -635,22 +692,23 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const *pmb, Variables &vars,
           var_send = var_send.transpose(-2, -3).reshape(sizes);
         }
 
-        send_bufs[bid].push_back(var_send);
-        recv_bufs[bid].push_back(torch::empty_like(send_bufs[bid].back()));
+        pmb->send_bufs[bid].push_back(var_send);
+        pmb->recv_bufs[bid].push_back(
+            torch::empty_like(pmb->send_bufs[bid].back()));
       }
     }
 
-  _sync_device();
+  comm->sync_stream();
 }
 
-void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
-                                        Variables &vars,
-                                        SyncOptions const &opts) const {
+void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
+                                        Variables& vars,
+                                        SyncOptions const& opts) const {
   if (options->verbose()) {
     SINFO(CubedSphereLayout) << "deserializing data from receive buffers\n";
   }
 
-  _sync_device();
+  comm->sync_device();
 
   auto pcoord = pmb->pcoord;
 
@@ -683,7 +741,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         // Copy data from receive buffer to mesh ghost zones
         int bid = get_buffer_id(offset);
         int count = 0;
-        for (auto &[name, var] : vars) {
+        for (auto& [name, var] : vars) {
           // do partial recv if name string contains ':'
           auto pos = name.find(":");
           if (pos != std::string::npos) {
@@ -692,7 +750,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
                 (suffix == "-" && (dy < 0 || dx < 0)))
               continue;
           }
-          var.index_put_(sub, recv_bufs[bid][count++]);
+          var.index_put_(sub, pmb->recv_bufs[bid][count++]);
         }
       }
   }
@@ -750,7 +808,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
       // Copy data from receive buffer to mesh ghost zones
       int bid = get_buffer_id(offset);
       int count = 0;
-      for (auto &[name, var] : vars) {
+      for (auto& [name, var] : vars) {
         // do partial recv if name string contains ':'
         auto pos = name.find(":");
         if (pos != std::string::npos) {
@@ -760,7 +818,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
             continue;
         }
 
-        var.index_put_(sub, recv_bufs[bid][count++]);
+        var.index_put_(sub, pmb->recv_bufs[bid][count++]);
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
@@ -768,27 +826,24 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const *pmb,
         auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
           case kConserved:
-            cs_cart_to_contra_(vel, alpha, beta);
+            cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
             coord_vec_lower_(vel, cosine_cell.index(sub3));
             break;
           case kPrimitive:
-            cs_cart_to_contra_(vel, alpha, beta);
+            cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
             break;
         }
       }
     }
 }
 
-void CubedSphereLayoutImpl::forward(
-    MeshBlockImpl const *pmb, Variables &vars, SyncOptions const &opts,
-    std::vector<c10::intrusive_ptr<c10d::Work>> &works) {
+void CubedSphereLayoutImpl::exchange_remote(
+    MeshBlockImpl const* pmb, SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
   TORCH_CHECK(!options->no_backend(),
-              "[CubedSphereLayout:forward] backend is disabled");
+              "[CubedSphereLayout:exchange_remote] backend is disabled");
   TORCH_CHECK(pmb != nullptr,
-              "[CubedSphereLayout:forward] MeshBlock pointer is null");
-
-  // Serialize data into send buffers
-  serialize(pmb, vars, opts);
+              "[CubedSphereLayout:exchange_remote] MeshBlock pointer is null");
 
   if (options->verbose()) {
     SINFO(CubedSphereLayout) << "performing communication\n";
@@ -805,7 +860,20 @@ void CubedSphereLayoutImpl::forward(
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
 
-  _group_start();
+  std::lock_guard<std::mutex> lock(g_cubed_sphere_comm_mutex);
+  comm->group_start();
+
+  struct RemoteExchangeOp {
+    int remote_process;
+    int buffer_id;
+    int send_tag;
+    int recv_tag;
+    int local_block;
+    int remote_local_block;
+    std::tuple<int, int, int> offset;
+    std::tuple<int, int, int> remote_offset;
+  };
+  std::vector<RemoteExchangeOp> remote_ops;
 
   for (int dy = dy_min; dy <= dy_max; ++dy)
     for (int dx = dx_min; dx <= dx_max; ++dx) {
@@ -818,26 +886,73 @@ void CubedSphereLayoutImpl::forward(
       if (nb < 0) continue;  // no neighbor
 
       int r = get_buffer_id(offset);
+      int remote_process = options->owner_process_rank(nb);
+      bool is_remote = remote_process != options->process_rank();
 
-      if (nb != rank) {  // different ranks
-        // rank-based ordering
-        if (rank < nb) {
-          works.push_back(pg->send(send_bufs[r], nb, opts.phyid()));
-          works.push_back(pg->recv(recv_bufs[r], nb, opts.phyid()));
-        } else {
-          works.push_back(pg->recv(recv_bufs[r], nb, opts.phyid()));
-          works.push_back(pg->send(send_bufs[r], nb, opts.phyid()));
-        }
-      } else {  // self-send
+      if (is_remote) {
+        int remote_local_block = options->local_block_index(nb);
+        int local_block = options->local_block_index(rank);
+        auto remote_offset = find_peer_offset(*this, nb, rank);
+        int send_tag =
+            make_comm_tag(remote_local_block, remote_offset, opts.phyid());
+        int recv_tag = make_comm_tag(local_block, offset, opts.phyid());
+        remote_ops.push_back({remote_process, r, send_tag, recv_tag,
+                              local_block, remote_local_block, offset,
+                              remote_offset});
+      } else if (nb == rank) {  // self-send
         TORCH_CHECK(false, "I should not be here");
       }
     }
 
-  _group_end();
+  if (options->backend() == "nccl") {
+    std::sort(remote_ops.begin(), remote_ops.end(),
+              [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
+                return make_remote_order_key(
+                           options->process_rank(), lhs.remote_process,
+                           lhs.local_block, lhs.remote_local_block, lhs.offset,
+                           lhs.remote_offset, opts) <
+                       make_remote_order_key(
+                           options->process_rank(), rhs.remote_process,
+                           rhs.local_block, rhs.remote_local_block, rhs.offset,
+                           rhs.remote_offset, opts);
+              });
+
+    for (auto const& op : remote_ops) {
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
+    }
+    for (auto const& op : remote_ops) {
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
+    }
+  } else {
+    for (auto const& op : remote_ops) {
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
+    }
+  }
+
+  comm->group_end();
+}
+
+std::tuple<int, int, int> CubedSphereLayoutImpl::_remap_exchange_offset(
+    std::tuple<int, int, int> iloc, int dy, int dx) const {
+  (void)iloc;
+  return {dy, dx, 0};
+}
+
+std::tuple<int, int, int> CubedSphereLayoutImpl::_peer_exchange_offset(
+    int peer_rank, int target_rank, SyncOptions const& opts,
+    std::tuple<int, int, int> offset) const {
+  (void)opts;
+  (void)offset;
+  return find_peer_offset(*this, peer_rank, target_rank);
 }
 
 void CubedSphereLayoutImpl::_interpolate_to_local(
-    MeshBlockImpl const *pmb, std::tuple<int, int, int> offset,
+    MeshBlockImpl const* pmb, std::tuple<int, int, int> offset,
     torch::Tensor var) const {
   // my coordinates
   auto pcoord = pmb->pcoord;

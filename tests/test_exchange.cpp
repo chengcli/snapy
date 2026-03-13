@@ -1,169 +1,210 @@
 // C/C++
-#include <cstdio>
+#include <cstdlib>
+#include <future>
+#include <iostream>
 
-// yaml
-#include <yaml-cpp/yaml.h>
+// base
+#include <configure.h>
+
+// torch
+#ifdef USE_C10D_NCCL
+#include <c10/cuda/CUDAFunctions.h>
+#endif
 
 // snap
-#include <snap/coord/cubed_sphere_utils.hpp>
-#include <snap/coord/spherical_utils.hpp>
-#include <snap/mesh/meshblock.hpp>
+#include <snap/layout/cubed_sphere_layout.hpp>
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
-// u = cos(lat)
-void set_zonal_velocity(MeshBlock pmb, torch::Tensor const& hydro_w) {
-  auto pcoord = pmb->pcoord;
-  auto playout = pmb->get_layout();
+namespace {
 
-  int r = get_rank();
-  auto [rx, ry, face_id] = playout->loc_of(r);
-  auto face = CS_FACE_NAMES[face_id];
+constexpr std::tuple<int, int, int> kCardinalOffsets[] = {
+    {-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}};
 
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto alpha = mesh[1];
-  auto beta = mesh[0];
-  auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
-
-  // hydro_w[IVZ] = lat.cos();
-  hydro_w[IVY] = lat.cos();
-
-  sph_contra_to_cart_(hydro_w.narrow(0, IVX, 3), M_PI / 2. - lat, lon);
-  cs_cart_to_contra_(hydro_w.narrow(0, IVX, 3), alpha, beta);
+int parse_env_int(char const* name, int fallback) {
+  char const* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') return fallback;
+  return std::stoi(value);
 }
 
-int main(int argc, char** argv) {
-  auto op = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
-  auto block = MeshBlock(op);
+bool parse_env_bool(char const* name, bool fallback) {
+  char const* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') return fallback;
+  return std::stoi(value) != 0;
+}
 
-  auto device = torch::kCPU;
-  // if (torch::cuda::is_available()) {
-  //  std::cout << "Running on CUDA" << std::endl;
-  //   device = torch::kCUDA;
-  // }
+double side_payload(int side) {
+  constexpr double kValues[] = {0.125, 0.250, 0.375, 0.500};
+  return kValues[side];
+}
 
+int offset_to_side(std::tuple<int, int, int> const& offset) {
+  auto [dy, dx, _] = offset;
+  if (dy == 0 && dx == -1) return SIDE_L;
+  if (dy == 0 && dx == 1) return SIDE_R;
+  if (dy == -1 && dx == 0) return SIDE_B;
+  if (dy == 1 && dx == 0) return SIDE_T;
+  return -1;
+}
+
+int source_side(Layout const& layout, std::tuple<int, int, int> const& iloc,
+                std::tuple<int, int, int> const& offset, int nb) {
+  auto face = std::get<2>(iloc);
+  auto nb_face = std::get<2>(layout->loc_of(nb));
+  int my_side = offset_to_side(offset);
+  TORCH_CHECK(my_side >= 0, "invalid offset");
+
+  if (face == nb_face) {
+    return offset_to_side(std::tuple<int, int, int>(-std::get<0>(offset),
+                                                    -std::get<1>(offset), 0));
+  }
+
+  return CS_FACE_EDGES[face][my_side].nside;
+}
+
+torch::Device select_device(LayoutOptions const& layout) {
+  auto device = torch::Device(torch::kCPU);
+  if (layout->backend() == "nccl") {
+    TORCH_CHECK(torch::cuda::is_available(),
+                "CUDA is required for backend=nccl");
+    int device_index = layout->device_id();
+    if (device_index < 0) device_index = layout->local_rank();
+#ifdef USE_C10D_NCCL
+    c10::cuda::set_device(device_index);
+#endif
+    device = torch::Device(torch::kCUDA, device_index);
+  }
+  return device;
+}
+
+void seed_hydro_state(MeshBlock block, Variables& vars, torch::Device device) {
   auto pcoord = block->pcoord;
-
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
   int nc3 = pcoord->options->nc3();
-  int nghost = pcoord->options->nghost();
+  int rank = block->options->layout()->rank();
 
-  auto w = torch::zeros(
+  auto hydro_w = torch::zeros(
       {5, nc3, nc2, nc1},
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
-  int r = block->options->layout()->rank();
-
-  if (r == 0) {
-    block->named_modules()["layout"]->pretty_print(std::cout);
-  }
-
-  auto [rx, ry, face] = block->get_layout()->loc_of(r);
 
   auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
-  auto left = block->part({-1, 0, 0}, PartOptions().exterior(false));
-  auto right = block->part({1, 0, 0}, PartOptions().exterior(false));
-  auto bot = block->part({0, -1, 0}, PartOptions().exterior(false));
-  auto top = block->part({0, 1, 0}, PartOptions().exterior(false));
+  hydro_w.index(interior)[IDN].fill_(rank + 1.0);
+  hydro_w.index(interior)[IPR].fill_(10.0 + rank);
 
-  w.index(interior)[IDN] = r + 1.0;
-  w.index(interior)[IPR] = r + 1.0;
-
-  // set up internal density as <face>.0 + <side> * 0.1
-  // for cells within nghost zones
-  w.index(interior)[IDN] = r + 1.0;
-  w.index(left)[IDN] += 0.1 * 1;
-  w.index(right)[IDN] += 0.1 * 2;
-  w.index(bot)[IDN] += 0.1 * 3;
-  w.index(top)[IDN] += 0.1 * 6;
-
-  auto wleft = w.index(left)[IDN];
-  for (int k = 0; k < wleft.size(0); ++k)
-    for (int j = 0; j < wleft.size(1); ++j)
-      for (int i = 0; i < wleft.size(2); ++i) {
-        wleft.index({k, j, i}) += 0.01 * j;
-        wleft.index({k, j, i}) += 0.001 * k;
-      }
-
-  auto wright = w.index(right)[IDN];
-  for (int k = 0; k < wright.size(0); ++k)
-    for (int j = 0; j < wright.size(1); ++j)
-      for (int i = 0; i < wright.size(2); ++i) {
-        wright.index({k, j, i}) += 0.01 * (wright.size(1) - 1 - j);
-        wright.index({k, j, i}) += 0.001 * (wright.size(0) - 1 - k);
-      }
-
-  auto wbot = w.index(bot)[IDN];
-  for (int k = 0; k < wbot.size(0); ++k)
-    for (int j = 0; j < wbot.size(1); ++j)
-      for (int i = 0; i < wbot.size(2); ++i) {
-        wbot.index({k, j, i}) += 0.01 * k;
-        wbot.index({k, j, i}) += 0.001 * j;
-      }
-
-  auto wtop = w.index(top)[IDN];
-  for (int k = 0; k < wtop.size(0); ++k)
-    for (int j = 0; j < wtop.size(1); ++j)
-      for (int i = 0; i < wtop.size(2); ++i) {
-        wtop.index({k, j, i}) += 0.01 * (wtop.size(0) - 1 - k);
-        wtop.index({k, j, i}) += 0.001 * (wtop.size(1) - 1 - j);
-      }
-
-  std::map<std::string, torch::Tensor> vars;
-  vars["hydro_w"] = w;
-  set_zonal_velocity(block, vars["hydro_w"]);
-
-  block->initialize(vars);
-  block->get_layout()->pg->barrier()->wait();
-
-  auto w_left = -get_rank() * torch::ones_like(vars["hydro_w"]);
-  auto w_right = get_rank() * torch::ones_like(vars["hydro_w"]);
-
-  SyncOptions sync_opts;
-  sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
-
-  Variables send_vars;
-  send_vars["hydro_wl:+"] = w_left;
-  send_vars["hydro_wr:-"] = w_right;
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  auto playout = block->get_layout();
-
-  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
-                   works);
-  playout->forward(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
-                   works);
-
-  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM2),
-                    works);
-  playout->finalize(block.get(), send_vars, sync_opts.dim(SyncOptions::DIM3),
-                    works);
-
-  for (int i = 0; i < block->options->layout()->world_size(); ++i) {
-    if (i == r) {
-      std::cout << fmt::format("rx = {}, ry = {}, face = {}, rank = {}", rx, ry,
-                               face, r)
-                << std::endl;
-      std::cout << "hydro_w[IDN] = \n"
-                << vars["hydro_w"][IDN].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVX] = \n"
-                << vars["hydro_w"][IVX].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVY] = \n"
-                << vars["hydro_w"][IVY].squeeze().flip(0) << std::endl;
-      std::cout << "hydro_w[IVZ] = \n"
-                << vars["hydro_w"][IVZ].squeeze().flip(0) << std::endl;
-
-      std::cout << std::endl
-                << "w_left[IDN] = \n"
-                << w_left[IDN].squeeze().flip(0) << std::endl;
-      std::cout << std::endl
-                << "w_right[IDN] = \n"
-                << w_right[IDN].squeeze().flip(0) << std::endl;
-    }
-    block->get_layout()->pg->barrier()->wait();
+  for (auto offset : kCardinalOffsets) {
+    int side = offset_to_side(offset);
+    auto part = block->part(offset, PartOptions().exterior(false));
+    hydro_w.index(part)[IDN].fill_(rank + 1.0 + side_payload(side));
+    hydro_w.index(part)[IPR].fill_(100.0 + 10.0 * rank + side);
   }
 
-  block->make_outputs(vars, 0.);
+  vars["hydro_w"] = hydro_w;
+}
+
+bool ghosts_match_expected(MeshBlock block, Variables const& vars,
+                           bool& saw_local_neighbor,
+                           bool& saw_remote_neighbor) {
+  auto layout = block->get_layout();
+  auto rank = layout->options->rank();
+  auto iloc = layout->loc_of(rank);
+  auto const& hydro_w = vars.at("hydro_w");
+
+  if (!torch::isfinite(hydro_w).all().item<bool>()) return false;
+
+  for (auto offset : kCardinalOffsets) {
+    int nb = layout->neighbor_rank(iloc, offset);
+    if (nb < 0) continue;
+
+    auto ghost = block->part(offset, PartOptions().exterior(true));
+    auto ghost_idn = hydro_w.index(ghost)[IDN];
+    int side = source_side(layout, iloc, offset, nb);
+    double expected_max = nb + 1.0 + side_payload(side);
+    double min_allowed = nb + 1.0 + side_payload(SIDE_L);
+    double actual_min = ghost_idn.min().item<double>();
+    double actual_max = ghost_idn.max().item<double>();
+    bool contains_expected =
+        torch::isclose(ghost_idn, torch::full_like(ghost_idn, expected_max))
+            .any()
+            .item<bool>();
+
+    if (actual_min < min_allowed || actual_max > expected_max ||
+        !contains_expected) {
+      std::cerr << "ghost mismatch on rank " << rank << " offset=("
+                << std::get<0>(offset) << "," << std::get<1>(offset)
+                << ") expected_max " << expected_max
+                << " actual_min=" << actual_min << " actual_max=" << actual_max
+                << " contains_expected=" << contains_expected << std::endl;
+      return false;
+    }
+
+    if (layout->options->owner_process_rank(nb) ==
+        layout->options->process_rank()) {
+      saw_local_neighbor = true;
+    } else {
+      saw_remote_neighbor = true;
+    }
+  }
+
+  return true;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  auto block_opts = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
+  auto mesh_opts = MeshOptionsImpl::create();
+  mesh_opts->block(block_opts);
+  mesh_opts->blocks_per_process(parse_env_int("BLOCKS_PER_PROCESS", 3));
+
+  auto device = select_device(block_opts->layout());
+  auto mesh = Mesh(mesh_opts);
+  if (device.is_cuda()) {
+    mesh->to(device);
+  }
+
+  MeshVariables vars(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    seed_hydro_state(mesh->blocks[i], vars[i], device);
+  }
+
+  SyncOptions opts;
+  opts.interpolate(false).type(kPrimitive);
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      Variables sync_vars;
+      sync_vars["hydro_w"] = vars[i].at("hydro_w");
+      mesh->blocks[i]->exchange(sync_vars, opts);
+    }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
+  mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
+
+  bool ok = true;
+  bool saw_local_neighbor = false;
+  bool saw_remote_neighbor = false;
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    ok = ok && ghosts_match_expected(mesh->blocks[i], vars[i],
+                                     saw_local_neighbor, saw_remote_neighbor);
+  }
+
+  bool expect_local = parse_env_bool("EXPECT_LOCAL_NEIGHBOR", true);
+  bool expect_remote = parse_env_bool("EXPECT_REMOTE_NEIGHBOR", true);
+  ok = ok && (saw_local_neighbor == expect_local);
+  ok = ok && (saw_remote_neighbor == expect_remote);
+
+  mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
+
+  if (!ok) {
+    std::cerr << "cubed-sphere exchange regression failed on process "
+              << block_opts->layout()->process_rank() << std::endl;
+    return 1;
+  }
 
   return 0;
 }

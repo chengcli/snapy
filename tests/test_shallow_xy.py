@@ -15,6 +15,6 @@ rho2 = data2["rho"][-1, :, :, 0]
 diff = sqrt(sum((rho2 - rho1) * (rho2 - rho1)))
 
 if diff < 50.0:
-    print("### 2D shallow-splash test passed. ###")
+    print("### 2D shallow-xy test passed. ###")
 else:
-    raise ValueError("ERROR: 2D shallow-splash test failed. L2-norm is %.2g" % diff)
+    raise ValueError("ERROR: 2D shallow-xy test failed. L2-norm is %.2g" % diff)

@@ -26,20 +26,19 @@ extern const CSVel CS_L2G_VEL[6][3];
 //! Given CS_G2L_VEL, populate CS_L2G_VEL
 void populate_cs_l2g_vel(CSVel l2g[6][3]);
 
-class CubedSphereLayoutImpl
-    : public torch::nn::Cloneable<CubedSphereLayoutImpl>,
-      public LayoutImpl {
+class CubedSphereLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   CubedSphereLayoutImpl() = default;
-  CubedSphereLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  CubedSphereLayoutImpl(const LayoutOptions& opts,
+                        MeshBlockImpl* owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("cubed-sphere");
-    reset();
+    _initialize();
   }
-  void reset() override;
 
   ~CubedSphereLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream& os) const;
 
   int pxy() const { return options->px(); }
 
@@ -49,28 +48,28 @@ class CubedSphereLayoutImpl
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
 
-  void serialize(MeshBlockImpl const *pmb, Variables &vars,
-                 SyncOptions const &opts) override;
+  void serialize(MeshBlockImpl const* pmb, Variables& vars,
+                 SyncOptions const& opts) override;
 
-  void deserialize(MeshBlockImpl const *pmb, Variables &vars,
-                   SyncOptions const &opts) const override;
+  void deserialize(MeshBlockImpl const* pmb, Variables& vars,
+                   SyncOptions const& opts) const override;
 
-  //! \brief Perform ghost zone exchange
-  /*!
-   * Needs specialization because cubed sphere layout will not have
-   * two ranks execute exchange two along sides, which is possible in slab
-   * layout with periodic boundary and with exactly two meshblocks
-   * next to each other.
-   * Therefore, send_id and recv_id do not need special treatment.
-   * Infact, calculating a matching send_id and recv_id is challenging.
-   */
-  void forward(MeshBlockImpl const *pmb, Variables &vars,
-               SyncOptions const &opts,
-               std::vector<c10::intrusive_ptr<c10d::Work>> &works) override;
+  void exchange_remote(
+      MeshBlockImpl const* pmb, SyncOptions const& opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>>& works) override;
+  int num_exchange_buffers() const override { return 9; }
 
  private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
+  void _initialize();
+  std::tuple<int, int, int> _remap_exchange_offset(
+      std::tuple<int, int, int> iloc, int dy, int dx) const override;
+  std::tuple<int, int, int> _peer_exchange_offset(
+      int peer_rank, int target_rank, SyncOptions const& opts,
+      std::tuple<int, int, int> offset) const override;
+
   //! \brief Interpolate transmitted variable to local ghost zones
-  void _interpolate_to_local(MeshBlockImpl const *pmb,
+  void _interpolate_to_local(MeshBlockImpl const* pmb,
                              std::tuple<int, int, int> offset,
                              torch::Tensor var) const;
 
@@ -81,7 +80,7 @@ class CubedSphereLayoutImpl
   }
 
   //! \brief Reverse: get (face, r_local) from global rank */
-  void _global_rank_to_face_local(int grank, int *face, int *r_local) const {
+  void _global_rank_to_face_local(int grank, int* face, int* r_local) const {
     int P = pxy() * pxy();
     *face = grank / P;
     *r_local = grank % P;
@@ -109,9 +108,8 @@ class CubedSphereLayoutImpl
    *    and second step outside. This mirrors typical ghost-corner
    *    exchange.
    */
-  void _step_one(int face, int rx, int ry, int dx, int dy, int *out_face,
-                 int *out_rx, int *out_ry) const;
+  void _step_one(int face, int rx, int ry, int dx, int dy, int* out_face,
+                 int* out_rx, int* out_ry) const;
 };
-TORCH_MODULE(CubedSphereLayout);
 
 }  // namespace snap

@@ -27,10 +27,9 @@ file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 foreach(input ${inputs})
-  execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${inp})
+  get_filename_component(input_name ${input} NAME)
+  execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${input_name})
 endforeach()
-
-setup_parallel_test(test_exchange 6)
 
 # ============= #
 # Example Tests #
@@ -39,7 +38,7 @@ add_test(
   NAME test_straka
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_test.cmake
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka.cmake
 )
 
 set_tests_properties(test_straka PROPERTIES
@@ -61,9 +60,103 @@ add_test(
   NAME test_shallow_splash
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_test.cmake
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash.cmake
 )
 
 set_tests_properties(test_shallow_splash PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
+
+if (DEFINED FULL_TESTS)
+  setup_parallel_test(test_exchange 2)
+  setup_parallel_test(test_mesh_multi_block 2)
+
+  set_tests_properties(test_exchange.release PROPERTIES
+    ENVIRONMENT
+      "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
+  )
+
+  add_test(
+    NAME test_exchange_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_exchange_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+  )
+
+  set_tests_properties(test_exchange_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    PROCESSORS 6
+    RUN_SERIAL TRUE
+    TIMEOUT 1200
+    LABELS "decomp;gloo"
+  )
+
+  add_test(
+    NAME test_straka_nccl_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_nccl_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+  )
+
+  set_tests_properties(test_straka_nccl_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    SKIP_RETURN_CODE 125
+    PROCESSORS 2
+    RUN_SERIAL TRUE
+    TIMEOUT 2400
+    LABELS "gpu;nccl;long"
+  )
+
+  add_test(
+    NAME test_shallow_xy_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+  )
+
+  set_tests_properties(test_shallow_xy_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    PROCESSORS 4
+    RUN_SERIAL TRUE
+    TIMEOUT 1200
+    LABELS "decomp;gloo"
+  )
+
+  add_test(
+    NAME test_shallow_splash_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+            --backend gloo
+  )
+
+  set_tests_properties(test_shallow_splash_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    PROCESSORS 6
+    RUN_SERIAL TRUE
+    TIMEOUT 2400
+    LABELS "decomp;gloo"
+  )
+
+  add_test(
+    NAME test_shallow_splash_nccl_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+            --backend nccl
+  )
+
+  set_tests_properties(test_shallow_splash_nccl_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    SKIP_RETURN_CODE 125
+    PROCESSORS 2
+    RUN_SERIAL TRUE
+    TIMEOUT 2400
+    LABELS "gpu;nccl;long"
+  )
+endif()

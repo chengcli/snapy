@@ -1,234 +1,126 @@
-"""
-Stub file for snapy.mesh module
-"""
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, overload
 
-from typing import Callable, Dict, List, Optional, Tuple, overload
 import torch
+
 from .hydro import HydroOptions
-from .layout import LayoutOptions
+from .layout import Layout, LayoutOptions
 
-
-# Type aliases
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
+Variables = Dict[str, torch.Tensor]
+MeshVariables = List[Variables]
 
-# MeshBlock
+
 class ScalarOptions:
-    """Scalar transport options (placeholder)."""
     pass
 
+
 class MeshBlockOptions:
-    """
-    Mesh block configuration options.
-
-    This class manages mesh block parameters.
-    """
-
-    def __init__(self) -> None:
-        """Initialize MeshBlockOptions with default values."""
-        ...
-
+    def __init__(self) -> None: ...
     def __repr__(self) -> str: ...
 
     @staticmethod
-    def from_yaml(filename: str, verbose: bool = False) -> "MeshBlockOptions":
-        """
-        Load MeshBlockOptions from a YAML file.
+    def from_yaml(filename: str, verbose: bool = False) -> "MeshBlockOptions": ...
 
-        Args:
-            filename: Path to YAML file
-            verbose: Enable verbose output
-
-        Returns:
-            MeshBlockOptions loaded from file
-        """
-        ...
-
-    def set_bfunc(
-        self,
-        dx3: int,
-        dx2: int,
-        dx1: int,
-        func: bcfunc_t
-    ) -> None:
-        """
-        Set boundary function for a specific face.
-
-        Args:
-            dx3: Direction in x3 (-1, 0, or 1)
-            dx2: Direction in x2 (-1, 0, or 1)
-            dx1: Direction in x1 (-1, 0, or 1)
-            func: Boundary function or None
-        """
-        ...
+    def set_bfunc(self, dx3: int, dx2: int, dx1: int, func: bcfunc_t) -> None: ...
 
     @overload
-    def intg(self):  # IntegratorOptions
-        """Get integrator options."""
-        ...
+    def verbose(self) -> bool: ...
+    @overload
+    def verbose(self, value: bool) -> "MeshBlockOptions": ...
 
     @overload
-    def intg(self, value) -> "MeshBlockOptions":  # IntegratorOptions
-        """Set integrator options."""
-        ...
+    def basename(self) -> str: ...
+    @overload
+    def basename(self, value: str) -> "MeshBlockOptions": ...
 
     @overload
-    def coord(self):  # CoordinateOptions
-        """Get coordinate options."""
-        ...
+    def output_dir(self) -> str: ...
+    @overload
+    def output_dir(self, value: str) -> "MeshBlockOptions": ...
 
     @overload
-    def coord(self, value) -> "MeshBlockOptions":  # CoordinateOptions
-        """Set coordinate options."""
-        ...
+    def outputs(self): ...
+    @overload
+    def outputs(self, value) -> "MeshBlockOptions": ...
 
     @overload
-    def hydro(self) -> HydroOptions:
-        """Get hydro options."""
-        ...
+    def intg(self): ...
+    @overload
+    def intg(self, value) -> "MeshBlockOptions": ...
 
     @overload
-    def hydro(self, value: HydroOptions) -> "MeshBlockOptions":
-        """Set hydro options."""
-        ...
+    def coord(self): ...
+    @overload
+    def coord(self, value) -> "MeshBlockOptions": ...
 
     @overload
-    def scalar(self) -> ScalarOptions:
-        """Get scalar options."""
-        ...
+    def hydro(self) -> HydroOptions: ...
+    @overload
+    def hydro(self, value: HydroOptions) -> "MeshBlockOptions": ...
 
     @overload
-    def scalar(self, value: ScalarOptions) -> "MeshBlockOptions":
-        """Set scalar options."""
-        ...
+    def scalar(self) -> ScalarOptions: ...
+    @overload
+    def scalar(self, value: ScalarOptions) -> "MeshBlockOptions": ...
 
     @overload
-    def ib(self):  # InternalBoundaryOptions
-        """Get internal boundary options."""
-        ...
+    def ib(self): ...
+    @overload
+    def ib(self, value) -> "MeshBlockOptions": ...
 
     @overload
-    def ib(self, value) -> "MeshBlockOptions":  # InternalBoundaryOptions
-        """Set internal boundary options."""
-        ...
+    def bfuncs(self) -> List[bcfunc_t]: ...
+    @overload
+    def bfuncs(self, value: List[bcfunc_t]) -> "MeshBlockOptions": ...
 
     @overload
-    def bfuncs(self) -> List[bcfunc_t]:
-        """Get boundary functions."""
-        ...
+    def layout(self) -> LayoutOptions: ...
+    @overload
+    def layout(self, value: LayoutOptions) -> "MeshBlockOptions": ...
+
+
+class MeshOptions:
+    def __init__(self) -> None: ...
+    def __repr__(self) -> str: ...
 
     @overload
-    def bfuncs(self, value: List[bcfunc_t]) -> "MeshBlockOptions":
-        """Set boundary functions."""
-        ...
+    def block(self) -> MeshBlockOptions: ...
+    @overload
+    def block(self, value: MeshBlockOptions) -> "MeshOptions": ...
 
     @overload
-    def layout(self) -> LayoutOptions:
-        """Get layout options."""
-        ...
-
+    def blocks_per_process(self) -> int: ...
     @overload
-    def layout(self, value: LayoutOptions) -> "MeshBlockOptions":
-        """Set layout options."""
-        ...
+    def blocks_per_process(self, value: int) -> "MeshOptions": ...
+
 
 class MeshBlock:
-    """
-    Mesh block implementation.
-
-    This module represents a computational block in the domain.
-    """
-
     @overload
-    def __init__(self) -> None:
-        """Construct a new default module."""
-        ...
-
+    def __init__(self) -> None: ...
     @overload
-    def __init__(self, options: MeshBlockOptions) -> None:
-        """
-        Construct a MeshBlock module.
-
-        Args:
-            options: Mesh block configuration options
-        """
-        ...
-
-    def __repr__(self) -> str: ...
+    def __init__(self, options: MeshBlockOptions) -> None: ...
 
     options: MeshBlockOptions
 
-    def forward(
-        self,
-        vars: Dict[str, torch.Tensor]
-        dt: float,
-        stage: int,
-    ) -> Dict[str, torch.Tensor]:
-        """
-        Forward integration step.
+    def __repr__(self) -> str: ...
+    def module(self, name: str) -> torch.nn.Module: ...
+    def buffer(self, name: str) -> torch.Tensor: ...
+    def cycle(self) -> int: ...
+    def inc_cycle(self) -> int: ...
+    def set_user_output_func(self, func: Callable[[Variables], Variables]) -> None: ...
+    def get_layout(self) -> Layout: ...
 
-        Args:
-            vars: Dictionary of variable tensors
-            dt: Time step size
-            stage: Integration stage
-
-        Returns:
-            Updated variables dictionary
-        """
-        ...
-
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
-        ...
-
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
-        ...
-
-    def inc_cycle(self) -> int:
-        """
-        Increment and return the cycle number.
-
-        Returns:
-            Previous cycle number
-        """
-        ...
-
-    def set_user_output_func(self, func: Callable) -> None:
-        """
-        Set user output callback function.
-
-        Args:
-            func: User output function
-        """
-        ...
-
-    def max_time_step(self, vars: Dict[str, torch.Tensor]) -> float:
-        """
-        Calculate maximum stable time step.
-
-        Args:
-            vars: Dictionary of variable tensors
-
-        Returns:
-            Maximum stable time step
-        """
-        ...
-
-    def make_outputs(
-        self,
-        vars: Dict[str, torch.Tensor],
-        time: float,
-        final_write: bool = False
-    ) -> None:
-        """
-        Generate output files.
-
-        Args:
-            vars: Dictionary of variable tensors
-            time: Current simulation time
-            final_write: Whether this is a final write
-        """
-        ...
+    def forward(self, vars: Variables, dt: float, stage: int) -> None: ...
+    def advance_local(self, vars: Variables, dt: float, stage: int) -> None: ...
+    def max_time_step(self, vars: Variables) -> float: ...
+    def local_max_time_step(self, vars: Variables) -> float: ...
+    def make_outputs(self, vars: Variables, time: float, final_write: bool = False) -> None: ...
+    def print_cycle_info(self, vars: Variables, time: float, dt: float) -> None: ...
+    def finalize(self, vars: Variables, time: float) -> None: ...
+    def device(self) -> torch.device: ...
+    def check_redo(self, vars: Variables) -> int: ...
+    def get_outputs(self): ...
+    def exchange_ghost_zones(self, vars: Variables) -> None: ...
 
     def part(
         self,
@@ -236,57 +128,42 @@ class MeshBlock:
         exterior: bool = True,
         extend_x1: int = 0,
         extend_x2: int = 0,
-        extend_x3: int = 0
-    ) -> Tuple:
-        """
-        Get index slices for a mesh block part.
+        extend_x3: int = 0,
+    ) -> Tuple[slice, ...]: ...
 
-        Args:
-            offset: Index offset tuple
-            exterior: Whether to include exterior
-            extend_x1: Extension in x1 direction
-            extend_x2: Extension in x2 direction
-            extend_x3: Extension in x3 direction
+    def initialize(self, vars: Variables) -> Tuple[Variables, float]: ...
+    def initialize_from_restart(self, restart_file: str) -> Tuple[Variables, float]: ...
+    def initialize_local(self, vars: Variables) -> None: ...
+    def initialize_under_mesh(self, vars: Variables) -> None: ...
+    def finalize_initialization(self, vars: Variables) -> None: ...
+    def apply_hydro_bc(self, var: torch.Tensor, type: int = ...) -> None: ...
 
-        Returns:
-            Tuple of slice objects
-        """
-        ...
 
-    def initialize(self, vars) -> Tuple:
-        """
-        Initialize the mesh block.
+class Mesh:
+    @overload
+    def __init__(self) -> None: ...
+    @overload
+    def __init__(self, options: MeshOptions) -> None: ...
 
-        Args:
-            vars: Variables dictionary
+    @staticmethod
+    def from_yaml(filename: str, verbose: bool = False) -> "Mesh": ...
 
-        Returns:
-            Tuple of (vars, time)
-        """
-        ...
+    options: MeshOptions
+    blocks: Sequence[MeshBlock]
 
-    def print_cycle_info(self, *args) -> None:
-        """Print cycle information."""
-        ...
-
-    def finalize(self, *args) -> None:
-        """Finalize the mesh block."""
-        ...
-
-    def device(self) -> torch.device:
-        """
-        Get the device of the mesh block.
-
-        Returns:
-            PyTorch device
-        """
-        ...
-
-    def check_redo(self, *args) -> bool:
-        """
-        Check if step needs to be redone.
-
-        Returns:
-            True if redo is needed
-        """
-        ...
+    def __repr__(self) -> str: ...
+    def module(self, name: str) -> torch.nn.Module: ...
+    def buffer(self, name: str) -> torch.Tensor: ...
+    def forward(self, vars: MeshVariables, dt: float, stage: int) -> None: ...
+    def initialize(
+        self, vars: MeshVariables, restart_files: Sequence[str] = ...
+    ) -> Tuple[MeshVariables, float]: ...
+    def device(self) -> torch.device: ...
+    def max_time_step(self, vars: MeshVariables) -> float: ...
+    def make_outputs(
+        self, vars: MeshVariables, current_time: float, final_write: bool = False
+    ) -> None: ...
+    def print_cycle_info(self, vars: MeshVariables, time: float, dt: float) -> None: ...
+    def check_redo(self, vars: MeshVariables) -> int: ...
+    def set_cycle(self, cycle: int) -> None: ...
+    def finalize(self, vars: MeshVariables, time: float) -> None: ...

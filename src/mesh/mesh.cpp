@@ -1,0 +1,332 @@
+// C/C++
+#include <algorithm>
+#include <future>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+
+// yaml
+#include <yaml-cpp/yaml.h>
+
+// snap
+#include <snap/mesh/mesh.hpp>
+#include <snap/utils/log.hpp>
+#include <snap/utils/signal_handler.hpp>
+
+namespace snap {
+
+namespace {
+MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
+  auto dst = std::make_shared<MeshBlockOptionsImpl>(*src);
+  auto layout = std::make_shared<LayoutOptionsImpl>(*src->layout());
+  dst->layout(layout);
+  if (src->coord() != nullptr) {
+    dst->coord(src->coord()->clone());
+  }
+  return dst;
+}
+}  // namespace
+
+MeshOptions MeshOptionsImpl::from_yaml(std::string input_file, bool verbose) {
+  auto block = MeshBlockOptionsImpl::from_yaml(input_file, verbose);
+  auto options = MeshOptionsImpl::create();
+  options->block(block);
+
+  auto config = YAML::LoadFile(input_file);
+  options->blocks_per_process(
+      config["distribute"]["blocks_per_process"].as<int>(1));
+  return options;
+}
+
+std::shared_ptr<MeshImpl> MeshImpl::from_yaml(std::string input_file,
+                                              bool verbose) {
+  return std::make_shared<MeshImpl>(
+      MeshOptionsImpl::from_yaml(input_file, verbose));
+}
+
+MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
+
+void MeshImpl::reset() {
+  blocks.clear();
+  TORCH_CHECK(options->block() != nullptr, "Mesh requires MeshBlockOptions");
+
+  auto base = options->block();
+  auto base_layout = base->layout();
+  TORCH_CHECK(base_layout != nullptr, "Mesh requires LayoutOptions");
+  TORCH_CHECK(options->blocks_per_process() > 0,
+              "blocks_per_process must be positive");
+
+  base_layout->blocks_per_process(options->blocks_per_process());
+  base_layout->world_size(base_layout->process_world_size() *
+                          options->blocks_per_process());
+
+  for (int i = 0; i < options->blocks_per_process(); ++i) {
+    auto block_opts = clone_block_options(base);
+    auto layout = block_opts->layout();
+    layout->blocks_per_process(options->blocks_per_process());
+    layout->world_size(layout->process_world_size() *
+                       options->blocks_per_process());
+    layout->rank(layout->global_block_rank(layout->process_rank(), i));
+    if (block_opts->coord() != nullptr) {
+      block_opts->coord()->repartition(layout);
+    }
+    auto block =
+        register_module("block" + std::to_string(i), MeshBlock(block_opts));
+    blocks.push_back(block);
+  }
+}
+
+double MeshImpl::initialize(MeshVariables& vars,
+                            std::vector<char const*> const& restart_files) {
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::initialize expects one Variables map per local MeshBlock");
+
+  bool has_restart = false;
+  for (int i = 0; i < blocks.size(); ++i) {
+    if (i < restart_files.size() && restart_files[i] != nullptr) {
+      has_restart = true;
+      break;
+    }
+  }
+
+  if (has_restart) {
+    double current_time = 0.;
+    for (int i = 0; i < blocks.size(); ++i) {
+      char const* restart = nullptr;
+      if (i < restart_files.size()) restart = restart_files[i];
+      auto block_time = blocks[i]->initialize(vars[i], restart);
+      if (i == 0) {
+        current_time = block_time;
+      } else {
+        TORCH_CHECK(block_time == current_time,
+                    "Mesh::initialize requires identical restart times across "
+                    "local MeshBlocks, expected ",
+                    current_time, " but got ", block_time, " on block ", i);
+      }
+    }
+    return current_time;
+  }
+
+  auto pg = blocks.front()->get_layout()->comm->pg;
+  pg->barrier()->wait();
+  SignalHandler::GetInstance();
+
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(blocks.size());
+  for (int i = 0; i < blocks.size(); ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      blocks[i]->initialize_under_mesh(vars[i]);
+    }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
+
+  return 0.;
+}
+
+torch::Device MeshImpl::device() const {
+  auto device = torch::Device(torch::kCPU);
+  auto block = options->block();
+  if (!torch::cuda::is_available() || block == nullptr ||
+      block->layout() == nullptr || block->layout()->backend() != "nccl") {
+    return device;
+  }
+
+  auto layout = blocks.front()->get_layout();
+  auto bound_device = layout->comm->pg->getBoundDeviceId();
+  if (bound_device.has_value()) {
+    return *bound_device;
+  }
+
+  auto device_index = layout->options->device_id();
+  if (device_index < 0) device_index = layout->options->local_rank();
+  return torch::Device(torch::kCUDA, device_index);
+}
+
+double MeshImpl::max_time_step(MeshVariables const& vars) {
+  TORCH_CHECK(
+      vars.size() == blocks.size(),
+      "Mesh::max_time_step expects one Variables map per local MeshBlock");
+
+  double dt_local = 1.e99;
+  for (int i = 0; i < blocks.size(); ++i) {
+    dt_local = std::min(dt_local, blocks[i]->local_max_time_step(vars[i]));
+  }
+
+  auto device = blocks.front()->device();
+  auto dt_tensor =
+      torch::tensor({dt_local}, torch::dtype(torch::kFloat64).device(device));
+  std::vector<at::Tensor> dt_reduce = {dt_tensor};
+  c10d::AllreduceOptions op;
+  op.reduceOp = c10d::ReduceOp::MIN;
+  blocks.front()->get_layout()->comm->pg->allreduce(dt_reduce, op)->wait();
+
+  auto dt = dt_reduce[0].item<double>();
+  auto redo = blocks.front()->pintg->current_redo;
+  auto cfl = blocks.front()->pintg->options->cfl();
+  return pow(2., -redo) * cfl * dt;
+}
+
+void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::forward expects one Variables map per local MeshBlock");
+
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(blocks.size());
+  for (int i = 0; i < blocks.size(); ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      blocks[i]->forward(vars[i], dt, stage);
+    }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
+}
+
+void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,
+                            bool final_write) {
+  TORCH_CHECK(
+      vars.size() == blocks.size(),
+      "Mesh::make_outputs expects one Variables map per local MeshBlock");
+  for (int i = 0; i < blocks.size(); ++i) {
+    blocks[i]->make_outputs(vars[i], current_time, final_write);
+  }
+}
+
+void MeshImpl::print_cycle_info(MeshVariables const& vars, double time,
+                                double dt) const {
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::print_cycle_info expects one Variables map per local "
+              "MeshBlock");
+
+  auto root = blocks.front();
+  auto pintg = root->pintg;
+  if (pintg->options->ncycle_out() == 0 ||
+      root->cycle % pintg->options->ncycle_out() != 0) {
+    return;
+  }
+
+  const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
+  bool compute_mass = false;
+  bool compute_energy = false;
+
+  if (vars.front().count("hydro_u")) {
+    compute_mass = true;
+    compute_energy = root->phydro->peos->nvar() > IPR;
+  }
+
+  SINFO() << "cycle=" << root->cycle << " redo=" << pintg->current_redo
+          << std::scientific << std::setprecision(dt_precision)
+          << " time=" << time << " dt=" << dt;
+
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = root->options->layout()->process_root_rank();
+
+  torch::Tensor local_sum;
+  if (compute_mass || compute_energy) {
+    for (int i = 0; i < blocks.size(); ++i) {
+      auto interior = blocks[i]->part({0, 0, 0}, PartOptions().exterior(false));
+      auto vol = blocks[i]->pcoord->cell_volume();
+      auto hydro_u_tot = vars[i].at("hydro_u") * vol;
+      auto block_sum = hydro_u_tot.index(interior).sum({1, 2, 3});
+      if (!local_sum.defined()) {
+        local_sum = block_sum.clone();
+      } else {
+        local_sum += block_sum;
+      }
+    }
+  }
+
+  if (local_sum.defined()) {
+    std::vector<at::Tensor> sum = {local_sum};
+    root->get_layout()->comm->pg->reduce(sum, opsum)->wait();
+
+    if (compute_mass) {
+      auto mass = sum[0][IDN];
+      SINFO() << std::scientific << std::setprecision(dt_precision)
+              << " mass0=" << mass.item<double>();
+
+      int ny = local_sum.size(0) - 5;
+      if (ny > 0) {
+        for (int n = 0; n < ny; ++n) {
+          mass += sum[0][ICY + n];
+        }
+        SINFO() << std::scientific << std::setprecision(dt_precision)
+                << " masst=" << mass.item<double>();
+      }
+    }
+
+    if (compute_energy) {
+      SINFO() << std::scientific << std::setprecision(dt_precision)
+              << " energy=" << sum[0][IPR].item<double>();
+    }
+  }
+
+  SINFO() << std::endl;
+}
+
+int MeshImpl::check_redo(MeshVariables& vars) {
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::check_redo expects one Variables map per local MeshBlock");
+
+  int redo = 0;
+  for (int i = 0; i < blocks.size(); ++i) {
+    int err = blocks[i]->check_redo(vars[i]);
+    if (err < 0) return -1;
+    redo = std::max(redo, err);
+  }
+  return redo;
+}
+
+void MeshImpl::set_cycle(int cycle) {
+  for (auto& block : blocks) {
+    block->cycle = cycle;
+  }
+}
+
+void MeshImpl::finalize(MeshVariables const& vars, double time) {
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::finalize expects one Variables map per local MeshBlock");
+
+  if (blocks.size() == 1) {
+    blocks.front()->finalize(vars.front(), time);
+    return;
+  }
+
+  make_outputs(vars, time, /*final_write=*/true);
+
+  auto root = blocks.front();
+  auto sig = SignalHandler::GetInstance();
+  if (sig->GetSignalFlag(SIGTERM) != 0) {
+    std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
+  } else if (sig->GetSignalFlag(SIGINT) != 0) {
+    std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
+  } else if (sig->GetSignalFlag(SIGALRM) != 0) {
+    std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
+  } else if (root->pintg->options->nlim() >= 0 &&
+             root->cycle >= root->pintg->options->nlim()) {
+    std::cout << std::endl << "Terminating on cycle limit" << std::endl;
+  } else if (time >= root->pintg->options->tlim()) {
+    std::cout << std::endl << "Terminating on time limit" << std::endl;
+  } else {
+    std::cout << std::endl << "Terminating abnormally" << std::endl;
+  }
+
+  std::cout << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
+  std::cout << "tlim=" << root->pintg->options->tlim()
+            << " nlim=" << root->pintg->options->nlim() << std::endl;
+
+  for (auto& block : blocks) {
+    block->send_bufs.clear();
+    block->send_bufs.shrink_to_fit();
+    block->recv_bufs.clear();
+    block->recv_bufs.shrink_to_fit();
+  }
+
+  root->get_layout()->comm->pg->barrier()->wait();
+  root->get_layout()->comm->pg->shutdown();
+}
+
+}  // namespace snap

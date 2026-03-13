@@ -7,7 +7,7 @@
 
 namespace snap {
 
-void CubedLayoutImpl::reset() {
+void CubedLayoutImpl::_initialize() {
   // build the ranks
   int px = options->px();
   int py = options->py();
@@ -18,7 +18,7 @@ void CubedLayoutImpl::reset() {
   build_rank_of3(px, py, pz, _coords3.data(), _rankof.data());
 
   // build backend
-  _init_backend();
+  _init_process_group();
 }
 
 void CubedLayoutImpl::pretty_print(std::ostream &os) const {

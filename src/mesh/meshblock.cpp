@@ -17,9 +17,6 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
-// Static member variable definitions
-Layout MeshBlockImpl::_playout = nullptr;
-
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
@@ -50,10 +47,12 @@ void MeshBlockImpl::reset() {
   //// ---- (1) set up distributed environment ---- ////
   if (_playout == nullptr) {
     std::unique_lock<std::mutex> lock(meshblock_mutex);
-    if (_playout == nullptr) {  // Check again after acquiring lock
+    if (_playout == nullptr) {
       _playout = LayoutImpl::create(options->layout(), this);
     }
   }
+  send_bufs.resize(_playout->num_exchange_buffers());
+  recv_bufs.resize(_playout->num_exchange_buffers());
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -274,7 +273,7 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  _playout->comm->pg->barrier()->wait();
 
   //// ------------ (1) Set up a signal handler ------------ ////
   SignalHandler::GetInstance();
@@ -283,6 +282,33 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
     return _init_from_restart(vars, std::string(restart_file));
   }
 
+  initialize_local(vars);
+
+  //// ------ (6) Exchange hydro and scalar buffers -------- ////
+  if (options->verbose()) {
+    SINFO(MeshBlock) << "exchanging ghost zones." << std::endl;
+  }
+
+  SyncOptions sync_opts;
+  sync_opts.interpolate(true).type(kPrimitive);
+
+  Variables sync_vars;
+  sync_vars["hydro_w"] = vars.at("hydro_w");
+  exchange(sync_vars, sync_opts);
+
+  if (pscalar->nvar() > 0) {
+    sync_opts.type(kScalar);
+    sync_vars.clear();
+    sync_vars["scalar_r"] = vars.at("scalar_r");
+    exchange(sync_vars, sync_opts);
+  }
+
+  finalize_initialization(vars);
+
+  return 0.;  // default start time is 0.0
+}
+
+void MeshBlockImpl::initialize_local(Variables& vars) {
   BoundaryFuncOptions bops;
   bops.nghost(options->coord()->nghost());
 
@@ -338,29 +364,38 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
       options->bfuncs()[i](vars.at("scalar_r"), 3 - i / 2, bops);
     }
   }
+}
 
-  //// ------ (6) Exchange hydro and scalar buffers -------- ////
-  if (options->verbose()) {
-    SINFO(MeshBlock) << "exchanging ghost zones." << std::endl;
-  }
+void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
+  initialize_local(vars);
 
-  SyncOptions sync_opts;
-  sync_opts.interpolate(true).type(kPrimitive);
-
-  Variables sync_vars;
-  sync_vars["hydro_w"] = hydro_w;
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  _playout->forward(this, sync_vars, sync_opts, works);
-  _playout->finalize(this, sync_vars, sync_opts, works);
+  SyncOptions prim_opts;
+  prim_opts.interpolate(true).type(kPrimitive);
+  Variables prim_vars;
+  prim_vars["hydro_w"] = vars.at("hydro_w");
+  exchange(prim_vars, prim_opts);
 
   if (pscalar->nvar() > 0) {
-    sync_opts.type(kScalar);
-    sync_vars.clear();
-    sync_vars["scalar_r"] = scalar_r;
-    _playout->forward(this, sync_vars, sync_opts, works);
-    _playout->finalize(this, sync_vars, sync_opts, works);
+    SyncOptions scalar_opts;
+    scalar_opts.interpolate(true).type(kScalar);
+    Variables scalar_vars;
+    scalar_vars["scalar_r"] = vars.at("scalar_r");
+    exchange(scalar_vars, scalar_opts);
   }
+
+  finalize_initialization(vars);
+}
+
+void MeshBlockImpl::finalize_initialization(Variables& vars) {
+  auto hydro_w = vars.at("hydro_w");
+  auto scalar_r =
+      vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
+  auto solid = vars.count("solid") ? vars.at("solid") : torch::Tensor();
+  int64_t nc3 = options->coord()->nc3();
+  int64_t nc2 = options->coord()->nc2();
+  int64_t nc1 = options->coord()->nc1();
+  BoundaryFuncOptions bops;
+  bops.nghost(options->coord()->nghost());
 
   //// ------ (7) Computer hydro and scalar conserved -------- ////
   if (options->verbose()) {
@@ -428,11 +463,29 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   if (options->verbose()) {
     SINFO(MeshBlock) << "initialization completed." << std::endl;
   }
-
-  return 0.;  // default start time is 0.0
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
+  auto dt_local = local_max_time_step(vars);
+  auto const& w = vars.at("hydro_w");
+  auto dt_min = torch::tensor({dt_local},
+                              torch::dtype(torch::kFloat64).device(w.device()));
+
+  std::vector<at::Tensor> dt_reduce = {dt_min};
+  c10d::AllreduceOptions op;
+  op.reduceOp = c10d::ReduceOp::MIN;
+  _playout->comm->pg->allreduce(dt_reduce, op)->wait();
+
+  auto dt = dt_reduce[0].item<double>();
+
+  if (options->verbose()) {
+    SINFO(MeshBlock) << "suggested dt from hydro: " << std::scientific
+                     << std::setprecision(6) << dt << std::endl;
+  }
+  return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
+}
+
+double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
   auto const& w = vars.at("hydro_w");
   auto dt_min =
       torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
@@ -444,23 +497,39 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
     dt_min[0] = phydro->max_time_step(w);
   }
 
-  // gather the minimum dt across all ranks
-  std::vector<at::Tensor> dt_reduce = {dt_min};
-
-  c10d::AllreduceOptions op;
-  op.reduceOp = c10d::ReduceOp::MIN;
-  _playout->pg->allreduce(dt_reduce, op)->wait();
-
-  auto dt = dt_reduce[0].item<double>();
-
-  if (options->verbose()) {
-    SINFO(MeshBlock) << "suggested dt from hydro: " << std::scientific
-                     << std::setprecision(6) << dt << std::endl;
-  }
-  return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
+  return dt_min.item<double>();
 }
 
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
+  advance_local(vars, dt, stage);
+  exchange_ghost_zones(vars);
+}
+
+void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  begin_exchange(vars, opts);
+  launch_exchange(opts, works);
+  finalize_exchange(vars, opts, works);
+}
+
+void MeshBlockImpl::begin_exchange(Variables& vars,
+                                   SyncOptions const& opts) const {
+  _playout->serialize(this, vars, opts);
+}
+
+void MeshBlockImpl::launch_exchange(
+    SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+  _playout->launch_exchange(this, opts, works);
+}
+
+void MeshBlockImpl::finalize_exchange(
+    Variables& vars, SyncOptions const& opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+  _playout->finalize(this, vars, opts, works);
+}
+
+void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
@@ -613,38 +682,34 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
     }
   }
 
-  // -------- (7) ghost zone exchange --------
+  // -------- (7) save final state for next stage --------
+  _hydro_u1.copy_(hydro_u);
+  if (pscalar->nvar() > 0) {
+    _scalar_s1.copy_(scalar_s);
+  }
+}
+
+void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
+  auto hydro_u = vars.at("hydro_u");
+  auto scalar_s =
+      vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
+
   SyncOptions sync_opts;
   sync_opts.interpolate(true).type(kConserved);
 
   Variables sync_vars;
   sync_vars["hydro_u"] = hydro_u;
-
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
-  _playout->forward(this, sync_vars, sync_opts, works);
-  _playout->finalize(this, sync_vars, sync_opts, works);
+  exchange(sync_vars, sync_opts);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
-    _playout->forward(this, sync_vars, sync_opts, works);
-    _playout->finalize(this, sync_vars, sync_opts, works);
+    exchange(sync_vars, sync_opts);
   }
 
   if (options->verbose()) {
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    SINFO(MeshBlock) << "stage " << stage
-                     << " ghost zone exchange time (s): " << elapsed.count()
-                     << std::endl;
-    start = std::chrono::high_resolution_clock::now();
-  }
-
-  // -------- (8) save final state for next stage --------
-  _hydro_u1.copy_(hydro_u);
-  if (pscalar->nvar() > 0) {
-    _scalar_s1.copy_(scalar_s);
+    SINFO(MeshBlock) << "ghost zone exchange completed." << std::endl;
   }
 }
 
@@ -668,13 +733,14 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
+
   bool compute_mass = false;
   bool compute_ie = false;
   bool compute_ke = false;
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->root_rank();
+  opsum.rootRank = options->layout()->process_root_rank();
 
   if (pintg->options->ncycle_out() != 0) {
     if (cycle % pintg->options->ncycle_out() == 0) {
@@ -695,7 +761,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
       std::vector<at::Tensor> sum = {
           hydro_u_tol.index(interior).sum({1, 2, 3})};
-      _playout->pg->reduce(sum, opsum)->wait();
+      _playout->comm->pg->reduce(sum, opsum)->wait();
 
       if (compute_mass) {
         auto mass = sum[0][IDN];
@@ -721,7 +787,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
         std::vector<at::Tensor> ke_sum = {
             ke_tol.index(interior).sum({1, 2, 3})};
-        _playout->pg->reduce(ke_sum, opsum)->wait();
+        _playout->comm->pg->reduce(ke_sum, opsum)->wait();
 
         SINFO() << std::scientific << std::setprecision(dt_precision)
                 << " ke=" << ke_sum[0][0].item<double>();
@@ -772,9 +838,9 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->root_rank();
+  opsum.rootRank = options->layout()->process_root_rank();
 
-  _playout->pg->reduce(cells, opsum)->wait();
+  _playout->comm->pg->reduce(cells, opsum)->wait();
 
   int64_t cellcycles = cells[0].item<int64_t>() * cycle * pintg->stages.size();
   double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
@@ -788,15 +854,15 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
-  _playout->pg->barrier()->wait();
+  _playout->comm->pg->barrier()->wait();
 
-  _playout->send_bufs.clear();
-  _playout->send_bufs.shrink_to_fit();
+  send_bufs.clear();
+  send_bufs.shrink_to_fit();
 
-  _playout->recv_bufs.clear();
-  _playout->recv_bufs.shrink_to_fit();
+  recv_bufs.clear();
+  recv_bufs.shrink_to_fit();
 
-  _playout->pg->shutdown();
+  _playout->comm->pg->shutdown();
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
@@ -840,8 +906,8 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 torch::Device MeshBlockImpl::device() const {
-  if (_playout->pg->getBoundDeviceId().has_value()) {
-    return _playout->pg->getBoundDeviceId().value();
+  if (_playout->comm->pg->getBoundDeviceId().has_value()) {
+    return _playout->comm->pg->getBoundDeviceId().value();
   } else {
     return torch::Device("cpu");
   }
@@ -853,7 +919,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   restart_file.append("/");
   restart_file.append(fname);
 
-  auto data = load_restart(restart_file);
+  auto data = load_restart(restart_file, options->layout()->rank());
 
   // check required variables
   TORCH_CHECK(data.count("hydro_u"),

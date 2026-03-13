@@ -1,23 +1,19 @@
 #pragma once
 
 // C/C++
+#include <torch/torch.h>
+
+#include <algorithm>
 #include <iostream>
 #include <memory>
-#include <tuple>
-
-// torch
-#include <torch/nn/cloneable.h>
-#include <torch/nn/module.h>
-#include <torch/nn/modules/common.h>
-
-#include <torch/csrc/distributed/c10d/Store.hpp>
-// #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
+#include <tuple>
 
 // snap
 #include <snap/snap.h>
 
 #include "connectivity.hpp"
+#include "process_group.hpp"
 
 // arg
 #include <snap/add_arg.h>
@@ -39,8 +35,8 @@ inline int get_buffer_id(std::tuple<int, int, int> offset) {
 }
 
 //! get environment variable with default
-inline std::string get_env(const char *name, const std::string &def) {
-  const char *v = std::getenv(name);
+inline std::string get_env(const char* name, const std::string& def) {
+  const char* v = std::getenv(name);
   return v ? std::string(v) : def;
 }
 
@@ -50,16 +46,19 @@ inline int get_rank() { return std::stoi(get_env("RANK", "0")); }
 //! get local rank from environment variable
 inline int get_local_rank() { return std::stoi(get_env("LOCAL_RANK", "0")); }
 
+//! get process world size from environment variable
+inline int get_world_size() { return std::stoi(get_env("WORLD_SIZE", "1")); }
+
 struct LayoutOptionsImpl {
   static std::shared_ptr<LayoutOptionsImpl> create() {
     return std::make_shared<LayoutOptionsImpl>();
   }
   static std::shared_ptr<LayoutOptionsImpl> from_yaml(
-      std::string const &filename, bool verbose = false);
+      std::string const& filename, bool verbose = false);
 
   LayoutOptionsImpl();
 
-  void report(std::ostream &os) const {
+  void report(std::ostream& os) const {
     os << "-- layout options --\n";
     os << "* type = " << type() << "\n"
        << "* px = " << px() << "\n"
@@ -70,13 +69,30 @@ struct LayoutOptionsImpl {
        << "* periodic_z = " << (periodic_z() ? "true" : "false") << "\n"
        << "* backend = " << backend() << "\n"
        << "* master_addr = " << master_addr() << "\n"
+       << "* process_rank = " << process_rank() << "\n"
        << "* rank = " << rank() << "\n"
        << "* local_rank = " << local_rank() << "\n"
+       << "* process_world_size = " << process_world_size() << "\n"
        << "* world_size = " << world_size() << "\n"
+       << "* blocks_per_process = " << blocks_per_process() << "\n"
        << "* master_port = " << master_port() << "\n"
        << "* no_backend = " << (no_backend() ? "true" : "false") << "\n"
        << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
+
+  int owner_process_rank(int block_rank) const {
+    return block_rank / std::max(1, blocks_per_process());
+  }
+
+  int local_block_index(int block_rank) const {
+    return block_rank % std::max(1, blocks_per_process());
+  }
+
+  int global_block_rank(int proc_rank, int local_block) const {
+    return proc_rank * std::max(1, blocks_per_process()) + local_block;
+  }
+
+  int process_root_rank() const { return owner_process_rank(root_rank()); }
 
   //! type of layout
   ADD_ARG(std::string, type) = "slab";
@@ -101,10 +117,13 @@ struct LayoutOptionsImpl {
 
   ADD_ARG(std::string, backend) = "gloo";
   ADD_ARG(std::string, master_addr) = "127.0.0.1";
+  ADD_ARG(int, process_rank) = 0;
   ADD_ARG(int, rank) = 0;
   ADD_ARG(int, root_rank) = 0;
   ADD_ARG(int, local_rank) = 0;
+  ADD_ARG(int, process_world_size) = 1;
   ADD_ARG(int, world_size) = 1;
+  ADD_ARG(int, blocks_per_process) = 1;
   ADD_ARG(int, master_port) = 29501;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
@@ -135,30 +154,28 @@ struct SyncOptions {
 
 using Variables = std::map<std::string, torch::Tensor>;
 
+inline int make_comm_tag(int local_block_index,
+                         std::tuple<int, int, int> offset, int phyid) {
+  return phyid * 1024 + local_block_index * 32 + get_buffer_id(offset);
+}
+
 class MeshBlockImpl;
 
 class LayoutImpl {
  public:
-  static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts,
-                                            torch::nn::Module *p = nullptr,
-                                            std::string const &name = "layout");
+  static std::shared_ptr<LayoutImpl> create(LayoutOptions const& opts,
+                                            MeshBlockImpl* p = nullptr,
+                                            std::string const& name = "layout");
 
-  //! exchange buffers
-  /*!
-   * The first index indicates the rank
-   * The second index indicates the variable group
-   */
-  std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
-
-  //! submodules
-  at::intrusive_ptr<c10d::Store> store;
-  std::shared_ptr<c10d::Backend> pg;
+  //! communication
+  std::shared_ptr<ProcessGroupContext> comm;
 
   //! options with which this `Layout` was constructed
   LayoutOptions options;
 
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
-  LayoutImpl(const LayoutOptions &opts) : options(opts) {
+  LayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
+      : comm(nullptr), options(opts), _owner(owner) {
     int P = options->px() * options->py() * options->pz();
     _rankof.resize(P);
   }
@@ -169,7 +186,13 @@ class LayoutImpl {
 
   bool is_root() const { return options->rank() == options->root_rank(); }
 
-  virtual ~LayoutImpl() = default;
+  virtual ~LayoutImpl();
+
+  //! Owning MeshBlock that provides exchange buffer storage for this layout.
+  MeshBlockImpl* owner() const { return _owner; }
+
+  //! Number of directional exchange slots required by this layout geometry.
+  virtual int num_exchange_buffers() const { return 9; }
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
     auto [rx, ry, rz] = iloc;
@@ -197,90 +220,105 @@ class LayoutImpl {
   }
 
   //! Serialize variables
-  virtual void serialize(MeshBlockImpl const *pmb, Variables &vars,
-                         SyncOptions const &opts);
+  virtual void serialize(MeshBlockImpl const* pmb, Variables& vars,
+                         SyncOptions const& opts);
 
   //! Deserialize variables
-  virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars,
-                           SyncOptions const &opts) const;
+  virtual void deserialize(MeshBlockImpl const* pmb, Variables& vars,
+                           SyncOptions const& opts) const;
 
   //! fill corners after exchange
-  virtual void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const;
+  virtual void fill_corners(MeshBlockImpl const* pmb, Variables& vars) const;
 
-  //! \brief Perform ghost zone exchange
-  /*!
-   * Exchanges ghost zone data with neighboring processes using point-to-point
-   * communication. This function serializes data, performs send/recv
-   * operations, and deserializes received data into ghost zones.
-   */
-  virtual void forward(MeshBlockImpl const *pmb, Variables &vars,
-                       SyncOptions const &opts,
-                       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+  //! Launch only the communication phase after buffers have been serialized.
+  void launch_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
-  void finalize(MeshBlockImpl const *pmb, Variables &vars,
-                SyncOptions const &opts,
-                std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+  virtual void exchange_remote(
+      MeshBlockImpl const* pmb, SyncOptions const& opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>>& works);
+
+  void finalize(MeshBlockImpl const* pmb, Variables& vars,
+                SyncOptions const& opts,
+                std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
  protected:
-  void _init_backend();
+  void _init_process_group();
 
-  // --- Backend initializers ---
-  void _init_gloo();
-  void _init_nccl();
+  //! Coordinate local sibling blocks so same-process copies are visible first.
+  void _prepare_local_exchange(MeshBlockImpl const* pmb,
+                               SyncOptions const& opts);
 
-  // --- NCCL specific ---
-  void _group_start() const;
-  void _group_end() const;
+  //! Return local blocks that actually participate in remote NCCL traffic.
+  std::vector<int> _active_remote_local_indices(SyncOptions const& opts) const;
 
-  // --- GPU specific ---
-  void _sync_device() const;
+  //! Build a stable ordering key for remote exchanges owned by one local block.
+  virtual std::vector<std::tuple<int, int, int, int, int, int>>
+  _remote_order_keys(SyncOptions const& opts) const;
+
+  //! Launch cubed-sphere NCCL sends/recvs process-wide to preserve op ordering.
+  void _launch_cubed_sphere_nccl_remote_ops(
+      SyncOptions const& opts,
+      std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>&
+          works_by_block) const;
+  virtual std::tuple<int, int, int> _remap_exchange_offset(
+      std::tuple<int, int, int> iloc, int dy, int dx) const;
+  virtual std::tuple<int, int, int> _peer_exchange_offset(
+      int peer_rank, int target_rank, SyncOptions const& opts,
+      std::tuple<int, int, int> offset) const;
+  virtual void _copy_local_exchange_buffers(
+      std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;
   std::vector<int> _rankof;
+  MeshBlockImpl* _owner = nullptr;
 };
 using Layout = std::shared_ptr<LayoutImpl>;
 
-class SlabLayoutImpl : public torch::nn::Cloneable<SlabLayoutImpl>,
-                       public LayoutImpl {
+class SlabLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   SlabLayoutImpl() = default;
-  SlabLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  SlabLayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("slab");
-    reset();
+    _initialize();
   }
-  void reset() override;
-  using LayoutImpl::forward;
 
   ~SlabLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream& os) const;
 
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
-};
-TORCH_MODULE(SlabLayout);
 
-class CubedLayoutImpl : public torch::nn::Cloneable<CubedLayoutImpl>,
-                        public LayoutImpl {
+ private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
+  void _initialize();
+};
+class CubedLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   CubedLayoutImpl() = default;
-  CubedLayoutImpl(const LayoutOptions &opts) : LayoutImpl(opts) {
+  CubedLayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
+      : LayoutImpl(opts, owner) {
     options->type("cubed");
-    reset();
+    _initialize();
   }
-  void reset() override;
 
   ~CubedLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const override;
+  void pretty_print(std::ostream& os) const;
+  int num_exchange_buffers() const override { return 27; }
 
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
                     std::tuple<int, int, int> offset) const override;
+
+ private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
+  void _initialize();
 };
-TORCH_MODULE(CubedLayout);
 
 }  // namespace snap
 

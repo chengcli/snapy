@@ -1,39 +1,30 @@
+// C/C++
+#include <string>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/mesh/meshblock.hpp>
+#include <snap/snap.h>
+
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
-int main(int argc, char** argv) {
-  torch::set_num_threads(1);
-  torch::set_num_interop_threads(1);
+namespace {
 
-  auto config = YAML::LoadFile("shallow_xy.yaml");
-
+void initialize_block(MeshBlock block, Variables& vars,
+                      YAML::Node const& config, torch::Device const& device) {
   auto phi = config["problem"]["phi"].as<double>();
   auto uphi = config["problem"]["uphi"].as<double>();
   auto dphi = config["problem"]["dphi"].as<double>();
 
-  auto block_op = MeshBlockOptionsImpl::from_yaml("shallow_xy.yaml");
-  auto block = MeshBlock(block_op);
-  torch::Device device(torch::kCPU);
-  if (torch::cuda::is_available() && block_op->layout()->backend() == "nccl") {
-    std::cout << "Running on CUDA" << std::endl;
-    device = block->get_layout()->pg->getBoundDeviceId().value();
-  }
-
-  block->to(device);
-
-  // initial conditions
   auto pcoord = block->pcoord;
   auto peos = block->phydro->peos;
 
-  // coordinates
-  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
-  auto x1v = mesh[2];
-  auto x2v = mesh[1];
+  auto grid = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto x1v = grid[2];
+  auto x2v = grid[1];
 
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -49,31 +40,53 @@ int main(int argc, char** argv) {
   w[IVX] = torch::where(x2v > 0., -uphi / w[IDN], uphi / w[IDN]);
   w[IVY] = 0.;
 
-  // initialize
-  std::map<std::string, torch::Tensor> vars;
   vars["hydro_w"] = w;
-  block->initialize(vars);
+}
 
-  double current_time = 0.;
-  block->make_outputs(vars, current_time);
+}  // namespace
 
-  while (!block->pintg->stop(block->cycle++, current_time)) {
-    auto dt = block->max_time_step(vars);
-    block->print_cycle_info(vars, current_time, dt);
+int main(int argc, char** argv) {
+  torch::set_num_threads(1);
+  torch::set_num_interop_threads(1);
 
-    // main loop
-    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
-      block->forward(vars, dt, stage);
-    }
+  std::string input_file = argc > 1 ? argv[1] : "shallow_xy.yaml";
+  auto config = YAML::LoadFile(input_file);
 
-    int err = block->check_redo(vars);
-    if (err > 0) continue;  // redo this step with smaller dt
-    if (err < 0) break;     // terminate simulation
+  auto mesh = MeshImpl::from_yaml(input_file);
+  auto device = mesh->device();
+  if (device.is_cuda()) {
+    std::cout << "Running on CUDA" << std::endl;
+  }
+  mesh->to(device);
 
-    // make outputs
-    current_time += dt;
-    block->make_outputs(vars, current_time);
+  MeshVariables vars(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    initialize_block(mesh->blocks[i], vars[i], config, device);
   }
 
-  block->finalize(vars, current_time);
+  double current_time = mesh->initialize(vars);
+  mesh->make_outputs(vars, current_time);
+
+  int cycle = 0;
+  while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
+    ++cycle;
+    mesh->set_cycle(cycle);
+
+    auto dt = mesh->max_time_step(vars);
+    mesh->print_cycle_info(vars, current_time, dt);
+
+    for (int stage = 0; stage < mesh->blocks.front()->pintg->stages.size();
+         ++stage) {
+      mesh->forward(vars, dt, stage);
+    }
+
+    int redo = mesh->check_redo(vars);
+    if (redo > 0) continue;
+    if (redo < 0) break;
+
+    current_time += dt;
+    mesh->make_outputs(vars, current_time);
+  }
+
+  mesh->finalize(vars, current_time);
 }

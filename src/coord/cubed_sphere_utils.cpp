@@ -142,7 +142,7 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
 
 //! Transform global cartesian velocity to local panel contravariant velocity
 void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
-                        torch::Tensor beta) {
+                        torch::Tensor beta, int face_id) {
   auto x = alpha.tan();
   auto y = beta.tan();
 
@@ -153,8 +153,7 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
   std::array<torch::Tensor, 3> local_vel;
 
   auto const g2l = CS_G2L_VEL;
-  auto playout = MeshBlockImpl::get_layout();
-  auto [rx, ry, f] = playout->loc_of(playout->options->rank());
+  auto f = face_id;
 
   local_vel[g2l[f][VEL1].idx] = g2l[f][VEL1].sgn * vel[VEL1];
   local_vel[g2l[f][VEL2].idx] = g2l[f][VEL2].sgn * vel[VEL2];
@@ -170,7 +169,7 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
 }
 
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
-                        torch::Tensor beta) {
+                        torch::Tensor beta, int face_id) {
   auto x = alpha.tan();
   auto y = beta.tan();
 
@@ -179,8 +178,7 @@ void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
   auto D = sqrt(1 + y * y);
 
   auto const l2g = CS_L2G_VEL;
-  auto playout = MeshBlockImpl::get_layout();
-  auto [rx, ry, f] = playout->loc_of(playout->options->rank());
+  auto f = face_id;
 
   auto vz = vel[VEL1].clone();
   auto vx = vel[VEL2].clone();

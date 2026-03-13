@@ -14,6 +14,8 @@ __pycache__/
 
 # egg
 *.egg-info
+python/*.so
+docs/user_guide/mixed_parallel_strategy.pdf
 
 # dist
 dist/
@@ -35,3 +37,7 @@ docs/_build/
 
 # codeql
 _codeql_detected_source_root
+
+# agents
+AGENTS.md
+CLAUDE.md

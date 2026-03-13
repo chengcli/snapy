@@ -18,6 +18,8 @@
 #include <snap/add_arg.h>
 
 namespace snap {
+struct LayoutOptionsImpl;
+using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 using IndexRange = std::vector<torch::indexing::TensorIndex>;
 
 struct EquationOfStateOptionsImpl;
@@ -57,13 +59,24 @@ struct CoordinateOptionsImpl {
   int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
   int nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
 
+  void repartition(LayoutOptions const &layout);
+
   ADD_ARG(std::string, type) = "cartesian";
+  ADD_ARG(double, global_x1min) = 0.;
+  ADD_ARG(double, global_x2min) = 0.;
+  ADD_ARG(double, global_x3min) = 0.;
+  ADD_ARG(double, global_x1max) = 1.;
+  ADD_ARG(double, global_x2max) = 1.;
+  ADD_ARG(double, global_x3max) = 1.;
   ADD_ARG(double, x1min) = 0.;
   ADD_ARG(double, x2min) = 0.;
   ADD_ARG(double, x3min) = 0.;
   ADD_ARG(double, x1max) = 1.;
   ADD_ARG(double, x2max) = 1.;
   ADD_ARG(double, x3max) = 1.;
+  ADD_ARG(int, global_nx1) = 1;
+  ADD_ARG(int, global_nx2) = 1;
+  ADD_ARG(int, global_nx3) = 1;
   ADD_ARG(int, nx1) = 1;
   ADD_ARG(int, nx2) = 1;
   ADD_ARG(int, nx3) = 1;

@@ -82,9 +82,9 @@ TEST_P(DeviceTest, contra_cart) {
   auto vel = vel_cart.clone();
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
-  cs_cart_to_contra_(vel, mesh[0], mesh[1]);
+  cs_cart_to_contra_(vel, mesh[0], mesh[1], 0);
   std::cout << "vel contravariant = \n" << vel << std::endl;
-  cs_contra_to_cart_(vel, mesh[0], mesh[1]);
+  cs_contra_to_cart_(vel, mesh[0], mesh[1], 0);
 
   EXPECT_TRUE(torch::allclose(vel, vel_cart));
 }

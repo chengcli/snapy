@@ -190,7 +190,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
 
-  auto playout = MeshBlockImpl::get_layout();
+  auto playout = pmb->get_layout();
 
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
@@ -236,20 +236,20 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   //// ------------ (3.A) Calculate dimension 2 LR states ------------ ////
-  std::vector<c10::intrusive_ptr<c10d::Work>> works;
   torch::Tensor wtmp2, wtmp3;
   SyncOptions sync_opts;
   sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
-  Variables send_vars;
+  std::vector<c10::intrusive_ptr<c10d::Work>> works;
+  Variables send_vars2, send_vars3;
 
   if (u.size(DIM2) > 1) {
     wtmp2 = precon23->forward(w, DIM2);
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
-      send_vars["hydro_wl:+"] = wtmp2[ILT];
-      send_vars["hydro_wr:-"] = wtmp2[IRT];
-      playout->forward(pmb, send_vars, sync_opts.dim(DIM2), works);
+      send_vars2["hydro_wl:+"] = wtmp2[ILT];
+      send_vars2["hydro_wr:-"] = wtmp2[IRT];
+      pmb->begin_exchange(send_vars2, sync_opts.dim(DIM2));
     }
   }
 
@@ -259,21 +259,25 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
-      send_vars["hydro_wl:+"] = wtmp3[ILT];
-      send_vars["hydro_wr:-"] = wtmp3[IRT];
-      playout->forward(pmb, send_vars, sync_opts.dim(DIM3), works);
+      send_vars3["hydro_wl:+"] = wtmp3[ILT];
+      send_vars3["hydro_wr:-"] = wtmp3[IRT];
+      pmb->begin_exchange(send_vars3, sync_opts.dim(DIM3));
     }
   }
 
-  // finalize communications
   if (playout->options->type() == "cubed-sphere") {
-    send_vars["hydro_wl:+"] = wtmp2[ILT];
-    send_vars["hydro_wr:-"] = wtmp2[IRT];
-    playout->finalize(pmb, send_vars, sync_opts.dim(DIM2), works);
-
-    send_vars["hydro_wl:+"] = wtmp3[ILT];
-    send_vars["hydro_wr:-"] = wtmp3[IRT];
-    playout->finalize(pmb, send_vars, sync_opts.dim(DIM3), works);
+    if (u.size(DIM2) > 1) {
+      pmb->launch_exchange(sync_opts.dim(DIM2), works);
+    }
+    if (u.size(DIM3) > 1) {
+      pmb->launch_exchange(sync_opts.dim(DIM3), works);
+    }
+    if (u.size(DIM2) > 1) {
+      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works);
+    }
+    if (u.size(DIM3) > 1) {
+      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works);
+    }
   }
 
   //// ------------ (4.A) Calculate dimension 2 flux ------------ ////

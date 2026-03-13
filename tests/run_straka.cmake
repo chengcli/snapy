@@ -3,16 +3,18 @@
 set(download_link "https://zenodo.org/records/18121953/files/straka-ref.nc")
 
 if(EXISTS "straka-ref.nc")
-  set(res 0)
+  set(_status 0)
 else()
-  execute_process(
-    COMMAND curl -L -o straka-ref.nc ${download_link}
-    RESULT_VARIABLE res
+  file(DOWNLOAD
+    "${download_link}"
+    "straka-ref.nc"
+    STATUS _status
+    SHOW_PROGRESS
   )
 endif()
 
-if(NOT res EQUAL 0)
-  message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
+if(NOT _status EQUAL 0)
+  message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
 execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)

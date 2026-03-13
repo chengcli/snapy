@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <mutex>
 #include <sstream>  // stringstream
 #include <stdexcept>
 
@@ -18,21 +20,49 @@
 int mppnccombine(int argc, char *argv[]);
 
 namespace snap {
+namespace {
+std::mutex combine_mutex;
+std::map<std::string, int> combine_counts;
+
+bool ready_to_combine(Layout const &layout, std::string const &key) {
+  std::lock_guard<std::mutex> lock(combine_mutex);
+  int &count = combine_counts[key];
+  count += 1;
+  if (count < layout->options->blocks_per_process()) {
+    return false;
+  }
+  combine_counts.erase(key);
+  return true;
+}
+}  // namespace
+
 void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
   auto layout = pmb->get_layout();
+  char number[64];
+  snprintf(number, sizeof(number), "%05d", file_number);
+
+  std::string key;
+  key.assign(pmb->options->output_dir());
+  key.append("|");
+  key.append(pmb->options->basename());
+  key.append("|");
+  key.append(options->file_id());
+  key.append("|");
+  key.append(number);
+  if (!ready_to_combine(layout, key)) {
+    return;
+  }
+
   /*c10d::BarrierOptions op;
   op.device_ids = {layout->options->local_rank()};
   layout->pg->barrier(op)->wait();*/
-  layout->pg->barrier()->wait();
+  layout->comm->pg->barrier()->wait();
 
   std::stringstream msg;
 
-  if (layout->is_root()) {
-    char number[64];
-    snprintf(number, sizeof(number), "%05d", file_number);
-
+  if (layout->options->process_rank() == layout->options->process_root_rank()) {
     std::string infile;
     infile.assign(pmb->options->output_dir());
     infile.append("/");
