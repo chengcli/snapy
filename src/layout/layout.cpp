@@ -59,6 +59,17 @@ struct OrderedPhaseState {
   int next_index = 0;
 };
 
+struct RemoteExchangeOp {
+  int remote_process;
+  int local_block;
+  int remote_local_block;
+  int buffer_id;
+  int send_tag;
+  int recv_tag;
+  std::tuple<int, int, int> offset;
+  std::tuple<int, int, int> peer_offset;
+};
+
 std::mutex g_local_exchange_mutex;
 std::condition_variable g_local_exchange_cv;
 std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
@@ -106,6 +117,22 @@ LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
 OrderedPhaseKey make_ordered_phase_key(LayoutImpl const& layout,
                                        SyncOptions const& opts, int phase) {
   return OrderedPhaseKey{make_local_exchange_key(layout, opts), phase};
+}
+
+auto make_remote_order_key(int process_rank, int remote_process, int local_block,
+                           int remote_local_block,
+                           std::tuple<int, int, int> offset,
+                           std::tuple<int, int, int> peer_offset, int phyid) {
+  int lower_process = std::min(process_rank, remote_process);
+  int upper_process = std::max(process_rank, remote_process);
+  int lower_block =
+      process_rank < remote_process ? local_block : remote_local_block;
+  int upper_block =
+      process_rank < remote_process ? remote_local_block : local_block;
+  auto lower_to_upper_offset =
+      process_rank < remote_process ? offset : peer_offset;
+  return std::make_tuple(lower_process, upper_process, lower_block, upper_block,
+                         get_buffer_id(lower_to_upper_offset), phyid);
 }
 
 }  // namespace
@@ -481,6 +508,8 @@ void LayoutImpl::exchange_remote(
   std::lock_guard<std::mutex> lock(g_process_comm_mutex);
   comm->group_start();
 
+  std::vector<RemoteExchangeOp> remote_ops;
+
   for (int dy_ = dy_min; dy_ <= dy_max; ++dy_)
     for (int dx_ = dx_min; dx_ <= dx_max; ++dx_) {
       int dy = dy_sgn * dy_;
@@ -502,22 +531,47 @@ void LayoutImpl::exchange_remote(
       if (is_remote) {
         int remote_local_block = options->local_block_index(nb);
         int local_block = options->local_block_index(rank);
-        int send_id =
-            make_comm_tag(remote_local_block, std::tuple<int, int, int>(-dy, -dx, 0),
-                          opts.phyid());
+        auto peer_offset = _peer_exchange_offset(nb, rank, opts, offset);
+        int send_id = make_comm_tag(remote_local_block, peer_offset, opts.phyid());
         int recv_id = make_comm_tag(local_block, offset, opts.phyid());
-
-        auto send_work = comm->pg->send(send_bufs[r], remote_process, send_id);
-        works.push_back(send_work);
-
-        auto recv_work = comm->pg->recv(recv_bufs[r], remote_process, recv_id);
-        works.push_back(recv_work);
+        remote_ops.push_back({remote_process, local_block, remote_local_block, r,
+                              send_id, recv_id, offset, peer_offset});
       } else if (nb == rank) {  // self-send
         int r1 = get_buffer_id(std::tuple<int, int, int>(-dy, -dx, 0));
         for (int n = 0; n < recv_bufs[r].size(); ++n)
           recv_bufs[r1][n].copy_(send_bufs[r][n]);
       }
     }
+
+  if (options->backend() == "nccl") {
+    std::sort(remote_ops.begin(), remote_ops.end(),
+              [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
+                return make_remote_order_key(
+                           options->process_rank(), lhs.remote_process,
+                           lhs.local_block, lhs.remote_local_block, lhs.offset,
+                           lhs.peer_offset, opts.phyid()) <
+                       make_remote_order_key(
+                           options->process_rank(), rhs.remote_process,
+                           rhs.local_block, rhs.remote_local_block, rhs.offset,
+                           rhs.peer_offset, opts.phyid());
+              });
+
+    for (auto const& op : remote_ops) {
+      works.push_back(
+          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+    }
+    for (auto const& op : remote_ops) {
+      works.push_back(
+          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+    }
+  } else {
+    for (auto const& op : remote_ops) {
+      works.push_back(
+          comm->pg->send(send_bufs[op.buffer_id], op.remote_process, op.send_tag));
+      works.push_back(
+          comm->pg->recv(recv_bufs[op.buffer_id], op.remote_process, op.recv_tag));
+    }
+  }
 
   comm->group_end();
 }
