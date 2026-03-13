@@ -1,8 +1,13 @@
 // gtest
 #include <gtest/gtest.h>
 
+// base
+#include <configure.h>
+
 // torch
+#ifdef USE_C10D_NCCL
 #include <c10/cuda/CUDAFunctions.h>
+#endif
 
 // snap
 #include <snap/mesh/mesh.hpp>
@@ -27,7 +32,9 @@ TEST(Mesh, multi_block_exchange) {
     ASSERT_TRUE(torch::cuda::is_available());
     int device_index = block_opts->layout()->device_id();
     if (device_index < 0) device_index = block_opts->layout()->local_rank();
+#ifdef USE_C10D_NCCL
     c10::cuda::set_device(device_index);
+#endif
     device = torch::Device(torch::kCUDA, device_index);
   }
 

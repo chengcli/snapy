@@ -3,8 +3,13 @@
 #include <future>
 #include <iostream>
 
+// base
+#include <configure.h>
+
 // torch
+#ifdef USE_C10D_NCCL
 #include <c10/cuda/CUDAFunctions.h>
+#endif
 
 // snap
 #include <snap/layout/cubed_sphere_layout.hpp>
@@ -65,7 +70,9 @@ torch::Device select_device(LayoutOptions const& layout) {
                 "CUDA is required for backend=nccl");
     int device_index = layout->device_id();
     if (device_index < 0) device_index = layout->local_rank();
+#ifdef USE_C10D_NCCL
     c10::cuda::set_device(device_index);
+#endif
     device = torch::Device(torch::kCUDA, device_index);
   }
   return device;
