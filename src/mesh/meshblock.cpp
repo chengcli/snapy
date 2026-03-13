@@ -883,6 +883,11 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
 
   auto current_time = data.at("last_time").item<double>();
 
+  // set the next_time of new outputs to the current time
+  for (int n = current_output_size; n < output_types.size(); ++n) {
+    output_types[n]->next_time = current_time;
+  }
+
   // move to device
   for (auto& [name, tensor] : data) {
     vars[name] = tensor.to(device());
