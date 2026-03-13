@@ -86,9 +86,9 @@ def main() -> int:
         return skip("pd-run not found in PATH")
 
     cases = (
-        ("single", 1, "0", Path(os.abspath(bin_dir / "straka_gpu_single.yaml"))),
-        ("mesh2", 1, "0", Path(os.abspath(bin_dir / "straka_gpu_mesh2.yaml"))),
-        ("proc2", 2, "0,1", Path(os.abspath(bin_dir / "straka_gpu_proc2.yaml"))),
+        ("single", 1, "0", Path(os.path.abspath(bin_dir / "straka_gpu_single.yaml"))),
+        ("mesh2", 1, "0", Path(os.path.abspath(bin_dir / "straka_gpu_mesh2.yaml"))),
+        ("proc2", 2, "0,1", Path(os.path.abspath(bin_dir / "straka_gpu_proc2.yaml"))),
     )
 
     outputs = {}
