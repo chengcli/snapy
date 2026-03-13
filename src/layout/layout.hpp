@@ -259,6 +259,7 @@ class LayoutImpl {
  protected:
   void _init_process_group();
   void _prepare_local_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts);
+  std::vector<int> _active_remote_local_indices(SyncOptions const& opts) const;
   virtual std::tuple<int, int, int> _remap_exchange_offset(
       std::tuple<int, int, int> iloc, int dy, int dx) const;
   virtual std::tuple<int, int, int> _peer_exchange_offset(

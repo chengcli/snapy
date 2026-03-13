@@ -110,6 +110,42 @@ OrderedPhaseKey make_ordered_phase_key(LayoutImpl const& layout,
 
 }  // namespace
 
+std::vector<int> LayoutImpl::_active_remote_local_indices(
+    SyncOptions const& opts) const {
+  std::vector<int> indices;
+  auto layouts = local_layouts_for(*this);
+
+  for (auto* local_layout : layouts) {
+    auto rank = local_layout->options->rank();
+    auto iloc = local_layout->loc_of(rank);
+    bool has_remote = false;
+
+    for (int dy_ = opts.dy_min(); dy_ <= opts.dy_max() && !has_remote; ++dy_) {
+      for (int dx_ = opts.dx_min(); dx_ <= opts.dx_max(); ++dx_) {
+        if (dy_ == 0 && dx_ == 0) continue;
+        if (opts.skip_corner() && std::abs(dy_) + std::abs(dx_) == 2) continue;
+
+        auto offset = local_layout->_remap_exchange_offset(iloc, dy_, dx_);
+        int nb = local_layout->neighbor_rank(iloc, offset);
+        if (nb < 0 || nb == rank) continue;
+        if (local_layout->options->owner_process_rank(nb) ==
+            local_layout->options->process_rank()) {
+          continue;
+        }
+
+        has_remote = true;
+        break;
+      }
+    }
+
+    if (has_remote) {
+      indices.push_back(local_layout->options->local_block_index(rank));
+    }
+  }
+
+  return indices;
+}
+
 LayoutOptionsImpl::LayoutOptionsImpl() {
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
@@ -380,20 +416,26 @@ void LayoutImpl::launch_exchange(
   _prepare_local_exchange(pmb, opts);
 
   if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
-    auto key = make_ordered_phase_key(*this, opts, 0);
     auto my_index = options->local_block_index(options->rank());
+    auto active_indices = _active_remote_local_indices(opts);
+    auto pos = std::find(active_indices.begin(), active_indices.end(), my_index);
+    if (pos == active_indices.end()) {
+      return;
+    }
+
+    auto key = make_ordered_phase_key(*this, opts, 0);
+    auto my_order = static_cast<int>(std::distance(active_indices.begin(), pos));
 
     std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
     auto& state = g_ordered_phase_states[key];
-    g_local_exchange_cv.wait(lock,
-                             [&]() { return state.next_index == my_index; });
+    g_local_exchange_cv.wait(lock, [&]() { return state.next_index == my_order; });
     lock.unlock();
 
     exchange_remote(pmb, opts, works);
 
     lock.lock();
     state.next_index += 1;
-    if (state.next_index == options->blocks_per_process()) {
+    if (state.next_index == active_indices.size()) {
       g_ordered_phase_states.erase(key);
     }
     g_local_exchange_cv.notify_all();
@@ -567,13 +609,25 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
                           SyncOptions const& opts,
                           std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
   if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
-    auto key = make_ordered_phase_key(*this, opts, 1);
     auto my_index = options->local_block_index(options->rank());
+    auto active_indices = _active_remote_local_indices(opts);
+    auto pos = std::find(active_indices.begin(), active_indices.end(), my_index);
+
+    if (pos == active_indices.end()) {
+      deserialize(pmb, vars, opts);
+      if (opts.skip_corner() && !opts.cross_panel_only()) {
+        fill_corners(pmb, vars);
+      }
+      works.clear();
+      return;
+    }
+
+    auto key = make_ordered_phase_key(*this, opts, 1);
+    auto my_order = static_cast<int>(std::distance(active_indices.begin(), pos));
 
     std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
     auto& state = g_ordered_phase_states[key];
-    g_local_exchange_cv.wait(lock,
-                             [&]() { return state.next_index == my_index; });
+    g_local_exchange_cv.wait(lock, [&]() { return state.next_index == my_order; });
     lock.unlock();
 
     for (auto& work : works) work->wait();
@@ -581,16 +635,11 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     if (opts.skip_corner() && !opts.cross_panel_only()) {
       fill_corners(pmb, vars);
     }
-    {
-      std::lock_guard<std::mutex> comm_lock(g_process_comm_mutex);
-      comm->pg->barrier()->wait();
-    }
-
     works.clear();
 
     lock.lock();
     state.next_index += 1;
-    if (state.next_index == options->blocks_per_process()) {
+    if (state.next_index == active_indices.size()) {
       g_ordered_phase_states.erase(key);
     }
     g_local_exchange_cv.notify_all();
