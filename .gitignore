@@ -15,6 +15,7 @@ __pycache__/
 # egg
 *.egg-info
 python/*.so
+docs/user_guide/mixed_parallel_strategy.pdf
 
 # dist
 dist/

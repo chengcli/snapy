@@ -9,4 +9,5 @@ This guide provides detailed information on using Snapy for atmospheric dynamics
    configuration
    simulation
    distributed
+   mixed_parallel_strategy
    output
