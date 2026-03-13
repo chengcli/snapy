@@ -62,7 +62,7 @@ add_test(
   NAME test_straka
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_test.cmake
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka.cmake
 )
 
 set_tests_properties(test_straka PROPERTIES
@@ -117,7 +117,7 @@ add_test(
   NAME test_shallow_splash
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_test.cmake
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash.cmake
 )
 
 set_tests_properties(test_shallow_splash PROPERTIES

@@ -1,24 +1,26 @@
 # run_shallow_xy_test.cmake
 
-set(ref_file "../bin/shallow_xy_single.out0.00001.nc")
-if(NOT EXISTS "${ref_file}")
-  message(FATAL_ERROR "Missing shallow_xy reference file ${ref_file}")
+set(download_link "https://zenodo.org/records/18121953/files/shallow_xy-ref.nc")
+
+if(EXISTS "shallow_xy-ref.nc")
+  set(_status 0)
+else()
+  file(DOWNLOAD
+    "${download_link}"
+    "shallow_xy-ref.nc"
+    STATUS _status
+    SHOW_PROGRESS
+  )
 endif()
 
-file(GLOB shallow_xy_outputs
-  "shallow_xy-main.nc"
-  "shallow_xy.out*.nc"
-  "shallow_xy.[0-9][0-9][0-9][0-9][0-9].restart"
-  "shallow_xy.final.restart"
-)
-if(shallow_xy_outputs)
-  file(REMOVE ${shallow_xy_outputs})
+if(NOT _status EQUAL 0)
+  message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
-execute_process(COMMAND ln -sf ../bin/shallow_xy_single.yaml shallow_xy.yaml)
+execute_process(COMMAND ln -sf ../bin/shallow_xy.yaml shallow_xy.yaml)
 
 execute_process(
-  COMMAND pd-run 1 ../bin/shallow_xy.${buildl} shallow_xy.yaml
+  COMMAND pd-run 4 ../bin/shallow_xy.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
@@ -34,7 +36,7 @@ if(NOT res EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND python test_shallow_xy.py shallow_xy-main.nc ${ref_file}
+  COMMAND python test_shallow_xy.py shallow_xy-main.nc shallow_xy-ref.nc
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
