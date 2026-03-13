@@ -74,7 +74,23 @@ std::mutex g_cubed_sphere_comm_mutex;
 auto make_remote_order_key(int process_rank, int remote_process, int local_block,
                            int remote_local_block,
                            std::tuple<int, int, int> offset,
-                           std::tuple<int, int, int> peer_offset, int phyid) {
+                           std::tuple<int, int, int> peer_offset,
+                           SyncOptions const& opts) {
+  auto exchange_order_index = [&](std::tuple<int, int, int> off) {
+    int order = 0;
+    for (int dy = opts.dy_min(); dy <= opts.dy_max(); ++dy) {
+      for (int dx = opts.dx_min(); dx <= opts.dx_max(); ++dx) {
+        if (dy == 0 && dx == 0) continue;
+        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
+        if (off == std::tuple<int, int, int>(dy, dx, 0)) {
+          return order;
+        }
+        order += 1;
+      }
+    }
+    return order;
+  };
+
   int lower_process = std::min(process_rank, remote_process);
   int upper_process = std::max(process_rank, remote_process);
   int lower_block =
@@ -84,7 +100,8 @@ auto make_remote_order_key(int process_rank, int remote_process, int local_block
   auto lower_to_upper_offset =
       process_rank < remote_process ? offset : peer_offset;
   return std::make_tuple(lower_process, upper_process, lower_block, upper_block,
-                         get_buffer_id(lower_to_upper_offset), phyid);
+                         exchange_order_index(lower_to_upper_offset),
+                         opts.phyid());
 }
 
 std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
@@ -827,8 +844,7 @@ void CubedSphereLayoutImpl::forward(
               "[CubedSphereLayout:forward] MeshBlock pointer is null");
 
   serialize(pmb, vars, opts);
-  _prepare_local_exchange(pmb, opts);
-  exchange_remote(pmb, opts, works);
+  launch_exchange(pmb, opts, works);
 }
 
 void CubedSphereLayoutImpl::exchange_remote(
@@ -903,11 +919,11 @@ void CubedSphereLayoutImpl::exchange_remote(
                 return make_remote_order_key(
                            options->process_rank(), lhs.remote_process,
                            lhs.local_block, lhs.remote_local_block, lhs.offset,
-                           lhs.remote_offset, opts.phyid()) <
+                           lhs.remote_offset, opts) <
                        make_remote_order_key(
                            options->process_rank(), rhs.remote_process,
                            rhs.local_block, rhs.remote_local_block, rhs.offset,
-                           rhs.remote_offset, opts.phyid());
+                           rhs.remote_offset, opts);
               });
 
     for (auto const& op : remote_ops) {
