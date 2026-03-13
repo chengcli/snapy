@@ -385,7 +385,6 @@ void MeshBlockImpl::initialize_local(Variables& vars) {
       options->bfuncs()[i](vars.at("scalar_r"), 3 - i / 2, bops);
     }
   }
-
 }
 
 void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
@@ -487,15 +486,14 @@ void MeshBlockImpl::finalize_initialization(Variables& vars) {
   if (options->verbose()) {
     SINFO(MeshBlock) << "initialization completed." << std::endl;
   }
-
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
   LayoutGuard layout_guard(_playout);
   auto dt_local = local_max_time_step(vars);
   auto const& w = vars.at("hydro_w");
-  auto dt_min =
-      torch::tensor({dt_local}, torch::dtype(torch::kFloat64).device(w.device()));
+  auto dt_min = torch::tensor({dt_local},
+                              torch::dtype(torch::kFloat64).device(w.device()));
 
   std::vector<at::Tensor> dt_reduce = {dt_min};
   c10d::AllreduceOptions op;
@@ -540,7 +538,8 @@ void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
   finalize_exchange(vars, opts, works);
 }
 
-void MeshBlockImpl::begin_exchange(Variables& vars, SyncOptions const& opts) const {
+void MeshBlockImpl::begin_exchange(Variables& vars,
+                                   SyncOptions const& opts) const {
   LayoutGuard layout_guard(_playout);
   _playout->serialize(this, vars, opts);
 }
@@ -723,7 +722,8 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
 void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
   LayoutGuard layout_guard(_playout);
   auto hydro_u = vars.at("hydro_u");
-  auto scalar_s = vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
+  auto scalar_s =
+      vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
 
   SyncOptions sync_opts;
   sync_opts.interpolate(true).type(kConserved);
@@ -820,7 +820,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 
         std::vector<at::Tensor> ke_sum = {
             ke_tol.index(interior).sum({1, 2, 3})};
-        _playout->pg->reduce(ke_sum, opsum)->wait();
+        _playout->comm->pg->reduce(ke_sum, opsum)->wait();
 
         SINFO() << std::scientific << std::setprecision(dt_precision)
                 << " ke=" << ke_sum[0][0].item<double>();
