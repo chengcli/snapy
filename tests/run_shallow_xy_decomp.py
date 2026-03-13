@@ -93,12 +93,12 @@ def main() -> int:
     if pd_combine is None:
         raise FileNotFoundError("pd-combine not found in PATH")
 
-    cases = [("single", 1, "", bin_dir / "shallow_xy_single.yaml")]
+    cases = [("single", 1, "", Path(os.path.abspath(bin_dir / "shallow_xy_single.yaml")))]
     if args.backend == "gloo" or gpu_count >= 1:
-        cases.append(("mesh4", 1, "0", bin_dir / "shallow_xy_mesh4.yaml"))
-    cases.append(("proc2_mesh2", 2, "0,1", bin_dir / "shallow_xy_proc2_mesh2.yaml"))
+        cases.append(("mesh4", 1, "0", Path(os.path.abspath(bin_dir / "shallow_xy_mesh4.yaml"))))
+    cases.append(("proc2_mesh2", 2, "0,1", Path(os.path.abspath(bin_dir / "shallow_xy_proc2_mesh2.yaml"))))
     if args.backend == "gloo" or gpu_count >= 4:
-        cases.append(("proc4", 4, "0,1,2,3", bin_dir / "shallow_xy_proc4.yaml"))
+        cases.append(("proc4", 4, "0,1,2,3", Path(os.path.abspath(bin_dir / "shallow_xy_proc4.yaml"))))
 
     outputs = {}
     for name, ranks, visible_devices, yaml_src in cases:

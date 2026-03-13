@@ -40,7 +40,7 @@ def main() -> int:
     if pd_run is None:
         raise FileNotFoundError("pd-run not found in PATH")
 
-    yaml_src = Path("/home/chengcli/scix/repos/snapy/tests/test_exchange.yaml")
+    yaml_src = Path(os.path.abspath("test_exchange.yaml"))
     if not yaml_src.exists():
         raise FileNotFoundError(f"missing input file {yaml_src}")
 

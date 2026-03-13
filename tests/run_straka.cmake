@@ -7,7 +7,7 @@ if(EXISTS "straka-ref.nc")
 else()
   file(DOWNLOAD
     "${download_link}"
-    "shallow_xy-ref.nc"
+    "straka-ref.nc"
     STATUS _status
     SHOW_PROGRESS
   )

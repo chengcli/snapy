@@ -86,15 +86,15 @@ def main() -> int:
     except Exception as exc:
         return skip(f"reference download failed: {exc}")
 
-    cases = [("mesh6", 1, "0", bin_dir / "shallow_splash_mesh6.yaml")]
+    cases = [("mesh6", 1, "0", Path(os.abspath(bin_dir / "shallow_splash_mesh6.yaml")))]
     if args.backend == "gloo" or gpu_count >= 6:
-        cases.append(("proc6", 6, "0,1,2,3,4,5", bin_dir / "shallow_splash.yaml"))
+        cases.append(("proc6", 6, "0,1,2,3,4,5", Path(os.abspath(bin_dir / "shallow_splash.yaml"))))
     cases.append(
-        ("proc2_mesh3", 2, "0,1", bin_dir / "shallow_splash_proc2_mesh3.yaml")
+        ("proc2_mesh3", 2, "0,1", Path(os.abspath(bin_dir / "shallow_splash_proc2_mesh3.yaml")))
     )
     if args.backend == "gloo" or gpu_count >= 3:
         cases.append(
-            ("proc3_mesh2", 3, "0,1,2", bin_dir / "shallow_splash_proc3_mesh2.yaml")
+            ("proc3_mesh2", 3, "0,1,2", Path(os.abspath(bin_dir / "shallow_splash_proc3_mesh2.yaml")))
         )
 
     for name, ranks, visible_devices, yaml_src in cases:
@@ -114,7 +114,7 @@ def main() -> int:
         run(
             [
                 sys.executable,
-                str(Path("/home/chengcli/scix/repos/snapy/tests/test_shallow_splash.py")),
+                str(Path("test_shallow_splash.py")),
                 "shallow_splash-main.nc",
                 str(reference),
             ],
