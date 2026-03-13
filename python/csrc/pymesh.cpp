@@ -214,6 +214,7 @@ void bind_mesh(py::module &m) {
             return std::make_pair(vars, time);
           },
           py::arg("vars"), py::arg("restart_files") = std::vector<std::string>{})
+      .def("device", &snap::MeshImpl::device)
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
            py::arg("current_time"), py::arg("final_write") = false)

@@ -104,6 +104,25 @@ double MeshImpl::initialize(MeshVariables& vars,
   return 0.;
 }
 
+torch::Device MeshImpl::device() const {
+  auto device = torch::Device(torch::kCPU);
+  auto block = options->block();
+  if (!torch::cuda::is_available() || block == nullptr || block->layout() == nullptr ||
+      block->layout()->backend() != "nccl") {
+    return device;
+  }
+
+  auto layout = blocks.front()->get_layout();
+  auto bound_device = layout->comm->pg->getBoundDeviceId();
+  if (bound_device.has_value()) {
+    return *bound_device;
+  }
+
+  auto device_index = layout->options->device_id();
+  if (device_index < 0) device_index = layout->options->local_rank();
+  return torch::Device(torch::kCUDA, device_index);
+}
+
 double MeshImpl::max_time_step(MeshVariables const& vars) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::max_time_step expects one Variables map per local MeshBlock");

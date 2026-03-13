@@ -13,23 +13,6 @@ using namespace snap;
 
 namespace {
 
-torch::Device select_device(Mesh& mesh, MeshBlockOptions const& block_opts) {
-  auto device = torch::Device(torch::kCPU);
-  if (torch::cuda::is_available() && block_opts->layout()->backend() == "nccl") {
-    std::cout << "Running on CUDA" << std::endl;
-    auto layout = mesh->blocks.front()->get_layout();
-    auto bound_device = layout->comm->pg->getBoundDeviceId();
-    if (bound_device.has_value()) {
-      device = *bound_device;
-    } else {
-      auto device_index = layout->options->device_id();
-      if (device_index < 0) device_index = layout->options->local_rank();
-      device = torch::Device(torch::kCUDA, device_index);
-    }
-  }
-  return device;
-}
-
 void initialize_block(MeshBlock block, Variables& vars, YAML::Node const& config,
                       torch::Device const& device) {
   auto phi = config["problem"]["phi"].as<double>();
@@ -76,7 +59,10 @@ int main(int argc, char** argv) {
       config["distribute"]["blocks_per_process"].as<int>(1));
 
   auto mesh = Mesh(op_mesh);
-  auto device = select_device(mesh, op_block);
+  auto device = mesh->device();
+  if (device.is_cuda()) {
+    std::cout << "Running on CUDA" << std::endl;
+  }
   mesh->to(device);
 
   MeshVariables vars(mesh->blocks.size());
