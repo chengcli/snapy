@@ -16,7 +16,8 @@ bool side_is_uniform(torch::Tensor const& side, double value) {
 }  // namespace
 
 TEST(Mesh, multi_block_exchange) {
-  auto block_opts = MeshBlockOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
+  auto block_opts =
+      MeshBlockOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
   auto mesh_opts = MeshOptionsImpl::create();
   mesh_opts->block(block_opts);
   mesh_opts->blocks_per_process(2);
@@ -46,9 +47,9 @@ TEST(Mesh, multi_block_exchange) {
     int nc2 = pcoord->options->nc2();
     int nc3 = pcoord->options->nc3();
 
-    auto hydro_w =
-        torch::zeros({5, nc3, nc2, nc1},
-                     torch::TensorOptions().dtype(torch::kFloat64).device(device));
+    auto hydro_w = torch::zeros(
+        {5, nc3, nc2, nc1},
+        torch::TensorOptions().dtype(torch::kFloat64).device(device));
     hydro_w[IDN].fill_(block->options->layout()->rank() + 1.0);
     hydro_w[IPR].fill_(1.0);
     vars[i]["hydro_w"] = hydro_w;
@@ -62,9 +63,10 @@ TEST(Mesh, multi_block_exchange) {
     auto rank = layout->options->rank();
     auto iloc = layout->loc_of(rank);
 
-    for (auto offset :
-         {std::tuple<int, int, int>{-1, 0, 0}, std::tuple<int, int, int>{1, 0, 0},
-          std::tuple<int, int, int>{0, -1, 0}, std::tuple<int, int, int>{0, 1, 0}}) {
+    for (auto offset : {std::tuple<int, int, int>{-1, 0, 0},
+                        std::tuple<int, int, int>{1, 0, 0},
+                        std::tuple<int, int, int>{0, -1, 0},
+                        std::tuple<int, int, int>{0, 1, 0}}) {
       int nb = layout->neighbor_rank(iloc, offset);
       ASSERT_GE(nb, 0);
 

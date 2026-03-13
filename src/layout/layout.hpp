@@ -1,13 +1,13 @@
 #pragma once
 
 // C/C++
+#include <torch/torch.h>
+
 #include <algorithm>
 #include <iostream>
 #include <memory>
-#include <tuple>
-
-#include <torch/torch.h>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
+#include <tuple>
 
 // snap
 #include <snap/snap.h>
@@ -128,7 +128,6 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
   ADD_ARG(bool, no_backend) = false;
-
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
@@ -242,8 +241,8 @@ class LayoutImpl {
                        std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
   //! Launch only the communication phase after buffers have been serialized.
-  void launch_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts,
-                       std::vector<c10::intrusive_ptr<c10d::Work>>& works);
+  void launch_exchange(MeshBlockImpl const *pmb, SyncOptions const &opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
   virtual void exchange_remote(
       MeshBlockImpl const *pmb, SyncOptions const &opts,
@@ -257,27 +256,28 @@ class LayoutImpl {
   void _init_process_group();
 
   //! Coordinate local sibling blocks so same-process copies are visible first.
-  void _prepare_local_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts);
+  void _prepare_local_exchange(MeshBlockImpl const *pmb,
+                               SyncOptions const &opts);
 
   //! Return local blocks that actually participate in remote NCCL traffic.
-  std::vector<int> _active_remote_local_indices(SyncOptions const& opts) const;
+  std::vector<int> _active_remote_local_indices(SyncOptions const &opts) const;
 
   //! Build a stable ordering key for remote exchanges owned by one local block.
   virtual std::vector<std::tuple<int, int, int, int, int, int>>
-  _remote_order_keys(SyncOptions const& opts) const;
+  _remote_order_keys(SyncOptions const &opts) const;
 
   //! Launch cubed-sphere NCCL sends/recvs process-wide to preserve op ordering.
   void _launch_cubed_sphere_nccl_remote_ops(
-      SyncOptions const& opts,
-      std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>&
-          works_by_block) const;
+      SyncOptions const &opts,
+      std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>
+          &works_by_block) const;
   virtual std::tuple<int, int, int> _remap_exchange_offset(
       std::tuple<int, int, int> iloc, int dy, int dx) const;
   virtual std::tuple<int, int, int> _peer_exchange_offset(
-      int peer_rank, int target_rank, SyncOptions const& opts,
+      int peer_rank, int target_rank, SyncOptions const &opts,
       std::tuple<int, int, int> offset) const;
   virtual void _copy_local_exchange_buffers(
-      std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const;
+      std::vector<LayoutImpl *> const &layouts, SyncOptions const &opts) const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;

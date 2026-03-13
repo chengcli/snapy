@@ -199,8 +199,8 @@ void bind_mesh(py::module &m) {
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
-      .def_static("from_yaml", &snap::MeshImpl::from_yaml,
-                  py::arg("filename"), py::arg("verbose") = false)
+      .def_static("from_yaml", &snap::MeshImpl::from_yaml, py::arg("filename"),
+                  py::arg("verbose") = false)
       .def_property_readonly("blocks",
                              [](snap::MeshImpl &self) { return self.blocks; })
       .def(
@@ -215,7 +215,8 @@ void bind_mesh(py::module &m) {
             double time = self.initialize(vars, c_restart_files);
             return std::make_pair(vars, time);
           },
-          py::arg("vars"), py::arg("restart_files") = std::vector<std::string>{})
+          py::arg("vars"),
+          py::arg("restart_files") = std::vector<std::string>{})
       .def("device", &snap::MeshImpl::device)
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),

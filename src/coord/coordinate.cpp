@@ -69,7 +69,8 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   op->global_nx3() = node["cells"]["nx3"].as<int>(1);
 
   auto layout = LayoutOptionsImpl::from_yaml(filename);
-  auto playout = LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
+  auto playout =
+      LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
   int rank = playout->options->rank();
   auto [lx2, lx3, lx1] = playout->loc_of(rank);
 
@@ -123,7 +124,8 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
 }
 
 void CoordinateOptionsImpl::repartition(LayoutOptions const& layout) {
-  auto playout = LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
+  auto playout =
+      LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
   int rank = layout->rank();
   auto [lx2, lx3, lx1] = playout->loc_of(rank);
 

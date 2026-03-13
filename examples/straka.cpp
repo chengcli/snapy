@@ -6,6 +6,7 @@
 
 // kintera
 #include <kintera/constants.h>
+
 #include <kintera/species.hpp>
 
 // snap
@@ -17,8 +18,8 @@ using namespace snap;
 
 namespace {
 
-void initialize_block(MeshBlock block, Variables& vars, YAML::Node const& config,
-                      torch::Device const& device) {
+void initialize_block(MeshBlock block, Variables& vars,
+                      YAML::Node const& config, torch::Device const& device) {
   auto p0 = config["problem"]["p0"].as<double>();
   auto Ts = config["problem"]["Ts"].as<double>();
   auto xc = config["problem"]["xc"].as<double>();
@@ -99,7 +100,8 @@ int main(int argc, char** argv) {
     auto dt = mesh->max_time_step(vars);
     mesh->print_cycle_info(vars, current_time, dt);
 
-    for (int stage = 0; stage < mesh->blocks.front()->pintg->stages.size(); ++stage) {
+    for (int stage = 0; stage < mesh->blocks.front()->pintg->stages.size();
+         ++stage) {
       mesh->forward(vars, dt, stage);
     }
 

@@ -43,7 +43,8 @@ std::shared_ptr<ProcessGroupContext> ProcessGroupContext::create(
     }
   }
 
-  auto ctx = std::shared_ptr<ProcessGroupContext>(new ProcessGroupContext(opts));
+  auto ctx =
+      std::shared_ptr<ProcessGroupContext>(new ProcessGroupContext(opts));
   cache[key] = ctx;
   return ctx;
 }
@@ -66,8 +67,8 @@ void ProcessGroupContext::_init() {
   store_opts.port = options_->master_port();
   store_opts.numWorkers = options_->process_world_size();
   store_opts.isServer = options_->process_rank() == 0;
-  store = at::make_intrusive<c10d::TCPStore>(options_->master_addr(),
-                                             store_opts);
+  store =
+      at::make_intrusive<c10d::TCPStore>(options_->master_addr(), store_opts);
 
   if (backend == "gloo") {
     _init_gloo();
@@ -83,8 +84,8 @@ void ProcessGroupContext::_init() {
     std::cout << "[Process " << options_->process_rank() << ":"
               << options_->local_rank()
               << "] Distributed environment initialized with backend="
-              << backend
-              << ", world_size=" << options_->process_world_size() << "\n";
+              << backend << ", world_size=" << options_->process_world_size()
+              << "\n";
   }
 }
 

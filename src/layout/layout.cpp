@@ -1,8 +1,9 @@
 // yaml
+#include <yaml-cpp/yaml.h>
+
 #include <condition_variable>
 #include <exception>
 #include <map>
-#include <yaml-cpp/yaml.h>
 
 // base
 #include <configure.h>  // gloo and nccl
@@ -89,14 +90,15 @@ std::map<OrderedPhaseKey, OrderedPhaseState> g_ordered_phase_states;
 std::mutex g_process_comm_mutex;
 
 std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
-  std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(), nullptr);
+  std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(),
+                                   nullptr);
 
   for (auto const& [key, local_layout] : g_local_layouts) {
     if (key.first == layout.options->process_rank()) {
-      TORCH_CHECK(key.second >= 0 &&
-                      key.second < layout.options->blocks_per_process(),
-                  "invalid local block index ", key.second,
-                  " for process-local layout registry");
+      TORCH_CHECK(
+          key.second >= 0 && key.second < layout.options->blocks_per_process(),
+          "invalid local block index ", key.second,
+          " for process-local layout registry");
       layouts[key.second] = local_layout;
     }
   }
@@ -146,8 +148,8 @@ int exchange_order_index(SyncOptions const& opts,
   return order;
 }
 
-auto make_remote_order_key(int process_rank, int remote_process, int local_block,
-                           int remote_local_block,
+auto make_remote_order_key(int process_rank, int remote_process,
+                           int local_block, int remote_local_block,
                            std::tuple<int, int, int> offset,
                            std::tuple<int, int, int> peer_offset,
                            SyncOptions const& opts) {
@@ -180,12 +182,13 @@ std::vector<int> LayoutImpl::_active_remote_local_indices(
     }
 
     keyed_indices.push_back(
-        {std::move(keys),
-         local_layout->options->local_block_index(local_layout->options->rank())});
+        {std::move(keys), local_layout->options->local_block_index(
+                              local_layout->options->rank())});
   }
 
-  std::sort(keyed_indices.begin(), keyed_indices.end(),
-            [](auto const& lhs, auto const& rhs) { return lhs.first < rhs.first; });
+  std::sort(
+      keyed_indices.begin(), keyed_indices.end(),
+      [](auto const& lhs, auto const& rhs) { return lhs.first < rhs.first; });
 
   std::vector<int> indices;
   indices.reserve(keyed_indices.size());
@@ -217,9 +220,9 @@ LayoutImpl::_remote_order_keys(SyncOptions const& opts) const {
 
       int remote_local_block = options->local_block_index(nb);
       auto peer_offset = _peer_exchange_offset(nb, rank, opts, offset);
-      keys.push_back(make_remote_order_key(options->process_rank(), remote_process,
-                                           local_block, remote_local_block, offset,
-                                           peer_offset, opts));
+      keys.push_back(make_remote_order_key(
+          options->process_rank(), remote_process, local_block,
+          remote_local_block, offset, peer_offset, opts));
     }
   }
 
@@ -229,8 +232,8 @@ LayoutImpl::_remote_order_keys(SyncOptions const& opts) const {
 
 void LayoutImpl::_launch_cubed_sphere_nccl_remote_ops(
     SyncOptions const& opts,
-    std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>&
-        works_by_block) const {
+    std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>& works_by_block)
+    const {
   auto layouts = local_layouts_for(*this);
   std::vector<RemoteExchangeOp> remote_ops;
 
@@ -252,7 +255,8 @@ void LayoutImpl::_launch_cubed_sphere_nccl_remote_ops(
 
         int local_block = layout->options->local_block_index(rank);
         int remote_local_block = layout->options->local_block_index(nb);
-        auto peer_offset = layout->_peer_exchange_offset(nb, rank, opts, offset);
+        auto peer_offset =
+            layout->_peer_exchange_offset(nb, rank, opts, offset);
         remote_ops.push_back(
             {layout, remote_process, local_block, remote_local_block,
              get_buffer_id(offset),
@@ -273,30 +277,29 @@ void LayoutImpl::_launch_cubed_sphere_nccl_remote_ops(
             });
 
   auto send_ops = remote_ops;
-  std::sort(send_ops.begin(), send_ops.end(),
-            [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
-              return std::make_tuple(
-                         lhs.remote_process, lhs.remote_local_block,
-                         exchange_order_index(opts, lhs.peer_offset)) <
-                     std::make_tuple(
-                         rhs.remote_process, rhs.remote_local_block,
-                         exchange_order_index(opts, rhs.peer_offset));
-            });
+  std::sort(
+      send_ops.begin(), send_ops.end(),
+      [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
+        return std::make_tuple(lhs.remote_process, lhs.remote_local_block,
+                               exchange_order_index(opts, lhs.peer_offset)) <
+               std::make_tuple(rhs.remote_process, rhs.remote_local_block,
+                               exchange_order_index(opts, rhs.peer_offset));
+      });
 
   if (layouts.empty()) return;
 
   std::lock_guard<std::mutex> lock(g_process_comm_mutex);
   layouts.front()->comm->group_start();
   for (auto const& op : recv_ops) {
-    auto work = op.layout->comm->pg->recv(
-        op.layout->owner()->recv_bufs[op.buffer_id], op.remote_process,
-        op.recv_tag);
+    auto work =
+        op.layout->comm->pg->recv(op.layout->owner()->recv_bufs[op.buffer_id],
+                                  op.remote_process, op.recv_tag);
     works_by_block[op.local_block].push_back(work);
   }
   for (auto const& op : send_ops) {
-    auto work = op.layout->comm->pg->send(
-        op.layout->owner()->send_bufs[op.buffer_id], op.remote_process,
-        op.send_tag);
+    auto work =
+        op.layout->comm->pg->send(op.layout->owner()->send_bufs[op.buffer_id],
+                                  op.remote_process, op.send_tag);
     works_by_block[op.local_block].push_back(work);
   }
   layouts.front()->comm->group_end();
@@ -399,9 +402,8 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     state.released = expected;
     g_local_exchange_cv.notify_all();
   } else {
-    g_local_exchange_cv.wait(lock, [&]() {
-      return state.ready && state.generation == generation;
-    });
+    g_local_exchange_cv.wait(
+        lock, [&]() { return state.ready && state.generation == generation; });
   }
 
   if (state.error != nullptr) {
@@ -414,9 +416,8 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
       state.generation += 1;
       g_local_exchange_cv.notify_all();
     } else {
-      g_local_exchange_cv.wait(lock, [&]() {
-        return state.generation != generation;
-      });
+      g_local_exchange_cv.wait(
+          lock, [&]() { return state.generation != generation; });
     }
     std::rethrow_exception(error);
   }
@@ -429,9 +430,8 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     state.generation += 1;
     g_local_exchange_cv.notify_all();
   } else {
-    g_local_exchange_cv.wait(lock, [&]() {
-      return state.generation != generation;
-    });
+    g_local_exchange_cv.wait(lock,
+                             [&]() { return state.generation != generation; });
   }
 }
 
@@ -482,24 +482,23 @@ void LayoutImpl::_copy_local_exchange_buffers(
 
         int bid = get_buffer_id(offset);
         auto peer = layouts.at(layout->options->local_block_index(nb));
-        auto peer_offset = layout->_peer_exchange_offset(nb, rank, opts, offset);
+        auto peer_offset =
+            layout->_peer_exchange_offset(nb, rank, opts, offset);
         int peer_bid = get_buffer_id(peer_offset);
 
         auto& send_bufs = layout->owner()->send_bufs;
         auto& peer_recv_bufs = peer->owner()->recv_bufs;
         for (int n = 0; n < send_bufs[bid].size(); ++n) {
-          TORCH_CHECK(peer_recv_bufs[peer_bid][n].numel() ==
-                          send_bufs[bid][n].numel(),
-                      "local exchange size mismatch from rank ", rank,
-                      " to rank ", nb, " send_offset=(",
-                      std::get<0>(offset), ",", std::get<1>(offset),
-                      ") recv_offset=(", std::get<0>(peer_offset), ",",
-                      std::get<1>(peer_offset), ") send_shape=",
-                      send_bufs[bid][n].sizes(), " recv_shape=",
-                      peer_recv_bufs[peer_bid][n].sizes());
-          peer_recv_bufs[peer_bid][n]
-              .view({-1})
-              .copy_(send_bufs[bid][n].reshape({-1}));
+          TORCH_CHECK(
+              peer_recv_bufs[peer_bid][n].numel() == send_bufs[bid][n].numel(),
+              "local exchange size mismatch from rank ", rank, " to rank ", nb,
+              " send_offset=(", std::get<0>(offset), ",", std::get<1>(offset),
+              ") recv_offset=(", std::get<0>(peer_offset), ",",
+              std::get<1>(peer_offset),
+              ") send_shape=", send_bufs[bid][n].sizes(),
+              " recv_shape=", peer_recv_bufs[peer_bid][n].sizes());
+          peer_recv_bufs[peer_bid][n].view({-1}).copy_(
+              send_bufs[bid][n].reshape({-1}));
         }
       }
     }
@@ -542,7 +541,8 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       pmb->recv_bufs[bid].resize(vars.size());
       for (auto& [name, var] : vars) {
         pmb->send_bufs[bid][count] = var.index(sub).clone();
-        pmb->recv_bufs[bid][count] = torch::empty_like(pmb->send_bufs[bid][count]);
+        pmb->recv_bufs[bid][count] =
+            torch::empty_like(pmb->send_bufs[bid][count]);
         count++;
       }
     }
@@ -609,9 +609,8 @@ void LayoutImpl::launch_exchange(
         g_nccl_launch_states.erase(key);
         g_local_exchange_cv.notify_all();
       } else {
-        g_local_exchange_cv.wait(lock, [&]() {
-          return state.generation != generation;
-        });
+        g_local_exchange_cv.wait(
+            lock, [&]() { return state.generation != generation; });
       }
       std::rethrow_exception(error);
     }
@@ -627,9 +626,8 @@ void LayoutImpl::launch_exchange(
       g_nccl_launch_states.erase(key);
       g_local_exchange_cv.notify_all();
     } else {
-      g_local_exchange_cv.wait(lock, [&]() {
-        return state.generation != generation;
-      });
+      g_local_exchange_cv.wait(
+          lock, [&]() { return state.generation != generation; });
     }
     return;
   }
@@ -637,17 +635,20 @@ void LayoutImpl::launch_exchange(
   if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
     auto my_index = options->local_block_index(options->rank());
     auto active_indices = _active_remote_local_indices(opts);
-    auto pos = std::find(active_indices.begin(), active_indices.end(), my_index);
+    auto pos =
+        std::find(active_indices.begin(), active_indices.end(), my_index);
     if (pos == active_indices.end()) {
       return;
     }
 
     auto key = make_ordered_phase_key(*this, opts, 0);
-    auto my_order = static_cast<int>(std::distance(active_indices.begin(), pos));
+    auto my_order =
+        static_cast<int>(std::distance(active_indices.begin(), pos));
 
     std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
     auto& state = g_ordered_phase_states[key];
-    g_local_exchange_cv.wait(lock, [&]() { return state.next_index == my_order; });
+    g_local_exchange_cv.wait(lock,
+                             [&]() { return state.next_index == my_order; });
     lock.unlock();
 
     exchange_remote(pmb, opts, works);
@@ -669,7 +670,8 @@ void LayoutImpl::exchange_remote(
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
   TORCH_CHECK(!options->no_backend(),
               "[Layout:exchange_remote] backend is disabled");
-  TORCH_CHECK(pmb != nullptr, "[Layout:exchange_remote] MeshBlock pointer is null");
+  TORCH_CHECK(pmb != nullptr,
+              "[Layout:exchange_remote] MeshBlock pointer is null");
 
   if (options->verbose()) {
     SINFO(Layout) << "performing communication\n";
@@ -724,7 +726,8 @@ void LayoutImpl::exchange_remote(
         int remote_local_block = options->local_block_index(nb);
         int local_block = options->local_block_index(rank);
         auto peer_offset = _peer_exchange_offset(nb, rank, opts, offset);
-        int send_id = make_comm_tag(remote_local_block, peer_offset, opts.phyid());
+        int send_id =
+            make_comm_tag(remote_local_block, peer_offset, opts.phyid());
         int recv_id = make_comm_tag(local_block, offset, opts.phyid());
         remote_ops.push_back({this, remote_process, local_block,
                               remote_local_block, r, send_id, recv_id, offset,
@@ -750,23 +753,19 @@ void LayoutImpl::exchange_remote(
               });
 
     for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                         op.recv_tag));
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
     }
     for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                         op.send_tag));
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
     }
   } else {
     for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                         op.send_tag));
-      works.push_back(
-          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                         op.recv_tag));
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
     }
   }
 
@@ -862,7 +861,8 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   if (options->backend() == "nccl" && options->blocks_per_process() > 1) {
     auto my_index = options->local_block_index(options->rank());
     auto active_indices = _active_remote_local_indices(opts);
-    auto pos = std::find(active_indices.begin(), active_indices.end(), my_index);
+    auto pos =
+        std::find(active_indices.begin(), active_indices.end(), my_index);
 
     if (pos == active_indices.end()) {
       deserialize(pmb, vars, opts);
@@ -874,11 +874,13 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
     }
 
     auto key = make_ordered_phase_key(*this, opts, 1);
-    auto my_order = static_cast<int>(std::distance(active_indices.begin(), pos));
+    auto my_order =
+        static_cast<int>(std::distance(active_indices.begin(), pos));
 
     std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
     auto& state = g_ordered_phase_states[key];
-    g_local_exchange_cv.wait(lock, [&]() { return state.next_index == my_order; });
+    g_local_exchange_cv.wait(lock,
+                             [&]() { return state.next_index == my_order; });
     lock.unlock();
 
     for (auto& work : works) work->wait();

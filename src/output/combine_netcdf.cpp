@@ -24,9 +24,9 @@ namespace {
 std::mutex combine_mutex;
 std::map<std::string, int> combine_counts;
 
-bool ready_to_combine(Layout const& layout, std::string const& key) {
+bool ready_to_combine(Layout const &layout, std::string const &key) {
   std::lock_guard<std::mutex> lock(combine_mutex);
-  int& count = combine_counts[key];
+  int &count = combine_counts[key];
   count += 1;
   if (count < layout->options->blocks_per_process()) {
     return false;

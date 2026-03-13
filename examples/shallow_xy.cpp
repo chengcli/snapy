@@ -13,8 +13,8 @@ using namespace snap;
 
 namespace {
 
-void initialize_block(MeshBlock block, Variables& vars, YAML::Node const& config,
-                      torch::Device const& device) {
+void initialize_block(MeshBlock block, Variables& vars,
+                      YAML::Node const& config, torch::Device const& device) {
   auto phi = config["problem"]["phi"].as<double>();
   auto uphi = config["problem"]["uphi"].as<double>();
   auto dphi = config["problem"]["dphi"].as<double>();

@@ -71,11 +71,11 @@ namespace {
 
 std::mutex g_cubed_sphere_comm_mutex;
 
-auto make_remote_order_key(int process_rank, int remote_process, int local_block,
-                           int remote_local_block,
+auto make_remote_order_key(int process_rank, int remote_process,
+                           int local_block, int remote_local_block,
                            std::tuple<int, int, int> offset,
                            std::tuple<int, int, int> peer_offset,
-                           SyncOptions const& opts) {
+                           SyncOptions const &opts) {
   auto exchange_order_index = [&](std::tuple<int, int, int> off) {
     int order = 0;
     for (int dy = opts.dy_min(); dy <= opts.dy_max(); ++dy) {
@@ -104,13 +104,13 @@ auto make_remote_order_key(int process_rank, int remote_process, int local_block
                          opts.phyid());
 }
 
-std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
+std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const &layout,
                                            int peer_rank, int target_rank) {
   auto peer_iloc = layout.loc_of(peer_rank);
-  for (auto offset : {std::tuple<int, int, int>{-1, 0, 0},
-                      std::tuple<int, int, int>{1, 0, 0},
-                      std::tuple<int, int, int>{0, -1, 0},
-                      std::tuple<int, int, int>{0, 1, 0}}) {
+  for (auto offset :
+       {std::tuple<int, int, int>{-1, 0, 0}, std::tuple<int, int, int>{1, 0, 0},
+        std::tuple<int, int, int>{0, -1, 0},
+        std::tuple<int, int, int>{0, 1, 0}}) {
     if (layout.neighbor_rank(peer_iloc, offset) == target_rank) {
       return offset;
     }
@@ -908,8 +908,9 @@ void CubedSphereLayoutImpl::exchange_remote(
         int send_tag =
             make_comm_tag(remote_local_block, remote_offset, opts.phyid());
         int recv_tag = make_comm_tag(local_block, offset, opts.phyid());
-        remote_ops.push_back({remote_process, r, send_tag, recv_tag, local_block,
-                              remote_local_block, offset, remote_offset});
+        remote_ops.push_back({remote_process, r, send_tag, recv_tag,
+                              local_block, remote_local_block, offset,
+                              remote_offset});
       } else if (nb == rank) {  // self-send
         TORCH_CHECK(false, "I should not be here");
       }
@@ -917,7 +918,7 @@ void CubedSphereLayoutImpl::exchange_remote(
 
   if (options->backend() == "nccl") {
     std::sort(remote_ops.begin(), remote_ops.end(),
-              [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
+              [&](RemoteExchangeOp const &lhs, RemoteExchangeOp const &rhs) {
                 return make_remote_order_key(
                            options->process_rank(), lhs.remote_process,
                            lhs.local_block, lhs.remote_local_block, lhs.offset,
@@ -928,24 +929,20 @@ void CubedSphereLayoutImpl::exchange_remote(
                            rhs.remote_offset, opts);
               });
 
-    for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                         op.recv_tag));
+    for (auto const &op : remote_ops) {
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
     }
-    for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                         op.send_tag));
+    for (auto const &op : remote_ops) {
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
     }
   } else {
-    for (auto const& op : remote_ops) {
-      works.push_back(
-          comm->pg->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                         op.send_tag));
-      works.push_back(
-          comm->pg->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                         op.recv_tag));
+    for (auto const &op : remote_ops) {
+      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                     op.remote_process, op.send_tag));
+      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                     op.remote_process, op.recv_tag));
     }
   }
 
@@ -959,7 +956,7 @@ std::tuple<int, int, int> CubedSphereLayoutImpl::_remap_exchange_offset(
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::_peer_exchange_offset(
-    int peer_rank, int target_rank, SyncOptions const& opts,
+    int peer_rank, int target_rank, SyncOptions const &opts,
     std::tuple<int, int, int> offset) const {
   (void)opts;
   (void)offset;

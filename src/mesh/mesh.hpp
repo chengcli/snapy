@@ -53,7 +53,8 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
   void forward(MeshVariables& vars, double dt, int stage);
   void make_outputs(MeshVariables const& vars, double current_time,
                     bool final_write = false);
-  void print_cycle_info(MeshVariables const& vars, double time, double dt) const;
+  void print_cycle_info(MeshVariables const& vars, double time,
+                        double dt) const;
   int check_redo(MeshVariables& vars);
   void set_cycle(int cycle);
   void finalize(MeshVariables const& vars, double time);

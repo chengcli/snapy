@@ -110,7 +110,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   Layout get_layout() const { return _playout; }
   static Layout current_layout() { return _tls_layout; }
-  static void set_current_layout(Layout layout) { _tls_layout = std::move(layout); }
+  static void set_current_layout(Layout layout) {
+    _tls_layout = std::move(layout);
+  }
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
@@ -131,7 +133,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   /*!
    * \param vars: variables to initialize
    * \return: initial simulation time
-  */
+   */
   double initialize(Variables& vars, char const* restart_file = nullptr);
   void initialize_local(Variables& vars);
 
@@ -161,12 +163,14 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   void begin_exchange(Variables& vars, SyncOptions const& opts) const;
 
   //! Launch remote exchange work after begin_exchange prepared the buffers.
-  void launch_exchange(SyncOptions const& opts,
-                       std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
+  void launch_exchange(
+      SyncOptions const& opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
 
   //! Wait on launched work and deserialize results back into the variables.
-  void finalize_exchange(Variables& vars, SyncOptions const& opts,
-                         std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
+  void finalize_exchange(
+      Variables& vars, SyncOptions const& opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
   void exchange_ghost_zones(Variables& vars);
 
   //! make write outputs at the current time

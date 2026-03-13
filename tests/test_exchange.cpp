@@ -126,8 +126,8 @@ bool ghosts_match_expected(MeshBlock block, Variables const& vars,
         !contains_expected) {
       std::cerr << "ghost mismatch on rank " << rank << " offset=("
                 << std::get<0>(offset) << "," << std::get<1>(offset)
-                << ") expected_max " << expected_max << " actual_min="
-                << actual_min << " actual_max=" << actual_max
+                << ") expected_max " << expected_max
+                << " actual_min=" << actual_min << " actual_max=" << actual_max
                 << " contains_expected=" << contains_expected << std::endl;
       return false;
     }
@@ -182,8 +182,8 @@ int main(int argc, char** argv) {
   bool saw_local_neighbor = false;
   bool saw_remote_neighbor = false;
   for (int i = 0; i < mesh->blocks.size(); ++i) {
-    ok = ok && ghosts_match_expected(mesh->blocks[i], vars[i], saw_local_neighbor,
-                                     saw_remote_neighbor);
+    ok = ok && ghosts_match_expected(mesh->blocks[i], vars[i],
+                                     saw_local_neighbor, saw_remote_neighbor);
   }
 
   bool expect_local = parse_env_bool("EXPECT_LOCAL_NEIGHBOR", true);

@@ -70,7 +70,8 @@ void MeshImpl::reset() {
     if (block_opts->coord() != nullptr) {
       block_opts->coord()->repartition(layout);
     }
-    auto block = register_module("block" + std::to_string(i), MeshBlock(block_opts));
+    auto block =
+        register_module("block" + std::to_string(i), MeshBlock(block_opts));
     blocks.push_back(block);
   }
 }
@@ -127,8 +128,8 @@ double MeshImpl::initialize(MeshVariables& vars,
 torch::Device MeshImpl::device() const {
   auto device = torch::Device(torch::kCPU);
   auto block = options->block();
-  if (!torch::cuda::is_available() || block == nullptr || block->layout() == nullptr ||
-      block->layout()->backend() != "nccl") {
+  if (!torch::cuda::is_available() || block == nullptr ||
+      block->layout() == nullptr || block->layout()->backend() != "nccl") {
     return device;
   }
 
@@ -144,8 +145,9 @@ torch::Device MeshImpl::device() const {
 }
 
 double MeshImpl::max_time_step(MeshVariables const& vars) {
-  TORCH_CHECK(vars.size() == blocks.size(),
-              "Mesh::max_time_step expects one Variables map per local MeshBlock");
+  TORCH_CHECK(
+      vars.size() == blocks.size(),
+      "Mesh::max_time_step expects one Variables map per local MeshBlock");
 
   double dt_local = 1.e99;
   for (int i = 0; i < blocks.size(); ++i) {
@@ -184,8 +186,9 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
 
 void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,
                             bool final_write) {
-  TORCH_CHECK(vars.size() == blocks.size(),
-              "Mesh::make_outputs expects one Variables map per local MeshBlock");
+  TORCH_CHECK(
+      vars.size() == blocks.size(),
+      "Mesh::make_outputs expects one Variables map per local MeshBlock");
   for (int i = 0; i < blocks.size(); ++i) {
     blocks[i]->make_outputs(vars[i], current_time, final_write);
   }
