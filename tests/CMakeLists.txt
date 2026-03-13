@@ -27,11 +27,17 @@ file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 foreach(input ${inputs})
-  execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${inp})
+  get_filename_component(input_name ${input} NAME)
+  execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${input_name})
 endforeach()
 
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_mesh_multi_block 2)
+
+set_tests_properties(test_exchange.release PROPERTIES
+  ENVIRONMENT
+    "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
+)
 
 add_test(
   NAME test_exchange_decomp

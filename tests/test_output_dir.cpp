@@ -1,4 +1,6 @@
 // C/C++
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -9,14 +11,22 @@
 
 namespace fs = std::filesystem;
 
-// Root of all temporary directories created by this test suite.
-// Using temp_directory_path() keeps the tests cross-platform.
-static const fs::path kTestRoot =
-    fs::temp_directory_path() / "snapy_test_output";
+static fs::path make_unique_test_dir(const std::string& name) {
+  static std::atomic<int> counter{0};
+  fs::path path;
+  do {
+    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    auto suffix = counter.fetch_add(1, std::memory_order_relaxed);
+    path = fs::temp_directory_path() /
+           ("snapy_test_output_" + name + "_" + std::to_string(now) + "_" +
+            std::to_string(suffix));
+  } while (fs::exists(path));
+  return path;
+}
 
 // Mirrors the exact error-handling pattern used in
 // src/output/netcdf.cpp and src/output/restart.cpp.
-static void create_output_dir(const std::string &dir) {
+static void create_output_dir(const std::string& dir) {
   std::error_code ec;
   fs::create_directories(dir, ec);
   if (ec) {
@@ -26,31 +36,23 @@ static void create_output_dir(const std::string &dir) {
 }
 
 TEST(OutputDir, creates_missing_directory) {
-  const fs::path dir = kTestRoot / "single";
-  std::error_code ec;
-  fs::remove_all(kTestRoot, ec);
+  const fs::path dir = make_unique_test_dir("single");
 
   ASSERT_FALSE(fs::exists(dir));
   EXPECT_NO_THROW(create_output_dir(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
-
-  fs::remove_all(kTestRoot, ec);
 }
 
 TEST(OutputDir, creates_nested_missing_directory) {
-  const fs::path dir = kTestRoot / "nested" / "deep" / "path";
-  std::error_code ec;
-  fs::remove_all(kTestRoot, ec);
+  const fs::path dir = make_unique_test_dir("nested") / "deep" / "path";
 
   ASSERT_FALSE(fs::exists(dir));
   EXPECT_NO_THROW(create_output_dir(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
-
-  fs::remove_all(kTestRoot, ec);
 }
 
 TEST(OutputDir, idempotent_for_existing_directory) {
-  const fs::path dir = kTestRoot / "existing";
+  const fs::path dir = make_unique_test_dir("existing");
   std::error_code ec;
   fs::create_directories(dir, ec);
   ASSERT_TRUE(fs::is_directory(dir));
@@ -58,8 +60,6 @@ TEST(OutputDir, idempotent_for_existing_directory) {
   // calling again on an already-existing directory must not throw
   EXPECT_NO_THROW(create_output_dir(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
-
-  fs::remove_all(kTestRoot, ec);
 }
 
 TEST(OutputDir, current_directory_default) {
@@ -67,7 +67,7 @@ TEST(OutputDir, current_directory_default) {
   EXPECT_NO_THROW(create_output_dir("."));
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

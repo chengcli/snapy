@@ -13,8 +13,21 @@ else()
   )
 endif()
 
-if(NOT res EQUAL 0)
-  message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
+list(GET _status 0 _status_code)
+if(NOT _status_code EQUAL 0)
+  list(GET _status 1 _status_message)
+  message(FATAL_ERROR
+          "Failed to download reference file: ${_status_code} ${_status_message}")
+endif()
+
+file(GLOB shallow_splash_outputs
+  "shallow_splash-main.nc"
+  "shallow_splash.out*.nc"
+  "shallow_splash.[0-9][0-9][0-9][0-9][0-9].restart"
+  "shallow_splash.final.restart"
+)
+if(shallow_splash_outputs)
+  file(REMOVE ${shallow_splash_outputs})
 endif()
 
 execute_process(COMMAND ln -sf ../bin/shallow_splash.yaml shallow_splash.yaml)
