@@ -72,6 +72,7 @@ class CubedSphereLayoutImpl : public LayoutImpl {
   int num_exchange_buffers() const override { return 9; }
 
  private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
   void _initialize();
   std::tuple<int, int, int> _remap_exchange_offset(
       std::tuple<int, int, int> iloc, int dy, int dx) const override;

@@ -98,7 +98,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! current cycle number
   int cycle = 0;
 
-  //! exchange buffers owned by the mesh block rather than the layout
+  //! Exchange buffers owned by the MeshBlock so Layout stays stateless.
   mutable std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
 
   //! submodules
@@ -134,6 +134,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   */
   double initialize(Variables& vars, char const* restart_file = nullptr);
   void initialize_local(Variables& vars);
+
+  //! Mesh-owned initialization path that preserves multi-block exchange order.
   void initialize_under_mesh(Variables& vars);
   void finalize_initialization(Variables& vars);
 
@@ -154,9 +156,15 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   void forward(Variables& vars, double dt, int stage);
   void advance_local(Variables& vars, double dt, int stage);
   void exchange(Variables& vars, SyncOptions const& opts) const;
+
+  //! Serialize state into MeshBlock-owned buffers without launching comms yet.
   void begin_exchange(Variables& vars, SyncOptions const& opts) const;
+
+  //! Launch remote exchange work after begin_exchange prepared the buffers.
   void launch_exchange(SyncOptions const& opts,
                        std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
+
+  //! Wait on launched work and deserialize results back into the variables.
   void finalize_exchange(Variables& vars, SyncOptions const& opts,
                          std::vector<c10::intrusive_ptr<c10d::Work>>& works) const;
   void exchange_ghost_zones(Variables& vars);

@@ -189,7 +189,10 @@ class LayoutImpl {
 
   virtual ~LayoutImpl();
 
+  //! Owning MeshBlock that provides exchange buffer storage for this layout.
   MeshBlockImpl *owner() const { return _owner; }
+
+  //! Number of directional exchange slots required by this layout geometry.
   virtual int num_exchange_buffers() const { return 9; }
 
   virtual int rank_of(std::tuple<int, int, int> iloc) const {
@@ -238,6 +241,7 @@ class LayoutImpl {
                        SyncOptions const &opts,
                        std::vector<c10::intrusive_ptr<c10d::Work>> &works);
 
+  //! Launch only the communication phase after buffers have been serialized.
   void launch_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts,
                        std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
@@ -251,10 +255,18 @@ class LayoutImpl {
 
  protected:
   void _init_process_group();
+
+  //! Coordinate local sibling blocks so same-process copies are visible first.
   void _prepare_local_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts);
+
+  //! Return local blocks that actually participate in remote NCCL traffic.
   std::vector<int> _active_remote_local_indices(SyncOptions const& opts) const;
+
+  //! Build a stable ordering key for remote exchanges owned by one local block.
   virtual std::vector<std::tuple<int, int, int, int, int, int>>
   _remote_order_keys(SyncOptions const& opts) const;
+
+  //! Launch cubed-sphere NCCL sends/recvs process-wide to preserve op ordering.
   void _launch_cubed_sphere_nccl_remote_ops(
       SyncOptions const& opts,
       std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>&
@@ -292,6 +304,7 @@ class SlabLayoutImpl : public LayoutImpl {
                     std::tuple<int, int, int> offset) const override;
 
  private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
   void _initialize();
 };
 class CubedLayoutImpl : public LayoutImpl {
@@ -313,6 +326,7 @@ class CubedLayoutImpl : public LayoutImpl {
                     std::tuple<int, int, int> offset) const override;
 
  private:
+  //! Constructor-time setup that replaces the old torch-style reset() hook.
   void _initialize();
 };
 
