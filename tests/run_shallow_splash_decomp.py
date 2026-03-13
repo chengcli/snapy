@@ -92,6 +92,10 @@ def main() -> int:
     cases.append(
         ("proc2_mesh3", 2, "0,1", bin_dir / "shallow_splash_proc2_mesh3.yaml")
     )
+    if args.backend == "gloo" or gpu_count >= 3:
+        cases.append(
+            ("proc3_mesh2", 3, "0,1,2", bin_dir / "shallow_splash_proc3_mesh2.yaml")
+        )
 
     for name, ranks, visible_devices, yaml_src in cases:
         if not yaml_src.exists():
