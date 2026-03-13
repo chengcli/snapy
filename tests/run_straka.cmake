@@ -13,8 +13,8 @@ else()
   )
 endif()
 
-if(NOT res EQUAL 0)
-  message(FATAL_ERROR "Failed to download reference file with exit code ${res}")
+if(NOT _status EQUAL 0)
+  message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
 execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)
