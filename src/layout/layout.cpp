@@ -926,8 +926,4 @@ void LayoutImpl::_init_process_group() {
   comm = ProcessGroupContext::create(options);
 }
 
-#ifdef NOT_USE_C10D_NCCL
-void LayoutImpl::_init_process_group() {}
-#endif
-
 }  // namespace snap
