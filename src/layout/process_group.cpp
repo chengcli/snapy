@@ -106,6 +106,7 @@ void ProcessGroupContext::_init_gloo() {
 void ProcessGroupContext::_init_nccl() {}
 void ProcessGroupContext::group_start() const {}
 void ProcessGroupContext::group_end() const {}
+void ProcessGroupContext::sync_stream() const {}
 void ProcessGroupContext::sync_device() const {}
 #endif
 

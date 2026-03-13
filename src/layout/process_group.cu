@@ -3,6 +3,7 @@
 
 // torch
 #include <c10/cuda/CUDAFunctions.h>
+#include <c10/cuda/CUDAStream.h>
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
 
 #include "layout.hpp"
@@ -48,9 +49,15 @@ void ProcessGroupContext::group_end() const {
   }
 }
 
+void ProcessGroupContext::sync_stream() const {
+  if (is_nccl()) {
+    c10::cuda::getCurrentCUDAStream(options_->device_id()).synchronize();
+  }
+}
+
 void ProcessGroupContext::sync_device() const {
   if (is_nccl()) {
-    cudaDeviceSynchronize();
+    c10::cuda::device_synchronize();
   }
 }
 

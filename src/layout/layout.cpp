@@ -547,17 +547,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       }
     }
 
-  comm->sync_device();
-}
-
-void LayoutImpl::forward(MeshBlockImpl const* pmb, Variables& vars,
-                         SyncOptions const& opts,
-                         std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
-  TORCH_CHECK(!options->no_backend(), "[Layout:forward] backend is disabled");
-  TORCH_CHECK(pmb != nullptr, "[Layout:forward] MeshBlock pointer is null");
-
-  serialize(pmb, vars, opts);
-  launch_exchange(pmb, opts, works);
+  comm->sync_stream();
 }
 
 void LayoutImpl::launch_exchange(

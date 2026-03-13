@@ -35,8 +35,8 @@ inline int get_buffer_id(std::tuple<int, int, int> offset) {
 }
 
 //! get environment variable with default
-inline std::string get_env(const char *name, const std::string &def) {
-  const char *v = std::getenv(name);
+inline std::string get_env(const char* name, const std::string& def) {
+  const char* v = std::getenv(name);
   return v ? std::string(v) : def;
 }
 
@@ -54,11 +54,11 @@ struct LayoutOptionsImpl {
     return std::make_shared<LayoutOptionsImpl>();
   }
   static std::shared_ptr<LayoutOptionsImpl> from_yaml(
-      std::string const &filename, bool verbose = false);
+      std::string const& filename, bool verbose = false);
 
   LayoutOptionsImpl();
 
-  void report(std::ostream &os) const {
+  void report(std::ostream& os) const {
     os << "-- layout options --\n";
     os << "* type = " << type() << "\n"
        << "* px = " << px() << "\n"
@@ -163,9 +163,9 @@ class MeshBlockImpl;
 
 class LayoutImpl {
  public:
-  static std::shared_ptr<LayoutImpl> create(LayoutOptions const &opts,
-                                            MeshBlockImpl *p = nullptr,
-                                            std::string const &name = "layout");
+  static std::shared_ptr<LayoutImpl> create(LayoutOptions const& opts,
+                                            MeshBlockImpl* p = nullptr,
+                                            std::string const& name = "layout");
 
   //! communication
   std::shared_ptr<ProcessGroupContext> comm;
@@ -174,7 +174,7 @@ class LayoutImpl {
   LayoutOptions options;
 
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
-  LayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+  LayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
       : comm(nullptr), options(opts), _owner(owner) {
     int P = options->px() * options->py() * options->pz();
     _rankof.resize(P);
@@ -189,7 +189,7 @@ class LayoutImpl {
   virtual ~LayoutImpl();
 
   //! Owning MeshBlock that provides exchange buffer storage for this layout.
-  MeshBlockImpl *owner() const { return _owner; }
+  MeshBlockImpl* owner() const { return _owner; }
 
   //! Number of directional exchange slots required by this layout geometry.
   virtual int num_exchange_buffers() const { return 9; }
@@ -220,69 +220,59 @@ class LayoutImpl {
   }
 
   //! Serialize variables
-  virtual void serialize(MeshBlockImpl const *pmb, Variables &vars,
-                         SyncOptions const &opts);
+  virtual void serialize(MeshBlockImpl const* pmb, Variables& vars,
+                         SyncOptions const& opts);
 
   //! Deserialize variables
-  virtual void deserialize(MeshBlockImpl const *pmb, Variables &vars,
-                           SyncOptions const &opts) const;
+  virtual void deserialize(MeshBlockImpl const* pmb, Variables& vars,
+                           SyncOptions const& opts) const;
 
   //! fill corners after exchange
-  virtual void fill_corners(MeshBlockImpl const *pmb, Variables &vars) const;
-
-  //! \brief Perform ghost zone exchange
-  /*!
-   * Exchanges ghost zone data with neighboring processes using point-to-point
-   * communication. This function serializes data, performs send/recv
-   * operations, and deserializes received data into ghost zones.
-   */
-  virtual void forward(MeshBlockImpl const *pmb, Variables &vars,
-                       SyncOptions const &opts,
-                       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+  virtual void fill_corners(MeshBlockImpl const* pmb, Variables& vars) const;
 
   //! Launch only the communication phase after buffers have been serialized.
-  void launch_exchange(MeshBlockImpl const *pmb, SyncOptions const &opts,
-                       std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+  void launch_exchange(MeshBlockImpl const* pmb, SyncOptions const& opts,
+                       std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
   virtual void exchange_remote(
-      MeshBlockImpl const *pmb, SyncOptions const &opts,
-      std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+      MeshBlockImpl const* pmb, SyncOptions const& opts,
+      std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
-  void finalize(MeshBlockImpl const *pmb, Variables &vars,
-                SyncOptions const &opts,
-                std::vector<c10::intrusive_ptr<c10d::Work>> &works);
+  void finalize(MeshBlockImpl const* pmb, Variables& vars,
+                SyncOptions const& opts,
+                std::vector<c10::intrusive_ptr<c10d::Work>>& works);
 
  protected:
   void _init_process_group();
 
   //! Coordinate local sibling blocks so same-process copies are visible first.
-  void _prepare_local_exchange(MeshBlockImpl const *pmb,
-                               SyncOptions const &opts);
+  void _prepare_local_exchange(MeshBlockImpl const* pmb,
+                               SyncOptions const& opts);
 
   //! Return local blocks that actually participate in remote NCCL traffic.
-  std::vector<int> _active_remote_local_indices(SyncOptions const &opts) const;
+  std::vector<int> _active_remote_local_indices(SyncOptions const& opts) const;
 
   //! Build a stable ordering key for remote exchanges owned by one local block.
   virtual std::vector<std::tuple<int, int, int, int, int, int>>
-  _remote_order_keys(SyncOptions const &opts) const;
+  _remote_order_keys(SyncOptions const& opts) const;
 
   //! Launch cubed-sphere NCCL sends/recvs process-wide to preserve op ordering.
   void _launch_cubed_sphere_nccl_remote_ops(
-      SyncOptions const &opts,
-      std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>
-          &works_by_block) const;
+      SyncOptions const& opts,
+      std::map<int, std::vector<c10::intrusive_ptr<c10d::Work>>>&
+          works_by_block) const;
   virtual std::tuple<int, int, int> _remap_exchange_offset(
       std::tuple<int, int, int> iloc, int dy, int dx) const;
   virtual std::tuple<int, int, int> _peer_exchange_offset(
-      int peer_rank, int target_rank, SyncOptions const &opts,
+      int peer_rank, int target_rank, SyncOptions const& opts,
       std::tuple<int, int, int> offset) const;
   virtual void _copy_local_exchange_buffers(
-      std::vector<LayoutImpl *> const &layouts, SyncOptions const &opts) const;
+      std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;
   std::vector<int> _rankof;
-  MeshBlockImpl *_owner = nullptr;
+  MeshBlockImpl* _owner = nullptr;
 };
 using Layout = std::shared_ptr<LayoutImpl>;
 
@@ -290,14 +280,14 @@ class SlabLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   SlabLayoutImpl() = default;
-  SlabLayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+  SlabLayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
       : LayoutImpl(opts, owner) {
     options->type("slab");
     _initialize();
   }
 
   ~SlabLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const;
+  void pretty_print(std::ostream& os) const;
 
   std::tuple<int, int, int> loc_of(int rank) const override;
   int neighbor_rank(std::tuple<int, int, int> iloc,
@@ -311,14 +301,14 @@ class CubedLayoutImpl : public LayoutImpl {
  public:
   //! Constructor to initialize the layers
   CubedLayoutImpl() = default;
-  CubedLayoutImpl(const LayoutOptions &opts, MeshBlockImpl *owner = nullptr)
+  CubedLayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
       : LayoutImpl(opts, owner) {
     options->type("cubed");
     _initialize();
   }
 
   ~CubedLayoutImpl() = default;
-  void pretty_print(std::ostream &os) const;
+  void pretty_print(std::ostream& os) const;
   int num_exchange_buffers() const override { return 27; }
 
   std::tuple<int, int, int> loc_of(int rank) const override;

@@ -24,6 +24,7 @@ class ProcessGroupContext {
   bool is_nccl() const { return backend == "nccl"; }
   void group_start() const;
   void group_end() const;
+  void sync_stream() const;
   void sync_device() const;
 
  private:
