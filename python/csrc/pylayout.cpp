@@ -7,7 +7,6 @@
 
 // torch
 #include <torch/extension.h>
-#include <torch/nn/modules/container/any.h>
 
 // snap
 #include <snap/layout/cubed_sphere_layout.hpp>
@@ -77,15 +76,6 @@ void bind_layout(py::module &m) {
         return fmt::format("SlabLayout(\n{})", ss.str());
       });
 
-  torch::python::add_module_bindings(pySlabLayout)
-      .def("buffer",
-           [](snap::SlabLayoutImpl &self, std::string name) {
-             return self.named_buffers()[name];
-           })
-      .def("module", [](snap::SlabLayoutImpl &self, std::string name) {
-        return self.named_modules()[name];
-      });
-
   auto pyCubedLayout =
       py::class_<snap::CubedLayoutImpl, snap::LayoutImpl,
                  std::shared_ptr<snap::CubedLayoutImpl>>(m, "CubedLayout");
@@ -99,15 +89,6 @@ void bind_layout(py::module &m) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("CubedSphereLayout(\n{})", ss.str());
-      });
-
-  torch::python::add_module_bindings(pyCubedLayout)
-      .def("buffer",
-           [](snap::CubedLayoutImpl &self, std::string name) {
-             return self.named_buffers()[name];
-           })
-      .def("module", [](snap::CubedLayoutImpl &self, std::string name) {
-        return self.named_modules()[name];
       });
 
   auto pyCubedSphereLayout =
@@ -125,15 +106,6 @@ void bind_layout(py::module &m) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("CubedSphereLayout(\n{})", ss.str());
-      });
-
-  torch::python::add_module_bindings(pyCubedSphereLayout)
-      .def("buffer",
-           [](snap::CubedSphereLayoutImpl &self, std::string name) {
-             return self.named_buffers()[name];
-           })
-      .def("module", [](snap::CubedSphereLayoutImpl &self, std::string name) {
-        return self.named_modules()[name];
       });
 
   // distribution functions

@@ -2,8 +2,7 @@
 Stub file for snapy.layout module
 """
 
-from typing import Callable, Dict, List, Optional, Tuple, overload
-import torch
+from typing import Tuple, overload
 
 # Layout
 class LayoutOptions:
@@ -249,14 +248,6 @@ class SlabLayout(Layout):
 
     def __repr__(self) -> str: ...
 
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
-        ...
-
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
-        ...
-
 class CubedLayout(Layout):
     """
     3D cubed domain layout.
@@ -274,14 +265,6 @@ class CubedLayout(Layout):
         ...
 
     def __repr__(self) -> str: ...
-
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
-        ...
-
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
-        ...
 
 class CubedSphereLayout(Layout):
     """
@@ -306,14 +289,6 @@ class CubedSphereLayout(Layout):
         ...
 
     def __repr__(self) -> str: ...
-
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
-        ...
-
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
-        ...
 
 # Distributed submodule functions
 class distributed:

@@ -21,6 +21,12 @@ struct MeshOptionsImpl {
     return std::make_shared<MeshOptionsImpl>();
   }
 
+  void report(std::ostream& os) const {
+    os << "-- mesh options --\n";
+    os << "* blocks_per_process = " << blocks_per_process() << "\n";
+    os << "* block = " << (block() != nullptr ? "set" : "null") << "\n";
+  }
+
   ADD_ARG(MeshBlockOptions, block) = nullptr;
   ADD_ARG(int, blocks_per_process) = 1;
 };
