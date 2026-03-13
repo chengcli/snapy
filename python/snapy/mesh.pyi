@@ -145,6 +145,9 @@ class Mesh:
     @overload
     def __init__(self, options: MeshOptions) -> None: ...
 
+    @staticmethod
+    def from_yaml(filename: str, verbose: bool = False) -> "Mesh": ...
+
     options: MeshOptions
     blocks: Sequence[MeshBlock]
 

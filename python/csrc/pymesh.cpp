@@ -199,6 +199,8 @@ void bind_mesh(py::module &m) {
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
+      .def_static("from_yaml", &snap::MeshImpl::from_yaml,
+                  py::arg("filename"), py::arg("verbose") = false)
       .def_property_readonly("blocks",
                              [](snap::MeshImpl &self) { return self.blocks; })
       .def(
