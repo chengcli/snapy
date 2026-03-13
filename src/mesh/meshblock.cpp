@@ -17,23 +17,6 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
-// Static member variable definitions
-thread_local Layout MeshBlockImpl::_tls_layout = nullptr;
-
-namespace {
-class LayoutGuard {
- public:
-  explicit LayoutGuard(Layout layout) : prev_(MeshBlockImpl::current_layout()) {
-    MeshBlockImpl::set_current_layout(std::move(layout));
-  }
-
-  ~LayoutGuard() { MeshBlockImpl::set_current_layout(prev_); }
-
- private:
-  Layout prev_;
-};
-}  // namespace
-
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
@@ -68,7 +51,6 @@ void MeshBlockImpl::reset() {
       _playout = LayoutImpl::create(options->layout(), this);
     }
   }
-  LayoutGuard layout_guard(_playout);
   send_bufs.resize(_playout->num_exchange_buffers());
   recv_bufs.resize(_playout->num_exchange_buffers());
 
@@ -288,7 +270,6 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
 }
 
 double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
-  LayoutGuard layout_guard(_playout);
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
@@ -328,8 +309,6 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
 }
 
 void MeshBlockImpl::initialize_local(Variables& vars) {
-  LayoutGuard layout_guard(_playout);
-
   BoundaryFuncOptions bops;
   bops.nghost(options->coord()->nghost());
 
@@ -388,7 +367,6 @@ void MeshBlockImpl::initialize_local(Variables& vars) {
 }
 
 void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
-  LayoutGuard layout_guard(_playout);
   initialize_local(vars);
 
   SyncOptions prim_opts;
@@ -409,7 +387,6 @@ void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
 }
 
 void MeshBlockImpl::finalize_initialization(Variables& vars) {
-  LayoutGuard layout_guard(_playout);
   auto hydro_w = vars.at("hydro_w");
   auto scalar_r =
       vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
@@ -489,7 +466,6 @@ void MeshBlockImpl::finalize_initialization(Variables& vars) {
 }
 
 double MeshBlockImpl::max_time_step(Variables const& vars) {
-  LayoutGuard layout_guard(_playout);
   auto dt_local = local_max_time_step(vars);
   auto const& w = vars.at("hydro_w");
   auto dt_min = torch::tensor({dt_local},
@@ -510,7 +486,6 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 }
 
 double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
-  LayoutGuard layout_guard(_playout);
   auto const& w = vars.at("hydro_w");
   auto dt_min =
       torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
@@ -531,7 +506,6 @@ void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
 }
 
 void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
-  LayoutGuard layout_guard(_playout);
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
   begin_exchange(vars, opts);
   launch_exchange(opts, works);
@@ -540,26 +514,22 @@ void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
 
 void MeshBlockImpl::begin_exchange(Variables& vars,
                                    SyncOptions const& opts) const {
-  LayoutGuard layout_guard(_playout);
   _playout->serialize(this, vars, opts);
 }
 
 void MeshBlockImpl::launch_exchange(
     SyncOptions const& opts,
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
-  LayoutGuard layout_guard(_playout);
   _playout->launch_exchange(this, opts, works);
 }
 
 void MeshBlockImpl::finalize_exchange(
     Variables& vars, SyncOptions const& opts,
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
-  LayoutGuard layout_guard(_playout);
   _playout->finalize(this, vars, opts, works);
 }
 
 void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
-  LayoutGuard layout_guard(_playout);
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
@@ -720,7 +690,6 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
-  LayoutGuard layout_guard(_playout);
   auto hydro_u = vars.at("hydro_u");
   auto scalar_s =
       vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
@@ -746,7 +715,6 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
 
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
                                  bool final_write) {
-  LayoutGuard layout_guard(_playout);
   for (auto& output_type : output_types) {
     if (final_write) {
       output_type->write_output_file(this, vars, current_time, final_write);
@@ -764,7 +732,6 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
 
 void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
                                      double dt) const {
-  LayoutGuard layout_guard(_playout);
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
 
   bool compute_mass = false;
@@ -837,7 +804,6 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
 }
 
 void MeshBlockImpl::finalize(Variables const& vars, double time) {
-  LayoutGuard layout_guard(_playout);
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
@@ -900,7 +866,6 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
-  LayoutGuard layout_guard(_playout);
   auto sig = snap::SignalHandler::GetInstance();
   if (sig->CheckSignalFlags(this)) return -1;  // terminate
 
@@ -941,7 +906,6 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 torch::Device MeshBlockImpl::device() const {
-  LayoutGuard layout_guard(_playout);
   if (_playout->comm->pg->getBoundDeviceId().has_value()) {
     return _playout->comm->pg->getBoundDeviceId().value();
   } else {
@@ -950,7 +914,6 @@ torch::Device MeshBlockImpl::device() const {
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
-  LayoutGuard layout_guard(_playout);
   std::string restart_file;
   restart_file.assign(options->output_dir());
   restart_file.append("/");

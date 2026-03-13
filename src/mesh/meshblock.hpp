@@ -109,10 +109,6 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Scalar pscalar = nullptr;
 
   Layout get_layout() const { return _playout; }
-  static Layout current_layout() { return _tls_layout; }
-  static void set_current_layout(Layout layout) {
-    _tls_layout = std::move(layout);
-  }
 
   //! Constructor to initialize the layers
   MeshBlockImpl() : options(MeshBlockOptionsImpl::create()) {}
@@ -219,7 +215,6 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   //! distribution layout
   Layout _playout;
-  static thread_local Layout _tls_layout;
 
   //! stage registers
   torch::Tensor _hydro_u0, _hydro_u1;
