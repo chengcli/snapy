@@ -10,6 +10,7 @@
 
 // snap
 #include <snap/layout/cubed_sphere_layout.hpp>
+#include <snap/layout/distributed.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -18,14 +19,14 @@
 
 namespace py = pybind11;
 
-void bind_layout(py::module &m) {
+void bind_layout(py::module& m) {
   auto pyLayoutOptions =
       py::class_<snap::LayoutOptionsImpl, snap::LayoutOptions>(m,
                                                                "LayoutOptions");
 
   pyLayoutOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::LayoutOptions &a) {
+           [](const snap::LayoutOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("LayoutOptions(\n{})", ss.str());
@@ -51,7 +52,7 @@ void bind_layout(py::module &m) {
       .def(py::init<snap::LayoutOptions>(), py::arg("options"))
       .def_readonly("options", &snap::LayoutImpl::options)
       .def("__repr__",
-           [](const snap::LayoutImpl &self) {
+           [](const snap::LayoutImpl& self) {
              std::stringstream ss;
              self.options->report(ss);
              return fmt::format("Layout(\n{})", ss.str());
@@ -70,7 +71,7 @@ void bind_layout(py::module &m) {
       .def("rank_of", &snap::SlabLayoutImpl::rank_of)
       .def("loc_of", &snap::SlabLayoutImpl::loc_of)
       .def("neighbor_rank", &snap::SlabLayoutImpl::neighbor_rank)
-      .def("__repr__", [](const snap::SlabLayoutImpl &self) {
+      .def("__repr__", [](const snap::SlabLayoutImpl& self) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("SlabLayout(\n{})", ss.str());
@@ -85,7 +86,7 @@ void bind_layout(py::module &m) {
       .def("rank_of", &snap::CubedLayoutImpl::rank_of)
       .def("loc_of", &snap::CubedLayoutImpl::loc_of)
       .def("neighbor_rank", &snap::CubedLayoutImpl::neighbor_rank)
-      .def("__repr__", [](const snap::CubedLayoutImpl &self) {
+      .def("__repr__", [](const snap::CubedLayoutImpl& self) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("CubedSphereLayout(\n{})", ss.str());
@@ -102,7 +103,7 @@ void bind_layout(py::module &m) {
       .def("rank_of", &snap::CubedSphereLayoutImpl::rank_of)
       .def("loc_of", &snap::CubedSphereLayoutImpl::loc_of)
       .def("neighbor_rank", &snap::CubedSphereLayoutImpl::neighbor_rank)
-      .def("__repr__", [](const snap::CubedSphereLayoutImpl &self) {
+      .def("__repr__", [](const snap::CubedSphereLayoutImpl& self) {
         std::stringstream ss;
         self.pretty_print(ss);
         return fmt::format("CubedSphereLayout(\n{})", ss.str());
@@ -112,5 +113,7 @@ void bind_layout(py::module &m) {
   auto m_dist = m.def_submodule("distributed", "Distributed module");
   m_dist.def("get_rank", &snap::get_rank)
       .def("get_local_rank", &snap::get_local_rank)
-      .def("get_layout", &snap::MeshBlockImpl::get_layout);
+      .def("get_layout", &snap::MeshBlockImpl::get_layout)
+      .def("set_process_group", &snap::set_process_group)
+      .def("is_process_group_initialized", &snap::is_process_group_initialized);
 }

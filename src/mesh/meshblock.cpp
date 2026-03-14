@@ -862,7 +862,9 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   recv_bufs.clear();
   recv_bufs.shrink_to_fit();
 
-  _playout->comm->pg->shutdown();
+  if (_playout->comm->owns_process_group()) {
+    _playout->comm->pg->shutdown();
+  }
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {

@@ -4,6 +4,8 @@
 // torch
 #include <c10/cuda/CUDAFunctions.h>
 #include <c10/cuda/CUDAStream.h>
+#include <torch/csrc/distributed/c10d/Backend.hpp>
+#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
 
 #include "layout.hpp"
@@ -25,10 +27,15 @@ void ProcessGroupContext::_init_nccl() {
 
   torch::Device device(torch::kCUDA, device_index);
   c10::cuda::set_device(device_index);
-
-  pg = std::make_shared<c10d::ProcessGroupNCCL>(
-      store, options_->process_rank(), options_->process_world_size(), opts);
   pg->setBoundDeviceId(device);
+  auto backend_impl =
+      c10::static_intrusive_pointer_cast<c10d::Backend>(
+          c10::make_intrusive<c10d::ProcessGroupNCCL>(
+              store, options_->process_rank(), options_->process_world_size(),
+              opts));
+  pg->setDefaultBackend(c10d::ProcessGroup::BackendType::NCCL);
+  pg->setBackend(c10::DeviceType::CUDA, c10d::ProcessGroup::BackendType::NCCL,
+                 backend_impl);
 
   if (options_->verbose()) {
     std::cout << "[Process " << options_->process_rank() << ":"
@@ -39,13 +46,16 @@ void ProcessGroupContext::_init_nccl() {
 
 void ProcessGroupContext::group_start() const {
   if (is_nccl()) {
-    std::dynamic_pointer_cast<c10d::ProcessGroupNCCL>(pg)->groupStart();
+    pg->startCoalescing(c10::DeviceType::CUDA);
   }
 }
 
 void ProcessGroupContext::group_end() const {
   if (is_nccl()) {
-    std::dynamic_pointer_cast<c10d::ProcessGroupNCCL>(pg)->groupEnd();
+    auto work = pg->endCoalescing(c10::DeviceType::CUDA);
+    if (work) {
+      work->wait();
+    }
   }
 }
 

@@ -1,6 +1,8 @@
+import os
 import torch
 import snapy
 import torch.distributed as dist
+import torch.distributed.distributed_c10d as dist_c10d
 import numpy as np
 from typing import List, Optional
 
@@ -16,6 +18,8 @@ def init_dist(args,
         dist.init_process_group(backend="gloo", init_method="env://")
     else:
         dist.init_process_group(backend="nccl", init_method="env://")
+
+    snapy.distributed.set_process_group(dist_c10d._get_default_group())
 
     world_size = dist.get_world_size()
     rank = dist.get_rank()

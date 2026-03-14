@@ -6,6 +6,7 @@
 #include <mutex>
 
 // snap
+#include <snap/layout/distributed.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "signal_handler.hpp"
@@ -74,7 +75,13 @@ int SignalHandler::CheckSignalFlags(MeshBlockImpl const* pmb) {
       torch::tensor({ret}, torch::dtype(torch::kInt32).device(pmb->device()))};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MAX;
-  pmb->get_layout()->comm->pg->allreduce(ret_reduce, op)->wait();
+  if (pmb != nullptr && pmb->get_layout() != nullptr &&
+      pmb->get_layout()->comm != nullptr &&
+      pmb->get_layout()->comm->pg.defined()) {
+    pmb->get_layout()->comm->pg->allreduce(ret_reduce, op)->wait();
+  } else if (is_process_group_initialized()) {
+    get_process_group()->allreduce(ret_reduce, op)->wait();
+  }
 
   return ret_reduce[0].item<int>();
 }

@@ -6,12 +6,17 @@
 #include <configure.h>
 
 // torch
+#include <c10/util/intrusive_ptr.h>
+
+#include <torch/csrc/distributed/c10d/Backend.hpp>
+#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
 #include <torch/csrc/distributed/c10d/TCPStore.hpp>
 
 // snap
 #include <snap/utils/log.hpp>
 
+#include "distributed.hpp"
 #include "layout.hpp"
 #include "process_group.hpp"
 
@@ -28,6 +33,15 @@ std::string process_group_key(LayoutOptions const& opts) {
      << opts->device_id();
   return os.str();
 }
+
+std::string external_process_group_key(
+    LayoutOptions const& opts,
+    c10::intrusive_ptr<c10d::ProcessGroup> const& external_pg) {
+  std::ostringstream os;
+  os << "external|" << process_group_key(opts) << "|"
+     << static_cast<void*>(external_pg.get());
+  return os.str();
+}
 }  // namespace
 
 std::shared_ptr<ProcessGroupContext> ProcessGroupContext::create(
@@ -35,7 +49,10 @@ std::shared_ptr<ProcessGroupContext> ProcessGroupContext::create(
   static std::map<std::string, std::weak_ptr<ProcessGroupContext>> cache;
 
   std::lock_guard<std::mutex> lock(mutex_);
-  auto key = process_group_key(opts);
+  auto external_pg = get_process_group();
+  auto key = external_pg.defined()
+                 ? external_process_group_key(opts, external_pg)
+                 : process_group_key(opts);
   auto it = cache.find(key);
   if (it != cache.end()) {
     if (auto existing = it->second.lock()) {
@@ -57,6 +74,12 @@ ProcessGroupContext::ProcessGroupContext(LayoutOptions const& opts)
 void ProcessGroupContext::_init() {
   if (options_->no_backend()) return;
 
+  auto external_pg = get_process_group();
+  if (external_pg.defined()) {
+    _init_external(external_pg);
+    return;
+  }
+
   if (options_->verbose()) {
     std::cout << "[Process " << options_->process_rank() << ":"
               << options_->local_rank()
@@ -69,6 +92,8 @@ void ProcessGroupContext::_init() {
   store_opts.isServer = options_->process_rank() == 0;
   store =
       at::make_intrusive<c10d::TCPStore>(options_->master_addr(), store_opts);
+  pg = c10::make_intrusive<c10d::ProcessGroup>(store, options_->process_rank(),
+                                               options_->process_world_size());
 
   if (backend == "gloo") {
     _init_gloo();
@@ -79,11 +104,36 @@ void ProcessGroupContext::_init() {
   }
 
   pg->barrier()->wait();
+  owns_process_group_ = true;
 
   if (options_->verbose()) {
     std::cout << "[Process " << options_->process_rank() << ":"
               << options_->local_rank()
               << "] Distributed environment initialized with backend="
+              << backend << ", world_size=" << options_->process_world_size()
+              << "\n";
+  }
+}
+
+void ProcessGroupContext::_init_external(
+    c10::intrusive_ptr<c10d::ProcessGroup> external_pg) {
+  TORCH_CHECK(external_pg->getBackendName() == backend,
+              "[ProcessGroup] external process group backend mismatch: "
+              "LayoutOptions requests ",
+              backend, " but registered ProcessGroup uses ",
+              external_pg->getBackendName());
+  pg = std::move(external_pg);
+  owns_process_group_ = false;
+
+  auto bound_device = pg->getBoundDeviceId();
+  if (bound_device.has_value()) {
+    options_->device_id(bound_device->index());
+  }
+
+  if (options_->verbose()) {
+    std::cout << "[Process " << options_->process_rank() << ":"
+              << options_->local_rank()
+              << "] Referencing externally initialized distributed backend="
               << backend << ", world_size=" << options_->process_world_size()
               << "\n";
   }
@@ -98,8 +148,13 @@ void ProcessGroupContext::_init_gloo() {
   auto opts = c10d::ProcessGroupGloo::Options::create();
   opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
 
-  pg = std::make_shared<c10d::ProcessGroupGloo>(
-      store, options_->process_rank(), options_->process_world_size(), opts);
+  auto backend_impl = c10::static_intrusive_pointer_cast<c10d::Backend>(
+      c10::make_intrusive<c10d::ProcessGroupGloo>(
+          store, options_->process_rank(), options_->process_world_size(),
+          opts));
+  pg->setDefaultBackend(c10d::ProcessGroup::BackendType::GLOO);
+  pg->setBackend(c10::DeviceType::CPU, c10d::ProcessGroup::BackendType::GLOO,
+                 backend_impl);
 }
 
 #ifdef NOT_USE_C10D_NCCL
