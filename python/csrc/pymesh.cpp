@@ -14,7 +14,7 @@
 
 namespace py = pybind11;
 
-void bind_mesh(py::module &m) {
+void bind_mesh(py::module& m) {
   auto pyMeshBlockOptions =
       py::class_<snap::MeshBlockOptionsImpl, snap::MeshBlockOptions>(
           m, "MeshBlockOptions");
@@ -23,7 +23,7 @@ void bind_mesh(py::module &m) {
 
   pyMeshBlockOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::MeshBlockOptions &a) {
+           [](const snap::MeshBlockOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("MeshBlockOptions(\n{})", ss.str());
@@ -32,14 +32,14 @@ void bind_mesh(py::module &m) {
                   py::arg("filename"), py::arg("verbose") = false)
       .def(
           "set_bfunc",
-          [&](snap::MeshBlockOptions &self, int dx3, int dx2, int dx1,
+          [&](snap::MeshBlockOptions& self, int dx3, int dx2, int dx1,
               py::object func_obj) {
             bcfunc_t func;
             if (func_obj.is_none()) {
               func = nullptr;
             } else {
               py::function f = py::cast<py::function>(func_obj);
-              func = [f](torch::Tensor const &var, int id,
+              func = [f](torch::Tensor const& var, int id,
                          snap::BoundaryFuncOptions op) {
                 py::gil_scoped_acquire gil;
                 f(var, id, op);
@@ -95,27 +95,29 @@ void bind_mesh(py::module &m) {
 
   pyMeshOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::MeshOptions &a) {
+           [](const snap::MeshOptions& a) {
              return fmt::format("MeshOptions(blocks_per_process={})",
                                 a->blocks_per_process());
            })
+      .def_static("from_yaml", &snap::MeshOptionsImpl::from_yaml,
+                  py::arg("filename"), py::arg("verbose") = false)
       .ADD_OPTION(snap::MeshBlockOptions, snap::MeshOptionsImpl, block)
       .ADD_OPTION(int, snap::MeshOptionsImpl, blocks_per_process);
 
   ADD_SNAP_MODULE(MeshBlock, MeshBlockOptions)
       .def(py::init<snap::MeshBlockOptions>(), py::arg("options"))
-      .def("cycle", [](snap::MeshBlockImpl &self) { return self.cycle; })
+      .def("cycle", [](snap::MeshBlockImpl& self) { return self.cycle; })
       .def("inc_cycle",
-           [](snap::MeshBlockImpl &self) {
+           [](snap::MeshBlockImpl& self) {
              auto v = self.cycle;
              self.cycle++;
              return v;
            })
       .def("set_user_output_func",
-           [&](snap::MeshBlockImpl &self, py::object func_ojb) {
+           [&](snap::MeshBlockImpl& self, py::object func_ojb) {
              py::function f = py::cast<py::function>(func_ojb);
              self.user_output_callback =
-                 [f](std::map<std::string, torch::Tensor> const &vars) {
+                 [f](std::map<std::string, torch::Tensor> const& vars) {
                    py::gil_scoped_acquire gil;
                    return f(vars).cast<std::map<std::string, torch::Tensor>>();
                  };
@@ -126,7 +128,7 @@ void bind_mesh(py::module &m) {
       .def("forward", &snap::MeshBlockImpl::forward)
       .def(
           "part",
-          [](snap::MeshBlockImpl &self, std::tuple<int, int, int> offset,
+          [](snap::MeshBlockImpl& self, std::tuple<int, int, int> offset,
              bool exterior, int extend_x1, int extend_x2, int extend_x3) {
             snap::PartOptions opts;
             opts.exterior(exterior);
@@ -149,14 +151,14 @@ void bind_mesh(py::module &m) {
           py::arg("extend_x3") = 0)
       .def(
           "initialize",
-          [](snap::MeshBlockImpl &self, snap::Variables &vars) {
+          [](snap::MeshBlockImpl& self, snap::Variables& vars) {
             self.initialize(vars);
             return std::make_pair(vars, 0.);
           },
           py::arg("vars"))
       .def(
           "initialize_from_restart",
-          [](snap::MeshBlockImpl &self, std::string restart_file) {
+          [](snap::MeshBlockImpl& self, std::string restart_file) {
             snap::Variables vars;
             double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
@@ -180,10 +182,10 @@ void bind_mesh(py::module &m) {
       .def("device", &snap::MeshBlockImpl::device)
       .def("check_redo", &snap::MeshBlockImpl::check_redo)
       .def("get_outputs",
-           [](snap::MeshBlockImpl &self) { return self.output_types; })
+           [](snap::MeshBlockImpl& self) { return self.output_types; })
       .def(
           "apply_hydro_bc",
-          [](snap::MeshBlockImpl &self, torch::Tensor var, int type) {
+          [](snap::MeshBlockImpl& self, torch::Tensor var, int type) {
             snap::BoundaryFuncOptions bops;
             bops.nghost(self.options->coord()->nghost());
             if (type != snap::kPrimitive && type != snap::kConserved) {
@@ -199,17 +201,14 @@ void bind_mesh(py::module &m) {
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
-      .def_static("from_yaml", &snap::MeshImpl::from_yaml, py::arg("filename"),
-                  py::arg("verbose") = false)
-      .def_property_readonly("blocks",
-                             [](snap::MeshImpl &self) { return self.blocks; })
+      .def_property("blocks", &snap::MeshBlockImpl::blocks)
       .def(
           "initialize",
-          [](snap::MeshImpl &self, snap::MeshVariables &vars,
-             std::vector<std::string> const &restart_files) {
-            std::vector<char const *> c_restart_files;
+          [](snap::MeshImpl& self, snap::MeshVariables& vars,
+             std::vector<std::string> const& restart_files) {
+            std::vector<char const*> c_restart_files;
             c_restart_files.reserve(restart_files.size());
-            for (auto const &file : restart_files) {
+            for (auto const& file : restart_files) {
               c_restart_files.push_back(file.empty() ? nullptr : file.c_str());
             }
             double time = self.initialize(vars, c_restart_files);

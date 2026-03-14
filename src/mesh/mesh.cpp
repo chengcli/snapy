@@ -38,12 +38,6 @@ MeshOptions MeshOptionsImpl::from_yaml(std::string input_file, bool verbose) {
   return options;
 }
 
-std::shared_ptr<MeshImpl> MeshImpl::from_yaml(std::string input_file,
-                                              bool verbose) {
-  return std::make_shared<MeshImpl>(
-      MeshOptionsImpl::from_yaml(input_file, verbose));
-}
-
 MeshImpl::MeshImpl(MeshOptions const& options_) : options(options_) { reset(); }
 
 void MeshImpl::reset() {

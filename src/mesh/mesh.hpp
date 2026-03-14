@@ -36,9 +36,6 @@ using MeshOptions = std::shared_ptr<MeshOptionsImpl>;
 
 class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
  public:
-  static std::shared_ptr<MeshImpl> from_yaml(std::string input_file,
-                                             bool verbose = false);
-
   MeshOptions options;
   std::vector<MeshBlock> blocks;
 
