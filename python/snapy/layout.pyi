@@ -308,3 +308,13 @@ class distributed:
     def get_layout(*args):  # Returns Layout
         """Get the layout object."""
         ...
+
+    @staticmethod
+    def set_process_group(pg) -> None:
+        """Register an externally initialized torch.distributed process group."""
+        ...
+
+    @staticmethod
+    def is_process_group_initialized() -> bool:
+        """Return whether an external process group has been registered."""
+        ...

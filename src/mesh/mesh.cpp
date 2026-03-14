@@ -326,7 +326,9 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
   }
 
   root->get_layout()->comm->pg->barrier()->wait();
-  root->get_layout()->comm->pg->shutdown();
+  if (root->get_layout()->comm->owns_process_group()) {
+    root->get_layout()->comm->pg->shutdown();
+  }
 }
 
 }  // namespace snap
