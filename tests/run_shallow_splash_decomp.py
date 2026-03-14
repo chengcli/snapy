@@ -69,9 +69,12 @@ def main() -> int:
     build_dir = Path(args.build_dir).resolve()
     tests_dir = build_dir / "tests"
     bin_dir = build_dir / "bin"
+    test_script = Path(__file__).with_name("test_shallow_splash.py").resolve()
     exe = bin_dir / f"shallow_splash.{args.build_type}"
     if not exe.exists():
         return skip(f"missing executable {exe}")
+    if not test_script.exists():
+        return skip(f"missing comparison script {test_script}")
 
     pd_run = shutil.which("pd-run")
     if pd_run is None:
@@ -114,7 +117,7 @@ def main() -> int:
         run(
             [
                 sys.executable,
-                str(Path("test_shallow_splash.py")),
+                str(test_script),
                 "shallow_splash-main.nc",
                 str(reference),
             ],

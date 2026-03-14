@@ -294,13 +294,17 @@ void LayoutImpl::_launch_cubed_sphere_nccl_remote_ops(
     auto work =
         op.layout->comm->pg->recv(op.layout->owner()->recv_bufs[op.buffer_id],
                                   op.remote_process, op.recv_tag);
-    works_by_block[op.local_block].push_back(work);
+    if (work) {
+      works_by_block[op.local_block].push_back(work);
+    }
   }
   for (auto const& op : send_ops) {
     auto work =
         op.layout->comm->pg->send(op.layout->owner()->send_bufs[op.buffer_id],
                                   op.remote_process, op.send_tag);
-    works_by_block[op.local_block].push_back(work);
+    if (work) {
+      works_by_block[op.local_block].push_back(work);
+    }
   }
   layouts.front()->comm->group_end();
 }
@@ -743,19 +747,31 @@ void LayoutImpl::exchange_remote(
               });
 
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                     op.remote_process, op.recv_tag));
+      auto work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                 op.remote_process, op.recv_tag);
+      if (work) {
+        works.push_back(work);
+      }
     }
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                     op.remote_process, op.send_tag));
+      auto work = comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                 op.remote_process, op.send_tag);
+      if (work) {
+        works.push_back(work);
+      }
     }
   } else {
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                     op.remote_process, op.send_tag));
-      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                     op.remote_process, op.recv_tag));
+      auto send_work = comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                      op.remote_process, op.send_tag);
+      if (send_work) {
+        works.push_back(send_work);
+      }
+      auto recv_work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                      op.remote_process, op.recv_tag);
+      if (recv_work) {
+        works.push_back(recv_work);
+      }
     }
   }
 
@@ -873,7 +889,11 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
                              [&]() { return state.next_index == my_order; });
     lock.unlock();
 
-    for (auto& work : works) work->wait();
+    for (auto& work : works) {
+      if (work) {
+        work->wait();
+      }
+    }
     deserialize(pmb, vars, opts);
     if (opts.skip_corner() && !opts.cross_panel_only()) {
       fill_corners(pmb, vars);
@@ -890,7 +910,11 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   }
 
   // Wait for all operations to complete
-  for (auto& work : works) work->wait();
+  for (auto& work : works) {
+    if (work) {
+      work->wait();
+    }
+  }
 
   // Deserialize received data into ghost zones
   deserialize(pmb, vars, opts);

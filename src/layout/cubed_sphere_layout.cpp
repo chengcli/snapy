@@ -918,19 +918,31 @@ void CubedSphereLayoutImpl::exchange_remote(
               });
 
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                     op.remote_process, op.recv_tag));
+      auto work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                 op.remote_process, op.recv_tag);
+      if (work) {
+        works.push_back(work);
+      }
     }
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                     op.remote_process, op.send_tag));
+      auto work = comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                 op.remote_process, op.send_tag);
+      if (work) {
+        works.push_back(work);
+      }
     }
   } else {
     for (auto const& op : remote_ops) {
-      works.push_back(comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                     op.remote_process, op.send_tag));
-      works.push_back(comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                     op.remote_process, op.recv_tag));
+      auto send_work = comm->pg->send(pmb->send_bufs[op.buffer_id],
+                                      op.remote_process, op.send_tag);
+      if (send_work) {
+        works.push_back(send_work);
+      }
+      auto recv_work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
+                                      op.remote_process, op.recv_tag);
+      if (recv_work) {
+        works.push_back(recv_work);
+      }
     }
   }
 
