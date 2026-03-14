@@ -1,5 +1,6 @@
 // pybind11
 #include <pybind11/functional.h>
+#include <pybind11/stl.h>
 
 // torch
 #include <torch/extension.h>
@@ -201,7 +202,19 @@ void bind_mesh(py::module& m) {
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
-      .def_property("blocks", &snap::MeshBlockImpl::blocks)
+      .def_property_readonly("blocks",
+                             [](const snap::MeshImpl& self) {
+                               py::list out;
+                               // for (auto& b : self.blocks)
+                               // out.append(py::cast(b.ptr()));
+                               for (auto& b : self.blocks) {
+                                 std::shared_ptr<snap::MeshBlockImpl> p =
+                                     b.ptr();
+                                 out.append(py::cast(std::move(p)));
+                               }
+                               return out;
+                             })
+      //}, py::return_value_policy::reference_internal)
       .def(
           "initialize",
           [](snap::MeshImpl& self, snap::MeshVariables& vars,
