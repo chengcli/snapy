@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
   std::string input_file = argc > 1 ? argv[1] : "straka.yaml";
   auto config = YAML::LoadFile(input_file);
 
-  auto mesh = MeshImpl::from_yaml(input_file);
+  auto mesh = Mesh(MeshOptionsImpl::from_yaml(input_file));
   auto device = mesh->device();
   if (device.is_cuda()) {
     std::cout << "Running on CUDA" << std::endl;
