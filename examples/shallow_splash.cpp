@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
   auto config = YAML::LoadFile(input_file);
 
   auto mesh = Mesh(MeshOptionsImpl::from_yaml(input_file));
-  auto device = mesh->device();
+  auto device = torch::Device(mesh->options->device_str());
   if (device.is_cuda()) {
     std::cout << "Running on CUDA" << std::endl;
   }

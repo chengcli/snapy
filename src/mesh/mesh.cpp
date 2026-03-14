@@ -70,32 +70,16 @@ void MeshImpl::reset() {
   }
 }
 
-double MeshImpl::initialize(MeshVariables& vars,
-                            std::vector<char const*> const& restart_files) {
+double MeshImpl::initialize(MeshVariables& vars, char const* restart_file) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::initialize expects one Variables map per local MeshBlock");
 
-  bool has_restart = false;
-  for (int i = 0; i < blocks.size(); ++i) {
-    if (i < restart_files.size() && restart_files[i] != nullptr) {
-      has_restart = true;
-      break;
-    }
-  }
-
-  if (has_restart) {
+  if (restart_file) {
     double current_time = 0.;
     for (int i = 0; i < blocks.size(); ++i) {
-      char const* restart = nullptr;
-      if (i < restart_files.size()) restart = restart_files[i];
-      auto block_time = blocks[i]->initialize(vars[i], restart);
+      auto block_time = blocks[i]->initialize(vars[i], restart_file);
       if (i == 0) {
         current_time = block_time;
-      } else {
-        TORCH_CHECK(block_time == current_time,
-                    "Mesh::initialize requires identical restart times across "
-                    "local MeshBlocks, expected ",
-                    current_time, " but got ", block_time, " on block ", i);
       }
     }
     return current_time;
@@ -119,25 +103,6 @@ double MeshImpl::initialize(MeshVariables& vars,
   return 0.;
 }
 
-torch::Device MeshImpl::device() const {
-  auto device = torch::Device(torch::kCPU);
-  auto block = options->block();
-  if (!torch::cuda::is_available() || block == nullptr ||
-      block->layout() == nullptr || block->layout()->backend() != "nccl") {
-    return device;
-  }
-
-  auto layout = blocks.front()->get_layout();
-  auto bound_device = layout->comm->pg->getBoundDeviceId();
-  if (bound_device.has_value()) {
-    return *bound_device;
-  }
-
-  auto device_index = layout->options->device_id();
-  if (device_index < 0) device_index = layout->options->local_rank();
-  return torch::Device(torch::kCUDA, device_index);
-}
-
 double MeshImpl::max_time_step(MeshVariables const& vars) {
   TORCH_CHECK(
       vars.size() == blocks.size(),
@@ -148,9 +113,7 @@ double MeshImpl::max_time_step(MeshVariables const& vars) {
     dt_local = std::min(dt_local, blocks[i]->local_max_time_step(vars[i]));
   }
 
-  auto device = blocks.front()->device();
-  auto dt_tensor =
-      torch::tensor({dt_local}, torch::dtype(torch::kFloat64).device(device));
+  auto dt_tensor = torch::tensor({dt_local}, torch::dtype(torch::kFloat64));
   std::vector<at::Tensor> dt_reduce = {dt_tensor};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MIN;
@@ -183,6 +146,7 @@ void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,
   TORCH_CHECK(
       vars.size() == blocks.size(),
       "Mesh::make_outputs expects one Variables map per local MeshBlock");
+
   for (int i = 0; i < blocks.size(); ++i) {
     blocks[i]->make_outputs(vars[i], current_time, final_write);
   }
@@ -294,23 +258,23 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
   auto root = blocks.front();
   auto sig = SignalHandler::GetInstance();
   if (sig->GetSignalFlag(SIGTERM) != 0) {
-    std::cout << std::endl << "Terminating on Terminate signal" << std::endl;
+    SINFO() << std::endl << "Terminating on Terminate signal" << std::endl;
   } else if (sig->GetSignalFlag(SIGINT) != 0) {
-    std::cout << std::endl << "Terminating on Interrupt signal" << std::endl;
+    SINFO() << std::endl << "Terminating on Interrupt signal" << std::endl;
   } else if (sig->GetSignalFlag(SIGALRM) != 0) {
-    std::cout << std::endl << "Terminating on wall-time limit" << std::endl;
+    SINFO() << std::endl << "Terminating on wall-time limit" << std::endl;
   } else if (root->pintg->options->nlim() >= 0 &&
              root->cycle >= root->pintg->options->nlim()) {
-    std::cout << std::endl << "Terminating on cycle limit" << std::endl;
+    SINFO() << std::endl << "Terminating on cycle limit" << std::endl;
   } else if (time >= root->pintg->options->tlim()) {
-    std::cout << std::endl << "Terminating on time limit" << std::endl;
+    SINFO() << std::endl << "Terminating on time limit" << std::endl;
   } else {
-    std::cout << std::endl << "Terminating abnormally" << std::endl;
+    SINFO() << std::endl << "Terminating abnormally" << std::endl;
   }
 
-  std::cout << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
-  std::cout << "tlim=" << root->pintg->options->tlim()
-            << " nlim=" << root->pintg->options->nlim() << std::endl;
+  SINFO() << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
+  SINFO() << "tlim=" << root->pintg->options->tlim()
+          << " nlim=" << root->pintg->options->nlim() << std::endl;
 
   for (auto& block : blocks) {
     block->send_bufs.clear();

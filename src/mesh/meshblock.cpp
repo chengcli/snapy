@@ -468,8 +468,7 @@ void MeshBlockImpl::finalize_initialization(Variables& vars) {
 double MeshBlockImpl::max_time_step(Variables const& vars) {
   auto dt_local = local_max_time_step(vars);
   auto const& w = vars.at("hydro_w");
-  auto dt_min = torch::tensor({dt_local},
-                              torch::dtype(torch::kFloat64).device(w.device()));
+  auto dt_min = torch::tensor({dt_local}, torch::dtype(torch::kFloat64));
 
   std::vector<at::Tensor> dt_reduce = {dt_min};
   c10d::AllreduceOptions op;
@@ -487,17 +486,16 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
 
 double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
   auto const& w = vars.at("hydro_w");
-  auto dt_min =
-      torch::tensor({1.e9}, torch::dtype(torch::kFloat64).device(w.device()));
+  double dt_min = 1.e9;
 
   // hyperbolic hydro time step
   if (vars.count("solid")) {
-    dt_min[0] = phydro->max_time_step(w, vars.at("solid"));
+    dt_min = phydro->max_time_step(w, vars.at("solid"));
   } else {
-    dt_min[0] = phydro->max_time_step(w);
+    dt_min = phydro->max_time_step(w);
   }
 
-  return dt_min.item<double>();
+  return dt_min;
 }
 
 void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
@@ -834,7 +832,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   std::vector<at::Tensor> cells = {
       torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
-                    torch::dtype(torch::kInt64).device(device()))};
+                    torch::dtype(torch::kInt64))};
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
@@ -851,9 +849,6 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
 
   // ------ shutdown processing group ------
-  /*c10d::BarrierOptions op;
-  op.device_ids = {options->layout()->local_rank()};
-  _playout->pg->barrier(op)->wait();*/
   _playout->comm->pg->barrier()->wait();
 
   send_bufs.clear();
@@ -907,14 +902,6 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   return 0;
 }
 
-torch::Device MeshBlockImpl::device() const {
-  if (_playout->comm->pg->getBoundDeviceId().has_value()) {
-    return _playout->comm->pg->getBoundDeviceId().value();
-  } else {
-    return torch::Device("cpu");
-  }
-}
-
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   std::string restart_file;
   restart_file.assign(options->output_dir());
@@ -958,7 +945,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
 
   // move to device
   for (auto& [name, tensor] : data) {
-    vars[name] = tensor.to(device());
+    vars[name] = tensor.to(torch::Device(options->device_str()));
   }
 
   // remove timing data

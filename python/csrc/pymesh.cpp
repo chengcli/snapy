@@ -31,6 +31,7 @@ void bind_mesh(py::module& m) {
            })
       .def_static("from_yaml", &snap::MeshBlockOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
+      .def("device_str", &snap::MeshBlockOptionsImpl::device_str)
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions& self, int dx3, int dx2, int dx1,
@@ -102,6 +103,7 @@ void bind_mesh(py::module& m) {
            })
       .def_static("from_yaml", &snap::MeshOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
+      .def("device_str", &snap::MeshOptionsImpl::device_str)
       .ADD_OPTION(snap::MeshBlockOptions, snap::MeshOptionsImpl, block)
       .ADD_OPTION(int, snap::MeshOptionsImpl, blocks_per_process);
 
@@ -180,7 +182,6 @@ void bind_mesh(py::module& m) {
       .def("get_layout", &snap::MeshBlockImpl::get_layout)
       .def("print_cycle_info", &snap::MeshBlockImpl::print_cycle_info)
       .def("finalize", &snap::MeshBlockImpl::finalize)
-      .def("device", &snap::MeshBlockImpl::device)
       .def("check_redo", &snap::MeshBlockImpl::check_redo)
       .def("get_outputs",
            [](snap::MeshBlockImpl& self) { return self.output_types; })
@@ -217,19 +218,19 @@ void bind_mesh(py::module& m) {
       //}, py::return_value_policy::reference_internal)
       .def(
           "initialize",
-          [](snap::MeshImpl& self, snap::MeshVariables& vars,
-             std::vector<std::string> const& restart_files) {
-            std::vector<char const*> c_restart_files;
-            c_restart_files.reserve(restart_files.size());
-            for (auto const& file : restart_files) {
-              c_restart_files.push_back(file.empty() ? nullptr : file.c_str());
-            }
-            double time = self.initialize(vars, c_restart_files);
+          [](snap::MeshImpl& self, snap::MeshVariables& vars) {
+            self.initialize(vars);
+            return std::make_pair(vars, 0.);
+          },
+          py::arg("vars"))
+      .def(
+          "initialize_from_restart",
+          [](snap::MeshImpl& self, std::string restart_file) {
+            snap::MeshVariables vars;
+            double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
           },
-          py::arg("vars"),
-          py::arg("restart_files") = std::vector<std::string>{})
-      .def("device", &snap::MeshImpl::device)
+          py::arg("restart_file"))
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
            py::arg("current_time"), py::arg("final_write") = false)
