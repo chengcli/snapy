@@ -98,6 +98,7 @@ void ProcessGroupContext::_init() {
   if (backend == "gloo") {
     _init_gloo();
   } else if (backend == "nccl") {
+    _init_gloo();
     _init_nccl();
   } else {
     throw std::runtime_error("Unsupported BACKEND=" + backend);

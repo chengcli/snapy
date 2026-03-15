@@ -7,6 +7,7 @@
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
+#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
 
 #include "layout.hpp"
 #include "process_group.hpp"
@@ -37,14 +38,6 @@ void ProcessGroupContext::_init_nccl() {
   pg->setDefaultBackend(c10d::ProcessGroup::BackendType::NCCL);
   pg->setBackend(c10::DeviceType::CUDA, c10d::ProcessGroup::BackendType::NCCL,
                  backend_nccl);
-
-  auto backend_gloo = c10::static_intrusive_pointer_cast<c10d::Backend>(
-      c10::make_intrusive<c10d::ProcessGroupGloo>(
-          store, options_->process_rank(), options_->process_world_size(),
-          opts));
-
-  pg->setBackend(c10::DeviceType::CPU, c10d::ProcessGroup::BackendType::GLOO,
-                 backend_gloo);
 
   if (options_->verbose()) {
     std::cout << "[Process " << options_->process_rank() << ":"
