@@ -24,7 +24,7 @@ execute_process(
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
-  message(FATAL_ERROR "pd-run failed with exit code ${res}")
+  message(FATAL_ERROR "torchrun failed with exit code ${res}")
 endif()
 
 execute_process(

@@ -81,9 +81,9 @@ def main() -> int:
     if not exe.exists():
         return skip(f"missing executable {exe}")
 
-    pd_run = shutil.which("pd-run")
-    if pd_run is None:
-        return skip("pd-run not found in PATH")
+    torchrun = shutil.which("torchrun")
+    if torchrun is None:
+        return skip("torchrun not found in PATH")
 
     cases = (
         ("single", 1, "0", Path(os.path.abspath(bin_dir / "straka_gpu_single.yaml"))),
@@ -103,7 +103,17 @@ def main() -> int:
         env["BACKEND"] = "nccl"
         env["CUDA_VISIBLE_DEVICES"] = visible_devices
 
-        run([pd_run, str(ranks), str(exe), "straka.yaml"], cwd=case_dir, env=env)
+        run(
+            [
+                torchrun,
+                "--no-python",
+                f"--nproc-per-node={ranks}",
+                str(exe),
+                "straka.yaml",
+            ],
+            cwd=case_dir,
+            env=env,
+        )
 
         output = case_dir / "straka.out0.00001.nc"
         if not output.exists():

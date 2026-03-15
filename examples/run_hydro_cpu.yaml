@@ -24,13 +24,21 @@ species:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 10.e3, x2min: 0., x2max: 20.e3, x3min: 0., x3max: 10.e3}
-  cells: {nx1: 119, nx2: 286, nx3: 168, nghost: 3}
+  bounds: {x1min: 0., x1max: 4.e3, x2min: 0., x2max: 8.e3, x3min: 0., x3max: 4.e3}
+  cells: {nx1: 16, nx2: 24, nx3: 12, nghost: 3}
+
+distribute:
+  backend: gloo
+  layout: slab
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 1
+  verbose: false
 
 dynamics:
   equation-of-state:
     type: ideal-moist
-    density-floor:  1.e-10
+    density-floor: 1.e-10
     pressure-floor: 1.e-10
     tracer-floor: 1.e-10
     limiter: true
@@ -49,11 +57,6 @@ dynamics:
     type: hllc
 
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.e9
-    max-iter: 5
-
   external:
     x1-inner: reflecting
     x1-outer: reflecting
@@ -66,8 +69,14 @@ integration:
   type: rk3
   cfl: 0.45
   implicit-scheme: 0
-  nlim: -1
-  tlim: 8640
+  nlim: 4
+  tlim: 40.
+  ncycle_out: 1
+
+outputs:
+  - type: netcdf
+    variables: [prim, uov, thermo]
+    dt: 20.
 
 forcing:
   const-gravity:

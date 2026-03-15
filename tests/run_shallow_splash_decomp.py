@@ -76,9 +76,9 @@ def main() -> int:
     if not test_script.exists():
         return skip(f"missing comparison script {test_script}")
 
-    pd_run = shutil.which("pd-run")
-    if pd_run is None:
-        return skip("pd-run not found in PATH")
+    torchrun = shutil.which("torchrun")
+    if torchrun is None:
+        return skip("torchrun not found in PATH")
 
     pd_combine = shutil.which("pd-combine")
     if pd_combine is None:
@@ -112,7 +112,17 @@ def main() -> int:
         if args.backend == "nccl":
             env["CUDA_VISIBLE_DEVICES"] = visible_devices
 
-        run([pd_run, str(ranks), str(exe), "shallow_splash.yaml"], cwd=case_dir, env=env)
+        run(
+            [
+                torchrun,
+                "--no-python",
+                f"--nproc-per-node={ranks}",
+                str(exe),
+                "shallow_splash.yaml",
+            ],
+            cwd=case_dir,
+            env=env,
+        )
         run([pd_combine, "0", "-o", "main"], cwd=case_dir, env=env)
         run(
             [

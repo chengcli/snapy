@@ -7,13 +7,14 @@
 using namespace snap;
 
 int main(int argc, char** argv) {
-  auto op = MeshBlockOptionsImpl::from_yaml("shock.yaml");
+  std::string input_file = argc > 1 ? argv[1] : "shock.yaml";
+  auto op = MeshBlockOptionsImpl::from_yaml(input_file);
   auto block = MeshBlock(op);
 
-  auto device = torch::kCPU;
-  if (torch::cuda::is_available()) {
+  torch::Device device(torch::kCPU);
+  if (torch::cuda::is_available() && op->layout()->backend() == "nccl") {
     std::cout << "Running on CUDA" << std::endl;
-    device = torch::kCUDA;
+    device = block->get_layout()->comm->pg->getBoundDeviceId().value();
   }
 
   block->to(device);

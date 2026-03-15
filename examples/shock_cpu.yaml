@@ -4,21 +4,27 @@ reference-state:
 
 species:
   - name: dry
-    composition: {Al: 1.}
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
     cv_R: 2.5
 
 geometry:
   type: cartesian
-  bounds: {x1min: -0.00001, x1max: 0.00001, x2min: -0.00001, x2max: 0.00001, x3min:
-  -0.00001, x3max: 0.00001}
-  cells: {nx1: 256, nx2: 256, nx3: 256, nghost: 3}
+  bounds: {x1min: -0.5, x1max: 0.5, x2min: -0.5, x2max: 0.5, x3min: -0.5, x3max: 0.5}
+  cells: {nx1: 128, nx2: 64, nx3: 1, nghost: 3}
+
+distribute:
+  backend: gloo
+  layout: slab
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 1
+  verbose: false
 
 dynamics:
   equation-of-state:
-    type: aneos
-    eos-file: example.aneos
-    density-floor:  1.e-6
-    pressure-floor: 100.
+    type: ideal-gas
+    density-floor: 1.e-10
+    pressure-floor: 1.e-10
     limiter: false
 
   vertical-projection:
@@ -26,8 +32,8 @@ dynamics:
     pressure-margin: 1.e-6
 
   reconstruct:
-    vertical: {type: plm, scale: false, shock: true}
-    horizontal: {type: plm, scale: false, shock: true}
+    vertical: {type: weno5, scale: false, shock: true}
+    horizontal: {type: weno5, scale: false, shock: true}
 
   riemann-solver:
     type: hllc
@@ -35,7 +41,7 @@ dynamics:
 boundary-condition:
   internal:
     solid-density: 1.e3
-    solid-pressure: 1.9
+    solid-pressure: 1.e9
     max-iter: 5
 
   external:
@@ -48,15 +54,13 @@ boundary-condition:
 
 integration:
   type: rk3
-  cfl: 0.5
+  cfl: 0.9
   implicit-scheme: 0
-  nlim: 1000
-  tlim: 1.e9
+  nlim: 8
+  tlim: 0.2
   ncycle_out: 1
 
 outputs:
-  - type: restart
-    dt: 300.
   - type: netcdf
     variables: [prim]
-    dt: 300.
+    dt: 0.1
