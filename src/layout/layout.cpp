@@ -551,7 +551,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       }
     }
 
-  comm->sync_stream();
+  // comm->sync_stream();
 }
 
 void LayoutImpl::launch_exchange(
@@ -784,7 +784,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
     SINFO(Layout) << "deserializing data from receive buffers\n";
   }
 
-  comm->sync_device();
+  // comm->sync_device();
 
   // Get my logical location
   auto iloc = loc_of(options->rank());

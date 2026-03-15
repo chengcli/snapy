@@ -698,7 +698,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       }
     }
 
-  comm->sync_stream();
+  // comm->sync_stream();
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
@@ -708,7 +708,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
     SINFO(CubedSphereLayout) << "deserializing data from receive buffers\n";
   }
 
-  comm->sync_device();
+  // comm->sync_device();
 
   auto pcoord = pmb->pcoord;
 
