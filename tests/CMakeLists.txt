@@ -68,6 +68,78 @@ set_tests_properties(test_shallow_splash PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 
+add_test(
+  NAME test_shock_cpu
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_example_mass_check.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+          --example shock
+          --input shock_cpu.yaml
+          --backend gloo
+)
+
+set_tests_properties(test_shock_cpu PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 1200
+  LABELS "examples;cpu"
+)
+
+add_test(
+  NAME test_shock_cuda
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_example_mass_check.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+          --example shock
+          --input shock_gpu.yaml
+          --backend nccl
+)
+
+set_tests_properties(test_shock_cuda PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  SKIP_RETURN_CODE 125
+  TIMEOUT 1200
+  LABELS "examples;gpu"
+)
+
+add_test(
+  NAME test_run_hydro_cpu
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_example_mass_check.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+          --example run_hydro
+          --input jupiter_crm_cpu.yaml
+          --backend gloo
+          --mass-rtol 1.0e-7
+)
+
+set_tests_properties(test_run_hydro_cpu PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 1200
+  LABELS "examples;cpu"
+)
+
+add_test(
+  NAME test_run_hydro_cuda
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/run_example_mass_check.py
+          --build-dir ${CMAKE_BINARY_DIR}
+          --build-type release
+          --example run_hydro
+          --input jupiter_crm_dry_gpu.yaml
+          --backend nccl
+          --mass-rtol 1.0e-7
+)
+
+set_tests_properties(test_run_hydro_cuda PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  SKIP_RETURN_CODE 125
+  TIMEOUT 1200
+  LABELS "examples;gpu"
+)
+
 if (DEFINED FULL_TESTS)
   setup_parallel_test(test_exchange 2)
   setup_parallel_test(test_mesh_multi_block 2)

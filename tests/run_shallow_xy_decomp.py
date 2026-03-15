@@ -85,9 +85,9 @@ def main() -> int:
     if not exe.exists():
         raise FileNotFoundError(f"missing executable {exe}")
 
-    pd_run = shutil.which("pd-run")
-    if pd_run is None:
-        raise FileNotFoundError("pd-run not found in PATH")
+    torchrun = shutil.which("torchrun")
+    if torchrun is None:
+        raise FileNotFoundError("torchrun not found in PATH")
 
     pd_combine = shutil.which("pd-combine")
     if pd_combine is None:
@@ -112,7 +112,17 @@ def main() -> int:
         env["BACKEND"] = args.backend
         if args.backend == "nccl" and visible_devices:
             env["CUDA_VISIBLE_DEVICES"] = visible_devices
-        run([pd_run, str(ranks), str(exe), "shallow_xy.yaml"], cwd=case_dir, env=env)
+        run(
+            [
+                torchrun,
+                "--no-python",
+                f"--nproc-per-node={ranks}",
+                str(exe),
+                "shallow_xy.yaml",
+            ],
+            cwd=case_dir,
+            env=env,
+        )
         run([pd_combine, "0", "-o", "main"], cwd=case_dir, env=env)
 
         output = case_dir / "shallow_xy-main.nc"
