@@ -20,7 +20,7 @@ endif()
 execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)
 
 execute_process(
-  COMMAND pd-run 2 ../bin/straka.${buildl}
+  COMMAND torchrun --no-python --nproc-per-node=2 ../bin/straka.${buildl}
   RESULT_VARIABLE res
 )
 

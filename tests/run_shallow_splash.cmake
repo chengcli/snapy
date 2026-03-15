@@ -20,7 +20,7 @@ endif()
 execute_process(COMMAND ln -sf ../bin/shallow_splash.yaml shallow_splash.yaml)
 
 execute_process(
-  COMMAND pd-run 6 ../bin/shallow_splash.${buildl}
+  COMMAND torchrun --no-python --nproc-per-node=6 ../bin/shallow_splash.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)

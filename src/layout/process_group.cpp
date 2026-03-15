@@ -148,13 +148,14 @@ void ProcessGroupContext::_init_gloo() {
   auto opts = c10d::ProcessGroupGloo::Options::create();
   opts->devices.push_back(c10d::ProcessGroupGloo::createDefaultDevice());
 
-  auto backend_impl = c10::static_intrusive_pointer_cast<c10d::Backend>(
+  auto backend_gloo = c10::static_intrusive_pointer_cast<c10d::Backend>(
       c10::make_intrusive<c10d::ProcessGroupGloo>(
           store, options_->process_rank(), options_->process_world_size(),
           opts));
+
   pg->setDefaultBackend(c10d::ProcessGroup::BackendType::GLOO);
   pg->setBackend(c10::DeviceType::CPU, c10d::ProcessGroup::BackendType::GLOO,
-                 backend_impl);
+                 backend_gloo);
 }
 
 #ifdef NOT_USE_C10D_NCCL
