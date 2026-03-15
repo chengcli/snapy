@@ -1,4 +1,5 @@
 // C/C++
+#include <filesystem>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -903,12 +904,12 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
-  std::string restart_file;
-  restart_file.assign(options->output_dir());
-  restart_file.append("/");
-  restart_file.append(fname);
+  std::filesystem::path restart_path(fname);
+  if (!restart_path.is_absolute()) {
+    restart_path = std::filesystem::path(options->output_dir()) / fname;
+  }
 
-  auto data = load_restart(restart_file, options->layout()->rank());
+  auto data = load_restart(restart_path.string(), options->layout()->rank());
 
   // check required variables
   TORCH_CHECK(data.count("hydro_u"),
