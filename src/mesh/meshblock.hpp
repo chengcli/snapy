@@ -47,6 +47,8 @@ struct MeshBlockOptionsImpl {
 
   bool is_physical_boundary(int dy, int dx, int dz) const;
 
+  std::string device_str() const;
+
   //! verbose
   ADD_ARG(bool, verbose) = false;
 
@@ -195,9 +197,6 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    * \return: > 0, redo is needed; 0, no redo; < 0, terminate simulation
    */
   int check_redo(Variables& vars);
-
-  // device
-  torch::Device device() const;
 
  protected:
   //! initialize from restart file

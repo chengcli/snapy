@@ -28,14 +28,15 @@ void ProcessGroupContext::_init_nccl() {
   torch::Device device(torch::kCUDA, device_index);
   c10::cuda::set_device(device_index);
   pg->setBoundDeviceId(device);
-  auto backend_impl =
+
+  auto backend_nccl =
       c10::static_intrusive_pointer_cast<c10d::Backend>(
           c10::make_intrusive<c10d::ProcessGroupNCCL>(
               store, options_->process_rank(), options_->process_world_size(),
               opts));
   pg->setDefaultBackend(c10d::ProcessGroup::BackendType::NCCL);
   pg->setBackend(c10::DeviceType::CUDA, c10d::ProcessGroup::BackendType::NCCL,
-                 backend_impl);
+                 backend_nccl);
 
   if (options_->verbose()) {
     std::cout << "[Process " << options_->process_rank() << ":"

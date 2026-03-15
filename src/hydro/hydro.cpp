@@ -122,8 +122,7 @@ void HydroImpl::reset() {
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 }
 
-torch::Tensor HydroImpl::max_time_step(torch::Tensor w,
-                                       torch::Tensor solid) const {
+double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   auto sub3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
 
   torch::Tensor cs;
@@ -181,7 +180,7 @@ torch::Tensor HydroImpl::max_time_step(torch::Tensor w,
     }
   }
 
-  return torch::min(dt_min);
+  return torch::min(dt_min).item<double>();
 }
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,

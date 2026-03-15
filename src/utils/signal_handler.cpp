@@ -72,7 +72,7 @@ int SignalHandler::CheckSignalFlags(MeshBlockImpl const* pmb) {
   sigprocmask(SIG_UNBLOCK, &mask_, nullptr);
 
   std::vector<at::Tensor> ret_reduce = {
-      torch::tensor({ret}, torch::dtype(torch::kInt32).device(pmb->device()))};
+      torch::tensor({ret}, torch::dtype(torch::kInt32))};
   c10d::AllreduceOptions op;
   op.reduceOp = c10d::ReduceOp::MAX;
   if (pmb != nullptr && pmb->get_layout() != nullptr &&

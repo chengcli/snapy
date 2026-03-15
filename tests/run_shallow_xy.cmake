@@ -20,7 +20,7 @@ endif()
 execute_process(COMMAND ln -sf ../bin/shallow_xy.yaml shallow_xy.yaml)
 
 execute_process(
-  COMMAND pd-run 4 ../bin/shallow_xy.${buildl}
+  COMMAND torchrun --no-python --nproc-per-node=4 ../bin/shallow_xy.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)
