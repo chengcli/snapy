@@ -7,7 +7,6 @@
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
-#include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
 
 #include "layout.hpp"
 #include "process_group.hpp"

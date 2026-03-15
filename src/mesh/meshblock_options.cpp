@@ -187,6 +187,8 @@ bool MeshBlockOptionsImpl::is_physical_boundary(int dy, int dx, int dz) const {
 }
 
 std::string MeshBlockOptionsImpl::device_str() const {
+  if (!layout()) return "";
+
   if (layout()->backend() == "nccl") {
     int device_index = layout()->device_id();
     if (device_index < 0) {
