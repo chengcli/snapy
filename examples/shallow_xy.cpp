@@ -13,6 +13,25 @@ using namespace snap;
 
 namespace {
 
+struct RunConfig {
+  std::string input_file;
+  std::string restart_file;
+};
+
+RunConfig ParseArguments(int argc, char** argv,
+                         std::string const& default_input) {
+  RunConfig cfg{default_input, ""};
+  for (int i = 1; i < argc; ++i) {
+    std::string arg(argv[i]);
+    if ((arg == "-r" || arg == "--restart") && i + 1 < argc) {
+      cfg.restart_file = argv[++i];
+    } else {
+      cfg.input_file = arg;
+    }
+  }
+  return cfg;
+}
+
 void initialize_block(MeshBlock block, Variables& vars,
                       YAML::Node const& config, torch::Device const& device) {
   auto phi = config["problem"]["phi"].as<double>();
@@ -49,10 +68,10 @@ int main(int argc, char** argv) {
   torch::set_num_threads(1);
   torch::set_num_interop_threads(1);
 
-  std::string input_file = argc > 1 ? argv[1] : "shallow_xy.yaml";
-  auto config = YAML::LoadFile(input_file);
+  auto args = ParseArguments(argc, argv, "shallow_xy.yaml");
+  auto config = YAML::LoadFile(args.input_file);
 
-  auto mesh = Mesh(MeshOptionsImpl::from_yaml(input_file));
+  auto mesh = Mesh(MeshOptionsImpl::from_yaml(args.input_file));
   auto device = torch::Device(mesh->options->device_str());
   if (device.is_cuda()) {
     std::cout << "Running on CUDA" << std::endl;
@@ -60,14 +79,18 @@ int main(int argc, char** argv) {
   mesh->to(device);
 
   MeshVariables vars(mesh->blocks.size());
-  for (int i = 0; i < mesh->blocks.size(); ++i) {
-    initialize_block(mesh->blocks[i], vars[i], config, device);
+  if (args.restart_file.empty()) {
+    for (size_t i = 0; i < mesh->blocks.size(); ++i) {
+      initialize_block(mesh->blocks[i], vars[i], config, device);
+    }
   }
 
-  double current_time = mesh->initialize(vars);
+  double current_time = args.restart_file.empty()
+                            ? mesh->initialize(vars)
+                            : mesh->initialize(vars, args.restart_file.c_str());
   mesh->make_outputs(vars, current_time);
 
-  int cycle = 0;
+  int cycle = mesh->blocks.front()->cycle;
   while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
     ++cycle;
     mesh->set_cycle(cycle);

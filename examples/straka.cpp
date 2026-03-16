@@ -18,6 +18,38 @@ using namespace snap;
 
 namespace {
 
+struct RunConfig {
+  std::string input_file;
+  std::string restart_file;
+};
+
+RunConfig ParseArguments(int argc, char** argv,
+                         std::string const& default_input) {
+  RunConfig cfg{default_input, ""};
+  for (int i = 1; i < argc; ++i) {
+    std::string arg(argv[i]);
+    if ((arg == "-r" || arg == "--restart") && i + 1 < argc) {
+      cfg.restart_file = argv[++i];
+    } else {
+      cfg.input_file = arg;
+    }
+  }
+  return cfg;
+}
+
+void set_user_output_callback(MeshBlock block, double p0, double Rd,
+                              double cp) {
+  block->user_output_callback = [Rd, cp, p0](Variables const& vars) {
+    auto w = vars.at("hydro_w");
+    auto temp = w[IPR] / (w[IDN] * Rd);
+
+    Variables out;
+    out["temp"] = temp;
+    out["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
+    return out;
+  };
+}
+
 void initialize_block(MeshBlock block, Variables& vars,
                       YAML::Node const& config, torch::Device const& device) {
   auto p0 = config["problem"]["p0"].as<double>();
@@ -57,15 +89,7 @@ void initialize_block(MeshBlock block, Variables& vars,
   w[IDN] = w[IPR] / (Rd * temp);
 
   vars["hydro_w"] = w;
-  block->user_output_callback = [Rd, cp, p0](Variables const& vars) {
-    auto w = vars.at("hydro_w");
-    auto temp = w[IPR] / (w[IDN] * Rd);
-
-    Variables out;
-    out["temp"] = temp;
-    out["theta"] = temp * (p0 / w[IPR]).pow(Rd / cp);
-    return out;
-  };
+  set_user_output_callback(block, p0, Rd, cp);
 }
 
 }  // namespace
@@ -74,10 +98,10 @@ int main(int argc, char** argv) {
   torch::set_num_threads(1);
   torch::set_num_interop_threads(1);
 
-  std::string input_file = argc > 1 ? argv[1] : "straka.yaml";
-  auto config = YAML::LoadFile(input_file);
+  auto args = ParseArguments(argc, argv, "straka.yaml");
+  auto config = YAML::LoadFile(args.input_file);
 
-  auto mesh = Mesh(MeshOptionsImpl::from_yaml(input_file));
+  auto mesh = Mesh(MeshOptionsImpl::from_yaml(args.input_file));
   auto device = torch::Device(mesh->options->device_str());
   if (device.is_cuda()) {
     std::cout << "Running on CUDA" << std::endl;
@@ -85,14 +109,23 @@ int main(int argc, char** argv) {
   mesh->to(device);
 
   MeshVariables vars(mesh->blocks.size());
-  for (int i = 0; i < mesh->blocks.size(); ++i) {
-    initialize_block(mesh->blocks[i], vars[i], config, device);
+  double p0 = config["problem"]["p0"].as<double>();
+  for (size_t i = 0; i < mesh->blocks.size(); ++i) {
+    auto peos = mesh->blocks[i]->phydro->peos;
+    auto Rd = kintera::constants::Rgas / peos->species_weight();
+    auto cp = peos->species_cv_ref() + Rd;
+    set_user_output_callback(mesh->blocks[i], p0, Rd, cp);
+    if (args.restart_file.empty()) {
+      initialize_block(mesh->blocks[i], vars[i], config, device);
+    }
   }
 
-  double current_time = mesh->initialize(vars);
+  double current_time = args.restart_file.empty()
+                            ? mesh->initialize(vars)
+                            : mesh->initialize(vars, args.restart_file.c_str());
   mesh->make_outputs(vars, current_time);
 
-  int cycle = 0;
+  int cycle = mesh->blocks.front()->cycle;
   while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
     ++cycle;
     mesh->set_cycle(cycle);

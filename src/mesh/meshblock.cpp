@@ -1,5 +1,6 @@
 // C/C++
 #include <ctime>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -903,12 +904,12 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 }
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
-  std::string restart_file;
-  restart_file.assign(options->output_dir());
-  restart_file.append("/");
-  restart_file.append(fname);
+  std::filesystem::path restart_path(fname);
+  if (!restart_path.is_absolute()) {
+    restart_path = std::filesystem::path(options->output_dir()) / fname;
+  }
 
-  auto data = load_restart(restart_file, options->layout()->rank());
+  auto data = load_restart(restart_path.string(), options->layout()->rank());
 
   // check required variables
   TORCH_CHECK(data.count("hydro_u"),
@@ -922,7 +923,8 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   TORCH_CHECK(data.count("next_time"),
               "Restart file is missing required variable: next_time");
 
-  cycle = data.at("last_cycle").item<int64_t>() - 1;
+  // Resume from the saved cycle so nlim-based runs do not take an extra step.
+  cycle = data.at("last_cycle").item<int64_t>();
 
   // user may add outputs after restart
   int current_output_size =
