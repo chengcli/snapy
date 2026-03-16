@@ -923,7 +923,8 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   TORCH_CHECK(data.count("next_time"),
               "Restart file is missing required variable: next_time");
 
-  cycle = data.at("last_cycle").item<int64_t>() - 1;
+  // Resume from the saved cycle so nlim-based runs do not take an extra step.
+  cycle = data.at("last_cycle").item<int64_t>();
 
   // user may add outputs after restart
   int current_output_size =
