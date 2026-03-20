@@ -35,26 +35,23 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
     using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
     using Vector = Eigen::Matrix<scalar_t, 3, 1>;
 
-    native::gpu_chunk_kernel<1, 5>(
-        iter, static_cast<size_t>(nlayer) *
-                  (3 * sizeof(Matrix) + sizeof(Vector)),
-        [=] GPU_LAMBDA(char* const data[5], unsigned int strides[5],
-                       char* work) {
-      auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-      auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-      auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
-      auto area = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
-      auto vol = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
-      auto a = reinterpret_cast<Matrix*>(work);
-      auto b = a + nlayer;
-      auto c = b + nlayer;
-      auto delta = reinterpret_cast<Vector*>(c + nlayer);
+    native::gpu_kernel<9>(
+        iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
+          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto gamma = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto area = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto vol = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto a = reinterpret_cast<Matrix*>(data[5] + strides[5]);
+          auto b = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto delta = reinterpret_cast<Vector*>(data[8] + strides[8]);
 
-      vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, 0, nlayer - 1,
-                             dir, ny, stride1, stride2,
-                             first_block, last_block,
-                             periodic, a, b, c, delta);
-    });
+          vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                 nlayer - 1, dir, ny, stride1, stride2,
+                                 first_block, last_block, periodic, a, b, c,
+                                 delta);
+        });
   });
 }
 
@@ -75,25 +72,22 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav, int d
     using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
     using Vector = Eigen::Matrix<scalar_t, 5, 1>;
 
-    native::gpu_chunk_kernel<1, 5>(
-        iter, static_cast<size_t>(nlayer) *
-                  (3 * sizeof(Matrix) + sizeof(Vector)),
-        [=] GPU_LAMBDA(char* const data[5], unsigned int strides[5],
-                       char* work) {
-      auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-      auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-      auto gamma = reinterpret_cast<scalar_t *>(data[2] + strides[2]);
-      auto area = reinterpret_cast<scalar_t *>(data[3] + strides[3]);
-      auto vol = reinterpret_cast<scalar_t *>(data[4] + strides[4]);
-      auto a = reinterpret_cast<Matrix*>(work);
-      auto b = a + nlayer;
-      auto c = b + nlayer;
-      auto delta = reinterpret_cast<Vector*>(c + nlayer);
+    native::gpu_kernel<9>(
+        iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
+          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto gamma = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto area = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto vol = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto a = reinterpret_cast<Matrix*>(data[5] + strides[5]);
+          auto b = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto delta = reinterpret_cast<Vector*>(data[8] + strides[8]);
 
-      vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0, nlayer - 1,
-                          dir, ny, stride1, stride2, first_block, last_block,
-                          periodic, a, b, c, delta);
-    });
+          vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0, nlayer - 1,
+                              dir, ny, stride1, stride2, first_block,
+                              last_block, periodic, a, b, c, delta);
+        });
   });
 }
 

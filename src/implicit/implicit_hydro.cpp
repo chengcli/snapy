@@ -1,6 +1,16 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+#if __has_include(<nvtx3/nvToolsExt.h>)
+#include <nvtx3/nvToolsExt.h>
+#define SNAPY_HAS_NVTX 1
+#else
+#define SNAPY_HAS_NVTX 0
+#endif
+
+#include <string>
+#include <vector>
+
 // snap
 #include <snap/snap.h>
 
@@ -12,6 +22,35 @@
 #include "implicit_hydro.hpp"
 
 namespace snap {
+
+namespace {
+
+class ScopedNvtxRange {
+ public:
+  explicit ScopedNvtxRange(char const* name) {
+#if SNAPY_HAS_NVTX
+    nvtxRangePushA(name);
+#else
+    (void)name;
+#endif
+  }
+
+  explicit ScopedNvtxRange(std::string const& name) {
+#if SNAPY_HAS_NVTX
+    nvtxRangePushA(name.c_str());
+#else
+    (void)name;
+#endif
+  }
+
+  ~ScopedNvtxRange() {
+#if SNAPY_HAS_NVTX
+    nvtxRangePop();
+#endif
+  }
+};
+
+}  // namespace
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
                                                bool /*verbose*/) {
@@ -52,10 +91,48 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions const& options_,
 
 void ImplicitHydroImpl::reset() {
   TORCH_CHECK(phydro, "[ImplicitHydro] Parent Hydro is null");
+  _a = register_buffer("a", torch::empty({0}, torch::kFloat64));
+  _b = register_buffer("b", torch::empty({0}, torch::kFloat64));
+  _c = register_buffer("c", torch::empty({0}, torch::kFloat64));
+  _delta = register_buffer("delta", torch::empty({0}, torch::kFloat64));
+  _du0 = register_buffer("du0", torch::empty({0}, torch::kFloat64));
+  _corr = register_buffer("corr", torch::empty({0}, torch::kFloat64));
+}
+
+void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
+  auto pcoord = phydro->pmb->pcoord;
+  int nx1 = pcoord->options->nx1();
+  int nx2 = pcoord->options->nx2();
+  int nx3 = pcoord->options->nx3();
+  int m = options->size();
+
+  auto abc_shape = std::vector<int64_t>{1, nx3, nx2, nx1 * m * m};
+  auto delta_shape = std::vector<int64_t>{1, nx3, nx2, nx1 * m};
+
+  auto needs_reset = [&](torch::Tensor const& t,
+                         std::vector<int64_t> const& shape) {
+    return !t.defined() || t.sizes().vec() != shape ||
+           t.scalar_type() != w.scalar_type() || t.device() != w.device();
+  };
+
+  auto maybe_resize = [&](torch::Tensor& t, std::vector<int64_t> const& shape) {
+    if (needs_reset(t, shape)) {
+      t.set_(torch::empty(shape, w.options()));
+    }
+  };
+
+  maybe_resize(_a, abc_shape);
+  maybe_resize(_b, abc_shape);
+  maybe_resize(_c, abc_shape);
+  maybe_resize(_delta, delta_shape);
+  maybe_resize(_du0, w.sizes().vec());
+  maybe_resize(_corr, w.sizes().vec());
 }
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
+  ScopedNvtxRange implicit_range("implicit_hydro.forward");
+
   if (options->scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
@@ -69,49 +146,71 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     TORCH_CHECK(false, "[ImplicitHydro] NaN encountered before implicit solve");
   }*/
 
-  auto du0 = du.clone();
+  ensure_workspace(w);
+  _du0.copy_(du);
 
   /// (1) Project to local orthonormal frame
-  w[IVY] += w[IVZ] * cos_theta;
-  w[IVZ] *= sin_theta;
+  {
+    ScopedNvtxRange range("implicit_hydro.project");
+    w[IVY] += w[IVZ] * cos_theta;
+    w[IVZ] *= sin_theta;
 
-  coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
-  pcoord->prim2local1_(du);
+    coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
+    pcoord->prim2local1_(du);
+  }
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  auto iter =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(true)
-          .declare_static_shape(du.index(interior).sizes(),
-                                /*squash_dims=*/{0, 3})
-          .add_owned_output(du.index(interior))
-          .add_owned_input(w.index(interior))
-          .add_owned_input(gamma.unsqueeze(0).index(interior))
-          .add_owned_input(
-              pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
-          .add_owned_input(
-              pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
-          .build();
+  auto iter = [&]() {
+    ScopedNvtxRange range("implicit_hydro.iterator_setup");
+    return at::TensorIteratorConfig()
+        .resize_outputs(false)
+        .check_all_same_dtype(true)
+        .declare_static_shape(du.index(interior).sizes(),
+                              /*squash_dims=*/{0, 3})
+        .add_owned_output(du.index(interior))
+        .add_owned_input(w.index(interior))
+        .add_owned_input(gamma.unsqueeze(0).index(interior))
+        .add_owned_input(
+            pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
+        .add_owned_input(
+            pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
+        .add_input(_a)
+        .add_input(_b)
+        .add_input(_c)
+        .add_input(_delta)
+        .build();
+  }();
 
-  if ((options->scheme() >> 3) & 1) {
-    at::native::vic_solve_full(du.device().type(), iter, dt,
-                               phydro->options->grav()->grav1(), 0);
-  } else {
-    at::native::vic_solve_partial(du.device().type(), iter, dt,
-                                  phydro->options->grav()->grav1(), 0);
+  {
+    ScopedNvtxRange range("implicit_hydro.solve");
+    if ((options->scheme() >> 3) & 1) {
+      at::native::vic_solve_full(du.device().type(), iter, dt,
+                                 phydro->options->grav()->grav1(), 0);
+    } else {
+      at::native::vic_solve_partial(du.device().type(), iter, dt,
+                                    phydro->options->grav()->grav1(), 0);
+    }
   }
 
   /// (3) De-project from local orthonormal frame
-  w[IVZ] /= sin_theta;
-  w[IVY] -= w[IVZ] * cos_theta;
-  pcoord->flux2global1_(du);
+  {
+    ScopedNvtxRange range("implicit_hydro.deproject");
+    w[IVZ] /= sin_theta;
+    w[IVY] -= w[IVZ] * cos_theta;
+    pcoord->flux2global1_(du);
+  }
+
+  {
+    ScopedNvtxRange range("implicit_hydro.correction");
+    _corr.copy_(du);
+    _corr.sub_(_du0);
+  }
 
   /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
     TORCH_CHECK(false, "[ImplicitHydro] NaN encountered after implicit solve");
   }*/
 
-  return du - du0;
+  return _corr;
 }
 
 std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(

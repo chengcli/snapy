@@ -15,17 +15,17 @@ namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO vic_solve_full_impl(
-    T *du, T *w, T *gamma, T *area, T *vol, double dt, double grav, int is,
+    T* du, T* w, T* gamma, T* area, T* vol, double dt, double grav, int is,
     int ie, int dir, int ny, int stride1, int stride2, bool first_block,
-    bool last_block, bool periodic, Eigen::Matrix<T, 5, 5> *a,
-    Eigen::Matrix<T, 5, 5> *b, Eigen::Matrix<T, 5, 5> *c,
-    Eigen::Matrix<T, 5, 1> *delta) {
+    bool last_block, bool periodic, Eigen::Matrix<T, 5, 5>* a,
+    Eigen::Matrix<T, 5, 5>* b, Eigen::Matrix<T, 5, 5>* c,
+    Eigen::Matrix<T, 5, 1>* delta) {
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat;
 
   // reduced diffusion matrix |A_{i-1/2}|, |A_{i+1/2}|
   Eigen::Matrix<T, 5, 5> Am, Ap;
-  Eigen::Matrix<T, 5, 5> dfdq[3];
+  Eigen::Matrix<T, 5, 5> dfdq_prev, dfdq_curr, dfdq_next;
 
   Eigen::Matrix<T, 5, 5> Phi, Dt, Bnd;
   Phi.setZero();
@@ -47,7 +47,11 @@ void DISPATCH_MACRO vic_solve_full_impl(
     int j = is - 1 + i;
     CopyPrimitives(wl, wr, w, j, stride1, stride2, ny);
     gm1 = GAMMA(j) - 1.;
-    FluxJacobian(dfdq[i], gm1, wr, dir);
+    if (i == 0) {
+      FluxJacobian(dfdq_prev, gm1, wr, dir);
+    } else {
+      FluxJacobian(dfdq_curr, gm1, wr, dir);
+    }
   }
 
   // 5. set up diffusion matrix and tridiagonal coefficients
@@ -66,7 +70,7 @@ void DISPATCH_MACRO vic_solve_full_impl(
   for (int i = is; i <= ie; ++i) {
     CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
     gm1 = GAMMA(i + 1) - 1.;
-    FluxJacobian(dfdq[2], gm1, wr, dir);
+    FluxJacobian(dfdq_next, gm1, wr, dir);
 
     // right edge
     gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
@@ -78,19 +82,21 @@ void DISPATCH_MACRO vic_solve_full_impl(
 
     Ap = Rmat * Lambda * Rimat;
 
+    T area_i = AREA(i);
+    T area_ip1 = AREA(i + 1);
+    T half_inv_vol = 0.5 / VOL(i);
+
     // set up diagonals a, b, c, and Jacobian of the forcing function
-    a[i] =
-        (Am * AREA(i) + Ap * AREA(i + 1) + (AREA(i + 1) - AREA(i)) * dfdq[1]) /
-            (2. * VOL(i)) +
-        Dt - Phi;
-    b[i] = -(Am + dfdq[0]) * AREA(i) / (2. * VOL(i));
-    c[i] = -(Ap - dfdq[2]) * AREA(i + 1) / (2. * VOL(i));
+    a[i] = (Am * area_i + Ap * area_ip1 + (area_ip1 - area_i) * dfdq_curr) *
+               half_inv_vol +
+           Dt - Phi;
+    b[i] = -(Am + dfdq_prev) * (area_i * half_inv_vol);
+    c[i] = -(Ap - dfdq_next) * (area_ip1 * half_inv_vol);
 
     // Shift one cell: i -> i+1
     Am = Ap;
-
-    dfdq[0] = dfdq[1];
-    dfdq[1] = dfdq[2];
+    dfdq_prev = dfdq_curr;
+    dfdq_curr = dfdq_next;
   }
 
   // 5. fix boundary condition
