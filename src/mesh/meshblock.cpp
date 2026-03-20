@@ -864,9 +864,6 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 }
 
 int MeshBlockImpl::check_redo(Variables& vars) {
-  auto sig = snap::SignalHandler::GetInstance();
-  if (sig->CheckSignalFlags(this)) return -1;  // terminate
-
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));

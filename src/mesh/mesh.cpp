@@ -229,6 +229,11 @@ int MeshImpl::check_redo(MeshVariables& vars) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::check_redo expects one Variables map per local MeshBlock");
 
+  auto sig = snap::SignalHandler::GetInstance();
+  if (!blocks.empty() && sig->CheckSignalFlags(blocks.front().get())) {
+    return -1;
+  }
+
   int redo = 0;
   for (int i = 0; i < blocks.size(); ++i) {
     int err = blocks[i]->check_redo(vars[i]);
