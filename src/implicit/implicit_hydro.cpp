@@ -79,16 +79,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   pcoord->prim2local1_(du);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  int nx1 = pcoord->options->nx1();
-  int nx2 = pcoord->options->nx2();
-  int nx3 = pcoord->options->nx3();
-
-  int m = options->size();
-  auto a = torch::zeros({1, nx3, nx2, nx1 * m * m}, w.options());
-  auto b = torch::zeros_like(a);
-  auto c = torch::zeros_like(a);
-  auto delta = torch::zeros({1, nx3, nx2, nx1 * m}, w.options());
-
   auto iter =
       at::TensorIteratorConfig()
           .resize_outputs(false)
@@ -102,10 +92,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
               pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
           .add_owned_input(
               pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
-          .add_input(a)
-          .add_input(b)
-          .add_input(c)
-          .add_input(delta)
           .build();
 
   if ((options->scheme() >> 3) & 1) {
