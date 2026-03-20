@@ -11,19 +11,24 @@
 #include <snap/math/luminv.h>
 #include <snap/snap.h>
 
+#include "implicit_profile.cuh"
+
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
 
 namespace snap {
 
 template <typename T, int N>
-void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
-                                 Eigen::Matrix<T, N, N> *b,
-                                 Eigen::Matrix<T, N, N> *c,
-                                 Eigen::Matrix<T, N, 1> *delta, T *du,
+void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
+                                 Eigen::Matrix<T, N, N>* b,
+                                 Eigen::Matrix<T, N, N>* c,
+                                 Eigen::Matrix<T, N, 1>* delta, T* du,
                                  double dt, int il, int iu, int dir, int ny,
                                  int stride1, int stride2, bool first_block,
                                  bool last_block) {
+  unsigned long long sweep_start = 0;
+  if (vic_profile_enabled()) sweep_start = vic_clock();
+
   Eigen::Matrix<T, N, 1> rhs;
 
   if constexpr (N == 3) {  // partial matrix
@@ -43,7 +48,8 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
   }
 
   int indx[N];
-  Eigen::Matrix<T, N, N, Eigen::RowMajor> A, Y;
+  Eigen::Matrix<T, N, N, Eigen::RowMajor> A;
+  Eigen::Matrix<T, N, N + 1, Eigen::RowMajor> solved;
 
   // if (!first_block) {
   // RecvBuffer(a[il - 1], delta[il - 1], bblock);
@@ -52,17 +58,22 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
   // a[il] *= c[il];
   //} else {
   if constexpr (N > 4) {
-    A = a[il].transpose();
+    unsigned long long inverse_start = 0;
+    if (vic_profile_enabled()) inverse_start = vic_clock();
+    A = a[il];
     for (int n = 0; n < N; ++n) indx[n] = n;
     ludcmp(A, indx);
-    luminv(A, indx, Y);
-    a[il] = Y.transpose();
+    solved.template leftCols<N>() = c[il];
+    solved.col(N) = rhs;
+    lubksb(A, indx, solved);
+    a[il] = solved.template leftCols<N>();
+    delta[il] = solved.col(N);
+    vic_profile_add(kVicInverse, vic_clock() - inverse_start, 1);
   } else {  // small matrix
     a[il] = a[il].inverse().eval();
+    delta[il] = a[il] * rhs;
+    a[il] = a[il] * c[il];
   }
-
-  delta[il] = a[il] * rhs;
-  a[il] = a[il] * c[il];
   //}
 
   for (int i = il + 1; i <= iu; ++i) {
@@ -85,29 +96,39 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N> *a,
     a[i] -= b[i] * a[i - 1];
 
     if constexpr (N > 4) {
-      A = a[i].transpose();
+      unsigned long long inverse_start = 0;
+      if (vic_profile_enabled()) inverse_start = vic_clock();
+      A = a[i];
       for (int n = 0; n < N; ++n) indx[n] = n;
       ludcmp(A, indx);
-      luminv(A, indx, Y);
-      a[i] = Y.transpose();
+      solved.template leftCols<N>() = c[i];
+      solved.col(N) = rhs - b[i] * delta[i - 1];
+      lubksb(A, indx, solved);
+      a[i] = solved.template leftCols<N>();
+      delta[i] = solved.col(N);
+      vic_profile_add(kVicInverse, vic_clock() - inverse_start, 1);
     } else {  // small matrix
       a[i] = a[i].inverse().eval();
+      delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
+      a[i] = a[i] * c[i];
     }
-
-    delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
-    a[i] = a[i] * c[i];
   }
+
+  vic_profile_add(kVicForwardSweep, vic_clock() - sweep_start, 1);
 
   // SaveCoefficients(a, delta, il, iu);
   // if (!last_block) SendBuffer(a[iu], delta[iu], tblock);
 }
 
 template <typename T, int N>
-void DISPATCH_MACRO BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
-                                         Eigen::Matrix<T, N, 1> *delta, int il,
+void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
+                                         Eigen::Matrix<T, N, 1>* delta, int il,
                                          int iu, int dir, int ny, int stride1,
                                          int stride2, bool first_block,
                                          bool last_block) {
+  unsigned long long sweep_start = 0;
+  if (vic_profile_enabled()) sweep_start = vic_clock();
+
   // LoadCoefficients(a, delta, il, iu);
   // if (!last_block) {
   //   RecvBuffer(delta[iu + 1], tblock);
@@ -143,6 +164,8 @@ void DISPATCH_MACRO BackwardSubstitution(T *du, T *w, Eigen::Matrix<T, N, N> *a,
       DU(IPR, i) = delta[i](4);
     }
   }
+
+  vic_profile_add(kVicBackwardSubstitution, vic_clock() - sweep_start, 1);
 
   // if (!first_block) SendBuffer(delta[il], bblock);
 }

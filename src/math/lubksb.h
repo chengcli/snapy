@@ -23,8 +23,8 @@
 //! \note a, n, and indx are not modified and can be reused for successive calls
 template <typename T, int N>
 inline DISPATCH_MACRO void lubksb(
-    Eigen::Matrix<T, N, N, Eigen::RowMajor> const &a, int const *indx,
-    Eigen::Vector<T, N> &b) {
+    Eigen::Matrix<T, N, N, Eigen::RowMajor> const& a, int const* indx,
+    Eigen::Vector<T, N>& b) {
   int i, ii = 0, ip, j;
   T sum;
 
@@ -42,5 +42,30 @@ inline DISPATCH_MACRO void lubksb(
     sum = b[i];
     for (j = i + 1; j < N; j++) sum -= a(i, j) * b(j);
     b[i] = sum / a(i, i);
+  }
+}
+
+template <typename T, int N, int M>
+inline DISPATCH_MACRO void lubksb(
+    Eigen::Matrix<T, N, N, Eigen::RowMajor> const& a, int const* indx,
+    Eigen::Matrix<T, N, M, Eigen::RowMajor>& b) {
+  for (int i = 0; i < N; ++i) {
+    int ip = indx[i];
+    if (ip != i) {
+      Eigen::Matrix<T, 1, M> tmp = b.row(ip);
+      b.row(ip) = b.row(i);
+      b.row(i) = tmp;
+    }
+
+    for (int j = 0; j < i; ++j) {
+      b.row(i).noalias() -= a(i, j) * b.row(j);
+    }
+  }
+
+  for (int i = N - 1; i >= 0; --i) {
+    for (int j = i + 1; j < N; ++j) {
+      b.row(i).noalias() -= a(i, j) * b.row(j);
+    }
+    b.row(i) /= a(i, i);
   }
 }
