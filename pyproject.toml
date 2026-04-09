@@ -4,7 +4,7 @@ requires = [
   "wheel",
   "build",
   "kintera>=2.2.0",
-  "torch>=2.10.0",
+  "torch==2.10.0",
   "ninja",
   ]
 build-backend = "setuptools.build_meta"
