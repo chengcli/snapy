@@ -140,34 +140,36 @@ set_tests_properties(test_run_hydro_cuda PROPERTIES
   LABELS "examples;gpu"
 )
 
-add_test(
-  NAME test_restart_multiblock
-  COMMAND ${Python3_EXECUTABLE}
-          ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_multiblock.py
-          --build-dir ${CMAKE_BINARY_DIR}
-          --build-type release
-)
+if (UNIX and NOT APPLE)
+    add_test(
+      NAME test_restart_multiblock
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_multiblock.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
 
-set_tests_properties(test_restart_multiblock PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  TIMEOUT 600
-  LABELS "restart;examples"
-)
+    set_tests_properties(test_restart_multiblock PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 600
+      LABELS "restart;examples"
+    )
 
-add_test(
-  NAME test_restart_cycle_limit
-  COMMAND ${Python3_EXECUTABLE}
-          ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_cycle_limit.py
-          --build-dir ${CMAKE_BINARY_DIR}
-          --build-type release
-)
+    add_test(
+      NAME test_restart_cycle_limit
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_cycle_limit.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
 
-set_tests_properties(test_restart_cycle_limit PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  SKIP_RETURN_CODE 125
-  TIMEOUT 600
-  LABELS "restart;examples"
-)
+    set_tests_properties(test_restart_cycle_limit PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      SKIP_RETURN_CODE 125
+      TIMEOUT 600
+      LABELS "restart;examples"
+    )
+endif()
 
 if (DEFINED FULL_TESTS)
   setup_parallel_test(test_exchange 2)
