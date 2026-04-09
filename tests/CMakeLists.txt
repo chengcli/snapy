@@ -140,7 +140,7 @@ set_tests_properties(test_run_hydro_cuda PROPERTIES
   LABELS "examples;gpu"
 )
 
-if (UNIX and NOT APPLE)
+if (NOT APPLE)
     add_test(
       NAME test_restart_multiblock
       COMMAND ${Python3_EXECUTABLE}
