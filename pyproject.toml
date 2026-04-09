@@ -3,7 +3,7 @@ requires = [
   "setuptools>=61.0.0",
   "wheel",
   "build",
-  "kintera>=2.2.0",
+  "kintera>=2.1.0",
   "torch==2.10.0",
   "ninja",
   ]
@@ -22,7 +22,7 @@ requires-python = ">=3.10"
 dependencies = [
   "numpy",
   "pyyaml",
-  "kintera>=2.2.0",
+  "kintera>=2.1.0",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

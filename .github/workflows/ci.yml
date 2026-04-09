@@ -57,7 +57,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install numpy pyyaml pytest netcdf4 'kintera>=2.2.0' 'torch==2.10.0'
+          pip install numpy pyyaml pytest netcdf4 'kintera>=2.1.0' 'torch==2.10.0'
 
       - name: Install NetCDF
         run: |
