@@ -1,13 +1,14 @@
 // eigen
 #include <Eigen/Dense>
 
+// C/C++
+#include <vector>
+
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
 #include <torch/torch.h>
-
-#include <vector>
 
 // snap
 #include "implicit_dispatch.hpp"
@@ -33,15 +34,15 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
+          std::vector<Eigen::Matrix<scalar_t, 3, 3>> a(nlayer), b(nlayer), c(nlayer);
+          std::vector<Eigen::Matrix<scalar_t, 3, 1>> delta(nlayer);
+
           for (int i = 0; i < n; i++) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
             auto gamma = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
             auto area = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
             auto vol = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
-            std::vector<Eigen::Matrix<scalar_t, 3, 3>> a(nlayer), b(nlayer),
-                c(nlayer);
-            std::vector<Eigen::Matrix<scalar_t, 3, 1>> delta(nlayer);
 
             vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, 0,
                                    nlayer - 1, dir, ny, stride1, stride2,
@@ -70,15 +71,15 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
+          std::vector<Eigen::Matrix<scalar_t, 5, 5>> a(nlayer), b(nlayer), c(nlayer);
+          std::vector<Eigen::Matrix<scalar_t, 5, 1>> delta(nlayer);
+
           for (int i = 0; i < n; i++) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
             auto gamma = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
             auto area = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
             auto vol = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
-            std::vector<Eigen::Matrix<scalar_t, 5, 5>> a(nlayer), b(nlayer),
-                c(nlayer);
-            std::vector<Eigen::Matrix<scalar_t, 5, 1>> delta(nlayer);
 
             vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0,
                                 nlayer - 1, dir, ny, stride1, stride2,
