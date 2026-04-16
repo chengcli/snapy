@@ -144,14 +144,7 @@ TEST_P(DeviceTest, test_diffusion_matrix) {
   auto op = VerticalImplicitOptions();
   auto pvic = VerticalImplicit(op);
 
-  auto start = std::chrono::high_resolution_clock::now();
-
   auto result = pvic->diffusion_matrix(w, gm1);
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Time taken by diffusion matrix: " << elapsed.count()
-            << " seconds" << std::endl;
 
   std::cout << "result = " << result.sizes() << std::endl;
 }
@@ -181,14 +174,7 @@ TEST_P(DeviceTest, test_foward) {
   auto pvic = VerticalImplicit(op);
   pvic->to(device, dtype);
 
-  auto start = std::chrono::high_resolution_clock::now();
-
   auto result = pvic->forward(w, du, gm1, 0.1);
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Time taken by forward: " << elapsed.count() << " seconds"
-            << std::endl;
 
   std::cout << "result = " << result.sizes() << std::endl;
 }

@@ -99,16 +99,6 @@ class LayoutOptions:
         ...
 
     @overload
-    def no_backend(self) -> bool:
-        """Get no backend flag."""
-        ...
-
-    @overload
-    def no_backend(self, value: bool) -> "LayoutOptions":
-        """Set no backend flag."""
-        ...
-
-    @overload
     def backend(self) -> str:
         """Get backend name."""
         ...

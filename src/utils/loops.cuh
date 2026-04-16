@@ -1,8 +1,13 @@
 // torch
+#include <ATen/cuda/CUDAContext.h>
 #include <ATen/TensorIterator.h>
 #include <ATen/native/ReduceOpsUtils.h>
-
 #include <ATen/native/cuda/Loops.cuh>
+#include <c10/cuda/CUDAException.h>
+
+#include <array>
+
+#include <cuda_runtime.h>
 
 namespace snap {
 namespace native {
