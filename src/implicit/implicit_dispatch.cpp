@@ -34,7 +34,8 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
-          std::vector<Eigen::Matrix<scalar_t, 3, 3>> a(nlayer), b(nlayer), c(nlayer);
+          std::vector<Eigen::Matrix<scalar_t, 3, 3>> a(nlayer), b(nlayer),
+              c(nlayer);
           std::vector<Eigen::Matrix<scalar_t, 3, 1>> delta(nlayer);
 
           for (int i = 0; i < n; i++) {
@@ -71,7 +72,8 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
-          std::vector<Eigen::Matrix<scalar_t, 5, 5>> a(nlayer), b(nlayer), c(nlayer);
+          std::vector<Eigen::Matrix<scalar_t, 5, 5>> a(nlayer), b(nlayer),
+              c(nlayer);
           std::vector<Eigen::Matrix<scalar_t, 5, 1>> delta(nlayer);
 
           for (int i = 0; i < n; i++) {
