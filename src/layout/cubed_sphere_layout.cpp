@@ -840,8 +840,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
 void CubedSphereLayoutImpl::exchange_remote(
     MeshBlockImpl const* pmb, SyncOptions const& opts,
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
-  TORCH_CHECK(!options->no_backend(),
-              "[CubedSphereLayout:exchange_remote] backend is disabled");
+  TORCH_CHECK(
+      owner() != nullptr,
+      "[CubedSphereLayout:exchange_remote] layout has no owning MeshBlock");
   TORCH_CHECK(pmb != nullptr,
               "[CubedSphereLayout:exchange_remote] MeshBlock pointer is null");
 

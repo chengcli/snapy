@@ -76,7 +76,6 @@ struct LayoutOptionsImpl {
        << "* world_size = " << world_size() << "\n"
        << "* blocks_per_process = " << blocks_per_process() << "\n"
        << "* master_port = " << master_port() << "\n"
-       << "* no_backend = " << (no_backend() ? "true" : "false") << "\n"
        << "* verbose = " << (verbose() ? "true" : "false") << "\n";
   }
 
@@ -127,7 +126,6 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, master_port) = 29501;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
-  ADD_ARG(bool, no_backend) = false;
 };
 using LayoutOptions = std::shared_ptr<LayoutOptionsImpl>;
 
@@ -186,7 +184,7 @@ class LayoutImpl {
 
   bool is_root() const { return options->rank() == options->root_rank(); }
   bool use_process_group() const {
-    return !options->no_backend() && options->process_world_size() > 1;
+    return owner() != nullptr && options->process_world_size() > 1;
   }
   bool has_process_group() const {
     return comm != nullptr && comm->pg.defined();

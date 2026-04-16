@@ -27,7 +27,6 @@ LayoutOptions make_test_options() {
   opts->process_world_size(1);
   opts->world_size(1);
   opts->blocks_per_process(1);
-  opts->no_backend(false);
   return opts;
 }
 

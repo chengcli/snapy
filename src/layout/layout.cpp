@@ -355,7 +355,6 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
                                                MeshBlockImpl* p,
                                                std::string const& name) {
   (void)name;
-  if (p == nullptr) options->no_backend(true);
 
   std::shared_ptr<LayoutImpl> pl;
   if (options->type() == "slab") {
@@ -368,7 +367,7 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
 
-  if (!options->no_backend()) {
+  if (p != nullptr) {
     std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
     g_local_layouts[{options->process_rank(),
                      options->local_block_index(options->rank())}] = pl.get();
@@ -378,7 +377,7 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
 }
 
 LayoutImpl::~LayoutImpl() {
-  if (options == nullptr || options->no_backend()) return;
+  if (options == nullptr || owner() == nullptr) return;
 
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
   g_local_layouts.erase(
@@ -667,8 +666,8 @@ void LayoutImpl::launch_exchange(
 void LayoutImpl::exchange_remote(
     MeshBlockImpl const* pmb, SyncOptions const& opts,
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
-  TORCH_CHECK(!options->no_backend(),
-              "[Layout:exchange_remote] backend is disabled");
+  TORCH_CHECK(owner() != nullptr,
+              "[Layout:exchange_remote] layout has no owning MeshBlock");
   TORCH_CHECK(pmb != nullptr,
               "[Layout:exchange_remote] MeshBlock pointer is null");
 
