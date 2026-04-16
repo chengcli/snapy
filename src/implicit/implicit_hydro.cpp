@@ -1,13 +1,6 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
-#if __has_include(<nvtx3/nvToolsExt.h>)
-#include <nvtx3/nvToolsExt.h>
-#define SNAPY_HAS_NVTX 1
-#else
-#define SNAPY_HAS_NVTX 0
-#endif
-
 #include <string>
 #include <vector>
 
@@ -22,35 +15,6 @@
 #include "implicit_hydro.hpp"
 
 namespace snap {
-
-namespace {
-
-class ScopedNvtxRange {
- public:
-  explicit ScopedNvtxRange(char const* name) {
-#if SNAPY_HAS_NVTX
-    nvtxRangePushA(name);
-#else
-    (void)name;
-#endif
-  }
-
-  explicit ScopedNvtxRange(std::string const& name) {
-#if SNAPY_HAS_NVTX
-    nvtxRangePushA(name.c_str());
-#else
-    (void)name;
-#endif
-  }
-
-  ~ScopedNvtxRange() {
-#if SNAPY_HAS_NVTX
-    nvtxRangePop();
-#endif
-  }
-};
-
-}  // namespace
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
                                                bool /*verbose*/) {
@@ -131,8 +95,6 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
-  ScopedNvtxRange implicit_range("implicit_hydro.forward");
-
   if (options->scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
@@ -151,7 +113,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   /// (1) Project to local orthonormal frame
   {
-    ScopedNvtxRange range("implicit_hydro.project");
     w[IVY] += w[IVZ] * cos_theta;
     w[IVZ] *= sin_theta;
 
@@ -161,7 +122,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   //// -------- Solve block-tridiagonal matrix --------- ////
   auto iter = [&]() {
-    ScopedNvtxRange range("implicit_hydro.iterator_setup");
     return at::TensorIteratorConfig()
         .resize_outputs(false)
         .check_all_same_dtype(true)
@@ -182,7 +142,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }();
 
   {
-    ScopedNvtxRange range("implicit_hydro.solve");
     if ((options->scheme() >> 3) & 1) {
       at::native::vic_solve_full(du.device().type(), iter, dt,
                                  phydro->options->grav()->grav1(), 0);
@@ -194,14 +153,12 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   /// (3) De-project from local orthonormal frame
   {
-    ScopedNvtxRange range("implicit_hydro.deproject");
     w[IVZ] /= sin_theta;
     w[IVY] -= w[IVZ] * cos_theta;
     pcoord->flux2global1_(du);
   }
 
   {
-    ScopedNvtxRange range("implicit_hydro.correction");
     _corr.copy_(du);
     _corr.sub_(_du0);
   }
