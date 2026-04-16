@@ -67,68 +67,6 @@ void gpu_kernel(at::TensorIterator& iter, const func_t& f) {
   });
 }
 
-template <typename func_t>
-__global__ void chunk_element_kernel(int64_t numel, func_t f, char* workspace) {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < numel) {
-    f(idx, workspace);
-  }
-}
-
-template <int Chunks, int Arity, typename func_t>
-void gpu_chunk_kernel(at::TensorIterator& iter, size_t work_size,
-                      const func_t& f) {
-  TORCH_CHECK(iter.ninputs() + iter.noutputs() == Arity);
-
-  std::array<char*, Arity> data;
-  for (int i = 0; i < Arity; i++) {
-    data[i] = reinterpret_cast<char*>(iter.data_ptr(i));
-  }
-
-  auto offset_calc = ::make_offset_calculator<Arity>(iter);
-  int64_t numel = iter.numel();
-  if (numel == 0) return;
-
-  int chunks = static_cast<int>(std::min<int64_t>(Chunks, numel));
-  int64_t base = numel / chunks;
-  int64_t rem = numel % chunks;
-  int64_t max_chunk = base + (rem > 0 ? 1 : 0);
-
-  char* d_workspace = nullptr;
-  if (work_size > 0) {
-    auto err = cudaMalloc(&d_workspace, work_size * max_chunk);
-    TORCH_CHECK(err == cudaSuccess, "cudaMalloc failed in gpu_chunk_kernel: ",
-                cudaGetErrorString(err));
-  }
-
-  auto stream = at::cuda::getCurrentCUDAStream();
-  int64_t chunk_start = 0;
-  constexpr int kThreads = 64;
-
-  for (int chunk = 0; chunk < chunks; ++chunk) {
-    int64_t chunk_numel = base + (chunk < rem ? 1 : 0);
-    dim3 block(kThreads);
-    dim3 grid((chunk_numel + block.x - 1) / block.x);
-
-    auto device_lambda = [=] __device__(int idx, char* workspace) {
-      auto offsets = offset_calc.get(idx + chunk_start);
-      char* work = workspace ? workspace + idx * work_size : nullptr;
-      f(data.data(), offsets.data(), work);
-    };
-
-    chunk_element_kernel<<<grid, block, 0, stream>>>(chunk_numel, device_lambda,
-                                                     d_workspace);
-    C10_CUDA_KERNEL_LAUNCH_CHECK();
-    chunk_start += chunk_numel;
-  }
-
-  if (d_workspace != nullptr) {
-    auto err = cudaFree(d_workspace);
-    TORCH_CHECK(err == cudaSuccess, "cudaFree failed in gpu_chunk_kernel: ",
-                cudaGetErrorString(err));
-  }
-}
-
 template <typename scalar_t, int Arity, typename func_t>
 void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
                     const func_t& f) {
