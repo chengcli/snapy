@@ -35,21 +35,10 @@ endforeach()
 # ============= #
 # Example Tests #
 # ============= #
-set(STRAKA_NPROC 2)
-set(SHALLOW_XY_NPROC 4)
-set(SHALLOW_SPLASH_NPROC 6)
-
-if(APPLE)
-  # GitHub's macOS runner has 3 cores, so avoid oversubscribing these examples.
-  set(SHALLOW_XY_NPROC 2)
-  set(SHALLOW_SPLASH_NPROC 3)
-endif()
-
 add_test(
   NAME test_straka
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -Dnproc=${STRAKA_NPROC}
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka.cmake
 )
 
@@ -61,7 +50,6 @@ add_test(
   NAME test_shallow_xy
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -Dnproc=${SHALLOW_XY_NPROC}
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy.cmake
 )
 
@@ -73,7 +61,6 @@ add_test(
   NAME test_shallow_splash
   COMMAND ${CMAKE_COMMAND}
           -Dbuildl=release
-          -Dnproc=${SHALLOW_SPLASH_NPROC}
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash.cmake
 )
 
