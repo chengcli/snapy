@@ -1,5 +1,14 @@
 # run_shallow_splash_test.cmake
 
+if(NOT DEFINED nproc)
+  set(nproc 6)
+endif()
+
+set(input_yaml "../bin/shallow_splash_mesh6.yaml")
+if(nproc EQUAL 3)
+  set(input_yaml "../bin/shallow_splash_proc3_mesh2.yaml")
+endif()
+
 set(download_link "https://zenodo.org/records/18121953/files/shallow_splash-ref.nc")
 
 if(EXISTS "shallow_splash-ref.nc")
@@ -17,10 +26,10 @@ if(NOT _status EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
-execute_process(COMMAND ln -sf ../bin/shallow_splash.yaml shallow_splash.yaml)
+execute_process(COMMAND ln -sf ${input_yaml} shallow_splash.yaml)
 
 execute_process(
-  COMMAND torchrun --no-python --nproc-per-node=6 ../bin/shallow_splash.${buildl}
+  COMMAND torchrun --no-python --nproc-per-node=${nproc} ../bin/shallow_splash.${buildl}
   RESULT_VARIABLE res
 )
 if(NOT res EQUAL 0)

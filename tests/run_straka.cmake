@@ -1,5 +1,9 @@
 # run_straka_test.cmake
 
+if(NOT DEFINED nproc)
+  set(nproc 2)
+endif()
+
 set(download_link "https://zenodo.org/records/18121953/files/straka-ref.nc")
 
 if(EXISTS "straka-ref.nc")
@@ -20,7 +24,7 @@ endif()
 execute_process(COMMAND ln -sf ../bin/straka.yaml straka.yaml)
 
 execute_process(
-  COMMAND torchrun --no-python --nproc-per-node=2 ../bin/straka.${buildl}
+  COMMAND torchrun --no-python --nproc-per-node=${nproc} ../bin/straka.${buildl}
   RESULT_VARIABLE res
 )
 
