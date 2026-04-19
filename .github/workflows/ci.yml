@@ -59,11 +59,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install wheel numpy pyyaml pytest netcdf4
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
-          else
-            pip install 'torch==2.10.0'
-          fi
+          pip install 'torch==2.10.0'
           pip install 'kintera>=2.1.0'
 
       - name: Install NetCDF
