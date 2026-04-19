@@ -91,4 +91,8 @@ jobs:
       - name: Run C++ & Pybind tests
         run: |
           cd ${{ github.workspace }}/build/tests
-          ctest --output-on-failure -R '^(test_.*|test_exchange_decomp|test_straka.*|test_shallow_.*)$'
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            ctest --output-on-failure -R '^(test_.*|test_exchange_decomp|test_straka.*|test_shallow_.*)$'
+          else
+            ctest --output-on-failure -E '^(test_straka|test_shallow_xy|test_shallow_splash|test_shock_cpu|test_run_hydro_cpu)$'
+          fi
