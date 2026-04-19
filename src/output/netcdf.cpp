@@ -144,15 +144,13 @@ void write_netcdf_task(NetcdfWriteTask const& task) {
   auto pmeta = MetadataTable::GetInstance();
   auto fname = make_netcdf_filename(task.output_dir, task.basename, task.rank,
                                     task.file_id, task.file_number);
-  auto staged_fname = make_netcdf_staging_path(fname);
 
   ensure_output_directory(task.output_dir);
   configure_hdf5_file_locking_for_netcdf();
 
   int ifile = -1;
   try {
-    check_nc(nc_create(staged_fname.c_str(), NC_NETCDF4, &ifile), "create",
-             staged_fname.string());
+    check_nc(nc_create(fname.c_str(), NC_NETCDF4, &ifile), "create", fname);
 
     int idt, idx1, idx2, idx3, idx1f = -1, idx2f = -1, idx3f = -1;
     nc_def_dim(ifile, "time", NC_UNLIMITED, &idt);
@@ -390,16 +388,15 @@ void write_netcdf_task(NetcdfWriteTask const& task) {
       }
     }
 
-    check_nc(nc_sync(ifile), "sync", staged_fname.string());
-    check_nc(nc_close(ifile), "close", staged_fname.string());
+    check_nc(nc_sync(ifile), "sync", fname);
+    check_nc(nc_close(ifile), "close", fname);
     ifile = -1;
-    publish_staged_output(staged_fname, fname);
   } catch (...) {
     if (ifile >= 0) {
       nc_close(ifile);
     }
     std::error_code ec;
-    std::filesystem::remove(staged_fname, ec);
+    std::filesystem::remove(fname, ec);
     throw;
   }
 }
