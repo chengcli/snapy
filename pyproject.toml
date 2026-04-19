@@ -1,6 +1,7 @@
 [build-system]
 requires = [
   "setuptools>=61.0.0",
+  "setuptools-scm>=8",
   "wheel",
   "build",
   "kintera>=2.1.0",
@@ -48,8 +49,6 @@ Documentation = "https://snapy.readthedocs.io"
 pd-combine = "snapy.api.pd_combine:main"
 pd-inspect = "snapy.api.pd_inspect:main"
 
-[tool.setuptools.dynamic.version]
-attr = "snapy.__version__"
 
 [tool.setuptools]
 packages = ["snapy"]
@@ -61,3 +60,6 @@ script-files = ["api/pd-run", "api/slurm.sbatch"]
 
 [tool.setuptools.exclude-package-data]
 "snapy" = ["csrc/**/*"]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
