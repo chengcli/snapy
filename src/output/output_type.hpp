@@ -32,11 +32,11 @@ struct OutputOptionsImpl {
   static std::shared_ptr<OutputOptionsImpl> create() {
     return std::make_shared<OutputOptionsImpl>();
   }
-  static std::shared_ptr<OutputOptionsImpl> from_yaml(YAML::Node const &node,
+  static std::shared_ptr<OutputOptionsImpl> from_yaml(YAML::Node const& node,
                                                       int fid = 0);
   std::string file_id() const { return "out" + std::to_string(fid()); }
 
-  void report(std::ostream &os) const {
+  void report(std::ostream& os) const {
     os << "-- output options --\n";
     os << "* fid = " << fid() << "\n"
        << "* dt = " << dt() << "\n"
@@ -117,65 +117,66 @@ class OutputType {
   // mark single parameter constructors as "explicit" to prevent them from
   // acting as implicit conversion functions: for f(OutputType arg), prevent
   // f(anOutputParameters)
-  explicit OutputType(OutputOptions const &options_);
+  explicit OutputType(OutputOptions const& options_);
 
   // rule of five:
   virtual ~OutputType() = default;
   // copy constructor and assignment operator (pnext_type, pfirst_data, etc. are
   // shallow copied)
-  OutputType(const OutputType &copy_other) = default;
-  OutputType &operator=(const OutputType &copy_other) = default;
+  OutputType(const OutputType& copy_other) = default;
+  OutputType& operator=(const OutputType& copy_other) = default;
   // move constructor and assignment operator
-  OutputType(OutputType &&) = default;
-  OutputType &operator=(OutputType &&) = default;
+  OutputType(OutputType&&) = default;
+  OutputType& operator=(OutputType&&) = default;
 
   // data
   // OutputData array start/end index
   int out_is, out_ie, out_js, out_je, out_ks, out_ke;
 
   // ptr to next node in singly linked list of OutputTypes
-  OutputType *pnext_type;
+  OutputType* pnext_type;
 
   // functions
   //! \brief Create doubly linked list of OutputData's containing requested
   //! variables
-  MeshBlockImpl *LoadOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  MeshBlockImpl* LoadOutputData(MeshBlockImpl* pmb, Variables const& vars);
 
-  void AppendOutputDataNode(OutputData *pdata);
-  void ReplaceOutputDataNode(OutputData *pold, OutputData *pnew);
+  void AppendOutputDataNode(OutputData* pdata);
+  void ReplaceOutputDataNode(OutputData* pold, OutputData* pnew);
   void ClearOutputData();
 
-  bool TransformOutputData(MeshBlockImpl *pmb);
+  bool TransformOutputData(MeshBlockImpl* pmb);
 
   //! \brief perform data slicing and update the data list
-  bool SliceOutputData(MeshBlockImpl *pmb, int dim) { return false; }
+  bool SliceOutputData(MeshBlockImpl* pmb, int dim) { return false; }
 
   //! \brief perform data summation and update the data list
-  void SumOutputData(MeshBlockImpl *pmb, int dim);
+  void SumOutputData(MeshBlockImpl* pmb, int dim);
 
   //! \brief Convert vectors in curvilinear coordinates into Cartesian
-  void CalculateCartesianVector(torch::Tensor const &src, torch::Tensor dst,
+  void CalculateCartesianVector(torch::Tensor const& src, torch::Tensor dst,
                                 Coordinate pco);
-  bool ContainVariable(const std::string &var);
+  bool ContainVariable(const std::string& var);
   // following pure virtual function must be implemented in all derived classes
-  virtual void write_output_file(MeshBlockImpl *pmb, Variables const &vars,
+  virtual void write_output_file(MeshBlockImpl* pmb, Variables const& vars,
                                  double time, bool flag) {}
-  virtual void combine_blocks(MeshBlockImpl *pmb, bool) {}
+  virtual void combine_blocks(MeshBlockImpl* pmb, bool) {}
+  virtual void wait_for_pending_writes() {}
 
  protected:
-  void loadHydroOutputData(MeshBlockImpl *pmb, Variables const &vars);
-  void loadDiagOutputData(MeshBlockImpl *pmb, Variables const &vars);
-  void loadScalarOutputData(MeshBlockImpl *pmb, Variables const &vars);
-  void loadUserOutputData(MeshBlockImpl *pmb, Variables const &vars);
+  void loadHydroOutputData(MeshBlockImpl* pmb, Variables const& vars);
+  void loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars);
+  void loadScalarOutputData(MeshBlockImpl* pmb, Variables const& vars);
+  void loadUserOutputData(MeshBlockImpl* pmb, Variables const& vars);
 
   int num_vars_;  // number of variables in output
   // nested doubly linked list of OutputData nodes (of the same OutputType):
 
   // ptr to head OutputData node in doubly linked list
-  OutputData *pfirst_data_;
+  OutputData* pfirst_data_;
 
   // ptr to tail OutputData node in doubly linked list
-  OutputData *plast_data_;
+  OutputData* plast_data_;
 };
 }  // namespace snap
 

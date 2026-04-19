@@ -1,6 +1,7 @@
 #pragma once
 
 // C/C++
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include "output_type.hpp"
 
 namespace snap {
+struct NetcdfOutputImpl;
 /*! \brief derived OutputType class for history dumps
 class HistoryOutput : public OutputType {
  public:
@@ -77,13 +79,17 @@ class HDF5Output : public OutputType {
 class NetcdfOutput : public OutputType {
  public:
   explicit NetcdfOutput(OutputOptions const& options_);
-  ~NetcdfOutput() {}
+  ~NetcdfOutput() override;
 
   //!  \brief Cycles over all MeshBlocks and writes OutputData in NETCDF format,
   ///         one MeshBlock per file
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool final_write) override;
   void combine_blocks(MeshBlockImpl* pmb, bool) override;
+  void wait_for_pending_writes() override;
+
+ private:
+  std::unique_ptr<NetcdfOutputImpl> impl_;
 };
 
 class PnetcdfOutput : public OutputType {

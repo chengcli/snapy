@@ -727,6 +727,11 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
       output_type->file_number += 1;
     }
   }
+  if (final_write) {
+    for (auto& output_type : output_types) {
+      output_type->wait_for_pending_writes();
+    }
+  }
   if (options->verbose()) {
     SINFO(MeshBlock) << "output writing completed at time: " << current_time
                      << std::endl;

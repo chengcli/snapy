@@ -1,6 +1,8 @@
 #pragma once
 
 // C/C++
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -52,6 +54,17 @@ int get_num_variables(std::string grid, AthenaArray<T> const& data) {
 }
 
 class MeshBlockImpl;
+class LayoutImpl;
+using Layout = std::shared_ptr<LayoutImpl>;
+void ensure_output_directory(std::string const& dir);
+void configure_hdf5_file_locking_for_netcdf();
+std::filesystem::path make_netcdf_staging_path(
+    std::filesystem::path const& final_path);
+void publish_staged_output(std::filesystem::path const& staged_path,
+                           std::filesystem::path const& final_path);
+void combine_netcdf_files(Layout const& layout, std::string const& output_dir,
+                          std::string const& basename,
+                          std::string const& file_id, int file_number);
 std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend = "");
 
 }  // namespace snap

@@ -17,16 +17,16 @@
 
 #include "output_formats.hpp"
 
-int mppnccombine(int argc, char *argv[]);
+int mppnccombine(int argc, char* argv[]);
 
 namespace snap {
 namespace {
 std::mutex combine_mutex;
 std::map<std::string, int> combine_counts;
 
-bool ready_to_combine(Layout const &layout, std::string const &key) {
+bool ready_to_combine(Layout const& layout, std::string const& key) {
   std::lock_guard<std::mutex> lock(combine_mutex);
-  int &count = combine_counts[key];
+  int& count = combine_counts[key];
   count += 1;
   if (count < layout->options->blocks_per_process()) {
     return false;
@@ -36,19 +36,19 @@ bool ready_to_combine(Layout const &layout, std::string const &key) {
 }
 }  // namespace
 
-void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
-// Only proceed if NETCDF output enabled
+void combine_netcdf_files(Layout const& layout, std::string const& output_dir,
+                          std::string const& basename,
+                          std::string const& file_id, int file_number) {
 #ifdef NETCDFOUTPUT
-  auto layout = pmb->get_layout();
   char number[64];
   snprintf(number, sizeof(number), "%05d", file_number);
 
   std::string key;
-  key.assign(pmb->options->output_dir());
+  key.assign(output_dir);
   key.append("|");
-  key.append(pmb->options->basename());
+  key.append(basename);
   key.append("|");
-  key.append(options->file_id());
+  key.append(file_id);
   key.append("|");
   key.append(number);
   if (!ready_to_combine(layout, key)) {
@@ -66,11 +66,11 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
 
   if (layout->options->process_rank() == layout->options->process_root_rank()) {
     std::string infile;
-    infile.assign(pmb->options->output_dir());
+    infile.assign(output_dir);
     infile.append("/");
-    infile.append(pmb->options->basename());
+    infile.append(basename);
     infile.append(".block*.");
-    infile.append(options->file_id());
+    infile.append(file_id);
     infile.append(".");
     infile.append(number);
     infile.append(".nc");
@@ -86,11 +86,11 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
     }
 
     std::string outfile;
-    outfile.assign(pmb->options->output_dir());
+    outfile.assign(output_dir);
     outfile.append("/");
-    outfile.append(pmb->options->basename());
+    outfile.append(basename);
     outfile.append(".");
-    outfile.append(options->file_id());
+    outfile.append(file_id);
     outfile.append(".");
     outfile.append(number);
     outfile.append(".nc");
@@ -98,7 +98,7 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
     int argc = 3 + glob_result.gl_pathc;
     // char argv[][2048] = {"CombineBlocks", "-r", outfile.c_str(),
     // infile.c_str()};
-    char **argv = new char *[argc];
+    char** argv = new char*[argc];
     for (int i = 0; i < argc; ++i) argv[i] = new char[2048];
     snprintf(argv[0], 2048, "%s", "CombineBlocks");
     snprintf(argv[1], 2048, "%s", "-r");
@@ -121,5 +121,11 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
   }
 
 #endif  // NETCDFOUTPUT
+}
+
+void NetcdfOutput::combine_blocks(MeshBlockImpl* pmb, bool) {
+  combine_netcdf_files(pmb->get_layout(), pmb->options->output_dir(),
+                       pmb->options->basename(), options->file_id(),
+                       file_number);
 }
 }  // namespace snap

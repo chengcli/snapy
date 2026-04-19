@@ -1,5 +1,11 @@
 // C/C++
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <mutex>
+#include <sstream>
+#include <stdexcept>
 
 // snap
 #include <snap/mesh/meshblock.hpp>
@@ -9,6 +15,82 @@
 
 namespace snap {
 static std::mutex table_mutex;
+
+namespace {
+std::atomic<unsigned long long> staging_counter{0};
+
+std::string make_staging_token() {
+  auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+  auto counter = staging_counter.fetch_add(1, std::memory_order_relaxed);
+  std::ostringstream os;
+  os << now << "_" << counter;
+  return os.str();
+}
+}  // namespace
+
+void ensure_output_directory(std::string const& dir) {
+  std::error_code ec;
+  std::filesystem::create_directories(dir, ec);
+  if (ec) {
+    throw std::runtime_error("Failed to create output directory '" + dir +
+                             "': " + ec.message());
+  }
+}
+
+void configure_hdf5_file_locking_for_netcdf() {
+  static std::once_flag once;
+  std::call_once(once, []() {
+    if (std::getenv("HDF5_USE_FILE_LOCKING") != nullptr) {
+      return;
+    }
+#if defined(_WIN32)
+    _putenv_s("HDF5_USE_FILE_LOCKING", "FALSE");
+#else
+    setenv("HDF5_USE_FILE_LOCKING", "FALSE", 0);
+#endif
+  });
+}
+
+std::filesystem::path make_netcdf_staging_path(
+    std::filesystem::path const& final_path) {
+  auto staging_dir = std::filesystem::temp_directory_path() / "snapy-netcdf";
+  ensure_output_directory(staging_dir.string());
+
+  auto filename = final_path.filename().string();
+  return staging_dir / ("." + filename + ".tmp." + make_staging_token());
+}
+
+void publish_staged_output(std::filesystem::path const& staged_path,
+                           std::filesystem::path const& final_path) {
+  auto parent = final_path.parent_path();
+  if (!parent.empty()) {
+    ensure_output_directory(parent.string());
+  }
+
+  auto publish_tmp = parent / ("." + final_path.filename().string() + ".tmp." +
+                               make_staging_token());
+
+  std::error_code ec;
+  std::filesystem::copy_file(staged_path, publish_tmp,
+                             std::filesystem::copy_options::overwrite_existing,
+                             ec);
+  if (ec) {
+    throw std::runtime_error("Failed to stage NetCDF output '" +
+                             publish_tmp.string() + "': " + ec.message());
+  }
+
+  std::filesystem::remove(final_path, ec);
+  ec.clear();
+
+  std::filesystem::rename(publish_tmp, final_path, ec);
+  if (ec) {
+    std::filesystem::remove(publish_tmp, ec);
+    throw std::runtime_error("Failed to publish NetCDF output '" +
+                             final_path.string() + "': " + ec.message());
+  }
+
+  std::filesystem::remove(staged_path, ec);
+}
 
 __attribute__((weak)) MetadataTable::MetadataTable() {
   table_ = {

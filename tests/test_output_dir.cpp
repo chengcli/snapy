@@ -9,6 +9,8 @@
 // external
 #include <gtest/gtest.h>
 
+#include "src/output/output_utils.hpp"
+
 namespace fs = std::filesystem;
 
 static fs::path make_unique_test_dir(const std::string& name) {
@@ -24,22 +26,11 @@ static fs::path make_unique_test_dir(const std::string& name) {
   return path;
 }
 
-// Mirrors the exact error-handling pattern used in
-// src/output/netcdf.cpp and src/output/restart.cpp.
-static void create_output_dir(const std::string& dir) {
-  std::error_code ec;
-  fs::create_directories(dir, ec);
-  if (ec) {
-    throw std::runtime_error("Failed to create output directory '" + dir +
-                             "': " + ec.message());
-  }
-}
-
 TEST(OutputDir, creates_missing_directory) {
   const fs::path dir = make_unique_test_dir("single");
 
   ASSERT_FALSE(fs::exists(dir));
-  EXPECT_NO_THROW(create_output_dir(dir.string()));
+  EXPECT_NO_THROW(snap::ensure_output_directory(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
 }
 
@@ -47,7 +38,7 @@ TEST(OutputDir, creates_nested_missing_directory) {
   const fs::path dir = make_unique_test_dir("nested") / "deep" / "path";
 
   ASSERT_FALSE(fs::exists(dir));
-  EXPECT_NO_THROW(create_output_dir(dir.string()));
+  EXPECT_NO_THROW(snap::ensure_output_directory(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
 }
 
@@ -58,13 +49,13 @@ TEST(OutputDir, idempotent_for_existing_directory) {
   ASSERT_TRUE(fs::is_directory(dir));
 
   // calling again on an already-existing directory must not throw
-  EXPECT_NO_THROW(create_output_dir(dir.string()));
+  EXPECT_NO_THROW(snap::ensure_output_directory(dir.string()));
   EXPECT_TRUE(fs::is_directory(dir));
 }
 
 TEST(OutputDir, current_directory_default) {
   // The default output_dir is "."; creating it must be a no-op, not an error.
-  EXPECT_NO_THROW(create_output_dir("."));
+  EXPECT_NO_THROW(snap::ensure_output_directory("."));
 }
 
 int main(int argc, char** argv) {
