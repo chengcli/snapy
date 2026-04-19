@@ -38,6 +38,9 @@ docs/_build/
 # codeql
 _codeql_detected_source_root
 
+# virtual env
+*env*/
+
 # agents
 AGENTS.md
 CLAUDE.md
