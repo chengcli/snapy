@@ -52,11 +52,15 @@ integration:
   tlim: 900
   ncycle_out: 10
 
+scalar:
+  nvar: 1
+  names: [tracer]
+
 outputs:
   - type: restart
     dt: 300.
   - type: netcdf
-    variables: [prim, uov]
+    variables: [prim, uov, r_tracer]
     dt: 300.
 
 forcing:

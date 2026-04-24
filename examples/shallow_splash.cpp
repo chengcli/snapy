@@ -62,13 +62,22 @@ void initialize_block(MeshBlock block, Variables& vars,
       torch::TensorOptions().dtype(torch::kFloat64).device(device));
 
   auto dist = (M_PI / 2. - lat) * r_planet;
+  auto anomaly = torch::logical_and((dist < radius), (lat > M_PI / 4.));
 
-  w[IDN] = torch::where(torch::logical_and((dist < radius), (lat > M_PI / 4.)),
-                        phi + dphi, phi);
+  w[IDN] = torch::where(anomaly, phi + dphi, phi);
   w[IVX] = 0.;
   w[IVY] = 0.;
 
   vars["hydro_w"] = w;
+
+  if (block->pscalar->nvar() > 0) {
+    auto scalar_r = torch::zeros(
+        {block->pscalar->nvar(), nc3, nc2, nc1},
+        torch::TensorOptions().dtype(torch::kFloat64).device(device));
+    scalar_r[0] = torch::where(anomaly, torch::ones_like(r_planet),
+                               torch::zeros_like(r_planet));
+    vars["scalar_r"] = scalar_r;
+  }
 }
 
 }  // namespace

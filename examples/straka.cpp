@@ -63,6 +63,8 @@ void initialize_block(MeshBlock block, Variables& vars,
 
   auto pcoord = block->pcoord;
   auto peos = block->phydro->peos;
+  auto x1min = config["geometry"]["bounds"]["x1min"].as<double>();
+  auto x1max = config["geometry"]["bounds"]["x1max"].as<double>();
 
   auto Rd = kintera::constants::Rgas / peos->species_weight();
   auto cv = peos->species_cv_ref();
@@ -89,6 +91,17 @@ void initialize_block(MeshBlock block, Variables& vars,
   w[IDN] = w[IPR] / (Rd * temp);
 
   vars["hydro_w"] = w;
+
+  if (block->pscalar->nvar() > 0) {
+    auto scalar_r = torch::zeros(
+        {block->pscalar->nvar(), nc3, nc2, nc1},
+        torch::TensorOptions().dtype(torch::kFloat64).device(device));
+
+    // Initialize a passive tracer with a monotone vertical gradient.
+    scalar_r[0] = ((x1v - x1min) / (x1max - x1min)).clamp(0.0, 1.0);
+    vars["scalar_r"] = scalar_r;
+  }
+
   set_user_output_callback(block, p0, Rd, cp);
 }
 
