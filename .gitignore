@@ -44,3 +44,4 @@ _codeql_detected_source_root
 # agents
 AGENTS.md
 CLAUDE.md
+.codex

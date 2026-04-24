@@ -656,15 +656,18 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         }
 
         auto var_send = var.index(sub).clone();
-        auto vel = var_send.narrow(0, IVX, 3);
 
         switch (opts.type()) {
-          case kConserved:
+          case kConserved: {
+            auto vel = var_send.narrow(0, IVX, 3);
             coord_vec_raise_(vel, cosine_cell.index(sub3));
             cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
-            break;
-          case kPrimitive:
+          } break;
+          case kPrimitive: {
+            auto vel = var_send.narrow(0, IVX, 3);
             cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
+          } break;
+          case kScalar:
             break;
         }
 
@@ -823,14 +826,17 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
           pcoord->interp_ghost(var, offset);
         }
 
-        auto vel = var.index(sub).narrow(0, IVX, 3);
         switch (opts.type()) {
-          case kConserved:
+          case kConserved: {
+            auto vel = var.index(sub).narrow(0, IVX, 3);
             cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
             coord_vec_lower_(vel, cosine_cell.index(sub3));
-            break;
-          case kPrimitive:
+          } break;
+          case kPrimitive: {
+            auto vel = var.index(sub).narrow(0, IVX, 3);
             cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
+          } break;
+          case kScalar:
             break;
         }
       }

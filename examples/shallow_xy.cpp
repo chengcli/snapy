@@ -37,6 +37,10 @@ void initialize_block(MeshBlock block, Variables& vars,
   auto phi = config["problem"]["phi"].as<double>();
   auto uphi = config["problem"]["uphi"].as<double>();
   auto dphi = config["problem"]["dphi"].as<double>();
+  auto x1min = config["geometry"]["bounds"]["x1min"].as<double>();
+  auto x1max = config["geometry"]["bounds"]["x1max"].as<double>();
+  auto x2min = config["geometry"]["bounds"]["x2min"].as<double>();
+  auto x2max = config["geometry"]["bounds"]["x2max"].as<double>();
 
   auto pcoord = block->pcoord;
   auto peos = block->phydro->peos;
@@ -60,6 +64,17 @@ void initialize_block(MeshBlock block, Variables& vars,
   w[IVY] = 0.;
 
   vars["hydro_w"] = w;
+
+  if (block->pscalar->nvar() > 0) {
+    auto scalar_r = torch::zeros(
+        {block->pscalar->nvar(), nc3, nc2, nc1},
+        torch::TensorOptions().dtype(torch::kFloat64).device(device));
+
+    auto grad_x = (x1v - x1min) / (x1max - x1min);
+    auto grad_y = (x2v - x2min) / (x2max - x2min);
+    scalar_r[0] = (0.5 * (grad_x + grad_y)).clamp(0.0, 1.0);
+    vars["scalar_r"] = scalar_r;
+  }
 }
 
 }  // namespace

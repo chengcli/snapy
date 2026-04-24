@@ -9,6 +9,7 @@ setup_test(test_plm)
 setup_test(test_weno)
 setup_test(test_reconstruct)
 setup_test(test_riemann)
+setup_test(test_scalar)
 setup_test(test_internal_boundary)
 setup_test(test_rectify)
 setup_test(test_pull_2d)
@@ -20,9 +21,15 @@ setup_test(test_coordinate)
 setup_test(test_output_dir)
 setup_test(test_process_group)
 setup_test(test_refine)
+setup_parallel_test(test_exchange 2)
 #setup_test(test_read_topo)
 #setup_cuda_test(test_thomas_solver)
 #setup_test(test_aneos)
+
+set_tests_properties(test_exchange.release PROPERTIES
+  ENVIRONMENT
+    "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
+)
 
 file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist
@@ -172,13 +179,7 @@ if (NOT APPLE)
 endif()
 
 if (DEFINED FULL_TESTS)
-  setup_parallel_test(test_exchange 2)
   setup_parallel_test(test_mesh_multi_block 2)
-
-  set_tests_properties(test_exchange.release PROPERTIES
-    ENVIRONMENT
-      "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
-  )
 
   add_test(
     NAME test_exchange_decomp

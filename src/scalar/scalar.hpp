@@ -8,6 +8,7 @@
 // kintera
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/thermo/thermo.hpp>
+#include <kintera/utils/format.hpp>
 
 // snap
 #include <snap/coord/coordinate.hpp>
@@ -18,9 +19,15 @@
 #include <snap/add_arg.h>
 
 namespace snap {
+class MeshBlockImpl;
+
 struct ScalarOptionsImpl {
   static std::shared_ptr<ScalarOptionsImpl> create() {
-    return std::make_shared<ScalarOptionsImpl>();
+    auto op = std::make_shared<ScalarOptionsImpl>();
+    op->recon() = ReconstructOptionsImpl::create();
+    op->riemann() = RiemannSolverOptionsImpl::create();
+    op->riemann()->type() = "upwind";
+    return op;
   }
   static std::shared_ptr<ScalarOptionsImpl> from_yaml(
       std::string const& filename, bool verbose = false);
@@ -28,6 +35,15 @@ struct ScalarOptionsImpl {
   ScalarOptionsImpl() = default;
   void report(std::ostream& os) const {
     os << "-- scalar options --\n";
+    os << "* verbose = " << (verbose() ? "true" : "false") << "\n"
+       << "* nvar = " << nvar() << "\n"
+       << "* names = " << fmt::format("{}", names()) << "\n";
+    if (recon()) {
+      recon()->report(os);
+    }
+    if (riemann()) {
+      riemann()->report(os);
+    }
     if (thermo()) {
       os << "-- thermo options --\n";
       thermo()->report(os);
@@ -39,6 +55,8 @@ struct ScalarOptionsImpl {
   }
 
   ADD_ARG(bool, verbose) = false;
+  ADD_ARG(int, nvar) = 0;
+  ADD_ARG(std::vector<std::string>, names);
 
   //! Thermodynamics options
   ADD_ARG(kintera::ThermoOptions, thermo) = nullptr;
@@ -73,20 +91,25 @@ class ScalarImpl : public torch::nn::Cloneable<ScalarImpl> {
   //! options with which this `Scalar` was constructed
   ScalarOptions options;
 
+  //! non-owning reference to parent meshblock
+  MeshBlockImpl const* pmb = nullptr;
+
   //! submodules
   Coordinate pcoord = nullptr;
   Reconstruct precon = nullptr;
   RiemannSolver priemann = nullptr;
+  torch::Tensor _flux1, _flux2, _flux3, _div;
 
   kintera::ThermoX pthermo = nullptr;
   kintera::Kinetics pkinetics = nullptr;
 
   //! Constructor to initialize the layers
   ScalarImpl() : options(ScalarOptionsImpl::create()) {}
-  explicit ScalarImpl(const ScalarOptions& options_);
+  explicit ScalarImpl(const ScalarOptions& options_,
+                      torch::nn::Module* p = nullptr);
   void reset() override;
 
-  int nvar() const { return 0; }
+  int nvar() const { return options ? options->nvar() : 0; }
   virtual double max_time_step(torch::Tensor w) const { return 1.e9; }
 
   torch::Tensor get_buffer(std::string var) const {

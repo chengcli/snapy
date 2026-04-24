@@ -36,9 +36,13 @@ integration:
   tlim: 9
   ncycle_out: 10
 
+scalar:
+  nvar: 1
+  names: [tracer]
+
 outputs:
   - type: netcdf
-    variables: [prim]
+    variables: [prim, r_tracer]
     dt: 3.
 
 problem:

@@ -33,7 +33,9 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
   // ------------- scalar --------------- //
   op->scalar() = ScalarOptionsImpl::from_yaml(input_file, verbose);
-  op->scalar()->recon() = op->hydro()->recon23();
+  if (op->scalar()->recon() == nullptr) {
+    op->scalar()->recon() = op->hydro()->recon23();
+  }
   if (verbose) op->scalar()->report(SINFO(MeshBlockOptions));
 
   // ------------- integrator ------------ //

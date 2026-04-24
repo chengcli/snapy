@@ -15,19 +15,19 @@
 
 namespace py = pybind11;
 
-void bind_bc(py::module &);
-void bind_mesh(py::module &);
-void bind_hydro(py::module &);
-void bind_scalar(py::module &);
-void bind_eos(py::module &);
-void bind_coord(py::module &);
-void bind_recon(py::module &);
-void bind_riemann(py::module &);
-void bind_output(py::module &);
-void bind_dsmc(py::module &);
-void bind_forcing(py::module &);
-void bind_implicit(py::module &);
-void bind_layout(py::module &);
+void bind_bc(py::module&);
+void bind_mesh(py::module&);
+void bind_hydro(py::module&);
+void bind_scalar(py::module&);
+void bind_eos(py::module&);
+void bind_coord(py::module&);
+void bind_recon(py::module&);
+void bind_riemann(py::module&);
+void bind_output(py::module&);
+void bind_dsmc(py::module&);
+void bind_forcing(py::module&);
+void bind_implicit(py::module&);
+void bind_layout(py::module&);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("__name__") = "snapy";
@@ -51,11 +51,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   bind_coord(m);
   bind_eos(m);
   bind_hydro(m);
+  bind_scalar(m);
   bind_recon(m);
   bind_riemann(m);
   bind_output(m);
   bind_forcing(m);
   bind_implicit(m);
   bind_mesh(m);
-  // bind_scalar(m);
 }

@@ -4,6 +4,8 @@ import torch
 
 from .hydro import HydroOptions
 from .layout import Layout, LayoutOptions
+from .reconstruction import ReconstructOptions
+from .riemann import RiemannSolverOptions
 
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
 Variables = Dict[str, torch.Tensor]
@@ -11,7 +13,33 @@ MeshVariables = List[Variables]
 
 
 class ScalarOptions:
-    pass
+    def __init__(self) -> None: ...
+    def __repr__(self) -> str: ...
+
+    @overload
+    def verbose(self) -> bool: ...
+    @overload
+    def verbose(self, value: bool) -> "ScalarOptions": ...
+
+    @overload
+    def nvar(self) -> int: ...
+    @overload
+    def nvar(self, value: int) -> "ScalarOptions": ...
+
+    @overload
+    def names(self) -> List[str]: ...
+    @overload
+    def names(self, value: List[str]) -> "ScalarOptions": ...
+
+    @overload
+    def recon(self) -> ReconstructOptions: ...
+    @overload
+    def recon(self, value: ReconstructOptions) -> "ScalarOptions": ...
+
+    @overload
+    def riemann(self) -> RiemannSolverOptions: ...
+    @overload
+    def riemann(self, value: RiemannSolverOptions) -> "ScalarOptions": ...
 
 
 class MeshBlockOptions:

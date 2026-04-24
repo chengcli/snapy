@@ -302,9 +302,9 @@ torch::Tensor CoordinateImpl::find_cell_index(
   return index;
 }
 
-torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
-                                      torch::Tensor flux2,
-                                      torch::Tensor flux3) {
+torch::Tensor CoordinateImpl::divergence(torch::Tensor flux1,
+                                         torch::Tensor flux2,
+                                         torch::Tensor flux3) const {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1, DIMC = 0 };
 
   auto vol = cell_volume();
@@ -346,6 +346,13 @@ torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
   }
 
   return dflx / vol;
+}
+
+torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
+                                      torch::Tensor flux2,
+                                      torch::Tensor flux3) {
+  (void)prim;
+  return divergence(flux1, flux2, flux3);
 }
 
 Coordinate CoordinateImpl::create(CoordinateOptions const& opts,

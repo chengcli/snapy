@@ -36,9 +36,9 @@ def main() -> int:
     if not exe.exists():
         raise FileNotFoundError(f"missing executable {exe}")
 
-    pd_run = shutil.which("pd-run")
-    if pd_run is None:
-        raise FileNotFoundError("pd-run not found in PATH")
+    torchrun = shutil.which("torchrun")
+    if torchrun is None:
+        raise FileNotFoundError("torchrun not found in PATH")
 
     yaml_src = Path(os.path.abspath("test_exchange.yaml"))
     if not yaml_src.exists():
@@ -60,7 +60,16 @@ def main() -> int:
         env["EXPECT_LOCAL_NEIGHBOR"] = "1" if expect_local else "0"
         env["EXPECT_REMOTE_NEIGHBOR"] = "1" if expect_remote else "0"
 
-        run([pd_run, str(ranks), str(exe)], cwd=case_dir, env=env)
+        run(
+            [
+                torchrun,
+                "--no-python",
+                f"--nproc-per-node={ranks}",
+                str(exe),
+            ],
+            cwd=case_dir,
+            env=env,
+        )
 
     return 0
 

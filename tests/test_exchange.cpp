@@ -103,6 +103,35 @@ void seed_hydro_state(MeshBlock block, Variables& vars, torch::Device device) {
   vars["hydro_w"] = hydro_w;
 }
 
+void seed_scalar_state(MeshBlock block, Variables& vars, torch::Device device) {
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int rank = block->options->layout()->rank();
+  int nscalar = block->pscalar->nvar();
+
+  auto scalar_r = torch::zeros(
+      {nscalar, nc3, nc2, nc1},
+      torch::TensorOptions().dtype(torch::kFloat64).device(device));
+
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
+  for (int n = 0; n < nscalar; ++n) {
+    scalar_r.index(interior)[n].fill_(0.01 * (n + 1) + rank + 1.0);
+  }
+
+  for (auto offset : kCardinalOffsets) {
+    int side = offset_to_side(offset);
+    auto part = block->part(offset, PartOptions().exterior(false));
+    for (int n = 0; n < nscalar; ++n) {
+      scalar_r.index(part)[n].fill_(0.01 * (n + 1) + rank + 1.0 +
+                                    side_payload(side));
+    }
+  }
+
+  vars["scalar_r"] = scalar_r;
+}
+
 bool ghosts_match_expected(MeshBlock block, Variables const& vars,
                            bool& saw_local_neighbor,
                            bool& saw_remote_neighbor) {
@@ -150,6 +179,40 @@ bool ghosts_match_expected(MeshBlock block, Variables const& vars,
   return true;
 }
 
+bool scalar_ghosts_match_expected(MeshBlock block, Variables const& vars) {
+  auto layout = block->get_layout();
+  auto rank = layout->options->rank();
+  auto iloc = layout->loc_of(rank);
+  auto const& scalar_r = vars.at("scalar_r");
+
+  if (!torch::isfinite(scalar_r).all().item<bool>()) return false;
+
+  for (auto offset : kCardinalOffsets) {
+    int nb = layout->neighbor_rank(iloc, offset);
+    if (nb < 0) continue;
+
+    auto ghost = block->part(offset, PartOptions().exterior(true));
+    auto ghost_scalar = scalar_r.index(ghost);
+    int side = source_side(layout, iloc, offset, nb);
+    for (int n = 0; n < ghost_scalar.size(0); ++n) {
+      double expected = 0.01 * (n + 1) + nb + 1.0 + side_payload(side);
+      bool contains_expected =
+          torch::isclose(ghost_scalar[n],
+                         torch::full_like(ghost_scalar[n], expected))
+              .any()
+              .item<bool>();
+      if (!contains_expected) {
+        std::cerr << "scalar ghost mismatch on rank " << rank << " offset=("
+                  << std::get<0>(offset) << "," << std::get<1>(offset)
+                  << ") scalar=" << n << " expected=" << expected << std::endl;
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -167,6 +230,7 @@ int main(int argc, char** argv) {
   MeshVariables vars(mesh->blocks.size());
   for (int i = 0; i < mesh->blocks.size(); ++i) {
     seed_hydro_state(mesh->blocks[i], vars[i], device);
+    seed_scalar_state(mesh->blocks[i], vars[i], device);
   }
 
   SyncOptions opts;
@@ -183,6 +247,21 @@ int main(int argc, char** argv) {
   for (auto& job : jobs) {
     job.get();
   }
+
+  SyncOptions scalar_opts;
+  scalar_opts.interpolate(true).type(kScalar);
+  jobs.clear();
+  jobs.reserve(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() {
+      Variables sync_vars;
+      sync_vars["scalar_r"] = vars[i].at("scalar_r");
+      mesh->blocks[i]->exchange(sync_vars, scalar_opts);
+    }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
   if (mesh->blocks.front()->get_layout()->has_process_group()) {
     mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
   }
@@ -193,6 +272,7 @@ int main(int argc, char** argv) {
   for (int i = 0; i < mesh->blocks.size(); ++i) {
     ok = ok && ghosts_match_expected(mesh->blocks[i], vars[i],
                                      saw_local_neighbor, saw_remote_neighbor);
+    ok = ok && scalar_ghosts_match_expected(mesh->blocks[i], vars[i]);
   }
 
   bool expect_local = parse_env_bool("EXPECT_LOCAL_NEIGHBOR", true);
