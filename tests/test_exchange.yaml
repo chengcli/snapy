@@ -11,6 +11,10 @@ dynamics:
   equation-of-state:
     type: ideal-gas
 
+scalar:
+  nvar: 2
+  names: [tr0, tr1]
+
 distribute:
   backend: gloo
   layout: cubed-sphere

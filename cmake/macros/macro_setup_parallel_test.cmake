@@ -27,5 +27,8 @@ macro(setup_parallel_test namel cores)
             gtest_main)
 
   add_test(NAME ${namel}.${buildl}
-           COMMAND pd-run ${cores} $<TARGET_FILE:${namel}.${buildl}>)
+           COMMAND torchrun
+                   --no-python
+                   --nproc-per-node=${cores}
+                   $<TARGET_FILE:${namel}.${buildl}>)
 endmacro()

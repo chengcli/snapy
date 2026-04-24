@@ -11,7 +11,7 @@
 
 namespace snap {
 ReconstructOptions ReconstructOptionsImpl::from_yaml(
-    std::string const &filename, std::string const &section) {
+    std::string const& filename, std::string const& section) {
   auto op = ReconstructOptionsImpl::create();
 
   auto config = YAML::LoadFile(filename);
@@ -21,7 +21,7 @@ ReconstructOptions ReconstructOptionsImpl::from_yaml(
 }
 
 ReconstructOptions ReconstructOptionsImpl::from_yaml(
-    const YAML::Node &node, std::string const &section) {
+    const YAML::Node& node, std::string const& section) {
   auto op = ReconstructOptionsImpl::create();
 
   if (!node[section]) return op;
@@ -43,8 +43,8 @@ ReconstructOptions ReconstructOptionsImpl::from_yaml(
  *                      |           |
  *                      il          iu
  */
-void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
-                    Interp &pinterp, torch::Tensor wlr) {
+void _apply_inplace(int dim, int il, int iu, const torch::Tensor& w,
+                    Interp& pinterp, torch::Tensor wlr) {
   if (il > iu) return;
 
   auto outl = wlr[IRT].slice(dim, il - 1, iu + 1);
@@ -60,10 +60,10 @@ void _apply_inplace(int dim, int il, int iu, const torch::Tensor &w,
   wlr[ILT].slice(dim, iu + 1) = wlr[ILT].select(dim, iu).unsqueeze(dim);
 }
 
-ReconstructImpl::ReconstructImpl(const ReconstructOptions &options_,
-                                 torch::nn::Module *p)
+ReconstructImpl::ReconstructImpl(const ReconstructOptions& options_,
+                                 torch::nn::Module* p)
     : options(options_) {
-  phydro = dynamic_cast<HydroImpl const *>(p);
+  phydro = dynamic_cast<HydroImpl const*>(p);
   reset();
 }
 
@@ -85,6 +85,12 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   int nvar = w.size(0);
 
   TORCH_CHECK(il <= iu, "il > iu");
+
+  if (phydro == nullptr) {
+    _apply_inplace(dim, il, iu, w, pinterp1, result);
+    result.clamp_min_(0.);
+    return result;
+  }
 
   if (options->shock()) {
     _apply_inplace(dim, il, iu, w, pinterp1, result);
@@ -148,8 +154,8 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
 }
 
 std::shared_ptr<ReconstructImpl> ReconstructImpl::create(
-    ReconstructOptions const &opts, torch::nn::Module *p,
-    std::string const &name) {
+    ReconstructOptions const& opts, torch::nn::Module* p,
+    std::string const& name) {
   TORCH_CHECK(p, "[Reconstruct] Parent module is null");
   TORCH_CHECK(opts, "[Reconstruct] Options pointer is null");
 

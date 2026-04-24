@@ -23,8 +23,14 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
 
   for (int n = 0; n < pmb->pscalar->nvar(); n++) {
     std::string scalar_name_cons, scalar_name_prim;
-    scalar_name_cons = root_name_cons + std::to_string(n);
-    scalar_name_prim = root_name_prim + std::to_string(n);
+    auto const& names = pmb->pscalar->options->names();
+    if (n < names.size() && !names[n].empty()) {
+      scalar_name_cons = root_name_cons + "_" + names[n];
+      scalar_name_prim = root_name_prim + "_" + names[n];
+    } else {
+      scalar_name_cons = root_name_cons + std::to_string(n);
+      scalar_name_prim = root_name_prim + std::to_string(n);
+    }
 
     if (ContainVariable(scalar_name_cons) || ContainVariable("cons")) {
       pod = new OutputData;

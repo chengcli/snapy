@@ -537,7 +537,8 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
               "Invalid stage: ", stage);
 
   auto hydro_u = vars.at("hydro_u");
-  auto scalar_s = vars.count("scalars") ? vars.at("scalar_s") : torch::Tensor();
+  auto scalar_s =
+      vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
 
   auto start = std::chrono::high_resolution_clock::now();
   // -------- (1) save initial state --------
@@ -594,6 +595,7 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
 
   if (pscalar->nvar() > 0) {
     scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
+    vars["scalar_r"] = scalar_s / hydro_u[IDN].unsqueeze(0);
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
@@ -709,6 +711,7 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
     exchange(sync_vars, sync_opts);
+    vars["scalar_r"] = scalar_s / hydro_u[IDN].unsqueeze(0);
   }
 
   if (options->verbose()) {

@@ -127,6 +127,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor forward(double dt, torch::Tensor hydro_u,
                         Variables const& other);
 
+  torch::Tensor flux1() const { return _flux1; }
+  torch::Tensor flux2() const { return _flux2; }
+  torch::Tensor flux3() const { return _flux3; }
+
  private:
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();

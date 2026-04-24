@@ -33,14 +33,14 @@ struct CoordinateOptionsImpl {
   }
 
   static std::shared_ptr<CoordinateOptionsImpl> from_yaml(
-      std::string const &filename);
+      std::string const& filename);
 
   CoordinateOptionsImpl() = default;
   std::shared_ptr<CoordinateOptionsImpl> clone() const {
     return std::make_shared<CoordinateOptionsImpl>(*this);
   }
 
-  void report(std::ostream &os) const {
+  void report(std::ostream& os) const {
     os << "-- coordinate options --\n";
     os << "* type = " << type() << "\n"
        << "* x1min = " << x1min() << "\n"
@@ -59,7 +59,7 @@ struct CoordinateOptionsImpl {
   int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
   int nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }
 
-  void repartition(LayoutOptions const &layout);
+  void repartition(LayoutOptions const& layout);
 
   ADD_ARG(std::string, type) = "cartesian";
   ADD_ARG(double, global_x1min) = 0.;
@@ -98,8 +98,8 @@ class CoordinateImpl {
    * \return          created `Coordinate` module
    */
   static std::shared_ptr<CoordinateImpl> create(
-      CoordinateOptions const &opts, torch::nn::Module *p,
-      std::string const &name = "coord");
+      CoordinateOptions const& opts, torch::nn::Module* p,
+      std::string const& name = "coord");
 
   //! data
   torch::Tensor cosine_cell_kj, cosine_face2_kj, cosine_face3_kj;
@@ -108,11 +108,11 @@ class CoordinateImpl {
   CoordinateOptions options;
 
   //! non-owning reference to parent
-  MeshBlockImpl const *pmb = nullptr;
+  MeshBlockImpl const* pmb = nullptr;
 
   CoordinateImpl() : options(CoordinateOptionsImpl::create()) {}
-  explicit CoordinateImpl(const CoordinateOptions &options_,
-                          torch::nn::Module *p = nullptr);
+  explicit CoordinateImpl(const CoordinateOptions& options_,
+                          torch::nn::Module* p = nullptr);
 
   //! data
   torch::Tensor x1f, x2f, x3f;
@@ -139,7 +139,7 @@ class CoordinateImpl {
     return options->nx3() > 1 ? options->nghost() + options->nx3() - 1 : 0;
   }
 
-  void print(std::ostream &stream) const;
+  void print(std::ostream& stream) const;
   virtual void reset_coordinates(std::array<MeshGenerator, 3> meshgens);
 
   //! module methods
@@ -175,7 +175,7 @@ class CoordinateImpl {
 
   virtual torch::Tensor cell_volume() const;
 
-  virtual torch::Tensor find_cell_index(torch::Tensor const &coords) const;
+  virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
   virtual std::array<double, 3> vec_from_cartesian(
       std::array<double, 3> vec) const {
@@ -183,30 +183,32 @@ class CoordinateImpl {
   }
 
   virtual void interp_ghost(torch::Tensor var,
-                            std::tuple<int, int, int> const &) const {}
+                            std::tuple<int, int, int> const&) const {}
 
   //! project contravariant velocity to a local orthogonal frame at face 1
-  virtual void prim2local1_(torch::Tensor const &prim) const {}
+  virtual void prim2local1_(torch::Tensor const& prim) const {}
 
   //! project contravariant velocity to a local orthogonal frame at face 2
-  virtual void prim2local2_(torch::Tensor const &prim) const {}
+  virtual void prim2local2_(torch::Tensor const& prim) const {}
 
   //! project contravariant velocity to a local orthogonal frame at face 3
-  virtual void prim2local3_(torch::Tensor const &prim) const {}
+  virtual void prim2local3_(torch::Tensor const& prim) const {}
 
   //! project fluxes from local orthogonal frame to global contravariant frame
   //! at face 1
-  virtual void flux2global1_(torch::Tensor const &flux) const {}
+  virtual void flux2global1_(torch::Tensor const& flux) const {}
 
   //! project fluxes from local orthogonal frame to global contravariant frame
   //! at face 2
-  virtual void flux2global2_(torch::Tensor const &flux) const {}
+  virtual void flux2global2_(torch::Tensor const& flux) const {}
 
   //! project fluxes from local orthogonal frame to global contravariant frame
   //! at face 3
-  virtual void flux2global3_(torch::Tensor const &flux) const {}
+  virtual void flux2global3_(torch::Tensor const& flux) const {}
 
   //! fluxes -> flux divergence
+  torch::Tensor divergence(torch::Tensor flux1, torch::Tensor flux2,
+                           torch::Tensor flux3) const;
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                                 torch::Tensor flux2, torch::Tensor flux3);
 };
@@ -218,13 +220,13 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
   using CoordinateImpl::forward;
 
   CartesianImpl() = default;
-  explicit CartesianImpl(const CoordinateOptions &options_,
-                         torch::nn::Module *p = nullptr)
+  explicit CartesianImpl(const CoordinateOptions& options_,
+                         torch::nn::Module* p = nullptr)
       : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override;
-  void pretty_print(std::ostream &stream) const override {
+  void pretty_print(std::ostream& stream) const override {
     stream << "Cartesian coordinate:" << std::endl;
     print(stream);
   }
@@ -239,13 +241,13 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
   using CoordinateImpl::forward;
 
   CylindricalImpl() = default;
-  explicit CylindricalImpl(const CoordinateOptions &options_,
-                           torch::nn::Module *p = nullptr)
+  explicit CylindricalImpl(const CoordinateOptions& options_,
+                           torch::nn::Module* p = nullptr)
       : CoordinateImpl(options_, p) {
     reset();
   }
   void reset() override {}
-  void pretty_print(std::ostream &stream) const override {
+  void pretty_print(std::ostream& stream) const override {
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);
   }
