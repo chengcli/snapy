@@ -60,6 +60,7 @@ std::shared_ptr<MeshBlockImpl> make_block(
 
   auto options = MeshBlockOptionsImpl::from_yaml(it->string());
   options->hydro()->eos()->type() = std::move(eos_type);
+  options->hydro()->riemann()->type() = "lmars";
   options->scalar()->nvar() = scalars.size();
   options->scalar()->names() = std::move(scalars);
   return std::make_shared<MeshBlockImpl>(options);
@@ -106,6 +107,70 @@ TEST(UserOutput, registered_callback_allows_uov_output) {
   vars["hydro_w"] = torch::ones({1, 1, 1, 1});
 
   EXPECT_NO_THROW(output.load_user_output(&block, vars));
+}
+
+TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
+  auto block = make_block("ideal-gas", {"tracer_a"});
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::dtype(torch::kFloat64));
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(3.0);
+  vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
+  vars["scalar_s"] =
+      torch::ones({1, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
+  vars["scalar_r"] = vars["scalar_s"] / vars["hydro_u"][IDN].unsqueeze(0);
+
+  block->user_forcing_callback = [](Variables const& forcing_vars, double dt,
+                                    int stage) {
+    EXPECT_DOUBLE_EQ(dt, 0.0);
+    EXPECT_EQ(stage, 0);
+    EXPECT_TRUE(forcing_vars.count("hydro_u"));
+    EXPECT_TRUE(forcing_vars.count("scalar_s"));
+
+    Variables out;
+    out["hydro_du"] = torch::zeros_like(forcing_vars.at("hydro_u"));
+    out["hydro_du"][IDN].fill_(0.5);
+    out["scalar_ds"] = torch::full_like(forcing_vars.at("scalar_s"), 0.25);
+    return out;
+  };
+
+  block->advance_local(vars, 0.0, 0);
+
+  auto hydro_u = vars.at("hydro_u");
+  auto scalar_s = vars.at("scalar_s");
+
+  EXPECT_TRUE(torch::allclose(hydro_u[IDN], torch::full_like(hydro_u[IDN], 1.5),
+                              1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(scalar_s, torch::full_like(scalar_s, 1.25),
+                              1.e-12, 1.e-12));
+}
+
+TEST(UserForcing, callback_rejects_unsupported_keys) {
+  auto block = make_block("ideal-gas");
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::dtype(torch::kFloat64));
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(3.0);
+  vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
+
+  block->user_forcing_callback = [](Variables const& forcing_vars, double,
+                                    int) {
+    Variables out;
+    out["hydro_w"] = torch::zeros_like(forcing_vars.at("hydro_u"));
+    return out;
+  };
+
+  EXPECT_THROW(block->advance_local(vars, 0.0, 0), c10::Error);
 }
 
 TEST(OutputSelection, hydro_fields_depend_on_eos_and_requested_mode) {

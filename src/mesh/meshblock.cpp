@@ -580,6 +580,50 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
     }
   }
 
+  // (3.C) user forcing callback
+  if (static_cast<bool>(user_forcing_callback)) {
+    auto extra_forcing = user_forcing_callback(vars, dt, stage);
+
+    auto hydro_it = extra_forcing.find("hydro_du");
+    if (hydro_it != extra_forcing.end()) {
+      TORCH_CHECK(hydro_it->second.sizes() == fut_hydro_du.sizes(),
+                  "User forcing callback returned hydro_du with shape ",
+                  hydro_it->second.sizes(), ", expected ", fut_hydro_du.sizes(),
+                  ".");
+      fut_hydro_du.add_(hydro_it->second);
+    }
+
+    auto scalar_it = extra_forcing.find("scalar_ds");
+    if (scalar_it != extra_forcing.end()) {
+      TORCH_CHECK(pscalar->nvar() > 0,
+                  "User forcing callback returned scalar_ds, but no scalar "
+                  "variables are configured on this MeshBlock.");
+      TORCH_CHECK(fut_scalar_ds.defined(),
+                  "User forcing callback returned scalar_ds before native "
+                  "scalar tendencies were initialized.");
+      TORCH_CHECK(scalar_it->second.sizes() == fut_scalar_ds.sizes(),
+                  "User forcing callback returned scalar_ds with shape ",
+                  scalar_it->second.sizes(), ", expected ",
+                  fut_scalar_ds.sizes(), ".");
+      fut_scalar_ds.add_(scalar_it->second);
+    }
+
+    for (auto const& [name, _] : extra_forcing) {
+      TORCH_CHECK(name == "hydro_du" || name == "scalar_ds",
+                  "User forcing callback returned unsupported key '", name,
+                  "'. Expected one or both of: hydro_du, scalar_ds.");
+    }
+
+    if (options->verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      SINFO(MeshBlock) << "stage " << stage
+                       << " user forcing time (s): " << elapsed.count()
+                       << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+    }
+  }
+
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
   phydro->peos->apply_conserved_limiter_(hydro_u);
