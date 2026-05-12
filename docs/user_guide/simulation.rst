@@ -192,8 +192,8 @@ Register custom output callbacks:
 
 .. code-block:: python
 
-    def user_output(block, vars, time):
-        """Custom output function."""
+    def user_output(vars):
+        """Return custom derived output fields."""
         # Calculate derived quantities
         rho = vars["hydro_w"][snapy.kIDN, :, :, :]
         vel1 = vars["hydro_w"][snapy.kIV1, :, :, :]
@@ -203,12 +203,22 @@ Register custom output callbacks:
         # Kinetic energy
         ke = 0.5 * rho * (vel1**2 + vel2**2 + vel3**2)
 
-        # Save to file
-        torch.save({"kinetic_energy": ke, "time": time},
-                   f"ke_{time:.3f}.pt")
+        return {"kinetic_energy": ke}
 
     # Register callback
     block.set_user_output_func(user_output)
+
+Register custom forcing callbacks:
+
+.. code-block:: python
+
+    def user_forcing(vars, dt, stage):
+        rho = vars["hydro_u"][snapy.kIDN, :, :, :]
+        hydro_du = torch.zeros_like(vars["hydro_u"])
+        hydro_du[snapy.kIDN] = 0.01 * dt * rho
+        return {"hydro_du": hydro_du}
+
+    block.set_user_forcing_func(user_forcing)
 
 GPU Acceleration
 ----------------
