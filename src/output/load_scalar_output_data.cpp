@@ -9,8 +9,6 @@
 namespace snap {
 void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
                                       Variables const& vars) {
-  OutputData* pod;
-
   if (!vars.count("scalar_r") && !vars.count("scalar_s")) {
     return;
   }
@@ -39,24 +37,14 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
       scalar_name_prim = root_name_prim + std::to_string(n);
     }
 
-    if (s.defined() && (ContainVariable(scalar_name_cons) ||
-                        ContainVariable("cons") || output_all_scalar_cons)) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = scalar_name_cons;
-      pod->data.InitFromTensor(s, 4, n, 1);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+    if (s.defined() &&
+        (output_all_scalar_cons || shouldOutputConserved({scalar_name_cons}))) {
+      appendTensorSliceOutput("SCALARS", scalar_name_cons, s, 4, n, 1);
     }
 
-    if (r.defined() && (ContainVariable(scalar_name_prim) ||
-                        ContainVariable("prim") || output_all_scalar_prim)) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = scalar_name_prim;
-      pod->data.InitFromTensor(r, 4, n, 1);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+    if (r.defined() &&
+        (output_all_scalar_prim || shouldOutputPrimitive({scalar_name_prim}))) {
+      appendTensorSliceOutput("SCALARS", scalar_name_prim, r, 4, n, 1);
     }
   }
 }

@@ -5,8 +5,6 @@
 
 namespace snap {
 void OutputType::loadUserOutputData(MeshBlockImpl* pmb, Variables const& vars) {
-  OutputData* pod;
-
   bool output_all_uov =
       ContainVariable("uov") || ContainVariable("user_out_var");
 
@@ -22,12 +20,7 @@ void OutputType::loadUserOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
   for (const auto& pair : user_out_var) {
     if (pair.first.length() != 0) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = pair.first;
-      pod->data.CopyFromTensor(pair.second);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+      appendTensorOutput("SCALARS", pair.first, pair.second);
     }
   }
 }
