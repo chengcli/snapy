@@ -40,6 +40,12 @@ foreach(input ${inputs})
   execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${input_name})
 endforeach()
 
+if (DEFINED KINTERA_DATA_DIR AND EXISTS "${KINTERA_DATA_DIR}/nasa9.dat")
+  execute_process(
+    COMMAND ln -sf ${KINTERA_DATA_DIR}/nasa9.dat
+            ${CMAKE_BINARY_DIR}/tests/nasa9.dat)
+endif()
+
 # ============= #
 # Example Tests #
 # ============= #

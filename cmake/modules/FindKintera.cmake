@@ -44,7 +44,15 @@ if(Python3_Interpreter_FOUND)
     OUTPUT_VARIABLE kintera_init_file
     OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 
+  execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c
+            "import pathlib, kintera; print(pathlib.Path(kintera.__file__).resolve().parent / 'data')"
+    OUTPUT_VARIABLE kintera_data_dir
+    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
   cmake_path(CONVERT ${kintera_init_file} TO_CMAKE_PATH_LIST kintera_init_file
+             NORMALIZE)
+  cmake_path(CONVERT ${kintera_data_dir} TO_CMAKE_PATH_LIST kintera_data_dir
              NORMALIZE)
 
   cmake_path(REPLACE_FILENAME kintera_init_file lib OUTPUT_VARIABLE
@@ -74,6 +82,10 @@ get_filename_component(KINTERA_INCLUDE_DIR ${_KINTERA_HEADER_DIR} DIRECTORY)
 set(KINTERA_INCLUDE_DIR
     "${KINTERA_INCLUDE_DIR}"
     CACHE FILEPATH "Path to a file.")
+
+set(KINTERA_DATA_DIR
+    "${kintera_data_dir}"
+    CACHE PATH "Path to the installed Kintera data directory.")
 
 # Step 4: unset the internal temp variable
 unset(_KINTERA_HEADER_DIR CACHE)
@@ -120,4 +132,5 @@ find_package_handle_standard_args(
 
 unset(kintera_lib_dir)
 unset(kintera_include_dir)
+unset(kintera_data_dir)
 unset(kintera_required_vars)
