@@ -13,66 +13,39 @@ namespace snap {
 
 void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
                                      Variables const& vars) {
-  OutputData* pod;
-
   auto peos = pmb->phydro->peos;
   auto pcoord = pmb->pcoord;
 
   auto const& w = vars.at("hydro_w");
   auto const& u = vars.at("hydro_u");
+  int nhydro = peos->nvar();
+  int ncomp = nhydro - 5;
 
   // (lab-frame) density
-  if (ContainVariable("D") || ContainVariable("cons")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "dens";
-    pod->data.InitFromTensor(u, 4, IDN, 1);
-    AppendOutputDataNode(pod);
-    num_vars_++;
+  if (shouldOutputConserved({"D"})) {
+    appendTensorSliceOutput("SCALARS", "dens", u, 4, IDN, 1);
   }
 
   // (rest-frame) density
-  if (ContainVariable("d") || ContainVariable("prim")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "rho";
-    pod->data.InitFromTensor(w, 4, IDN, 1);
-    AppendOutputDataNode(pod);
-    num_vars_++;
+  if (shouldOutputPrimitive({"d"})) {
+    appendTensorSliceOutput("SCALARS", "rho", w, 4, IDN, 1);
   }
 
   // total energy
-  if (peos->nvar() > 4) {
-    if (ContainVariable("E") || ContainVariable("cons")) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "Etot";
-      pod->data.InitFromTensor(u, 4, IPR, 1);
-
-      AppendOutputDataNode(pod);
-      num_vars_++;
+  if (nhydro > 4) {
+    if (shouldOutputConserved({"E"})) {
+      appendTensorSliceOutput("SCALARS", "Etot", u, 4, IPR, 1);
     }
 
     // pressure
-    if (ContainVariable("p") || ContainVariable("prim")) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "press";
-      pod->data.InitFromTensor(w, 4, IPR, 1);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+    if (shouldOutputPrimitive({"p"})) {
+      appendTensorSliceOutput("SCALARS", "press", w, 4, IPR, 1);
     }
   }
 
   // momentum vector
-  if (ContainVariable("m") || ContainVariable("cons")) {
-    pod = new OutputData;
-    pod->type = "VECTORS";
-    pod->name = "mom";
-    pod->data.InitFromTensor(u, 4, IVX, 3);
-
-    AppendOutputDataNode(pod);
-    num_vars_ += 3;
+  if (shouldOutputConserved({"m"})) {
+    appendTensorSliceOutput("VECTORS", "mom", u, 4, IVX, 3);
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
       src.InitFromTensor(pmb->hydro_u, 4, IVX, 3);
@@ -90,42 +63,18 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
 
   // each component of momentum
   if (ContainVariable("m1")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "mom1";
-    pod->data.InitFromTensor(u, 4, IVX, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "mom1", u, 4, IVX, 1);
   }
   if (ContainVariable("m2")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "mom2";
-    pod->data.InitFromTensor(u, 4, IVY, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "mom2", u, 4, IVY, 1);
   }
   if (ContainVariable("m3")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "mom3";
-    pod->data.InitFromTensor(u, 4, IVZ, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "mom3", u, 4, IVZ, 1);
   }
 
   // velocity vector
-  if (ContainVariable("v") || ContainVariable("prim")) {
-    pod = new OutputData;
-    pod->type = "VECTORS";
-    pod->name = "vel";
-    pod->data.InitFromTensor(w, 4, IVX, 3);
-
-    AppendOutputDataNode(pod);
-    num_vars_ += 3;
+  if (shouldOutputPrimitive({"v"})) {
+    appendTensorSliceOutput("VECTORS", "vel", w, 4, IVX, 3);
     /*if (options.cartesian_vector) {
       AthenaArray<Real> src;
       src.InitFromTensor(GET_SHARED("hydro/w"), 4, IVX, 3);
@@ -143,59 +92,31 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
 
   // each component of velocity
   if (ContainVariable("vx") || ContainVariable("v1")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "vel1";
-    pod->data.InitFromTensor(w, 4, IVX, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "vel1", w, 4, IVX, 1);
   }
   if (ContainVariable("vy") || ContainVariable("v2")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "vel2";
-    pod->data.InitFromTensor(w, 4, IVY, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "vel2", w, 4, IVY, 1);
   }
   if (ContainVariable("vz") || ContainVariable("v3")) {
-    pod = new OutputData;
-    pod->type = "SCALARS";
-    pod->name = "vel3";
-    pod->data.InitFromTensor(w, 4, IVZ, 1);
-
-    AppendOutputDataNode(pod);
-    num_vars_++;
+    appendTensorSliceOutput("SCALARS", "vel3", w, 4, IVZ, 1);
   }
 
   // vapor + cloud
-  auto ny = peos->nvar() - 5;
-  if (ny > 0) {
-    if (ContainVariable("prim")) {
-      pod = new OutputData;
-      pod->type = "VECTORS";
-      pod->name = get_hydro_names(pmb);
-      pod->data.InitFromTensor(w, 4, ICY, ny);
+  if (ncomp > 0) {
+    auto hydro_names = get_hydro_names(pmb);
+    if (!hydro_names.empty()) {
+      if (shouldOutputPrimitive()) {
+        appendTensorSliceOutput("VECTORS", hydro_names, w, 4, ICY, ncomp);
+      }
 
-      AppendOutputDataNode(pod);
-      num_vars_ += ny;
-    }
-
-    if (ContainVariable("cons")) {
-      pod = new OutputData;
-      pod->type = "VECTORS";
-      pod->name = get_hydro_names(pmb);
-      pod->data.InitFromTensor(u, 4, ICY, ny);
-
-      AppendOutputDataNode(pod);
-      num_vars_ += ny;
+      if (shouldOutputConserved()) {
+        appendTensorSliceOutput("VECTORS", hydro_names, u, 4, ICY, ncomp);
+      }
     }
   }
 
   // lat/lon grid for cubed sphere
-  if (ContainVariable("prim") || ContainVariable("cons")) {
+  if (shouldOutputPrimitive() || shouldOutputConserved()) {
     if (pcoord->options->type() == "gnomonic-equiangle") {
       int r = pmb->options->layout()->rank();
       auto [rx, ry, face_id] = pmb->get_layout()->loc_of(r);
@@ -207,20 +128,10 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
       auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
 
       // longitude
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "lon";
-      pod->data.CopyFromTensor(lon);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+      appendTensorOutput("SCALARS", "lon", lon);
 
       // latitude
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "lat";
-      pod->data.CopyFromTensor(lat);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+      appendTensorOutput("SCALARS", "lat", lat);
     }
   }
 }

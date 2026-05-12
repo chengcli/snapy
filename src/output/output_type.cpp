@@ -10,7 +10,7 @@
 #include "output_type.hpp"
 
 namespace snap {
-OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
+OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const& node, int fid) {
   auto options = OutputOptionsImpl::create();
 
   options->fid() = fid;
@@ -57,7 +57,7 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   return options;
 }
 
-OutputType::OutputType(OutputOptions const &options_)
+OutputType::OutputType(OutputOptions const& options_)
     : options(options_),
       pnext_type(),    // Terminate this node in singly linked list with nullptr
       num_vars_(),     // nested doubly linked list of OutputData:
@@ -65,11 +65,11 @@ OutputType::OutputType(OutputOptions const &options_)
       plast_data_() {  // Initialize tail node to nullptr
 }
 
-MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
-                                          Variables const &vars_in) {
+MeshBlockImpl* OutputType::LoadOutputData(MeshBlockImpl* pmb_in,
+                                          Variables const& vars_in) {
   num_vars_ = 0;
-  OutputData *pod;
-  MeshBlockImpl *pmb;
+  OutputData* pod;
+  MeshBlockImpl* pmb;
   Variables vars;
   // set ptrs to data in OutputData linked list, then slice/sum as needed
 
@@ -88,7 +88,7 @@ MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
 
     int nghost = pmb->options->coord()->nghost();
 
-    for (auto &[name, var] : vars_in) {
+    for (auto& [name, var] : vars_in) {
       auto interior_in = pmb_in->part(
           {0, 0, 0}, PartOptions().exterior(false).ndim(var.dim()));
       auto interior_out =
@@ -125,7 +125,7 @@ MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
   return pmb;
 }
 
-void OutputType::AppendOutputDataNode(OutputData *pnew_data) {
+void OutputType::AppendOutputDataNode(OutputData* pnew_data) {
   if (pfirst_data_ == nullptr) {
     pfirst_data_ = pnew_data;
   } else {
@@ -136,7 +136,7 @@ void OutputType::AppendOutputDataNode(OutputData *pnew_data) {
   plast_data_ = pnew_data;
 }
 
-void OutputType::ReplaceOutputDataNode(OutputData *pold, OutputData *pnew) {
+void OutputType::ReplaceOutputDataNode(OutputData* pold, OutputData* pnew) {
   if (pold == pfirst_data_) {
     pfirst_data_ = pnew;
     if (pold->pnext != nullptr) {  // there is another node in the list
@@ -159,9 +159,9 @@ void OutputType::ReplaceOutputDataNode(OutputData *pold, OutputData *pnew) {
 }
 
 void OutputType::ClearOutputData() {
-  OutputData *pdata = pfirst_data_;
+  OutputData* pdata = pfirst_data_;
   while (pdata != nullptr) {
-    OutputData *pdata_old = pdata;
+    OutputData* pdata_old = pdata;
     pdata = pdata->pnext;
     delete pdata_old;
   }
@@ -170,9 +170,51 @@ void OutputType::ClearOutputData() {
   plast_data_ = nullptr;
 }
 
-bool OutputType::ContainVariable(const std::string &var) {
+bool OutputType::ContainVariable(const std::string& var) const {
   return std::find(options->variables().begin(), options->variables().end(),
                    var) != options->variables().end();
+}
+
+bool OutputType::ContainAnyVariable(
+    std::initializer_list<std::string> vars) const {
+  for (auto const& var : vars) {
+    if (std::find(options->variables().begin(), options->variables().end(),
+                  var) != options->variables().end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool OutputType::shouldOutputPrimitive(
+    std::initializer_list<std::string> vars) const {
+  return ContainVariable("prim") || ContainAnyVariable(vars);
+}
+
+bool OutputType::shouldOutputConserved(
+    std::initializer_list<std::string> vars) const {
+  return ContainVariable("cons") || ContainAnyVariable(vars);
+}
+
+void OutputType::appendTensorOutput(std::string type, std::string name,
+                                    torch::Tensor const& tensor) {
+  auto* pod = new OutputData;
+  pod->type = std::move(type);
+  pod->name = std::move(name);
+  pod->data.CopyFromTensor(tensor);
+  AppendOutputDataNode(pod);
+  num_vars_++;
+}
+
+void OutputType::appendTensorSliceOutput(std::string type, std::string name,
+                                         torch::Tensor const& tensor, int dim,
+                                         int start, int count) {
+  auto* pod = new OutputData;
+  pod->type = std::move(type);
+  pod->name = std::move(name);
+  pod->data.InitFromTensor(tensor, dim, start, count);
+  AppendOutputDataNode(pod);
+  num_vars_ += count;
 }
 
 }  // namespace snap

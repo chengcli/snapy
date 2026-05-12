@@ -125,6 +125,17 @@ void bind_mesh(py::module& m) {
                    return f(vars).cast<std::map<std::string, torch::Tensor>>();
                  };
            })
+      .def("set_user_forcing_func",
+           [&](snap::MeshBlockImpl& self, py::object func_obj) {
+             py::function f = py::cast<py::function>(func_obj);
+             self.user_forcing_callback =
+                 [f](std::map<std::string, torch::Tensor> const& vars,
+                     double dt, int stage) {
+                   py::gil_scoped_acquire gil;
+                   return f(vars, dt, stage)
+                       .cast<std::map<std::string, torch::Tensor>>();
+                 };
+           })
       .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
       .def("make_outputs", &snap::MeshBlockImpl::make_outputs, py::arg("vars"),
            py::arg("time"), py::arg("final_write") = false)

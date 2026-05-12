@@ -57,7 +57,7 @@ scalar:
 
 outputs:
   - type: netcdf
-    variables: [prim, r_tracer]
+    variables: [prim, scalar_prim]
     dt: 1.E5
 
 forcing:

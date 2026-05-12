@@ -94,6 +94,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! user output
   std::function<Variables(Variables const&)> user_output_callback;
 
+  //! user forcing increments applied during advance_local
+  std::function<Variables(Variables const&, double, int)> user_forcing_callback;
+
   //! outputs
   std::vector<std::shared_ptr<OutputType>> output_types;
 

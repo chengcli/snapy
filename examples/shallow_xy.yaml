@@ -42,7 +42,7 @@ scalar:
 
 outputs:
   - type: netcdf
-    variables: [prim, r_tracer]
+    variables: [prim, scalar_prim]
     dt: 3.
 
 problem:

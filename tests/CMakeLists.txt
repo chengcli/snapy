@@ -19,6 +19,7 @@ setup_test(test_cubed)
 setup_test(test_cubed_sphere)
 setup_test(test_coordinate)
 setup_test(test_output_dir)
+setup_test(test_user_output)
 setup_test(test_process_group)
 setup_test(test_refine)
 setup_parallel_test(test_exchange 2)
@@ -38,6 +39,12 @@ foreach(input ${inputs})
   get_filename_component(input_name ${input} NAME)
   execute_process(COMMAND ln -sf ${input} ${CMAKE_BINARY_DIR}/tests/${input_name})
 endforeach()
+
+if (DEFINED KINTERA_DATA_DIR AND EXISTS "${KINTERA_DATA_DIR}/nasa9.dat")
+  execute_process(
+    COMMAND ln -sf ${KINTERA_DATA_DIR}/nasa9.dat
+            ${CMAKE_BINARY_DIR}/tests/nasa9.dat)
+endif()
 
 # ============= #
 # Example Tests #

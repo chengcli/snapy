@@ -60,7 +60,7 @@ outputs:
   - type: restart
     dt: 300.
   - type: netcdf
-    variables: [prim, uov, r_tracer]
+    variables: [prim, uov, scalar_prim]
     dt: 300.
 
 forcing:

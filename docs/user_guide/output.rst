@@ -355,10 +355,9 @@ Register custom output:
 
     import snapy
     import torch
-    from netCDF4 import Dataset
 
-    def custom_output(block, vars, time):
-        """Save custom derived quantities."""
+    def custom_output(vars):
+        """Return custom derived quantities."""
         # Extract variables
         rho = vars["hydro_w"][snapy.kIDN, :, :, :]
         vel1 = vars["hydro_w"][snapy.kIV1, :, :, :]
@@ -372,26 +371,11 @@ Register custom output:
         ie = press / (gamma - 1.0)
         total_energy = ke + ie
 
-        # Save to NetCDF
-        filename = f"custom_output_{time:.6f}.nc"
-        nc = Dataset(filename, "w")
-
-        # Create dimensions
-        nc.createDimension("x3", ke.shape[0])
-        nc.createDimension("x2", ke.shape[1])
-        nc.createDimension("x1", ke.shape[2])
-
-        # Create variables
-        ke_var = nc.createVariable("kinetic_energy", "f8", ("x3", "x2", "x1"))
-        ie_var = nc.createVariable("internal_energy", "f8", ("x3", "x2", "x1"))
-        te_var = nc.createVariable("total_energy", "f8", ("x3", "x2", "x1"))
-
-        # Write data
-        ke_var[:] = ke.cpu().numpy()
-        ie_var[:] = ie.cpu().numpy()
-        te_var[:] = total_energy.cpu().numpy()
-
-        nc.close()
+        return {
+            "kinetic_energy": ke,
+            "internal_energy": ie,
+            "total_energy": total_energy,
+        }
 
     # Register callback
     block.set_user_output_func(custom_output)

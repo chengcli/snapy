@@ -1,3 +1,6 @@
+// C/C++
+#include <type_traits>
+
 // fmt
 #include <fmt/format.h>
 
@@ -28,12 +31,19 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     kintera::ThermoX thermo_x(thermo_y->options);
     thermo_x->to(w.device());
 
-    int ny = thermo_y->options->species().size() - 1;
+    auto const species_count = thermo_y->options->species().size();
+    int ny = species_count > 1 ? static_cast<int>(species_count - 1) : 0;
     auto temp = peos->compute("W->T", {w});
     auto dens = w[IDN];
     auto pres = w[IPR];
-    auto yfrac = w.narrow(0, ICY, ny);
-    auto xfrac = thermo_y->compute("Y->X", {yfrac});
+    torch::Tensor xfrac;
+    if (ny > 0) {
+      auto yfrac = w.narrow(0, ICY, ny);
+      xfrac = thermo_y->compute("Y->X", {yfrac});
+    } else {
+      // Dry single-species cases have no tracer state to convert.
+      xfrac = torch::ones_like(temp).unsqueeze(-1);
+    }
 
     // mole concentration [mol/m^3]
     auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
@@ -65,8 +75,14 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     auto theta_v = theta * feps;
 
     // relative humidity
-    auto rh = kintera::relative_humidity(temp, conc, thermo_x->stoich,
-                                         thermo_x->options->nucleation());
+    auto nucleation = thermo_x->options->nucleation();
+    using Reactions =
+        std::remove_reference_t<decltype(nucleation->reactions())>;
+    Reactions reactions = nucleation ? nucleation->reactions() : Reactions{};
+    torch::Tensor rh;
+    if (!reactions.empty()) {
+      rh = kintera::relative_humidity(temp, conc, thermo_x->stoich, nucleation);
+    }
 
     // temperature
     pod = new OutputData;
@@ -88,7 +104,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "theta_v";
-    pod->data.CopyFromTensor(theta);
+    pod->data.CopyFromTensor(theta_v);
     AppendOutputDataNode(pod);
     num_vars_ += 1;
 
@@ -101,7 +117,6 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     num_vars_ += 1;
 
     // relative humidity
-    auto reactions = thermo_x->options->nucleation()->reactions();
     for (int i = 0; i < reactions.size(); ++i) {
       pod = new OutputData;
       pod->type = "SCALARS";

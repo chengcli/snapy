@@ -102,6 +102,16 @@ MeshBlock
       :param func: User output function
       :type func: Callable
 
+   .. method:: set_user_forcing_func(func: Callable) -> None
+
+      Set user forcing callback function.
+
+      The callback receives ``(vars, dt, stage)`` and may return additive
+      tendency terms keyed by ``"hydro_du"`` and/or ``"scalar_ds"``.
+
+      :param func: User forcing function
+      :type func: Callable
+
    .. attribute:: options
 
       Mesh block configuration options.
