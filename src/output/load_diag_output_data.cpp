@@ -28,7 +28,8 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     kintera::ThermoX thermo_x(thermo_y->options);
     thermo_x->to(w.device());
 
-    int ny = std::max<int>(thermo_y->options->species().size() - 1, 0);
+    auto const species_count = thermo_y->options->species().size();
+    int ny = species_count > 1 ? static_cast<int>(species_count - 1) : 0;
     auto temp = peos->compute("W->T", {w});
     auto dens = w[IDN];
     auto pres = w[IPR];
