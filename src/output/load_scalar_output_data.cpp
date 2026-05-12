@@ -11,12 +11,19 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
                                       Variables const& vars) {
   OutputData* pod;
 
-  if (!vars.count("scalar_r") || !vars.count("scalar_s")) {
+  if (!vars.count("scalar_r") && !vars.count("scalar_s")) {
     return;
   }
 
-  auto const& r = vars.at("scalar_r");
-  auto const& s = vars.at("scalar_s");
+  auto const& r =
+      vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
+  auto const& s =
+      vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
+  bool output_all_scalar = ContainVariable("scalar");
+  bool output_all_scalar_cons =
+      output_all_scalar || ContainVariable("scalar_cons");
+  bool output_all_scalar_prim =
+      output_all_scalar || ContainVariable("scalar_prim");
 
   std::string root_name_cons = "s";
   std::string root_name_prim = "r";
@@ -32,7 +39,8 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
       scalar_name_prim = root_name_prim + std::to_string(n);
     }
 
-    if (ContainVariable(scalar_name_cons) || ContainVariable("cons")) {
+    if (s.defined() && (ContainVariable(scalar_name_cons) ||
+                        ContainVariable("cons") || output_all_scalar_cons)) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_cons;
@@ -41,7 +49,8 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
       num_vars_++;
     }
 
-    if (ContainVariable(scalar_name_prim) || ContainVariable("prim")) {
+    if (r.defined() && (ContainVariable(scalar_name_prim) ||
+                        ContainVariable("prim") || output_all_scalar_prim)) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = scalar_name_prim;
