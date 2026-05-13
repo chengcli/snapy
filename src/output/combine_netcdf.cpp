@@ -17,16 +17,16 @@
 
 #include "output_formats.hpp"
 
-int mppnccombine(int argc, char *argv[]);
+int mppnccombine(int argc, char* argv[]);
 
 namespace snap {
 namespace {
 std::mutex combine_mutex;
 std::map<std::string, int> combine_counts;
 
-bool ready_to_combine(Layout const &layout, std::string const &key) {
+bool ready_to_combine(Layout const& layout, std::string const& key) {
   std::lock_guard<std::mutex> lock(combine_mutex);
-  int &count = combine_counts[key];
+  int& count = combine_counts[key];
   count += 1;
   if (count < layout->options->blocks_per_process()) {
     return false;
@@ -36,7 +36,7 @@ bool ready_to_combine(Layout const &layout, std::string const &key) {
 }
 }  // namespace
 
-void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
+void NetcdfOutput::combine_blocks(MeshBlockImpl* pmb, bool) {
 // Only proceed if NETCDF output enabled
 #ifdef NETCDFOUTPUT
   auto layout = pmb->get_layout();
@@ -95,29 +95,31 @@ void NetcdfOutput::combine_blocks(MeshBlockImpl *pmb, bool) {
     outfile.append(number);
     outfile.append(".nc");
 
-    int argc = 3 + glob_result.gl_pathc;
-    // char argv[][2048] = {"CombineBlocks", "-r", outfile.c_str(),
-    // infile.c_str()};
-    char **argv = new char *[argc];
-    for (int i = 0; i < argc; ++i) argv[i] = new char[2048];
-    snprintf(argv[0], 2048, "%s", "CombineBlocks");
-    snprintf(argv[1], 2048, "%s", "-r");
-    snprintf(argv[2], 2048, "%s", outfile.c_str());
-    for (int i = 3; i < argc; ++i)
-      snprintf(argv[i], 2048, "%s", glob_result.gl_pathv[i - 3]);
-
     remove(outfile.c_str());
-    err = mppnccombine(argc, argv);
+    if (glob_result.gl_pathc == 1) {
+      err = std::rename(glob_result.gl_pathv[0], outfile.c_str());
+    } else {
+      int argc = 3 + glob_result.gl_pathc;
+      char** argv = new char*[argc];
+      for (int i = 0; i < argc; ++i) argv[i] = new char[2048];
+      snprintf(argv[0], 2048, "%s", "CombineBlocks");
+      snprintf(argv[1], 2048, "%s", "-r");
+      snprintf(argv[2], 2048, "%s", outfile.c_str());
+      for (int i = 3; i < argc; ++i)
+        snprintf(argv[i], 2048, "%s", glob_result.gl_pathv[i - 3]);
+
+      err = mppnccombine(argc, argv);
+      for (int i = 0; i < argc; ++i) delete[] argv[i];
+      delete[] argv;
+    }
     if (err) {
       msg << "### FATAL ERROR in function [NetcdfOutput::combine_blocks]"
           << std::endl
-          << "mppnccombine failed with error " << err << std::endl;
+          << "NetCDF block combine failed with error " << err << std::endl;
       throw std::runtime_error(msg.str().c_str());
     }
 
     globfree(&glob_result);
-    for (int i = 0; i < argc; ++i) delete[] argv[i];
-    delete[] argv;
   }
 
 #endif  // NETCDFOUTPUT

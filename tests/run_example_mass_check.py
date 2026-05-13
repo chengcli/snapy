@@ -92,6 +92,17 @@ def run_case(
     return log_path
 
 
+def print_log_on_failure(log_path: Path) -> None:
+    if not log_path.exists():
+        return
+    print(f"--- begin {log_path} ---")
+    try:
+        print(log_path.read_text(encoding="utf-8"), end="")
+    except Exception as exc:
+        print(f"<failed to read log: {exc}>")
+    print(f"--- end {log_path} ---")
+
+
 def load_masses(log_path: Path) -> list[float]:
     text = log_path.read_text(encoding="utf-8")
     return [float(match.group(1)) for match in MASS_PATTERN.finditer(text)]
@@ -139,7 +150,13 @@ def main() -> int:
 
     case_dir = tests_dir / f"{args.example}_{args.backend}"
     prepare_case(case_dir, yaml_src, yaml_name)
-    log_path = run_case(torchrun, exe, args.example, yaml_name, case_dir, env, args.nproc)
+    try:
+        log_path = run_case(
+            torchrun, exe, args.example, yaml_name, case_dir, env, args.nproc
+        )
+    except subprocess.CalledProcessError as exc:
+        print_log_on_failure(case_dir / "run.log")
+        raise exc
     check_mass(log_path, args.mass_rtol)
     return 0
 
