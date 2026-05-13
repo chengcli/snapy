@@ -2,8 +2,11 @@
 #include <glob.h>
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <mutex>
+#include <vector>
 
 // snap
 #include <snap/mesh/meshblock.hpp>
@@ -12,12 +15,14 @@
 
 namespace snap {
 namespace {
+constexpr char kRestartBundleMagic[] = "SNAPY_RESTART_BUNDLE_V1";
+
 std::mutex combine_mutex;
 std::map<std::string, int> combine_counts;
 
-bool ready_to_combine(Layout const &layout, std::string const &key) {
+bool ready_to_combine(Layout const& layout, std::string const& key) {
   std::lock_guard<std::mutex> lock(combine_mutex);
-  int &count = combine_counts[key];
+  int& count = combine_counts[key];
   count += 1;
   if (count < layout->options->blocks_per_process()) {
     return false;
@@ -27,17 +32,48 @@ bool ready_to_combine(Layout const &layout, std::string const &key) {
 }
 }  // namespace
 
-// execute tar command to create an archive
-int make_tar_archive(std::string const &archive_name,
-                     std::vector<std::string> const &file_list) {
-  std::string command = "tar -cf " + archive_name;
-  for (auto const &f : file_list) {
-    command += " " + f;
+int make_restart_bundle(std::string const& bundle_name,
+                        std::vector<std::string> const& file_list) {
+  namespace fs = std::filesystem;
+
+  std::vector<std::uintmax_t> sizes;
+  sizes.reserve(file_list.size());
+  for (auto const& file : file_list) {
+    sizes.push_back(fs::file_size(file));
   }
-  return std::system(command.c_str());
+
+  std::ofstream out(bundle_name, std::ios::binary | std::ios::trunc);
+  if (!out) return -1;
+
+  out << kRestartBundleMagic << "\n";
+  out << file_list.size() << "\n";
+  for (size_t i = 0; i < file_list.size(); ++i) {
+    out << fs::path(file_list[i]).filename().string() << "\t" << sizes[i]
+        << "\n";
+  }
+  out << "\n";
+  if (!out) return -1;
+
+  std::vector<char> buffer(1 << 20);
+  for (auto const& file : file_list) {
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return -1;
+
+    while (in) {
+      in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+      auto count = in.gcount();
+      if (count > 0) {
+        out.write(buffer.data(), count);
+      }
+    }
+    if (!out) return -1;
+  }
+
+  out.flush();
+  return out ? 0 : -1;
 }
 
-void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
+void RestartOutput::combine_blocks(MeshBlockImpl* pmb, bool final_write) {
   auto layout = pmb->get_layout();
   char number[64];
   snprintf(number, sizeof(number), "%05d", file_number);
@@ -103,20 +139,26 @@ void RestartOutput::combine_blocks(MeshBlockImpl *pmb, bool final_write) {
     }
 
     remove(outfile.c_str());
-    err = make_tar_archive(outfile, file_list);
+    if (file_list.size() == 1) {
+      err = std::rename(file_list.front().c_str(), outfile.c_str());
+    } else {
+      err = make_restart_bundle(outfile, file_list);
+    }
 
     if (err) {
       msg << "### FATAL ERROR in function [RestartOutput::combine_blocks]"
           << std::endl
-          << "make_tar_archive() failed with error " << err << std::endl;
+          << "restart bundling failed with error " << err << std::endl;
       throw std::runtime_error(msg.str().c_str());
     }
 
     globfree(&glob_result);
 
     // remove input part files
-    for (auto const &f : file_list) {
-      remove(f.c_str());
+    if (file_list.size() != 1) {
+      for (auto const& f : file_list) {
+        remove(f.c_str());
+      }
     }
   }
 }

@@ -16,6 +16,7 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/vectorize.hpp>
 
+#include "netcdf_utils.hpp"
 #include "output_formats.hpp"
 #include "output_utils.hpp"
 
@@ -28,16 +29,25 @@
 #endif  // NETCDFOUTPUT
 
 namespace snap {
-NetcdfOutput::NetcdfOutput(OutputOptions const &options_)
+NetcdfOutput::NetcdfOutput(OutputOptions const& options_)
     : OutputType(options_) {}
 
-void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
-                                     Variables const &vars, double current_time,
+void NetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
+                                     Variables const& vars, double current_time,
                                      bool final_write) {
   // skip final write if specified
   if (final_write) return;
 
 #ifdef NETCDFOUTPUT
+#define SNAP_NETCDF_CHECK(call)                                      \
+  do {                                                               \
+    int status__ = (call);                                           \
+    if (status__ != NC_NOERR) {                                      \
+      throw std::runtime_error(std::string(#call) +                  \
+                               " failed: " + nc_strerror(status__)); \
+    }                                                                \
+  } while (false)
+
   auto pmb = LoadOutputData(pmb_in, vars);
   int rank = pmb->options->layout()->rank();
 
@@ -105,7 +115,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     throw std::runtime_error("Failed to create output directory '" +
                              pmb->options->output_dir() + "': " + ec.message());
   }
-  nc_create(fname.c_str(), NC_NETCDF4, &ifile);
+  SNAP_NETCDF_CHECK(nc_create(fname.c_str(), NC_NETCDF4, &ifile));
 
   // 2. coordinate structure
   int ncells1 = out_ie - out_is + 1;
@@ -225,7 +235,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   int nbtotal = nb1 * nb2 * nb3;
   nc_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT, 1, &nbtotal);
 
-  OutputData *pdata = pfirst_data_;
+  OutputData* pdata = pfirst_data_;
 
   // count total variables (vector variables are expanded into flat scalars)
   int total_vars = 0;
@@ -244,8 +254,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   int iaxis3[4] = {idt, idx1, idx3f, idx2};
   int iaxisr[4] = {idt, iray, idx3, idx2};
   int iaxis_23[3] = {idt, idx3, idx2};
-  int *var_ids = new int[total_vars];
-  int *ivar = var_ids;
+  int* var_ids = new int[total_vars];
+  int* ivar = var_ids;
 
   pdata = pfirst_data_;
   while (pdata != nullptr) {
@@ -282,33 +292,42 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     }
 
     for (int n = 0; n < nvar; ++n) {
-      auto name = varnames[n];
+      auto const& raw_name = varnames[n];
+      auto name = sanitize_netcdf_name(raw_name);
 
       if (grid == "CCF")
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis1, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis1, ivar));
       else if ((grid == "CFC") && (ncells2 > 1))
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis2, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis2, ivar));
       else if ((grid == "FCC") && (ncells3 > 1))
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis3, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis3, ivar));
       else if (grid == "--C")
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis, ivar));
       else if (grid == "-CC")
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 3, iaxis_23, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 3, iaxis_23, ivar));
       else if (grid == "--F")
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis1, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis1, ivar));
       else if (grid == "---")
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 1, iaxis, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 1, iaxis, ivar));
       else
-        nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis, ivar);
+        SNAP_NETCDF_CHECK(
+            nc_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis, ivar));
 
       // set units
-      auto attr = pmeta->GetUnits(name);
+      auto attr = pmeta->GetUnits(raw_name);
       if (attr != "") {
         nc_put_att_text(ifile, *ivar, "units", attr.length(), attr.c_str());
       }
 
       // set long_name
-      attr = pmeta->GetLongName(name);
+      attr = pmeta->GetLongName(raw_name);
       if (attr != "") {
         nc_put_att_text(ifile, *ivar, "long_name", attr.length(), attr.c_str());
       }
@@ -318,10 +337,10 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     pdata = pdata->pnext;
   }
 
-  nc_enddef(ifile);
+  SNAP_NETCDF_CHECK(nc_enddef(ifile));
 
   // 4. write variables
-  float *data = new float[nfaces1 * nfaces3 * nfaces2];
+  float* data = new float[nfaces1 * nfaces3 * nfaces2];
   size_t start[4] = {0, 0, 0, 0};
   size_t count[4] = {1, (size_t)ncells1, (size_t)ncells3, (size_t)ncells2};
   size_t count1[4] = {1, (size_t)nfaces1, (size_t)ncells3, (size_t)ncells2};
@@ -379,7 +398,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
 
     if (grid == "CCF") {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie + 1; ++i)
           for (int k = out_ks; k <= out_ke; ++k)
             for (int j = out_js; j <= out_je; ++j)
@@ -388,7 +407,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
       }
     } else if ((grid == "CFC") && (ncells2 > 1)) {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie; ++i)
           for (int k = out_ks; k <= out_ke; ++k)
             for (int j = out_js; j <= out_je + 1; ++j)
@@ -397,7 +416,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
       }
     } else if ((grid == "FCC") && (ncells3 > 1)) {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie; ++i)
           for (int k = out_ks; k <= out_ke + 1; ++k)
             for (int j = out_js; j <= out_je; ++j)
@@ -406,32 +425,32 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
       }
     } else if (grid == "--C") {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie; ++i) *it++ = pdata->data(n, i);
         nc_put_vara_float(ifile, *ivar++, start, count, data);
       }
     } else if (grid == "-CC") {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int k = out_ks; k <= out_ke; ++k)
           for (int j = out_js; j <= out_je; ++j) *it++ = pdata->data(n, k, j);
         nc_put_vara_float(ifile, *ivar++, start, count_23, data);
       }
     } else if (grid == "--F") {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie + 1; ++i) *it++ = pdata->data(n, i);
         nc_put_vara_float(ifile, *ivar++, start, count1, data);
       }
     } else if (grid == "---") {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         *it++ = pdata->data(n);
         nc_put_vara_float(ifile, *ivar++, start, count, data);
       }
     } else {
       for (int n = 0; n < nvar; n++) {
-        float *it = data;
+        float* it = data;
         for (int i = out_is; i <= out_ie; ++i)
           for (int k = out_ks; k <= out_ke; ++k)
             for (int j = out_js; j <= out_je; ++j)
@@ -447,7 +466,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   }
 
   // 5. close nc file
-  nc_close(ifile);
+  SNAP_NETCDF_CHECK(nc_close(ifile));
 
   ClearOutputData();  // required when LoadOutputData() is used.
   delete[] data;

@@ -59,7 +59,7 @@ def ensure_cuda() -> tuple[bool, str]:
 
 
 def run_case(
-    torchrun: str,
+    torchrun: str | None,
     exe: Path,
     example: str,
     yaml_name: str,
@@ -68,7 +68,12 @@ def run_case(
     nproc: int,
 ) -> Path:
     log_path = case_dir / "run.log"
-    cmd = [torchrun, "--no-python", f"--nproc-per-node={nproc}", str(exe)]
+    if nproc == 1:
+        cmd = [str(exe)]
+    else:
+        if torchrun is None:
+            raise FileNotFoundError("torchrun not found in PATH")
+        cmd = [torchrun, "--no-python", f"--nproc-per-node={nproc}", str(exe)]
     if example == "run_hydro":
         cmd.extend(["-i", yaml_name])
     else:
@@ -121,7 +126,7 @@ def main() -> int:
         raise FileNotFoundError(f"missing input file {yaml_src}")
 
     torchrun = torchrun_path()
-    if torchrun is None:
+    if args.nproc > 1 and torchrun is None:
         return skip("torchrun not found in PATH")
 
     env = os.environ.copy()
