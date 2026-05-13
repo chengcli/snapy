@@ -212,13 +212,26 @@ void bind_mesh(py::module& m) {
           },
           py::arg("var"), py::arg("type") = (int)snap::kConserved);
 
-  ADD_SNAP_MODULE(Mesh, MeshOptions)
+  auto pyMesh = torch::python::bind_module<snap::MeshImpl>(m, "Mesh");
+  pyMesh.def(py::init<>(), R"(Construct a new default module.)")
+      .def_readonly("options", &snap::MeshImpl::options)
+      .def("__repr__",
+           [](const snap::MeshImpl& a) {
+             return fmt::format("Mesh(\nblocks_per_process={})",
+                                a.options->blocks_per_process());
+           })
+      .def("module",
+           [](snap::MeshImpl& self, std::string name) {
+             return self.named_modules()[name];
+           })
+      .def("buffer",
+           [](snap::MeshImpl& self, std::string name) {
+             return self.named_buffers()[name];
+           })
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
       .def_property_readonly("blocks",
                              [](const snap::MeshImpl& self) {
                                py::list out;
-                               // for (auto& b : self.blocks)
-                               // out.append(py::cast(b.ptr()));
                                for (auto& b : self.blocks) {
                                  std::shared_ptr<snap::MeshBlockImpl> p =
                                      b.ptr();
@@ -226,7 +239,6 @@ void bind_mesh(py::module& m) {
                                }
                                return out;
                              })
-      //}, py::return_value_policy::reference_internal)
       .def(
           "initialize",
           [](snap::MeshImpl& self, snap::MeshVariables& vars) {
@@ -237,11 +249,24 @@ void bind_mesh(py::module& m) {
       .def(
           "initialize_from_restart",
           [](snap::MeshImpl& self, std::string restart_file) {
-            snap::MeshVariables vars;
+            snap::MeshVariables vars(self.blocks.size());
             double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
           },
           py::arg("restart_file"))
+      .def(
+          "forward",
+          [](snap::MeshImpl& self, snap::MeshVariables& vars, double dt,
+             int stage) {
+            TORCH_CHECK(
+                vars.size() == self.blocks.size(),
+                "Mesh::forward expects one Variables map per local MeshBlock");
+            py::gil_scoped_release release;
+            for (int i = 0; i < self.blocks.size(); ++i) {
+              self.blocks[i]->forward(vars[i], dt, stage);
+            }
+          },
+          py::arg("vars"), py::arg("dt"), py::arg("stage"))
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
            py::arg("current_time"), py::arg("final_write") = false)
