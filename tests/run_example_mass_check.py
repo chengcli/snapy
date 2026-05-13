@@ -29,16 +29,37 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def link_resource(target: Path, src: Path) -> None:
+    try:
+        target.symlink_to(src)
+    except OSError:
+        shutil.copy2(src, target)
+
+
+def kintera_data_dir() -> Path | None:
+    try:
+        import kintera
+    except Exception:
+        return None
+
+    data_dir = Path(kintera.__file__).resolve().parent / "data"
+    if data_dir.is_dir():
+        return data_dir
+    return None
+
+
 def prepare_case(case_dir: Path, yaml_src: Path, yaml_name: str) -> None:
     if case_dir.exists():
         shutil.rmtree(case_dir)
     case_dir.mkdir(parents=True)
 
-    target = case_dir / yaml_name
-    try:
-        target.symlink_to(yaml_src)
-    except OSError:
-        shutil.copy2(yaml_src, target)
+    link_resource(case_dir / yaml_name, yaml_src)
+
+    data_dir = kintera_data_dir()
+    if data_dir is not None:
+        for resource in data_dir.iterdir():
+            if resource.is_file():
+                link_resource(case_dir / resource.name, resource)
 
 
 def torchrun_path() -> str | None:
