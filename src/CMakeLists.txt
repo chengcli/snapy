@@ -19,7 +19,6 @@ include_directories(
   ${CMAKE_BINARY_DIR}
   ${NETCDF_INCLUDES}
   ${PNETCDF_INCLUDE_DIR}
-  SYSTEM ${LIBARCHIVE_INCLUDE_DIR}
   SYSTEM ${TORCH_API_INCLUDE_DIR}
   SYSTEM ${TORCH_INCLUDE_DIR}
   SYSTEM ${KINTERA_INCLUDE_DIR}
@@ -74,7 +73,6 @@ target_link_libraries(${namel}_${buildl}
     ${TORCH_LIBRARY}
     ${TORCH_CPU_LIBRARY}
     ${C10_LIBRARY}
-    archive_static
     fmt::fmt
     yaml-cpp::yaml-cpp
     )
