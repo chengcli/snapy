@@ -139,7 +139,9 @@ void bind_mesh(py::module& m) {
       .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
       .def("make_outputs", &snap::MeshBlockImpl::make_outputs, py::arg("vars"),
            py::arg("time"), py::arg("final_write") = false)
-      .def("forward", &snap::MeshBlockImpl::forward)
+      .def("forward", &snap::MeshBlockImpl::forward, py::arg("vars"),
+           py::arg("dt"), py::arg("stage"),
+           py::call_guard<py::gil_scoped_release>())
       .def(
           "part",
           [](snap::MeshBlockImpl& self, std::tuple<int, int, int> offset,
@@ -187,7 +189,8 @@ void bind_mesh(py::module& m) {
       .def("local_max_time_step", &snap::MeshBlockImpl::local_max_time_step,
            py::arg("vars"))
       .def("advance_local", &snap::MeshBlockImpl::advance_local,
-           py::arg("vars"), py::arg("dt"), py::arg("stage"))
+           py::arg("vars"), py::arg("dt"), py::arg("stage"),
+           py::call_guard<py::gil_scoped_release>())
       .def("exchange_ghost_zones", &snap::MeshBlockImpl::exchange_ghost_zones,
            py::arg("vars"))
       .def("get_layout", &snap::MeshBlockImpl::get_layout)
@@ -217,8 +220,6 @@ void bind_mesh(py::module& m) {
       .def_property_readonly("blocks",
                              [](const snap::MeshImpl& self) {
                                py::list out;
-                               // for (auto& b : self.blocks)
-                               // out.append(py::cast(b.ptr()));
                                for (auto& b : self.blocks) {
                                  std::shared_ptr<snap::MeshBlockImpl> p =
                                      b.ptr();
@@ -226,7 +227,6 @@ void bind_mesh(py::module& m) {
                                }
                                return out;
                              })
-      //}, py::return_value_policy::reference_internal)
       .def(
           "initialize",
           [](snap::MeshImpl& self, snap::MeshVariables& vars) {
@@ -237,7 +237,7 @@ void bind_mesh(py::module& m) {
       .def(
           "initialize_from_restart",
           [](snap::MeshImpl& self, std::string restart_file) {
-            snap::MeshVariables vars;
+            snap::MeshVariables vars(self.blocks.size());
             double time = self.initialize(vars, restart_file.c_str());
             return std::make_pair(vars, time);
           },

@@ -18,6 +18,17 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
+static void set_scalar_primitive(Variables& vars, torch::Tensor const& scalar_s,
+                                 torch::Tensor const& hydro_u) {
+  auto scalar_r = scalar_s / hydro_u[IDN].unsqueeze(0);
+  auto it = vars.find("scalar_r");
+  if (it != vars.end()) {
+    it->second.set_(scalar_r);
+  } else {
+    vars["scalar_r"] = scalar_r;
+  }
+}
+
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
@@ -639,7 +650,7 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
 
   if (pscalar->nvar() > 0) {
     scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
-    vars["scalar_r"] = scalar_s / hydro_u[IDN].unsqueeze(0);
+    set_scalar_primitive(vars, scalar_s, hydro_u);
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
@@ -755,7 +766,7 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
     exchange(sync_vars, sync_opts);
-    vars["scalar_r"] = scalar_s / hydro_u[IDN].unsqueeze(0);
+    set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
   if (options->verbose()) {
@@ -961,7 +972,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
 
 double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   std::filesystem::path restart_path(fname);
-  if (!restart_path.is_absolute()) {
+  if (!restart_path.is_absolute() && !std::filesystem::exists(restart_path)) {
     restart_path = std::filesystem::path(options->output_dir()) / fname;
   }
 
@@ -1001,8 +1012,14 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
     output_types[n]->next_time = current_time;
   }
 
+  bool rebuild_scalar_r =
+      pscalar->nvar() > 0 && data.count("scalar_s") && data.count("hydro_u");
+
   // move to device
   for (auto& [name, tensor] : data) {
+    if (rebuild_scalar_r && name == "scalar_r") {
+      continue;
+    }
     vars[name] = tensor.to(torch::Device(options->device_str()));
   }
 
@@ -1011,6 +1028,10 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
   vars.erase("last_cycle");
   vars.erase("file_number");
   vars.erase("next_time");
+
+  if (rebuild_scalar_r) {
+    set_scalar_primitive(vars, vars.at("scalar_s"), vars.at("hydro_u"));
+  }
 
   return current_time;
 }

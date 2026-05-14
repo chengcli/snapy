@@ -25,6 +25,18 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   }
   return dst;
 }
+
+template <typename Func>
+void run_block_jobs(size_t count, Func&& func) {
+  std::vector<std::future<void>> jobs;
+  jobs.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    jobs.push_back(std::async(std::launch::async, [&, i]() { func(i); }));
+  }
+  for (auto& job : jobs) {
+    job.get();
+  }
+}
 }  // namespace
 
 MeshOptions MeshOptionsImpl::from_yaml(std::string input_file, bool verbose) {
@@ -134,16 +146,17 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::forward expects one Variables map per local MeshBlock");
 
-  std::vector<std::future<void>> jobs;
-  jobs.reserve(blocks.size());
-  for (int i = 0; i < blocks.size(); ++i) {
-    jobs.push_back(std::async(std::launch::async, [&, i]() {
-      blocks[i]->forward(vars[i], dt, stage);
-    }));
+  if (blocks.size() == 1) {
+    blocks[0]->advance_local(vars[0], dt, stage);
+    blocks[0]->exchange_ghost_zones(vars[0]);
+    return;
   }
-  for (auto& job : jobs) {
-    job.get();
-  }
+
+  run_block_jobs(blocks.size(), [&](size_t i) {
+    blocks[i]->advance_local(vars[i], dt, stage);
+  });
+  run_block_jobs(blocks.size(),
+                 [&](size_t i) { blocks[i]->exchange_ghost_zones(vars[i]); });
 }
 
 void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,

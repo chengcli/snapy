@@ -4,6 +4,7 @@
 
 setup_problem(shock)
 setup_problem(straka)
+setup_problem(jupiter_dry_mesh)
 setup_problem(run_hydro)
 setup_problem(shallow_xy)
 setup_problem(shallow_splash)
