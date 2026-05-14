@@ -22,5 +22,4 @@
            [](snap::m_name##Impl& self, std::string name) {    \
              return self.named_buffers()[name];                \
            })                                                  \
-      .def("forward", &snap::m_name##Impl::forward,            \
-           py::call_guard<py::gil_scoped_release>())
+      .def("forward", &snap::m_name##Impl::forward)
