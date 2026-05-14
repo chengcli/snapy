@@ -15,17 +15,21 @@
 
 namespace snap {
 
-RestartOutput::RestartOutput(OutputOptions const &options_)
+RestartOutput::RestartOutput(OutputOptions const& options_)
     : OutputType(options_) {
   // restart files are always combined
   options->combine(true);
 }
 
-void RestartOutput::write_output_file(MeshBlockImpl *pmb, Variables const &vars,
+void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
                                       double current_time, bool final_write) {
   // make a cpu copy of variables
   Variables out_vars;
-  for (auto const &[name, var] : vars) {
+  bool skip_scalar_r = vars.count("scalar_s") && vars.count("hydro_u");
+  for (auto const& [name, var] : vars) {
+    if (skip_scalar_r && name == "scalar_r") {
+      continue;
+    }
     if (var.defined()) {
       out_vars[name] = var.to(torch::kCPU);
     }

@@ -38,12 +38,12 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
     }
 
     if (s.defined() &&
-        (output_all_scalar_cons || shouldOutputConserved({scalar_name_cons}))) {
+        (output_all_scalar_cons || ContainVariable(scalar_name_cons))) {
       appendTensorSliceOutput("SCALARS", scalar_name_cons, s, 4, n, 1);
     }
 
     if (r.defined() &&
-        (output_all_scalar_prim || shouldOutputPrimitive({scalar_name_prim}))) {
+        (output_all_scalar_prim || ContainVariable(scalar_name_prim))) {
       appendTensorSliceOutput("SCALARS", scalar_name_prim, r, 4, n, 1);
     }
   }
