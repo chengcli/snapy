@@ -159,6 +159,15 @@ class OutputType {
                                 Coordinate pco);
   bool ContainVariable(const std::string& var) const;
   bool ContainAnyVariable(std::initializer_list<std::string> vars) const;
+  bool OutputsPrimStat() const;
+  bool OutputsScalarStat() const;
+  bool OutputsAnyStat() const;
+  void AccumulateStats(Variables const& vars, double current_time);
+  void ResetStats(double current_time);
+  torch::Tensor PrimStatMean(torch::Tensor const& current) const;
+  torch::Tensor PrimStatStd(torch::Tensor const& current) const;
+  torch::Tensor ScalarStatMean(torch::Tensor const& current) const;
+  torch::Tensor ScalarStatStd(torch::Tensor const& current) const;
   // following pure virtual function must be implemented in all derived classes
   virtual void write_output_file(MeshBlockImpl* pmb, Variables const& vars,
                                  double time, bool flag) {}
@@ -187,6 +196,14 @@ class OutputType {
 
   // ptr to tail OutputData node in doubly linked list
   OutputData* plast_data_;
+
+  torch::Tensor prim_stat_mean_;
+  torch::Tensor prim_stat_m2_;
+  torch::Tensor scalar_stat_mean_;
+  torch::Tensor scalar_stat_m2_;
+  double stat_elapsed_ = 0.0;
+  double stat_last_time_ = 0.0;
+  bool stat_initialized_ = false;
 };
 }  // namespace snap
 

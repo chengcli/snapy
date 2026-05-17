@@ -26,6 +26,12 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
   std::string root_name_cons = "s";
   std::string root_name_prim = "r";
 
+  torch::Tensor r_mean, r_std;
+  if (r.defined() && OutputsScalarStat()) {
+    r_mean = ScalarStatMean(r);
+    r_std = ScalarStatStd(r);
+  }
+
   for (int n = 0; n < pmb->pscalar->nvar(); n++) {
     std::string scalar_name_cons, scalar_name_prim;
     auto const& names = pmb->pscalar->options->names();
@@ -45,6 +51,13 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
     if (r.defined() &&
         (output_all_scalar_prim || ContainVariable(scalar_name_prim))) {
       appendTensorSliceOutput("SCALARS", scalar_name_prim, r, 4, n, 1);
+    }
+
+    if (r_mean.defined()) {
+      appendTensorSliceOutput("SCALARS", scalar_name_prim + "_mean", r_mean, 4,
+                              n, 1);
+      appendTensorSliceOutput("SCALARS", scalar_name_prim + "_std", r_std, 4, n,
+                              1);
     }
   }
 }

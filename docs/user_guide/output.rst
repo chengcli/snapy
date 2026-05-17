@@ -95,6 +95,27 @@ Snapy outputs these standard hydrodynamic variables:
 * ``press``: Pressure (Pa)
 * ``temp``: Temperature (K, if applicable)
 
+Primitive Statistics
+~~~~~~~~~~~~~~~~~~~~
+
+Use ``prim_stat`` to output time-weighted hydro primitive statistics over each
+output interval:
+
+.. code-block:: yaml
+
+    outputs:
+      - type: netcdf
+        variables: [prim_stat]
+        dt: 300.
+
+This writes mean and population standard deviation fields such as
+``rho_mean``, ``rho_std``, ``press_mean``, ``press_std``, ``vel1_mean``,
+``vel2_mean``, ``vel3_mean``, ``vel1_std``, ``vel2_std``, and ``vel3_std``.
+
+Use ``scalar_stat`` to output time-weighted scalar primitive statistics over
+the same cadence. Scalar statistic names follow the scalar primitive names, for
+example ``r_tracer_a_mean`` and ``r_tracer_a_std``.
+
 Tracer Species
 ~~~~~~~~~~~~~~
 

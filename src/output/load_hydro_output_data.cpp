@@ -10,6 +10,23 @@
 #include "output_utils.hpp"
 
 namespace snap {
+namespace {
+std::string append_suffix(std::string const& names, std::string const& suffix) {
+  if (names.empty()) return names;
+
+  std::string result;
+  std::string::size_type start = 0;
+  while (start <= names.size()) {
+    auto end = names.find(';', start);
+    auto name = names.substr(start, end - start);
+    if (!result.empty()) result += ";";
+    result += name + suffix;
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+  return result;
+}
+}  // namespace
 
 void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
                                      Variables const& vars) {
@@ -20,6 +37,36 @@ void OutputType::loadHydroOutputData(MeshBlockImpl* pmb,
   auto const& u = vars.at("hydro_u");
   int nhydro = peos->nvar();
   int ncomp = nhydro - 5;
+
+  if (OutputsPrimStat()) {
+    auto mean = PrimStatMean(w);
+    auto std = PrimStatStd(w);
+
+    appendTensorSliceOutput("SCALARS", "rho_mean", mean, 4, IDN, 1);
+    appendTensorSliceOutput("SCALARS", "rho_std", std, 4, IDN, 1);
+
+    if (nhydro > 4) {
+      appendTensorSliceOutput("SCALARS", "press_mean", mean, 4, IPR, 1);
+      appendTensorSliceOutput("SCALARS", "press_std", std, 4, IPR, 1);
+    }
+
+    appendTensorSliceOutput("SCALARS", "vel1_mean", mean, 4, IVX, 1);
+    appendTensorSliceOutput("SCALARS", "vel2_mean", mean, 4, IVY, 1);
+    appendTensorSliceOutput("SCALARS", "vel3_mean", mean, 4, IVZ, 1);
+    appendTensorSliceOutput("SCALARS", "vel1_std", std, 4, IVX, 1);
+    appendTensorSliceOutput("SCALARS", "vel2_std", std, 4, IVY, 1);
+    appendTensorSliceOutput("SCALARS", "vel3_std", std, 4, IVZ, 1);
+
+    if (ncomp > 0) {
+      auto hydro_names = get_hydro_names(pmb);
+      if (!hydro_names.empty()) {
+        appendTensorSliceOutput("VECTORS", append_suffix(hydro_names, "_mean"),
+                                mean, 4, ICY, ncomp);
+        appendTensorSliceOutput("VECTORS", append_suffix(hydro_names, "_std"),
+                                std, 4, ICY, ncomp);
+      }
+    }
+  }
 
   // (lab-frame) density
   if (shouldOutputConserved({"D"})) {

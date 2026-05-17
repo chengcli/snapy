@@ -777,10 +777,12 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
 void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
                                  bool final_write) {
   for (auto& output_type : output_types) {
+    output_type->AccumulateStats(vars, current_time);
     if (final_write) {
       output_type->write_output_file(this, vars, current_time, final_write);
     } else if (current_time >= output_type->next_time) {
       output_type->write_output_file(this, vars, current_time, final_write);
+      output_type->ResetStats(current_time);
       output_type->next_time += output_type->options->dt();
       output_type->file_number += 1;
     }

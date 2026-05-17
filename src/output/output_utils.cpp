@@ -1,5 +1,7 @@
 // C/C++
+#include <cstring>
 #include <mutex>
+#include <utility>
 
 // snap
 #include <snap/mesh/meshblock.hpp>
@@ -9,6 +11,19 @@
 
 namespace snap {
 static std::mutex table_mutex;
+
+namespace {
+std::string strip_stat_suffix(std::string name) {
+  for (auto const& suffix : {"_mean", "_std"}) {
+    auto suffix_len = std::strlen(suffix);
+    if (name.size() >= suffix_len &&
+        name.compare(name.size() - suffix_len, suffix_len, suffix) == 0) {
+      return name.substr(0, name.size() - suffix_len);
+    }
+  }
+  return name;
+}
+}  // namespace
 
 __attribute__((weak)) MetadataTable::MetadataTable() {
   table_ = {
@@ -195,6 +210,7 @@ void MetadataTable::Destroy() {
 }
 
 std::string MetadataTable::GetGridType(std::string name) const {
+  name = strip_stat_suffix(std::move(name));
   int nouts = table_.size();
 
   // if leading 5 characters is 'path_', grid type is '-CC'
@@ -217,6 +233,7 @@ std::string MetadataTable::GetGridType(std::string name) const {
 }
 
 std::string MetadataTable::GetUnits(std::string name) const {
+  name = strip_stat_suffix(std::move(name));
   // if leading 5 characters is 'path_', unit is 'kg/m^2'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "kg/m^2";
@@ -233,6 +250,7 @@ std::string MetadataTable::GetUnits(std::string name) const {
 }
 
 std::string MetadataTable::GetLongName(std::string name) const {
+  name = strip_stat_suffix(std::move(name));
   int nouts = table_.size();
   for (int i = 0; i < nouts; ++i) {
     if (table_[i][0] == name) {
