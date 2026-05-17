@@ -3,6 +3,7 @@
 
 // C/C++
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -40,6 +41,15 @@ class TestOutputType : public OutputType {
       names.push_back(pdata->name);
     }
     return names;
+  }
+
+  double output_value(std::string const& name) const {
+    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+      if (pdata->name == name) {
+        return pdata->data(0, 0, 0, 0);
+      }
+    }
+    throw std::runtime_error("missing output variable: " + name);
   }
 };
 
@@ -231,6 +241,142 @@ TEST(OutputSelection, scalar_fields_follow_primitive_and_conserved_requests) {
   EXPECT_TRUE(contains(names, "r_tracer_b"));
   EXPECT_TRUE(contains(names, "s_tracer_a"));
   EXPECT_TRUE(contains(names, "s_tracer_b"));
+}
+
+TEST(OutputSelection, scalar_statistics_are_explicitly_selected) {
+  auto block = make_block("ideal-gas", {"tracer_a", "tracer_b"});
+
+  Variables vars;
+  vars["scalar_r"] = torch::ones({2, 1, 4, 4}, torch::kFloat64);
+  vars["scalar_s"] = torch::ones({2, 1, 4, 4}, torch::kFloat64);
+
+  auto scalar_opts = OutputOptionsImpl::create();
+  scalar_opts->variables({"scalar_prim"});
+  TestOutputType scalar_output(scalar_opts);
+  scalar_output.load_scalar(block.get(), vars);
+  auto scalar_names = scalar_output.output_names();
+  EXPECT_TRUE(contains(scalar_names, "r_tracer_a"));
+  EXPECT_FALSE(contains(scalar_names, "r_tracer_a_mean"));
+  scalar_output.ClearOutputData();
+
+  auto stat_opts = OutputOptionsImpl::create();
+  stat_opts->variables({"scalar_stat"});
+  TestOutputType stat_output(stat_opts);
+  stat_output.load_scalar(block.get(), vars);
+  auto stat_names = stat_output.output_names();
+  EXPECT_TRUE(contains(stat_names, "r_tracer_a_mean"));
+  EXPECT_TRUE(contains(stat_names, "r_tracer_a_std"));
+  EXPECT_TRUE(contains(stat_names, "r_tracer_b_mean"));
+  EXPECT_TRUE(contains(stat_names, "r_tracer_b_std"));
+}
+
+TEST(OutputSelection, primitive_statistics_are_explicitly_selected) {
+  auto block = make_block("ideal-gas");
+
+  Variables vars;
+  vars["hydro_w"] =
+      torch::ones({block->phydro->peos->nvar(), 1, 4, 4}, torch::kFloat64);
+  vars["hydro_u"] = torch::ones_like(vars["hydro_w"]);
+
+  auto prim_opts = OutputOptionsImpl::create();
+  prim_opts->variables({"prim"});
+  TestOutputType prim_output(prim_opts);
+  prim_output.load_hydro(block.get(), vars);
+  auto prim_names = prim_output.output_names();
+  EXPECT_FALSE(contains(prim_names, "rho_mean"));
+  EXPECT_FALSE(contains(prim_names, "vel1_mean"));
+  prim_output.ClearOutputData();
+
+  auto stat_opts = OutputOptionsImpl::create();
+  stat_opts->variables({"prim_stat"});
+  TestOutputType stat_output(stat_opts);
+  stat_output.load_hydro(block.get(), vars);
+  auto stat_names = stat_output.output_names();
+  EXPECT_TRUE(contains(stat_names, "rho_mean"));
+  EXPECT_TRUE(contains(stat_names, "rho_std"));
+  EXPECT_TRUE(contains(stat_names, "press_mean"));
+  EXPECT_TRUE(contains(stat_names, "press_std"));
+  EXPECT_TRUE(contains(stat_names, "vel1_mean"));
+  EXPECT_TRUE(contains(stat_names, "vel2_mean"));
+  EXPECT_TRUE(contains(stat_names, "vel3_mean"));
+  EXPECT_TRUE(contains(stat_names, "vel1_std"));
+  EXPECT_TRUE(contains(stat_names, "vel2_std"));
+  EXPECT_TRUE(contains(stat_names, "vel3_std"));
+}
+
+TEST(OutputStatistics, primitive_statistics_are_time_weighted_and_reset) {
+  auto block = make_block("ideal-gas");
+
+  Variables vars;
+  vars["hydro_w"] =
+      torch::ones({block->phydro->peos->nvar(), 1, 4, 4}, torch::kFloat64);
+  vars["hydro_u"] = torch::ones_like(vars["hydro_w"]);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"prim_stat"});
+  TestOutputType output(opts);
+
+  vars["hydro_w"].fill_(1.0);
+  output.AccumulatePrimStat(vars, 0.0);
+  output.load_hydro(block.get(), vars);
+  EXPECT_DOUBLE_EQ(output.output_value("rho_mean"), 1.0);
+  EXPECT_DOUBLE_EQ(output.output_value("rho_std"), 0.0);
+  output.ClearOutputData();
+
+  vars["hydro_w"].fill_(3.0);
+  output.AccumulatePrimStat(vars, 1.0);
+  vars["hydro_w"].fill_(5.0);
+  output.AccumulatePrimStat(vars, 3.0);
+
+  output.load_hydro(block.get(), vars);
+  EXPECT_NEAR(output.output_value("rho_mean"), 13.0 / 3.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("rho_std"), std::sqrt(8.0 / 9.0), 1.e-12);
+  EXPECT_NEAR(output.output_value("vel1_mean"), 13.0 / 3.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("vel1_std"), std::sqrt(8.0 / 9.0), 1.e-12);
+  output.ClearOutputData();
+
+  output.ResetPrimStat(3.0);
+  vars["hydro_w"].fill_(7.0);
+  output.AccumulatePrimStat(vars, 4.0);
+  output.load_hydro(block.get(), vars);
+  EXPECT_DOUBLE_EQ(output.output_value("rho_mean"), 7.0);
+  EXPECT_DOUBLE_EQ(output.output_value("rho_std"), 0.0);
+}
+
+TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
+  auto block = make_block("ideal-gas", {"tracer_a"});
+
+  Variables vars;
+  vars["scalar_r"] = torch::ones({1, 1, 4, 4}, torch::kFloat64);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"scalar_stat"});
+  TestOutputType output(opts);
+
+  vars["scalar_r"].fill_(1.0);
+  output.AccumulatePrimStat(vars, 0.0);
+  output.load_scalar(block.get(), vars);
+  EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_mean"), 1.0);
+  EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
+  output.ClearOutputData();
+
+  vars["scalar_r"].fill_(3.0);
+  output.AccumulatePrimStat(vars, 1.0);
+  vars["scalar_r"].fill_(5.0);
+  output.AccumulatePrimStat(vars, 3.0);
+
+  output.load_scalar(block.get(), vars);
+  EXPECT_NEAR(output.output_value("r_tracer_a_mean"), 13.0 / 3.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("r_tracer_a_std"), std::sqrt(8.0 / 9.0),
+              1.e-12);
+  output.ClearOutputData();
+
+  output.ResetPrimStat(3.0);
+  vars["scalar_r"].fill_(7.0);
+  output.AccumulatePrimStat(vars, 4.0);
+  output.load_scalar(block.get(), vars);
+  EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_mean"), 7.0);
+  EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
 }
 
 int main(int argc, char** argv) {
