@@ -164,13 +164,9 @@ class OutputType {
                      var) != options->variables().end();
   }
 
-  bool OutputsPrimStat() const {
-    return ContainVariable("prim_stat");
-  }
+  bool OutputsPrimStat() const { return ContainVariable("prim_stat"); }
 
-  bool OutputsScalarStat() const {
-    return ContainVariable("scalar_stat");
-  }
+  bool OutputsScalarStat() const { return ContainVariable("scalar_stat"); }
 
   bool OutputsAnyStat() const {
     return OutputsPrimStat() || OutputsScalarStat();
@@ -188,11 +184,13 @@ class OutputType {
   virtual void combine_blocks(MeshBlockImpl* pmb, bool) {}
 
  protected:
-  bool shouldOutputPrimitive(std::initializer_list<std::string> vars = {}) const {
+  bool shouldOutputPrimitive(
+      std::initializer_list<std::string> vars = {}) const {
     return ContainVariable("prim") || ContainAnyVariable(vars);
   }
 
-  bool shouldOutputConserved(std::initializer_list<std::string> vars = {}) const {
+  bool shouldOutputConserved(
+      std::initializer_list<std::string> vars = {}) const {
     return ContainVariable("cons") || ContainAnyVariable(vars);
   }
 

@@ -56,8 +56,8 @@ void OutputType::loadScalarOutputData(MeshBlockImpl* pmb,
     if (r_mean.defined()) {
       appendTensorSliceOutput("SCALARS", scalar_name_prim + "_mean", r_mean, 4,
                               n, 1);
-      appendTensorSliceOutput("SCALARS", scalar_name_prim + "_std", r_std, 4,
-                              n, 1);
+      appendTensorSliceOutput("SCALARS", scalar_name_prim + "_std", r_std, 4, n,
+                              1);
     }
   }
 }
