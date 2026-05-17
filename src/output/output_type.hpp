@@ -157,23 +157,13 @@ class OutputType {
   //! \brief Convert vectors in curvilinear coordinates into Cartesian
   void CalculateCartesianVector(torch::Tensor const& src, torch::Tensor dst,
                                 Coordinate pco);
+  bool ContainVariable(const std::string& var) const;
   bool ContainAnyVariable(std::initializer_list<std::string> vars) const;
-
-  bool ContainVariable(const std::string& var) const {
-    return std::find(options->variables().begin(), options->variables().end(),
-                     var) != options->variables().end();
-  }
-
-  bool OutputsPrimStat() const { return ContainVariable("prim_stat"); }
-
-  bool OutputsScalarStat() const { return ContainVariable("scalar_stat"); }
-
-  bool OutputsAnyStat() const {
-    return OutputsPrimStat() || OutputsScalarStat();
-  }
-
-  void AccumulatePrimStat(Variables const& vars, double current_time);
-  void ResetPrimStat(double current_time);
+  bool OutputsPrimStat() const;
+  bool OutputsScalarStat() const;
+  bool OutputsAnyStat() const;
+  void AccumulateStats(Variables const& vars, double current_time);
+  void ResetStats(double current_time);
   torch::Tensor PrimStatMean(torch::Tensor const& current) const;
   torch::Tensor PrimStatStd(torch::Tensor const& current) const;
   torch::Tensor ScalarStatMean(torch::Tensor const& current) const;
@@ -185,22 +175,14 @@ class OutputType {
 
  protected:
   bool shouldOutputPrimitive(
-      std::initializer_list<std::string> vars = {}) const {
-    return ContainVariable("prim") || ContainAnyVariable(vars);
-  }
-
+      std::initializer_list<std::string> vars = {}) const;
   bool shouldOutputConserved(
-      std::initializer_list<std::string> vars = {}) const {
-    return ContainVariable("cons") || ContainAnyVariable(vars);
-  }
-
+      std::initializer_list<std::string> vars = {}) const;
   void appendTensorOutput(std::string type, std::string name,
                           torch::Tensor const& tensor);
-
   void appendTensorSliceOutput(std::string type, std::string name,
                                torch::Tensor const& tensor, int dim, int start,
                                int count);
-
   void loadHydroOutputData(MeshBlockImpl* pmb, Variables const& vars);
   void loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars);
   void loadScalarOutputData(MeshBlockImpl* pmb, Variables const& vars);
@@ -215,13 +197,13 @@ class OutputType {
   // ptr to tail OutputData node in doubly linked list
   OutputData* plast_data_;
 
-  torch::Tensor prim_stat_sum_;
-  torch::Tensor prim_stat_sum_sq_;
-  torch::Tensor scalar_stat_sum_;
-  torch::Tensor scalar_stat_sum_sq_;
-  double prim_stat_elapsed_ = 0.0;
-  double prim_stat_last_time_ = 0.0;
-  bool prim_stat_initialized_ = false;
+  torch::Tensor prim_stat_mean_;
+  torch::Tensor prim_stat_m2_;
+  torch::Tensor scalar_stat_mean_;
+  torch::Tensor scalar_stat_m2_;
+  double stat_elapsed_ = 0.0;
+  double stat_last_time_ = 0.0;
+  bool stat_initialized_ = false;
 };
 }  // namespace snap
 

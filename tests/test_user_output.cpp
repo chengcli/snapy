@@ -317,16 +317,16 @@ TEST(OutputStatistics, primitive_statistics_are_time_weighted_and_reset) {
   TestOutputType output(opts);
 
   vars["hydro_w"].fill_(1.0);
-  output.AccumulatePrimStat(vars, 0.0);
+  output.AccumulateStats(vars, 0.0);
   output.load_hydro(block.get(), vars);
   EXPECT_DOUBLE_EQ(output.output_value("rho_mean"), 1.0);
   EXPECT_DOUBLE_EQ(output.output_value("rho_std"), 0.0);
   output.ClearOutputData();
 
   vars["hydro_w"].fill_(3.0);
-  output.AccumulatePrimStat(vars, 1.0);
+  output.AccumulateStats(vars, 1.0);
   vars["hydro_w"].fill_(5.0);
-  output.AccumulatePrimStat(vars, 3.0);
+  output.AccumulateStats(vars, 3.0);
 
   output.load_hydro(block.get(), vars);
   EXPECT_NEAR(output.output_value("rho_mean"), 13.0 / 3.0, 1.e-12);
@@ -335,12 +335,24 @@ TEST(OutputStatistics, primitive_statistics_are_time_weighted_and_reset) {
   EXPECT_NEAR(output.output_value("vel1_std"), std::sqrt(8.0 / 9.0), 1.e-12);
   output.ClearOutputData();
 
-  output.ResetPrimStat(3.0);
+  output.ResetStats(3.0);
   vars["hydro_w"].fill_(7.0);
-  output.AccumulatePrimStat(vars, 4.0);
+  output.AccumulateStats(vars, 4.0);
   output.load_hydro(block.get(), vars);
   EXPECT_DOUBLE_EQ(output.output_value("rho_mean"), 7.0);
   EXPECT_DOUBLE_EQ(output.output_value("rho_std"), 0.0);
+  output.ClearOutputData();
+
+  TestOutputType stable_output(opts);
+  vars["hydro_w"].fill_(1.e9 + 1.0);
+  stable_output.AccumulateStats(vars, 0.0);
+  vars["hydro_w"].fill_(1.e9 + 1.0);
+  stable_output.AccumulateStats(vars, 1.0);
+  vars["hydro_w"].fill_(1.e9 + 3.0);
+  stable_output.AccumulateStats(vars, 2.0);
+  stable_output.load_hydro(block.get(), vars);
+  EXPECT_NEAR(stable_output.output_value("rho_mean"), 1.e9 + 2.0, 1.e-6);
+  EXPECT_NEAR(stable_output.output_value("rho_std"), 1.0, 1.e-12);
 }
 
 TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
@@ -354,16 +366,16 @@ TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
   TestOutputType output(opts);
 
   vars["scalar_r"].fill_(1.0);
-  output.AccumulatePrimStat(vars, 0.0);
+  output.AccumulateStats(vars, 0.0);
   output.load_scalar(block.get(), vars);
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_mean"), 1.0);
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
   output.ClearOutputData();
 
   vars["scalar_r"].fill_(3.0);
-  output.AccumulatePrimStat(vars, 1.0);
+  output.AccumulateStats(vars, 1.0);
   vars["scalar_r"].fill_(5.0);
-  output.AccumulatePrimStat(vars, 3.0);
+  output.AccumulateStats(vars, 3.0);
 
   output.load_scalar(block.get(), vars);
   EXPECT_NEAR(output.output_value("r_tracer_a_mean"), 13.0 / 3.0, 1.e-12);
@@ -371,9 +383,9 @@ TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
               1.e-12);
   output.ClearOutputData();
 
-  output.ResetPrimStat(3.0);
+  output.ResetStats(3.0);
   vars["scalar_r"].fill_(7.0);
-  output.AccumulatePrimStat(vars, 4.0);
+  output.AccumulateStats(vars, 4.0);
   output.load_scalar(block.get(), vars);
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_mean"), 7.0);
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);

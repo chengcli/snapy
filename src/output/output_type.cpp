@@ -181,96 +181,126 @@ bool OutputType::ContainAnyVariable(
   return false;
 }
 
-void OutputType::AccumulatePrimStat(Variables const& vars,
-                                    double current_time) {
+bool OutputType::ContainVariable(const std::string& var) const {
+  return std::find(options->variables().begin(), options->variables().end(),
+                   var) != options->variables().end();
+}
+
+bool OutputType::OutputsPrimStat() const {
+  return ContainVariable("prim_stat");
+}
+
+bool OutputType::OutputsScalarStat() const {
+  return ContainVariable("scalar_stat");
+}
+
+bool OutputType::OutputsAnyStat() const {
+  return OutputsPrimStat() || OutputsScalarStat();
+}
+
+bool OutputType::shouldOutputPrimitive(
+    std::initializer_list<std::string> vars) const {
+  return ContainVariable("prim") || ContainAnyVariable(vars);
+}
+
+bool OutputType::shouldOutputConserved(
+    std::initializer_list<std::string> vars) const {
+  return ContainVariable("cons") || ContainAnyVariable(vars);
+}
+
+namespace {
+void update_weighted_moments(torch::Tensor const& value, double weight,
+                             double previous_weight, torch::Tensor& mean,
+                             torch::Tensor& m2) {
+  if (!mean.defined()) {
+    mean = torch::zeros_like(value);
+    m2 = torch::zeros_like(value);
+  }
+
+  auto delta = value - mean;
+  double total_weight = previous_weight + weight;
+  mean.add_(delta * (weight / total_weight));
+  m2.add_(weight * delta * (value - mean));
+}
+}  // namespace
+
+void OutputType::AccumulateStats(Variables const& vars, double current_time) {
   if (!OutputsAnyStat()) return;
-  if (!prim_stat_initialized_) {
-    prim_stat_last_time_ = current_time;
-    prim_stat_initialized_ = true;
+  if (!stat_initialized_) {
+    stat_last_time_ = current_time;
+    stat_initialized_ = true;
     return;
   }
 
-  double dt = current_time - prim_stat_last_time_;
+  double dt = current_time - stat_last_time_;
   if (dt > 0.0) {
     if (OutputsPrimStat()) {
       auto it = vars.find("hydro_w");
       if (it != vars.end() && it->second.defined()) {
-        auto const& w = it->second;
-        if (!prim_stat_sum_.defined()) {
-          prim_stat_sum_ = torch::zeros_like(w);
-          prim_stat_sum_sq_ = torch::zeros_like(w);
-        }
-        prim_stat_sum_.add_(w * dt);
-        prim_stat_sum_sq_.add_(w * w * dt);
+        update_weighted_moments(it->second, dt, stat_elapsed_, prim_stat_mean_,
+                                prim_stat_m2_);
       }
     }
 
     if (OutputsScalarStat()) {
       auto it = vars.find("scalar_r");
       if (it != vars.end() && it->second.defined()) {
-        auto const& r = it->second;
-        if (!scalar_stat_sum_.defined()) {
-          scalar_stat_sum_ = torch::zeros_like(r);
-          scalar_stat_sum_sq_ = torch::zeros_like(r);
-        }
-        scalar_stat_sum_.add_(r * dt);
-        scalar_stat_sum_sq_.add_(r * r * dt);
+        update_weighted_moments(it->second, dt, stat_elapsed_,
+                                scalar_stat_mean_, scalar_stat_m2_);
       }
     }
 
-    prim_stat_elapsed_ += dt;
+    stat_elapsed_ += dt;
   }
-  prim_stat_last_time_ = current_time;
+  stat_last_time_ = current_time;
 }
 
-void OutputType::ResetPrimStat(double current_time) {
+void OutputType::ResetStats(double current_time) {
   if (!OutputsAnyStat()) return;
-  if (prim_stat_sum_.defined()) {
-    prim_stat_sum_.zero_();
+  if (prim_stat_mean_.defined()) {
+    prim_stat_mean_.zero_();
   }
-  if (prim_stat_sum_sq_.defined()) {
-    prim_stat_sum_sq_.zero_();
+  if (prim_stat_m2_.defined()) {
+    prim_stat_m2_.zero_();
   }
-  if (scalar_stat_sum_.defined()) {
-    scalar_stat_sum_.zero_();
+  if (scalar_stat_mean_.defined()) {
+    scalar_stat_mean_.zero_();
   }
-  if (scalar_stat_sum_sq_.defined()) {
-    scalar_stat_sum_sq_.zero_();
+  if (scalar_stat_m2_.defined()) {
+    scalar_stat_m2_.zero_();
   }
-  prim_stat_elapsed_ = 0.0;
-  prim_stat_last_time_ = current_time;
-  prim_stat_initialized_ = true;
+  stat_elapsed_ = 0.0;
+  stat_last_time_ = current_time;
+  stat_initialized_ = true;
 }
 
 torch::Tensor OutputType::PrimStatMean(torch::Tensor const& current) const {
-  if (prim_stat_elapsed_ <= 0.0 || !prim_stat_sum_.defined()) {
+  if (stat_elapsed_ <= 0.0 || !prim_stat_mean_.defined()) {
     return current;
   }
-  return prim_stat_sum_ / prim_stat_elapsed_;
+  return prim_stat_mean_;
 }
 
 torch::Tensor OutputType::PrimStatStd(torch::Tensor const& current) const {
-  if (prim_stat_elapsed_ <= 0.0 || !prim_stat_sum_sq_.defined()) {
+  if (stat_elapsed_ <= 0.0 || !prim_stat_m2_.defined()) {
     return torch::zeros_like(current);
   }
-  auto mean = prim_stat_sum_ / prim_stat_elapsed_;
-  auto variance = prim_stat_sum_sq_ / prim_stat_elapsed_ - mean * mean;
+  auto variance = prim_stat_m2_ / stat_elapsed_;
   return torch::sqrt(torch::clamp_min(variance, 0.0));
 }
 
 torch::Tensor OutputType::ScalarStatMean(torch::Tensor const& current) const {
-  if (prim_stat_elapsed_ <= 0.0 || !scalar_stat_sum_.defined()) {
+  if (stat_elapsed_ <= 0.0 || !scalar_stat_mean_.defined()) {
     return current;
   }
-  return scalar_stat_sum_ / prim_stat_elapsed_;
+  return scalar_stat_mean_;
 }
 
 torch::Tensor OutputType::ScalarStatStd(torch::Tensor const& current) const {
-  if (prim_stat_elapsed_ <= 0.0 || !scalar_stat_sum_sq_.defined()) {
+  if (stat_elapsed_ <= 0.0 || !scalar_stat_m2_.defined()) {
     return torch::zeros_like(current);
   }
-  auto mean = scalar_stat_sum_ / prim_stat_elapsed_;
-  auto variance = scalar_stat_sum_sq_ / prim_stat_elapsed_ - mean * mean;
+  auto variance = scalar_stat_m2_ / stat_elapsed_;
   return torch::sqrt(torch::clamp_min(variance, 0.0));
 }
 
