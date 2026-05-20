@@ -114,8 +114,8 @@ void DISPATCH_MACRO vic_solve_full_impl(
   if (periodic) {
     // PeriodicBackwardSubstitution(a, c, delta, is, ie);
   } else {
-    BackwardSubstitution(du, w, a, delta, is, ie, dir, ny, stride1, stride2,
-                         first_block, last_block);
+    BackwardSubstitution(du, w, a, delta, vol, is, ie, dir, ny, stride1,
+                         stride2, first_block, last_block);
   }
 }
 
