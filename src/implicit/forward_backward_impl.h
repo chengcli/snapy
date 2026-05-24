@@ -17,6 +17,12 @@
 
 namespace snap {
 
+template <typename T>
+inline DISPATCH_MACRO T capped_exp(T x) {
+  // return x >= 0 ? 2. - std::exp(-x) : std::exp(x);
+  return 1. + 2. / M_PI * atan(M_PI / 2. * x);
+}
+
 template <typename T, int N>
 void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
                                  Eigen::Matrix<T, N, N>* b,
@@ -130,20 +136,17 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   /// implicit total-density tendency after the VIC solve.
   /// The tridiagnonal coefficients are no longer needed after back substitution
   /// Use them as scratch space for temporary storage:
-  /// - a[i](0) -> (Delta rho_i - Delta rho'_i)
-  /// - a[i](1) -> (Delta rho'_i * vol_i)
-  /// - a[i](2) -> dry mass fraction
+  /// - a[i](0) -> (Delta rho'_i * vol_i)
+  /// - a[i](1) -> dry mass fraction
+  /// - a[i](2) -> dry mass fraction correction factor
 
   for (int i = il; i <= iu; ++i) {
-    T explicit_total = DU(IDN, i);
-    for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
-    a[i](0) = explicit_total - delta[i](0);
-    a[i](1) = delta[i](0) * VOL(i);
-    denom += a[i](1) * a[i](1);
+    a[i](0) = delta[i](0) * VOL(i);
+    denom += a[i](0) * a[i](0);
 
-    a[i](2) = 1;
-    for (int n = 0; n < ny; ++n) a[i](2) -= W(ICY + n, i);
-    dry_struct += a[i](0) * VOL(i) * a[i](2);
+    a[i](1) = 1;
+    for (int n = 0; n < ny; ++n) a[i](1) -= W(ICY + n, i);
+    dry_struct += (DU(IDN, i) - delta[i](0) * a[i](1)) * VOL(i);
   }
 
   /// MS-VIC redistribution:
@@ -152,7 +155,8 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   /// S_j = sum_i (Delta rho_i - Delta rho'_i) V_i y_ij.
 
   for (int i = il; i <= iu; ++i) {
-    DU(IDN, i) = delta[i](0) * (a[i](2) + a[i](1) * dry_struct / denom);
+    a[i](2) = capped_exp(a[i](0) * dry_struct / (denom * a[i](1)));
+    DU(IDN, i) = delta[i](0) * a[i](1) * a[i](2);
 
     if constexpr (N == 3) {  // partial matrix
       DU(IVX + dir, i) = delta[i](1);
@@ -168,12 +172,13 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   for (int n = 0; n < ny; ++n) {
     T species_struct = 0;
     for (int i = il; i <= iu; ++i) {
-      species_struct += a[i](0) * VOL(i) * W(ICY + n, i);
+      species_struct += (DU(ICY + n, i) - delta[i](0) * W(ICY + n, i)) * VOL(i);
     }
 
     for (int i = il; i <= iu; ++i) {
-      DU(ICY + n, i) =
-          delta[i](0) * (W(ICY + n, i) + a[i](1) * species_struct / denom);
+      T corr = capped_exp(a[i](0) * species_struct / (denom * W(ICY + n, i)));
+      DU(ICY + n, i) = delta[i](0) * W(ICY + n, i) * corr;
+      if (3 + n < N * N) a[i](3 + n) = corr;
     }
   }
 
