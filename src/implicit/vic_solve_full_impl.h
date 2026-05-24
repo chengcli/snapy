@@ -35,10 +35,9 @@ void DISPATCH_MACRO vic_solve_full_impl(
   Phi(IVX + dir, IDN) = grav;
   Phi(IPR, IVX + dir) = grav;
 
-  Dt.setIdentity();
-  Dt *= 1. / dt;
+  Dt.setConstant(1. / dt);
 
-  Bnd.setIdentity();
+  Bnd.setConstant(1.);
   Bnd(IVX + dir) = -1;
 
   T prim[5];       // Roe averaged primitive variables of cell i-1/2

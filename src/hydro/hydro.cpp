@@ -1,6 +1,3 @@
-// C/C++
-#include <algorithm>
-
 // kintera
 #include <kintera/utils/format.hpp>
 
@@ -140,7 +137,9 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
     cs = torch::where(solid, 1.e-8, cs);
   }
 
-  std::array<double, 3> dt_min = {1.e9, 1.e9, 1.e9};
+  auto dt_min = torch::tensor({1.e9, 1.e9, 1.e9},
+                              torch::dtype(torch::kFloat64).device(w.device()));
+
   auto icorr = options->icorr();
 
   if (icorr) {
@@ -148,47 +147,41 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
         (!(icorr->scheme() & 1) || (cs.size(0) == 1 && cs.size(1) == 1))) {
       dt_min[0] = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
 
     if ((cs.size(1) > 1) && (!((icorr->scheme() >> 1) & 1))) {
       dt_min[1] = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
 
     if ((cs.size(0) > 1) && (!((icorr->scheme() >> 2) & 1))) {
       dt_min[2] = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
   } else {
     if (cs.size(2) > 1) {
       dt_min[0] = (pmb->pcoord->center_width1() / (w[IVX].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
 
     if (cs.size(1) > 1) {
       dt_min[1] = (pmb->pcoord->center_width2() / (w[IVY].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
 
     if (cs.size(0) > 1) {
       dt_min[2] = (pmb->pcoord->center_width3() / (w[IVZ].abs() + cs))
                       .index(sub3)
-                      .min()
-                      .item<double>();
+                      .min();
     }
   }
 
-  return *std::min_element(dt_min.begin(), dt_min.end());
+  return dt_min.min().item<double>();
 }
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,

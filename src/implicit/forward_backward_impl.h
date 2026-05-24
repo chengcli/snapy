@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <cmath>
+
 // eigen
 #include <Eigen/Dense>
 
@@ -139,6 +142,7 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   /// - a[i](0) -> (Delta rho'_i * vol_i)
   /// - a[i](1) -> dry mass fraction
   /// - a[i](2) -> dry mass fraction correction factor
+  /// - a[i](3+) -> mass fraction correction factor for other species
 
   for (int i = il; i <= iu; ++i) {
     a[i](0) = delta[i](0) * VOL(i);
@@ -155,7 +159,8 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   /// S_j = sum_i (Delta rho_i - Delta rho'_i) V_i y_ij.
 
   for (int i = il; i <= iu; ++i) {
-    a[i](2) = capped_exp(a[i](0) * dry_struct / (denom * a[i](1)));
+    a[i](2) =
+        capped_exp(a[i](0) * dry_struct / std::max((T)1.e-12, denom * a[i](1)));
     DU(IDN, i) = delta[i](0) * a[i](1) * a[i](2);
 
     if constexpr (N == 3) {  // partial matrix
@@ -176,7 +181,8 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
     }
 
     for (int i = il; i <= iu; ++i) {
-      T corr = capped_exp(a[i](0) * species_struct / (denom * W(ICY + n, i)));
+      T corr = capped_exp(a[i](0) * species_struct /
+                          std::max((T)1.e-12, denom * W(ICY + n, i)));
       DU(ICY + n, i) = delta[i](0) * W(ICY + n, i) * corr;
       if (3 + n < N * N) a[i](3 + n) = corr;
     }
