@@ -37,18 +37,19 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   T gm1, cs;
 
   // ---- interface i-1/2 (cells i-1, i); also dfdq at cells i-1 and i ----
-  CopyPrimitives(wl, wr, w, i, stride1, stride2, ny);  // wl = cell i-1, wr = cell i
+  CopyPrimitives(wl, wr, w, i, stride1, stride2,
+                 ny);  // wl = cell i-1, wr = cell i
 
   gm1 = GAMMA(i - 1) - 1.;
   FluxJacobian(dfdqf, gm1, wl, dir);
   dfdq_prev << dfdqf(IDN, IDN), dfdqf(IDN, IVX), dfdqf(IDN, IPR),  //
-      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),          //
+      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),           //
       dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
 
   gm1 = GAMMA(i) - 1.;
   FluxJacobian(dfdqf, gm1, wr, dir);
   dfdq_curr << dfdqf(IDN, IDN), dfdqf(IDN, IVX), dfdqf(IDN, IPR),  //
-      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),          //
+      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),           //
       dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
 
   gm1 = 0.5 * (GAMMA(i - 1) + GAMMA(i)) - 1.;
@@ -62,12 +63,13 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
       Am(IPR, IDN), Am(IPR, IVX), Am(IPR, IPR);
 
   // ---- interface i+1/2 (cells i, i+1); also dfdq at cell i+1 ----
-  CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);  // wl = cell i, wr = cell i+1
+  CopyPrimitives(wl, wr, w, i + 1, stride1, stride2,
+                 ny);  // wl = cell i, wr = cell i+1
 
   gm1 = GAMMA(i + 1) - 1.;
   FluxJacobian(dfdqf, gm1, wr, dir);
   dfdq_next << dfdqf(IDN, IDN), dfdqf(IDN, IVX), dfdqf(IDN, IPR),  //
-      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),          //
+      dfdqf(IVX, IDN), dfdqf(IVX, IVX), dfdqf(IVX, IPR),           //
       dfdqf(IPR, IDN), dfdqf(IPR, IVX), dfdqf(IPR, IPR);
 
   gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;

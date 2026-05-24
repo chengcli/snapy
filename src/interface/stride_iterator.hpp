@@ -29,7 +29,7 @@ class StrideIterator {
 
   // constructors
   //! \brief Default constructor
-  StrideIterator() : data(NULL), step(0) {};
+  StrideIterator() : data(NULL), step(0){};
 
   //! \brief Copy constructor
   //! \param[in] x Iterator to copy from

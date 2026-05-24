@@ -17,10 +17,11 @@
 
 namespace snap {
 
-// On CPU the partial solve stays fused (assembly + sweep in vic_solve_partial_cpu
-// below, using thread-local scratch), so the assemble phase is a no-op. The
-// GPU path splits these into two kernels; this keeps the CPU path bit-identical
-// to its previous behavior while honoring the same assemble-then-solve calls.
+// On CPU the partial solve stays fused (assembly + sweep in
+// vic_solve_partial_cpu below, using thread-local scratch), so the assemble
+// phase is a no-op. The GPU path splits these into two kernels; this keeps the
+// CPU path bit-identical to its previous behavior while honoring the same
+// assemble-then-solve calls.
 void vic_assemble_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
                               double /*grav*/, int /*dir*/) {}
 
@@ -108,7 +109,8 @@ DEFINE_DISPATCH(vic_assemble_partial);
 DEFINE_DISPATCH(vic_solve_partial);
 DEFINE_DISPATCH(vic_solve_full);
 
-REGISTER_ALL_CPU_DISPATCH(vic_assemble_partial, &snap::vic_assemble_partial_cpu);
+REGISTER_ALL_CPU_DISPATCH(vic_assemble_partial,
+                          &snap::vic_assemble_partial_cpu);
 REGISTER_ALL_CPU_DISPATCH(vic_solve_partial, &snap::vic_solve_partial_cpu);
 REGISTER_ALL_CPU_DISPATCH(vic_solve_full, &snap::vic_solve_full_cpu);
 
