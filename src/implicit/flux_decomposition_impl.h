@@ -14,12 +14,12 @@
 namespace snap {
 
 template <typename T>
-T DISPATCH_MACRO SoundSpeed(T *prim, T gm1) {
+T DISPATCH_MACRO SoundSpeed(T* prim, T gm1) {
   return sqrt(prim[IPR] * (gm1 + 1.) / prim[IDN]);
 }
 
 template <typename T>
-void DISPATCH_MACRO CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1,
+void DISPATCH_MACRO CopyPrimitives(T* wl, T* wr, T* prim, int i, int stride1,
                                    int stride2, int ny) {
   wl[IDN] = prim[(i - 1) * stride2];
   wr[IDN] = prim[i * stride2];
@@ -37,7 +37,7 @@ void DISPATCH_MACRO CopyPrimitives(T *wl, T *wr, T *prim, int i, int stride1,
 }
 
 template <typename T>
-void DISPATCH_MACRO RoeAverage(T *prim, T gm1, T *wl, T *wr) {
+void DISPATCH_MACRO RoeAverage(T* prim, T gm1, T* wl, T* wr) {
   T sqrtdl = sqrt(wl[IDN]);
   T sqrtdr = sqrt(wr[IDN]);
   T isdlpdr = 1.0 / (sqrtdl + sqrtdr);
@@ -70,17 +70,14 @@ void DISPATCH_MACRO RoeAverage(T *prim, T gm1, T *wl, T *wr) {
 }
 
 template <typename T>
-void DISPATCH_MACRO Eigenvalue(Eigen::Matrix<T, 5, 5> &Lambda, T u, T cs) {
-  Lambda << fabs(u - cs), 0., 0., 0., 0.,  //
-      0., fabs(u), 0., 0., 0.,             //
-      0., 0., fabs(u + cs), 0., 0.,        //
-      0., 0., 0., fabs(u), 0.,             //
-      0., 0., 0., 0., fabs(u);
+inline void DISPATCH_MACRO Eigenvalue(Eigen::Matrix<T, 5, 1>& Lambda, T u,
+                                      T cs) {
+  Lambda << fabs(u - cs), fabs(u), fabs(u + cs), fabs(u), fabs(u);
 }
 
 template <typename T>
-void DISPATCH_MACRO Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat,
-                                Eigen::Matrix<T, 5, 5> &Rimat, T *prim, T cs,
+void DISPATCH_MACRO Eigenvector(Eigen::Matrix<T, 5, 5>& Rmat,
+                                Eigen::Matrix<T, 5, 5>& Rimat, T* prim, T cs,
                                 T gm1, int dir) {
   T r = prim[IDN];
   T u = prim[IVX + dir];
@@ -108,7 +105,7 @@ void DISPATCH_MACRO Eigenvector(Eigen::Matrix<T, 5, 5> &Rmat,
 }
 
 template <typename T>
-void DISPATCH_MACRO FluxJacobian(Eigen::Matrix<T, 5, 5> &dfdq, T gm1, T *w,
+void DISPATCH_MACRO FluxJacobian(Eigen::Matrix<T, 5, 5>& dfdq, T gm1, T* w,
                                  int dir) {
   // flux derivative
   // Input variables are density, velocity field and energy.
