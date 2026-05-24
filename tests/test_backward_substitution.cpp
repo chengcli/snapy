@@ -31,30 +31,38 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
   std::vector<double> du(nhydro * nlayer, 0.);
   std::vector<double> w(nhydro * nlayer, 0.);
   std::vector<double> vol = {1.0, 2.0, 1.5, 0.5};
-  std::vector<double> corr = {0.4, -0.2, 0.8, -0.1};
+  std::vector<double> corr = {0.4, -0.2, 0.1, -0.3};
 
   std::vector<Eigen::Matrix<double, 3, 3>> a(nlayer);
   std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
 
   for (int i = il; i <= iu; ++i) {
-    double dry = 1.0 + 0.2 * i;
-    double vapor = 0.10 + 0.03 * i;
-    double cloud = 0.05 + 0.01 * i;
+    double vapor_frac = 0.10 + 0.02 * i;
+    double cloud_frac = 0.05 + 0.01 * i;
+    double dry_frac = 1. - vapor_frac - cloud_frac;
+    double explicit_total = 1.5 + 0.2 * i;
 
-    du[snap::IDN * stride1 + i] = dry;
+    du[snap::IDN * stride1 + i] = explicit_total * dry_frac;
     du[snap::IVX * stride1 + i] = 10.0 + i;
     du[snap::IPR * stride1 + i] = 20.0 + i;
-    du[snap::ICY * stride1 + i] = vapor;
-    du[(snap::ICY + 1) * stride1 + i] = cloud;
+    du[snap::ICY * stride1 + i] = explicit_total * vapor_frac;
+    du[(snap::ICY + 1) * stride1 + i] = explicit_total * cloud_frac;
 
-    w[snap::ICY * stride1 + i] = 0.10 + 0.02 * i;
-    w[(snap::ICY + 1) * stride1 + i] = 0.05 + 0.01 * i;
+    w[snap::ICY * stride1 + i] = vapor_frac;
+    w[(snap::ICY + 1) * stride1 + i] = cloud_frac;
 
     a[i].setZero();
-    delta[i] << dry + vapor + cloud + corr[i], 100.0 + i, 200.0 + i;
+    delta[i] << explicit_total + corr[i], 100.0 + i, 200.0 + i;
   }
 
   auto original = du;
+  std::vector<double> implicit_total(nlayer, 0.);
+  double denom = 0.;
+  for (int i = il; i <= iu; ++i) {
+    implicit_total[i] = delta[i](0);
+    double weighted_implicit = implicit_total[i] * vol[i];
+    denom += weighted_implicit * weighted_implicit;
+  }
 
   snap::BackwardSubstitution<double, 3>(du.data(), w.data(), a.data(),
                                         delta.data(), vol.data(), il, iu, 0, ny,
@@ -67,7 +75,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
   }
 
   for (int var : vars) {
-    double first_offset = 0.;
+    double species_struct = 0.;
     for (int i = il; i <= iu; ++i) {
       double fraction = 0.;
       if (var == snap::IDN) {
@@ -77,11 +85,34 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
         fraction = w[var * stride1 + i];
       }
 
-      double redistributed = original[var * stride1 + i] + fraction * corr[i];
-      double offset = du[var * stride1 + i] - redistributed;
-      if (i == il) first_offset = offset;
-      EXPECT_NEAR(offset, first_offset, 1.e-12);
+      species_struct +=
+          (original[snap::IDN * stride1 + i] +
+           original[snap::ICY * stride1 + i] +
+           original[(snap::ICY + 1) * stride1 + i] - implicit_total[i]) *
+          vol[i] * fraction;
     }
+
+    for (int i = il; i <= iu; ++i) {
+      double fraction = 0.;
+      if (var == snap::IDN) {
+        fraction =
+            1. - w[snap::ICY * stride1 + i] - w[(snap::ICY + 1) * stride1 + i];
+      } else {
+        fraction = w[var * stride1 + i];
+      }
+
+      double weighted_implicit = implicit_total[i] * vol[i];
+      double expected = implicit_total[i] *
+                        (fraction + weighted_implicit * species_struct / denom);
+      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-12);
+    }
+  }
+
+  for (int i = il; i <= iu; ++i) {
+    double constituent_sum = du[snap::IDN * stride1 + i] +
+                             du[snap::ICY * stride1 + i] +
+                             du[(snap::ICY + 1) * stride1 + i];
+    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-12);
   }
 }
 
