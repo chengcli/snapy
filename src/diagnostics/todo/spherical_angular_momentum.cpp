@@ -74,7 +74,7 @@ void SphericalAngularMomentum::Finalize(AthenaArray<Real> const &w) {
       }
     }
 
-    // sum over all ranks
+// sum over all ranks
 #ifdef MPI_PARALLEL
   MPI_Allreduce(MPI_IN_PLACE, mass_moi_am, 3, MPI_ATHENA_REAL, MPI_SUM,
                 MPI_COMM_WORLD);
