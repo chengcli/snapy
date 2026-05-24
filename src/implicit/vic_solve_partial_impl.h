@@ -26,23 +26,14 @@ void DISPATCH_MACRO vic_solve_partial_impl(
 
   // reduced diffusion matrix |A_{i-1/2}|, |A_{i+1/2}|
   Eigen::Matrix<T, 5, 5> Am, Ap, dfdqf;
-  Eigen::Matrix<T, 3, 2> Am1, Ap1;
   Eigen::Matrix<T, 3, 3> Am2, Ap2;
   Eigen::Matrix<T, 3, 3> dfdq[3];
 
-  Eigen::Matrix<T, 3, 3> Phi, Dt, Bnd;
-
-  Phi << 0., 0., 0.,  //
-      grav, 0., 0.,   //
-      0., grav, 0.;
-
-  Dt << 1. / dt, 0., 0.,  //
-      0., 1. / dt, 0.,    //
-      0., 0., 1. / dt;
-
-  Bnd << 1., 0., 0.,  //
-      0., -1., 0.,    //
-      0., 0., 1.;
+  // The constant Phi (gravity), Dt (I/dt) and Bnd (diag(1,-1,1)) matrices are
+  // folded directly into scalar/column edits of a[i] below, instead of being
+  // materialized and matrix-multiplied. This is bit-exact with the matrix form
+  // (adds of 0.0 / mul by 1.0 are exact) and cuts per-thread register pressure,
+  // which is the occupancy limiter for this kernel.
 
   T prim[5];       // Roe averaged primitive variables of cell i-1/2
   T wl[5], wr[5];  // left/right primitive variables of cell i-1 and i
@@ -72,9 +63,6 @@ void DISPATCH_MACRO vic_solve_partial_impl(
 
   Am = Rmat * Lambda * Rimat;
 
-  Am1 << Am(IDN, IVY), Am(IDN, IVZ), Am(IVX, IVY),  //
-      Am(IVX, IVZ), Am(IPR, IVY), Am(IPR, IVZ);
-
   Am2 << Am(IDN, IDN), Am(IDN, IVX), Am(IDN, IPR),  //
       Am(IVX, IDN), Am(IVX, IVX), Am(IVX, IPR),     //
       Am(IPR, IDN), Am(IPR, IVX), Am(IPR, IPR);
@@ -97,9 +85,6 @@ void DISPATCH_MACRO vic_solve_partial_impl(
 
     Ap = Rmat * Lambda * Rimat;
 
-    Ap1 << Ap(IDN, IVY), Ap(IDN, IVZ), Ap(IVX, IVY),  //
-        Ap(IVX, IVZ), Ap(IPR, IVY), Ap(IPR, IVZ);
-
     Ap2 << Ap(IDN, IDN), Ap(IDN, IVX), Ap(IDN, IPR),  //
         Ap(IVX, IDN), Ap(IVX, IVX), Ap(IVX, IPR),     //
         Ap(IPR, IDN), Ap(IPR, IVX), Ap(IPR, IPR);
@@ -107,22 +92,36 @@ void DISPATCH_MACRO vic_solve_partial_impl(
     // set up diagonals a, b, c.
     a[i] = (Am2 * AREA(i) + Ap2 * AREA(i + 1) +
             (AREA(i + 1) - AREA(i)) * dfdq[1]) /
-               (2. * VOL(i)) +
-           Dt - Phi;
+           (2. * VOL(i));
+    // + Dt: add 1/dt to the diagonal
+    a[i](0, 0) += 1. / dt;
+    a[i](1, 1) += 1. / dt;
+    a[i](2, 2) += 1. / dt;
+    // - Phi: subtract gravity coupling
+    a[i](1, 0) -= grav;
+    a[i](2, 1) -= grav;
     b[i] = -(Am2 + dfdq[0]) * AREA(i) / (2. * VOL(i));
     c[i] = -(Ap2 - dfdq[2]) * AREA(i + 1) / (2. * VOL(i));
 
     // Shift one cell: i -> i+1
-    Am1 = Ap1;
     Am2 = Ap2;
 
     dfdq[0] = dfdq[1];
     dfdq[1] = dfdq[2];
   }
 
-  // 5. fix boundary condition
-  if (first_block && !periodic) a[is] += b[is] * Bnd;
-  if (last_block && !periodic) a[ie] += c[ie] * Bnd;
+  // 5. fix boundary condition. Bnd = diag(1, -1, 1), so X * Bnd just flips the
+  // sign of column 1 (the velocity column) of the added term.
+  if (first_block && !periodic) {
+    a[is].col(0) += b[is].col(0);
+    a[is].col(1) -= b[is].col(1);
+    a[is].col(2) += b[is].col(2);
+  }
+  if (last_block && !periodic) {
+    a[ie].col(0) += c[ie].col(0);
+    a[ie].col(1) -= c[ie].col(1);
+    a[ie].col(2) += c[ie].col(2);
+  }
 
   // 6. solve tridiagonal system using LU decomposition
   if (periodic) {

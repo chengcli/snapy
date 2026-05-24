@@ -146,6 +146,11 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
       at::native::vic_solve_full(du.device().type(), iter, dt,
                                  phydro->options->grav()->grav1(), 0);
     } else {
+      // assemble the tridiagonal coefficients (cell-parallel), then solve
+      // (per-column serial sweep). On CPU the assemble call is a no-op and the
+      // solve is fused; on GPU these are two kernels.
+      at::native::vic_assemble_partial(du.device().type(), iter, dt,
+                                       phydro->options->grav()->grav1(), 0);
       at::native::vic_solve_partial(du.device().type(), iter, dt,
                                     phydro->options->grav()->grav1(), 0);
     }
