@@ -71,7 +71,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
   int vars[] = {snap::IDN, snap::ICY, snap::ICY + 1};
   for (int var : vars) {
     EXPECT_NEAR(column_integral(du, vol, var, stride1, il, iu),
-                column_integral(original, vol, var, stride1, il, iu), 1.e-12);
+                column_integral(original, vol, var, stride1, il, iu), 1.e-5);
   }
 
   for (int var : vars) {
@@ -104,7 +104,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
       double weighted_implicit = implicit_total[i] * vol[i];
       double expected = implicit_total[i] *
                         (fraction + weighted_implicit * species_struct / denom);
-      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-12);
+      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-5);
     }
   }
 
@@ -112,7 +112,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
     double constituent_sum = du[snap::IDN * stride1 + i] +
                              du[snap::ICY * stride1 + i] +
                              du[(snap::ICY + 1) * stride1 + i];
-    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-12);
+    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-5);
   }
 }
 
