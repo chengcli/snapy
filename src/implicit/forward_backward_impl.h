@@ -13,6 +13,7 @@
 
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
+#define VOL(n) vol[(n) * stride2]
 
 namespace snap {
 
@@ -123,37 +124,35 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
 
   T denom = 0;
+  T dry_struct = 0;
 
   /// DU starts as the explicit constituent tendencies. delta[i](0) is the
-  /// implicit total-density tendency after the VIC solve. Store
-  /// (Delta rho_i - Delta rho'_i) in a[i](0,0); the tridiagonal coefficients
-  /// are no longer needed after back substitution.
+  /// implicit total-density tendency after the VIC solve.
+  /// The tridiagnonal coefficients are no longer needed after back substitution
+  /// Use them as scratch space for temporary storage:
+  /// - a[i](0) -> (Delta rho_i - Delta rho'_i)
+  /// - a[i](1) -> (Delta rho'_i * vol_i)
+  /// - a[i](2) -> dry mass fraction
+
   for (int i = il; i <= iu; ++i) {
     T explicit_total = DU(IDN, i);
     for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
-    a[i](0, 0) = explicit_total - delta[i](0);
+    a[i](0) = explicit_total - delta[i](0);
+    a[i](1) = delta[i](0) * VOL(i);
+    denom += a[i](1) * a[i](1);
 
-    T wi = delta[i](0) * vol[i * stride2];
-    denom += wi * wi;
-  }
-
-  T dry_struct = 0;
-  for (int i = il; i <= iu; ++i) {
-    T dry_frac = 1;
-    for (int n = 0; n < ny; ++n) dry_frac -= W(ICY + n, i);
-    dry_struct += a[i](0, 0) * vol[i * stride2] * dry_frac;
+    a[i](2) = 1;
+    for (int n = 0; n < ny; ++n) a[i](2) -= W(ICY + n, i);
+    dry_struct += a[i](0) * VOL(i) * a[i](2);
   }
 
   /// MS-VIC redistribution:
   ///   y'_ij = y_ij + W_i S_j / sum_k W_k^2,
   /// with W_i = Delta rho'_i V_i and
   /// S_j = sum_i (Delta rho_i - Delta rho'_i) V_i y_ij.
-  for (int i = il; i <= iu; ++i) {
-    T dry_frac = 1;
-    for (int n = 0; n < ny; ++n) dry_frac -= W(ICY + n, i);
 
-    T wi = delta[i](0) * vol[i * stride2];
-    DU(IDN, i) = delta[i](0) * (dry_frac + wi * dry_struct / denom);
+  for (int i = il; i <= iu; ++i) {
+    DU(IDN, i) = delta[i](0) * (a[i](2) + a[i](1) * dry_struct / denom);
 
     if constexpr (N == 3) {  // partial matrix
       DU(IVX + dir, i) = delta[i](1);
@@ -169,13 +168,12 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   for (int n = 0; n < ny; ++n) {
     T species_struct = 0;
     for (int i = il; i <= iu; ++i) {
-      species_struct += a[i](0, 0) * vol[i * stride2] * W(ICY + n, i);
+      species_struct += a[i](0) * VOL(i) * W(ICY + n, i);
     }
 
     for (int i = il; i <= iu; ++i) {
-      T wi = delta[i](0) * vol[i * stride2];
       DU(ICY + n, i) =
-          delta[i](0) * (W(ICY + n, i) + wi * species_struct / denom);
+          delta[i](0) * (W(ICY + n, i) + a[i](1) * species_struct / denom);
     }
   }
 
@@ -184,5 +182,6 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
 
 }  // namespace snap
 
+#undef VOL
 #undef DU
 #undef W

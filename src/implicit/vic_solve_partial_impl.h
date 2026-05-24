@@ -22,7 +22,8 @@ void DISPATCH_MACRO vic_solve_partial_impl(
     Eigen::Matrix<T, 3, 3>* b, Eigen::Matrix<T, 3, 3>* c,
     Eigen::Matrix<T, 3, 1>* delta) {
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
-  Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat;
+  Eigen::Matrix<T, 5, 5> Rmat, Rimat;
+  Eigen::Matrix<T, 5, 1> Lambda;
 
   // reduced diffusion matrix |A_{i-1/2}|, |A_{i+1/2}|
   Eigen::Matrix<T, 5, 5> Am, Ap, dfdqf;
@@ -30,19 +31,15 @@ void DISPATCH_MACRO vic_solve_partial_impl(
   Eigen::Matrix<T, 3, 3> Am2, Ap2;
   Eigen::Matrix<T, 3, 3> dfdq[3];
 
-  Eigen::Matrix<T, 3, 3> Phi, Dt, Bnd;
+  Eigen::Matrix<T, 3, 3> Phi;
+  Eigen::Matrix<T, 3, 1> Dt, Bnd;
 
   Phi << 0., 0., 0.,  //
       grav, 0., 0.,   //
       0., grav, 0.;
 
-  Dt << 1. / dt, 0., 0.,  //
-      0., 1. / dt, 0.,    //
-      0., 0., 1. / dt;
-
-  Bnd << 1., 0., 0.,  //
-      0., -1., 0.,    //
-      0., 0., 1.;
+  Dt << 1. / dt, 1. / dt, 1. / dt;
+  Bnd << 1., -1, 1.;
 
   T prim[5];       // Roe averaged primitive variables of cell i-1/2
   T wl[5], wr[5];  // left/right primitive variables of cell i-1 and i
@@ -70,7 +67,7 @@ void DISPATCH_MACRO vic_solve_partial_impl(
   Eigenvalue(Lambda, prim[IVX + dir], cs);
   Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
 
-  Am = Rmat * Lambda * Rimat;
+  Am.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
 
   Am1 << Am(IDN, IVY), Am(IDN, IVZ), Am(IVX, IVY),  //
       Am(IVX, IVZ), Am(IPR, IVY), Am(IPR, IVZ);
@@ -95,7 +92,7 @@ void DISPATCH_MACRO vic_solve_partial_impl(
     Eigenvalue(Lambda, prim[IVX + dir], cs);
     Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
 
-    Ap = Rmat * Lambda * Rimat;
+    Ap.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
 
     Ap1 << Ap(IDN, IVY), Ap(IDN, IVZ), Ap(IVX, IVY),  //
         Ap(IVX, IVZ), Ap(IPR, IVY), Ap(IPR, IVZ);
@@ -104,13 +101,17 @@ void DISPATCH_MACRO vic_solve_partial_impl(
         Ap(IVX, IDN), Ap(IVX, IVX), Ap(IVX, IPR),     //
         Ap(IPR, IDN), Ap(IPR, IVX), Ap(IPR, IPR);
 
+    T const& area_i = AREA(i);
+    T const& area_ip1 = AREA(i + 1);
+    T half_inv_vol = 0.5 / VOL(i);
+
     // set up diagonals a, b, c.
-    a[i] = (Am2 * AREA(i) + Ap2 * AREA(i + 1) +
-            (AREA(i + 1) - AREA(i)) * dfdq[1]) /
-               (2. * VOL(i)) +
-           Dt - Phi;
-    b[i] = -(Am2 + dfdq[0]) * AREA(i) / (2. * VOL(i));
-    c[i] = -(Ap2 - dfdq[2]) * AREA(i + 1) / (2. * VOL(i));
+    a[i] = (Am2 * area_i + Ap2 * area_ip1 + (area_ip1 - area_i) * dfdq[1]) *
+               half_inv_vol -
+           Phi;
+    a[i].diagonal() += Dt;
+    b[i] = -(Am2 + dfdq[0]) * area_i * half_inv_vol;
+    c[i] = -(Ap2 - dfdq[2]) * area_ip1 * half_inv_vol;
 
     // Shift one cell: i -> i+1
     Am1 = Ap1;
@@ -121,8 +122,8 @@ void DISPATCH_MACRO vic_solve_partial_impl(
   }
 
   // 5. fix boundary condition
-  if (first_block && !periodic) a[is] += b[is] * Bnd;
-  if (last_block && !periodic) a[ie] += c[ie] * Bnd;
+  if (first_block && !periodic) a[is] += b[is] * Bnd.asDiagonal();
+  if (last_block && !periodic) a[ie] += c[ie] * Bnd.asDiagonal();
 
   // 6. solve tridiagonal system using LU decomposition
   if (periodic) {
