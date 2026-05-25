@@ -1,8 +1,5 @@
 #pragma once
 
-// C/C++
-#include <cmath>
-
 // eigen
 #include <Eigen/Dense>
 
@@ -19,12 +16,6 @@
 #define VOL(n) vol[(n) * stride2]
 
 namespace snap {
-
-template <typename T>
-inline DISPATCH_MACRO T capped_exp(T x) {
-  // return x >= 0 ? 2. - std::exp(-x) : std::exp(x);
-  return 1. + 2. / M_PI * atan(M_PI / 2. * x);
-}
 
 template <typename T, int N>
 void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
@@ -132,36 +123,45 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   // update solutions, i=iu
   for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
 
-  T denom = 0;
-  T dry_struct = 0;
+  T sum_a2 = 0;
 
   /// DU starts as the explicit constituent tendencies. delta[i](0) is the
   /// implicit total-density tendency after the VIC solve.
   /// The tridiagnonal coefficients are no longer needed after back substitution
   /// Use them as scratch space for temporary storage:
-  /// - a[i](0) -> (Delta rho'_i * vol_i)
-  /// - a[i](1) -> dry mass fraction
-  /// - a[i](2) -> dry mass fraction correction factor
-  /// - a[i](3+) -> mass fraction correction factor for other species
+  /// - a[i](0) -> explicit total density tendency, Delta rho_i
+  /// - a[i](1) -> layer weight A_i = rho_i * V_i
+  /// - a[i](2) -> dry mass fraction
 
   for (int i = il; i <= iu; ++i) {
-    a[i](0) = delta[i](0) * VOL(i);
-    denom += a[i](0) * a[i](0);
+    T explicit_total = DU(IDN, i);
+    T dryfrac = 1;
+    for (int n = 0; n < ny; ++n) {
+      explicit_total += DU(ICY + n, i);
+      dryfrac -= W(ICY + n, i);
+    }
 
-    a[i](1) = 1;
-    for (int n = 0; n < ny; ++n) a[i](1) -= W(ICY + n, i);
-    dry_struct += (DU(IDN, i) - delta[i](0) * a[i](1)) * VOL(i);
+    a[i](0) = explicit_total;
+    a[i](1) = W(IDN, i) * VOL(i);
+    a[i](2) = dryfrac;
+    sum_a2 += a[i](1) * a[i](1);
   }
 
-  /// MS-VIC redistribution:
-  ///   y'_ij = y_ij + W_i S_j / sum_k W_k^2,
-  /// with W_i = Delta rho'_i V_i and
-  /// S_j = sum_i (Delta rho_i - Delta rho'_i) V_i y_ij.
+  /// MS-VIC redistribution from ms_vic.tex:
+  ///   Delta rho'_ij = Delta rho_ij + (Delta rho'_i - Delta rho_i) y_ij
+  ///                    + rho_i A_i B_j / sum_k A_k^2,
+  /// with A_i = rho_i V_i and
+  ///      B_j = sum_i (Delta rho_i - Delta rho'_i) y_ij V_i.
+
+  T b_dry = 0;
+  for (int i = il; i <= iu; ++i) {
+    b_dry += (a[i](0) - delta[i](0)) * a[i](2) * VOL(i);
+  }
 
   for (int i = il; i <= iu; ++i) {
-    a[i](2) =
-        capped_exp(a[i](0) * dry_struct / std::max((T)1.e-12, denom * a[i](1)));
-    DU(IDN, i) = delta[i](0) * a[i](1) * a[i](2);
+    T structural =
+        sum_a2 > 0 ? W(IDN, i) * a[i](1) * b_dry / sum_a2 : static_cast<T>(0);
+    DU(IDN, i) = DU(IDN, i) + (delta[i](0) - a[i](0)) * a[i](2) + structural;
 
     if constexpr (N == 3) {  // partial matrix
       DU(IVX + dir, i) = delta[i](1);
@@ -175,16 +175,16 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   }
 
   for (int n = 0; n < ny; ++n) {
-    T species_struct = 0;
+    T b_species = 0;
     for (int i = il; i <= iu; ++i) {
-      species_struct += (DU(ICY + n, i) - delta[i](0) * W(ICY + n, i)) * VOL(i);
+      b_species += (a[i](0) - delta[i](0)) * W(ICY + n, i) * VOL(i);
     }
 
     for (int i = il; i <= iu; ++i) {
-      T corr = capped_exp(a[i](0) * species_struct /
-                          std::max((T)1.e-12, denom * W(ICY + n, i)));
-      DU(ICY + n, i) = delta[i](0) * W(ICY + n, i) * corr;
-      if (3 + n < N * N) a[i](3 + n) = corr;
+      T structural = sum_a2 > 0 ? W(IDN, i) * a[i](1) * b_species / sum_a2
+                                : static_cast<T>(0);
+      DU(ICY + n, i) =
+          DU(ICY + n, i) + (delta[i](0) - a[i](0)) * W(ICY + n, i) + structural;
     }
   }
 

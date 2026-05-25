@@ -70,7 +70,7 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // Phase 2 of the partial VIC solve: the serial per-column block-Thomas sweep
 // (ForwardSweep) plus the backward substitution and per-column MS-VIC reduction
 // sums (vic_backward_reduce). Coefficients a, b, c are assumed already assembled
-// (by vic_assemble_partial). The reduction scalars are stashed in the b buffer
+// (by vic_assemble_partial). The reduction scalars are stashed in the c buffer
 // (free after ForwardSweep); the per-cell redistribution map is deferred to
 // vic_redistribute_partial so it can run cell-parallel.
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
@@ -101,9 +101,10 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
 
           ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
                        stride2, first_block, last_block);
-          // b is dead after ForwardSweep; reuse its column memory to stash the
+          // c is dead after ForwardSweep; reuse its column memory to stash the
           // per-column reduction scalars for the redistribution map.
-          vic_backward_reduce(du, w, a, delta, vol, b[0].data(), 0, nlayer - 1,
+          vic_backward_reduce(du, w, a, delta, vol,
+                              reinterpret_cast<scalar_t*>(c), 0, nlayer - 1,
                               dir, ny, stride1, stride2);
         });
   });
@@ -111,7 +112,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
 
 // Phase 3 of the partial VIC solve: the per-cell MS-VIC redistribution map,
 // parallelized over EVERY cell (column x layer). Reads delta + the reduction
-// scalars stashed in b by vic_solve_partial and writes the final tendencies DU.
+// scalars stashed in c by vic_solve_partial and writes the final tendencies DU.
 void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
                                    double grav, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
@@ -140,10 +141,11 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
       auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
       auto w = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
       auto vol = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
-      auto b = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
+      auto c = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
       auto delta = reinterpret_cast<Vector *>(data[8] + offsets[8]);
 
-      vic_redistribute_cell(du, w, delta, vol, b[0].data(), i, dir, ny, stride1,
+      vic_redistribute_cell(du, w, delta, vol,
+                            reinterpret_cast<scalar_t*>(c), i, dir, ny, stride1,
                             stride2);
     });
   });

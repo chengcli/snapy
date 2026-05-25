@@ -1,9 +1,5 @@
 #pragma once
 
-// C/C++
-#include <algorithm>
-#include <cmath>
-
 // eigen
 #include <Eigen/Dense>
 
@@ -11,7 +7,7 @@
 #include <configure.h>
 
 // snap
-#include "forward_backward_impl.h"  // capped_exp + index constants
+#include "forward_backward_impl.h"
 
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
@@ -21,13 +17,11 @@ namespace snap {
 
 // Split form of the MS-VIC BackwardSubstitution (forward_backward_impl.h) for
 // the GPU. The serial work (backward substitution + the per-column reduction
-// sums) stays per-column here; the per-cell capped_exp redistribution map moves
-// to vic_redistribute_cell() so it can run as a cell-parallel kernel. Together
-// these reproduce BackwardSubstitution's arithmetic (modulo FMA contraction).
+// sums) stays per-column here; the per-cell redistribution map moves to
+// vic_redistribute_cell() so it can run as a cell-parallel kernel.
 //
-// `scratch` is the column's reduction storage (the b off-diagonal buffer, free
-// after ForwardSweep): scratch[0]=denom, scratch[1]=dry_struct,
-// scratch[2+n]=species_struct[n]. DU is NOT written here.
+// `scratch` is the column's reduction storage. scratch[0]=sum_k A_k^2,
+// scratch[1]=B_dry, scratch[2+n]=B_species[n]. DU is NOT written here.
 template <typename T, int N>
 void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
                                         Eigen::Matrix<T, N, 1>* delta, T* vol,
@@ -36,24 +30,32 @@ void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   // backward substitution
   for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
 
-  // per-column reduction sums (read the original, un-redistributed DU)
-  T denom = 0;
-  T dry_struct = 0;
+  // Per-column reduction sums for the exact MS-VIC formula.
+  T sum_a2 = 0;
+  T b_dry = 0;
   for (int i = il; i <= iu; ++i) {
-    T a0 = delta[i](0) * VOL(i);
-    denom += a0 * a0;
+    T explicit_total = DU(IDN, i);
     T dryfrac = 1;
-    for (int n = 0; n < ny; ++n) dryfrac -= W(ICY + n, i);
-    dry_struct += (DU(IDN, i) - delta[i](0) * dryfrac) * VOL(i);
+    for (int n = 0; n < ny; ++n) {
+      explicit_total += DU(ICY + n, i);
+      dryfrac -= W(ICY + n, i);
+    }
+
+    T a_i = W(IDN, i) * VOL(i);
+    sum_a2 += a_i * a_i;
+    b_dry += (explicit_total - delta[i](0)) * dryfrac * VOL(i);
   }
-  scratch[0] = denom;
-  scratch[1] = dry_struct;
+  scratch[0] = sum_a2;
+  scratch[1] = b_dry;
 
   for (int n = 0; n < ny; ++n) {
-    T species_struct = 0;
-    for (int i = il; i <= iu; ++i)
-      species_struct += (DU(ICY + n, i) - delta[i](0) * W(ICY + n, i)) * VOL(i);
-    scratch[2 + n] = species_struct;
+    T b_species = 0;
+    for (int i = il; i <= iu; ++i) {
+      T explicit_total = DU(IDN, i);
+      for (int m = 0; m < ny; ++m) explicit_total += DU(ICY + m, i);
+      b_species += (explicit_total - delta[i](0)) * W(ICY + n, i) * VOL(i);
+    }
+    scratch[2 + n] = b_species;
   }
 }
 
@@ -64,16 +66,19 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
                                           Eigen::Matrix<T, N, 1>* delta, T* vol,
                                           T const* scratch, int i, int dir,
                                           int ny, int stride1, int stride2) {
-  T denom = scratch[0];
-  T dry_struct = scratch[1];
+  T sum_a2 = scratch[0];
 
-  T a0 = delta[i](0) * VOL(i);
+  T a_i = W(IDN, i) * VOL(i);
   T dryfrac = 1;
   for (int n = 0; n < ny; ++n) dryfrac -= W(ICY + n, i);
 
+  T explicit_total = DU(IDN, i);
+  for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
+
+  T dry_structural =
+      sum_a2 > 0 ? W(IDN, i) * a_i * scratch[1] / sum_a2 : static_cast<T>(0);
   DU(IDN, i) =
-      delta[i](0) * dryfrac *
-      capped_exp(a0 * dry_struct / std::max((T)1.e-12, denom * dryfrac));
+      DU(IDN, i) + (delta[i](0) - explicit_total) * dryfrac + dry_structural;
 
   if constexpr (N == 3) {  // partial matrix
     DU(IVX + dir, i) = delta[i](1);
@@ -86,9 +91,11 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
   }
 
   for (int n = 0; n < ny; ++n) {
-    T corr = capped_exp(a0 * scratch[2 + n] /
-                        std::max((T)1.e-12, denom * W(ICY + n, i)));
-    DU(ICY + n, i) = delta[i](0) * W(ICY + n, i) * corr;
+    T structural = sum_a2 > 0 ? W(IDN, i) * a_i * scratch[2 + n] / sum_a2
+                              : static_cast<T>(0);
+    DU(ICY + n, i) = DU(ICY + n, i) +
+                     (delta[i](0) - explicit_total) * W(ICY + n, i) +
+                     structural;
   }
 }
 
