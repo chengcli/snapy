@@ -146,13 +146,15 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
       at::native::vic_solve_full(du.device().type(), iter, dt,
                                  phydro->options->grav()->grav1(), 0);
     } else {
-      // assemble the tridiagonal coefficients (cell-parallel), then solve
-      // (per-column serial sweep). On CPU the assemble call is a no-op and the
-      // solve is fused; on GPU these are two kernels.
-      at::native::vic_assemble_partial(du.device().type(), iter, dt,
-                                       phydro->options->grav()->grav1(), 0);
-      at::native::vic_solve_partial(du.device().type(), iter, dt,
-                                    phydro->options->grav()->grav1(), 0);
+      // GPU partial-VIC pipeline: assemble coefficients (cell-parallel) ->
+      // serial per-column Thomas sweep + reductions -> cell-parallel MS-VIC
+      // redistribution map. On CPU, assemble/redistribute are no-ops and
+      // vic_solve_partial runs the whole thing fused.
+      auto grav1 = phydro->options->grav()->grav1();
+      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
+                                           0);
     }
   }
 

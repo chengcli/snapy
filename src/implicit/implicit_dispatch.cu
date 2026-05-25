@@ -15,6 +15,7 @@
 #include "forward_backward_impl.h"
 #include "implicit_dispatch.hpp"
 #include "vic_assemble_partial_impl.h"
+#include "vic_redistribute_impl.h"
 #include "vic_solve_full_impl.h"
 #include "vic_solve_partial_impl.h"
 
@@ -66,8 +67,12 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
   });
 }
 
-// Phase 2 of the partial VIC solve: the serial per-column block-Thomas sweep.
-// Coefficients a, b, c are assumed already assembled (by vic_assemble_partial).
+// Phase 2 of the partial VIC solve: the serial per-column block-Thomas sweep
+// (ForwardSweep) plus the backward substitution and per-column MS-VIC reduction
+// sums (vic_backward_reduce). Coefficients a, b, c are assumed already assembled
+// (by vic_assemble_partial). The reduction scalars are stashed in the b buffer
+// (free after ForwardSweep); the per-cell redistribution map is deferred to
+// vic_redistribute_partial so it can run cell-parallel.
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
@@ -88,6 +93,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
         iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
           auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto vol = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
           auto a = reinterpret_cast<Matrix*>(data[5] + strides[5]);
           auto b = reinterpret_cast<Matrix*>(data[6] + strides[6]);
           auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
@@ -95,9 +101,51 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
 
           ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
                        stride2, first_block, last_block);
-          BackwardSubstitution(du, w, a, delta, 0, nlayer - 1, dir, ny, stride1,
-                               stride2, first_block, last_block);
+          // b is dead after ForwardSweep; reuse its column memory to stash the
+          // per-column reduction scalars for the redistribution map.
+          vic_backward_reduce(du, w, a, delta, vol, b[0].data(), 0, nlayer - 1,
+                              dir, ny, stride1, stride2);
         });
+  });
+}
+
+// Phase 3 of the partial VIC solve: the per-cell MS-VIC redistribution map,
+// parallelized over EVERY cell (column x layer). Reads delta + the reduction
+// scalars stashed in b by vic_solve_partial and writes the final tendencies DU.
+void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
+                                   double grav, int dir) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cuda", [&]() {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    int nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
+    int stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    int stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+
+    using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
+    using Vector = Eigen::Matrix<scalar_t, 3, 1>;
+
+    int64_t ncol = iter.numel();
+    auto offset_calc = ::make_offset_calculator<9>(iter);
+    std::array<char *, 9> data;
+    for (int k = 0; k < 9; ++k) data[k] = (char *)iter.data_ptr(k);
+
+    int64_t total = ncol * (int64_t)nlayer;
+    at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
+      int col = idx / nlayer;
+      int i = idx % nlayer;
+      auto offsets = offset_calc.get(col);
+      auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
+      auto w = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
+      auto vol = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
+      auto b = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
+      auto delta = reinterpret_cast<Vector *>(data[8] + offsets[8]);
+
+      vic_redistribute_cell(du, w, delta, vol, b[0].data(), i, dir, ny, stride1,
+                            stride2);
+    });
   });
 }
 
@@ -143,6 +191,8 @@ namespace at::native {
 
 REGISTER_CUDA_DISPATCH(vic_assemble_partial, &snap::vic_assemble_partial_cuda);
 REGISTER_CUDA_DISPATCH(vic_solve_partial, &snap::vic_solve_partial_cuda);
+REGISTER_CUDA_DISPATCH(vic_redistribute_partial,
+                       &snap::vic_redistribute_partial_cuda);
 REGISTER_CUDA_DISPATCH(vic_solve_full, &snap::vic_solve_full_cuda);
 
 }  // namespace at::native

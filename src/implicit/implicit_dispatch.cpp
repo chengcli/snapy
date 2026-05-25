@@ -25,6 +25,13 @@ namespace snap {
 void vic_assemble_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
                               double /*grav*/, int /*dir*/) {}
 
+// On CPU the solve stays fused (vic_solve_partial_cpu does the full backward
+// substitution + MS-VIC redistribution), so the redistribute phase is a no-op.
+// On GPU these are separate kernels (vic_solve_partial does the sweep + column
+// reductions; vic_redistribute_partial does the cell-parallel map).
+void vic_redistribute_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
+                                  double /*grav*/, int /*dir*/) {}
+
 void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
                            int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
@@ -107,11 +114,14 @@ namespace at::native {
 
 DEFINE_DISPATCH(vic_assemble_partial);
 DEFINE_DISPATCH(vic_solve_partial);
+DEFINE_DISPATCH(vic_redistribute_partial);
 DEFINE_DISPATCH(vic_solve_full);
 
 REGISTER_ALL_CPU_DISPATCH(vic_assemble_partial,
                           &snap::vic_assemble_partial_cpu);
 REGISTER_ALL_CPU_DISPATCH(vic_solve_partial, &snap::vic_solve_partial_cpu);
+REGISTER_ALL_CPU_DISPATCH(vic_redistribute_partial,
+                          &snap::vic_redistribute_partial_cpu);
 REGISTER_ALL_CPU_DISPATCH(vic_solve_full, &snap::vic_solve_full_cpu);
 
 }  // namespace at::native

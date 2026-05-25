@@ -19,18 +19,28 @@ namespace snap {
 // vertical cell `i` of one column. This is the per-cell-parallel form of the
 // assembly loop in vic_solve_partial_impl(): every cell is independent, so one
 // GPU thread can own one cell. Shared interface Jacobians are recomputed from
-// the same inputs, so the result is bit-identical to the serial assembly.
+// the same inputs, so the result matches the serial assembly. Kept in lockstep
+// with vic_solve_partial_impl() so the GPU (split) and CPU (fused) paths agree.
 //
 // a, b, c point to the start of the column's coefficient arrays (indexed [i]),
 // matching the layout used by ForwardSweep/BackwardSubstitution.
 template <typename T>
 void DISPATCH_MACRO vic_assemble_partial_impl(
-    Eigen::Matrix<T, 3, 3> *a, Eigen::Matrix<T, 3, 3> *b,
-    Eigen::Matrix<T, 3, 3> *c, T *w, T *gamma, T *area, T *vol, int i, int is,
+    Eigen::Matrix<T, 3, 3>* a, Eigen::Matrix<T, 3, 3>* b,
+    Eigen::Matrix<T, 3, 3>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
     int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
     bool first_block, bool last_block) {
-  Eigen::Matrix<T, 5, 5> Rmat, Lambda, Rimat, Am, Ap, dfdqf;
+  Eigen::Matrix<T, 5, 5> Rmat, Rimat, Am, Ap, dfdqf;
+  Eigen::Matrix<T, 5, 1> Lambda;
   Eigen::Matrix<T, 3, 3> Am2, Ap2, dfdq_prev, dfdq_curr, dfdq_next;
+
+  Eigen::Matrix<T, 3, 3> Phi;
+  Eigen::Matrix<T, 3, 1> Dt, Bnd;
+  Phi << 0., 0., 0.,  //
+      grav, 0., 0.,   //
+      0., grav, 0.;
+  Dt << 1. / dt, 1. / dt, 1. / dt;
+  Bnd << 1., -1, 1.;
 
   T prim[5];       // Roe averaged primitive variables at an interface
   T wl[5], wr[5];  // left/right primitive variables
@@ -57,7 +67,7 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   cs = SoundSpeed(prim, gm1);
   Eigenvalue(Lambda, prim[IVX + dir], cs);
   Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
-  Am = Rmat * Lambda * Rimat;
+  Am.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
   Am2 << Am(IDN, IDN), Am(IDN, IVX), Am(IDN, IPR),  //
       Am(IVX, IDN), Am(IVX, IVX), Am(IVX, IPR),     //
       Am(IPR, IDN), Am(IPR, IVX), Am(IPR, IPR);
@@ -77,36 +87,26 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   cs = SoundSpeed(prim, gm1);
   Eigenvalue(Lambda, prim[IVX + dir], cs);
   Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
-  Ap = Rmat * Lambda * Rimat;
+  Ap.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
   Ap2 << Ap(IDN, IDN), Ap(IDN, IVX), Ap(IDN, IPR),  //
       Ap(IVX, IDN), Ap(IVX, IVX), Ap(IVX, IPR),     //
       Ap(IPR, IDN), Ap(IPR, IVX), Ap(IPR, IPR);
 
   // ---- set up diagonals a, b, c (matches vic_solve_partial_impl) ----
-  a[i] = (Am2 * AREA(i) + Ap2 * AREA(i + 1) +
-          (AREA(i + 1) - AREA(i)) * dfdq_curr) /
-         (2. * VOL(i));
-  // + Dt: add 1/dt to the diagonal
-  a[i](0, 0) += 1. / dt;
-  a[i](1, 1) += 1. / dt;
-  a[i](2, 2) += 1. / dt;
-  // - Phi: subtract gravity coupling
-  a[i](1, 0) -= grav;
-  a[i](2, 1) -= grav;
-  b[i] = -(Am2 + dfdq_prev) * AREA(i) / (2. * VOL(i));
-  c[i] = -(Ap2 - dfdq_next) * AREA(i + 1) / (2. * VOL(i));
+  T const& area_i = AREA(i);
+  T const& area_ip1 = AREA(i + 1);
+  T half_inv_vol = 0.5 / VOL(i);
 
-  // ---- boundary condition. Bnd = diag(1, -1, 1) flips column 1 sign. ----
-  if (i == is && first_block) {
-    a[i].col(0) += b[i].col(0);
-    a[i].col(1) -= b[i].col(1);
-    a[i].col(2) += b[i].col(2);
-  }
-  if (i == ie && last_block) {
-    a[i].col(0) += c[i].col(0);
-    a[i].col(1) -= c[i].col(1);
-    a[i].col(2) += c[i].col(2);
-  }
+  a[i] = (Am2 * area_i + Ap2 * area_ip1 + (area_ip1 - area_i) * dfdq_curr) *
+             half_inv_vol -
+         Phi;
+  a[i].diagonal() += Dt;
+  b[i] = -(Am2 + dfdq_prev) * area_i * half_inv_vol;
+  c[i] = -(Ap2 - dfdq_next) * area_ip1 * half_inv_vol;
+
+  // ---- boundary condition. Bnd = diag(1, -1, 1). ----
+  if (i == is && first_block) a[i] += b[i] * Bnd.asDiagonal();
+  if (i == ie && last_block) a[i] += c[i] * Bnd.asDiagonal();
 }
 
 }  // namespace snap
