@@ -1,6 +1,7 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,7 @@ void ImplicitHydroImpl::reset() {
   _delta = register_buffer("delta", torch::empty({0}, torch::kFloat64));
   _du0 = register_buffer("du0", torch::empty({0}, torch::kFloat64));
   _corr = register_buffer("corr", torch::empty({0}, torch::kFloat64));
+  _mass_corr = register_buffer("mass_corr", torch::empty({0}, torch::kFloat64));
 }
 
 void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
@@ -91,6 +93,7 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
   maybe_resize(_delta, delta_shape);
   maybe_resize(_du0, w.sizes().vec());
   maybe_resize(_corr, w.sizes().vec());
+  maybe_resize(_mass_corr, w.sizes().vec());
 }
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
@@ -110,6 +113,15 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   ensure_workspace(w);
   _du0.copy_(du);
+  _mass_corr.zero_();
+
+  int nvapor = 0;
+  if (phydro->options->eos()->thermo()) {
+    nvapor = std::max<int>(
+        0,
+        static_cast<int>(phydro->options->eos()->thermo()->vapor_ids().size()) -
+            1);
+  }
 
   /// (1) Project to local orthonormal frame
   {
@@ -128,6 +140,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
         .declare_static_shape(du.index(interior).sizes(),
                               /*squash_dims=*/{0, 3})
         .add_owned_output(du.index(interior))
+        .add_owned_output(_mass_corr.index(interior))
         .add_owned_input(w.index(interior))
         .add_owned_input(gamma.unsqueeze(0).index(interior))
         .add_owned_input(
@@ -144,17 +157,19 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   {
     if ((options->scheme() >> 3) & 1) {
       at::native::vic_solve_full(du.device().type(), iter, dt,
-                                 phydro->options->grav()->grav1(), 0);
+                                 phydro->options->grav()->grav1(), 0, nvapor);
     } else {
       // GPU partial-VIC pipeline: assemble coefficients (cell-parallel) ->
       // serial per-column Thomas sweep + reductions -> cell-parallel MS-VIC
       // redistribution map. On CPU, assemble/redistribute are no-ops and
       // vic_solve_partial runs the whole thing fused.
       auto grav1 = phydro->options->grav()->grav1();
-      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0,
+                                       nvapor);
+      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0,
+                                    nvapor);
       at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
-                                           0);
+                                           0, nvapor);
     }
   }
 

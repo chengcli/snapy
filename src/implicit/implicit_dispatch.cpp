@@ -20,7 +20,7 @@
 namespace snap {
 
 void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
-                              int dir) {
+                              int dir, int /*nvapor*/) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cpu", [&] {
@@ -38,14 +38,14 @@ void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
-            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
             auto gamma =
-                reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
-            auto area = reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
-            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
-            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
-            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+                reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
+            auto area = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
 
             for (int i = 0; i < nlayer; ++i) {
               vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, i, 0,
@@ -59,7 +59,7 @@ void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 }
 
 void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
-                           int dir) {
+                           int dir, int /*nvapor*/) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cpu", [&] {
@@ -79,12 +79,12 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
-            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
-            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
-            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
-            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
+            auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
+            auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
+            auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
             ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
                          stride1, stride2, first_block, last_block);
@@ -97,7 +97,7 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 }
 
 void vic_redistribute_partial_cpu(at::TensorIterator& iter, double /*dt*/,
-                                  double /*grav*/, int dir) {
+                                  double /*grav*/, int dir, int nvapor) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cpu", [&] {
@@ -115,14 +115,16 @@ void vic_redistribute_partial_cpu(at::TensorIterator& iter, double /*dt*/,
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
-            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
-            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
+            auto mass_fix =
+                reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
+            auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
+            auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
             for (int i = 0; i < nlayer; ++i) {
-              vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
-                                    stride1, stride2);
+              vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
+                                    dir, ny, nvapor, stride1, stride2);
             }
           }
         },
@@ -131,7 +133,7 @@ void vic_redistribute_partial_cpu(at::TensorIterator& iter, double /*dt*/,
 }
 
 void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
-                        int dir) {
+                        int dir, int nvapor) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cpu", [&] {
@@ -152,15 +154,17 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto mass_fix =
+                reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
             auto gamma =
-                reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
-            auto area = reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
-            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
-            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
-            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
-            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
+                reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
+            auto area = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
+            auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
             vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
                                    nlayer - 1, dir, ny, stride1, stride2,
@@ -170,8 +174,8 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
             vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0,
                                 nlayer - 1, dir, ny, stride1, stride2);
             for (int i = 0; i < nlayer; ++i) {
-              vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
-                                    stride1, stride2);
+              vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
+                                    dir, ny, nvapor, stride1, stride2);
             }
           }
         },

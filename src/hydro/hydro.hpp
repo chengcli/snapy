@@ -130,6 +130,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor flux1() const { return _flux1; }
   torch::Tensor flux2() const { return _flux2; }
   torch::Tensor flux3() const { return _flux3; }
+  torch::Tensor implicit_mass_correction() const;
 
  private:
   //! Register all forcing modules

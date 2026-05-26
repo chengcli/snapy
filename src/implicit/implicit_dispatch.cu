@@ -26,7 +26,7 @@ namespace snap {
 // longer runs as a serial per-column loop. Results are bit-identical to the
 // fused assembly that previously lived in vic_solve_partial_cuda.
 void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                               int dir) {
+                               int dir, int /*nvapor*/) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cuda", [&]() {
@@ -42,22 +42,22 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
     using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
 
     int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<9>(iter);
-    std::array<char *, 9> data;
-    for (int k = 0; k < 9; ++k) data[k] = (char *)iter.data_ptr(k);
+    auto offset_calc = ::make_offset_calculator<10>(iter);
+    std::array<char *, 10> data;
+    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
 
     int64_t total = ncol * (int64_t)nlayer;
     at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
       int col = idx / nlayer;
       int i = idx % nlayer;
       auto offsets = offset_calc.get(col);
-      auto w = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
-      auto gamma = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
-      auto area = reinterpret_cast<scalar_t *>(data[3] + offsets[3]);
-      auto vol = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
-      auto a = reinterpret_cast<Matrix *>(data[5] + offsets[5]);
-      auto b = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
-      auto c = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
+      auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
+      auto gamma = reinterpret_cast<scalar_t *>(data[3] + offsets[3]);
+      auto area = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
+      auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto a = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
+      auto b = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
+      auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
 
       vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1,
                                 dt, grav, dir, ny, stride1, stride2,
@@ -73,7 +73,7 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // (free after ForwardSweep); the per-cell redistribution map is deferred to
 // vic_redistribute_partial so it can run cell-parallel.
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                            int dir) {
+                            int dir, int /*nvapor*/) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cuda", [&]() {
@@ -89,15 +89,15 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
     using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
     using Vector = Eigen::Matrix<scalar_t, 3, 1>;
 
-    native::gpu_kernel<9>(
-        iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
+    native::gpu_kernel<10>(
+        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
           auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto vol = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto a = reinterpret_cast<Matrix*>(data[5] + strides[5]);
-          auto b = reinterpret_cast<Matrix*>(data[6] + strides[6]);
-          auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
-          auto delta = reinterpret_cast<Vector*>(data[8] + strides[8]);
+          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
+          auto delta = reinterpret_cast<Vector*>(data[9] + strides[9]);
 
           ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
                        stride2, first_block, last_block);
@@ -113,7 +113,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // parallelized over EVERY cell (column x layer). Reads delta + the reduction
 // scalars stashed in c by vic_solve_partial and writes the final tendencies DU.
 void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
-                                   double grav, int dir) {
+                                   double grav, int dir, int nvapor) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cuda", [&]() {
@@ -128,9 +128,9 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
     using Vector = Eigen::Matrix<scalar_t, 3, 1>;
 
     int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<9>(iter);
-    std::array<char *, 9> data;
-    for (int k = 0; k < 9; ++k) data[k] = (char *)iter.data_ptr(k);
+    auto offset_calc = ::make_offset_calculator<10>(iter);
+    std::array<char *, 10> data;
+    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
 
     int64_t total = ncol * (int64_t)nlayer;
     at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
@@ -138,19 +138,20 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
       int i = idx % nlayer;
       auto offsets = offset_calc.get(col);
       auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
-      auto w = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
-      auto vol = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
-      auto c = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
-      auto delta = reinterpret_cast<Vector *>(data[8] + offsets[8]);
+      auto mass_fix = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
+      auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
+      auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
+      auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
 
-      vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
-                            stride1, stride2);
+      vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i, dir,
+                            ny, nvapor, stride1, stride2);
     });
   });
 }
 
 void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
-                         int dir) {
+                         int dir, int nvapor) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
@@ -167,17 +168,18 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
     using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
     using Vector = Eigen::Matrix<scalar_t, 5, 1>;
 
-    native::gpu_kernel<9>(
-        iter, [=] GPU_LAMBDA(char* const data[9], unsigned int strides[9]) {
+    native::gpu_kernel<10>(
+        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
           auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto w = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto gamma = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto area = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto vol = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto a = reinterpret_cast<Matrix*>(data[5] + strides[5]);
-          auto b = reinterpret_cast<Matrix*>(data[6] + strides[6]);
-          auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
-          auto delta = reinterpret_cast<Vector*>(data[8] + strides[8]);
+          auto mass_fix = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto gamma = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto area = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
+          auto delta = reinterpret_cast<Vector*>(data[9] + strides[9]);
 
           // Mirror the split CUDA partial-VIC path: assemble the full-VIC
           // coefficients, run the column solve, then reuse the c buffer as
@@ -190,8 +192,8 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
           vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
                               dir, ny, stride1, stride2);
           for (int i = 0; i < nlayer; ++i) {
-            vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
-                                  stride1, stride2);
+            vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
+                                  dir, ny, nvapor, stride1, stride2);
           }
         });
   });

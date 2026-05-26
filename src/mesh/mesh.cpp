@@ -297,7 +297,7 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
     SINFO() << std::endl << "Terminating abnormally" << std::endl;
   }
 
-  SINFO() << "time=" << time << " cycle=" << root->cycle - 1 << std::endl;
+  SINFO() << "time=" << time << " cycle=" << root->cycle << std::endl;
   SINFO() << "tlim=" << root->pintg->options->tlim()
           << " nlim=" << root->pintg->options->nlim() << std::endl;
 
