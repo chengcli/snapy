@@ -86,6 +86,11 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
   TORCH_CHECK(phydro, "[EquationOfState] Parent module is null.");
 }
 
+torch::Tensor EquationOfStateImpl::internal_energy_offset(
+    torch::Tensor hydro_like) const {
+  return torch::zeros_like(hydro_like[IDN]);
+}
+
 torch::Tensor EquationOfStateImpl::compute(
     std::string ab, std::vector<torch::Tensor> const& args) {
   TORCH_CHECK(false, "[EquationOfState] compute() is not implemented.",

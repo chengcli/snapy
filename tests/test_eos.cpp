@@ -11,6 +11,7 @@
 // snapy
 #include <snap/snap.h>
 
+#include <snap/eos/ideal_moist.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 // tests
@@ -18,9 +19,18 @@
 
 using namespace snap;
 
+namespace {
+
+std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_eos.yaml");
+  options->hydro()->eos()->type() = std::move(eos_type);
+  return std::make_shared<MeshBlockImpl>(options);
+}
+
+}  // namespace
+
 TEST_P(DeviceTest, moist_mixture) {
-  auto op_block = MeshBlockOptionsImpl::from_yaml("test_eos.yaml");
-  auto block = MeshBlock(op_block);
+  auto block = make_block("moist-mixture");
   block->to(device, dtype);
 
   auto peos = block->phydro->peos;
@@ -57,6 +67,47 @@ TEST_P(DeviceTest, moist_mixture) {
   auto cs = peos->compute("WA->L", {prim, gamma});
   std::cout << "cs min = " << cs.min() << std::endl;
   std::cout << "cs max = " << cs.max() << std::endl;
+}
+
+TEST_P(DeviceTest, ideal_moist_internal_energy_offset) {
+  auto block = make_block("ideal-moist");
+  block->to(device, dtype);
+
+  auto peos = block->phydro->peos;
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  int nvar = peos->nvar();
+
+  auto hydro =
+      torch::randn({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  auto offset = peos->internal_energy_offset(hydro);
+
+  auto ideal_moist = std::dynamic_pointer_cast<IdealMoistImpl>(peos);
+  ASSERT_TRUE(ideal_moist);
+
+  auto expected = hydro[IDN] * ideal_moist->u0[0].to(dtype).to(device);
+  EXPECT_TRUE(torch::allclose(offset, expected, 1.E-6, 1.E-6));
+
+  auto tendency = 0.25 * hydro;
+  auto tendency_offset = peos->internal_energy_offset(tendency);
+  EXPECT_TRUE(torch::allclose(tendency_offset, 0.25 * offset, 1.E-6, 1.E-6));
+}
+
+TEST_P(DeviceTest, ideal_gas_internal_energy_offset_is_zero) {
+  auto block = make_block("ideal-gas");
+  block->to(device, dtype);
+
+  auto peos = block->phydro->peos;
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+
+  auto hydro = torch::randn({peos->nvar(), nc3, nc2, nc1},
+                            torch::device(device).dtype(dtype));
+  auto offset = peos->internal_energy_offset(hydro);
+  EXPECT_TRUE(
+      torch::allclose(offset, torch::zeros_like(hydro[IDN]), 1.E-12, 1.E-12));
 }
 
 /*TEST_P(DeviceTest, cons2prim_hydro_ideal_ncloud5) {
@@ -125,7 +176,7 @@ TEST_P(DeviceTest, prim2cons_hydro_ideal_ncloud5) {
   }
 }*/
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();

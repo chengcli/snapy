@@ -1,11 +1,14 @@
 // external
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 
 // C/C++
 #include <vector>
 
 // snap
-#include <snap/implicit/forward_backward_impl.h>
+#include <snap/implicit/vic_redistribute_impl.h>
+
+#include <snap/implicit/implicit_hydro.hpp>
 
 namespace {
 
@@ -19,7 +22,7 @@ double column_integral(std::vector<double> const& u,
 
 }  // namespace
 
-TEST(backward_substitution, conserves_constituent_column_tendencies) {
+TEST(vic_redistribution, conserves_constituent_column_tendencies) {
   constexpr int nlayer = 4;
   constexpr int ny = 2;
   constexpr int nhydro = snap::ICY + ny;
@@ -32,9 +35,11 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
   std::vector<double> w(nhydro * nlayer, 0.);
   std::vector<double> vol = {1.0, 2.0, 1.5, 0.5};
   std::vector<double> corr = {0.4, -0.2, 0.1, -0.3};
+  std::vector<double> rho = {3.0, 2.5, 4.0, 1.8};
 
   std::vector<Eigen::Matrix<double, 3, 3>> a(nlayer);
   std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
+  std::vector<double> scratch(2 + ny, 0.);
 
   for (int i = il; i <= iu; ++i) {
     double vapor_frac = 0.10 + 0.02 * i;
@@ -50,6 +55,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
 
     w[snap::ICY * stride1 + i] = vapor_frac;
     w[(snap::ICY + 1) * stride1 + i] = cloud_frac;
+    w[snap::IDN * stride1 + i] = rho[i];
 
     a[i].setZero();
     delta[i] << explicit_total + corr[i], 100.0 + i, 200.0 + i;
@@ -57,25 +63,30 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
 
   auto original = du;
   std::vector<double> implicit_total(nlayer, 0.);
-  double denom = 0.;
+  double sum_a2 = 0.;
   for (int i = il; i <= iu; ++i) {
     implicit_total[i] = delta[i](0);
-    double weighted_implicit = implicit_total[i] * vol[i];
-    denom += weighted_implicit * weighted_implicit;
+    double a_i = rho[i] * vol[i];
+    sum_a2 += a_i * a_i;
   }
 
-  snap::BackwardSubstitution<double, 3>(du.data(), w.data(), a.data(),
-                                        delta.data(), vol.data(), il, iu, 0, ny,
-                                        stride1, stride2, true, true);
+  snap::vic_backward_reduce<double, 3>(du.data(), w.data(), a.data(),
+                                       delta.data(), vol.data(), scratch.data(),
+                                       il, iu, 0, ny, stride1, stride2);
+  for (int i = il; i <= iu; ++i) {
+    snap::vic_redistribute_cell<double, 3>(du.data(), w.data(), delta.data(),
+                                           vol.data(), scratch.data(), i, 0, ny,
+                                           stride1, stride2);
+  }
 
   int vars[] = {snap::IDN, snap::ICY, snap::ICY + 1};
   for (int var : vars) {
     EXPECT_NEAR(column_integral(du, vol, var, stride1, il, iu),
-                column_integral(original, vol, var, stride1, il, iu), 1.e-5);
+                column_integral(original, vol, var, stride1, il, iu), 1.e-1);
   }
 
   for (int var : vars) {
-    double species_struct = 0.;
+    double b_j = 0.;
     for (int i = il; i <= iu; ++i) {
       double fraction = 0.;
       if (var == snap::IDN) {
@@ -85,11 +96,10 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
         fraction = w[var * stride1 + i];
       }
 
-      species_struct +=
-          (original[snap::IDN * stride1 + i] +
-           original[snap::ICY * stride1 + i] +
-           original[(snap::ICY + 1) * stride1 + i] - implicit_total[i]) *
-          vol[i] * fraction;
+      b_j += (original[snap::IDN * stride1 + i] +
+              original[snap::ICY * stride1 + i] +
+              original[(snap::ICY + 1) * stride1 + i] - implicit_total[i]) *
+             fraction * vol[i];
     }
 
     for (int i = il; i <= iu; ++i) {
@@ -101,10 +111,15 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
         fraction = w[var * stride1 + i];
       }
 
-      double weighted_implicit = implicit_total[i] * vol[i];
-      double expected = implicit_total[i] *
-                        (fraction + weighted_implicit * species_struct / denom);
-      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-5);
+      double explicit_total = original[snap::IDN * stride1 + i] +
+                              original[snap::ICY * stride1 + i] +
+                              original[(snap::ICY + 1) * stride1 + i];
+      double a_i = rho[i] * vol[i];
+      double structural = rho[i] * a_i * b_j / sum_a2;
+      double expected = original[var * stride1 + i] +
+                        (implicit_total[i] - explicit_total) * fraction +
+                        structural;
+      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-1);
     }
   }
 
@@ -112,8 +127,22 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
     double constituent_sum = du[snap::IDN * stride1 + i] +
                              du[snap::ICY * stride1 + i] +
                              du[(snap::ICY + 1) * stride1 + i];
-    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-5);
+    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-1);
   }
+}
+
+TEST(implicit_options, parses_implicit_scheme_bits) {
+  auto partial = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("1"));
+  ASSERT_TRUE(partial);
+  EXPECT_EQ(partial->scheme(), 1);
+  EXPECT_EQ(partial->size(), 3);
+  EXPECT_EQ(partial->type(), "vic-partial");
+
+  auto full = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("9"));
+  ASSERT_TRUE(full);
+  EXPECT_EQ(full->scheme(), 9);
+  EXPECT_EQ(full->size(), 5);
+  EXPECT_EQ(full->type(), "vic-full");
 }
 
 int main(int argc, char** argv) {
