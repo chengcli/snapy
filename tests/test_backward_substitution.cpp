@@ -1,11 +1,14 @@
 // external
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 
 // C/C++
 #include <vector>
 
 // snap
 #include <snap/implicit/forward_backward_impl.h>
+
+#include <snap/implicit/implicit_hydro.hpp>
 
 namespace {
 
@@ -68,7 +71,7 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
 
   snap::BackwardSubstitution<double, 3>(du.data(), w.data(), a.data(),
                                         delta.data(), vol.data(), il, iu, 0, ny,
-                                        stride1, stride2, true, true);
+                                        stride1, stride2, true, true, true);
 
   int vars[] = {snap::IDN, snap::ICY, snap::ICY + 1};
   for (int var : vars) {
@@ -120,6 +123,97 @@ TEST(backward_substitution, conserves_constituent_column_tendencies) {
                              du[(snap::ICY + 1) * stride1 + i];
     EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-11);
   }
+}
+
+TEST(backward_substitution, can_disable_conservation_terms) {
+  constexpr int nlayer = 4;
+  constexpr int ny = 2;
+  constexpr int nhydro = snap::ICY + ny;
+  constexpr int stride1 = nlayer;
+  constexpr int stride2 = 1;
+  constexpr int il = 0;
+  constexpr int iu = nlayer - 1;
+
+  std::vector<double> du(nhydro * nlayer, 0.);
+  std::vector<double> w(nhydro * nlayer, 0.);
+  std::vector<double> vol = {1.0, 2.0, 1.5, 0.5};
+  std::vector<double> corr = {0.4, -0.2, 0.1, -0.3};
+  std::vector<Eigen::Matrix<double, 3, 3>> a(nlayer);
+  std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
+
+  for (int i = il; i <= iu; ++i) {
+    double vapor_frac = 0.10 + 0.02 * i;
+    double cloud_frac = 0.05 + 0.01 * i;
+    double dry_frac = 1. - vapor_frac - cloud_frac;
+    double explicit_total = 1.5 + 0.2 * i;
+
+    du[snap::IDN * stride1 + i] = explicit_total * dry_frac;
+    du[snap::IVX * stride1 + i] = 10.0 + i;
+    du[snap::IPR * stride1 + i] = 20.0 + i;
+    du[snap::ICY * stride1 + i] = explicit_total * vapor_frac;
+    du[(snap::ICY + 1) * stride1 + i] = explicit_total * cloud_frac;
+
+    w[snap::ICY * stride1 + i] = vapor_frac;
+    w[(snap::ICY + 1) * stride1 + i] = cloud_frac;
+    w[snap::IDN * stride1 + i] = 3.0 + 0.1 * i;
+
+    a[i].setZero();
+    delta[i] << explicit_total + corr[i], 100.0 + i, 200.0 + i;
+  }
+
+  auto original = du;
+  std::vector<double> implicit_total(nlayer, 0.);
+  for (int i = il; i <= iu; ++i) implicit_total[i] = delta[i](0);
+
+  snap::BackwardSubstitution<double, 3>(du.data(), w.data(), a.data(),
+                                        delta.data(), vol.data(), il, iu, 0, ny,
+                                        stride1, stride2, true, true, false);
+
+  int vars[] = {snap::IDN, snap::ICY, snap::ICY + 1};
+  for (int var : vars) {
+    for (int i = il; i <= iu; ++i) {
+      double fraction = 0.;
+      if (var == snap::IDN) {
+        fraction =
+            1. - w[snap::ICY * stride1 + i] - w[(snap::ICY + 1) * stride1 + i];
+      } else {
+        fraction = w[var * stride1 + i];
+      }
+
+      double explicit_total = original[snap::IDN * stride1 + i] +
+                              original[snap::ICY * stride1 + i] +
+                              original[(snap::ICY + 1) * stride1 + i];
+      double expected = original[var * stride1 + i] +
+                        (implicit_total[i] - explicit_total) * fraction;
+      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-11);
+    }
+  }
+
+  for (int i = il; i <= iu; ++i) {
+    double constituent_sum = du[snap::IDN * stride1 + i] +
+                             du[snap::ICY * stride1 + i] +
+                             du[(snap::ICY + 1) * stride1 + i];
+    EXPECT_NEAR(constituent_sum, implicit_total[i], 1.e-11);
+  }
+}
+
+TEST(implicit_options, parses_conservation_runtime_option) {
+  auto legacy = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("1"));
+  ASSERT_TRUE(legacy);
+  EXPECT_EQ(legacy->scheme(), 1);
+  EXPECT_TRUE(legacy->conservation());
+
+  auto configured = snap::ImplicitOptionsImpl::from_yaml(
+      YAML::Load("{scheme: 1, conservation: false}"));
+  ASSERT_TRUE(configured);
+  EXPECT_EQ(configured->scheme(), 1);
+  EXPECT_FALSE(configured->conservation());
+
+  auto legacy_key = snap::ImplicitOptionsImpl::from_yaml(
+      YAML::Load("{scheme: 1, structural-correction: false}"));
+  ASSERT_TRUE(legacy_key);
+  EXPECT_EQ(legacy_key->scheme(), 1);
+  EXPECT_FALSE(legacy_key->conservation());
 }
 
 int main(int argc, char** argv) {

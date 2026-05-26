@@ -25,7 +25,8 @@ struct ImplicitOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- implicit hydro options --\n";
     os << "* type = " << type() << "\n"
-       << "* scheme = " << scheme() << "\n";
+       << "* scheme = " << scheme() << "\n"
+       << "* conservation = " << (conservation() ? "true" : "false") << "\n";
   }
 
   int size() const {
@@ -38,6 +39,7 @@ struct ImplicitOptionsImpl {
 
   std::string type() const;
   ADD_ARG(int, scheme) = 0;
+  ADD_ARG(bool, conservation) = true;
 };
 using ImplicitOptions = std::shared_ptr<ImplicitOptionsImpl>;
 

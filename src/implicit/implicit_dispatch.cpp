@@ -23,17 +23,19 @@ namespace snap {
 // CPU path bit-identical to its previous behavior while honoring the same
 // assemble-then-solve calls.
 void vic_assemble_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
-                              double /*grav*/, int /*dir*/) {}
+                              double /*grav*/, int /*dir*/,
+                              bool /*conservation*/) {}
 
 // On CPU the solve stays fused (vic_solve_partial_cpu does the full backward
 // substitution + MS-VIC redistribution), so the redistribute phase is a no-op.
 // On GPU these are separate kernels (vic_solve_partial does the sweep + column
 // reductions; vic_redistribute_partial does the cell-parallel map).
 void vic_redistribute_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
-                                  double /*grav*/, int /*dir*/) {}
+                                  double /*grav*/, int /*dir*/,
+                                  bool /*conservation*/) {}
 
 void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
-                           int dir) {
+                           int dir, bool conservation) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cpu", [&] {
@@ -60,10 +62,10 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
             auto area = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
             auto vol = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
 
-            vic_solve_partial_impl(du, w, gamma, area, vol, dt, grav, 0,
-                                   nlayer - 1, dir, ny, stride1, stride2,
-                                   first_block, last_block, periodic, a.data(),
-                                   b.data(), c.data(), delta.data());
+            vic_solve_partial_impl(
+                du, w, gamma, area, vol, dt, grav, 0, nlayer - 1, dir, ny,
+                stride1, stride2, first_block, last_block, periodic, a.data(),
+                b.data(), c.data(), delta.data(), conservation);
           }
         },
         grain_size);
@@ -71,7 +73,7 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 }
 
 void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
-                        int dir) {
+                        int dir, bool conservation) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cpu", [&] {
@@ -101,7 +103,7 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
             vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0,
                                 nlayer - 1, dir, ny, stride1, stride2,
                                 first_block, last_block, periodic, a.data(),
-                                b.data(), c.data(), delta.data());
+                                b.data(), c.data(), delta.data(), conservation);
           }
         },
         grain_size);

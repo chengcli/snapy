@@ -113,7 +113,8 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
                                          Eigen::Matrix<T, N, 1>* delta, T* vol,
                                          int il, int iu, int dir, int ny,
                                          int stride1, int stride2,
-                                         bool first_block, bool last_block) {
+                                         bool first_block, bool last_block,
+                                         bool conservation) {
   // LoadCoefficients(a, delta, il, iu);
   // if (!last_block) {
   //   RecvBuffer(delta[iu + 1], tblock);
@@ -159,8 +160,9 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
   }
 
   for (int i = il; i <= iu; ++i) {
-    T structural =
-        sum_a2 > 0 ? W(IDN, i) * a[i](1) * b_dry / sum_a2 : static_cast<T>(0);
+    T structural = conservation && sum_a2 > 0
+                       ? W(IDN, i) * a[i](1) * b_dry / sum_a2
+                       : static_cast<T>(0);
     DU(IDN, i) = DU(IDN, i) + (delta[i](0) - a[i](0)) * a[i](2) + structural;
 
     if constexpr (N == 3) {  // partial matrix
@@ -181,8 +183,9 @@ void DISPATCH_MACRO BackwardSubstitution(T* du, T* w, Eigen::Matrix<T, N, N>* a,
     }
 
     for (int i = il; i <= iu; ++i) {
-      T structural = sum_a2 > 0 ? W(IDN, i) * a[i](1) * b_species / sum_a2
-                                : static_cast<T>(0);
+      T structural = conservation && sum_a2 > 0
+                         ? W(IDN, i) * a[i](1) * b_species / sum_a2
+                         : static_cast<T>(0);
       DU(ICY + n, i) =
           DU(ICY + n, i) + (delta[i](0) - a[i](0)) * W(ICY + n, i) + structural;
     }

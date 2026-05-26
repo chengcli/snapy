@@ -27,7 +27,7 @@ namespace snap {
 // longer runs as a serial per-column loop. Results are bit-identical to the
 // fused assembly that previously lived in vic_solve_partial_cuda.
 void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                               int dir) {
+                               int dir, bool conservation) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cuda", [&]() {
@@ -73,7 +73,8 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // (by vic_assemble_partial). The reduction scalars are stashed in the c buffer
 // (free after ForwardSweep); the per-cell redistribution map is deferred to
 // vic_redistribute_partial so it can run cell-parallel.
-void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
+void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
+                            int dir, bool conservation) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cuda", [&]() {
@@ -105,7 +106,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
           // per-column reduction scalars for the redistribution map.
           vic_backward_reduce(du, w, a, delta, vol,
                               reinterpret_cast<scalar_t*>(c), 0, nlayer - 1,
-                              dir, ny, stride1, stride2);
+                              dir, ny, stride1, stride2, conservation);
         });
   });
 }
@@ -114,7 +115,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav, in
 // parallelized over EVERY cell (column x layer). Reads delta + the reduction
 // scalars stashed in c by vic_solve_partial and writes the final tendencies DU.
 void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
-                                   double grav, int dir) {
+                                   double grav, int dir, bool conservation) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cuda", [&]() {
@@ -146,12 +147,13 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
 
       vic_redistribute_cell(du, w, delta, vol,
                             reinterpret_cast<scalar_t*>(c), i, dir, ny, stride1,
-                            stride2);
+                            stride2, conservation);
     });
   });
 }
 
-void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
+void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
+                         int dir, bool conservation) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
@@ -182,7 +184,7 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav, int d
 
           vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0, nlayer - 1,
                               dir, ny, stride1, stride2, first_block,
-                              last_block, periodic, a, b, c, delta);
+                              last_block, periodic, a, b, c, delta, conservation);
         });
   });
 }

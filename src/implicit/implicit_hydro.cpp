@@ -26,7 +26,10 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
   auto op = ImplicitOptionsImpl::create();
-  op->scheme(node.as<int>());
+  // 4-th bit is conservation scheme or not
+  op->conservation((node.as<int>() >> 4) & 1);
+  // rest of the bits is scheme
+  // op->scheme(node.as<int>() & ~(1 << 4));
   return op;
 }
 
@@ -144,17 +147,20 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   {
     if ((options->scheme() >> 3) & 1) {
       at::native::vic_solve_full(du.device().type(), iter, dt,
-                                 phydro->options->grav()->grav1(), 0);
+                                 phydro->options->grav()->grav1(), 0,
+                                 options->conservation());
     } else {
       // GPU partial-VIC pipeline: assemble coefficients (cell-parallel) ->
       // serial per-column Thomas sweep + reductions -> cell-parallel MS-VIC
       // redistribution map. On CPU, assemble/redistribute are no-ops and
       // vic_solve_partial runs the whole thing fused.
       auto grav1 = phydro->options->grav()->grav1();
-      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0,
+                                       options->conservation());
+      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0,
+                                    options->conservation());
       at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
-                                           0);
+                                           0, options->conservation());
     }
   }
 
