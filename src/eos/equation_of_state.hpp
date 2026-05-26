@@ -103,6 +103,10 @@ class EquationOfStateImpl {
   //!         thermodynamic model).
   virtual double species_cv_ref(int n = 0) const { return 0.; }
 
+  //! \brief Return the additive internal-energy offset carried by conserved
+  //! constituent densities.
+  virtual torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const;
+
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
    * These five abbreviations should be supported:

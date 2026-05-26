@@ -60,8 +60,23 @@ double IdealMoistImpl::species_cv_ref(int n) const {
   return (options->thermo()->cref_R()[n] * Ri).item<double>();
 }
 
+torch::Tensor IdealMoistImpl::internal_energy_offset(
+    torch::Tensor hydro_like) const {
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
+
+  auto offset = hydro_like[IDN] * u0[0];
+  if (ny == 0) return offset;
+
+  std::vector<int64_t> vec(hydro_like.dim(), 1);
+  vec[0] = -1;
+  offset +=
+      (hydro_like.narrow(0, ICY, ny) * u0.narrow(0, 1, ny).view(vec)).sum(0);
+  return offset;
+}
+
 torch::Tensor IdealMoistImpl::compute(std::string ab,
-                                      std::vector<torch::Tensor> const &args) {
+                                      std::vector<torch::Tensor> const& args) {
   if (ab == "W->U") {
     auto w = args[0];
     auto u = args.size() > 1 ? args[1] : torch::empty_like(w);
@@ -108,7 +123,7 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
   }
 }
 
-void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
+void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor& cons) {
   apply_primitive_limiter_(prim);
   auto pcoord = phydro->pmb->pcoord;
 
@@ -139,7 +154,7 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_conserved_limiter_(cons);
 }
 
-void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
+void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor& prim) {
   apply_conserved_limiter_(cons);
   auto pcoord = phydro->pmb->pcoord;
 
@@ -268,7 +283,7 @@ torch::Tensor IdealMoistImpl::_temp2intEng(torch::Tensor cons,
   return ie;
 }
 
-torch::Tensor IdealMoistImpl::f_eps(torch::Tensor const &yfrac) const {
+torch::Tensor IdealMoistImpl::f_eps(torch::Tensor const& yfrac) const {
   int nvapor = pthermo->options->vapor_ids().size() - 1;
   int ncloud = pthermo->options->cloud_ids().size();
 
@@ -283,7 +298,7 @@ torch::Tensor IdealMoistImpl::f_eps(torch::Tensor const &yfrac) const {
          yfrac.narrow(0, nvapor, ncloud).sum(0);
 }
 
-torch::Tensor IdealMoistImpl::f_sig(torch::Tensor const &yfrac) const {
+torch::Tensor IdealMoistImpl::f_sig(torch::Tensor const& yfrac) const {
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
