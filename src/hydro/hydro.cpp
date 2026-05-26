@@ -344,8 +344,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       wi = w;
     }
 
-    // auto du0 = du.clone();
-    _imp.copy_(du);
+    auto du0 = du.clone();
     du[IPR].sub_(peos->internal_energy_offset(du));
 
     torch::Tensor gamma;
@@ -358,9 +357,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     picorr->forward(du, wi, gamma, dt);
     du[IPR].add_(peos->internal_energy_offset(du));
 
-    //_imp.copy_(du);
-    //_imp.sub_(du0);
-    _imp = du - _imp;
+    _imp.copy_(du);
+    _imp.sub_(du0);
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
