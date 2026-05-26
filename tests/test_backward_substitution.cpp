@@ -198,22 +198,26 @@ TEST(backward_substitution, can_disable_conservation_terms) {
 }
 
 TEST(implicit_options, parses_conservation_runtime_option) {
-  auto legacy = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("1"));
-  ASSERT_TRUE(legacy);
-  EXPECT_EQ(legacy->scheme(), 1);
-  EXPECT_TRUE(legacy->conservation());
+  auto unconserved = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("1"));
+  ASSERT_TRUE(unconserved);
+  EXPECT_EQ(unconserved->scheme(), 1);
+  EXPECT_EQ(unconserved->scheme_id(), 1);
+  EXPECT_FALSE(unconserved->conservation());
 
-  auto configured = snap::ImplicitOptionsImpl::from_yaml(
-      YAML::Load("{scheme: 1, conservation: false}"));
-  ASSERT_TRUE(configured);
-  EXPECT_EQ(configured->scheme(), 1);
-  EXPECT_FALSE(configured->conservation());
+  auto conserved_partial =
+      snap::ImplicitOptionsImpl::from_yaml(YAML::Load("17"));
+  ASSERT_TRUE(conserved_partial);
+  EXPECT_EQ(conserved_partial->scheme(), 17);
+  EXPECT_EQ(conserved_partial->scheme_id(), 1);
+  EXPECT_TRUE(conserved_partial->conservation());
 
-  auto legacy_key = snap::ImplicitOptionsImpl::from_yaml(
-      YAML::Load("{scheme: 1, structural-correction: false}"));
-  ASSERT_TRUE(legacy_key);
-  EXPECT_EQ(legacy_key->scheme(), 1);
-  EXPECT_FALSE(legacy_key->conservation());
+  auto conserved_full = snap::ImplicitOptionsImpl::from_yaml(YAML::Load("25"));
+  ASSERT_TRUE(conserved_full);
+  EXPECT_EQ(conserved_full->scheme(), 25);
+  EXPECT_EQ(conserved_full->scheme_id(), 9);
+  EXPECT_TRUE(conserved_full->conservation());
+  EXPECT_EQ(conserved_full->size(), 5);
+  EXPECT_EQ(conserved_full->type(), "vic-full");
 }
 
 int main(int argc, char** argv) {

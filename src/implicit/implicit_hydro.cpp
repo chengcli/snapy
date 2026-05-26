@@ -26,15 +26,12 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
   auto op = ImplicitOptionsImpl::create();
-  // 4-th bit is conservation scheme or not
-  op->conservation((node.as<int>() >> 4) & 1);
-  // rest of the bits is scheme
-  // op->scheme(node.as<int>() & ~(1 << 4));
+  op->scheme(node.as<int>());
   return op;
 }
 
 std::string ImplicitOptionsImpl::type() const {
-  switch (scheme()) {
+  switch (scheme_id()) {
     case 0:
       return "none";
       break;
@@ -98,7 +95,7 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
-  if (options->scheme() == 0) {  // null operation
+  if (options->scheme_id() == 0) {  // null operation
     return torch::zeros_like(du);
   }
 
@@ -145,7 +142,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }();
 
   {
-    if ((options->scheme() >> 3) & 1) {
+    if ((options->scheme_id() >> 3) & 1) {
       at::native::vic_solve_full(du.device().type(), iter, dt,
                                  phydro->options->grav()->grav1(), 0,
                                  options->conservation());
