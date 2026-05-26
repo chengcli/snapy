@@ -23,7 +23,8 @@ namespace snap {
 // with vic_solve_partial_impl() so the GPU (split) and CPU (fused) paths agree.
 //
 // a, b, c point to the start of the column's coefficient arrays (indexed [i]),
-// matching the layout used by ForwardSweep/BackwardSubstitution.
+// matching the layout used by ForwardSweep and the split redistribution
+// helpers.
 template <typename T>
 void DISPATCH_MACRO vic_assemble_partial_impl(
     Eigen::Matrix<T, 3, 3>* a, Eigen::Matrix<T, 3, 3>* b,

@@ -11,31 +11,55 @@
 #include <torch/torch.h>
 
 // snap
+#include "forward_sweep_impl.h"
 #include "implicit_dispatch.hpp"
+#include "vic_assemble_partial_impl.h"
+#include "vic_redistribute_impl.h"
 #include "vic_solve_full_impl.h"
-#include "vic_solve_partial_impl.h"
 
 namespace snap {
 
-// On CPU the partial solve stays fused (assembly + sweep in
-// vic_solve_partial_cpu below, using thread-local scratch), so the assemble
-// phase is a no-op. The GPU path splits these into two kernels; this keeps the
-// CPU path bit-identical to its previous behavior while honoring the same
-// assemble-then-solve calls.
-void vic_assemble_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
-                              double /*grav*/, int /*dir*/,
-                              bool /*conservation*/) {}
+void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
+                              int dir) {
+  int grain_size = iter.numel() / at::get_num_threads();
 
-// On CPU the solve stays fused (vic_solve_partial_cpu does the full backward
-// substitution + MS-VIC redistribution), so the redistribute phase is a no-op.
-// On GPU these are separate kernels (vic_solve_partial does the sweep + column
-// reductions; vic_redistribute_partial does the cell-parallel map).
-void vic_redistribute_partial_cpu(at::TensorIterator& /*iter*/, double /*dt*/,
-                                  double /*grav*/, int /*dir*/,
-                                  bool /*conservation*/) {}
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cpu", [&] {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+    bool first_block = true;
+    bool last_block = true;
+
+    using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
+
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int64_t col = 0; col < n; ++col) {
+            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto gamma =
+                reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
+            auto area = reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
+            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
+            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+
+            for (int i = 0; i < nlayer; ++i) {
+              vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, i, 0,
+                                        nlayer - 1, dt, grav, dir, ny, stride1,
+                                        stride2, first_block, last_block);
+            }
+          }
+        },
+        grain_size);
+  });
+}
 
 void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
-                           int dir, bool conservation) {
+                           int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cpu", [&] {
@@ -47,25 +71,59 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
     int ny = nhydro - ICY;
     bool first_block = true;
     bool last_block = true;
-    bool periodic = false;
+
+    using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
+    using Vector = Eigen::Matrix<scalar_t, 3, 1>;
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
-          std::vector<Eigen::Matrix<scalar_t, 3, 3>> a(nlayer), b(nlayer),
-              c(nlayer);
-          std::vector<Eigen::Matrix<scalar_t, 3, 1>> delta(nlayer);
+          for (int64_t col = 0; col < n; ++col) {
+            auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
+            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
 
-          for (int i = 0; i < n; i++) {
-            auto du = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            auto gamma = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-            auto area = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
+            ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
+                         stride1, stride2, first_block, last_block);
+            vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0,
+                                nlayer - 1, dir, ny, stride1, stride2);
+          }
+        },
+        grain_size);
+  });
+}
 
-            vic_solve_partial_impl(
-                du, w, gamma, area, vol, dt, grav, 0, nlayer - 1, dir, ny,
-                stride1, stride2, first_block, last_block, periodic, a.data(),
-                b.data(), c.data(), delta.data(), conservation);
+void vic_redistribute_partial_cpu(at::TensorIterator& iter, double /*dt*/,
+                                  double /*grav*/, int dir) {
+  int grain_size = iter.numel() / at::get_num_threads();
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cpu", [&] {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+
+    using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
+    using Vector = Eigen::Matrix<scalar_t, 3, 1>;
+
+    iter.for_each(
+        [&](char** data, const int64_t* strides, int64_t n) {
+          for (int64_t col = 0; col < n; ++col) {
+            auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
+
+            for (int i = 0; i < nlayer; ++i) {
+              vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
+                                    stride1, stride2);
+            }
           }
         },
         grain_size);
@@ -73,7 +131,7 @@ void vic_solve_partial_cpu(at::TensorIterator& iter, double dt, double grav,
 }
 
 void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
-                        int dir, bool conservation) {
+                        int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cpu", [&] {
@@ -87,23 +145,34 @@ void vic_solve_full_cpu(at::TensorIterator& iter, double dt, double grav,
     bool last_block = true;
     bool periodic = false;
 
+    using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
+    using Vector = Eigen::Matrix<scalar_t, 5, 1>;
+
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
-          std::vector<Eigen::Matrix<scalar_t, 5, 5>> a(nlayer), b(nlayer),
-              c(nlayer);
-          std::vector<Eigen::Matrix<scalar_t, 5, 1>> delta(nlayer);
+          for (int64_t col = 0; col < n; ++col) {
+            auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
+            auto w = reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
+            auto gamma =
+                reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
+            auto area = reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
+            auto vol = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
+            auto a = reinterpret_cast<Matrix*>(data[5] + col * strides[5]);
+            auto b = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
+            auto c = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
+            auto delta = reinterpret_cast<Vector*>(data[8] + col * strides[8]);
 
-          for (int i = 0; i < n; i++) {
-            auto du = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            auto gamma = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-            auto area = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-            auto vol = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
-
-            vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0,
-                                nlayer - 1, dir, ny, stride1, stride2,
-                                first_block, last_block, periodic, a.data(),
-                                b.data(), c.data(), delta.data(), conservation);
+            vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                   nlayer - 1, dir, ny, stride1, stride2,
+                                   first_block, last_block, periodic, a, b, c);
+            ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
+                         stride1, stride2, first_block, last_block);
+            vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0,
+                                nlayer - 1, dir, ny, stride1, stride2);
+            for (int i = 0; i < nlayer; ++i) {
+              vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
+                                    stride1, stride2);
+            }
           }
         },
         grain_size);

@@ -5,7 +5,6 @@
 
 // snap
 #include "flux_decomposition_impl.h"
-#include "forward_backward_impl.h"
 
 #define GAMMA(n) gamma[(n) * stride2]
 #define AREA(n) area[(n) * stride2]
@@ -14,12 +13,11 @@
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO vic_solve_full_impl(
+void DISPATCH_MACRO vic_assemble_full_impl(
     T* du, T* w, T* gamma, T* area, T* vol, double dt, double grav, int is,
     int ie, int dir, int ny, int stride1, int stride2, bool first_block,
     bool last_block, bool periodic, Eigen::Matrix<T, 5, 5>* a,
-    Eigen::Matrix<T, 5, 5>* b, Eigen::Matrix<T, 5, 5>* c,
-    Eigen::Matrix<T, 5, 1>* delta, bool conservation = true) {
+    Eigen::Matrix<T, 5, 5>* b, Eigen::Matrix<T, 5, 5>* c) {
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -105,21 +103,6 @@ void DISPATCH_MACRO vic_solve_full_impl(
   // 5. fix boundary condition
   if (first_block && !periodic) a[is] += b[is] * Bnd.asDiagonal();
   if (last_block && !periodic) a[ie] += c[ie] * Bnd.asDiagonal();
-
-  // 6. solve tridiagonal system
-  if (periodic) {
-    // PeriodicForwardSweep(a, b, c, corr, dt, is, ie);
-  } else {
-    ForwardSweep(a, b, c, delta, du, dt, is, ie, dir, ny, stride1, stride2,
-                 first_block, last_block);
-  }
-
-  if (periodic) {
-    // PeriodicBackwardSubstitution(a, c, delta, is, ie);
-  } else {
-    BackwardSubstitution(du, w, a, delta, vol, is, ie, dir, ny, stride1,
-                         stride2, first_block, last_block, conservation);
-  }
 }
 
 }  // namespace snap

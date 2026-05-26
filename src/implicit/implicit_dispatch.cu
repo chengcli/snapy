@@ -12,12 +12,11 @@
 #include <snap/utils/cuda_utils.h>
 #include <snap/utils/loops.cuh>
 
-#include "forward_backward_impl.h"
+#include "forward_sweep_impl.h"
 #include "implicit_dispatch.hpp"
 #include "vic_assemble_partial_impl.h"
 #include "vic_redistribute_impl.h"
 #include "vic_solve_full_impl.h"
-#include "vic_solve_partial_impl.h"
 
 namespace snap {
 
@@ -27,7 +26,7 @@ namespace snap {
 // longer runs as a serial per-column loop. Results are bit-identical to the
 // fused assembly that previously lived in vic_solve_partial_cuda.
 void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                               int dir, bool conservation) {
+                               int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cuda", [&]() {
@@ -68,13 +67,13 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 }
 
 // Phase 2 of the partial VIC solve: the serial per-column block-Thomas sweep
-// (ForwardSweep) plus the backward substitution and per-column MS-VIC reduction
+// (ForwardSweep) plus the per-column MS-VIC reduction
 // sums (vic_backward_reduce). Coefficients a, b, c are assumed already assembled
 // (by vic_assemble_partial). The reduction scalars are stashed in the c buffer
 // (free after ForwardSweep); the per-cell redistribution map is deferred to
 // vic_redistribute_partial so it can run cell-parallel.
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                            int dir, bool conservation) {
+                            int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cuda", [&]() {
@@ -104,9 +103,8 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
                        stride2, first_block, last_block);
           // c is dead after ForwardSweep; reuse its column memory to stash the
           // per-column reduction scalars for the redistribution map.
-          vic_backward_reduce(du, w, a, delta, vol,
-                              reinterpret_cast<scalar_t*>(c), 0, nlayer - 1,
-                              dir, ny, stride1, stride2, conservation);
+          vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
+                              dir, ny, stride1, stride2);
         });
   });
 }
@@ -115,7 +113,7 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // parallelized over EVERY cell (column x layer). Reads delta + the reduction
 // scalars stashed in c by vic_solve_partial and writes the final tendencies DU.
 void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
-                                   double grav, int dir, bool conservation) {
+                                   double grav, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_partial_cuda", [&]() {
@@ -145,15 +143,14 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
       auto c = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
       auto delta = reinterpret_cast<Vector *>(data[8] + offsets[8]);
 
-      vic_redistribute_cell(du, w, delta, vol,
-                            reinterpret_cast<scalar_t*>(c), i, dir, ny, stride1,
-                            stride2, conservation);
+      vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
+                            stride1, stride2);
     });
   });
 }
 
 void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
-                         int dir, bool conservation) {
+                         int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
@@ -182,9 +179,20 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
           auto c = reinterpret_cast<Matrix*>(data[7] + strides[7]);
           auto delta = reinterpret_cast<Vector*>(data[8] + strides[8]);
 
-          vic_solve_full_impl(du, w, gamma, area, vol, dt, grav, 0, nlayer - 1,
-                              dir, ny, stride1, stride2, first_block,
-                              last_block, periodic, a, b, c, delta, conservation);
+          // Mirror the split CUDA partial-VIC path: assemble the full-VIC
+          // coefficients, run the column solve, then reuse the c buffer as
+          // per-column scratch for the exact MS-VIC redistribution.
+          vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                 nlayer - 1, dir, ny, stride1, stride2,
+                                 first_block, last_block, periodic, a, b, c);
+          ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
+                       stride2, first_block, last_block);
+          vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
+                              dir, ny, stride1, stride2);
+          for (int i = 0; i < nlayer; ++i) {
+            vic_redistribute_cell(du, w, delta, vol, c[0].data(), i, dir, ny,
+                                  stride1, stride2);
+          }
         });
   });
 }

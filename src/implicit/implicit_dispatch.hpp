@@ -7,7 +7,7 @@
 namespace at::native {
 
 using vic_solve_fn = void (*)(at::TensorIterator& iter, double dt, double grav,
-                              int dir, bool conservation);
+                              int dir);
 
 DECLARE_DISPATCH(vic_solve_fn, vic_assemble_partial);
 DECLARE_DISPATCH(vic_solve_fn, vic_solve_partial);

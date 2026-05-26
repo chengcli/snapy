@@ -7,7 +7,7 @@
 #include <configure.h>
 
 // snap
-#include "forward_backward_impl.h"
+#include "forward_sweep_impl.h"
 
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
@@ -15,10 +15,10 @@
 
 namespace snap {
 
-// Split form of the MS-VIC BackwardSubstitution (forward_backward_impl.h) for
-// the GPU. The serial work (backward substitution + the per-column reduction
-// sums) stays per-column here; the per-cell redistribution map moves to
-// vic_redistribute_cell() so it can run as a cell-parallel kernel.
+// Split form of the MS-VIC redistribution around ForwardSweep
+// (forward_sweep_impl.h). The serial work (backward substitution + the
+// per-column reduction sums) stays per-column here; the per-cell redistribution
+// map moves to vic_redistribute_cell() so it can run as a cell-parallel kernel.
 //
 // `scratch` is the column's reduction storage. scratch[0]=sum_k A_k^2,
 // scratch[1]=B_dry, scratch[2+n]=B_species[n]. DU is NOT written here.
@@ -26,20 +26,13 @@ template <typename T, int N>
 void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
                                         Eigen::Matrix<T, N, 1>* delta, T* vol,
                                         T* scratch, int il, int iu, int dir,
-                                        int ny, int stride1, int stride2,
-                                        bool conservation) {
+                                        int ny, int stride1, int stride2) {
   // backward substitution
   for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
 
   // Per-column reduction sums for the exact MS-VIC formula.
   T sum_a2 = 0;
   T b_dry = 0;
-  if (!conservation) {
-    scratch[0] = 0;
-    scratch[1] = 0;
-    for (int n = 0; n < ny; ++n) scratch[2 + n] = 0;
-    return;
-  }
 
   for (int i = il; i <= iu; ++i) {
     T explicit_total = DU(IDN, i);
@@ -73,8 +66,7 @@ template <typename T, int N>
 void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
                                           Eigen::Matrix<T, N, 1>* delta, T* vol,
                                           T const* scratch, int i, int dir,
-                                          int ny, int stride1, int stride2,
-                                          bool conservation) {
+                                          int ny, int stride1, int stride2) {
   T sum_a2 = scratch[0];
 
   T a_i = W(IDN, i) * VOL(i);
@@ -84,9 +76,7 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
   T explicit_total = DU(IDN, i);
   for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
 
-  T dry_structural = conservation && sum_a2 > 0
-                         ? W(IDN, i) * a_i * scratch[1] / sum_a2
-                         : static_cast<T>(0);
+  T dry_structural = W(IDN, i) * a_i * scratch[1] / sum_a2;
   DU(IDN, i) =
       DU(IDN, i) + (delta[i](0) - explicit_total) * dryfrac + dry_structural;
 
@@ -101,9 +91,8 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
   }
 
   for (int n = 0; n < ny; ++n) {
-    T structural = conservation && sum_a2 > 0
-                       ? W(IDN, i) * a_i * scratch[2 + n] / sum_a2
-                       : static_cast<T>(0);
+    // T structural = W(IDN, i) * a_i * scratch[2 + n] / sum_a2;
+    T structural = 0.;
     DU(ICY + n, i) = DU(ICY + n, i) +
                      (delta[i](0) - explicit_total) * W(ICY + n, i) +
                      structural;

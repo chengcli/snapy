@@ -14,8 +14,6 @@
 namespace snap {
 
 struct ImplicitOptionsImpl {
-  static constexpr int kConservationBit = 1 << 4;
-
   static std::shared_ptr<ImplicitOptionsImpl> create() {
     return std::make_shared<ImplicitOptionsImpl>();
   }
@@ -27,15 +25,11 @@ struct ImplicitOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- implicit hydro options --\n";
     os << "* type = " << type() << "\n"
-       << "* scheme = " << scheme_id() << "\n"
-       << "* conservation = " << (conservation() ? "true" : "false") << "\n";
+       << "* scheme = " << scheme() << "\n";
   }
 
-  int scheme_id() const { return scheme() & ~kConservationBit; }
-  bool conservation() const { return (scheme() & kConservationBit) != 0; }
-
   int size() const {
-    if ((scheme_id() >> 3) & 1) {  // full
+    if ((scheme() >> 3) & 1) {  // full
       return 5;
     } else {
       return 3;

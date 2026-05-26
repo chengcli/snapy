@@ -31,7 +31,7 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
 }
 
 std::string ImplicitOptionsImpl::type() const {
-  switch (scheme_id()) {
+  switch (scheme()) {
     case 0:
       return "none";
       break;
@@ -95,7 +95,7 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
-  if (options->scheme_id() == 0) {  // null operation
+  if (options->scheme() == 0) {  // null operation
     return torch::zeros_like(du);
   }
 
@@ -142,22 +142,19 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }();
 
   {
-    if ((options->scheme_id() >> 3) & 1) {
+    if ((options->scheme() >> 3) & 1) {
       at::native::vic_solve_full(du.device().type(), iter, dt,
-                                 phydro->options->grav()->grav1(), 0,
-                                 options->conservation());
+                                 phydro->options->grav()->grav1(), 0);
     } else {
       // GPU partial-VIC pipeline: assemble coefficients (cell-parallel) ->
       // serial per-column Thomas sweep + reductions -> cell-parallel MS-VIC
       // redistribution map. On CPU, assemble/redistribute are no-ops and
       // vic_solve_partial runs the whole thing fused.
       auto grav1 = phydro->options->grav()->grav1();
-      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0,
-                                       options->conservation());
-      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0,
-                                    options->conservation());
+      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
       at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
-                                           0, options->conservation());
+                                           0);
     }
   }
 
