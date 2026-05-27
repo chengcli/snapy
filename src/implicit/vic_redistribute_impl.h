@@ -94,13 +94,13 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w, T* mass_fix,
     DU(IPR, i) = delta[i](4);
   }
 
-  for (int n = 0; n < nvapor; ++n) {
+  /*for (int n = 0; n < nvapor; ++n) {
     T structural = W(IDN, i) * a_i * scratch[2 + n] / sum_a2;
     DU(ICY + n, i) =
         DU(ICY + n, i) + diffusion_fix * W(ICY + n, i) + structural;
-  }
+  }*/
 
-  for (int n = nvapor; n < ny; ++n) {
+  for (int n = 0; n < ny; ++n) {
     DU(ICY + n, i) = DU(ICY + n, i) + diffusion_fix * W(ICY + n, i);
   }
 }
