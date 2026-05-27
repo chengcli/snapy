@@ -155,19 +155,17 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }();
 
   {
+    auto grav1 = phydro->options->grav()->grav1();
     if ((options->scheme() >> 3) & 1) {
-      at::native::vic_solve_full(du.device().type(), iter, dt,
-                                 phydro->options->grav()->grav1(), 0, nvapor);
+      at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0,
+                                        nvapor);
     } else {
-      // GPU partial-VIC pipeline: assemble coefficients (cell-parallel) ->
-      // serial per-column Thomas sweep + reductions -> cell-parallel MS-VIC
-      // redistribution map. On CPU, assemble/redistribute are no-ops and
-      // vic_solve_partial runs the whole thing fused.
-      auto grav1 = phydro->options->grav()->grav1();
-      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0,
-                                       nvapor);
-      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0,
-                                    nvapor);
+      // Match the full-VIC pipeline: assemble coefficients, run the column
+      // solve + reductions, then apply the per-cell redistribution map.
+      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
+      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
       at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
                                            0, nvapor);
     }

@@ -14,9 +14,9 @@
 
 #include "forward_sweep_impl.h"
 #include "implicit_dispatch.hpp"
+#include "vic_assemble_full_impl.h"
 #include "vic_assemble_partial_impl.h"
 #include "vic_redistribute_impl.h"
-#include "vic_assemble_full_impl.h"
 
 namespace snap {
 
@@ -26,7 +26,7 @@ namespace snap {
 // longer runs as a serial per-column loop. Results are bit-identical to the
 // fused assembly that previously lived in vic_solve_partial_cuda.
 void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                               int dir, int /*nvapor*/) {
+                               int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_partial_cuda", [&]() {
@@ -66,6 +66,41 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
   });
 }
 
+void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
+                            int dir) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_assemble_full_cuda", [&]() {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+    bool first_block = true;
+    bool last_block = true;
+    bool periodic = false;
+
+    using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
+
+    native::gpu_kernel<10>(
+        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
+          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto gamma = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto area = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
+
+          vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
+                                 nlayer - 1, dir, ny, stride1, stride2,
+                                 first_block, last_block, periodic, a, b, c);
+        });
+  });
+}
+
 // Phase 2 of the partial VIC solve: the serial per-column block-Thomas sweep
 // (ForwardSweep) plus the per-column MS-VIC reduction
 // sums (vic_backward_reduce). Coefficients a, b, c are assumed already assembled
@@ -73,7 +108,7 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
 // (free after ForwardSweep); the per-cell redistribution map is deferred to
 // vic_redistribute_partial so it can run cell-parallel.
 void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
-                            int dir, int /*nvapor*/) {
+                            int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_partial_cuda", [&]() {
@@ -103,6 +138,41 @@ void vic_solve_partial_cuda(at::TensorIterator &iter, double dt, double grav,
                        stride2, first_block, last_block);
           // c is dead after ForwardSweep; reuse its column memory to stash the
           // per-column reduction scalars for the redistribution map.
+          vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
+                              dir, ny, stride1, stride2);
+        });
+  });
+}
+
+void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
+                         int dir) {
+  at::cuda::CUDAGuard device_guard(iter.device());
+
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
+    auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
+    auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
+
+    int ny = nhydro - ICY;
+    bool first_block = true;
+    bool last_block = true;
+
+    using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
+    using Vector = Eigen::Matrix<scalar_t, 5, 1>;
+
+    native::gpu_kernel<10>(
+        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
+          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
+          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
+          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
+          auto delta = reinterpret_cast<Vector*>(data[9] + strides[9]);
+
+          ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
+                       stride2, first_block, last_block);
           vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
                               dir, ny, stride1, stride2);
         });
@@ -150,20 +220,17 @@ void vic_redistribute_partial_cuda(at::TensorIterator &iter, double dt,
   });
 }
 
-void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
-                         int dir, int nvapor) {
+void vic_redistribute_full_cuda(at::TensorIterator &iter, double dt,
+                                double grav, int dir, int nvapor) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
-  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_solve_full_cuda", [&]() {
+  AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_full_cuda", [&]() {
     auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
     auto nlayer = at::native::ensure_nonempty_size(iter.output(), 3);
     auto stride1 = at::native::ensure_nonempty_stride(iter.output(), 0);
     auto stride2 = at::native::ensure_nonempty_stride(iter.output(), 3);
 
     int ny = nhydro - ICY;
-    bool first_block = true;
-    bool last_block = true;
-    bool periodic = false;
 
     using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
     using Vector = Eigen::Matrix<scalar_t, 5, 1>;
@@ -173,24 +240,10 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
           auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto mass_fix = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto gamma = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto area = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
           auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
-          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
-          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
           auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
           auto delta = reinterpret_cast<Vector*>(data[9] + strides[9]);
 
-          // Mirror the split CUDA partial-VIC path: assemble the full-VIC
-          // coefficients, run the column solve, then reuse the c buffer as
-          // per-column scratch for the exact MS-VIC redistribution.
-          vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
-                                 nlayer - 1, dir, ny, stride1, stride2,
-                                 first_block, last_block, periodic, a, b, c);
-          ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
-                       stride2, first_block, last_block);
-          vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
-                              dir, ny, stride1, stride2);
           for (int i = 0; i < nlayer; ++i) {
             vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
                                   dir, ny, nvapor, stride1, stride2);
@@ -204,9 +257,12 @@ void vic_solve_full_cuda(at::TensorIterator &iter, double dt, double grav,
 namespace at::native {
 
 REGISTER_CUDA_DISPATCH(vic_assemble_partial, &snap::vic_assemble_partial_cuda);
+REGISTER_CUDA_DISPATCH(vic_assemble_full, &snap::vic_assemble_full_cuda);
 REGISTER_CUDA_DISPATCH(vic_solve_partial, &snap::vic_solve_partial_cuda);
+REGISTER_CUDA_DISPATCH(vic_solve_full, &snap::vic_solve_full_cuda);
 REGISTER_CUDA_DISPATCH(vic_redistribute_partial,
                        &snap::vic_redistribute_partial_cuda);
-REGISTER_CUDA_DISPATCH(vic_solve_full, &snap::vic_solve_full_cuda);
+REGISTER_CUDA_DISPATCH(vic_redistribute_full,
+                       &snap::vic_redistribute_full_cuda);
 
 }  // namespace at::native
