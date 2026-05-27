@@ -11,6 +11,7 @@
 
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
+#define MASS(n, i) mass_fix[(n) * stride1 + (i) * stride2]
 #define VOL(n) vol[(n) * stride2]
 
 namespace snap {
@@ -63,10 +64,11 @@ void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
 // Per-cell MS-VIC redistribution map. Reads delta, W, VOL and the per-column
 // reduction scalars from `scratch`, writes the final tendencies DU for cell i.
 template <typename T, int N>
-void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
+void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w, T* mass_fix,
                                           Eigen::Matrix<T, N, 1>* delta, T* vol,
                                           T const* scratch, int i, int dir,
-                                          int ny, int stride1, int stride2) {
+                                          int ny, int nvapor, int stride1,
+                                          int stride2) {
   T sum_a2 = scratch[0];
 
   T a_i = W(IDN, i) * VOL(i);
@@ -76,9 +78,11 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
   T explicit_total = DU(IDN, i);
   for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
 
+  T diffusion_fix = delta[i](0) - explicit_total;
+  MASS(IDN, i) = diffusion_fix;
+
   T dry_structural = W(IDN, i) * a_i * scratch[1] / sum_a2;
-  DU(IDN, i) =
-      DU(IDN, i) + (delta[i](0) - explicit_total) * dryfrac + dry_structural;
+  DU(IDN, i) = DU(IDN, i) + diffusion_fix * dryfrac + dry_structural;
 
   if constexpr (N == 3) {  // partial matrix
     DU(IVX + dir, i) = delta[i](1);
@@ -90,12 +94,14 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
     DU(IPR, i) = delta[i](4);
   }
 
+  /*for (int n = 0; n < nvapor; ++n) {
+    T structural = W(IDN, i) * a_i * scratch[2 + n] / sum_a2;
+    DU(ICY + n, i) =
+        DU(ICY + n, i) + diffusion_fix * W(ICY + n, i) + structural;
+  }*/
+
   for (int n = 0; n < ny; ++n) {
-    // T structural = W(IDN, i) * a_i * scratch[2 + n] / sum_a2;
-    T structural = 0.;
-    DU(ICY + n, i) = DU(ICY + n, i) +
-                     (delta[i](0) - explicit_total) * W(ICY + n, i) +
-                     structural;
+    DU(ICY + n, i) = DU(ICY + n, i) + diffusion_fix * W(ICY + n, i);
   }
 }
 
@@ -103,4 +109,5 @@ void DISPATCH_MACRO vic_redistribute_cell(T* du, T* w,
 
 #undef DU
 #undef W
+#undef MASS
 #undef VOL

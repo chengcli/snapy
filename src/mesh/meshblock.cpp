@@ -581,6 +581,11 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
   // (3.B) scalar forward
   if (pscalar->nvar() > 0) {
     fut_scalar_ds = pscalar->forward(dt, scalar_s, vars);
+    auto mass_corr = phydro->implicit_mass_correction();
+    if (mass_corr.defined() && mass_corr.numel() > 0 &&
+        vars.count("scalar_r")) {
+      fut_scalar_ds.add_(mass_corr[IDN].unsqueeze(0) * vars.at("scalar_r"));
+    }
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
@@ -889,7 +894,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
     SINFO() << std::endl << "Terminating abnormally" << std::endl;
   }
 
-  SINFO() << "time=" << time << " cycle=" << cycle - 1 << std::endl;
+  SINFO() << "time=" << time << " cycle=" << cycle << std::endl;
   SINFO() << "tlim=" << pintg->options->tlim()
           << " nlim=" << pintg->options->nlim() << std::endl;
 

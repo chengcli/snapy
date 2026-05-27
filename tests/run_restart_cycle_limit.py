@@ -166,6 +166,9 @@ def main() -> int:
   base_term = parse_termination(base_log)
   restart_term = parse_termination(restart_log)
   assert_close(restart_term[0], base_term[0], "termination time", atol=1.0e-9)
+  if base_term[1] != 120:
+    raise AssertionError(
+        f"base termination cycle mismatch: expected 120, got {base_term[1]}")
   if restart_term[1] != base_term[1]:
     raise AssertionError(
         f"termination cycle mismatch: expected {base_term[1]}, got {restart_term[1]}")

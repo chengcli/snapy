@@ -61,7 +61,8 @@ int main(int argc, char** argv) {
   double current_time = 0.;
   block->make_outputs(vars, current_time);
 
-  while (!block->pintg->stop(block->cycle++, current_time)) {
+  while (!block->pintg->stop(block->cycle, current_time)) {
+    ++block->cycle;
     auto dt = block->max_time_step(vars);
     block->print_cycle_info(vars, current_time, dt);
 

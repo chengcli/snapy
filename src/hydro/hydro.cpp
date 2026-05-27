@@ -371,6 +371,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   return du;
 }
 
+torch::Tensor HydroImpl::implicit_mass_correction() const {
+  return picorr ? picorr->mass_correction() : torch::Tensor();
+}
+
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
                                              torch::nn::Module* p,
                                              std::string const& name) {

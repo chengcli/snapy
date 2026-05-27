@@ -75,10 +75,12 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,
                         double dt);
 
+  torch::Tensor mass_correction() const { return _mass_corr; }
+
  private:
   void ensure_workspace(torch::Tensor const& w);
 
-  torch::Tensor _a, _b, _c, _delta, _du0, _corr;
+  torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr;
 };
 TORCH_MODULE(ImplicitHydro);
 

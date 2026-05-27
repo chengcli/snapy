@@ -152,7 +152,10 @@ int main(int argc, char** argv) {
     }
 
     int redo = mesh->check_redo(vars);
-    if (redo > 0) continue;
+    if (redo > 0) {
+      cycle = mesh->blocks.front()->cycle;
+      continue;
+    }
     if (redo < 0) break;
 
     current_time += dt;
