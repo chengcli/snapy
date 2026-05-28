@@ -37,10 +37,12 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int nvar,
     scoeff[i] = coeff[i];
   }
 
-  // drop last few threads
-  if (id > nt - N) return;
+  bool active = id <= nt - N;
 
   __syncthreads();
+
+  // drop last few threads
+  if (!active) return;
 
   // calculation
   for (int j = 0; j < nvar; ++j) {
@@ -78,10 +80,12 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int nvar,
     scoeff[i] = coeff[i];
   }
 
-  // drop last few threads
-  if (id > nt - 3) return;
+  bool active = id <= nt - 3;
 
   __syncthreads();
+
+  // drop last few threads
+  if (!active) return;
 
   // calculation
   T *c1 = scoeff;
@@ -141,10 +145,12 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
     scoeff[i] = coeff[i];
   }
 
-  // drop last few threads
-  if (id > nt - 5) return;
+  bool active = id <= nt - 5;
 
   __syncthreads();
+
+  // drop last few threads
+  if (!active) return;
 
   // first thread print shared memory array
   // if (id == 0) {
