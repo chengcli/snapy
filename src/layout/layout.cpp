@@ -608,7 +608,6 @@ void LayoutImpl::launch_exchange(
         state.error = nullptr;
         state.works_by_block.clear();
         state.generation += 1;
-        g_nccl_launch_states.erase(key);
         g_local_exchange_cv.notify_all();
       } else {
         g_local_exchange_cv.wait(
@@ -617,7 +616,8 @@ void LayoutImpl::launch_exchange(
       std::rethrow_exception(error);
     }
 
-    works = state.works_by_block[my_index];
+    auto& block_works = state.works_by_block[my_index];
+    works.insert(works.end(), block_works.begin(), block_works.end());
     state.released -= 1;
     if (state.released == 0) {
       state.arrived = 0;
@@ -625,7 +625,6 @@ void LayoutImpl::launch_exchange(
       state.error = nullptr;
       state.works_by_block.clear();
       state.generation += 1;
-      g_nccl_launch_states.erase(key);
       g_local_exchange_cv.notify_all();
     } else {
       g_local_exchange_cv.wait(
