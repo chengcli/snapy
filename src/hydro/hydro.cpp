@@ -266,16 +266,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   if (playout->options->type() == "cubed-sphere") {
-    if (u.size(DIM2) > 1) {
+    bool exchange_dim2 = u.size(DIM2) > 1;
+    bool exchange_dim3 = u.size(DIM3) > 1;
+    bool combine_nccl_dims = playout->options->backend() == "nccl" &&
+                             playout->options->blocks_per_process() > 1 &&
+                             exchange_dim2 && exchange_dim3;
+
+    if (combine_nccl_dims) {
+      pmb->launch_exchange(sync_opts.dim(0), works);
+    } else if (exchange_dim2) {
       pmb->launch_exchange(sync_opts.dim(DIM2), works);
     }
-    if (u.size(DIM3) > 1) {
+    if (!combine_nccl_dims && exchange_dim3) {
       pmb->launch_exchange(sync_opts.dim(DIM3), works);
     }
-    if (u.size(DIM2) > 1) {
+    if (exchange_dim2) {
       pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works);
     }
-    if (u.size(DIM3) > 1) {
+    if (exchange_dim3) {
       pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works);
     }
   }
