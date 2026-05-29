@@ -563,10 +563,6 @@ void LayoutImpl::launch_exchange(
     std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
   _prepare_local_exchange(pmb, opts);
 
-  if (options->process_world_size() <= 1) {
-    return;
-  }
-
   if (options->backend() == "nccl" && options->blocks_per_process() > 1 &&
       options->type() == "cubed-sphere") {
     auto key = make_local_exchange_key(*this, opts);
