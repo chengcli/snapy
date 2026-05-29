@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
     job.get();
   }
   if (mesh->blocks.front()->get_layout()->has_process_group()) {
-    mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
+    mesh->blocks.front()->get_layout()->comm->barrier();
   }
 
   bool ok = true;
@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
   ok = ok && (saw_remote_neighbor == expect_remote);
 
   if (mesh->blocks.front()->get_layout()->has_process_group()) {
-    mesh->blocks.front()->get_layout()->comm->pg->barrier()->wait();
+    mesh->blocks.front()->get_layout()->comm->barrier();
   }
 
   if (!ok) {

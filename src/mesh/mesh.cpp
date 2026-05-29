@@ -99,7 +99,7 @@ double MeshImpl::initialize(MeshVariables& vars, char const* restart_file) {
 
   auto layout = blocks.front()->get_layout();
   if (layout->has_process_group()) {
-    layout->comm->pg->barrier()->wait();
+    layout->comm->barrier();
   }
   SignalHandler::GetInstance();
 
@@ -310,7 +310,7 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
 
   auto layout = root->get_layout();
   if (layout->has_process_group()) {
-    layout->comm->pg->barrier()->wait();
+    layout->comm->barrier();
     if (layout->comm->owns_process_group()) {
       layout->comm->pg->shutdown();
     }

@@ -104,7 +104,7 @@ void ProcessGroupContext::_init() {
     throw std::runtime_error("Unsupported BACKEND=" + backend);
   }
 
-  pg->barrier()->wait();
+  barrier();
   owns_process_group_ = true;
 
   if (options_->verbose()) {
@@ -157,6 +157,20 @@ void ProcessGroupContext::_init_gloo() {
   pg->setDefaultBackend(c10d::ProcessGroup::BackendType::GLOO);
   pg->setBackend(c10::DeviceType::CPU, c10d::ProcessGroup::BackendType::GLOO,
                  backend_gloo);
+}
+
+void ProcessGroupContext::barrier() const {
+  if (!pg.defined()) return;
+
+  c10d::BarrierOptions op;
+  if (is_nccl()) {
+    int device_index = options_->device_id();
+    if (device_index < 0) {
+      device_index = options_->local_rank();
+    }
+    op.device_ids = {device_index};
+  }
+  pg->barrier(op)->wait();
 }
 
 #ifdef NOT_USE_C10D_NCCL
