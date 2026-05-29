@@ -942,7 +942,7 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   {
     if (has_process_group()) {
       std::lock_guard<std::mutex> lock(g_process_comm_mutex);
-      comm->pg->barrier()->wait();
+      comm->barrier();
     }
   }
 

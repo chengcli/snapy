@@ -92,7 +92,7 @@ void RestartOutput::combine_blocks(MeshBlockImpl* pmb, bool final_write) {
   op.device_ids = {layout->options->local_rank()};
   layout->pg->barrier(op)->wait();*/
   if (layout->has_process_group()) {
-    layout->comm->pg->barrier()->wait();
+    layout->comm->barrier();
   }
 
   std::stringstream msg;

@@ -286,7 +286,7 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
   if (_playout->has_process_group()) {
-    _playout->comm->pg->barrier()->wait();
+    _playout->comm->barrier();
   }
 
   //// ------------ (1) Set up a signal handler ------------ ////
@@ -926,7 +926,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
 
   // ------ shutdown processing group ------
   if (_playout->has_process_group()) {
-    _playout->comm->pg->barrier()->wait();
+    _playout->comm->barrier();
   }
 
   send_bufs.clear();

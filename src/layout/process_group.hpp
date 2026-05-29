@@ -26,6 +26,7 @@ class ProcessGroupContext {
 
   bool is_nccl() const { return backend == "nccl"; }
   bool owns_process_group() const { return owns_process_group_; }
+  void barrier() const;
   void group_start() const;
   void group_end() const;
   void sync_stream() const;
