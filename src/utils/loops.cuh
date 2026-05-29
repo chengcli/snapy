@@ -29,14 +29,7 @@ void _left_shift(int arr[N], int k) {
 }
 
 template <typename scalar_t, typename func_t>
-__global__ void reduce_kernel(int64_t numel, func_t f) {
-  int x = threadIdx.x + blockIdx.x * blockDim.x;
-  int y = threadIdx.y + blockIdx.y * blockDim.y;
-  int z = threadIdx.z + blockIdx.z * blockDim.z;
-
-  int tid = x + y * blockDim.x * gridDim.x +
-            z * blockDim.x * blockDim.y * gridDim.x * gridDim.y;
-
+__global__ void reduce_kernel(func_t f) {
   int bid =
       blockIdx.x + blockIdx.y * gridDim.x + blockIdx.z * gridDim.x * gridDim.y;
 
@@ -44,9 +37,7 @@ __global__ void reduce_kernel(int64_t numel, func_t f) {
   extern __shared__ unsigned char memory[];
   scalar_t* smem = reinterpret_cast<scalar_t*>(memory);
 
-  if (tid < numel) {
-    f(bid, smem);
-  }
+  f(bid, smem);
 }
 
 template <int Arity, typename func_t>
@@ -114,7 +105,7 @@ void stencil_kernel(at::TensorIterator& iter, int dim, int buffers,
   auto stream = at::cuda::getCurrentCUDAStream();
 
   reduce_kernel<scalar_t><<<grid, block, shared, stream>>>(
-      numel, [=] __device__(int bid, scalar_t* smem) {
+      [=] __device__(int bid, scalar_t* smem) {
         auto offsets = offset_calc.get(bid);
         f(data.data(), offsets.data(), smem);
       });
