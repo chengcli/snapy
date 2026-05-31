@@ -57,6 +57,9 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
     return w;
   }
 
+  TORCH_CHECK(phydro->options->grav(),
+              "[PrimitiveProjection] forcing does not have const-gravity");
+
   auto pcoord = phydro->pmb->pcoord;
 
   int is = pcoord->il();
@@ -81,9 +84,9 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
   return result;
 }
 
-void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
+torch::Tensor PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
   if (options->type() == "none") {
-    return;
+    return torch::zeros_like(wlr[0][IDN]);
   }
 
   auto pcoord = phydro->pmb->pcoord;
@@ -93,6 +96,12 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
 
   // restore pressure
   wlr.select(1, IPR).slice(3, is, ie + 1) += _psf.slice(2, is, ie + 1);
+
+  // compute hydrostatic correction
+  auto rho_grav = torch::zeros_like(wlr[0][IDN]);
+  rho_grav.slice(2, is, ie) =
+      (wlr[0][IPR].slice(2, is + 1, ie + 1) - wlr[1][IPR].slice(2, is, ie)) /
+      pcoord->dx1f.slice(0, is, ie);
 
   // restore density
   if (options->type() == "temperature") {
@@ -106,6 +115,8 @@ void PrimitiveProjectorImpl::restore_inplace(torch::Tensor wlr) {
     throw std::runtime_error("Unknown primitive projector type: " +
                              options->type());
   }
+
+  return rho_grav;
 }
 
 std::shared_ptr<PrimitiveProjectorImpl> PrimitiveProjectorImpl::create(

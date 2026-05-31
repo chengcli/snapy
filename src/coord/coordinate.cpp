@@ -248,20 +248,14 @@ void CoordinateImpl::print(std::ostream& stream) const {
 }
 
 torch::Tensor CoordinateImpl::center_width1() const {
-  // return dx1f.unsqueeze(0).unsqueeze(0).expand({x3v.size(0), x2v.size(0),
-  // -1});
   return dx1f.unsqueeze(0).unsqueeze(1);
 }
 
 torch::Tensor CoordinateImpl::center_width2() const {
-  // return dx2f.unsqueeze(0).unsqueeze(1).expand({x3v.size(0), -1,
-  // x1v.size(0)});
   return dx2f.unsqueeze(0).unsqueeze(2);
 }
 
 torch::Tensor CoordinateImpl::center_width3() const {
-  // return dx3f.unsqueeze(1).unsqueeze(2).expand({-1, x2v.size(0),
-  // x1v.size(0)});
   return dx3f.unsqueeze(1).unsqueeze(2);
 }
 
@@ -278,7 +272,6 @@ torch::Tensor CoordinateImpl::face_area3() const {
 }
 
 torch::Tensor CoordinateImpl::cell_volume() const {
-  // return dx1f.outer(dx2f).unsqueeze(0).outer(dx3f).unsqueeze(0);
   return torch::einsum("km,mji->kji",
                        {dx3f.unsqueeze(1), dx2f.outer(dx1f).unsqueeze(0)});
 }

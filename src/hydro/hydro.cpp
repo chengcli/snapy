@@ -207,15 +207,19 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     pmb->pib->mark_prim_solid_(w, other.at("solid"));
   }
 
+  // hydrostatic pressure correction
+  torch::Tensor rho_grav;
+
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
     torch::Tensor wtmp;
     if (pproj) {
       auto wp = pproj->forward(w, pmb->pcoord->dx1f);
       wtmp = precon1->forward(wp, DIM1);
-      pproj->restore_inplace(wtmp);
+      rho_grav = pproj->restore_inplace(wtmp);
     } else {
       wtmp = precon1->forward(w, DIM1);
+      rho_grav = torch::zeros_like(w[IDN]);
     }
 
     auto wlr1 =
@@ -334,6 +338,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
+
+  // apply hydrostatic correction
+  if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
+    du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());
+    du[IPR] +=
+        dt * w[IVX] * rho_grav * (1. - options->grav()->non_hydrostatic());
+  }
+
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

@@ -17,6 +17,7 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
   op->grav1() = node["grav1"].as<double>(0.);
   op->grav2() = node["grav2"].as<double>(0.);
   op->grav3() = node["grav3"].as<double>(0.);
+  op->non_hydrostatic() = node["non-hydrostatic"].as<double>(1.);
 
   return op;
 }
@@ -24,8 +25,9 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
 torch::Tensor ConstGravityImpl::forward(torch::Tensor du, torch::Tensor w,
                                         torch::Tensor temp, double dt) {
   if (options->grav1() != 0.) {
-    du[IVX] += dt * w[IDN] * options->grav1();
-    du[IPR] += dt * w[IDN] * w[IVX] * options->grav1();
+    du[IVX] += dt * w[IDN] * options->grav1() * options->non_hydrostatic();
+    du[IPR] +=
+        dt * w[IDN] * w[IVX] * options->grav1() * options->non_hydrostatic();
   }
 
   if (options->grav2() != 0.) {

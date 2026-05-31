@@ -41,6 +41,7 @@ struct ConstGravityOptionsImpl {
        << "* grav3 = " << grav3() << "\n";
   }
 
+  ADD_ARG(double, non_hydrostatic) = 1.;
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
   ADD_ARG(double, grav3) = 0.;
