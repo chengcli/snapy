@@ -58,7 +58,7 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
   }
 
   TORCH_CHECK(phydro->options->grav(),
-              "[PrimitiveProjection] forcing does not have const-gravity");
+              "[PrimitiveProjector] forcing does not have const-gravity");
 
   auto pcoord = phydro->pmb->pcoord;
 

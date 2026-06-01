@@ -18,6 +18,7 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
   op->grav2() = node["grav2"].as<double>(0.);
   op->grav3() = node["grav3"].as<double>(0.);
   op->non_hydrostatic() = node["non-hydrostatic"].as<double>(1.);
+  TORCH_CHECK(op->non_hydrostatic() >= 0. && op->non_hydrostatic() <= 1.);
 
   return op;
 }

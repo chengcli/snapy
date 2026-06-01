@@ -208,7 +208,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   // hydrostatic pressure correction
-  torch::Tensor rho_grav;
+  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -219,7 +219,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       rho_grav = pproj->restore_inplace(wtmp);
     } else {
       wtmp = precon1->forward(w, DIM1);
-      rho_grav = torch::zeros_like(w[IDN]);
     }
 
     auto wlr1 =
