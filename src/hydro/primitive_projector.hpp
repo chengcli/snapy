@@ -101,7 +101,7 @@ class PrimitiveProjectorImpl
   //! decompose the total pressure into hydrostatic and non-hydrostatic parts
   torch::Tensor forward(torch::Tensor w, torch::Tensor dz);
 
-  void restore_inplace(torch::Tensor wlr);
+  torch::Tensor restore_inplace(torch::Tensor wlr);
 
  private:
   //! cache

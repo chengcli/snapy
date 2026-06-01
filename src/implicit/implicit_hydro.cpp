@@ -102,6 +102,9 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     return torch::zeros_like(du);
   }
 
+  TORCH_CHECK(phydro->options->grav(),
+              "[ImplicitHydro] forcing does not have const-gravity");
+
   auto pcoord = phydro->pmb->pcoord;
   auto interior = phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
   auto cos_theta = pcoord->cosine_cell_kj;
@@ -124,64 +127,57 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }
 
   /// (1) Project to local orthonormal frame
-  {
-    w[IVY] += w[IVZ] * cos_theta;
-    w[IVZ] *= sin_theta;
+  w[IVY] += w[IVZ] * cos_theta;
+  w[IVZ] *= sin_theta;
 
-    coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
-    pcoord->prim2local1_(du);
-  }
+  coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
+  pcoord->prim2local1_(du);
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  auto iter = [&]() {
-    return at::TensorIteratorConfig()
-        .resize_outputs(false)
-        .check_all_same_dtype(true)
-        .declare_static_shape(du.index(interior).sizes(),
-                              /*squash_dims=*/{0, 3})
-        .add_owned_output(du.index(interior))
-        .add_owned_output(_mass_corr.index(interior))
-        .add_owned_input(w.index(interior))
-        .add_owned_input(gamma.unsqueeze(0).index(interior))
-        .add_owned_input(
-            pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
-        .add_owned_input(
-            pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
-        .add_input(_a)
-        .add_input(_b)
-        .add_input(_c)
-        .add_input(_delta)
-        .build();
-  }();
+  auto iter =
+      at::TensorIteratorConfig()
+          .resize_outputs(false)
+          .check_all_same_dtype(true)
+          .declare_static_shape(du.index(interior).sizes(),
+                                /*squash_dims=*/{0, 3})
+          .add_owned_output(du.index(interior))
+          .add_owned_output(_mass_corr.index(interior))
+          .add_owned_input(w.index(interior))
+          .add_owned_input(gamma.unsqueeze(0).index(interior))
+          .add_owned_input(
+              pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
+          .add_owned_input(
+              pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
+          .add_input(_a)
+          .add_input(_b)
+          .add_input(_c)
+          .add_input(_delta)
+          .build();
 
-  {
-    auto grav1 = phydro->options->grav()->grav1();
-    if ((options->scheme() >> 3) & 1) {
-      at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0,
-                                        nvapor);
-    } else {
-      // Match the full-VIC pipeline: assemble coefficients, run the column
-      // solve + reductions, then apply the per-cell redistribution map.
-      at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
-      at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
-                                           0, nvapor);
-    }
+  auto grav1 = phydro->options->grav()->grav1() *
+               phydro->options->grav()->non_hydrostatic();
+
+  if ((options->scheme() >> 3) & 1) {
+    at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0,
+                                      nvapor);
+  } else {
+    // Match the full-VIC pipeline: assemble coefficients, run the column
+    // solve + reductions, then apply the per-cell redistribution map.
+    at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1, 0,
+                                         nvapor);
   }
 
   /// (3) De-project from local orthonormal frame
-  {
-    w[IVZ] /= sin_theta;
-    w[IVY] -= w[IVZ] * cos_theta;
-    pcoord->flux2global1_(du);
-  }
+  w[IVZ] /= sin_theta;
+  w[IVY] -= w[IVZ] * cos_theta;
+  pcoord->flux2global1_(du);
 
-  {
-    _corr.copy_(du);
-    _corr.sub_(_du0);
-  }
+  _corr.copy_(du);
+  _corr.sub_(_du0);
 
   /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
     TORCH_CHECK(false, "[ImplicitHydro] NaN encountered after implicit solve");

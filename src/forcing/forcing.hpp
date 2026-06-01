@@ -38,9 +38,11 @@ struct ConstGravityOptionsImpl {
     os << "-- constant gravity options --\n";
     os << "* grav1 = " << grav1() << "\n"
        << "* grav2 = " << grav2() << "\n"
-       << "* grav3 = " << grav3() << "\n";
+       << "* grav3 = " << grav3() << "\n"
+       << "* non-hydrostatic = " << non_hydrostatic() << "\n";
   }
 
+  ADD_ARG(double, non_hydrostatic) = 1.;
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
   ADD_ARG(double, grav3) = 0.;
