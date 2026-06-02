@@ -44,7 +44,7 @@ torch::Tensor BotHeatImpl::forward(torch::Tensor du, torch::Tensor w,
   int il = pcoord->il();
   auto dz = pcoord->dx1f[il];
   du[IPR].narrow(-1, il, options->depth()) +=
-      options->flux() / (dz * options->depth());
+      dt * options->flux() / (dz * options->depth());
   return du;
 }
 

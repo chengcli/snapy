@@ -2,7 +2,10 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/snap.h>
+
 #include <snap/hydro/hydro.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
 
@@ -17,6 +20,9 @@ BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
   op->dTdt() = node["dTdt"].as<double>(0.0);
   op->pmin() = node["pmin"].as<double>(0.0);
   op->pmax() = node["pmax"].as<double>(1.0);
+
+  TORCH_CHECK(op->pmin() <= op->pmax(),
+              "BodyHeatOptions: pmin must not exceed pmax.");
 
   return op;
 }
@@ -34,9 +40,15 @@ void BodyHeatImpl::reset() {
 
 torch::Tensor BodyHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                     torch::Tensor temp, double dt) {
-  // auto wtop = w.select(-1, ie);
-  // auto ivol = pthermo->compute("DY->V", {wtop[IDN], wtop.narrow(0, 1, ny)});
-  // auto cv = pthermo->compute("VT->cv", {ivol, temp});
+  auto interior =
+      phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto pres = w[IPR].index(interior);
+  auto rho = w[IDN].index(interior);
+  auto cv = phydro->peos->specific_heat_cv(w, temp).index(interior);
+  auto mask =
+      torch::logical_and(pres >= options->pmin(), pres <= options->pmax());
+  du[IPR].index(interior) += torch::where(mask, dt * options->dTdt() * rho * cv,
+                                          torch::zeros_like(pres));
   return du;
 }
 

@@ -7,6 +7,7 @@
 #include <torch/nn/modules/container/any.h>
 
 // kintera
+#include <kintera/thermo/thermo.hpp>
 #include <kintera/utils/format.hpp>
 
 // arg
@@ -381,13 +382,21 @@ class RelaxBotCompImpl : public torch::nn::Cloneable<RelaxBotCompImpl> {
   //! options with which this `RelaxBotComp` was constructed
   RelaxBotCompOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
+  //! thermodynamic conversion modules
+  kintera::ThermoY pthermo_y = nullptr;
+  kintera::ThermoX pthermo_x = nullptr;
+
+  //! configured species indices in thermodynamic ordering
+  std::vector<int64_t> species_ids;
+
   // Constructor to initialize the layers
   RelaxBotCompImpl() : options(RelaxBotCompOptionsImpl::create()) {}
-  explicit RelaxBotCompImpl(RelaxBotCompOptions const& options_)
-      : options(options_) {
-    reset();
-  }
-  void reset() override {}
+  explicit RelaxBotCompImpl(RelaxBotCompOptions const& options_,
+                            torch::nn::Module* p = nullptr);
+  void reset() override;
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);
@@ -423,13 +432,14 @@ class RelaxBotTempImpl : public torch::nn::Cloneable<RelaxBotTempImpl> {
   //! options with which this `RelaxBotTemp` was constructed
   RelaxBotTempOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
   // Constructor to initialize the layers
   RelaxBotTempImpl() : options(RelaxBotTempOptionsImpl::create()) {}
-  explicit RelaxBotTempImpl(RelaxBotTempOptions const& options_)
-      : options(options_) {
-    reset();
-  }
-  void reset() override {}
+  explicit RelaxBotTempImpl(RelaxBotTempOptions const& options_,
+                            torch::nn::Module* p = nullptr);
+  void reset() override;
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);
@@ -469,13 +479,14 @@ class RelaxBotVeloImpl : public torch::nn::Cloneable<RelaxBotVeloImpl> {
   //! options with which this `RelaxBotVelo` was constructed
   RelaxBotVeloOptions options;
 
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
   // Constructor to initialize the layers
   RelaxBotVeloImpl() : options(RelaxBotVeloOptionsImpl::create()) {}
-  explicit RelaxBotVeloImpl(RelaxBotVeloOptions const& options_)
-      : options(options_) {
-    reset();
-  }
-  void reset() override {}
+  explicit RelaxBotVeloImpl(RelaxBotVeloOptions const& options_,
+                            torch::nn::Module* p = nullptr);
+  void reset() override;
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);

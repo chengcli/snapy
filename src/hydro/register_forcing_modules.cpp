@@ -35,7 +35,8 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
   }
 
   if (options->bodyHeat()) {
-    forcings.push_back(torch::nn::AnyModule(BodyHeat(options->bodyHeat())));
+    forcings.push_back(
+        torch::nn::AnyModule(BodyHeat(options->bodyHeat(), this)));
     forcing_names.push_back("body-heat");
   }
 
@@ -51,19 +52,19 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
 
   if (options->relaxBotComp()) {
     forcings.push_back(
-        torch::nn::AnyModule(RelaxBotComp(options->relaxBotComp())));
+        torch::nn::AnyModule(RelaxBotComp(options->relaxBotComp(), this)));
     forcing_names.push_back("relax-bot-comp");
   }
 
   if (options->relaxBotTemp()) {
     forcings.push_back(
-        torch::nn::AnyModule(RelaxBotTemp(options->relaxBotTemp())));
+        torch::nn::AnyModule(RelaxBotTemp(options->relaxBotTemp(), this)));
     forcing_names.push_back("relax-bot-temp");
   }
 
   if (options->relaxBotVelo()) {
     forcings.push_back(
-        torch::nn::AnyModule(RelaxBotVelo(options->relaxBotVelo())));
+        torch::nn::AnyModule(RelaxBotVelo(options->relaxBotVelo(), this)));
     forcing_names.push_back("relax-bot-velo");
   }
 
