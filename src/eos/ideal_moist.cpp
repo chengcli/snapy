@@ -60,6 +60,13 @@ double IdealMoistImpl::species_cv_ref(int n) const {
   return (options->thermo()->cref_R()[n] * Ri).item<double>();
 }
 
+torch::Tensor IdealMoistImpl::specific_heat_cv(torch::Tensor prim,
+                                               torch::Tensor temp) {
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
+  return species_cv_ref() * f_sig(prim.narrow(0, ICY, ny));
+}
+
 torch::Tensor IdealMoistImpl::internal_energy_offset(
     torch::Tensor hydro_like) const {
   int ny = pthermo->options->vapor_ids().size() +

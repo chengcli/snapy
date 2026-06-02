@@ -22,6 +22,11 @@ double IdealGasImpl::species_cv_ref(int n) const {
   return Ri / (options->gammad() - 1.);
 }
 
+torch::Tensor IdealGasImpl::specific_heat_cv(torch::Tensor prim,
+                                             torch::Tensor temp) {
+  return torch::full_like(temp, species_cv_ref());
+}
+
 torch::Tensor IdealGasImpl::compute(std::string ab,
                                     std::vector<torch::Tensor> const &args) {
   if (ab == "W->U") {

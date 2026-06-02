@@ -7,7 +7,7 @@ import torch
 from .boundary import InternalBoundaryOptions
 from .coordinate import CoordinateOptions
 from .eos import EquationOfStateOptions
-from .forcing import ConstGravityOptions, CoriolisOptions
+from .forcing import ConstGravityOptions, CoriolisOptions, DiffusionOptions
 from .implicit import ImplicitOptions
 from .reconstruction import ReconstructOptions
 from .riemann import RiemannSolverOptions
@@ -152,13 +152,13 @@ class HydroOptions:
         ...
 
     @overload
-    def visc(self):  # DiffusionOptions
-        """Get viscosity/diffusion options."""
+    def diffusion(self) -> DiffusionOptions:
+        """Get hydro diffusion options."""
         ...
 
     @overload
-    def visc(self, value) -> "HydroOptions":  # DiffusionOptions
-        """Set viscosity/diffusion options."""
+    def diffusion(self, value: DiffusionOptions) -> "HydroOptions":
+        """Set hydro diffusion options."""
         ...
 
     @overload

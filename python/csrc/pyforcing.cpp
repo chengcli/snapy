@@ -40,4 +40,18 @@ void bind_forcing(py::module &m) {
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega1)
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega2)
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega3);
+
+  auto pyDiffusionOptions =
+      py::class_<snap::DiffusionOptionsImpl, snap::DiffusionOptions>(
+          m, "DiffusionOptions");
+
+  pyDiffusionOptions.def(py::init<>())
+      .def("__repr__",
+           [](const snap::DiffusionOptions &a) {
+             std::stringstream ss;
+             a->report(ss);
+             return fmt::format("DiffusionOptions(\n{})", ss.str());
+           })
+      .ADD_OPTION(double, snap::DiffusionOptionsImpl, nu_iso)
+      .ADD_OPTION(double, snap::DiffusionOptionsImpl, kappa_iso);
 }

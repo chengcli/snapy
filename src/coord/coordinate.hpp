@@ -118,6 +118,7 @@ class CoordinateImpl {
   torch::Tensor x1f, x2f, x3f;
   torch::Tensor x1v, x2v, x3v;
   torch::Tensor dx1f, dx2f, dx3f;
+  torch::Tensor dx1v, dx2v, dx3v;
 
   virtual ~CoordinateImpl() = default;
 
@@ -156,6 +157,21 @@ class CoordinateImpl {
   virtual torch::Tensor center_width3() const;
   virtual torch::Tensor center_width3(int is, int ie) const {
     return center_width3().slice(0, is, ie);
+  }
+
+  virtual torch::Tensor center_distance1() const;
+  virtual torch::Tensor center_distance1(int is, int ie) const {
+    return center_distance1().slice(2, is, ie);
+  }
+
+  virtual torch::Tensor center_distance2() const;
+  virtual torch::Tensor center_distance2(int is, int ie) const {
+    return center_distance2().slice(1, is, ie);
+  }
+
+  virtual torch::Tensor center_distance3() const;
+  virtual torch::Tensor center_distance3(int is, int ie) const {
+    return center_distance3().slice(0, is, ie);
   }
 
   virtual torch::Tensor face_area1() const;

@@ -91,3 +91,30 @@ class CoriolisOptions:
     def omega3(self, value: float) -> "CoriolisOptions":
         """Set rotation rate omega3."""
         ...
+
+class DiffusionOptions:
+    """Constant isotropic hydro diffusion options."""
+
+    def __init__(self) -> None: ...
+
+    def __repr__(self) -> str: ...
+
+    @overload
+    def nu_iso(self) -> float:
+        """Get kinematic viscosity."""
+        ...
+
+    @overload
+    def nu_iso(self, value: float) -> "DiffusionOptions":
+        """Set kinematic viscosity."""
+        ...
+
+    @overload
+    def kappa_iso(self) -> float:
+        """Get thermal diffusivity in units of length squared per time."""
+        ...
+
+    @overload
+    def kappa_iso(self, value: float) -> "DiffusionOptions":
+        """Set thermal diffusivity in units of length squared per time."""
+        ...

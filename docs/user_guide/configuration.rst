@@ -124,6 +124,22 @@ Add gravitational and Coriolis forcing:
         omega: 7.27e-5      # Rotation rate (rad/s)
         latitude: 45.0      # Latitude (degrees)
 
+Add constant isotropic viscosity and heat conduction on a Cartesian mesh:
+
+.. code-block:: yaml
+
+    forcing:
+      diffusion:
+        nu_iso: 0.0         # Kinematic viscosity
+        kappa_iso: 0.0      # Thermal diffusivity (length^2 / time)
+
+Diffusion is integrated explicitly and contributes a parabolic time-step
+limit. Curved coordinates, anisotropic coefficients, and spatially varying
+coefficients are not supported. Heat conduction uses the energy flux
+``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local mixture
+specific heat supplied by the equation of state. An EOS without a positive
+reference specific heat at constant volume cannot enable heat conduction.
+
 Implicit Correction
 -------------------
 

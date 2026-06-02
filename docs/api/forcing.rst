@@ -57,3 +57,23 @@ CoriolisOptions
 
       :return: Rotation rate
       :rtype: float
+
+DiffusionOptions
+~~~~~~~~~~~~~~~~
+
+.. class:: DiffusionOptions
+
+   Constant isotropic hydro diffusion configuration for Cartesian meshes.
+
+   .. method:: nu_iso() -> float
+               nu_iso(value: float) -> DiffusionOptions
+
+      Get or set kinematic viscosity.
+
+   .. method:: kappa_iso() -> float
+               kappa_iso(value: float) -> DiffusionOptions
+
+      Get or set thermal diffusivity in units of length squared per time.
+      The conductive energy flux is
+      ``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local
+      equation-of-state mixture specific heat at constant volume.

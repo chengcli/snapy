@@ -152,12 +152,12 @@ struct DiffusionOptionsImpl {
   }
   void report(std::ostream& os) const {
     os << "-- diffusion options --\n";
-    os << "* K = " << K() << "\n"
-       << "* type = " << type() << "\n";
+    os << "* nu_iso = " << nu_iso() << "\n"
+       << "* kappa_iso = " << kappa_iso() << "\n";
   }
 
-  ADD_ARG(double, K) = 0.;
-  ADD_ARG(std::string, type) = "theta";
+  ADD_ARG(double, nu_iso) = 0.;
+  ADD_ARG(double, kappa_iso) = 0.;
 };
 using DiffusionOptions = std::shared_ptr<DiffusionOptionsImpl>;
 
@@ -168,13 +168,16 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
 
   // Constructor to initialize the layers
   DiffusionImpl() : options(DiffusionOptionsImpl::create()) {}
-  explicit DiffusionImpl(DiffusionOptions const& options_) : options(options_) {
-    reset();
-  }
-  void reset() override {}
+  //! non-owning reference to parent
+  HydroImpl const* phydro = nullptr;
+
+  explicit DiffusionImpl(DiffusionOptions const& options_,
+                         torch::nn::Module* p = nullptr);
+  void reset() override;
 
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);
+  double max_time_step(torch::Tensor w) const;
 };
 TORCH_MODULE(Diffusion);
 

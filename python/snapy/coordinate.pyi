@@ -174,6 +174,18 @@ class Coordinate:
         """Get cell center widths in x3 direction."""
         ...
 
+    def center_distance1(self) -> torch.Tensor:
+        """Get distances between adjacent cell centers in x1 direction."""
+        ...
+
+    def center_distance2(self) -> torch.Tensor:
+        """Get distances between adjacent cell centers in x2 direction."""
+        ...
+
+    def center_distance3(self) -> torch.Tensor:
+        """Get distances between adjacent cell centers in x3 direction."""
+        ...
+
     def face_area1(self) -> torch.Tensor:
         """Get face areas perpendicular to x1."""
         ...

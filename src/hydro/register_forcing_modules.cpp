@@ -22,6 +22,12 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
     forcing_names.push_back("coriolis");
   }
 
+  if (options->diffusion()) {
+    pdiffusion = Diffusion(options->diffusion(), this);
+    forcings.push_back(torch::nn::AnyModule(pdiffusion));
+    forcing_names.push_back("diffusion");
+  }
+
   if (options->fricHeat()) {
     forcings.push_back(
         torch::nn::AnyModule(FricHeat(options->fricHeat(), this)));

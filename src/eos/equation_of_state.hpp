@@ -103,6 +103,15 @@ class EquationOfStateImpl {
   //!         thermodynamic model).
   virtual double species_cv_ref(int n = 0) const { return 0.; }
 
+  //! \brief Return the local mixture specific heat at constant volume.
+  //!
+  //! \param[in] prim Primitive hydrodynamic variables.
+  //! \param[in] temp Temperature.
+  //! \return Specific heat at constant volume in J/(kg·K), or units
+  //!         consistent with the underlying thermodynamic model.
+  virtual torch::Tensor specific_heat_cv(torch::Tensor prim,
+                                         torch::Tensor temp);
+
   //! \brief Return the additive internal-energy offset carried by conserved
   //! constituent densities.
   virtual torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const;
