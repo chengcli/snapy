@@ -15,9 +15,10 @@ using namespace snap;
 
 namespace {
 
-std::shared_ptr<MeshBlockImpl> make_block() {
+std::shared_ptr<MeshBlockImpl> make_block(
+    std::string const& filename = "test_diffusion_moist.yaml") {
   return std::make_shared<MeshBlockImpl>(
-      MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml"));
+      MeshBlockOptionsImpl::from_yaml(filename));
 }
 
 torch::Tensor make_primitive(std::shared_ptr<MeshBlockImpl> const& block) {
@@ -154,6 +155,19 @@ TEST(forcing, relax_bottom_composition_preserves_state) {
   EXPECT_TRUE(torch::allclose(
       block->phydro->peos->compute("W->T", {updated}).index(bot3),
       temp.index(bot3), 1.e-8, 1.e-8));
+  expect_only_bottom(du, block);
+}
+
+TEST(forcing, relax_bottom_composition_handles_multidimensional_ghost_zones) {
+  auto block = make_block("test_forcing_3d.yaml");
+  auto w = make_primitive(block);
+  auto temp = block->phydro->peos->compute("W->T", {w});
+  auto du = torch::zeros_like(w);
+  auto op = RelaxBotCompOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-comp: {tau: 2., species: [vapor], xfrac: [0.2]}"));
+
+  RelaxBotComp(op, block->phydro.get())->forward(du, w, temp, 0.5);
+
   expect_only_bottom(du, block);
 }
 
