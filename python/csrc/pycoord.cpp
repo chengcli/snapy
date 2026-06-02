@@ -63,6 +63,15 @@ void bind_coord(py::module &m) {
       .def(
           "center_width3",
           py::overload_cast<>(&snap::CoordinateImpl::center_width3, py::const_))
+      .def("center_distance1",
+           py::overload_cast<>(&snap::CoordinateImpl::center_distance1,
+                               py::const_))
+      .def("center_distance2",
+           py::overload_cast<>(&snap::CoordinateImpl::center_distance2,
+                               py::const_))
+      .def("center_distance3",
+           py::overload_cast<>(&snap::CoordinateImpl::center_distance3,
+                               py::const_))
       .def("face_area1",
            py::overload_cast<>(&snap::CoordinateImpl::face_area1, py::const_))
       .def("face_area2",

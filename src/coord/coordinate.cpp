@@ -259,6 +259,18 @@ torch::Tensor CoordinateImpl::center_width3() const {
   return dx3f.unsqueeze(1).unsqueeze(2);
 }
 
+torch::Tensor CoordinateImpl::center_distance1() const {
+  return dx1v.unsqueeze(0).unsqueeze(1);
+}
+
+torch::Tensor CoordinateImpl::center_distance2() const {
+  return dx2v.unsqueeze(0).unsqueeze(2);
+}
+
+torch::Tensor CoordinateImpl::center_distance3() const {
+  return dx3v.unsqueeze(1).unsqueeze(2);
+}
+
 torch::Tensor CoordinateImpl::face_area1() const {
   return dx3f.outer(dx2f).unsqueeze(2).expand({-1, -1, x1f.size(0)});
 }

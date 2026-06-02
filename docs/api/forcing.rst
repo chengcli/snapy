@@ -57,3 +57,20 @@ CoriolisOptions
 
       :return: Rotation rate
       :rtype: float
+
+DiffusionOptions
+~~~~~~~~~~~~~~~~
+
+.. class:: DiffusionOptions
+
+   Constant isotropic hydro diffusion configuration for Cartesian meshes.
+
+   .. method:: nu_iso() -> float
+               nu_iso(value: float) -> DiffusionOptions
+
+      Get or set kinematic viscosity.
+
+   .. method:: kappa_iso() -> float
+               kappa_iso(value: float) -> DiffusionOptions
+
+      Get or set thermal diffusivity.

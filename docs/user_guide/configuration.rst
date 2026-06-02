@@ -124,6 +124,19 @@ Add gravitational and Coriolis forcing:
         omega: 7.27e-5      # Rotation rate (rad/s)
         latitude: 45.0      # Latitude (degrees)
 
+Add constant isotropic viscosity and heat conduction on a Cartesian mesh:
+
+.. code-block:: yaml
+
+    forcing:
+      diffusion:
+        nu_iso: 0.0         # Kinematic viscosity
+        kappa_iso: 0.0      # Thermal diffusivity
+
+Diffusion is integrated explicitly and contributes a parabolic time-step
+limit. Curved coordinates, anisotropic coefficients, and spatially varying
+coefficients are not supported.
+
 Implicit Correction
 -------------------
 

@@ -65,8 +65,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   op->coriolis() = CoriolisOptionsImpl::from_yaml(forcing);
   if (op->coriolis()) op->coriolis()->report(SINFO(HydroOptions));
 
-  op->visc() = DiffusionOptionsImpl::from_yaml(forcing);
-  if (op->visc()) op->visc()->report(SINFO(HydroOptions));
+  op->diffusion() = DiffusionOptionsImpl::from_yaml(forcing);
+  if (op->diffusion()) op->diffusion()->report(SINFO(HydroOptions));
 
   op->fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
   if (op->fricHeat()) op->fricHeat()->report(SINFO(HydroOptions));
@@ -113,7 +113,7 @@ HydroOptions HydroOptionsImpl::clone() const {
 
   if (grav()) op->grav() = grav()->clone();
   if (coriolis()) op->coriolis() = coriolis()->clone();
-  if (visc()) op->visc() = visc()->clone();
+  if (diffusion()) op->diffusion() = diffusion()->clone();
   if (fricHeat()) op->fricHeat() = fricHeat()->clone();
   if (bodyHeat()) op->bodyHeat() = bodyHeat()->clone();
   if (topCool()) op->topCool() = topCool()->clone();

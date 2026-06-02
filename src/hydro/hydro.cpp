@@ -181,7 +181,9 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
     }
   }
 
-  return dt_min.min().item<double>();
+  double dt = dt_min.min().item<double>();
+  if (pdiffusion) dt = std::min(dt, pdiffusion->max_time_step(w));
+  return dt;
 }
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,

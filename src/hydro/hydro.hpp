@@ -50,7 +50,7 @@ struct HydroOptionsImpl {
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
   ADD_ARG(CoriolisOptions, coriolis) = nullptr;
-  ADD_ARG(DiffusionOptions, visc) = nullptr;
+  ADD_ARG(DiffusionOptions, diffusion) = nullptr;
   ADD_ARG(FricHeatOptions, fricHeat) = nullptr;
   ADD_ARG(BodyHeatOptions, bodyHeat) = nullptr;
   ADD_ARG(BotHeatOptions, botHeat) = nullptr;
@@ -113,6 +113,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   //! forcings
   std::vector<torch::nn::AnyModule> forcings;
+  Diffusion pdiffusion = nullptr;
 
   //! Constructor to initialize the layers
   HydroImpl() = default;
