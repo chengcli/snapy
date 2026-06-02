@@ -1,0 +1,39 @@
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 3.5
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 6., x2min: 0., x2max: 4., x3min: 0., x3max: 3.}
+  cells: {nx1: 6, nx2: 4, nx3: 3, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting

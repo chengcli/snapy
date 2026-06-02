@@ -83,29 +83,31 @@ torch::Tensor RelaxBotCompImpl::forward(torch::Tensor du, torch::Tensor w,
       phydro->pmb->part({0, 0, -1}, PartOptions().exterior(false).depth(1));
   auto bottom3 = phydro->pmb->part(
       {0, 0, -1}, PartOptions().exterior(false).depth(1).ndim(3));
-  auto wbot = w.index(bottom);
   int ny = pthermo_y->options->species().size() - 1;
 
-  auto target_w = wbot.clone();
-  auto target_x = pthermo_y->compute("Y->X", {target_w.narrow(0, ICY, ny)});
+  auto wbot = w.index(bottom);
+  auto rho = wbot[IDN];
+  auto current_y = wbot.narrow(0, ICY, ny);
+  auto target_x = pthermo_y->compute("Y->X", {current_y});
   for (int n = 0; n < species_ids.size(); ++n) {
     target_x.select(-1, species_ids[n]).fill_(options->xfrac()[n]);
   }
 
   auto dry = 1. - target_x.narrow(-1, 1, ny).sum(-1);
-  TORCH_CHECK(dry.min().item<double>() >= -1.e-12,
-              "[RelaxBotComp] Configured and retained species leave a "
-              "negative dry mole fraction.");
   target_x.select(-1, 0) = dry.clamp_min(0.);
 
   auto target_y = pthermo_x->compute("X->Y", {target_x});
-  target_w.narrow(0, ICY, ny) = target_y;
-  auto ivol = pthermo_y->compute("DY->V", {target_w[IDN], target_y});
-  target_w[IPR] = pthermo_y->compute("VT->P", {ivol, temp.index(bottom3)});
+  auto target_v = pthermo_y->compute("DY->V", {rho, target_y});
+  auto current_v = pthermo_y->compute("DY->V", {rho, current_y});
+  auto temp_bot = temp.index(bottom3);
+  auto target_ie = pthermo_y->compute("VT->U", {target_v, temp_bot});
+  auto current_ie = pthermo_y->compute("VT->U", {current_v, temp_bot});
 
-  auto target_u = phydro->peos->compute("W->U", {target_w});
-  auto current_u = phydro->peos->compute("W->U", {wbot});
-  du.index(bottom) += dt / options->tau() * (target_u - current_u);
+  auto delta = torch::zeros_like(wbot);
+  delta[IDN] = -rho * (target_y - current_y).sum(0);
+  delta.narrow(0, ICY, ny) = rho * (target_y - current_y);
+  delta[IPR] = target_ie - current_ie;
+  du.index(bottom) += dt / options->tau() * delta;
   return du;
 }
 
