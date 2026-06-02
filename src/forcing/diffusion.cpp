@@ -144,6 +144,9 @@ void DiffusionImpl::reset() {
               "[Diffusion] Only cartesian coordinates are supported.");
   TORCH_CHECK(options->nu_iso() == 0. || coord->options->nghost() >= 2,
               "[Diffusion] Isotropic viscosity requires nghost >= 2.");
+  TORCH_CHECK(options->kappa_iso() == 0. || phydro->peos->species_cv_ref() > 0.,
+              "[Diffusion] Isotropic heat conduction requires an EOS with a "
+              "positive reference specific heat at constant volume.");
 }
 
 torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
@@ -163,6 +166,7 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto [div_start, div_end] = region_bounds(pmb->part({0, 0, 0}, div_options));
 
   torch::Tensor div_vel;
+  torch::Tensor rho_cv;
 
   if (options->nu_iso() > 0.) {
     div_vel = torch::zeros_like(w[IDN]);
@@ -173,6 +177,9 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
             centered_derivative(w[IVX + idir], coord, idir, div_start, div_end);
       }
     }
+  }
+  if (options->kappa_iso() > 0.) {
+    rho_cv = w[IDN] * phydro->peos->specific_heat_cv(w, temp);
   }
 
   std::array<torch::Tensor, 3> fluxes;
@@ -216,8 +223,11 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     }
 
     if (options->kappa_iso() > 0.) {
+      // W->T is in kelvin, so convert thermal diffusivity to conductivity
+      // using the local mixture volumetric heat capacity.
       flux[IPR].index(face_index) -=
-          options->kappa_iso() * rho_face *
+          options->kappa_iso() *
+          face_average(rho_cv, idir, face_start, face_end) *
           face_normal_derivative(temp, coord, idir, face_start, face_end);
     }
     fluxes[idir] = flux;

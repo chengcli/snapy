@@ -111,10 +111,10 @@ class DiffusionOptions:
 
     @overload
     def kappa_iso(self) -> float:
-        """Get thermal diffusivity."""
+        """Get thermal diffusivity in units of length squared per time."""
         ...
 
     @overload
     def kappa_iso(self, value: float) -> "DiffusionOptions":
-        """Set thermal diffusivity."""
+        """Set thermal diffusivity in units of length squared per time."""
         ...

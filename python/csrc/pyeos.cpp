@@ -61,6 +61,8 @@ void bind_eos(py::module &m) {
            py::arg("n") = 0)
       .def("species_cv_ref", &snap::EquationOfStateImpl::species_cv_ref,
            py::arg("n") = 0)
+      .def("specific_heat_cv", &snap::EquationOfStateImpl::specific_heat_cv,
+           py::arg("prim"), py::arg("temp"))
       .def("compute", &snap::EquationOfStateImpl::compute);
 
   auto pyIdealGas =

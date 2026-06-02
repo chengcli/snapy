@@ -31,6 +31,8 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   }
   double species_weight(int n = 0) const override;
   double species_cv_ref(int n = 0) const override;
+  torch::Tensor specific_heat_cv(torch::Tensor prim,
+                                 torch::Tensor temp) override;
   torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const override;
 
   /*torch::Tensor get_buffer(std::string var) const override {

@@ -187,6 +187,10 @@ class EquationOfState:
         """
         ...
 
+    def specific_heat_cv(self, prim: torch.Tensor, temp: torch.Tensor) -> torch.Tensor:
+        """Compute local mixture specific heat at constant volume."""
+        ...
+
     def compute(self, *args) -> torch.Tensor:
         """Compute thermodynamic properties."""
         ...

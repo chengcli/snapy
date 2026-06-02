@@ -80,6 +80,13 @@ TEST(diffusion_options, reject_enabled_curved_coordinates) {
   EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(options));
 }
 
+TEST(diffusion_options, reject_conduction_without_reference_specific_heat) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  options->hydro()->eos()->type() = "shallow-water";
+  options->hydro()->diffusion()->nu_iso() = 0.;
+  EXPECT_ANY_THROW(std::make_shared<MeshBlockImpl>(options));
+}
+
 TEST_P(DeviceTest, uniform_state_has_zero_tendency) {
   auto block = make_block();
   block->to(device, dtype);
@@ -121,7 +128,8 @@ TEST_P(DeviceTest, temperature_uses_conductive_laplacian) {
   auto du = torch::zeros_like(w);
 
   block->phydro->pdiffusion->forward(du, w, temp, 0.1);
-  EXPECT_NEAR(du[IPR][0][0][4].item<double>(), 0.05, 1.e-5);
+  auto cv_ref = block->phydro->peos->species_cv_ref();
+  EXPECT_NEAR(du[IPR][0][0][4].item<double>(), 0.05 * cv_ref, 1.e-3);
   EXPECT_TRUE(torch::allclose(du[IDN], torch::zeros_like(du[IDN])));
   EXPECT_TRUE(torch::allclose(du.narrow(0, IVX, 3),
                               torch::zeros_like(du.narrow(0, IVX, 3))));

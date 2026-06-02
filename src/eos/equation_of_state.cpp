@@ -91,6 +91,11 @@ torch::Tensor EquationOfStateImpl::internal_energy_offset(
   return torch::zeros_like(hydro_like[IDN]);
 }
 
+torch::Tensor EquationOfStateImpl::specific_heat_cv(torch::Tensor prim,
+                                                    torch::Tensor temp) {
+  return torch::zeros_like(temp);
+}
+
 torch::Tensor EquationOfStateImpl::compute(
     std::string ab, std::vector<torch::Tensor> const& args) {
   TORCH_CHECK(false, "[EquationOfState] compute() is not implemented.",

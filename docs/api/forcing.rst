@@ -73,4 +73,7 @@ DiffusionOptions
    .. method:: kappa_iso() -> float
                kappa_iso(value: float) -> DiffusionOptions
 
-      Get or set thermal diffusivity.
+      Get or set thermal diffusivity in units of length squared per time.
+      The conductive energy flux is
+      ``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local
+      equation-of-state mixture specific heat at constant volume.
