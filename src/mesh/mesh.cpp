@@ -1,6 +1,7 @@
 // C/C++
-#include <algorithm>
 #include <c10/core/DeviceGuard.h>
+
+#include <algorithm>
 #include <future>
 #include <iomanip>
 #include <iostream>
