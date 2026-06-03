@@ -1,5 +1,6 @@
 // C/C++
 #include <algorithm>
+#include <c10/core/DeviceGuard.h>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -27,11 +28,14 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
 }
 
 template <typename Func>
-void run_block_jobs(size_t count, Func&& func) {
+void run_block_jobs(size_t count, torch::Device const& device, Func&& func) {
   std::vector<std::future<void>> jobs;
   jobs.reserve(count);
   for (size_t i = 0; i < count; ++i) {
-    jobs.push_back(std::async(std::launch::async, [&, i]() { func(i); }));
+    jobs.push_back(std::async(std::launch::async, [&, i, device]() {
+      c10::OptionalDeviceGuard device_guard(device);
+      func(i);
+    }));
   }
   for (auto& job : jobs) {
     job.get();
@@ -103,10 +107,12 @@ double MeshImpl::initialize(MeshVariables& vars, char const* restart_file) {
   }
   SignalHandler::GetInstance();
 
+  auto device = torch::Device(blocks.front()->options->device_str());
   std::vector<std::future<void>> jobs;
   jobs.reserve(blocks.size());
   for (int i = 0; i < blocks.size(); ++i) {
-    jobs.push_back(std::async(std::launch::async, [&, i]() {
+    jobs.push_back(std::async(std::launch::async, [&, i, device]() {
+      c10::OptionalDeviceGuard device_guard(device);
       blocks[i]->initialize_under_mesh(vars[i]);
     }));
   }
@@ -152,10 +158,11 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
     return;
   }
 
-  run_block_jobs(blocks.size(), [&](size_t i) {
+  auto device = torch::Device(blocks.front()->options->device_str());
+  run_block_jobs(blocks.size(), device, [&](size_t i) {
     blocks[i]->advance_local(vars[i], dt, stage);
   });
-  run_block_jobs(blocks.size(),
+  run_block_jobs(blocks.size(), device,
                  [&](size_t i) { blocks[i]->exchange_ghost_zones(vars[i]); });
 }
 
