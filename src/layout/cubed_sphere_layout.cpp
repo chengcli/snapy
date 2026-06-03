@@ -962,9 +962,9 @@ void CubedSphereLayoutImpl::exchange_remote(
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::_remap_exchange_offset(
-    std::tuple<int, int, int> iloc, int dy, int dx) const {
+    std::tuple<int, int, int> iloc, int dy, int dx, int dz) const {
   (void)iloc;
-  return {dy, dx, 0};
+  return {dy, dx, dz};
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::_peer_exchange_offset(

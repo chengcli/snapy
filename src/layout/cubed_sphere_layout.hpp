@@ -63,7 +63,8 @@ class CubedSphereLayoutImpl : public LayoutImpl {
   //! Constructor-time setup that replaces the old torch-style reset() hook.
   void _initialize();
   std::tuple<int, int, int> _remap_exchange_offset(
-      std::tuple<int, int, int> iloc, int dy, int dx) const override;
+      std::tuple<int, int, int> iloc, int dy, int dx,
+      int dz = 0) const override;
   std::tuple<int, int, int> _peer_exchange_offset(
       int peer_rank, int target_rank, SyncOptions const& opts,
       std::tuple<int, int, int> offset) const override;
