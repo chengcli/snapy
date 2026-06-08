@@ -40,7 +40,8 @@ std::tuple<int, int, int> CubedLayoutImpl::loc_of(int rank) const {
 int CubedLayoutImpl::neighbor_rank(std::tuple<int, int, int> iloc,
                                    std::tuple<int, int, int> offset) const {
   auto [rx, ry, rz] = iloc;
-  auto [dx, dy, dz] = offset;
+  auto [dy, dx, dz] =
+      offset;  // dy=offset[0]=x3-dir, dx=offset[1]=x2-dir, dz=offset[2]=x1-dir
 
   int nx = rx + dx;
   int ny = ry + dy;
