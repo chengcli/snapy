@@ -89,6 +89,12 @@ std::map<LocalExchangeKey, NCCLLaunchState> g_nccl_launch_states;
 std::map<OrderedPhaseKey, OrderedPhaseState> g_ordered_phase_states;
 std::mutex g_process_comm_mutex;
 
+std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
+                                       SyncOptions const& opts) {
+  if (layout.num_exchange_buffers() < 27) return {0, 0};
+  return {opts.dz_min(), opts.dz_max()};
+}
+
 std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
   std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(),
                                    nullptr);
@@ -208,9 +214,10 @@ LayoutImpl::_remote_order_keys(SyncOptions const& opts) const {
   auto rank = options->rank();
   auto iloc = loc_of(rank);
   int local_block = options->local_block_index(rank);
+  auto [dz_min, dz_max] = exchange_dz_bounds(*this, opts);
   std::vector<std::tuple<int, int, int, int, int, int>> keys;
 
-  for (int dz_ = opts.dz_min(); dz_ <= opts.dz_max(); ++dz_) {
+  for (int dz_ = dz_min; dz_ <= dz_max; ++dz_) {
     for (int dy_ = opts.dy_min(); dy_ <= opts.dy_max(); ++dy_) {
       for (int dx_ = opts.dx_min(); dx_ <= opts.dx_max(); ++dx_) {
         if (dz_ == 0 && dy_ == 0 && dx_ == 0) continue;
@@ -487,8 +494,9 @@ void LayoutImpl::_copy_local_exchange_buffers(
   for (auto* layout : layouts) {
     auto rank = layout->options->rank();
     auto iloc = layout->loc_of(rank);
+    auto [dz_min, dz_max] = exchange_dz_bounds(*layout, opts);
 
-    for (int dz_ = opts.dz_min(); dz_ <= opts.dz_max(); ++dz_) {
+    for (int dz_ = dz_min; dz_ <= dz_max; ++dz_) {
       for (int dy_ = opts.dy_min(); dy_ <= opts.dy_max(); ++dy_) {
         for (int dx_ = opts.dx_min(); dx_ <= opts.dx_max(); ++dx_) {
           if (dz_ == 0 && dy_ == 0 && dx_ == 0) continue;
@@ -541,8 +549,7 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
   auto iloc = loc_of(options->rank());
 
   // Iterate over all 3D neighbor directions
-  int dz_min = opts.dz_min();
-  int dz_max = opts.dz_max();
+  auto [dz_min, dz_max] = exchange_dz_bounds(*this, opts);
   int dy_min = opts.dy_min();
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
@@ -705,8 +712,7 @@ void LayoutImpl::exchange_remote(
   // Get my logical location
   auto iloc = loc_of(rank);
 
-  int dz_min = opts.dz_min();
-  int dz_max = opts.dz_max();
+  auto [dz_min, dz_max] = exchange_dz_bounds(*this, opts);
   int dy_min = opts.dy_min();
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
@@ -833,8 +839,7 @@ void LayoutImpl::deserialize(MeshBlockImpl const* pmb, Variables& vars,
   // Get my logical location
   auto iloc = loc_of(options->rank());
 
-  int dz_min = opts.dz_min();
-  int dz_max = opts.dz_max();
+  auto [dz_min, dz_max] = exchange_dz_bounds(*this, opts);
   int dy_min = opts.dy_min();
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
