@@ -2,8 +2,12 @@
 #include <gtest/gtest.h>
 
 // C/C++
+#include <netcdf.h>
+
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -13,6 +17,7 @@
 
 // snap
 #include <snap/mesh/meshblock.hpp>
+#include <snap/output/output_formats.hpp>
 #include <snap/output/output_type.hpp>
 
 using namespace snap;
@@ -21,30 +26,53 @@ namespace {
 
 class TestOutputType : public OutputType {
  public:
-  explicit TestOutputType(OutputOptions const& options) : OutputType(options) {}
+  explicit TestOutputType(OutputOptions const &options) : OutputType(options) {}
 
-  void load_hydro(MeshBlockImpl* pmb, Variables const& vars) {
+  void load_hydro(MeshBlockImpl *pmb, Variables const &vars) {
     loadHydroOutputData(pmb, vars);
   }
 
-  void load_scalar(MeshBlockImpl* pmb, Variables const& vars) {
+  void load_scalar(MeshBlockImpl *pmb, Variables const &vars) {
     loadScalarOutputData(pmb, vars);
   }
 
-  void load_user_output(MeshBlockImpl* pmb, Variables const& vars) {
+  void load_user_output(MeshBlockImpl *pmb, Variables const &vars) {
     loadUserOutputData(pmb, vars);
+  }
+
+  void append(std::string name, torch::Tensor const &tensor) {
+    appendTensorSliceOutput("SCALARS", std::move(name), tensor, 4, 0,
+                            tensor.size(0));
+  }
+
+  std::vector<int> output_shape(std::string const &name) const {
+    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+      if (pdata->name == name) {
+        return {pdata->data.GetDim4(), pdata->data.GetDim3(),
+                pdata->data.GetDim2(), pdata->data.GetDim1()};
+      }
+    }
+    throw std::runtime_error("missing output variable: " + name);
+  }
+
+  double output_value(std::string const &name, int n, int k, int j,
+                      int i) const {
+    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+      if (pdata->name == name) return pdata->data(n, k, j, i);
+    }
+    throw std::runtime_error("missing output variable: " + name);
   }
 
   std::vector<std::string> output_names() const {
     std::vector<std::string> names;
-    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       names.push_back(pdata->name);
     }
     return names;
   }
 
-  double output_value(std::string const& name) const {
-    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+  double output_value(std::string const &name) const {
+    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       if (pdata->name == name) {
         return pdata->data(0, 0, 0, 0);
       }
@@ -61,7 +89,7 @@ std::shared_ptr<MeshBlockImpl> make_block(
       std::filesystem::path("build") / "tests" / "test_coordinate.yaml",
   };
   auto it = std::find_if(candidates.begin(), candidates.end(),
-                         [](std::filesystem::path const& path) {
+                         [](std::filesystem::path const &path) {
                            return std::filesystem::exists(path);
                          });
   if (it == candidates.end()) {
@@ -76,7 +104,12 @@ std::shared_ptr<MeshBlockImpl> make_block(
   return std::make_shared<MeshBlockImpl>(options);
 }
 
-bool contains(std::vector<std::string> const& names, std::string const& name) {
+std::shared_ptr<MeshBlockImpl> make_3d_block() {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+  return std::make_shared<MeshBlockImpl>(options);
+}
+
+bool contains(std::vector<std::string> const &names, std::string const &name) {
   return std::find(names.begin(), names.end(), name) != names.end();
 }
 
@@ -94,7 +127,7 @@ TEST(UserOutput, missing_callback_reports_meaningful_error) {
   try {
     output.load_user_output(&block, vars);
     FAIL() << "Expected missing user output callback to throw";
-  } catch (std::exception const& exc) {
+  } catch (std::exception const &exc) {
     auto msg = std::string(exc.what());
     EXPECT_NE(msg.find("set_user_output_func"), std::string::npos);
     EXPECT_NE(msg.find("uov"), std::string::npos);
@@ -107,7 +140,7 @@ TEST(UserOutput, registered_callback_allows_uov_output) {
   TestOutputType output(options);
 
   MeshBlockImpl block;
-  block.user_output_callback = [](Variables const&) {
+  block.user_output_callback = [](Variables const &) {
     Variables out;
     out["my_uov"] = torch::ones({1, 1, 1});
     return out;
@@ -118,6 +151,128 @@ TEST(UserOutput, registered_callback_allows_uov_output) {
 
   EXPECT_NO_THROW(output.load_user_output(&block, vars));
 }
+
+TEST(OutputSlice, selects_boundary_cell_and_collapses_axis) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->x1_slice(2.0);
+  TestOutputType output(opts);
+
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  auto values = torch::arange(nc1 * nc2 * nc3, torch::kFloat64)
+                    .reshape({1, nc3, nc2, nc1});
+  output.append("field", values);
+  output.out_is = block->pcoord->il();
+  output.out_ie = block->pcoord->iu();
+  output.out_js = block->pcoord->jl();
+  output.out_je = block->pcoord->ju();
+  output.out_ks = block->pcoord->kl();
+  output.out_ke = block->pcoord->ku();
+
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.islice, block->pcoord->il() + 2);
+  EXPECT_EQ(output.output_shape("field"), (std::vector<int>{1, nc3, nc2, 1}));
+  EXPECT_DOUBLE_EQ(output.output_value("field", 0, block->pcoord->kl(),
+                                       block->pcoord->jl(), 0),
+                   values
+                       .index({0, block->pcoord->kl(), block->pcoord->jl(),
+                               block->pcoord->il() + 2})
+                       .item<double>());
+  output.ClearOutputData();
+}
+
+TEST(OutputSlice, supports_multiple_axes_and_rejects_nonintersecting_block) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->x2_slice(1.5);
+  opts->x3_slice(2.5);
+  TestOutputType output(opts);
+
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  output.append("field", torch::ones({1, nc3, nc2, nc1}, torch::kFloat64));
+  output.out_is = block->pcoord->il();
+  output.out_ie = block->pcoord->iu();
+  output.out_js = block->pcoord->jl();
+  output.out_je = block->pcoord->ju();
+  output.out_ks = block->pcoord->kl();
+  output.out_ke = block->pcoord->ku();
+
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.output_shape("field"), (std::vector<int>{1, 1, 1, nc1}));
+  output.ClearOutputData();
+
+  auto outside_opts = OutputOptionsImpl::create();
+  outside_opts->x1_slice(block->pcoord->options->x1max());
+  TestOutputType outside(outside_opts);
+  outside.append("field", torch::ones({1, nc3, nc2, nc1}, torch::kFloat64));
+  EXPECT_FALSE(outside.TransformOutputData(block.get()));
+  outside.ClearOutputData();
+}
+
+TEST(OutputSlice, yaml_coordinate_presence_activates_slice_and_rejects_sum) {
+  auto opts = OutputOptionsImpl::from_yaml(
+      YAML::Load("{type: netcdf, x1_slice: 1.25}"));
+  ASSERT_TRUE(opts->x1_slice().has_value());
+  EXPECT_DOUBLE_EQ(*opts->x1_slice(), 1.25);
+  EXPECT_FALSE(opts->x2_slice().has_value());
+
+  EXPECT_THROW(
+      OutputOptionsImpl::from_yaml(YAML::Load("{type: netcdf, x1_slice: 1.25, "
+                                              "output_sumx1: true}")),
+      std::invalid_argument);
+}
+
+#ifdef NETCDFOUTPUT
+TEST(OutputSlice, netcdf_writes_selected_coordinate_and_collapsed_dimension) {
+  auto block = make_3d_block();
+  auto dir = std::filesystem::temp_directory_path() /
+             ("snapy_slice_" +
+              std::to_string(reinterpret_cast<std::uintptr_t>(block.get())));
+  block->options->output_dir(dir.string());
+  block->options->basename("slice");
+
+  auto opts = OutputOptionsImpl::create();
+  opts->file_type("netcdf");
+  opts->variables({"d"});
+  opts->x1_slice(2.0);
+  opts->combine(false);
+  NetcdfOutput output(opts);
+
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  int nvar = block->phydro->peos->nvar();
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  vars["hydro_u"] = torch::zeros_like(vars["hydro_w"]);
+  vars["hydro_w"][IDN].copy_(
+      torch::arange(nc1 * nc2 * nc3, torch::kFloat64).reshape({nc3, nc2, nc1}));
+
+  output.write_output_file(block.get(), vars, 0.0, false);
+  auto file = dir / "slice.block0.out0.00000.nc";
+
+  int ncid;
+  ASSERT_EQ(nc_open(file.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
+  int dimid;
+  ASSERT_EQ(nc_inq_dimid(ncid, "x1", &dimid), NC_NOERR);
+  size_t length;
+  ASSERT_EQ(nc_inq_dimlen(ncid, dimid, &length), NC_NOERR);
+  EXPECT_EQ(length, 1);
+
+  int varid;
+  ASSERT_EQ(nc_inq_varid(ncid, "x1", &varid), NC_NOERR);
+  float coordinate;
+  ASSERT_EQ(nc_get_var_float(ncid, varid, &coordinate), NC_NOERR);
+  EXPECT_FLOAT_EQ(coordinate, 2.5F);
+  EXPECT_EQ(nc_close(ncid), NC_NOERR);
+  std::remove(file.c_str());
+  std::remove(dir.c_str());
+}
+#endif
 
 TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
   auto block = make_block("ideal-gas", {"tracer_a"});
@@ -135,7 +290,7 @@ TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
       torch::ones({1, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
   vars["scalar_r"] = vars["scalar_s"] / vars["hydro_u"][IDN].unsqueeze(0);
 
-  block->user_forcing_callback = [](Variables const& forcing_vars, double dt,
+  block->user_forcing_callback = [](Variables const &forcing_vars, double dt,
                                     int stage) {
     EXPECT_DOUBLE_EQ(dt, 0.0);
     EXPECT_EQ(stage, 0);
@@ -173,7 +328,7 @@ TEST(UserForcing, callback_rejects_unsupported_keys) {
   vars["hydro_w"][IPR].fill_(3.0);
   vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
 
-  block->user_forcing_callback = [](Variables const& forcing_vars, double,
+  block->user_forcing_callback = [](Variables const &forcing_vars, double,
                                     int) {
     Variables out;
     out["hydro_w"] = torch::zeros_like(forcing_vars.at("hydro_u"));
@@ -391,7 +546,7 @@ TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

@@ -116,6 +116,25 @@ Use ``scalar_stat`` to output time-weighted scalar primitive statistics over
 the same cadence. Scalar statistic names follow the scalar primitive names, for
 example ``r_tracer_a_mean`` and ``r_tracer_a_std``.
 
+Slice Output
+~~~~~~~~~~~~
+
+Set a slice coordinate on a NetCDF output to write only the cell containing
+that coordinate:
+
+.. code-block:: yaml
+
+    outputs:
+      - type: netcdf
+        variables: [prim]
+        x2_slice: 0.0
+        dt: 300.
+
+Slices use lower-inclusive, upper-exclusive mesh bounds. Multiple slice
+coordinates may be specified to produce line or point output. A slice
+coordinate must lie inside the global mesh and cannot be combined with a sum
+along the same axis.
+
 Tracer Species
 ~~~~~~~~~~~~~~
 
