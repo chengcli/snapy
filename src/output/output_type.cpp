@@ -8,8 +8,27 @@
 
 #include "output_formats.hpp"
 #include "output_type.hpp"
+#include "output_utils.hpp"
 
 namespace snap {
+namespace {
+std::string first_output_name(std::string const &name) {
+  auto end = name.find_first_of(";,");
+  return name.substr(0, end);
+}
+
+int data_dimension_for_axis(std::string const &grid, int physical_dim) {
+  // Reduced outputs compact retained spatial axes into AthenaArray dimensions.
+  if (grid.empty() || grid.size() != 3 || grid[0] != '-') {
+    return physical_dim;
+  }
+  if (grid == "---") return 0;
+  if (grid[1] == '-') return physical_dim == 1 ? 1 : 0;
+  if (physical_dim == 1) return 0;
+  return physical_dim - 1;
+}
+}  // namespace
+
 OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   auto options = OutputOptionsImpl::create();
 
@@ -392,6 +411,14 @@ bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
 
   OutputData *pdata = pfirst_data_;
   while (pdata != nullptr) {
+    auto grid = MetadataTable::GetInstance()->GetGridType(
+        first_output_name(pdata->name));
+    int data_dim = data_dimension_for_axis(grid, dim);
+    if (data_dim == 0) {
+      pdata = pdata->pnext;
+      continue;
+    }
+
     auto *pnew = new OutputData;
     pnew->type = pdata->type;
     pnew->name = pdata->name;
@@ -404,14 +431,14 @@ bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
     int nx1 = pdata->data.GetDim1();
     int source = *selected;
 
-    if (dim == 3) {
+    if (data_dim == 3) {
       pnew->data.NewAthenaArray(nx4, 1, nx2, nx1);
       source = nx3 > 1 ? source : 0;
       for (int n = 0; n < nx4; ++n)
         for (int j = 0; j < nx2; ++j)
           for (int i = 0; i < nx1; ++i)
             pnew->data(n, 0, j, i) = pdata->data(n, source, j, i);
-    } else if (dim == 2) {
+    } else if (data_dim == 2) {
       pnew->data.NewAthenaArray(nx4, nx3, 1, nx1);
       source = nx2 > 1 ? source : 0;
       for (int n = 0; n < nx4; ++n)
@@ -442,8 +469,19 @@ bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
 }
 
 void OutputType::SumOutputData(MeshBlockImpl *, int dim) {
+  int sum_begin = dim == 3 ? out_ks : (dim == 2 ? out_js : out_is);
+  int sum_end = dim == 3 ? out_ke : (dim == 2 ? out_je : out_ie);
+
   OutputData *pdata = pfirst_data_;
   while (pdata != nullptr) {
+    auto grid = MetadataTable::GetInstance()->GetGridType(
+        first_output_name(pdata->name));
+    int data_dim = data_dimension_for_axis(grid, dim);
+    if (data_dim == 0) {
+      pdata = pdata->pnext;
+      continue;
+    }
+
     auto *pnew = new OutputData;
     pnew->type = pdata->type;
     pnew->name = pdata->name;
@@ -455,26 +493,26 @@ void OutputType::SumOutputData(MeshBlockImpl *, int dim) {
     int nx2 = pdata->data.GetDim2();
     int nx1 = pdata->data.GetDim1();
 
-    if (dim == 3) {
+    if (data_dim == 3) {
       pnew->data.NewAthenaArray(nx4, 1, nx2, nx1);
       for (int n = 0; n < nx4; ++n)
-        for (int k = out_ks; k <= out_ke; ++k)
-          for (int j = out_js; j <= out_je; ++j)
-            for (int i = out_is; i <= out_ie; ++i)
+        for (int k = sum_begin; k <= sum_end; ++k)
+          for (int j = 0; j < nx2; ++j)
+            for (int i = 0; i < nx1; ++i)
               pnew->data(n, 0, j, i) += pdata->data(n, k, j, i);
-    } else if (dim == 2) {
+    } else if (data_dim == 2) {
       pnew->data.NewAthenaArray(nx4, nx3, 1, nx1);
       for (int n = 0; n < nx4; ++n)
-        for (int k = out_ks; k <= out_ke; ++k)
-          for (int j = out_js; j <= out_je; ++j)
-            for (int i = out_is; i <= out_ie; ++i)
+        for (int k = 0; k < nx3; ++k)
+          for (int j = sum_begin; j <= sum_end; ++j)
+            for (int i = 0; i < nx1; ++i)
               pnew->data(n, k, 0, i) += pdata->data(n, k, j, i);
     } else {
       pnew->data.NewAthenaArray(nx4, nx3, nx2, 1);
       for (int n = 0; n < nx4; ++n)
-        for (int k = out_ks; k <= out_ke; ++k)
-          for (int j = out_js; j <= out_je; ++j)
-            for (int i = out_is; i <= out_ie; ++i)
+        for (int k = 0; k < nx3; ++k)
+          for (int j = 0; j < nx2; ++j)
+            for (int i = sum_begin; i <= sum_end; ++i)
               pnew->data(n, k, j, 0) += pdata->data(n, k, j, i);
     }
 

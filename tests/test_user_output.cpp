@@ -1,8 +1,13 @@
 // external
 #include <gtest/gtest.h>
 
+// base
+#include <configure.h>
+
 // C/C++
+#ifdef NETCDFOUTPUT
 #include <netcdf.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -43,6 +48,10 @@ class TestOutputType : public OutputType {
   void append(std::string name, torch::Tensor const &tensor) {
     appendTensorSliceOutput("SCALARS", std::move(name), tensor, 4, 0,
                             tensor.size(0));
+  }
+
+  void append_reduced(std::string name, torch::Tensor const &tensor) {
+    appendTensorOutput("SCALARS", std::move(name), tensor);
   }
 
   std::vector<int> output_shape(std::string const &name) const {
@@ -211,6 +220,87 @@ TEST(OutputSlice, supports_multiple_axes_and_rejects_nonintersecting_block) {
   outside.append("field", torch::ones({1, nc3, nc2, nc1}, torch::kFloat64));
   EXPECT_FALSE(outside.TransformOutputData(block.get()));
   outside.ClearOutputData();
+}
+
+TEST(OutputSlice, preserves_axes_absent_from_reduced_outputs) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->x2_slice(1.5);
+  opts->x3_slice(2.5);
+  TestOutputType output(opts);
+
+  int nc1 = block->pcoord->options->nc1();
+  output.append_reduced("avg_vel", torch::ones({3, nc1}, torch::kFloat64));
+  output.out_is = block->pcoord->il();
+  output.out_ie = block->pcoord->iu();
+  output.out_js = block->pcoord->jl();
+  output.out_je = block->pcoord->ju();
+  output.out_ks = block->pcoord->kl();
+  output.out_ke = block->pcoord->ku();
+
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.output_shape("avg_vel"), (std::vector<int>{1, 1, 3, nc1}));
+  output.ClearOutputData();
+}
+
+TEST(OutputSlice, maps_reduced_output_spatial_axes) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->x2_slice(1.5);
+  TestOutputType output(opts);
+
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  auto values =
+      torch::arange(2 * nc3 * nc2, torch::kFloat64).reshape({2, nc3, nc2});
+  output.append_reduced("path_species", values);
+  output.out_is = block->pcoord->il();
+  output.out_ie = block->pcoord->iu();
+  output.out_js = block->pcoord->jl();
+  output.out_je = block->pcoord->ju();
+  output.out_ks = block->pcoord->kl();
+  output.out_ke = block->pcoord->ku();
+
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.output_shape("path_species"),
+            (std::vector<int>{1, 2, nc3, 1}));
+  EXPECT_DOUBLE_EQ(
+      output.output_value("path_species", 0, 0, block->pcoord->kl(), 0),
+      values.index({0, block->pcoord->kl(), block->pcoord->jl() + 1})
+          .item<double>());
+  output.ClearOutputData();
+}
+
+TEST(OutputSlice, maps_reduced_output_sum_axes) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->output_sumx2(true);
+  TestOutputType output(opts);
+
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  auto values =
+      torch::arange(2 * nc3 * nc2, torch::kFloat64).reshape({2, nc3, nc2});
+  output.append_reduced("path_species", values);
+  output.out_is = block->pcoord->il();
+  output.out_ie = block->pcoord->iu();
+  output.out_js = block->pcoord->jl();
+  output.out_je = block->pcoord->ju();
+  output.out_ks = block->pcoord->kl();
+  output.out_ke = block->pcoord->ku();
+
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.output_shape("path_species"),
+            (std::vector<int>{1, 2, nc3, 1}));
+  EXPECT_DOUBLE_EQ(
+      output.output_value("path_species", 0, 0, block->pcoord->kl(), 0),
+      values
+          .index({0, block->pcoord->kl(),
+                  torch::indexing::Slice(block->pcoord->jl(),
+                                         block->pcoord->ju() + 1)})
+          .sum()
+          .item<double>());
+  output.ClearOutputData();
 }
 
 TEST(OutputSlice, yaml_coordinate_presence_activates_slice_and_rejects_sum) {
