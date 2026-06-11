@@ -104,6 +104,27 @@ void bind_mesh(py::module& m) {
       .def_static("from_yaml", &snap::MeshOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
       .def("device_str", &snap::MeshOptionsImpl::device_str)
+      .def(
+          "set_local_horizontal_cells",
+          [](snap::MeshOptions& self, int nx2, int nx3) {
+            if (nx2 <= 0 || nx3 <= 0) {
+              throw std::invalid_argument(
+                  "horizontal cell counts must be positive");
+            }
+            auto block = self->block();
+            if (block == nullptr || block->coord() == nullptr ||
+                block->layout() == nullptr) {
+              throw std::runtime_error(
+                  "MeshOptions requires coordinate and layout options");
+            }
+            auto coord = block->coord();
+            auto layout = block->layout();
+            coord->nx2(nx2);
+            coord->nx3(nx3);
+            coord->global_nx2(nx2 * layout->px());
+            coord->global_nx3(nx3 * layout->py());
+          },
+          py::arg("nx2"), py::arg("nx3"))
       .ADD_OPTION(snap::MeshBlockOptions, snap::MeshOptionsImpl, block)
       .ADD_OPTION(int, snap::MeshOptionsImpl, blocks_per_process);
 
@@ -243,6 +264,9 @@ void bind_mesh(py::module& m) {
           },
           py::arg("restart_file"))
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
+      .def("exchange_ghost_zones", &snap::MeshImpl::exchange_ghost_zones,
+           py::arg("vars"), py::arg("type") = (int)snap::kConserved,
+           py::call_guard<py::gil_scoped_release>())
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
            py::arg("current_time"), py::arg("final_write") = false)
       .def("print_cycle_info", &snap::MeshImpl::print_cycle_info,

@@ -167,6 +167,25 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
                  [&](size_t i) { blocks[i]->exchange_ghost_zones(vars[i]); });
 }
 
+void MeshImpl::exchange_ghost_zones(MeshVariables& vars, int type) {
+  TORCH_CHECK(
+      vars.size() == blocks.size(),
+      "Mesh::exchange_ghost_zones expects one Variables map per local MeshBlock");
+  TORCH_CHECK(type == kPrimitive || type == kConserved || type == kScalar,
+              "Mesh::exchange_ghost_zones received invalid variable type");
+
+  SyncOptions opts;
+  opts.interpolate(true).type(type);
+  if (blocks.size() == 1) {
+    blocks[0]->exchange(vars[0], opts);
+    return;
+  }
+
+  auto device = torch::Device(blocks.front()->options->device_str());
+  run_block_jobs(blocks.size(), device,
+                 [&](size_t i) { blocks[i]->exchange(vars[i], opts); });
+}
+
 void MeshImpl::make_outputs(MeshVariables const& vars, double current_time,
                             bool final_write) {
   TORCH_CHECK(
