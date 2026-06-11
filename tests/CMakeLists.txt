@@ -37,6 +37,15 @@ set_tests_properties(test_exchange.release PROPERTIES
     "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
 )
 
+add_test(
+  NAME test_mesh_exchange_python
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mesh_exchange.py
+)
+set_tests_properties(test_mesh_exchange_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  LABELS "python;exchange"
+)
+
 file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
