@@ -40,36 +40,6 @@ class OutputOptions:
         ...
 
     @overload
-    def output_slicex1(self) -> bool:
-        """Get x1 slice output flag."""
-        ...
-
-    @overload
-    def output_slicex1(self, value: bool) -> "OutputOptions":
-        """Set x1 slice output flag."""
-        ...
-
-    @overload
-    def output_slicex2(self) -> bool:
-        """Get x2 slice output flag."""
-        ...
-
-    @overload
-    def output_slicex2(self, value: bool) -> "OutputOptions":
-        """Set x2 slice output flag."""
-        ...
-
-    @overload
-    def output_slicex3(self) -> bool:
-        """Get x3 slice output flag."""
-        ...
-
-    @overload
-    def output_slicex3(self, value: bool) -> "OutputOptions":
-        """Set x3 slice output flag."""
-        ...
-
-    @overload
     def output_sumx1(self) -> bool:
         """Get x1 sum output flag."""
         ...
@@ -120,32 +90,32 @@ class OutputOptions:
         ...
 
     @overload
-    def x1_slice(self) -> float:
+    def x1_slice(self) -> Optional[float]:
         """Get x1 slice position."""
         ...
 
     @overload
-    def x1_slice(self, value: float) -> "OutputOptions":
+    def x1_slice(self, value: Optional[float]) -> "OutputOptions":
         """Set x1 slice position."""
         ...
 
     @overload
-    def x2_slice(self) -> float:
+    def x2_slice(self) -> Optional[float]:
         """Get x2 slice position."""
         ...
 
     @overload
-    def x2_slice(self, value: float) -> "OutputOptions":
+    def x2_slice(self, value: Optional[float]) -> "OutputOptions":
         """Set x2 slice position."""
         ...
 
     @overload
-    def x3_slice(self) -> float:
+    def x3_slice(self) -> Optional[float]:
         """Get x3 slice position."""
         ...
 
     @overload
-    def x3_slice(self, value: float) -> "OutputOptions":
+    def x3_slice(self, value: Optional[float]) -> "OutputOptions":
         """Set x3 slice position."""
         ...
 

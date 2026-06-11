@@ -8,17 +8,32 @@
 
 #include "output_formats.hpp"
 #include "output_type.hpp"
+#include "output_utils.hpp"
 
 namespace snap {
-OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const& node, int fid) {
+namespace {
+std::string first_output_name(std::string const &name) {
+  auto end = name.find_first_of(";,");
+  return name.substr(0, end);
+}
+
+int data_dimension_for_axis(std::string const &grid, int physical_dim) {
+  // Reduced outputs compact retained spatial axes into AthenaArray dimensions.
+  if (grid.empty() || grid.size() != 3 || grid[0] != '-') {
+    return physical_dim;
+  }
+  if (grid == "---") return 0;
+  if (grid[1] == '-') return physical_dim == 1 ? 1 : 0;
+  if (physical_dim == 1) return 0;
+  return physical_dim - 1;
+}
+}  // namespace
+
+OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   auto options = OutputOptionsImpl::create();
 
   options->fid() = fid;
   options->dt() = node["dt"].as<double>(0.);
-
-  options->output_slicex1() = node["output_slicex1"].as<bool>(false);
-  options->output_slicex2() = node["output_slicex2"].as<bool>(false);
-  options->output_slicex3() = node["output_slicex3"].as<bool>(false);
 
   options->output_sumx1() = node["output_sumx1"].as<bool>(false);
   options->output_sumx2() = node["output_sumx2"].as<bool>(false);
@@ -27,9 +42,19 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const& node, int fid) {
   options->include_ghost_zones() = node["include_ghost_zones"].as<bool>(false);
   options->cartesian_vector() = node["cartesian_vector"].as<bool>(false);
 
-  options->x1_slice() = node["x1_slice"].as<double>(0.);
-  options->x2_slice() = node["x2_slice"].as<double>(0.);
-  options->x3_slice() = node["x3_slice"].as<double>(0.);
+  if (node["x1_slice"]) options->x1_slice() = node["x1_slice"].as<double>();
+  if (node["x2_slice"]) options->x2_slice() = node["x2_slice"].as<double>();
+  if (node["x3_slice"]) options->x3_slice() = node["x3_slice"].as<double>();
+
+  if (options->x1_slice() && options->output_sumx1()) {
+    throw std::invalid_argument("Cannot request both slice and sum along x1");
+  }
+  if (options->x2_slice() && options->output_sumx2()) {
+    throw std::invalid_argument("Cannot request both slice and sum along x2");
+  }
+  if (options->x3_slice() && options->output_sumx3()) {
+    throw std::invalid_argument("Cannot request both slice and sum along x3");
+  }
 
   if (node["type"]) {
     options->file_type() = node["type"].as<std::string>();
@@ -57,7 +82,7 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const& node, int fid) {
   return options;
 }
 
-OutputType::OutputType(OutputOptions const& options_)
+OutputType::OutputType(OutputOptions const &options_)
     : options(options_),
       pnext_type(),    // Terminate this node in singly linked list with nullptr
       num_vars_(),     // nested doubly linked list of OutputData:
@@ -65,11 +90,11 @@ OutputType::OutputType(OutputOptions const& options_)
       plast_data_() {  // Initialize tail node to nullptr
 }
 
-MeshBlockImpl* OutputType::LoadOutputData(MeshBlockImpl* pmb_in,
-                                          Variables const& vars_in) {
+MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
+                                          Variables const &vars_in) {
   num_vars_ = 0;
-  OutputData* pod;
-  MeshBlockImpl* pmb;
+  OutputData *pod;
+  MeshBlockImpl *pmb;
   Variables vars;
   // set ptrs to data in OutputData linked list, then slice/sum as needed
 
@@ -88,7 +113,7 @@ MeshBlockImpl* OutputType::LoadOutputData(MeshBlockImpl* pmb_in,
 
     int nghost = pmb->options->coord()->nghost();
 
-    for (auto& [name, var] : vars_in) {
+    for (auto &[name, var] : vars_in) {
       auto interior_in = pmb_in->part(
           {0, 0, 0}, PartOptions().exterior(false).ndim(var.dim()));
       auto interior_out =
@@ -125,7 +150,7 @@ MeshBlockImpl* OutputType::LoadOutputData(MeshBlockImpl* pmb_in,
   return pmb;
 }
 
-void OutputType::AppendOutputDataNode(OutputData* pnew_data) {
+void OutputType::AppendOutputDataNode(OutputData *pnew_data) {
   if (pfirst_data_ == nullptr) {
     pfirst_data_ = pnew_data;
   } else {
@@ -136,7 +161,7 @@ void OutputType::AppendOutputDataNode(OutputData* pnew_data) {
   plast_data_ = pnew_data;
 }
 
-void OutputType::ReplaceOutputDataNode(OutputData* pold, OutputData* pnew) {
+void OutputType::ReplaceOutputDataNode(OutputData *pold, OutputData *pnew) {
   if (pold == pfirst_data_) {
     pfirst_data_ = pnew;
     if (pold->pnext != nullptr) {  // there is another node in the list
@@ -159,9 +184,9 @@ void OutputType::ReplaceOutputDataNode(OutputData* pold, OutputData* pnew) {
 }
 
 void OutputType::ClearOutputData() {
-  OutputData* pdata = pfirst_data_;
+  OutputData *pdata = pfirst_data_;
   while (pdata != nullptr) {
-    OutputData* pdata_old = pdata;
+    OutputData *pdata_old = pdata;
     pdata = pdata->pnext;
     delete pdata_old;
   }
@@ -172,7 +197,7 @@ void OutputType::ClearOutputData() {
 
 bool OutputType::ContainAnyVariable(
     std::initializer_list<std::string> vars) const {
-  for (auto const& var : vars) {
+  for (auto const &var : vars) {
     if (std::find(options->variables().begin(), options->variables().end(),
                   var) != options->variables().end()) {
       return true;
@@ -181,7 +206,7 @@ bool OutputType::ContainAnyVariable(
   return false;
 }
 
-bool OutputType::ContainVariable(const std::string& var) const {
+bool OutputType::ContainVariable(const std::string &var) const {
   return std::find(options->variables().begin(), options->variables().end(),
                    var) != options->variables().end();
 }
@@ -209,9 +234,9 @@ bool OutputType::shouldOutputConserved(
 }
 
 namespace {
-void update_weighted_moments(torch::Tensor const& value, double weight,
-                             double previous_weight, torch::Tensor& mean,
-                             torch::Tensor& m2) {
+void update_weighted_moments(torch::Tensor const &value, double weight,
+                             double previous_weight, torch::Tensor &mean,
+                             torch::Tensor &m2) {
   if (!mean.defined()) {
     mean = torch::zeros_like(value);
     m2 = torch::zeros_like(value);
@@ -224,7 +249,7 @@ void update_weighted_moments(torch::Tensor const& value, double weight,
 }
 }  // namespace
 
-void OutputType::AccumulateStats(Variables const& vars, double current_time) {
+void OutputType::AccumulateStats(Variables const &vars, double current_time) {
   if (!OutputsAnyStat()) return;
   if (!stat_initialized_) {
     stat_last_time_ = current_time;
@@ -274,14 +299,14 @@ void OutputType::ResetStats(double current_time) {
   stat_initialized_ = true;
 }
 
-torch::Tensor OutputType::PrimStatMean(torch::Tensor const& current) const {
+torch::Tensor OutputType::PrimStatMean(torch::Tensor const &current) const {
   if (stat_elapsed_ <= 0.0 || !prim_stat_mean_.defined()) {
     return current;
   }
   return prim_stat_mean_;
 }
 
-torch::Tensor OutputType::PrimStatStd(torch::Tensor const& current) const {
+torch::Tensor OutputType::PrimStatStd(torch::Tensor const &current) const {
   if (stat_elapsed_ <= 0.0 || !prim_stat_m2_.defined()) {
     return torch::zeros_like(current);
   }
@@ -289,14 +314,14 @@ torch::Tensor OutputType::PrimStatStd(torch::Tensor const& current) const {
   return torch::sqrt(torch::clamp_min(variance, 0.0));
 }
 
-torch::Tensor OutputType::ScalarStatMean(torch::Tensor const& current) const {
+torch::Tensor OutputType::ScalarStatMean(torch::Tensor const &current) const {
   if (stat_elapsed_ <= 0.0 || !scalar_stat_mean_.defined()) {
     return current;
   }
   return scalar_stat_mean_;
 }
 
-torch::Tensor OutputType::ScalarStatStd(torch::Tensor const& current) const {
+torch::Tensor OutputType::ScalarStatStd(torch::Tensor const &current) const {
   if (stat_elapsed_ <= 0.0 || !scalar_stat_m2_.defined()) {
     return torch::zeros_like(current);
   }
@@ -305,8 +330,8 @@ torch::Tensor OutputType::ScalarStatStd(torch::Tensor const& current) const {
 }
 
 void OutputType::appendTensorOutput(std::string type, std::string name,
-                                    torch::Tensor const& tensor) {
-  auto* pod = new OutputData;
+                                    torch::Tensor const &tensor) {
+  auto *pod = new OutputData;
   pod->type = std::move(type);
   pod->name = std::move(name);
   pod->data.CopyFromTensor(tensor);
@@ -315,14 +340,193 @@ void OutputType::appendTensorOutput(std::string type, std::string name,
 }
 
 void OutputType::appendTensorSliceOutput(std::string type, std::string name,
-                                         torch::Tensor const& tensor, int dim,
+                                         torch::Tensor const &tensor, int dim,
                                          int start, int count) {
-  auto* pod = new OutputData;
+  auto *pod = new OutputData;
   pod->type = std::move(type);
   pod->name = std::move(name);
   pod->data.InitFromTensor(tensor, dim, start, count);
   AppendOutputDataNode(pod);
   num_vars_ += count;
+}
+
+bool OutputType::TransformOutputData(MeshBlockImpl *pmb) {
+  if (options->x3_slice() && !SliceOutputData(pmb, 3)) return false;
+  if (options->x2_slice() && !SliceOutputData(pmb, 2)) return false;
+  if (options->x1_slice() && !SliceOutputData(pmb, 1)) return false;
+
+  if (options->output_sumx3()) SumOutputData(pmb, 3);
+  if (options->output_sumx2()) SumOutputData(pmb, 2);
+  if (options->output_sumx1()) SumOutputData(pmb, 1);
+  return true;
+}
+
+bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
+  auto pcoord = pmb->pcoord;
+  auto coord_options = pcoord->options;
+
+  double slice;
+  double lower;
+  double upper;
+  int begin;
+  int end;
+  torch::Tensor faces;
+  int *selected;
+
+  if (dim == 1) {
+    slice = *options->x1_slice();
+    lower = coord_options->x1min();
+    upper = coord_options->x1max();
+    begin = pcoord->il();
+    end = pcoord->iu();
+    faces = pcoord->x1f;
+    selected = &islice;
+  } else if (dim == 2) {
+    slice = *options->x2_slice();
+    lower = coord_options->x2min();
+    upper = coord_options->x2max();
+    begin = pcoord->jl();
+    end = pcoord->ju();
+    faces = pcoord->x2f;
+    selected = &jslice;
+  } else {
+    slice = *options->x3_slice();
+    lower = coord_options->x3min();
+    upper = coord_options->x3max();
+    begin = pcoord->kl();
+    end = pcoord->ku();
+    faces = pcoord->x3f;
+    selected = &kslice;
+  }
+
+  if (slice < lower || slice >= upper) return false;
+
+  *selected = begin;
+  for (int i = begin + 1; i <= end + 1; ++i) {
+    if (faces[i].item<double>() > slice) {
+      *selected = i - 1;
+      break;
+    }
+  }
+
+  OutputData *pdata = pfirst_data_;
+  while (pdata != nullptr) {
+    auto grid = MetadataTable::GetInstance()->GetGridType(
+        first_output_name(pdata->name));
+    int data_dim = data_dimension_for_axis(grid, dim);
+    if (data_dim == 0) {
+      pdata = pdata->pnext;
+      continue;
+    }
+
+    auto *pnew = new OutputData;
+    pnew->type = pdata->type;
+    pnew->name = pdata->name;
+    pnew->longname = pdata->longname;
+    pnew->units = pdata->units;
+
+    int nx4 = pdata->data.GetDim4();
+    int nx3 = pdata->data.GetDim3();
+    int nx2 = pdata->data.GetDim2();
+    int nx1 = pdata->data.GetDim1();
+    int source = *selected;
+
+    if (data_dim == 3) {
+      pnew->data.NewAthenaArray(nx4, 1, nx2, nx1);
+      source = nx3 > 1 ? source : 0;
+      for (int n = 0; n < nx4; ++n)
+        for (int j = 0; j < nx2; ++j)
+          for (int i = 0; i < nx1; ++i)
+            pnew->data(n, 0, j, i) = pdata->data(n, source, j, i);
+    } else if (data_dim == 2) {
+      pnew->data.NewAthenaArray(nx4, nx3, 1, nx1);
+      source = nx2 > 1 ? source : 0;
+      for (int n = 0; n < nx4; ++n)
+        for (int k = 0; k < nx3; ++k)
+          for (int i = 0; i < nx1; ++i)
+            pnew->data(n, k, 0, i) = pdata->data(n, k, source, i);
+    } else {
+      pnew->data.NewAthenaArray(nx4, nx3, nx2, 1);
+      source = nx1 > 1 ? source : 0;
+      for (int n = 0; n < nx4; ++n)
+        for (int k = 0; k < nx3; ++k)
+          for (int j = 0; j < nx2; ++j)
+            pnew->data(n, k, j, 0) = pdata->data(n, k, j, source);
+    }
+
+    ReplaceOutputDataNode(pdata, pnew);
+    pdata = pnew->pnext;
+  }
+
+  if (dim == 3) {
+    out_ks = out_ke = 0;
+  } else if (dim == 2) {
+    out_js = out_je = 0;
+  } else {
+    out_is = out_ie = 0;
+  }
+  return true;
+}
+
+void OutputType::SumOutputData(MeshBlockImpl *, int dim) {
+  int sum_begin = dim == 3 ? out_ks : (dim == 2 ? out_js : out_is);
+  int sum_end = dim == 3 ? out_ke : (dim == 2 ? out_je : out_ie);
+
+  OutputData *pdata = pfirst_data_;
+  while (pdata != nullptr) {
+    auto grid = MetadataTable::GetInstance()->GetGridType(
+        first_output_name(pdata->name));
+    int data_dim = data_dimension_for_axis(grid, dim);
+    if (data_dim == 0) {
+      pdata = pdata->pnext;
+      continue;
+    }
+
+    auto *pnew = new OutputData;
+    pnew->type = pdata->type;
+    pnew->name = pdata->name;
+    pnew->longname = pdata->longname;
+    pnew->units = pdata->units;
+
+    int nx4 = pdata->data.GetDim4();
+    int nx3 = pdata->data.GetDim3();
+    int nx2 = pdata->data.GetDim2();
+    int nx1 = pdata->data.GetDim1();
+
+    if (data_dim == 3) {
+      pnew->data.NewAthenaArray(nx4, 1, nx2, nx1);
+      for (int n = 0; n < nx4; ++n)
+        for (int k = sum_begin; k <= sum_end; ++k)
+          for (int j = 0; j < nx2; ++j)
+            for (int i = 0; i < nx1; ++i)
+              pnew->data(n, 0, j, i) += pdata->data(n, k, j, i);
+    } else if (data_dim == 2) {
+      pnew->data.NewAthenaArray(nx4, nx3, 1, nx1);
+      for (int n = 0; n < nx4; ++n)
+        for (int k = 0; k < nx3; ++k)
+          for (int j = sum_begin; j <= sum_end; ++j)
+            for (int i = 0; i < nx1; ++i)
+              pnew->data(n, k, 0, i) += pdata->data(n, k, j, i);
+    } else {
+      pnew->data.NewAthenaArray(nx4, nx3, nx2, 1);
+      for (int n = 0; n < nx4; ++n)
+        for (int k = 0; k < nx3; ++k)
+          for (int j = 0; j < nx2; ++j)
+            for (int i = sum_begin; i <= sum_end; ++i)
+              pnew->data(n, k, j, 0) += pdata->data(n, k, j, i);
+    }
+
+    ReplaceOutputDataNode(pdata, pnew);
+    pdata = pnew->pnext;
+  }
+
+  if (dim == 3) {
+    out_ks = out_ke = 0;
+  } else if (dim == 2) {
+    out_js = out_je = 0;
+  } else {
+    out_is = out_ie = 0;
+  }
 }
 
 }  // namespace snap

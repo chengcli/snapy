@@ -18,8 +18,8 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
-static void set_scalar_primitive(Variables& vars, torch::Tensor const& scalar_s,
-                                 torch::Tensor const& hydro_u) {
+static void set_scalar_primitive(Variables &vars, torch::Tensor const &scalar_s,
+                                 torch::Tensor const &hydro_u) {
   auto scalar_r = scalar_s / hydro_u[IDN].unsqueeze(0);
   auto it = vars.find("scalar_r");
   if (it != vars.end()) {
@@ -29,7 +29,7 @@ static void set_scalar_primitive(Variables& vars, torch::Tensor const& scalar_s,
   }
 }
 
-MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const& options_)
+MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const &options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
   int nc2 = options->coord()->nc2();
@@ -125,7 +125,30 @@ void MeshBlockImpl::reset() {
   }
 
   //// --------- (3) set up output --------- ////
-  for (auto const& out_op : options->outputs()) {
+  for (auto const &out_op : options->outputs()) {
+    auto validate_slice = [](std::optional<double> const &slice, double lower,
+                             double upper, bool sum, char const *axis) {
+      if (slice && sum) {
+        throw std::invalid_argument(std::string("Cannot request both slice and "
+                                                "sum along ") +
+                                    axis);
+      }
+      if (slice && (*slice < lower || *slice >= upper)) {
+        throw std::invalid_argument(std::string("Slice at ") + axis + "=" +
+                                    std::to_string(*slice) +
+                                    " is out of range of Mesh");
+      }
+    };
+    validate_slice(out_op->x1_slice(), options->coord()->global_x1min(),
+                   options->coord()->global_x1max(), out_op->output_sumx1(),
+                   "x1");
+    validate_slice(out_op->x2_slice(), options->coord()->global_x2min(),
+                   options->coord()->global_x2max(), out_op->output_sumx2(),
+                   "x2");
+    validate_slice(out_op->x3_slice(), options->coord()->global_x3min(),
+                   options->coord()->global_x3max(), out_op->output_sumx3(),
+                   "x3");
+
     if (out_op->file_type() == "restart") {
       output_types.push_back(std::make_shared<RestartOutput>(out_op));
     } else if (out_op->file_type() == "netcdf") {
@@ -206,7 +229,7 @@ void MeshBlockImpl::reset() {
 }
 
 std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
-    std::tuple<int, int, int> offset, PartOptions const& opts) const {
+    std::tuple<int, int, int> offset, PartOptions const &opts) const {
   int nc1 = options->coord()->nc1();
   int nc2 = options->coord()->nc2();
   int nc3 = options->coord()->nc3();
@@ -281,7 +304,7 @@ std::vector<torch::indexing::TensorIndex> MeshBlockImpl::part(
   }
 }
 
-double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
+double MeshBlockImpl::initialize(Variables &vars, char const *restart_file) {
   /*c10d::BarrierOptions op;
   op.device_ids = {options->layout()->local_rank()};
   _playout->pg->barrier(op)->wait();*/
@@ -322,7 +345,7 @@ double MeshBlockImpl::initialize(Variables& vars, char const* restart_file) {
   return 0.;  // default start time is 0.0
 }
 
-void MeshBlockImpl::initialize_local(Variables& vars) {
+void MeshBlockImpl::initialize_local(Variables &vars) {
   BoundaryFuncOptions bops;
   bops.nghost(options->coord()->nghost());
 
@@ -380,7 +403,7 @@ void MeshBlockImpl::initialize_local(Variables& vars) {
   }
 }
 
-void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
+void MeshBlockImpl::initialize_under_mesh(Variables &vars) {
   initialize_local(vars);
 
   SyncOptions prim_opts;
@@ -400,7 +423,7 @@ void MeshBlockImpl::initialize_under_mesh(Variables& vars) {
   finalize_initialization(vars);
 }
 
-void MeshBlockImpl::finalize_initialization(Variables& vars) {
+void MeshBlockImpl::finalize_initialization(Variables &vars) {
   auto hydro_w = vars.at("hydro_w");
   auto scalar_r =
       vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
@@ -479,9 +502,9 @@ void MeshBlockImpl::finalize_initialization(Variables& vars) {
   }
 }
 
-double MeshBlockImpl::max_time_step(Variables const& vars) {
+double MeshBlockImpl::max_time_step(Variables const &vars) {
   auto dt_local = local_max_time_step(vars);
-  auto const& w = vars.at("hydro_w");
+  auto const &w = vars.at("hydro_w");
   auto dt_min = torch::tensor({dt_local}, torch::dtype(torch::kFloat64));
 
   std::vector<at::Tensor> dt_reduce = {dt_min};
@@ -500,8 +523,8 @@ double MeshBlockImpl::max_time_step(Variables const& vars) {
   return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
 }
 
-double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
-  auto const& w = vars.at("hydro_w");
+double MeshBlockImpl::local_max_time_step(Variables const &vars) const {
+  auto const &w = vars.at("hydro_w");
   double dt_min = 1.e9;
 
   // hyperbolic hydro time step
@@ -514,36 +537,36 @@ double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
   return dt_min;
 }
 
-void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
+void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
   advance_local(vars, dt, stage);
   exchange_ghost_zones(vars);
 }
 
-void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
+void MeshBlockImpl::exchange(Variables &vars, SyncOptions const &opts) const {
   std::vector<c10::intrusive_ptr<c10d::Work>> works;
   begin_exchange(vars, opts);
   launch_exchange(opts, works);
   finalize_exchange(vars, opts, works);
 }
 
-void MeshBlockImpl::begin_exchange(Variables& vars,
-                                   SyncOptions const& opts) const {
+void MeshBlockImpl::begin_exchange(Variables &vars,
+                                   SyncOptions const &opts) const {
   _playout->serialize(this, vars, opts);
 }
 
 void MeshBlockImpl::launch_exchange(
-    SyncOptions const& opts,
-    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+    SyncOptions const &opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>> &works) const {
   _playout->launch_exchange(this, opts, works);
 }
 
 void MeshBlockImpl::finalize_exchange(
-    Variables& vars, SyncOptions const& opts,
-    std::vector<c10::intrusive_ptr<c10d::Work>>& works) const {
+    Variables &vars, SyncOptions const &opts,
+    std::vector<c10::intrusive_ptr<c10d::Work>> &works) const {
   _playout->finalize(this, vars, opts, works);
 }
 
-void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
+void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
@@ -624,7 +647,7 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
       fut_scalar_ds.add_(scalar_it->second);
     }
 
-    for (auto const& [name, _] : extra_forcing) {
+    for (auto const &[name, _] : extra_forcing) {
       TORCH_CHECK(name == "hydro_du" || name == "scalar_ds",
                   "User forcing callback returned unsupported key '", name,
                   "'. Expected one or both of: hydro_du, scalar_ds.");
@@ -754,7 +777,7 @@ void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
   }
 }
 
-void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
+void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
   auto hydro_u = vars.at("hydro_u");
   auto scalar_s =
       vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
@@ -779,9 +802,9 @@ void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
   }
 }
 
-void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
+void MeshBlockImpl::make_outputs(Variables const &vars, double current_time,
                                  bool final_write) {
-  for (auto& output_type : output_types) {
+  for (auto &output_type : output_types) {
     output_type->AccumulateStats(vars, current_time);
     if (final_write) {
       output_type->write_output_file(this, vars, current_time, final_write);
@@ -798,7 +821,7 @@ void MeshBlockImpl::make_outputs(Variables const& vars, double current_time,
   }
 }
 
-void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
+void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
                                      double dt) const {
   const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
 
@@ -875,7 +898,7 @@ void MeshBlockImpl::print_cycle_info(Variables const& vars, double time,
   }
 }
 
-void MeshBlockImpl::finalize(Variables const& vars, double time) {
+void MeshBlockImpl::finalize(Variables const &vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
@@ -940,7 +963,7 @@ void MeshBlockImpl::finalize(Variables const& vars, double time) {
   }
 }
 
-int MeshBlockImpl::check_redo(Variables& vars) {
+int MeshBlockImpl::check_redo(Variables &vars) {
   // check if density or pressure is negative
   auto hydro_u = vars.at("hydro_u");
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
@@ -977,7 +1000,7 @@ int MeshBlockImpl::check_redo(Variables& vars) {
   return 0;
 }
 
-double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
+double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   std::filesystem::path restart_path(fname);
   if (!restart_path.is_absolute() && !std::filesystem::exists(restart_path)) {
     restart_path = std::filesystem::path(options->output_dir()) / fname;
@@ -1023,7 +1046,7 @@ double MeshBlockImpl::_init_from_restart(Variables& vars, std::string fname) {
       pscalar->nvar() > 0 && data.count("scalar_s") && data.count("hydro_u");
 
   // move to device
-  for (auto& [name, tensor] : data) {
+  for (auto &[name, tensor] : data) {
     if (rebuild_scalar_r && name == "scalar_r") {
       continue;
     }

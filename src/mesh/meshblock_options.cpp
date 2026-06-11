@@ -48,12 +48,12 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   // --------------- outputs ------------- //
   int fid = 0;
   if (config["outputs"]) {
-    for (auto const& out_cfg : config["outputs"]) {
+    for (auto const &out_cfg : config["outputs"]) {
       op->outputs().push_back(OutputOptionsImpl::from_yaml(out_cfg, fid++));
     }
 
     if (verbose) {
-      for (auto const& out_op : op->outputs()) {
+      for (auto const &out_op : op->outputs()) {
         out_op->report(SINFO(MeshBlockOptions));
       }
     }
@@ -61,6 +61,22 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
   // ------------- coordinate ------------- //
   op->coord() = CoordinateOptionsImpl::from_yaml(input_file);
+  for (auto const &out_op : op->outputs()) {
+    auto check_slice = [](std::optional<double> const &slice, double lower,
+                          double upper, char const *axis) {
+      if (slice && (*slice < lower || *slice >= upper)) {
+        throw std::invalid_argument(std::string("Slice at ") + axis + "=" +
+                                    std::to_string(*slice) +
+                                    " is out of range of Mesh");
+      }
+    };
+    check_slice(out_op->x1_slice(), op->coord()->global_x1min(),
+                op->coord()->global_x1max(), "x1");
+    check_slice(out_op->x2_slice(), op->coord()->global_x2min(),
+                op->coord()->global_x2max(), "x2");
+    check_slice(out_op->x3_slice(), op->coord()->global_x3min(),
+                op->coord()->global_x3max(), "x3");
+  }
   if (verbose) op->coord()->report(SINFO(MeshBlockOptions));
 
   // --------- internal boundary ---------- //
