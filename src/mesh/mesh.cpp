@@ -168,9 +168,9 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
 }
 
 void MeshImpl::exchange_ghost_zones(MeshVariables& vars, int type) {
-  TORCH_CHECK(
-      vars.size() == blocks.size(),
-      "Mesh::exchange_ghost_zones expects one Variables map per local MeshBlock");
+  TORCH_CHECK(vars.size() == blocks.size(),
+              "Mesh::exchange_ghost_zones expects one Variables map per local "
+              "MeshBlock");
   TORCH_CHECK(type == kPrimitive || type == kConserved || type == kScalar,
               "Mesh::exchange_ghost_zones received invalid variable type");
 
