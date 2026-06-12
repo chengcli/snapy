@@ -106,7 +106,7 @@ void CoriolisXYZImpl::reset() {
   } else if (pcoord->options->type() == "gnomonic-equiangle") {
     int r = phydro->pmb->options->layout()->rank();
     auto layout = phydro->pmb->get_layout();
-    auto [rx, ry, face] = layout->loc_of(r);
+    auto face = std::get<2>(layout->loc_of(r));
 
     cubed_sphere = true;
     shallow_water = phydro->peos->options->type() == "shallow-water";

@@ -64,6 +64,7 @@ std::shared_ptr<MeshBlockImpl> make_cubed_sphere_block(
   auto options = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
   options->layout()->rank(face);
   options->layout()->world_size(6);
+  options->layout()->blocks_per_process(6);
   options->hydro()->eos()->type() = eos_type;
   return std::make_shared<MeshBlockImpl>(options);
 }
@@ -74,8 +75,8 @@ torch::Tensor expected_cubed_sphere_coriolis(
     bool traditional) {
   auto coord = block->pcoord;
   auto mesh = torch::meshgrid({coord->x3v, coord->x2v, coord->x1v}, "ij");
-  auto [rx, ry, face] =
-      block->get_layout()->loc_of(block->options->layout()->rank());
+  auto face = std::get<2>(
+      block->get_layout()->loc_of(block->options->layout()->rank()));
   auto momentum = density.unsqueeze(0) * global_velocity;
 
   auto effective_omega = torch::empty_like(global_velocity);

@@ -87,7 +87,7 @@ struct CoriolisOptionsImpl {
        << "* omega2 = " << omega2() << "\n"
        << "* omega3 = " << omega3() << "\n"
        << "* type = " << type() << "\n"
-       << "* traditional = " << traditional() << "\n";
+       << "* traditional = " << (traditional() ? "true" : "false") << "\n";
   }
 
   ADD_ARG(double, omega1) = 0.;
