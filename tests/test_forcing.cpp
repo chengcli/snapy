@@ -1,3 +1,6 @@
+// C/C++
+#include <array>
+
 // external
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
@@ -8,6 +11,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
+#include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -54,6 +59,93 @@ void expect_only_bottom(torch::Tensor const& du,
   EXPECT_TRUE(torch::allclose(du, expected));
 }
 
+std::shared_ptr<MeshBlockImpl> make_cubed_sphere_block(
+    int face, std::string const& eos_type) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
+  options->layout()->rank(face);
+  options->layout()->world_size(6);
+  options->layout()->blocks_per_process(6);
+  options->hydro()->eos()->type() = eos_type;
+  return std::make_shared<MeshBlockImpl>(options);
+}
+
+torch::Tensor expected_cubed_sphere_coriolis(
+    std::shared_ptr<MeshBlockImpl> const& block, torch::Tensor global_velocity,
+    torch::Tensor density, std::array<double, 3> const& omega,
+    bool traditional) {
+  auto coord = block->pcoord;
+  auto mesh = torch::meshgrid({coord->x3v, coord->x2v, coord->x1v}, "ij");
+  auto face = std::get<2>(
+      block->get_layout()->loc_of(block->options->layout()->rank()));
+  auto momentum = density.unsqueeze(0) * global_velocity;
+
+  auto effective_omega = torch::empty_like(global_velocity);
+  effective_omega[VEL1].fill_(omega[0]);
+  effective_omega[VEL2].fill_(omega[1]);
+  effective_omega[VEL3].fill_(omega[2]);
+  if (traditional) {
+    auto radial = torch::zeros_like(global_velocity);
+    radial[VEL1].fill_(1.);
+    cs_contra_to_cart_(radial, mesh[1], mesh[0], face);
+    auto omega_radial = (effective_omega * radial).sum(0, true);
+    effective_omega = omega_radial * radial;
+  }
+
+  auto expected = torch::empty_like(global_velocity);
+  expected[VEL1] = 2. * (effective_omega[VEL3] * momentum[VEL2] -
+                         effective_omega[VEL2] * momentum[VEL3]);
+  expected[VEL2] = 2. * (effective_omega[VEL1] * momentum[VEL3] -
+                         effective_omega[VEL3] * momentum[VEL1]);
+  expected[VEL3] = 2. * (effective_omega[VEL2] * momentum[VEL1] -
+                         effective_omega[VEL1] * momentum[VEL2]);
+  cs_cart_to_contra_(expected, mesh[1], mesh[0], face);
+  if (traditional) expected[VEL1].zero_();
+  coord_vec_lower_(expected, coord->cosine_cell_kj);
+  return expected;
+}
+
+void check_cubed_sphere_coriolis(std::string const& eos_type,
+                                 bool configure_traditional,
+                                 bool expected_traditional) {
+  std::array<double, 3> omega = {0.7, -0.4, 0.2};
+  for (int face = 0; face < 6; ++face) {
+    auto block = make_cubed_sphere_block(face, eos_type);
+    auto coord = block->pcoord;
+    auto shape = std::vector<int64_t>{
+        3, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()};
+    auto global_velocity = torch::empty(shape, torch::kFloat64);
+    global_velocity[VEL1].fill_(1.3);
+    global_velocity[VEL2].fill_(-2.1);
+    global_velocity[VEL3].fill_(0.8);
+
+    auto panel_velocity = global_velocity.clone();
+    auto mesh = torch::meshgrid({coord->x3v, coord->x2v, coord->x1v}, "ij");
+    cs_cart_to_contra_(panel_velocity, mesh[1], mesh[0], face);
+
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.7);
+    w.narrow(0, IVX, 3).copy_(panel_velocity);
+    if (w.size(0) > IPR) w[IPR].fill_(1.e5);
+    auto du = torch::zeros_like(w);
+    auto op = CoriolisOptionsImpl::from_yaml(YAML::Load(
+        "coriolis: {type: xyz, omega1: 0.7, omega2: -0.4, omega3: 0.2}"));
+    op->traditional() = configure_traditional;
+
+    CoriolisXYZ(op, block->phydro.get())->forward(du, w, torch::Tensor(), 1.);
+
+    auto expected = expected_cubed_sphere_coriolis(
+        block, global_velocity, w[IDN], omega, expected_traditional);
+    EXPECT_TRUE(torch::allclose(du.narrow(0, IVX, 3), expected, 1.e-12, 1.e-12))
+        << "face " << face;
+    if (expected_traditional) {
+      EXPECT_TRUE(torch::equal(du[IVX], torch::zeros_like(du[IVX])))
+          << "face " << face;
+    }
+  }
+}
+
 }  // namespace
 
 TEST(forcing_options, reject_invalid_values) {
@@ -79,6 +171,16 @@ TEST(forcing_options, reject_unknown_composition_species) {
   EXPECT_ANY_THROW(RelaxBotComp(op, block->phydro.get()));
 }
 
+TEST(forcing_options, parse_coriolis_traditional) {
+  auto default_op =
+      CoriolisOptionsImpl::from_yaml(YAML::Load("coriolis: {type: xyz}"));
+  auto traditional_op = CoriolisOptionsImpl::from_yaml(
+      YAML::Load("coriolis: {type: xyz, traditional: true}"));
+
+  EXPECT_FALSE(default_op->traditional());
+  EXPECT_TRUE(traditional_op->traditional());
+}
+
 TEST(forcing, meshblock_registers_parent_dependent_modules) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
   options->hydro()->bodyHeat() = BodyHeatOptionsImpl::from_yaml(
@@ -91,6 +193,18 @@ TEST(forcing, meshblock_registers_parent_dependent_modules) {
       YAML::Load("relax-bot-velo: {tau: 1.}"));
 
   EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(options));
+}
+
+TEST(forcing, cubed_sphere_coriolis_uses_cartesian_rotation_vector) {
+  check_cubed_sphere_coriolis("ideal-gas", false, false);
+}
+
+TEST(forcing, cubed_sphere_coriolis_supports_traditional_approximation) {
+  check_cubed_sphere_coriolis("ideal-gas", true, true);
+}
+
+TEST(forcing, cubed_sphere_shallow_water_uses_traditional_coriolis) {
+  check_cubed_sphere_coriolis("shallow-water", false, true);
 }
 
 TEST(forcing, relax_bottom_temperature) {
