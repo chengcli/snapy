@@ -119,9 +119,9 @@ void CoriolisXYZImpl::reset() {
     omega2 = omegax * ones_like(mesh[0]);
     omega3 = omegay * ones_like(mesh[0]);
 
-    radial = torch::zeros({3, mesh[0].size(0), mesh[0].size(1),
-                           mesh[0].size(2)},
-                          mesh[0].options());
+    radial =
+        torch::zeros({3, mesh[0].size(0), mesh[0].size(1), mesh[0].size(2)},
+                     mesh[0].options());
     radial[VEL1].fill_(1.);
     cs_contra_to_cart_(radial, alpha, beta, face_id);
     radial = register_buffer("radial", radial);

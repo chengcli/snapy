@@ -110,9 +110,8 @@ void check_cubed_sphere_coriolis(std::string const& eos_type,
   for (int face = 0; face < 6; ++face) {
     auto block = make_cubed_sphere_block(face, eos_type);
     auto coord = block->pcoord;
-    auto shape =
-        std::vector<int64_t>{3, coord->options->nc3(), coord->options->nc2(),
-                             coord->options->nc1()};
+    auto shape = std::vector<int64_t>{
+        3, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()};
     auto global_velocity = torch::empty(shape, torch::kFloat64);
     global_velocity[VEL1].fill_(1.3);
     global_velocity[VEL2].fill_(-2.1);
@@ -122,10 +121,9 @@ void check_cubed_sphere_coriolis(std::string const& eos_type,
     auto mesh = torch::meshgrid({coord->x3v, coord->x2v, coord->x1v}, "ij");
     cs_cart_to_contra_(panel_velocity, mesh[1], mesh[0], face);
 
-    auto w = torch::zeros(
-        {block->phydro->peos->nvar(), coord->options->nc3(),
-         coord->options->nc2(), coord->options->nc1()},
-        torch::kFloat64);
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
     w[IDN].fill_(1.7);
     w.narrow(0, IVX, 3).copy_(panel_velocity);
     if (w.size(0) > IPR) w[IPR].fill_(1.e5);
