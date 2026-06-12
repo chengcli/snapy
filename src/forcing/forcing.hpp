@@ -86,7 +86,8 @@ struct CoriolisOptionsImpl {
     os << "* omega1 = " << omega1() << "\n"
        << "* omega2 = " << omega2() << "\n"
        << "* omega3 = " << omega3() << "\n"
-       << "* type = " << type() << "\n";
+       << "* type = " << type() << "\n"
+       << "* traditional = " << traditional() << "\n";
   }
 
   ADD_ARG(double, omega1) = 0.;
@@ -94,6 +95,7 @@ struct CoriolisOptionsImpl {
   ADD_ARG(double, omega3) = 0.;
 
   ADD_ARG(std::string, type) = "xyz";
+  ADD_ARG(bool, traditional) = false;
 };
 using CoriolisOptions = std::shared_ptr<CoriolisOptionsImpl>;
 
@@ -119,7 +121,13 @@ TORCH_MODULE(Coriolis123);
 class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
  public:
   //! data
-  torch::Tensor omega1, omega2, omega3;
+  torch::Tensor omega1, omega2, omega3, alpha, beta, radial;
+
+  //! cubed-sphere metadata
+  int face_id = -1;
+  bool cubed_sphere = false;
+  bool shallow_water = false;
+  bool traditional = false;
 
   //! options with which this `CoriolisXYZ` was constructed
   CoriolisOptions options;

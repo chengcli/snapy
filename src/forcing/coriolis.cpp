@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/hydro/hydro.hpp>
@@ -27,6 +28,7 @@ CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const &forcing) {
   op->omega1() = node["omega1"].as<double>(0.);
   op->omega2() = node["omega2"].as<double>(0.);
   op->omega3() = node["omega3"].as<double>(0.);
+  op->traditional() = node["traditional"].as<bool>(false);
 
   return op;
 }
@@ -71,6 +73,11 @@ void CoriolisXYZImpl::reset() {
   TORCH_CHECK(phydro, "[CoriolisXYZ] Parent Hydro is null");
   auto pcoord = phydro->pmb->pcoord;
 
+  cubed_sphere = false;
+  shallow_water = false;
+  traditional = false;
+  face_id = -1;
+
   auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
 
   auto omegaz = options->omega1();
@@ -99,25 +106,25 @@ void CoriolisXYZImpl::reset() {
   } else if (pcoord->options->type() == "gnomonic-equiangle") {
     int r = phydro->pmb->options->layout()->rank();
     auto layout = phydro->pmb->get_layout();
-    auto [rx, ry, face_id] = layout->loc_of(r);
-    auto face = CS_FACE_NAMES[face_id];
+    auto [rx, ry, face] = layout->loc_of(r);
 
-    auto alpha = mesh[1];
-    auto beta = mesh[0];
-    auto [lon, lat] = cs_ab_to_lonlat(face, alpha, beta);
+    cubed_sphere = true;
+    shallow_water = phydro->peos->options->type() == "shallow-water";
+    traditional = options->traditional() || shallow_water;
+    face_id = face;
+    alpha = register_buffer("alpha", mesh[1]);
+    beta = register_buffer("beta", mesh[0]);
 
-    auto theta = M_PI / 2. - lat;
-    auto phi = lon;
+    omega1 = omegaz * ones_like(mesh[0]);
+    omega2 = omegax * ones_like(mesh[0]);
+    omega3 = omegay * ones_like(mesh[0]);
 
-    omega1 = theta.sin() * phi.cos() * omegax +
-             theta.sin() * phi.sin() * omegay + theta.cos() * omegaz;
-    /*omega2 = theta.cos() * phi.cos() * omegax +
-             theta.cos() * phi.sin() * omegay - theta.sin() * omegaz;
-    omega3 = -phi.sin() * omegax + phi.cos() * omegay;*/
-
-    // 2D coriolis only
-    omega2 = torch::zeros_like(omega1);
-    omega3 = torch::zeros_like(omega1);
+    radial = torch::zeros({3, mesh[0].size(0), mesh[0].size(1),
+                           mesh[0].size(2)},
+                          mesh[0].options());
+    radial[VEL1].fill_(1.);
+    cs_contra_to_cart_(radial, alpha, beta, face_id);
+    radial = register_buffer("radial", radial);
   } else {
     throw std::runtime_error("CoriolisXYZ: unsupported coordinate system");
   }
@@ -129,6 +136,39 @@ void CoriolisXYZImpl::reset() {
 
 torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
                                        torch::Tensor temp, double dt) {
+  if (cubed_sphere) {
+    auto force = w.narrow(0, IVX, 3).clone();
+    force *= w[IDN].unsqueeze(0);
+    cs_contra_to_cart_(force, alpha, beta, face_id);
+
+    auto o1 = omega1;
+    auto o2 = omega2;
+    auto o3 = omega3;
+    if (traditional) {
+      auto omega_radial =
+          omega1 * radial[VEL1] + omega2 * radial[VEL2] + omega3 * radial[VEL3];
+      o1 = omega_radial * radial[VEL1];
+      o2 = omega_radial * radial[VEL2];
+      o3 = omega_radial * radial[VEL3];
+    }
+
+    auto m1 = force[VEL1].clone();
+    auto m2 = force[VEL2].clone();
+    auto m3 = force[VEL3].clone();
+    force[VEL1] = 2. * (o3 * m2 - o2 * m3);
+    force[VEL2] = 2. * (o1 * m3 - o3 * m1);
+    force[VEL3] = 2. * (o2 * m1 - o1 * m2);
+
+    cs_cart_to_contra_(force, alpha, beta, face_id);
+    coord_vec_lower_(force, phydro->pmb->pcoord->cosine_cell_kj);
+    if (traditional) {
+      du.narrow(0, IVY, 2) += dt * force.narrow(0, VEL2, 2);
+    } else {
+      du.narrow(0, IVX, 3) += dt * force;
+    }
+    return du;
+  }
+
   auto m1 = w[IDN] * w[IVX];
   auto m2 = w[IDN] * w[IVY];
   auto m3 = w[IDN] * w[IVZ];
