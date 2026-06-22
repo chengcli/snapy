@@ -1,3 +1,6 @@
+// C/C++
+#include <vector>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -12,6 +15,45 @@
 #include "spherical_polar.hpp"
 
 namespace snap {
+
+torch::Tensor derivative(torch::Tensor value, torch::Tensor distance, int dim) {
+  auto grad = torch::zeros_like(value);
+  int n = value.size(dim);
+  if (n <= 1) return grad;
+
+  auto full = torch::indexing::Slice();
+  std::vector<torch::indexing::TensorIndex> dst(value.dim(), full);
+  std::vector<torch::indexing::TensorIndex> lo(value.dim(), full);
+  std::vector<torch::indexing::TensorIndex> hi(value.dim(), full);
+
+  dst[dim] = 0;
+  lo[dim] = 0;
+  hi[dim] = 1;
+  grad.index_put_(dst, (value.index(hi) - value.index(lo)) /
+                           distance.index(hi).clamp_min(1.e-30));
+
+  if (n > 2) {
+    dst[dim] = torch::indexing::Slice(1, n - 1);
+    lo[dim] = torch::indexing::Slice(0, n - 2);
+    hi[dim] = torch::indexing::Slice(2, n);
+
+    std::vector<torch::indexing::TensorIndex> d_lo(distance.dim(), full);
+    std::vector<torch::indexing::TensorIndex> d_hi(distance.dim(), full);
+    d_lo[dim] = torch::indexing::Slice(1, n - 1);
+    d_hi[dim] = torch::indexing::Slice(2, n);
+    auto denom = distance.index(d_lo) + distance.index(d_hi);
+    grad.index_put_(
+        dst, (value.index(hi) - value.index(lo)) / denom.clamp_min(1.e-30));
+  }
+
+  dst[dim] = n - 1;
+  lo[dim] = n - 2;
+  hi[dim] = n - 1;
+  grad.index_put_(dst, (value.index(hi) - value.index(lo)) /
+                           distance.index(hi).clamp_min(1.e-30));
+
+  return grad;
+}
 
 CoordinateOptions CoordinateOptionsImpl::from_yaml(
     std::string const& filename) {
@@ -351,6 +393,36 @@ torch::Tensor CoordinateImpl::divergence(torch::Tensor flux1,
   }
 
   return dflx / vol;
+}
+
+torch::Tensor CoordinateImpl::curl(torch::Tensor velocity) const {
+  TORCH_CHECK(velocity.dim() == 4 && velocity.size(0) >= 3,
+              "CoordinateImpl::curl expects a vector tensor with shape "
+              "[3,nx3,nx2,nx1]");
+
+  enum { DIM1 = 2, DIM2 = 1, DIM3 = 0 };
+
+  auto v1 = velocity[VEL1];
+  auto v2 = velocity[VEL2];
+  auto v3 = velocity[VEL3];
+
+  auto dtype = velocity.scalar_type();
+  auto device = velocity.device();
+  auto dx1 = center_distance1().to(device).to(dtype);
+  auto dx2 = center_distance2().to(device).to(dtype);
+  auto dx3 = center_distance3().to(device).to(dtype);
+  auto dl1 = center_width1().to(device).to(dtype);
+  auto dl2 = center_width2().to(device).to(dtype);
+  auto dl3 = center_width3().to(device).to(dtype);
+
+  auto curl1 = derivative(v3 * dl3, dx2, DIM2) / dl3.clamp_min(1.e-30) -
+               derivative(v2 * dl2, dx3, DIM3) / dl2.clamp_min(1.e-30);
+  auto curl2 = derivative(v1 * dl1, dx3, DIM3) / dl1.clamp_min(1.e-30) -
+               derivative(v3 * dl3, dx1, DIM1) / dl3.clamp_min(1.e-30);
+  auto curl3 = derivative(v2 * dl2, dx1, DIM1) / dl2.clamp_min(1.e-30) -
+               derivative(v1 * dl1, dx2, DIM2) / dl1.clamp_min(1.e-30);
+
+  return torch::stack({curl1, curl2, curl3});
 }
 
 torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,

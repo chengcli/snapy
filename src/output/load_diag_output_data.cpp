@@ -1,5 +1,6 @@
 // C/C++
 #include <type_traits>
+#include <vector>
 
 // fmt
 #include <fmt/format.h>
@@ -18,15 +19,42 @@
 
 namespace snap {
 
+torch::Tensor interp_to_face(torch::Tensor value, int dim) {
+  auto face = torch::empty_like(value);
+  int n = value.size(dim);
+  if (n <= 1) {
+    face.copy_(value);
+    return face;
+  }
+
+  auto full = torch::indexing::Slice();
+  std::vector<torch::indexing::TensorIndex> dst(value.dim(), full);
+  std::vector<torch::indexing::TensorIndex> lo(value.dim(), full);
+  std::vector<torch::indexing::TensorIndex> hi(value.dim(), full);
+
+  dst[dim] = 0;
+  lo[dim] = 0;
+  face.index_put_(dst, value.index(lo));
+
+  dst[dim] = torch::indexing::Slice(1, n);
+  lo[dim] = torch::indexing::Slice(0, n - 1);
+  hi[dim] = torch::indexing::Slice(1, n);
+  face.index_put_(dst, 0.5 * (value.index(lo) + value.index(hi)));
+
+  return face;
+}
+
 void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   OutputData* pod;
   auto peos = pmb->phydro->peos;
   auto pcoord = pmb->pcoord;
 
-  if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo()) {
+  auto modules = pmb->named_modules();
+  if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo() &&
+      modules.contains("hydro.eos.thermo")) {
     auto const& w = vars.at("hydro_w");
 
-    auto m = pmb->named_modules()["hydro.eos.thermo"];
+    auto m = modules["hydro.eos.thermo"];
     auto thermo_y = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);
     kintera::ThermoX thermo_x(thermo_y->options);
     thermo_x->to(w.device());
@@ -70,8 +98,8 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     auto theta = (entropy_vol / cp_vol).exp();
 
     // virtual potential temperature [K]
-    auto Rgas = kintera::constants::Rgas / mu;
-    auto feps = pres / (dens * Rgas * temp);
+    auto Rd = kintera::constants::Rgas / thermo_x->mu[0];
+    auto feps = pres / (dens * Rd * temp);
     auto theta_v = theta * feps;
 
     // relative humidity
@@ -131,6 +159,59 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
 
       AppendOutputDataNode(pod);
       num_vars_ += 1;
+    }
+  }
+
+  if (ContainVariable("diagnostics") || ContainVariable("div") ||
+      ContainVariable("div_h") || ContainVariable("curl")) {
+    auto const& w = vars.at("hydro_w");
+
+    if (ContainVariable("diagnostics") || ContainVariable("div") ||
+        ContainVariable("div_h")) {
+      torch::Tensor v1f;
+      torch::Tensor v2f;
+      torch::Tensor v3f;
+      if (pcoord->options->nx1() > 1) {
+        auto w1f = interp_to_face(w, 3);
+        pcoord->prim2local1_(w1f);
+        v1f = w1f[IVX].unsqueeze(0);
+      }
+      if (pcoord->options->nx2() > 1) {
+        auto w2f = interp_to_face(w, 2);
+        pcoord->prim2local2_(w2f);
+        v2f = w2f[IVY].unsqueeze(0);
+      }
+      if (pcoord->options->nx3() > 1) {
+        auto w3f = interp_to_face(w, 1);
+        pcoord->prim2local3_(w3f);
+        v3f = w3f[IVZ].unsqueeze(0);
+      }
+
+      if (ContainVariable("diagnostics") || ContainVariable("div")) {
+        appendTensorOutput("SCALARS", "div",
+                           pcoord->divergence(v1f, v2f, v3f).squeeze(0));
+      }
+
+      if (ContainVariable("diagnostics") || ContainVariable("div_h")) {
+        torch::Tensor div_h;
+        if (v2f.defined() || v3f.defined()) {
+          div_h = pcoord->divergence(torch::Tensor(), v2f, v3f).squeeze(0);
+        } else {
+          div_h = torch::zeros_like(w[IDN]);
+        }
+        appendTensorOutput("SCALARS", "div_h", div_h);
+      }
+    }
+
+    if (ContainVariable("diagnostics") || ContainVariable("curl")) {
+      auto w_local = w.clone();
+      pcoord->prim2local1_(w_local);
+      auto curl = pcoord->curl(w_local.narrow(0, IVX, 3));
+      if (pcoord->options->nx3() > 1) {
+        appendTensorSliceOutput("VECTORS", "curl", curl, 4, 0, 3);
+      } else {
+        appendTensorOutput("SCALARS", "curl", curl[VEL3]);
+      }
     }
   }
 

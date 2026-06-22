@@ -41,7 +41,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"vel3", "horizontal velocity", "m/s", "CCC"},
       {"temp", "temperature", "K", "CCC"},
       {"theta", "potential temperature", "K", "CCC"},
-      {"thetav", "virtual potential temperature", "K", "CCC"},
+      {"theta_v", "virtual potential temperature", "K", "CCC"},
       {"mse", "moist static energy", "J/kg", "CCC"},
       {"qtol", "total precipitable mass fraction", "kg/kg", "CCC"},
       {"entropy", "entropy", "J/(kg.K)", "CCC"},
