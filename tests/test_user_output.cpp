@@ -20,6 +20,9 @@
 // torch
 #include <torch/torch.h>
 
+// kintera
+#include <kintera/constants.h>
+
 // snap
 #include <snap/mesh/meshblock.hpp>
 #include <snap/output/output_formats.hpp>
@@ -31,31 +34,35 @@ namespace {
 
 class TestOutputType : public OutputType {
  public:
-  explicit TestOutputType(OutputOptions const &options) : OutputType(options) {}
+  explicit TestOutputType(OutputOptions const& options) : OutputType(options) {}
 
-  void load_hydro(MeshBlockImpl *pmb, Variables const &vars) {
+  void load_hydro(MeshBlockImpl* pmb, Variables const& vars) {
     loadHydroOutputData(pmb, vars);
   }
 
-  void load_scalar(MeshBlockImpl *pmb, Variables const &vars) {
+  void load_scalar(MeshBlockImpl* pmb, Variables const& vars) {
     loadScalarOutputData(pmb, vars);
   }
 
-  void load_user_output(MeshBlockImpl *pmb, Variables const &vars) {
+  void load_diag(MeshBlockImpl* pmb, Variables const& vars) {
+    loadDiagOutputData(pmb, vars);
+  }
+
+  void load_user_output(MeshBlockImpl* pmb, Variables const& vars) {
     loadUserOutputData(pmb, vars);
   }
 
-  void append(std::string name, torch::Tensor const &tensor) {
+  void append(std::string name, torch::Tensor const& tensor) {
     appendTensorSliceOutput("SCALARS", std::move(name), tensor, 4, 0,
                             tensor.size(0));
   }
 
-  void append_reduced(std::string name, torch::Tensor const &tensor) {
+  void append_reduced(std::string name, torch::Tensor const& tensor) {
     appendTensorOutput("SCALARS", std::move(name), tensor);
   }
 
-  std::vector<int> output_shape(std::string const &name) const {
-    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+  std::vector<int> output_shape(std::string const& name) const {
+    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       if (pdata->name == name) {
         return {pdata->data.GetDim4(), pdata->data.GetDim3(),
                 pdata->data.GetDim2(), pdata->data.GetDim1()};
@@ -64,9 +71,9 @@ class TestOutputType : public OutputType {
     throw std::runtime_error("missing output variable: " + name);
   }
 
-  double output_value(std::string const &name, int n, int k, int j,
+  double output_value(std::string const& name, int n, int k, int j,
                       int i) const {
-    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       if (pdata->name == name) return pdata->data(n, k, j, i);
     }
     throw std::runtime_error("missing output variable: " + name);
@@ -74,14 +81,14 @@ class TestOutputType : public OutputType {
 
   std::vector<std::string> output_names() const {
     std::vector<std::string> names;
-    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       names.push_back(pdata->name);
     }
     return names;
   }
 
-  double output_value(std::string const &name) const {
-    for (auto *pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
+  double output_value(std::string const& name) const {
+    for (auto* pdata = pfirst_data_; pdata != nullptr; pdata = pdata->pnext) {
       if (pdata->name == name) {
         return pdata->data(0, 0, 0, 0);
       }
@@ -98,7 +105,7 @@ std::shared_ptr<MeshBlockImpl> make_block(
       std::filesystem::path("build") / "tests" / "test_coordinate.yaml",
   };
   auto it = std::find_if(candidates.begin(), candidates.end(),
-                         [](std::filesystem::path const &path) {
+                         [](std::filesystem::path const& path) {
                            return std::filesystem::exists(path);
                          });
   if (it == candidates.end()) {
@@ -118,7 +125,7 @@ std::shared_ptr<MeshBlockImpl> make_3d_block() {
   return std::make_shared<MeshBlockImpl>(options);
 }
 
-bool contains(std::vector<std::string> const &names, std::string const &name) {
+bool contains(std::vector<std::string> const& names, std::string const& name) {
   return std::find(names.begin(), names.end(), name) != names.end();
 }
 
@@ -136,7 +143,7 @@ TEST(UserOutput, missing_callback_reports_meaningful_error) {
   try {
     output.load_user_output(&block, vars);
     FAIL() << "Expected missing user output callback to throw";
-  } catch (std::exception const &exc) {
+  } catch (std::exception const& exc) {
     auto msg = std::string(exc.what());
     EXPECT_NE(msg.find("set_user_output_func"), std::string::npos);
     EXPECT_NE(msg.find("uov"), std::string::npos);
@@ -149,7 +156,7 @@ TEST(UserOutput, registered_callback_allows_uov_output) {
   TestOutputType output(options);
 
   MeshBlockImpl block;
-  block.user_output_callback = [](Variables const &) {
+  block.user_output_callback = [](Variables const&) {
     Variables out;
     out["my_uov"] = torch::ones({1, 1, 1});
     return out;
@@ -380,7 +387,7 @@ TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
       torch::ones({1, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
   vars["scalar_r"] = vars["scalar_s"] / vars["hydro_u"][IDN].unsqueeze(0);
 
-  block->user_forcing_callback = [](Variables const &forcing_vars, double dt,
+  block->user_forcing_callback = [](Variables const& forcing_vars, double dt,
                                     int stage) {
     EXPECT_DOUBLE_EQ(dt, 0.0);
     EXPECT_EQ(stage, 0);
@@ -418,7 +425,7 @@ TEST(UserForcing, callback_rejects_unsupported_keys) {
   vars["hydro_w"][IPR].fill_(3.0);
   vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
 
-  block->user_forcing_callback = [](Variables const &forcing_vars, double,
+  block->user_forcing_callback = [](Variables const& forcing_vars, double,
                                     int) {
     Variables out;
     out["hydro_w"] = torch::zeros_like(forcing_vars.at("hydro_u"));
@@ -549,6 +556,125 @@ TEST(OutputSelection, primitive_statistics_are_explicitly_selected) {
   EXPECT_TRUE(contains(stat_names, "vel3_std"));
 }
 
+TEST(OutputDiagnostics, virtual_potential_temperature_uses_dry_gas_constant) {
+  auto block = make_3d_block();
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::kFloat64);
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(1.e5);
+  vars["hydro_w"][ICY].fill_(0.2);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"thermo"});
+  TestOutputType output(opts);
+  output.load_diag(block.get(), vars);
+
+  auto temp = block->phydro->peos->compute("W->T", {vars["hydro_w"]});
+  auto Rd = kintera::constants::Rgas / block->phydro->peos->species_weight(0);
+  auto factor = vars["hydro_w"][IPR] / (vars["hydro_w"][IDN] * Rd * temp);
+  auto expected = output.output_value("theta") *
+                  factor
+                      .index({block->pcoord->kl(), block->pcoord->jl(),
+                              block->pcoord->il()})
+                      .item<double>();
+
+  EXPECT_NEAR(output.output_value("theta_v"), expected, 1.e-10);
+  output.ClearOutputData();
+}
+
+TEST(OutputDiagnostics, divergence_of_uniform_cartesian_velocity_is_zero) {
+  auto block = make_3d_block();
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::kFloat64);
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(1.e5);
+  vars["hydro_w"].narrow(0, IVX, 3).fill_(2.0);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"diagnostics"});
+  TestOutputType output(opts);
+  output.load_diag(block.get(), vars);
+
+  EXPECT_NEAR(output.output_value("div", 0, block->pcoord->kl(),
+                                  block->pcoord->jl(), block->pcoord->il()),
+              0.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("div_h", 0, block->pcoord->kl(),
+                                  block->pcoord->jl(), block->pcoord->il()),
+              0.0, 1.e-12);
+  output.ClearOutputData();
+}
+
+TEST(OutputDiagnostics, cartesian_curl_of_solid_body_rotation) {
+  auto block = make_3d_block();
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::kFloat64);
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(1.e5);
+
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  vars["hydro_w"][IVX].zero_();
+  vars["hydro_w"][IVY].copy_(-mesh[0]);
+  vars["hydro_w"][IVZ].copy_(mesh[1]);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"curl"});
+  TestOutputType output(opts);
+  output.load_diag(block.get(), vars);
+
+  EXPECT_NEAR(output.output_value("curl", VEL1, pcoord->kl(), pcoord->jl(),
+                                  pcoord->il()),
+              2.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("curl", VEL2, pcoord->kl(), pcoord->jl(),
+                                  pcoord->il()),
+              0.0, 1.e-12);
+  EXPECT_NEAR(output.output_value("curl", VEL3, pcoord->kl(), pcoord->jl(),
+                                  pcoord->il()),
+              0.0, 1.e-12);
+  output.ClearOutputData();
+}
+
+TEST(OutputDiagnostics, gnomonic_diagnostics_are_finite) {
+  auto block = make_block("ideal-gas");
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::kFloat64);
+  vars["hydro_w"][IDN].fill_(1.0);
+  vars["hydro_w"][IPR].fill_(1.e5);
+  vars["hydro_w"].narrow(0, IVX, 3).fill_(1.0);
+
+  auto opts = OutputOptionsImpl::create();
+  opts->variables({"diagnostics"});
+  TestOutputType output(opts);
+  output.load_diag(block.get(), vars);
+
+  EXPECT_TRUE(std::isfinite(output.output_value("curl", VEL1, pcoord->kl(),
+                                                pcoord->jl(), pcoord->il())));
+  EXPECT_TRUE(std::isfinite(
+      output.output_value("div", 0, pcoord->kl(), pcoord->jl(), pcoord->il())));
+  output.ClearOutputData();
+}
+
 TEST(OutputStatistics, primitive_statistics_are_time_weighted_and_reset) {
   auto block = make_block("ideal-gas");
 
@@ -636,7 +762,7 @@ TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

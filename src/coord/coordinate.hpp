@@ -225,6 +225,10 @@ class CoordinateImpl {
   //! fluxes -> flux divergence
   torch::Tensor divergence(torch::Tensor flux1, torch::Tensor flux2,
                            torch::Tensor flux3) const;
+
+  //! cell-centered vector curl
+  virtual torch::Tensor curl(torch::Tensor velocity) const;
+
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
                                 torch::Tensor flux2, torch::Tensor flux3);
 };
