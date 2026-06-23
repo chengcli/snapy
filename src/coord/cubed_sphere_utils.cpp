@@ -11,6 +11,7 @@
 #include <snap/mesh/meshblock.hpp>
 
 #include "cubed_sphere_utils.hpp"
+#include "spherical_utils.hpp"
 
 namespace snap {
 
@@ -140,6 +141,54 @@ std::pair<torch::Tensor, torch::Tensor> cs_ab_to_lonlat(char const *face,
   return {lon, lat};
 }
 
+static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+cs_ab_to_xyz_tensors(char const *face, torch::Tensor const &alpha,
+                     torch::Tensor const &beta) {
+  auto a = alpha.tan();
+  auto b = beta.tan();
+  auto one = torch::ones_like(a);
+
+  torch::Tensor x, y, z;
+  if (strcmp(face, "+X") == 0) {
+    x = one;
+    y = a;
+    z = b;
+  } else if (strcmp(face, "+Y") == 0) {
+    x = -a;
+    y = one;
+    z = b;
+  } else if (strcmp(face, "-X") == 0) {
+    x = -one;
+    y = -a;
+    z = b;
+  } else if (strcmp(face, "+Z") == 0) {
+    x = -b;
+    y = a;
+    z = one;
+  } else if (strcmp(face, "-Y") == 0) {
+    x = a;
+    y = -one;
+    z = b;
+  } else if (strcmp(face, "-Z") == 0) {
+    x = b;
+    y = a;
+    z = -one;
+  } else {
+    TORCH_CHECK(false, "invalid cubed-sphere face name: ", face);
+  }
+
+  auto r = (x * x + y * y + z * z).sqrt();
+  return {x / r, y / r, z / r};
+}
+
+static std::pair<torch::Tensor, torch::Tensor> cs_ab_to_theta_phi(
+    torch::Tensor const &alpha, torch::Tensor const &beta, int face_id) {
+  auto [x, y, z] = cs_ab_to_xyz_tensors(CS_FACE_NAMES[face_id], alpha, beta);
+  auto theta = z.clamp(-1.0, 1.0).acos();
+  auto phi = torch::atan2(y, x);
+  return {theta, phi};
+}
+
 //! Transform global cartesian velocity to local panel contravariant velocity
 void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
                         torch::Tensor beta, int face_id) {
@@ -152,7 +201,7 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
 
   std::array<torch::Tensor, 3> local_vel;
 
-  auto const g2l = CS_G2L_VEL;
+  auto const g2l = CS_CART_TO_LOCAL_VEL;
   auto f = face_id;
 
   local_vel[g2l[f][VEL1].idx] = g2l[f][VEL1].sgn * vel[VEL1];
@@ -177,7 +226,7 @@ void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
   auto C = sqrt(1 + x * x);
   auto D = sqrt(1 + y * y);
 
-  auto const l2g = CS_L2G_VEL;
+  auto const l2g = CS_LOCAL_TO_CART_VEL;
   auto f = face_id;
 
   auto vz = vel[VEL1].clone();
@@ -190,6 +239,20 @@ void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
       l2g[f][VEL2].sgn * (vz * x + vx * D - (vy * x * y) / C) / delta;
   vel[l2g[f][VEL3].idx] =
       l2g[f][VEL3].sgn * (vz * y + vy * C - (vx * x * y) / D) / delta;
+}
+
+void cs_contra_to_sph_(torch::Tensor const &vel, torch::Tensor alpha,
+                       torch::Tensor beta, int face_id) {
+  auto [theta, phi] = cs_ab_to_theta_phi(alpha, beta, face_id);
+  cs_contra_to_cart_(vel, alpha, beta, face_id);
+  sph_cart_to_contra_(vel, theta, phi);
+}
+
+void cs_sph_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
+                       torch::Tensor beta, int face_id) {
+  auto [theta, phi] = cs_ab_to_theta_phi(alpha, beta, face_id);
+  sph_contra_to_cart_(vel, theta, phi);
+  cs_cart_to_contra_(vel, alpha, beta, face_id);
 }
 
 }  // namespace snap

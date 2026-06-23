@@ -6,6 +6,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/gnomonic_equiangle.hpp>
+#include <snap/coord/spherical_utils.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -87,6 +88,93 @@ TEST_P(DeviceTest, contra_cart) {
   cs_contra_to_cart_(vel, mesh[0], mesh[1], 0);
 
   EXPECT_TRUE(torch::allclose(vel, vel_cart));
+}
+
+TEST_P(DeviceTest, contra_sph) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
+
+  auto vel_contra = torch::randn({3, nc3, nc2, nc1}, opts) +
+                    torch::full({3, nc3, nc2, nc1}, 0.5, opts);
+
+  for (int face = 0; face < 6; ++face) {
+    auto vel = vel_contra.clone();
+    cs_contra_to_sph_(vel, alpha, beta, face);
+    cs_sph_to_contra_(vel, alpha, beta, face);
+    EXPECT_TRUE(torch::allclose(vel, vel_contra, 1.e-4, 1.e-5))
+        << "face " << face;
+  }
+}
+
+TEST_P(DeviceTest, contra_sph_matches_cartesian_composition) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
+
+  auto vel_contra = torch::randn({3, nc3, nc2, nc1}, opts) +
+                    torch::full({3, nc3, nc2, nc1}, 0.5, opts);
+
+  for (int face = 0; face < 6; ++face) {
+    auto expected = vel_contra.clone();
+    cs_contra_to_cart_(expected, alpha, beta, face);
+    auto lonlat = cs_ab_to_lonlat(CS_FACE_NAMES[face], alpha, beta);
+    auto theta = 0.5 * M_PI - lonlat.second;
+    sph_cart_to_contra_(expected, theta, lonlat.first);
+
+    auto actual = vel_contra.clone();
+    cs_contra_to_sph_(actual, alpha, beta, face);
+
+    EXPECT_TRUE(torch::allclose(actual, expected, 1.e-4, 1.e-5))
+        << "face " << face;
+  }
+}
+
+TEST_P(DeviceTest, uniform_radial_spherical_velocity_round_trips) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
+
+  auto vel_sph = torch::zeros({3, nc3, nc2, nc1}, opts);
+  vel_sph[VEL1].fill_(1.2345);
+
+  for (int face = 0; face < 6; ++face) {
+    auto vel = vel_sph.clone();
+    cs_sph_to_contra_(vel, alpha, beta, face);
+    cs_contra_to_sph_(vel, alpha, beta, face);
+    EXPECT_TRUE(torch::allclose(vel, vel_sph, 1.e-4, 1.e-5))
+        << "face " << face;
+  }
 }
 
 TEST_P(DeviceTest, usrc) {

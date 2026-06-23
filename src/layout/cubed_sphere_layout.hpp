@@ -20,6 +20,8 @@ struct CSVel {
 
 extern const char CS_FACE_NAMES[6][3];
 extern const CSEdge CS_FACE_EDGES[6][4];
+extern const CSVel CS_CART_TO_LOCAL_VEL[6][3];
+extern const CSVel CS_LOCAL_TO_CART_VEL[6][3];
 extern const CSVel CS_G2L_VEL[6][3];
 extern const CSVel CS_L2G_VEL[6][3];
 

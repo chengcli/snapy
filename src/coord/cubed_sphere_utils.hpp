@@ -169,4 +169,20 @@ void cs_cart_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
 void cs_contra_to_cart_(torch::Tensor const &vel, torch::Tensor alpha,
                         torch::Tensor beta, int face_id);
 
+//! \brief Transform contravariant velocities to global spherical polar velocity
+/*!
+ * The spherical polar basis is defined by the global cartesian position on the
+ * unit sphere, with components ordered as (v_r, v_theta, v_phi).
+ */
+void cs_contra_to_sph_(torch::Tensor const &vel, torch::Tensor alpha,
+                       torch::Tensor beta, int face_id);
+
+//! \brief Transform global spherical polar velocity to contravariant velocities
+/*!
+ * The spherical polar basis is defined by the global cartesian position on the
+ * unit sphere, with components ordered as (v_r, v_theta, v_phi).
+ */
+void cs_sph_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
+                       torch::Tensor beta, int face_id);
+
 }  // namespace snap
