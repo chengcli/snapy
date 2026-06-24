@@ -172,8 +172,7 @@ TEST_P(DeviceTest, uniform_radial_spherical_velocity_round_trips) {
     auto vel = vel_sph.clone();
     cs_sph_to_contra_(vel, alpha, beta, face);
     cs_contra_to_sph_(vel, alpha, beta, face);
-    EXPECT_TRUE(torch::allclose(vel, vel_sph, 1.e-4, 1.e-5))
-        << "face " << face;
+    EXPECT_TRUE(torch::allclose(vel, vel_sph, 1.e-4, 1.e-5)) << "face " << face;
   }
 }
 
