@@ -117,6 +117,8 @@ void bind_coord(py::module &m) {
       .def("coord_vec_raise_", &snap::coord_vec_raise_)
       .def("cs_cart_to_contra_", &snap::cs_cart_to_contra_)
       .def("cs_contra_to_cart_", &snap::cs_contra_to_cart_)
+      .def("cs_sph_to_contra_", &snap::cs_sph_to_contra_)
+      .def("cs_contra_to_sph_", &snap::cs_contra_to_sph_)
       .def("cs_ab_to_lonlat", &snap::cs_ab_to_lonlat)
       .def("get_cs_face_name", [](int face_id) {
         return std::string(snap::CS_FACE_NAMES[face_id]);

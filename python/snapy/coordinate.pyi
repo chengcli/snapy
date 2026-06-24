@@ -289,6 +289,16 @@ class coord:
         ...
 
     @staticmethod
+    def cs_sph_to_contra_(*args) -> None:
+        """Convert spherical polar to contravariant coordinates on cubed sphere."""
+        ...
+
+    @staticmethod
+    def cs_contra_to_sph_(*args) -> None:
+        """Convert contravariant to spherical polar coordinates on cubed sphere."""
+        ...
+
+    @staticmethod
     def cs_ab_to_lonlat(*args) -> Tuple[float, float]:
         """
         Convert cubed sphere (a, b) coordinates to longitude/latitude.

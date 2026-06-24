@@ -220,7 +220,7 @@ const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
  * Each entry says: on face F, the global velocity component VEL{1,2,3}
  * corresponds to local component idx with sign sgn.
  */
-const CSVel CS_G2L_VEL[6][3] = {
+const CSVel CS_CART_TO_LOCAL_VEL[6][3] = {
     /* face 0: */
     [0] = {/* VEL1 */ {VEL3, +1},
            /* VEL2 */ {VEL1, +1},
@@ -250,6 +250,58 @@ const CSVel CS_G2L_VEL[6][3] = {
  * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
  * corresponds to global component idx with sign sgn.
  */
+const CSVel CS_LOCAL_TO_CART_VEL[6][3] = {
+    /* face 0: */
+    [0] = {/* VEL1 */ {VEL2, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL1, +1}},
+    /* face 1: */
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
+    /* face 2: */
+    [2] = {/* VEL1 */ {VEL2, -1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL1, +1}},
+    /* face 3: */
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, -1}},
+    /* face 4: */
+    [4] = {/* VEL1 */ {VEL3, -1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, +1}},
+    /* face 5: */
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
+
+const CSVel CS_G2L_VEL[6][3] = {
+    /* face 0: */
+    [0] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, +1},
+           /* VEL3 */ {VEL2, +1}},
+    /* face 1: */
+    [1] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, -1},
+           /* VEL3 */ {VEL1, +1}},
+    /* face 2: */
+    [2] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL1, -1},
+           /* VEL3 */ {VEL2, -1}},
+    /* face 3: */
+    [3] = {/* VEL1 */ {VEL1, +1},
+           /* VEL2 */ {VEL3, -1},
+           /* VEL3 */ {VEL2, +1}},
+    /* face 4: */
+    [4] = {/* VEL1 */ {VEL3, +1},
+           /* VEL2 */ {VEL2, +1},
+           /* VEL3 */ {VEL1, -1}},
+    /* face 5: */
+    [5] = {/* VEL1 */ {VEL1, -1},
+           /* VEL2 */ {VEL3, +1},
+           /* VEL3 */ {VEL2, +1}}};
+
 const CSVel CS_L2G_VEL[6][3] = {
     /* face 0: */
     [0] = {/* VEL1 */ {VEL2, +1},
@@ -661,11 +713,11 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
           case kConserved: {
             auto vel = var_send.narrow(0, IVX, 3);
             coord_vec_raise_(vel, cosine_cell.index(sub3));
-            cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
+            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
           } break;
           case kPrimitive: {
             auto vel = var_send.narrow(0, IVX, 3);
-            cs_contra_to_cart_(vel, alpha, beta, std::get<2>(iloc));
+            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
           } break;
           case kScalar:
             break;
@@ -829,12 +881,12 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
         switch (opts.type()) {
           case kConserved: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
+            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
             coord_vec_lower_(vel, cosine_cell.index(sub3));
           } break;
           case kPrimitive: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_cart_to_contra_(vel, alpha, beta, std::get<2>(iloc));
+            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
           } break;
           case kScalar:
             break;
