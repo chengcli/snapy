@@ -44,9 +44,31 @@ void bind_layout(py::module& m) {
       .ADD_OPTION(std::string, snap::LayoutOptionsImpl, master_addr)
       .ADD_OPTION(int, snap::LayoutOptionsImpl, master_port)
       .ADD_OPTION(int, snap::LayoutOptionsImpl, root_rank)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, process_rank)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, process_world_size)
       .ADD_OPTION(int, snap::LayoutOptionsImpl, world_size)
       .ADD_OPTION(int, snap::LayoutOptionsImpl, rank)
-      .ADD_OPTION(int, snap::LayoutOptionsImpl, local_rank);
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, local_rank)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, blocks_per_process)
+      .ADD_OPTION(int, snap::LayoutOptionsImpl, device_id);
+
+  auto pySyncOptions = py::class_<snap::SyncOptions>(m, "SyncOptions");
+  py::setattr(pySyncOptions, "DIM1", py::int_((int)snap::SyncOptions::DIM1));
+  py::setattr(pySyncOptions, "DIM2", py::int_((int)snap::SyncOptions::DIM2));
+  py::setattr(pySyncOptions, "DIM3", py::int_((int)snap::SyncOptions::DIM3));
+  pySyncOptions.def(py::init<>())
+      .def("dz_min", &snap::SyncOptions::dz_min)
+      .def("dz_max", &snap::SyncOptions::dz_max)
+      .def("dx_min", &snap::SyncOptions::dx_min)
+      .def("dx_max", &snap::SyncOptions::dx_max)
+      .def("dy_min", &snap::SyncOptions::dy_min)
+      .def("dy_max", &snap::SyncOptions::dy_max)
+      .ADD_OPTION(bool, snap::SyncOptions, cross_panel_only)
+      .ADD_OPTION(bool, snap::SyncOptions, skip_corner)
+      .ADD_OPTION(bool, snap::SyncOptions, interpolate)
+      .ADD_OPTION(int, snap::SyncOptions, type)
+      .ADD_OPTION(int, snap::SyncOptions, dim)
+      .ADD_OPTION(int, snap::SyncOptions, phyid);
 
   py::class_<snap::LayoutImpl, snap::Layout>(m, "Layout")
       .def(py::init<snap::LayoutOptions>(), py::arg("options"))

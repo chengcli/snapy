@@ -3,7 +3,6 @@ import os
 import sys
 import glob
 import torch
-import commux
 import platform
 from pathlib import Path
 from setuptools import setup
@@ -33,7 +32,12 @@ def parse_library_names(libdir):
     return snap_non_cuda + other + snap_cuda
 
 site_dir = sysconfig.get_paths()["purelib"]
-commux_dir = Path(commux.__file__).resolve().parent
+try:
+    import commux
+except ImportError:
+    commux_dir = None
+else:
+    commux_dir = Path(commux.__file__).resolve().parent
 
 current_dir = os.getenv("WORKSPACE", Path().absolute())
 include_dirs = [
@@ -43,11 +47,14 @@ include_dirs = [
     f'{current_dir}/build/_deps/yaml-cpp-src/include',
     f"{site_dir}/kintera",
     f"{site_dir}/pyharp",
-    f"{commux_dir}/include",
 ]
+if commux_dir is not None:
+    include_dirs.append(f"{commux_dir}/include")
 
 # add homebrew directories if on MacOS
-lib_dirs = [f"{current_dir}/build/lib", f"{commux_dir}/lib"]
+lib_dirs = [f"{current_dir}/build/lib"]
+if commux_dir is not None:
+    lib_dirs.append(f"{commux_dir}/lib")
 if platform.system() == 'Darwin':
     lib_dirs.extend(['/opt/homebrew/lib'])
 else:
