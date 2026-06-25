@@ -21,12 +21,12 @@ def commux_has_cuda_support() -> bool:
     except Exception:
         return False
 
-    lib = Path(commux.__file__).resolve().parent / "lib" / "libcommux.so"
+    lib = Path(commux.__file__).resolve().parent / "lib" / "libcommux_cuda.so"
     if not lib.exists():
         return False
 
     result = subprocess.run(
-        ["ldd", str(lib)],
+        ["readelf", "-d", str(lib)],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

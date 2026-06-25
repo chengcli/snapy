@@ -84,7 +84,16 @@ if(UCX_FOUND)
   set_property(TARGET ${namel}_${buildl} APPEND PROPERTY
     BUILD_RPATH "${COMMUX_LIBRARY_DIR};$ORIGIN/../../commux/lib")
 
-  if(COMMUX_CUDA_FOUND)
+  if(CUDA)
+    if(NOT COMMUX_CUDA_FOUND)
+      message(FATAL_ERROR
+        "CUDA=ON requires commux's CUDA sidecar library "
+        "libcommux_cuda.so, but it was not found")
+    endif()
+
+    target_link_libraries(${namel}_${buildl}
+      PUBLIC commux::commux_cuda)
+
     target_compile_definitions(${namel}_${buildl}
       PRIVATE COMMUX_WITH_CUDA_RUNTIME=1)
   endif()

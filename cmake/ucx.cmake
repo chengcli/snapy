@@ -4,7 +4,7 @@ endif()
 
 execute_process(
   COMMAND "${Python3_EXECUTABLE}" -c
-          "import commux, pathlib; p=pathlib.Path(commux.__file__).resolve().parent; print(p / 'include'); print(p / 'lib'); print(p / 'lib' / 'libcommux.so')"
+          "import commux, pathlib; p=pathlib.Path(commux.__file__).resolve().parent; print(p / 'include'); print(p / 'lib'); print(p / 'lib' / 'libcommux.so'); print(p / 'lib' / 'libcommux_cuda.so')"
   OUTPUT_VARIABLE _commux_info
   OUTPUT_STRIP_TRAILING_WHITESPACE
   RESULT_VARIABLE _commux_probe)
@@ -19,6 +19,7 @@ string(REPLACE "\n" ";" _commux_lines "${_commux_info}")
 list(GET _commux_lines 0 COMMUX_INCLUDE_DIR)
 list(GET _commux_lines 1 COMMUX_LIBRARY_DIR)
 list(GET _commux_lines 2 COMMUX_LIBRARY)
+list(GET _commux_lines 3 COMMUX_CUDA_LIBRARY)
 
 if(NOT EXISTS "${COMMUX_INCLUDE_DIR}/commux/process_group_ucx.hpp")
   message(FATAL_ERROR "commux header not found under ${COMMUX_INCLUDE_DIR}")
@@ -43,12 +44,7 @@ if(NOT UCX_INCLUDE_DIR)
           "commux header requires UCX headers, but ucp/api/ucp.h was not found")
 endif()
 
-execute_process(
-  COMMAND ldd "${COMMUX_LIBRARY}"
-  OUTPUT_VARIABLE _commux_ldd
-  ERROR_VARIABLE _commux_ldd_error
-  RESULT_VARIABLE _commux_ldd_result)
-if(_commux_ldd_result EQUAL 0 AND _commux_ldd MATCHES "libc10_cuda")
+if(EXISTS "${COMMUX_CUDA_LIBRARY}")
   set(COMMUX_CUDA_FOUND TRUE)
 else()
   set(COMMUX_CUDA_FOUND FALSE)
@@ -60,7 +56,18 @@ set_target_properties(
   IMPORTED_LOCATION "${COMMUX_LIBRARY}"
   INTERFACE_INCLUDE_DIRECTORIES "${COMMUX_INCLUDE_DIR};${UCX_INCLUDE_DIR}")
 
+if(COMMUX_CUDA_FOUND)
+  add_library(commux::commux_cuda SHARED IMPORTED GLOBAL)
+  set_target_properties(
+    commux::commux_cuda PROPERTIES
+    IMPORTED_LOCATION "${COMMUX_CUDA_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${COMMUX_INCLUDE_DIR};${UCX_INCLUDE_DIR}")
+endif()
+
 set(UCX_FOUND TRUE)
 set(COMMUX_FOUND TRUE)
 message(STATUS "UCX backend: commux at ${COMMUX_LIBRARY}")
-message(STATUS "UCX backend: commux CUDA support ${COMMUX_CUDA_FOUND}")
+if(COMMUX_CUDA_FOUND)
+  message(STATUS "UCX backend: commux CUDA sidecar at ${COMMUX_CUDA_LIBRARY}")
+endif()
+message(STATUS "UCX backend: commux CUDA sidecar available ${COMMUX_CUDA_FOUND}")

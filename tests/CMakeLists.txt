@@ -44,20 +44,22 @@ if(UCX_FOUND)
     LABELS "ucx;exchange"
   )
 
-  add_test(
-    NAME test_exchange_ucx_cuda
-    COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/run_exchange_backend.py
-            --build-dir ${CMAKE_BINARY_DIR}
-            --build-type ${buildl}
-            --backend ucx
-            --device cuda
-  )
-  set_tests_properties(test_exchange_ucx_cuda PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-    SKIP_RETURN_CODE 125
-    LABELS "ucx;exchange;gpu"
-  )
+  if(CUDA)
+    add_test(
+      NAME test_exchange_ucx_cuda
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_exchange_backend.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type ${buildl}
+              --backend ucx
+              --device cuda
+    )
+    set_tests_properties(test_exchange_ucx_cuda PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      SKIP_RETURN_CODE 125
+      LABELS "ucx;exchange;gpu"
+    )
+  endif()
 endif()
 #setup_test(test_read_topo)
 #setup_cuda_test(test_thomas_solver)

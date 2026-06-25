@@ -125,7 +125,7 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, process_world_size) = 1;
   ADD_ARG(int, world_size) = 1;
   ADD_ARG(int, blocks_per_process) = 1;
-  ADD_ARG(int, master_port) = 29501;
+  ADD_ARG(int, master_port) = -1;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
 };

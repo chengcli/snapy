@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <exception>
 #include <map>
+#include <random>
 
 // base
 #include <configure.h>
@@ -18,6 +19,13 @@
 namespace snap {
 
 namespace {
+
+int random_master_port() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<int> dist(29500, 29600);
+  return dist(gen);
+}
 
 struct LocalExchangeKey {
   int process_rank;
@@ -122,7 +130,9 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   auto process_world_size_env =
       get_env("PROCESS_WORLD_SIZE", get_env("WORLD_SIZE", "1"));
   master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
-  master_port(std::stoi(get_env("MASTER_PORT", "29501")));
+  auto master_port_env = std::getenv("MASTER_PORT");
+  master_port(master_port_env ? std::stoi(master_port_env)
+                              : random_master_port());
   process_rank(std::stoi(process_rank_env));
   rank(std::stoi(get_env("RANK", process_rank_env)));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
