@@ -23,7 +23,6 @@ include_directories(
   SYSTEM ${TORCH_INCLUDE_DIR}
   SYSTEM ${KINTERA_INCLUDE_DIR}
   SYSTEM ${HARP_INCLUDE_DIR}
-  SYSTEM ${NCCL_INCLUDE_DIR}
   SYSTEM ${CMAKE_SOURCE_DIR}/external/gloo
   )
 
@@ -61,6 +60,7 @@ add_library(${namel}_${buildl}
 set_target_properties(${namel}_${buildl}
     PROPERTIES
     COMPILE_FLAGS "${CMAKE_CXX_FLAGS_${buildu}}"
+    BUILD_RPATH_USE_ORIGIN TRUE
     )
 
 target_link_libraries(${namel}_${buildl}
@@ -76,6 +76,28 @@ target_link_libraries(${namel}_${buildl}
     fmt::fmt
     yaml-cpp::yaml-cpp
     )
+
+if(UCX_FOUND)
+  target_link_libraries(${namel}_${buildl}
+    PUBLIC commux::commux)
+
+  set_property(TARGET ${namel}_${buildl} APPEND PROPERTY
+    BUILD_RPATH "${COMMUX_LIBRARY_DIR};$ORIGIN/../../commux/lib")
+
+  if(CUDA)
+    if(NOT COMMUX_CUDA_FOUND)
+      message(FATAL_ERROR
+        "CUDA=ON requires commux's CUDA sidecar library "
+        "libcommux_cuda.so, but it was not found")
+    endif()
+
+    target_link_libraries(${namel}_${buildl}
+      PUBLIC commux::commux_cuda)
+
+    target_compile_definitions(${namel}_${buildl}
+      PRIVATE COMMUX_WITH_CUDA_RUNTIME=1)
+  endif()
+endif()
 
 add_library(snapy::snap ALIAS ${namel}_${buildl})
 
@@ -110,7 +132,6 @@ if (CUDAToolkit_FOUND)
       ${KINTERA_CUDA_LIBRARY}
       ${TORCH_CUDA_LIBRARY}
       ${C10_CUDA_LIBRARY}
-      ${NCCL_LIBRARY}
       )
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})
