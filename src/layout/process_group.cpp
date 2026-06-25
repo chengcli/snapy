@@ -25,12 +25,24 @@ namespace snap {
 std::mutex ProcessGroupContext::mutex_;
 
 namespace {
+class C10dWork final : public CommWork {
+ public:
+  explicit C10dWork(c10::intrusive_ptr<c10d::Work> work)
+      : work_(std::move(work)) {}
+
+  void wait() override {
+    if (work_) work_->wait();
+  }
+
+ private:
+  c10::intrusive_ptr<c10d::Work> work_;
+};
+
 std::string process_group_key(LayoutOptions const& opts) {
   std::ostringstream os;
   os << opts->backend() << "|" << opts->master_addr() << "|"
      << opts->master_port() << "|" << opts->process_rank() << "|"
-     << opts->process_world_size() << "|" << opts->local_rank() << "|"
-     << opts->device_id();
+     << opts->process_world_size() << "|" << opts->local_rank();
   return os.str();
 }
 
@@ -42,6 +54,18 @@ std::string external_process_group_key(
      << static_cast<void*>(external_pg.get());
   return os.str();
 }
+
+void check_ucx_tensor_support(std::vector<torch::Tensor> const& tensors) {
+#ifndef COMMUX_WITH_CUDA_RUNTIME
+  for (auto const& tensor : tensors) {
+    TORCH_CHECK(!tensor.is_cuda(),
+                "backend=ucx received a CUDA tensor, but the installed commux "
+                "library was built without CUDA support");
+  }
+#else
+  (void)tensors;
+#endif
+}
 }  // namespace
 
 std::shared_ptr<ProcessGroupContext> ProcessGroupContext::create(
@@ -50,7 +74,7 @@ std::shared_ptr<ProcessGroupContext> ProcessGroupContext::create(
 
   std::lock_guard<std::mutex> lock(mutex_);
   auto external_pg = get_process_group();
-  auto key = external_pg.defined()
+  auto key = opts->backend() != "ucx" && external_pg.defined()
                  ? external_process_group_key(opts, external_pg)
                  : process_group_key(opts);
   auto it = cache.find(key);
@@ -75,7 +99,7 @@ void ProcessGroupContext::_init() {
   if (options_->process_world_size() <= 1) return;
 
   auto external_pg = get_process_group();
-  if (external_pg.defined()) {
+  if (backend != "ucx" && external_pg.defined()) {
     _init_external(external_pg);
     return;
   }
@@ -92,14 +116,15 @@ void ProcessGroupContext::_init() {
   store_opts.isServer = options_->process_rank() == 0;
   store =
       at::make_intrusive<c10d::TCPStore>(options_->master_addr(), store_opts);
-  pg = c10::make_intrusive<c10d::ProcessGroup>(store, options_->process_rank(),
-                                               options_->process_world_size());
+  if (backend != "ucx") {
+    pg = c10::make_intrusive<c10d::ProcessGroup>(
+        store, options_->process_rank(), options_->process_world_size());
+  }
 
-  if (backend == "gloo") {
+  if (backend == "ucx") {
+    _init_ucx();
+  } else if (backend == "gloo") {
     _init_gloo();
-  } else if (backend == "nccl") {
-    _init_gloo();
-    _init_nccl();
   } else {
     throw std::runtime_error("Unsupported BACKEND=" + backend);
   }
@@ -114,6 +139,66 @@ void ProcessGroupContext::_init() {
               << backend << ", world_size=" << options_->process_world_size()
               << "\n";
   }
+}
+
+bool ProcessGroupContext::initialized() const {
+  return pg.defined() || ucx_ != nullptr;
+}
+
+CommWorkPtr ProcessGroupContext::send(std::vector<torch::Tensor>& tensors,
+                                      int peer, int tag) const {
+  sync_tensor_streams(tensors);
+  if (ucx_) {
+    check_ucx_tensor_support(tensors);
+    return std::make_shared<C10dWork>(ucx_->send(tensors, peer, tag));
+  }
+  for (auto const& tensor : tensors) {
+    TORCH_CHECK(tensor.device().is_cpu(),
+                "Gloo communication requires CPU tensors");
+  }
+  return std::make_shared<C10dWork>(pg->send(tensors, peer, tag));
+}
+
+CommWorkPtr ProcessGroupContext::recv(std::vector<torch::Tensor>& tensors,
+                                      int peer, int tag) const {
+  sync_tensor_streams(tensors);
+  if (ucx_) {
+    check_ucx_tensor_support(tensors);
+    return std::make_shared<C10dWork>(ucx_->recv(tensors, peer, tag));
+  }
+  for (auto const& tensor : tensors) {
+    TORCH_CHECK(tensor.device().is_cpu(),
+                "Gloo communication requires CPU tensors");
+  }
+  return std::make_shared<C10dWork>(pg->recv(tensors, peer, tag));
+}
+
+void ProcessGroupContext::allreduce(std::vector<torch::Tensor>& tensors,
+                                    c10d::ReduceOp op) const {
+  if (ucx_) {
+    c10d::AllreduceOptions opts;
+    opts.reduceOp = op;
+    ucx_->allreduce(tensors, opts)->wait();
+    return;
+  }
+  c10d::AllreduceOptions opts;
+  opts.reduceOp = op;
+  pg->allreduce(tensors, opts)->wait();
+}
+
+void ProcessGroupContext::reduce(std::vector<torch::Tensor>& tensors,
+                                 c10d::ReduceOp op, int root) const {
+  if (ucx_) {
+    c10d::ReduceOptions opts;
+    opts.reduceOp = op;
+    opts.rootRank = root;
+    ucx_->reduce(tensors, opts)->wait();
+    return;
+  }
+  c10d::ReduceOptions opts;
+  opts.reduceOp = op;
+  opts.rootRank = root;
+  pg->reduce(tensors, opts)->wait();
 }
 
 void ProcessGroupContext::_init_external(
@@ -160,25 +245,45 @@ void ProcessGroupContext::_init_gloo() {
 }
 
 void ProcessGroupContext::barrier() const {
+  if (ucx_) {
+    ucx_->barrier()->wait();
+    return;
+  }
   if (!pg.defined()) return;
 
-  c10d::BarrierOptions op;
-  if (is_nccl()) {
-    int device_index = options_->device_id();
-    if (device_index < 0) {
-      device_index = options_->local_rank();
-    }
-    op.device_ids = {device_index};
-  }
-  pg->barrier(op)->wait();
+  pg->barrier()->wait();
 }
 
-#ifdef NOT_USE_C10D_NCCL
-void ProcessGroupContext::_init_nccl() {}
-void ProcessGroupContext::group_start() const {}
-void ProcessGroupContext::group_end() const {}
-void ProcessGroupContext::sync_stream() const {}
-void ProcessGroupContext::sync_device() const {}
+void ProcessGroupContext::shutdown() const {
+  if (pg.defined()) {
+    pg->shutdown();
+  }
+}
+
+bool ProcessGroupContext::supports_coalescing() const {
+  return ucx_ && ucx_->supportsCoalescing();
+}
+
+void ProcessGroupContext::start_coalescing() const {
+  if (supports_coalescing()) {
+    ucx_->startCoalescing();
+  }
+}
+
+CommWorkPtr ProcessGroupContext::end_coalescing() const {
+  if (!supports_coalescing()) return nullptr;
+  return std::make_shared<C10dWork>(ucx_->endCoalescing());
+}
+
+#ifdef NOT_USE_CUDA
+void sync_tensor_streams(std::vector<torch::Tensor> const&) {}
+#endif
+
+#ifndef USE_UCX
+void ProcessGroupContext::_init_ucx() {
+  throw std::runtime_error(
+      "backend=ucx requested, but snapy was built without UCX support");
+}
 #endif
 
 }  // namespace snap

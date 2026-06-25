@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, overloa
 import torch
 
 from .hydro import HydroOptions
-from .layout import Layout, LayoutOptions
+from .layout import Layout, LayoutOptions, SyncOptions
 from .reconstruction import ReconstructOptions
 from .riemann import RiemannSolverOptions
 
@@ -192,6 +192,7 @@ class Mesh:
     ) -> Tuple[MeshVariables, float]: ...
     def device(self) -> torch.device: ...
     def max_time_step(self, vars: MeshVariables) -> float: ...
+    def exchange(self, vars: MeshVariables, opts: SyncOptions) -> None: ...
     def exchange_ghost_zones(self, vars: MeshVariables, type: int = ...) -> None: ...
     def make_outputs(
         self, vars: MeshVariables, current_time: float, final_write: bool = False

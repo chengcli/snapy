@@ -264,6 +264,8 @@ void bind_mesh(py::module& m) {
           },
           py::arg("restart_file"))
       .def("max_time_step", &snap::MeshImpl::max_time_step, py::arg("vars"))
+      .def("exchange", &snap::MeshImpl::exchange, py::arg("vars"),
+           py::arg("opts"), py::call_guard<py::gil_scoped_release>())
       .def("exchange_ghost_zones", &snap::MeshImpl::exchange_ghost_zones,
            py::arg("vars"), py::arg("type") = (int)snap::kConserved,
            py::call_guard<py::gil_scoped_release>())
