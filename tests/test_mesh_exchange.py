@@ -9,6 +9,16 @@ options = snapy.MeshOptions.from_yaml(
 )
 options.blocks_per_process(4)
 options.set_local_horizontal_cells(4, 4)
+layout_options = options.block().layout()
+layout_options.process_rank(0)
+layout_options.process_world_size(1)
+layout_options.blocks_per_process(options.blocks_per_process())
+layout_options.device_id(0)
+assert layout_options.process_rank() == 0
+assert layout_options.process_world_size() == 1
+assert layout_options.blocks_per_process() == 4
+assert layout_options.device_id() == 0
+
 mesh = snapy.Mesh(options)
 
 variables = []
@@ -24,7 +34,9 @@ for rank, block in enumerate(mesh.blocks):
     tensor[block.part((0, 0, 0), False)] = float(rank)
     variables.append({"field": tensor})
 
-mesh.exchange_ghost_zones(variables, snapy.kScalar)
+sync_options = snapy.SyncOptions()
+sync_options.interpolate(True).type(snapy.kScalar)
+mesh.exchange(variables, sync_options)
 
 for rank, (block, block_vars) in enumerate(zip(mesh.blocks, variables)):
     layout = block.get_layout()

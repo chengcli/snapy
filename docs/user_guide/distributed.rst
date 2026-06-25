@@ -1,7 +1,8 @@
 Distributed Simulations
 =======================
 
-Snapy supports distributed parallel simulations using PyTorch's distributed communication backend.
+Snapy supports distributed parallel simulations using UCX on Linux. Gloo
+remains the CPU-only and macOS distributed backend.
 
 Distributed Architecture
 ------------------------
@@ -10,6 +11,22 @@ Snapy uses domain decomposition to split the computational domain across multipl
 
 Setup
 -----
+
+Linux builds use the installed ``commux`` package for UCX communication. Select
+UCX as the backend without specifying a communication device:
+
+.. code-block:: yaml
+
+    distribute:
+      backend: ucx
+
+UCX is the default backend on builds configured with UCX, so the ``backend``
+entry may be omitted. Set ``backend: gloo`` or ``BACKEND=gloo`` to opt into
+Gloo.
+
+Communication automatically follows each tensor's device type. For CUDA
+execution, build with ``-DCUDA=ON`` and set ``DEVICE=cuda`` when launching the
+provided examples. ``BACKEND`` overrides the configured transport.
 
 Basic distributed setup using ``torchrun``:
 
@@ -216,14 +233,14 @@ Overlap communication with computation:
 GPU-Direct Communication
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-For NCCL backend with GPU-direct support:
+For UCX with GPU-direct support, select CUDA memory and configure the desired
+UCX transports for the cluster:
 
 .. code-block:: bash
 
-    # Set NCCL environment variables
-    export NCCL_IB_DISABLE=0
-    export NCCL_SOCKET_IFNAME=ib0
-    export NCCL_DEBUG=INFO
+    export BACKEND=ucx
+    export DEVICE=cuda
+    export UCX_TLS=rc,cuda_copy,cuda_ipc
 
 Load Balancing
 --------------
@@ -246,11 +263,8 @@ Example Slurm script:
 
     # Load modules
     module load cuda/12.1
-    module load nccl/2.18
-
-    # Set environment
-    export NCCL_IB_DISABLE=0
-    export NCCL_DEBUG=WARN
+    export BACKEND=ucx
+    export DEVICE=cuda
 
     # Run simulation
     srun torchrun --nnodes=$SLURM_NNODES \
@@ -282,9 +296,8 @@ Debug distributed simulations:
         dist.barrier()
         raise RuntimeError("NaN detected")
 
-Enable NCCL debugging:
+Enable UCX debugging:
 
 .. code-block:: bash
 
-    export NCCL_DEBUG=INFO
-    export NCCL_DEBUG_SUBSYS=ALL
+    export UCX_LOG_LEVEL=info

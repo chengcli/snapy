@@ -9,6 +9,11 @@ option(BUILD_EXAMPLES "Build examples" OFF)
 option(CUDA "Enable CUDA support" OFF)
 option(NETCDF "Build with netcdf support" ON)
 option(PNETCDF "Build with pnetcdf support" OFF)
+if(APPLE)
+  option(UCX "Build the UCX communication backend" OFF)
+else()
+  option(UCX "Build the UCX communication backend" ON)
+endif()
 
 project(
   snapy
@@ -93,10 +98,10 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/yamlpp.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/eigen.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ucx.cmake)
 
 if (CMAKE_CUDA_COMPILER)
   find_package(CUDAToolkit REQUIRED)
-  find_package(NCCL REQUIRED)
 else()
   set(CUDAToolkit_FOUND OFF)
 endif()
