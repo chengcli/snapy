@@ -21,18 +21,18 @@ __device__ T sqr(T x) {
 }
 
 template <typename T>
-__device__ T interp(T const* w, int v, int start, int stride_var,
-                    int stride_dim, FusedReconScheme scheme, bool right) {
+__device__ T interp(T const* line, int v, int start, int axis_size,
+                    FusedReconScheme scheme, bool right) {
   if (scheme == FusedReconScheme::CP3) {
-    return interp_point_poly3_impl(w, v, start, stride_var, stride_dim, right);
+    return interp_shared_poly3_impl(line, v, start, axis_size, right);
   }
   if (scheme == FusedReconScheme::CP5) {
-    return interp_point_poly5_impl(w, v, start, stride_var, stride_dim, right);
+    return interp_shared_poly5_impl(line, v, start, axis_size, right);
   }
   if (scheme == FusedReconScheme::WENO3) {
-    return interp_point_weno3_impl(w, v, start, stride_var, stride_dim, right);
+    return interp_shared_weno3_impl(line, v, start, axis_size, right);
   }
-  return interp_point_weno5_impl(w, v, start, stride_var, stride_dim, right);
+  return interp_shared_weno5_impl(line, v, start, axis_size, right);
 }
 
 template <typename T>
@@ -96,17 +96,40 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                              T gammad, T density_floor, T pressure_floor,
                              bool eos_limiter, T const* inv_mu_ratio_m1,
                              T const* cv_ratio_m1, T const* u0) {
-  int flat = blockIdx.x * blockDim.x + threadIdx.x;
   int ncells = nc1 * nc2 * nc3;
-  if (flat >= ncells) return;
-
-  int i = flat % nc1;
-  int j = (flat / nc1) % nc2;
-  int k = flat / (nc1 * nc2);
   int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
   int stride_dim = dim == 3 ? 1 : (dim == 2 ? nc1 : nc1 * nc2);
-  int pos = dim == 3 ? i : (dim == 2 ? j : k);
   int stride_var = ncells;
+  int pos = threadIdx.x;
+  int line = blockIdx.x;
+  int base = 0;
+
+  if (dim == 3) {
+    int j = line % nc2;
+    int k = line / nc2;
+    base = k * nc2 * nc1 + j * nc1;
+  } else if (dim == 2) {
+    int i = line % nc1;
+    int k = line / nc1;
+    base = k * nc2 * nc1 + i;
+  } else {
+    int i = line % nc1;
+    int j = line / nc1;
+    base = j * nc1 + i;
+  }
+
+  extern __shared__ unsigned char memory[];
+  T* smem = reinterpret_cast<T*>(memory);
+  if (pos < axis_size) {
+    int flat = base + pos * stride_dim;
+    for (int v = 0; v < nvar; ++v) {
+      smem[v * axis_size + pos] = w[v * stride_var + flat];
+    }
+  }
+  __syncthreads();
+
+  if (pos >= axis_size) return;
+  int flat = base + pos * stride_dim;
   int nghost = (recon_prim == FusedReconScheme::CP3 ||
                 recon_prim == FusedReconScheme::WENO3)
                    ? 2
@@ -119,16 +142,15 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     return;
   }
 
-  int base = flat - pos * stride_dim;
   int wl_start = pos - il;
   int wr_start = pos - (il - 1);
   T wl_local[64], wr_local[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    wl_local[v] = interp(w + base, v, wl_start, stride_var, stride_dim, scheme,
-                         /*right=*/true);
-    wr_local[v] = interp(w + base, v, wr_start, stride_var, stride_dim, scheme,
-                         /*right=*/false);
+    wl_local[v] =
+        interp(smem, v, wl_start, axis_size, scheme, /*right=*/true);
+    wr_local[v] =
+        interp(smem, v, wr_start, axis_size, scheme, /*right=*/false);
   }
 
   if (eos_limiter) {
@@ -311,12 +333,10 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
                                T const* x2v, T const* x2f, T const* x3v,
                                T const* x3f) {
   int edge_len = max(nc2, nc3);
-  int flat = blockIdx.x * blockDim.x + threadIdx.x;
-  int total = 4 * edge_len * nc1;
-  if (flat >= total) return;
-  int i = flat % nc1;
-  int edge_pos = (flat / nc1) % edge_len;
-  int side = flat / (nc1 * edge_len);
+  int line = blockIdx.x;
+  int i = line % nc1;
+  int edge_pos = (line / nc1) % edge_len;
+  int side = line / (nc1 * edge_len);
   if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
   if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
       (side >= CS_SIDE_B && edge_pos >= nc2)) {
@@ -324,8 +344,27 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   }
 
   int dim = side <= CS_SIDE_R ? 2 : 1;
+  int axis_size = dim == 2 ? nc2 : nc3;
   int stride_dim = dim == 2 ? nc1 : nc1 * nc2;
   int stride_var = nc1 * nc2 * nc3;
+  int pos = threadIdx.x;
+  int base = 0;
+  if (side <= CS_SIDE_R) {
+    base = edge_pos * nc2 * nc1 + i;
+  } else {
+    base = edge_pos * nc1 + i;
+  }
+
+  extern __shared__ unsigned char memory[];
+  T* smem = reinterpret_cast<T*>(memory);
+  if (pos < axis_size) {
+    int in = base + pos * stride_dim;
+    for (int v = 0; v < nvar; ++v) {
+      smem[v * axis_size + pos] = w[v * stride_var + in];
+    }
+  }
+  __syncthreads();
+
   int nghost = (recon_prim == FusedReconScheme::CP3 ||
                 recon_prim == FusedReconScheme::WENO3)
                    ? 2
@@ -334,8 +373,7 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   T alpha, beta;
   cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
             &alpha, &beta, &k, &j, &face_pos);
-  int pos = side <= CS_SIDE_R ? j : k;
-  int base = k * nc2 * nc1 + j * nc1 + i - pos * stride_dim;
+  if (pos != face_pos) return;
   int il = nghost;
   bool send_right_state = (side == CS_SIDE_L || side == CS_SIDE_B);
   int start = send_right_state ? face_pos - (il - 1) : face_pos - il;
@@ -344,8 +382,7 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   T local[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    local[v] =
-        interp(w + base, v, start, stride_var, stride_dim, scheme, right_interp);
+    local[v] = interp(smem, v, start, axis_size, scheme, right_interp);
   }
   if (eos_limiter) {
     local[IDN] = max(local[IDN], density_floor);
@@ -378,12 +415,10 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
                                T const* x2v, T const* x2f, T const* x3v,
                                T const* x3f) {
   int edge_len = max(nc2, nc3);
-  int flat = blockIdx.x * blockDim.x + threadIdx.x;
-  int total = 4 * edge_len * nc1;
-  if (flat >= total) return;
-  int i = flat % nc1;
-  int edge_pos = (flat / nc1) % edge_len;
-  int side = flat / (nc1 * edge_len);
+  int line = blockIdx.x;
+  int i = line % nc1;
+  int edge_pos = (line / nc1) % edge_len;
+  int side = line / (nc1 * edge_len);
   if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
   if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
       (side >= CS_SIDE_B && edge_pos >= nc2)) {
@@ -400,8 +435,27 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   int remote_off = ((peer_side * nvar) * edge_len + peer_edge) * nc1 + i;
 
   int dim = side <= CS_SIDE_R ? 2 : 1;
+  int axis_size = dim == 2 ? nc2 : nc3;
   int stride_dim = dim == 2 ? nc1 : nc1 * nc2;
   int stride_var = nc1 * nc2 * nc3;
+  int pos = threadIdx.x;
+  int base = 0;
+  if (side <= CS_SIDE_R) {
+    base = edge_pos * nc2 * nc1 + i;
+  } else {
+    base = edge_pos * nc1 + i;
+  }
+
+  extern __shared__ unsigned char memory[];
+  T* smem = reinterpret_cast<T*>(memory);
+  if (pos < axis_size) {
+    int in = base + pos * stride_dim;
+    for (int v = 0; v < nvar; ++v) {
+      smem[v * axis_size + pos] = w[v * stride_var + in];
+    }
+  }
+  __syncthreads();
+
   int nghost = (recon_prim == FusedReconScheme::CP3 ||
                 recon_prim == FusedReconScheme::WENO3)
                    ? 2
@@ -410,8 +464,7 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   T alpha, beta;
   cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
             &alpha, &beta, &k, &j, &face_pos);
-  int pos = side <= CS_SIDE_R ? j : k;
-  int base = k * nc2 * nc1 + j * nc1 + i - pos * stride_dim;
+  if (pos != face_pos) return;
   int il = nghost;
   bool own_is_right_state = (side == CS_SIDE_L || side == CS_SIDE_B);
   int start = own_is_right_state ? face_pos - (il - 1) : face_pos - il;
@@ -420,8 +473,7 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   T own[64], remote[64], wl[64], wr[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    own[v] =
-        interp(w + base, v, start, stride_var, stride_dim, scheme, right_interp);
+    own[v] = interp(smem, v, start, axis_size, scheme, right_interp);
     remote[v] = peer_buf[remote_off + v * buf_stride_var];
   }
   cs_sph_to_contra(remote, face, alpha, beta);
@@ -471,13 +523,18 @@ void fused_recon_riemann_cuda(
   int nc2 = w.size(2);
   int nc1 = w.size(3);
   int nvar = w.size(0);
-  int ncells = nc1 * nc2 * nc3;
-  int threads = 128;
-  int blocks = (ncells + threads - 1) / threads;
+  int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
+  TORCH_CHECK(axis_size <= 1024,
+              "dynamics.fused-recon-riemann shared-memory kernel requires "
+              "the reconstructed dimension to fit in one CUDA block, but got ",
+              axis_size);
+  int threads = axis_size;
+  int blocks = dim == 3 ? nc2 * nc3 : (dim == 2 ? nc1 * nc3 : nc1 * nc2);
   auto stream = at::cuda::getCurrentCUDAStream();
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_recon_riemann_cuda", [&] {
-    fused_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
+    size_t shared = static_cast<size_t>(axis_size) * nvar * sizeof(scalar_t);
+    fused_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
         w.data_ptr<scalar_t>(), flux.data_ptr<scalar_t>(), nvar, nc3, nc2, nc1,
         dim, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
         scalar_t(density_floor), scalar_t(pressure_floor), eos_limiter,
@@ -506,13 +563,18 @@ void fused_cubed_sphere_exchange_cuda(
   int nc1 = w.size(3);
   int nvar = w.size(0);
   int edge_len = std::max(nc2, nc3);
-  int threads = 128;
-  int blocks = (4 * edge_len * nc1 + threads - 1) / threads;
+  int threads = edge_len;
+  TORCH_CHECK(threads <= 1024,
+              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
+              "exchange requires edge lines to fit in one CUDA block, but got ",
+              threads);
+  int blocks = 4 * edge_len * nc1;
   auto stream = at::cuda::getCurrentCUDAStream();
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_exchange",
                              [&] {
-    cs_pack_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
+    size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
+    cs_pack_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
         w.data_ptr<scalar_t>(), symm_buffer.data_ptr<scalar_t>(),
         side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1, face, recon_prim,
         recon_vel, scalar_t(density_floor), scalar_t(pressure_floor),
@@ -526,7 +588,8 @@ void fused_cubed_sphere_exchange_cuda(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_flux", [&] {
-    cs_flux_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
+    size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
+    cs_flux_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
         w.data_ptr<scalar_t>(), flux2.defined() ? flux2.data_ptr<scalar_t>()
                                                 : nullptr,
         flux3.defined() ? flux3.data_ptr<scalar_t>() : nullptr,
