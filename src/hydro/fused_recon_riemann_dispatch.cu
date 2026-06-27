@@ -12,6 +12,7 @@
 #include "fused_recon_riemann_dispatch.hpp"
 
 namespace snap {
+#ifndef NOT_USE_NVSHMEM
 namespace {
 
 template <typename T>
@@ -378,7 +379,6 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   }
 }
 
-#ifndef NOT_USE_NVSHMEM
 enum {
   CS_SIDE_L = 0,
   CS_SIDE_R = 1,
@@ -680,7 +680,6 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
     fused_hllc(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, stride_var);
   }
 }
-#endif
 
 }  // namespace
 
@@ -713,7 +712,6 @@ void fused_recon_riemann_cuda(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-#ifndef NOT_USE_NVSHMEM
 void fused_cubed_sphere_exchange_cuda(
     torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
     torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,

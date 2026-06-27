@@ -22,6 +22,7 @@ enum class FusedEos : int {
   IdealMoist = 1,
 };
 
+#ifndef NOT_USE_NVSHMEM
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux, int dim,
                               FusedReconScheme recon_prim,
                               FusedReconScheme recon_vel,
@@ -31,7 +32,6 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux, int dim,
                               torch::Tensor inv_mu_ratio_m1,
                               torch::Tensor cv_ratio_m1, torch::Tensor u0);
 
-#ifndef NOT_USE_NVSHMEM
 void fused_cubed_sphere_exchange_cuda(
     torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
     torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,

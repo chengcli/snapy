@@ -268,7 +268,11 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
+#ifdef NOT_USE_NVSHMEM
+    return _forward_staged(dt, u, other);
+#else
     return _forward_fused_recon_riemann(dt, u, other);
+#endif
   }
   return _forward_staged(dt, u, other);
 }
@@ -476,6 +480,11 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
 torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
                                                       torch::Tensor u,
                                                       Variables const& other) {
+#ifdef NOT_USE_NVSHMEM
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann is disabled unless snapy is built "
+              "with NVSHMEM=ON");
+#else
 #ifdef NOT_USE_CUDA
   TORCH_CHECK(false,
               "dynamics.fused-recon-riemann requires a CUDA-enabled build");
@@ -534,11 +543,6 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
                 pmb->pcoord->options->type(), " with layout type ",
                 playout->options->type());
   } else {
-#ifdef NOT_USE_NVSHMEM
-    TORCH_CHECK(false,
-                "dynamics.fused-recon-riemann on cubed-sphere layouts "
-                "requires an NVSHMEM-enabled build");
-#else
     TORCH_CHECK(
         playout->options->blocks_per_process() == 1,
         "dynamics.fused-recon-riemann cubed-sphere symmetric-memory exchange "
@@ -552,7 +556,6 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
     TORCH_CHECK(playout->has_process_group(),
                 "dynamics.fused-recon-riemann cubed-sphere symmetric-memory "
                 "exchange requires an initialized process group");
-#endif
   }
 
   peos->forward(u, w);
@@ -602,7 +605,6 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
         inv_mu_ratio_m1, cv_ratio_m1, u0);
   }
 
-#ifndef NOT_USE_NVSHMEM
   if (cubed_sphere_layout) {
     bool exchange_dim2 = u.size(2) > 1 && !options->disable_flux_x2();
     bool exchange_dim3 = u.size(1) > 1 && !options->disable_flux_x3();
@@ -637,7 +639,6 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
           options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0);
     }
   }
-#endif
 
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
 
@@ -648,6 +649,7 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
   return du;
+#endif
 }
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {
