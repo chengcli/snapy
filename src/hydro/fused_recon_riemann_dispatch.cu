@@ -19,15 +19,49 @@ template <typename T>
 __device__ T interp(T const* line, int v, int start, int axis_size,
                     FusedReconScheme scheme, bool right) {
   if (scheme == FusedReconScheme::CP3) {
-    return interp_shared_poly3_impl(line, v, start, axis_size, right);
+    constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
+    T c[3];
+    for (int k = 0; k < 3; ++k) c[k] = right ? cm[2 - k] : cm[k];
+    return interp_shared_poly_coeff_impl<T, 3>(line, c, v, start, axis_size);
   }
   if (scheme == FusedReconScheme::CP5) {
-    return interp_shared_poly5_impl(line, v, start, axis_size, right);
+    constexpr T cm[5] = {-1. / 20., 9. / 20., 47. / 60., -13. / 60.,
+                         1. / 30.};
+    T c[5];
+    for (int k = 0; k < 5; ++k) c[k] = right ? cm[4 - k] : cm[k];
+    return interp_shared_poly_coeff_impl<T, 5>(line, c, v, start, axis_size);
   }
   if (scheme == FusedReconScheme::WENO3) {
-    return interp_shared_weno3_impl(line, v, start, axis_size, right);
+    constexpr T cm[4][3] = {{1. / 2., 1. / 2., 0.},
+                            {0., 3. / 2., -1. / 2.},
+                            {1., -1., 0.},
+                            {0., 1., -1.}};
+    T c[12];
+    for (int r = 0; r < 4; ++r) {
+      for (int k = 0; k < 3; ++k) {
+        c[r * 3 + k] = right ? cm[r][2 - k] : cm[r][k];
+      }
+    }
+    return interp_shared_weno3_coeff_impl(line, c, v, start, axis_size,
+                                          /*scale=*/false);
   }
-  return interp_shared_weno5_impl(line, v, start, axis_size, right);
+  constexpr T cm[9][5] = {{-1. / 6., 5. / 6., 1. / 3., 0., 0.},
+                          {0., 1. / 3., 5. / 6., -1. / 6., 0.},
+                          {0., 0., 11. / 6., -7. / 6., 1. / 3.},
+                          {1., -2., 1., 0., 0.},
+                          {1., -4., 3., 0., 0.},
+                          {0., 1., -2., 1., 0.},
+                          {0., -1., 0., 1., 0.},
+                          {0., 0., 1., -2., 1.},
+                          {0., 0., 3., -4., 1.}};
+  T c[45];
+  for (int r = 0; r < 9; ++r) {
+    for (int k = 0; k < 5; ++k) {
+      c[r * 5 + k] = right ? cm[r][4 - k] : cm[r][k];
+    }
+  }
+  return interp_shared_weno5_coeff_impl(line, c, v, start, axis_size,
+                                        /*scale=*/false);
 }
 
 template <typename T>

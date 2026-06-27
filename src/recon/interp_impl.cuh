@@ -9,12 +9,98 @@
 namespace snap {
 
 template <int N, typename T>
-inline __device__ T _vvdot(T *v1, T *v2) {
+inline __device__ T _vvdot(T const *v1, T const *v2) {
   T out = 0.;
   for (int i = 0; i < N; ++i) {
     out += v1[i] * v2[i];
   }
   return out;
+}
+
+template <typename T, int N>
+__device__ T interp_shared_poly_coeff_impl(T const *line, T const *coeff, int v,
+                                           int start, int axis_size) {
+  T out = 0.;
+  for (int k = 0; k < N; ++k) {
+    out += coeff[k] * line[v * axis_size + start + k];
+  }
+  return out;
+}
+
+template <typename T>
+__device__ T interp_shared_weno3_coeff_impl(T const *line, T const *coeff,
+                                            int v, int start, int axis_size,
+                                            bool scale) {
+  T const *c1 = coeff;
+  T const *c2 = c1 + 3;
+  T const *c3 = c2 + 3;
+  T const *c4 = c3 + 3;
+  T const *src = line + v * axis_size + start;
+  T vscale =
+      scale ? (fabs(src[0]) + fabs(src[1]) + fabs(src[2])) / 3.0 : 1.0;
+
+  if (vscale == 0.0) return 0.0;
+
+  T phi[3];
+  phi[0] = src[0] / vscale;
+  phi[1] = src[1] / vscale;
+  phi[2] = src[2] / vscale;
+
+  T p0 = _vvdot<3>(phi, c1);
+  T p1 = _vvdot<3>(phi, c2);
+
+  T beta0 = SQR(_vvdot<3>(phi, c3));
+  T beta1 = SQR(_vvdot<3>(phi, c4));
+
+  T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
+  T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
+
+  return (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
+}
+
+template <typename T>
+__device__ T interp_shared_weno5_coeff_impl(T const *line, T const *coeff,
+                                            int v, int start, int axis_size,
+                                            bool scale) {
+  T const *c1 = coeff;
+  T const *c2 = c1 + 5;
+  T const *c3 = c2 + 5;
+  T const *c4 = c3 + 5;
+  T const *c5 = c4 + 5;
+  T const *c6 = c5 + 5;
+  T const *c7 = c6 + 5;
+  T const *c8 = c7 + 5;
+  T const *c9 = c8 + 5;
+  T const *src = line + v * axis_size + start;
+  T vscale = scale ? (fabs(src[0]) + fabs(src[1]) + fabs(src[2]) +
+                      fabs(src[3]) + fabs(src[4])) /
+                         5.0
+                   : 1.0;
+
+  if (vscale == 0.0) return 0.0;
+
+  T phi[5];
+  for (int k = 0; k < 5; ++k) {
+    phi[k] = src[k] / vscale;
+  }
+
+  T p0 = _vvdot<5>(phi, c1);
+  T p1 = _vvdot<5>(phi, c2);
+  T p2 = _vvdot<5>(phi, c3);
+
+  T beta0 =
+      13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
+  T beta1 =
+      13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
+  T beta2 =
+      13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
+
+  T alpha0 = .3 / SQR(beta0 + 1e-6);
+  T alpha1 = .6 / SQR(beta1 + 1e-6);
+  T alpha2 = .1 / SQR(beta2 + 1e-6);
+
+  return vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
+         (alpha0 + alpha1 + alpha2);
 }
 
 // polynomial
@@ -44,17 +130,8 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int nvar,
   // drop last few threads
   if (!active) return;
 
-  // calculation
   for (int j = 0; j < nvar; ++j) {
-    int i = id + j * nt;
-    T sout = 0.;
-
-    for (int k = 0; k < N; ++k) {
-      sout += scoeff[k] * sinp[i + k];
-    }
-
-    // copy to global memory
-    OUT(j, id) = sout;
+    OUT(j, id) = interp_shared_poly_coeff_impl<T, N>(sinp, scoeff, j, id, nt);
   }
 };
 
@@ -87,39 +164,9 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int nvar,
   // drop last few threads
   if (!active) return;
 
-  // calculation
-  T *c1 = scoeff;
-  T *c2 = c1 + 3;
-  T *c3 = c2 + 3;
-  T *c4 = c3 + 3;
-
-  T phi[3];
-
   for (int j = 0; j < nvar; ++j) {
-    int i = id + j * nt;
-    T vscale =
-        scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2])) / 3.0
-              : 1.0;
-
-    if (vscale != 0.0) {
-      phi[0] = sinp[i] / vscale;
-      phi[1] = sinp[i + 1] / vscale;
-      phi[2] = sinp[i + 2] / vscale;
-    } else {
-      OUT(j, id) = 0.0;
-      continue;
-    }
-
-    T p0 = _vvdot<3>(phi, c1);
-    T p1 = _vvdot<3>(phi, c2);
-
-    T beta0 = SQR(_vvdot<3>(phi, c3));
-    T beta1 = SQR(_vvdot<3>(phi, c4));
-
-    T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
-    T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
-
-    OUT(j, id) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
+    OUT(j, id) =
+        interp_shared_weno3_coeff_impl(sinp, scoeff, j, id, nt, scale);
   }
 };
 
@@ -158,137 +205,11 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
   //   printf("smem[%d] = %f\n", i, smem[i]);
   //}
 
-  // calculation
-  T *c1 = scoeff;
-  T *c2 = c1 + 5;
-  T *c3 = c2 + 5;
-  T *c4 = c3 + 5;
-  T *c5 = c4 + 5;
-  T *c6 = c5 + 5;
-  T *c7 = c6 + 5;
-  T *c8 = c7 + 5;
-  T *c9 = c8 + 5;
-
-  T phi[5];
-
   for (int j = 0; j < nvar; ++j) {
-    int i = id + j * nt;
-    T vscale = scale ? (fabs(sinp[i]) + fabs(sinp[i + 1]) + fabs(sinp[i + 2]) +
-                        fabs(sinp[i + 3]) + fabs(sinp[i + 4])) /
-                           5.0
-                     : 1.0;
-
-    if (vscale != 0.0) {
-      for (int k = 0; k < 5; ++k) {
-        phi[k] = sinp[i + k] / vscale;
-      }
-    } else {
-      OUT(j, id) = 0.0;
-      continue;
-    }
-
-    T p0 = _vvdot<5>(phi, c1);
-    T p1 = _vvdot<5>(phi, c2);
-    T p2 = _vvdot<5>(phi, c3);
-
-    T beta0 =
-        13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
-    T beta1 =
-        13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
-    T beta2 =
-        13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
-
-    T alpha0 = .3 / SQR(beta0 + 1e-6);
-    T alpha1 = .6 / SQR(beta1 + 1e-6);
-    T alpha2 = .1 / SQR(beta2 + 1e-6);
-
-    OUT(j, id) = vscale * (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
-                 (alpha0 + alpha1 + alpha2);
+    OUT(j, id) =
+        interp_shared_weno5_coeff_impl(sinp, scoeff, j, id, nt, scale);
   }
 };
-
-template <typename T>
-__device__ T interp_shared_poly3_impl(T const *line, int v, int start,
-                                      int axis_size, bool right) {
-  constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
-  T out = 0.;
-  for (int k = 0; k < 3; ++k) {
-    out += (right ? cm[2 - k] : cm[k]) * line[v * axis_size + start + k];
-  }
-  return out;
-}
-
-template <typename T>
-__device__ T interp_shared_poly5_impl(T const *line, int v, int start,
-                                      int axis_size, bool right) {
-  constexpr T cm[5] = {-1. / 20., 9. / 20., 47. / 60., -13. / 60., 1. / 30.};
-  T out = 0.;
-  for (int k = 0; k < 5; ++k) {
-    out += (right ? cm[4 - k] : cm[k]) * line[v * axis_size + start + k];
-  }
-  return out;
-}
-
-template <typename T>
-__device__ T interp_shared_weno3_impl(T const *line, int v, int start,
-                                      int axis_size, bool right) {
-  constexpr T cm[4][3] = {{1. / 2., 1. / 2., 0.},
-                          {0., 3. / 2., -1. / 2.},
-                          {1., -1., 0.},
-                          {0., 1., -1.}};
-  T c[4][3];
-  for (int r = 0; r < 4; ++r) {
-    for (int k = 0; k < 3; ++k) c[r][k] = right ? cm[r][2 - k] : cm[r][k];
-  }
-  T phi[3];
-  for (int k = 0; k < 3; ++k) {
-    phi[k] = line[v * axis_size + start + k];
-  }
-  T p0 = _vvdot<3>(phi, c[0]);
-  T p1 = _vvdot<3>(phi, c[1]);
-  T beta0 = SQR(_vvdot<3>(phi, c[2]));
-  T beta1 = SQR(_vvdot<3>(phi, c[3]));
-  T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1.e-6);
-  T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1.e-6);
-  return (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1);
-}
-
-template <typename T>
-__device__ T interp_shared_weno5_impl(T const *line, int v, int start,
-                                      int axis_size, bool right) {
-  constexpr T cm[9][5] = {
-      {-1. / 6., 5. / 6., 1. / 3., 0., 0.},
-      {0., 1. / 3., 5. / 6., -1. / 6., 0.},
-      {0., 0., 11. / 6., -7. / 6., 1. / 3.},
-      {1., -2., 1., 0., 0.},
-      {1., -4., 3., 0., 0.},
-      {0., 1., -2., 1., 0.},
-      {0., -1., 0., 1., 0.},
-      {0., 0., 1., -2., 1.},
-      {0., 0., 3., -4., 1.}};
-  T c[9][5];
-  for (int r = 0; r < 9; ++r) {
-    for (int k = 0; k < 5; ++k) c[r][k] = right ? cm[r][4 - k] : cm[r][k];
-  }
-  T phi[5];
-  for (int k = 0; k < 5; ++k) {
-    phi[k] = line[v * axis_size + start + k];
-  }
-  T p0 = _vvdot<5>(phi, c[0]);
-  T p1 = _vvdot<5>(phi, c[1]);
-  T p2 = _vvdot<5>(phi, c[2]);
-  T beta0 = 13. / 12. * SQR(_vvdot<5>(phi, c[3])) +
-            .25 * SQR(_vvdot<5>(phi, c[4]));
-  T beta1 = 13. / 12. * SQR(_vvdot<5>(phi, c[5])) +
-            .25 * SQR(_vvdot<5>(phi, c[6]));
-  T beta2 = 13. / 12. * SQR(_vvdot<5>(phi, c[7])) +
-            .25 * SQR(_vvdot<5>(phi, c[8]));
-  T alpha0 = .3 / SQR(beta0 + 1.e-6);
-  T alpha1 = .6 / SQR(beta1 + 1.e-6);
-  T alpha2 = .1 / SQR(beta2 + 1.e-6);
-  return (alpha0 * p0 + alpha1 * p1 + alpha2 * p2) /
-         (alpha0 + alpha1 + alpha2);
-}
 
 }  // namespace snap
 
