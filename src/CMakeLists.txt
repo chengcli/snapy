@@ -108,6 +108,7 @@ if (CUDAToolkit_FOUND)
       eos/*.cu
       eos/aneos/*.cu
       coord/*.cu
+      hydro/*.cu
       recon/*.cu
       riemann/*.cu
       implicit/*.cu
@@ -137,8 +138,13 @@ if (CUDAToolkit_FOUND)
   if(NVSHMEM)
     target_include_directories(${namel}_cuda_${buildl}
         SYSTEM PUBLIC ${NVSHMEM_INCLUDE_DIR})
-    target_link_libraries(${namel}_cuda_${buildl}
-        PUBLIC ${NVSHMEM_LIBRARY})
+    if(NVSHMEM_TORCH_TARGET)
+      target_link_libraries(${namel}_cuda_${buildl}
+          PUBLIC ${NVSHMEM_TORCH_TARGET})
+    else()
+      target_link_libraries(${namel}_cuda_${buildl}
+          PUBLIC ${NVSHMEM_LIBRARY})
+    endif()
   endif()
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})

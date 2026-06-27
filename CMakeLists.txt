@@ -134,16 +134,36 @@ if (CUDAToolkit_FOUND)
 endif()
 
 if(NVSHMEM)
-  find_path(NVSHMEM_INCLUDE_DIR nvshmem.h
-    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
-    PATH_SUFFIXES include)
-  find_library(NVSHMEM_LIBRARY nvshmem
-    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
-    PATH_SUFFIXES lib lib64)
-  if(NOT NVSHMEM_INCLUDE_DIR OR NOT NVSHMEM_LIBRARY)
+  get_filename_component(_torch_lib_dir "${TORCH_LIBRARY}" DIRECTORY)
+  get_filename_component(_torch_package_dir "${_torch_lib_dir}" DIRECTORY)
+  get_filename_component(_torch_site_packages_dir "${_torch_package_dir}" DIRECTORY)
+  if(TARGET torch_nvshmem)
+    find_path(NVSHMEM_INCLUDE_DIR nvshmem.h
+      HINTS "${_torch_site_packages_dir}/nvidia/nvshmem"
+      PATH_SUFFIXES include)
+    set(NVSHMEM_TORCH_TARGET torch_nvshmem)
+    message(STATUS "NVSHMEM: using LibTorch torch_nvshmem target")
+  else()
+    find_path(NVSHMEM_INCLUDE_DIR nvshmem.h
+      HINTS
+        "${_torch_site_packages_dir}/nvidia/nvshmem"
+        ENV NVSHMEM_HOME
+        ENV NVSHMEM_ROOT
+      PATH_SUFFIXES include)
+    find_library(NVSHMEM_LIBRARY
+      NAMES torch_nvshmem nvshmem
+      HINTS
+        "${_torch_lib_dir}"
+        "${_torch_site_packages_dir}/nvidia/nvshmem"
+        ENV NVSHMEM_HOME
+        ENV NVSHMEM_ROOT
+      PATH_SUFFIXES lib lib64)
+  endif()
+  if(NOT NVSHMEM_INCLUDE_DIR OR (NOT NVSHMEM_LIBRARY AND NOT NVSHMEM_TORCH_TARGET))
     message(FATAL_ERROR
-      "NVSHMEM=ON requires nvshmem.h and libnvshmem. Set NVSHMEM_HOME or "
-      "NVSHMEM_ROOT if they are installed outside the default search path.")
+      "NVSHMEM=ON requires NVSHMEM headers and either LibTorch's "
+      "torch_nvshmem target or a standalone libnvshmem. Set NVSHMEM_HOME or "
+      "NVSHMEM_ROOT if using a standalone install.")
   endif()
 endif()
 

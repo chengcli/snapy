@@ -8,9 +8,30 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
+#include "../eos/ideal_moist.hpp"
+#include "fused_recon_riemann_dispatch.hpp"
 #include "hydro.hpp"
 
 namespace snap {
+namespace {
+
+FusedReconScheme fused_recon_scheme(std::string const& type,
+                                    bool velocity_group) {
+  if (type == "weno5") {
+    return velocity_group ? FusedReconScheme::CP5 : FusedReconScheme::WENO5;
+  }
+  if (type == "weno3") {
+    return velocity_group ? FusedReconScheme::CP3 : FusedReconScheme::WENO3;
+  }
+  if (type == "cp5") return FusedReconScheme::CP5;
+  if (type == "cp3") return FusedReconScheme::CP3;
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann supports cp3, cp5, weno3, and "
+              "weno5 reconstruction, but got ",
+              type);
+}
+
+}  // namespace
 
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
     : options(options_) {
@@ -191,10 +212,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   if (options->fused_recon_riemann()) {
     return _forward_fused_recon_riemann(dt, u, other);
   }
-  TORCH_CHECK(false,
-              "dynamics.fused-recon-riemann reached the fused CUDA dispatch "
-              "surface, but the fused reconstruction/Riemann kernel has not "
-              "been linked into this build");
+  return _forward_staged(dt, u, other);
 }
 
 torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
@@ -409,6 +427,23 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
               "dynamics.fused-recon-riemann requires CUDA tensors");
   TORCH_CHECK(other.count("hydro_w"),
               "dynamics.fused-recon-riemann requires hydro_w primitives");
+  auto const& w = other.at("hydro_w");
+  TORCH_CHECK(w.is_cuda(),
+              "dynamics.fused-recon-riemann requires CUDA primitive tensors");
+  TORCH_CHECK(w.is_contiguous() && u.is_contiguous(),
+              "dynamics.fused-recon-riemann requires contiguous hydro tensors");
+  TORCH_CHECK(_flux1.is_contiguous() &&
+                  (!_flux2.defined() || _flux2.is_contiguous()) &&
+                  (!_flux3.defined() || _flux3.is_contiguous()),
+              "dynamics.fused-recon-riemann requires contiguous flux buffers");
+  TORCH_CHECK(w.size(0) <= 64,
+              "dynamics.fused-recon-riemann supports at most 64 hydro "
+              "variables, but got ",
+              w.size(0));
+  TORCH_CHECK(w.size(0) - ICY <= 32,
+              "dynamics.fused-recon-riemann supports at most 32 mass "
+              "fractions, but got ",
+              w.size(0) - ICY);
   TORCH_CHECK(!other.count("solid"),
               "dynamics.fused-recon-riemann does not yet support solid "
               "internal-boundary state revision");
@@ -432,6 +467,10 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
               riemann_type);
 
   auto playout = pmb->get_layout();
+  TORCH_CHECK(pmb->pcoord->options->type() == "cartesian",
+              "dynamics.fused-recon-riemann currently supports cartesian "
+              "coordinates only, but got ",
+              pmb->pcoord->options->type());
   if (playout->options->type() == "cubed-sphere") {
 #ifdef NOT_USE_NVSHMEM
     TORCH_CHECK(false,
@@ -444,7 +483,62 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
 #endif
   }
 
-  return _forward_staged(dt, u, other);
+  peos->forward(u, w);
+
+  auto recon1_prim = fused_recon_scheme(precon1->pinterp1->options->type(),
+                                        /*velocity_group=*/false);
+  auto recon1_vel = fused_recon_scheme(precon1->pinterp1->options->type(),
+                                       /*velocity_group=*/true);
+  auto recon23_prim = fused_recon_scheme(precon23->pinterp1->options->type(),
+                                         /*velocity_group=*/false);
+  auto recon23_vel = fused_recon_scheme(precon23->pinterp1->options->type(),
+                                        /*velocity_group=*/true);
+  auto solver = riemann_type == "lmars" ? FusedRiemannSolver::LMARS
+                                        : FusedRiemannSolver::HLLC;
+  auto eos =
+      eos_type == "ideal-gas" ? FusedEos::IdealGas : FusedEos::IdealMoist;
+
+  torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
+  if (eos == FusedEos::IdealMoist) {
+    auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(peos.get());
+    TORCH_CHECK(ideal_moist != nullptr,
+                "dynamics.fused-recon-riemann expected IdealMoistImpl");
+    inv_mu_ratio_m1 = ideal_moist->inv_mu_ratio_m1.to(w.options());
+    cv_ratio_m1 = ideal_moist->cv_ratio_m1.to(w.options());
+    u0 = ideal_moist->u0.to(w.options());
+  }
+
+  if (u.size(3) > 1 && !options->disable_flux_x1()) {
+    fused_recon_riemann_cuda(
+        w, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
+        options->eos()->gammad(), options->eos()->density_floor(),
+        options->eos()->pressure_floor(), options->eos()->limiter(),
+        inv_mu_ratio_m1, cv_ratio_m1, u0);
+  }
+  if (u.size(2) > 1 && !options->disable_flux_x2()) {
+    fused_recon_riemann_cuda(
+        w, _flux2, /*dim=*/2, recon23_prim, recon23_vel, solver, eos,
+        options->eos()->gammad(), options->eos()->density_floor(),
+        options->eos()->pressure_floor(), options->eos()->limiter(),
+        inv_mu_ratio_m1, cv_ratio_m1, u0);
+  }
+  if (u.size(1) > 1 && !options->disable_flux_x3()) {
+    fused_recon_riemann_cuda(
+        w, _flux3, /*dim=*/1, recon23_prim, recon23_vel, solver, eos,
+        options->eos()->gammad(), options->eos()->density_floor(),
+        options->eos()->pressure_floor(), options->eos()->limiter(),
+        inv_mu_ratio_m1, cv_ratio_m1, u0);
+  }
+
+  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
+
+  auto du = torch::zeros_like(_div);
+  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  du.index(interior) = -dt * _div.index(interior);
+
+  auto temp = peos->compute("W->T", {w});
+  for (auto& f : forcings) f.forward(du, w, temp, dt);
+  return du;
 }
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {
