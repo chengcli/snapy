@@ -1,4 +1,6 @@
 // kintera
+#include <kintera/constants.h>
+
 #include <kintera/utils/format.hpp>
 
 // C/C++
@@ -36,6 +38,53 @@ FusedReconScheme fused_recon_scheme(std::string const& type,
               "dynamics.fused-recon-riemann supports cp3, cp5, weno3, and "
               "weno5 reconstruction, but got ",
               type);
+}
+
+bool fused_combo_supported(std::string const& eos_type,
+                           std::string const& riemann_type) {
+  return ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
+          (riemann_type == "lmars" || riemann_type == "hllc")) ||
+         (eos_type == "shallow-water" && riemann_type == "shallow-roe");
+}
+
+bool fused_recon_type_supported(std::string const& type) {
+  return type == "cp3" || type == "cp5" || type == "weno3" || type == "weno5";
+}
+
+FusedEos fused_eos(std::string const& type) {
+  if (type == "ideal-gas") return FusedEos::IdealGas;
+  if (type == "ideal-moist") return FusedEos::IdealMoist;
+  if (type == "shallow-water") return FusedEos::ShallowWater;
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann supports EOS types ideal-gas, "
+              "ideal-moist, and shallow-water, but got ",
+              type);
+}
+
+FusedRiemannSolver fused_riemann_solver(std::string const& type) {
+  if (type == "lmars") return FusedRiemannSolver::LMARS;
+  if (type == "hllc") return FusedRiemannSolver::HLLC;
+  if (type == "shallow-roe") return FusedRiemannSolver::ShallowRoe;
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann supports Riemann solvers lmars, "
+              "hllc, and shallow-roe, but got ",
+              type);
+}
+
+FusedPrimitiveProjector fused_projector(PrimitiveProjector const& pproj) {
+  if (!pproj || pproj->options->type() == "none") {
+    return FusedPrimitiveProjector::None;
+  }
+  if (pproj->options->type() == "density") {
+    return FusedPrimitiveProjector::Density;
+  }
+  if (pproj->options->type() == "temperature") {
+    return FusedPrimitiveProjector::Temperature;
+  }
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann supports primitive projector "
+              "types density and temperature, but got ",
+              pproj->options->type());
 }
 
 void ensure_symmetric_group(LayoutImpl const& layout,
@@ -264,6 +313,16 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
+    auto eos_type = options->eos()->type();
+    auto riemann_type = options->riemann()->type();
+    bool supported =
+        u.is_cuda() && fused_combo_supported(eos_type, riemann_type) &&
+        fused_recon_type_supported(precon1->pinterp1->options->type()) &&
+        fused_recon_type_supported(precon23->pinterp1->options->type()) &&
+        !other.count("solid") && !psed;
+    if (!supported) {
+      return _forward_staged(dt, u, other);
+    }
     return _forward_fused_recon_riemann(dt, u, other);
   }
   return _forward_staged(dt, u, other);
@@ -501,24 +560,16 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
   TORCH_CHECK(!other.count("solid"),
               "dynamics.fused-recon-riemann does not yet support solid "
               "internal-boundary state revision");
-  TORCH_CHECK(!pproj,
-              "dynamics.fused-recon-riemann does not yet support primitive "
-              "projectors");
   TORCH_CHECK(!psed,
               "dynamics.fused-recon-riemann does not yet support "
               "sedimentation fluxes");
 
   auto eos_type = options->eos()->type();
-  TORCH_CHECK(eos_type == "ideal-gas" || eos_type == "ideal-moist",
-              "dynamics.fused-recon-riemann supports EOS types ideal-gas and "
-              "ideal-moist, but got ",
-              eos_type);
-
   auto riemann_type = options->riemann()->type();
-  TORCH_CHECK(riemann_type == "lmars" || riemann_type == "hllc",
-              "dynamics.fused-recon-riemann supports Riemann solvers lmars "
-              "and hllc, but got ",
-              riemann_type);
+  TORCH_CHECK(fused_combo_supported(eos_type, riemann_type),
+              "dynamics.fused-recon-riemann does not support EOS/Riemann "
+              "combination ",
+              eos_type, "/", riemann_type);
 
   auto playout = pmb->get_layout();
   bool cubed_sphere_layout = playout->options->type() == "cubed-sphere";
@@ -555,10 +606,10 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
                                          /*velocity_group=*/false);
   auto recon23_vel = fused_recon_scheme(precon23->pinterp1->options->type(),
                                         /*velocity_group=*/true);
-  auto solver = riemann_type == "lmars" ? FusedRiemannSolver::LMARS
-                                        : FusedRiemannSolver::HLLC;
-  auto eos =
-      eos_type == "ideal-gas" ? FusedEos::IdealGas : FusedEos::IdealMoist;
+  auto solver = fused_riemann_solver(riemann_type);
+  auto eos = fused_eos(eos_type);
+  int shallow_roe_dir_yz = options->riemann()->dir() == "yz" ? 1 : 0;
+  auto projector = fused_projector(pproj);
 
   torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
   if (eos == FusedEos::IdealMoist) {
@@ -570,26 +621,47 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
     u0 = ideal_moist->u0.to(w.options());
   }
 
+  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  torch::Tensor w1 = w;
+  torch::Tensor psf, dx1f;
+  double gas_constant = 0.;
+  if (projector != FusedPrimitiveProjector::None) {
+    TORCH_CHECK(eos != FusedEos::ShallowWater,
+                "dynamics.fused-recon-riemann primitive projectors are not "
+                "defined for shallow-water EOS");
+    w1 = pproj->forward(w, pmb->pcoord->dx1f);
+    psf = pproj->psf().to(w.options());
+    dx1f = pmb->pcoord->dx1f.to(w.options());
+    if (projector == FusedPrimitiveProjector::Temperature) {
+      gas_constant = kintera::constants::Rgas / peos->species_weight();
+    }
+  }
+
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(
-        w, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
+        w1, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz, projector, psf,
+        dx1f, gas_constant, rho_grav);
   }
   if (u.size(2) > 1 && !options->disable_flux_x2()) {
     fused_recon_riemann_cuda(
         w, _flux2, /*dim=*/2, recon23_prim, recon23_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
+        FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
+        torch::Tensor());
   }
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     fused_recon_riemann_cuda(
         w, _flux3, /*dim=*/1, recon23_prim, recon23_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
+        FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
+        torch::Tensor());
   }
 
   if (cubed_sphere_layout) {
@@ -623,7 +695,8 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
           symm->get_rank(), symm->get_world_size(), side_meta, x2v, x2f, x3v,
           x3f, recon23_prim, recon23_vel, solver, eos, options->eos()->gammad(),
           options->eos()->density_floor(), options->eos()->pressure_floor(),
-          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0);
+          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
+          shallow_roe_dir_yz, FusedPrimitiveProjector::None);
     }
   }
 
@@ -635,6 +708,12 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
 
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
+
+  if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
+    du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());
+    du[IPR] +=
+        dt * w[IVX] * rho_grav * (1. - options->grav()->non_hydrostatic());
+  }
   return du;
 }
 

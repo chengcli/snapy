@@ -8,6 +8,23 @@
 #include "hydro.hpp"
 
 namespace snap {
+namespace {
+
+bool fused_recon_riemann_supported_by_options(HydroOptions const& op) {
+  auto eos_type = op->eos() ? op->eos()->type() : "";
+  auto riemann_type = op->riemann() ? op->riemann()->type() : "";
+  bool eos_supported = eos_type == "ideal-gas" || eos_type == "ideal-moist" ||
+                       eos_type == "shallow-water";
+  bool riemann_supported = riemann_type == "lmars" || riemann_type == "hllc" ||
+                           riemann_type == "shallow-roe";
+  bool combo_supported =
+      ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
+       (riemann_type == "lmars" || riemann_type == "hllc")) ||
+      (eos_type == "shallow-water" && riemann_type == "shallow-roe");
+  return eos_supported && riemann_supported && combo_supported;
+}
+
+}  // namespace
 
 HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
                                          bool verbose) {
@@ -48,7 +65,7 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
-    op->fused_recon_riemann() = dyn["fused-recon-riemann"].as<bool>(false);
+    op->fused_recon_riemann() = fused_recon_riemann_supported_by_options(op);
   }
 
   // --------------- forcings --------------- //

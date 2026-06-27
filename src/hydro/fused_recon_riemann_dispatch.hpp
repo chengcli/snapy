@@ -15,21 +15,29 @@ enum class FusedReconScheme : int {
 enum class FusedRiemannSolver : int {
   LMARS = 0,
   HLLC = 1,
+  ShallowRoe = 2,
 };
 
 enum class FusedEos : int {
   IdealGas = 0,
   IdealMoist = 1,
+  ShallowWater = 2,
 };
 
-void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux, int dim,
-                              FusedReconScheme recon_prim,
-                              FusedReconScheme recon_vel,
-                              FusedRiemannSolver solver, FusedEos eos,
-                              double gammad, double density_floor,
-                              double pressure_floor, bool eos_limiter,
-                              torch::Tensor inv_mu_ratio_m1,
-                              torch::Tensor cv_ratio_m1, torch::Tensor u0);
+enum class FusedPrimitiveProjector : int {
+  None = 0,
+  Density = 1,
+  Temperature = 2,
+};
+
+void fused_recon_riemann_cuda(
+    torch::Tensor w, torch::Tensor flux, int dim, FusedReconScheme recon_prim,
+    FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
+    double gammad, double density_floor, double pressure_floor,
+    bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
+    torch::Tensor u0, int shallow_roe_dir_yz, FusedPrimitiveProjector projector,
+    torch::Tensor psf, torch::Tensor dx1f, double gas_constant,
+    torch::Tensor rho_grav);
 
 void fused_cubed_sphere_exchange_cuda(
     torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
@@ -40,6 +48,7 @@ void fused_cubed_sphere_exchange_cuda(
     FusedReconScheme recon_prim, FusedReconScheme recon_vel,
     FusedRiemannSolver solver, FusedEos eos, double gammad,
     double density_floor, double pressure_floor, bool eos_limiter,
-    torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0);
+    torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0,
+    int shallow_roe_dir_yz, FusedPrimitiveProjector projector);
 
 }  // namespace snap
