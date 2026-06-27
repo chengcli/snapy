@@ -210,7 +210,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         u.is_cuda() && fused_combo_supported(eos_type, riemann_type) &&
         fused_recon_type_supported(precon1->pinterp1->options->type()) &&
         fused_recon_type_supported(precon23->pinterp1->options->type()) &&
-        !other.count("solid") && !psed;
+        !other.count("solid") && (!psed || eos_type == "ideal-moist");
     if (!supported) {
       return _forward_staged(dt, u, other);
     }

@@ -111,6 +111,7 @@ if (CUDAToolkit_FOUND)
       hydro/*.cu
       recon/*.cu
       riemann/*.cu
+      sedimentation/*.cu
       implicit/*.cu
       utils/*.cu
       layout/*.cu

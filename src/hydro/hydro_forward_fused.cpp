@@ -16,6 +16,7 @@
 #include <torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp>
 
 #include "../eos/ideal_moist.hpp"
+#include "../sedimentation/sedimentation.hpp"
 #include "fused_recon_riemann_dispatch.hpp"
 #include "hydro.hpp"
 #include "primitive_projector_dispatch.hpp"
@@ -162,9 +163,6 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   TORCH_CHECK(!other.count("solid"),
               "dynamics.fused-recon-riemann does not yet support solid "
               "internal-boundary state revision");
-  TORCH_CHECK(!psed,
-              "dynamics.fused-recon-riemann does not yet support "
-              "sedimentation fluxes");
 
   auto eos_type = options->eos()->type();
   auto riemann_type = options->riemann()->type();
@@ -252,6 +250,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         options->eos()->pressure_floor(), options->eos()->limiter(),
         inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz, projector, psf,
         dx1f, gas_constant, rho_grav);
+  }
+  if (u.size(3) > 1 && psed) {
+    psed->forward(w, _flux1);
   }
   if (u.size(2) > 1 && !options->disable_flux_x2()) {
     fused_recon_riemann_cuda(

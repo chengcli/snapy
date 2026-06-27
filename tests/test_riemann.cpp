@@ -8,6 +8,9 @@
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
 
+// kintera
+#include <kintera/species.hpp>
+
 // snap
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -139,6 +142,75 @@ forcing:
 geometry:
   type: cartesian
   bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 10, nx2: 8, nx3: 1, nghost: 3}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
+)";
+
+const char *small_ideal_moist_sedimentation_config = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor: 1.e-10
+    pressure-floor: 1.e-10
+    tracer-floor: 1.e-10
+    limiter: false
+
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+
+  riemann-solver:
+    type: hllc
+
+forcing:
+  const-gravity:
+    grav1: -9.8
+
+sedimentation:
+  radius:
+    cloud: 1.0e-5
+
+  density:
+    cloud: 1000.
+
+  const-vsed:
+    cloud: -10.0
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1.e3, x2min: 0., x2max: 1.e3, x3min: 0., x3max: 1.e3}
   cells: {nx1: 10, nx2: 8, nx3: 1, nghost: 3}
 
 boundary-condition:
@@ -312,6 +384,71 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_projector) {
   auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
   auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
   EXPECT_TRUE(torch::allclose(fused_du, staged_du, 1.e-8, 1.e-8));
+
+  std::remove(staged_name);
+  std::remove(fused_name);
+}
+
+TEST_P(DeviceTest,
+       fused_recon_riemann_matches_staged_ideal_moist_sedimentation) {
+  if (device.type() != torch::kCUDA) {
+    GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+
+  char staged_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(staged_name);
+  std::ofstream staged_file(staged_name);
+  staged_file << small_ideal_moist_sedimentation_config;
+  staged_file.close();
+
+  char fused_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fused_name);
+  std::ofstream fused_file(fused_name);
+  fused_file << small_ideal_moist_sedimentation_config;
+  fused_file.close();
+
+  kintera::init_species_from_yaml(staged_name);
+  auto staged_opts = MeshBlockOptionsImpl::from_yaml(staged_name);
+  kintera::init_species_from_yaml(fused_name);
+  auto fused_opts = MeshBlockOptionsImpl::from_yaml(fused_name);
+  staged_opts->hydro()->fused_recon_riemann() = false;
+  staged_opts->hydro()->disable_flux_x1() = true;
+  staged_opts->hydro()->disable_flux_x2() = true;
+  staged_opts->hydro()->disable_flux_x3() = true;
+  staged_opts->hydro()->grav()->grav1(-9.8);
+  fused_opts->hydro()->disable_flux_x1() = true;
+  fused_opts->hydro()->disable_flux_x2() = true;
+  fused_opts->hydro()->disable_flux_x3() = true;
+  fused_opts->hydro()->grav()->grav1(-9.8);
+  auto staged_block = MeshBlock(staged_opts);
+  auto fused_block = MeshBlock(fused_opts);
+  staged_block->to(device, dtype);
+  fused_block->to(device, dtype);
+
+  int nc1 = staged_block->pcoord->options->nc1();
+  int nc2 = staged_block->pcoord->options->nc2();
+  int nc3 = staged_block->pcoord->options->nc3();
+  int nvar = staged_block->phydro->peos->nvar();
+
+  torch::manual_seed(205);
+  auto w =
+      torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  w[IDN].mul_(0.1).add_(1.0);
+  w[IPR].mul_(1000.0).add_(1.e5);
+  w.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  if (nvar > ICY) {
+    w.narrow(0, ICY, nvar - ICY).mul_(1.e-3);
+  }
+
+  auto u = staged_block->phydro->peos->compute("W->U", {w});
+  Variables staged_vars, fused_vars;
+  staged_vars["hydro_w"] = torch::empty_like(w);
+  fused_vars["hydro_w"] = torch::empty_like(w);
+
+  auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
+  auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  double tol = dtype == torch::kFloat32 ? 1.e-4 : 1.e-8;
+  EXPECT_TRUE(torch::allclose(fused_du, staged_du, tol, tol));
 
   std::remove(staged_name);
   std::remove(fused_name);
