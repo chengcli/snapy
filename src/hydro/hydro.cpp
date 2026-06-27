@@ -13,9 +13,7 @@
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
-#ifndef NOT_USE_NVSHMEM
 #include <torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp>
-#endif
 
 #include "../eos/ideal_moist.hpp"
 #include "fused_recon_riemann_dispatch.hpp"
@@ -40,7 +38,6 @@ FusedReconScheme fused_recon_scheme(std::string const& type,
               type);
 }
 
-#ifndef NOT_USE_NVSHMEM
 void ensure_symmetric_group(LayoutImpl const& layout,
                             std::string const& group_name) {
   static std::mutex mutex;
@@ -87,7 +84,6 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
   }
   return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
 }
-#endif
 
 }  // namespace
 
@@ -268,11 +264,7 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
-#ifdef NOT_USE_NVSHMEM
-    return _forward_staged(dt, u, other);
-#else
     return _forward_fused_recon_riemann(dt, u, other);
-#endif
   }
   return _forward_staged(dt, u, other);
 }
@@ -480,11 +472,6 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
 torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
                                                       torch::Tensor u,
                                                       Variables const& other) {
-#ifdef NOT_USE_NVSHMEM
-  TORCH_CHECK(false,
-              "dynamics.fused-recon-riemann is disabled unless snapy is built "
-              "with NVSHMEM=ON");
-#else
 #ifdef NOT_USE_CUDA
   TORCH_CHECK(false,
               "dynamics.fused-recon-riemann requires a CUDA-enabled build");
@@ -649,7 +636,6 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
   return du;
-#endif
 }
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {

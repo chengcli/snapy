@@ -9,9 +9,6 @@
 // CUDA
 #define @CUDA_OPTION@
 
-// NVSHMEM
-#define @NVSHMEM_OPTION@
-
 // NetCDF output (NETCDFOUTPUT or NO_NETCDFOUTPUT)
 #define @NETCDF_OPTION@
 

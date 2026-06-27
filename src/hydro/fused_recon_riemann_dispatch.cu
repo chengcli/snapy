@@ -16,11 +16,6 @@ namespace snap {
 namespace {
 
 template <typename T>
-__device__ T sqr(T x) {
-  return x * x;
-}
-
-template <typename T>
 __device__ T interp(T const* line, int v, int start, int axis_size,
                     FusedReconScheme scheme, bool right) {
   if (scheme == FusedReconScheme::CP3) {
@@ -136,14 +131,15 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                    : 3;
   int il = nghost;
   int iu = axis_size - nghost;
+  int stencil = 2 * nghost - 1;
 
   if (pos < il || pos > iu + 1) {
     for (int v = 0; v < nvar; ++v) flux[v * stride_var + flat] = 0.;
     return;
   }
 
-  int wl_start = pos - il;
-  int wr_start = pos - (il - 1);
+  int wl_start = min(max(pos - il, 0), axis_size - stencil);
+  int wr_start = min(max(pos - (il - 1), 0), axis_size - stencil);
   T wl_local[64], wr_local[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
@@ -170,11 +166,12 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                       cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
 
   if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
-               er / wr_local[IDN], gl, gr, dim, ny, stride_var);
+    lmars_impl_strided(flux + flat, wl_local, wr_local, el / wl_local[IDN],
+                       er / wr_local[IDN], gl, gr, dim, ny,
+                       /*stride_w=*/1, /*stride_f=*/stride_var);
   } else {
-    hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim, ny,
-              stride_var);
+    hllc_impl_strided(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr,
+                      dim, ny, /*stride_w=*/1, /*stride_f=*/stride_var);
   }
 }
 
@@ -503,10 +500,11 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
   T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
   if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
-               stride_var);
+    lmars_impl_strided(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim,
+                       ny, /*stride_w=*/1, /*stride_f=*/stride_var);
   } else {
-    hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, stride_var);
+    hllc_impl_strided(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny,
+                      /*stride_w=*/1, /*stride_f=*/stride_var);
   }
 }
 

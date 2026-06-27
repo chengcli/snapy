@@ -7,16 +7,16 @@
 #include <snap/snap.h>
 
 #define SQR(x) ((x) * (x))
-#define FLX(n) flx[(n) * stride]
-#define WL(n) wl[(n) * stride]
-#define WR(n) wr[(n) * stride]
+#define FLX(n) flx[(n) * stride_f]
+#define WL(n) wl[(n) * stride_w]
+#define WR(n) wr[(n) * stride_w]
 
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
-                              T gammar, T cl, T cr, int dim, int ny,
-                              int stride) {
+void DISPATCH_MACRO hllc_impl_strided(T *flx, T *wl, T *wr, T el, T er,
+                                      T gammal, T gammar, T cl, T cr, int dim,
+                                      int ny, int stride_w, int stride_f) {
   auto TINY_NUMBER = 1.0e-10;
 
   auto ivx = IPR - dim;
@@ -125,6 +125,14 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
     auto frn = WR(IDN) * WR(ICY + n) * vxr;
     FLX(ICY + n) = sl * fln + sr * frn;
   }
+}
+
+template <typename T>
+void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
+                              T gammar, T cl, T cr, int dim, int ny,
+                              int stride) {
+  hllc_impl_strided(flx, wl, wr, el, er, gammal, gammar, cl, cr, dim, ny,
+                    stride, stride);
 }
 
 }  // namespace snap

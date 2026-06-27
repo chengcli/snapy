@@ -116,11 +116,6 @@ if (CUDAToolkit_FOUND)
       layout/*.cu
       )
 
-  if(NOT NVSHMEM)
-    list(REMOVE_ITEM cu_src_files
-        "${CMAKE_CURRENT_SOURCE_DIR}/hydro/fused_recon_riemann_dispatch.cu")
-  endif()
-
   add_library(${namel}_cuda_${buildl}
       SHARED
       ${cu_src_files}
@@ -140,16 +135,14 @@ if (CUDAToolkit_FOUND)
       ${C10_CUDA_LIBRARY}
       )
 
-  if(NVSHMEM)
-    target_include_directories(${namel}_cuda_${buildl}
-        SYSTEM PUBLIC ${NVSHMEM_INCLUDE_DIR})
-    if(NVSHMEM_TORCH_TARGET)
-      target_link_libraries(${namel}_cuda_${buildl}
-          PUBLIC ${NVSHMEM_TORCH_TARGET})
-    else()
-      target_link_libraries(${namel}_cuda_${buildl}
-          PUBLIC ${NVSHMEM_LIBRARY})
-    endif()
+  target_include_directories(${namel}_cuda_${buildl}
+      SYSTEM PUBLIC ${NVSHMEM_INCLUDE_DIR})
+  if(NVSHMEM_TORCH_TARGET)
+    target_link_libraries(${namel}_cuda_${buildl}
+        PUBLIC ${NVSHMEM_TORCH_TARGET})
+  else()
+    target_link_libraries(${namel}_cuda_${buildl}
+        PUBLIC ${NVSHMEM_LIBRARY})
   endif()
 
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})

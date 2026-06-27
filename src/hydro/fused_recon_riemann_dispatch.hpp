@@ -22,7 +22,6 @@ enum class FusedEos : int {
   IdealMoist = 1,
 };
 
-#ifndef NOT_USE_NVSHMEM
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux, int dim,
                               FusedReconScheme recon_prim,
                               FusedReconScheme recon_vel,
@@ -42,6 +41,5 @@ void fused_cubed_sphere_exchange_cuda(
     FusedRiemannSolver solver, FusedEos eos, double gammad,
     double density_floor, double pressure_floor, bool eos_limiter,
     torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0);
-#endif
 
 }  // namespace snap

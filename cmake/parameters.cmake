@@ -9,13 +9,6 @@ else()
   set(CUDA_OPTION "NOT_USE_CUDA")
 endif()
 
-# nvshmem options
-if(NVSHMEM)
-  set(NVSHMEM_OPTION "USE_NVSHMEM")
-else()
-  set(NVSHMEM_OPTION "NOT_USE_NVSHMEM")
-endif()
-
 # ucx options
 if(UCX)
   set(UCX_OPTION "USE_UCX")
