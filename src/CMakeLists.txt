@@ -116,6 +116,11 @@ if (CUDAToolkit_FOUND)
       layout/*.cu
       )
 
+  if(NOT NVSHMEM)
+    list(REMOVE_ITEM cu_src_files
+        "${CMAKE_CURRENT_SOURCE_DIR}/hydro/fused_recon_riemann_dispatch.cu")
+  endif()
+
   add_library(${namel}_cuda_${buildl}
       SHARED
       ${cu_src_files}
