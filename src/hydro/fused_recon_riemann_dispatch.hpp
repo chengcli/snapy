@@ -3,32 +3,10 @@
 // torch
 #include <torch/torch.h>
 
+// snap
+#include <snap/snap.h>
+
 namespace snap {
-
-enum class FusedReconScheme : int {
-  CP3 = 0,
-  CP5 = 1,
-  WENO3 = 2,
-  WENO5 = 3,
-};
-
-enum class FusedRiemannSolver : int {
-  LMARS = 0,
-  HLLC = 1,
-  ShallowRoe = 2,
-};
-
-enum class FusedEos : int {
-  IdealGas = 0,
-  IdealMoist = 1,
-  ShallowWater = 2,
-};
-
-enum class FusedPrimitiveProjector : int {
-  None = 0,
-  Density = 1,
-  Temperature = 2,
-};
 
 void fused_recon_riemann_cuda(
     torch::Tensor w, torch::Tensor flux, int dim, FusedReconScheme recon_prim,

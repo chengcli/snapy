@@ -14,9 +14,9 @@
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO hllc_impl_strided(T *flx, T *wl, T *wr, T el, T er,
-                                      T gammal, T gammar, T cl, T cr, int dim,
-                                      int ny, int stride_w, int stride_f) {
+void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
+                              T gammar, T cl, T cr, int dim, int ny,
+                              int stride_w, int stride_f) {
   auto TINY_NUMBER = 1.0e-10;
 
   auto ivx = IPR - dim;
@@ -125,14 +125,6 @@ void DISPATCH_MACRO hllc_impl_strided(T *flx, T *wl, T *wr, T el, T er,
     auto frn = WR(IDN) * WR(ICY + n) * vxr;
     FLX(ICY + n) = sl * fln + sr * frn;
   }
-}
-
-template <typename T>
-void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
-                              T gammar, T cl, T cr, int dim, int ny,
-                              int stride) {
-  hllc_impl_strided(flx, wl, wr, el, er, gammal, gammar, cl, cr, dim, ny,
-                    stride, stride);
 }
 
 }  // namespace snap

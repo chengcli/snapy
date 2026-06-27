@@ -7,6 +7,8 @@
 // snap
 #include <snap/snap.h>
 
+#include "../eos/ideal_moist_impl.h"
+#include "../eos/shallow_water_impl.h"
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
@@ -15,69 +17,6 @@
 
 namespace snap {
 namespace {
-
-template <typename T>
-__device__ T interp(T const* line, int v, int start, int axis_size,
-                    FusedReconScheme scheme, bool right) {
-  if (scheme == FusedReconScheme::CP3) {
-    constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
-    T c[3];
-    for (int k = 0; k < 3; ++k) c[k] = right ? cm[2 - k] : cm[k];
-    return interp_shared_poly_coeff_impl<T, 3>(line, c, v, start, axis_size);
-  }
-  if (scheme == FusedReconScheme::CP5) {
-    constexpr T cm[5] = {-1. / 20., 9. / 20., 47. / 60., -13. / 60.,
-                         1. / 30.};
-    T c[5];
-    for (int k = 0; k < 5; ++k) c[k] = right ? cm[4 - k] : cm[k];
-    return interp_shared_poly_coeff_impl<T, 5>(line, c, v, start, axis_size);
-  }
-  if (scheme == FusedReconScheme::WENO3) {
-    constexpr T cm[4][3] = {{1. / 2., 1. / 2., 0.},
-                            {0., 3. / 2., -1. / 2.},
-                            {1., -1., 0.},
-                            {0., 1., -1.}};
-    T c[12];
-    for (int r = 0; r < 4; ++r) {
-      for (int k = 0; k < 3; ++k) {
-        c[r * 3 + k] = right ? cm[r][2 - k] : cm[r][k];
-      }
-    }
-    return interp_shared_weno3_coeff_impl(line, c, v, start, axis_size,
-                                          /*scale=*/false);
-  }
-  constexpr T cm[9][5] = {{-1. / 6., 5. / 6., 1. / 3., 0., 0.},
-                          {0., 1. / 3., 5. / 6., -1. / 6., 0.},
-                          {0., 0., 11. / 6., -7. / 6., 1. / 3.},
-                          {1., -2., 1., 0., 0.},
-                          {1., -4., 3., 0., 0.},
-                          {0., 1., -2., 1., 0.},
-                          {0., -1., 0., 1., 0.},
-                          {0., 0., 1., -2., 1.},
-                          {0., 0., 3., -4., 1.}};
-  T c[45];
-  for (int r = 0; r < 9; ++r) {
-    for (int k = 0; k < 5; ++k) {
-      c[r * 5 + k] = right ? cm[r][4 - k] : cm[r][k];
-    }
-  }
-  return interp_shared_weno5_coeff_impl(line, c, v, start, axis_size,
-                                        /*scale=*/false);
-}
-
-template <typename T>
-__device__ T ideal_moist_feps(T const* y, int ny, T const* inv_mu_ratio_m1) {
-  T out = 1.;
-  for (int n = 0; n < ny; ++n) out += y[n] * inv_mu_ratio_m1[n];
-  return out;
-}
-
-template <typename T>
-__device__ T ideal_moist_fsig(T const* y, int ny, T const* cv_ratio_m1) {
-  T out = 1.;
-  for (int n = 0; n < ny; ++n) out += y[n] * cv_ratio_m1[n];
-  return out;
-}
 
 template <typename T>
 __device__ void eos_side_quantities(T const* wl, T const* wr, int ny,
@@ -90,6 +29,13 @@ __device__ void eos_side_quantities(T const* wl, T const* wr, int ny,
     *er = wr[IPR] / (gammad - 1.);
     *gl = gammad;
     *gr = gammad;
+  } else if (eos == FusedEos::ShallowWater) {
+    *el = 0.;
+    *er = 0.;
+    *gl = 0.;
+    *gr = 0.;
+    shallow_water_side_quantities(wl[IDN], wr[IDN], cl, cr);
+    return;
   } else {
     T yl[32], yr[32];
     T suml = 0., sumr = 0.;
@@ -194,9 +140,11 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
     wl_local[v] =
-        interp(smem, v, wl_start, axis_size, scheme, /*right=*/true);
+        interp_shared_fused_impl(smem, v, wl_start, axis_size, scheme,
+                                 /*right=*/true);
     wr_local[v] =
-        interp(smem, v, wr_start, axis_size, scheme, /*right=*/false);
+        interp_shared_fused_impl(smem, v, wr_start, axis_size, scheme,
+                                 /*right=*/false);
   }
 
   if (projector != FusedPrimitiveProjector::None && dim == 3 && valid_face) {
@@ -240,9 +188,8 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   }
 
   if (solver == FusedRiemannSolver::ShallowRoe) {
-    shallow_roe_impl_strided(flux + flat, wl_local, wr_local, dim,
-                             shallow_roe_dir_yz, /*stride_w=*/1,
-                             /*stride_f=*/stride_var);
+    shallow_roe_impl(flux + flat, wl_local, wr_local, dim, shallow_roe_dir_yz,
+                     /*stride_w=*/1, /*stride_f=*/stride_var);
     return;
   }
 
@@ -252,12 +199,12 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                       cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
 
   if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl_strided(flux + flat, wl_local, wr_local, el / wl_local[IDN],
-                       er / wr_local[IDN], gl, gr, dim, ny,
-                       /*stride_w=*/1, /*stride_f=*/stride_var);
+    lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
+               er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
+               /*stride_f=*/stride_var);
   } else {
-    hllc_impl_strided(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr,
-                      dim, ny, /*stride_w=*/1, /*stride_f=*/stride_var);
+    hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim, ny,
+              /*stride_w=*/1, /*stride_f=*/stride_var);
   }
 }
 
@@ -466,7 +413,8 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   T local[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    local[v] = interp(smem, v, start, axis_size, scheme, right_interp);
+    local[v] =
+        interp_shared_fused_impl(smem, v, start, axis_size, scheme, right_interp);
   }
   if (eos_limiter) {
     local[IDN] = max(local[IDN], density_floor);
@@ -560,7 +508,8 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   T own[64], remote[64], wl[64], wr[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    own[v] = interp(smem, v, start, axis_size, scheme, right_interp);
+    own[v] =
+        interp_shared_fused_impl(smem, v, start, axis_size, scheme, right_interp);
     remote[v] = peer_buf[remote_off + v * buf_stride_var];
   }
   cs_sph_to_contra(remote, face, alpha, beta);
@@ -587,8 +536,8 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
   T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
   if (solver == FusedRiemannSolver::ShallowRoe) {
-    shallow_roe_impl_strided(flux, wl, wr, dim, shallow_roe_dir_yz,
-                             /*stride_w=*/1, /*stride_f=*/stride_var);
+    shallow_roe_impl(flux, wl, wr, dim, shallow_roe_dir_yz, /*stride_w=*/1,
+                     /*stride_f=*/stride_var);
     return;
   }
 
@@ -598,11 +547,11 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
                       u0, &el, &er, &gl, &gr, &cl, &cr);
 
   if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl_strided(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim,
-                       ny, /*stride_w=*/1, /*stride_f=*/stride_var);
+    lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
+               /*stride_w=*/1, /*stride_f=*/stride_var);
   } else {
-    hllc_impl_strided(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny,
-                      /*stride_w=*/1, /*stride_f=*/stride_var);
+    hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
+              /*stride_f=*/stride_var);
   }
 }
 

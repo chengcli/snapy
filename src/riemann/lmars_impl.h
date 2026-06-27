@@ -14,9 +14,9 @@
 namespace snap {
 
 template <typename T>
-void DISPATCH_MACRO lmars_impl_strided(T *flx, T *wl, T *wr, T hl, T hr,
-                                       T gammal, T gammar, int dim, int ny,
-                                       int stride_w, int stride_f) {
+void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
+                               T gammar, int dim, int ny, int stride_w,
+                               int stride_f) {
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
@@ -74,13 +74,6 @@ void DISPATCH_MACRO lmars_impl_strided(T *flx, T *wl, T *wr, T hl, T hr,
     FLX(ivz) = ubar * wri[IDN] * wri[IVZ];
     FLX(IPR) = ubar * wri[IDN] * hr;
   }
-}
-
-template <typename T>
-void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
-                               T gammar, int dim, int ny, int stride) {
-  lmars_impl_strided(flx, wl, wr, hl, hr, gammal, gammar, dim, ny, stride,
-                     stride);
 }
 
 }  // namespace snap

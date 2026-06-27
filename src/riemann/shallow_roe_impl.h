@@ -12,9 +12,8 @@ namespace snap {
 #define SFLX(n) (flx[(n) * stride_f])
 
 template <typename T>
-void DISPATCH_MACRO shallow_roe_impl_strided(T* flx, T const* wl, T const* wr,
-                                             int dim, int dir_yz, int stride_w,
-                                             int stride_f) {
+void DISPATCH_MACRO shallow_roe_impl(T* flx, T const* wl, T const* wr, int dim,
+                                     int dir_yz, int stride_w, int stride_f) {
   int ivx, ivy, ivz;
   if (dir_yz) {
     ivx = dim == 2 ? IVY : IVZ;
