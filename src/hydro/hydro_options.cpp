@@ -48,6 +48,7 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
+    op->fused_recon_riemann() = dyn["fused-recon-riemann"].as<bool>(false);
   }
 
   // --------------- forcings --------------- //
@@ -110,6 +111,7 @@ HydroOptions HydroOptionsImpl::clone() const {
   op->disable_flux_x1() = disable_flux_x1();
   op->disable_flux_x2() = disable_flux_x2();
   op->disable_flux_x3() = disable_flux_x3();
+  op->fused_recon_riemann() = fused_recon_riemann();
 
   if (grav()) op->grav() = grav()->clone();
   if (coriolis()) op->coriolis() = coriolis()->clone();

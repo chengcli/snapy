@@ -188,6 +188,17 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
+  if (options->fused_recon_riemann()) {
+    return _forward_fused_recon_riemann(dt, u, other);
+  }
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann reached the fused CUDA dispatch "
+              "surface, but the fused reconstruction/Riemann kernel has not "
+              "been linked into this build");
+}
+
+torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
+                                         Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();
@@ -384,6 +395,56 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   return du;
+}
+
+torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
+                                                      torch::Tensor u,
+                                                      Variables const& other) {
+#ifdef NOT_USE_CUDA
+  TORCH_CHECK(false,
+              "dynamics.fused-recon-riemann requires a CUDA-enabled build");
+#endif
+
+  TORCH_CHECK(u.is_cuda(),
+              "dynamics.fused-recon-riemann requires CUDA tensors");
+  TORCH_CHECK(other.count("hydro_w"),
+              "dynamics.fused-recon-riemann requires hydro_w primitives");
+  TORCH_CHECK(!other.count("solid"),
+              "dynamics.fused-recon-riemann does not yet support solid "
+              "internal-boundary state revision");
+  TORCH_CHECK(!pproj,
+              "dynamics.fused-recon-riemann does not yet support primitive "
+              "projectors");
+  TORCH_CHECK(!psed,
+              "dynamics.fused-recon-riemann does not yet support "
+              "sedimentation fluxes");
+
+  auto eos_type = options->eos()->type();
+  TORCH_CHECK(eos_type == "ideal-gas" || eos_type == "ideal-moist",
+              "dynamics.fused-recon-riemann supports EOS types ideal-gas and "
+              "ideal-moist, but got ",
+              eos_type);
+
+  auto riemann_type = options->riemann()->type();
+  TORCH_CHECK(riemann_type == "lmars" || riemann_type == "hllc",
+              "dynamics.fused-recon-riemann supports Riemann solvers lmars "
+              "and hllc, but got ",
+              riemann_type);
+
+  auto playout = pmb->get_layout();
+  if (playout->options->type() == "cubed-sphere") {
+#ifdef NOT_USE_NVSHMEM
+    TORCH_CHECK(false,
+                "dynamics.fused-recon-riemann on cubed-sphere layouts "
+                "requires an NVSHMEM-enabled build");
+#else
+    TORCH_CHECK(false,
+                "dynamics.fused-recon-riemann cubed-sphere NVSHMEM exchange "
+                "is not implemented in this build");
+#endif
+  }
+
+  return _forward_staged(dt, u, other);
 }
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {

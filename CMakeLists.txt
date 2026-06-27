@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" OFF)
 option(CUDA "Enable CUDA support" OFF)
+option(NVSHMEM "Enable NVSHMEM-backed kernel-side communication" OFF)
 option(NETCDF "Build with netcdf support" ON)
 option(PNETCDF "Build with pnetcdf support" OFF)
 if(APPLE)
@@ -23,6 +24,10 @@ project(
 # Try to enable CUDA
 if (CUDA)
   enable_language(CUDA)
+endif()
+
+if(NVSHMEM AND NOT CUDA)
+  message(FATAL_ERROR "NVSHMEM=ON requires CUDA=ON")
 endif()
 
 # search for <Package>_ROOT
@@ -126,6 +131,20 @@ if (CUDAToolkit_FOUND)
   endif()
 
   set(CMAKE_CUDA_ARCHITECTURES ${_cuda_arch_list})
+endif()
+
+if(NVSHMEM)
+  find_path(NVSHMEM_INCLUDE_DIR nvshmem.h
+    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
+    PATH_SUFFIXES include)
+  find_library(NVSHMEM_LIBRARY nvshmem
+    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
+    PATH_SUFFIXES lib lib64)
+  if(NOT NVSHMEM_INCLUDE_DIR OR NOT NVSHMEM_LIBRARY)
+    message(FATAL_ERROR
+      "NVSHMEM=ON requires nvshmem.h and libnvshmem. Set NVSHMEM_HOME or "
+      "NVSHMEM_ROOT if they are installed outside the default search path.")
+  endif()
 endif()
 
 message(STATUS "${Blue}${PROJECT_NAME}-4. Setting up project libraries ...${ColorReset}")

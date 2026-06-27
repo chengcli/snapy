@@ -134,6 +134,13 @@ if (CUDAToolkit_FOUND)
       ${C10_CUDA_LIBRARY}
       )
 
+  if(NVSHMEM)
+    target_include_directories(${namel}_cuda_${buildl}
+        SYSTEM PUBLIC ${NVSHMEM_INCLUDE_DIR})
+    target_link_libraries(${namel}_cuda_${buildl}
+        PUBLIC ${NVSHMEM_LIBRARY})
+  endif()
+
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})
 endif()
 

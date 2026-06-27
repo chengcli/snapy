@@ -64,6 +64,41 @@ boundary-condition:
 
 using namespace snap;
 
+TEST(HydroOptions, parses_fused_recon_riemann_flag) {
+  auto config = std::regex_replace(
+      block_config, std::regex("riemann-solver:\\n    type: lmars"),
+      "fused-recon-riemann: true\n\n  riemann-solver:\n    type: lmars");
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_TRUE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, ignores_old_fused_reconstruction_riemann_flag) {
+  auto config = std::regex_replace(
+      block_config, std::regex("riemann-solver:\\n    type: lmars"),
+      "fused-reconstruction-riemann: true\n\n  riemann-solver:\n    type: "
+      "lmars");
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_FALSE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
 TEST_P(DeviceTest, test_lmars) {
   // create a temporary file
   char fname[80] = "/tmp/tempfile.XXXXXX";

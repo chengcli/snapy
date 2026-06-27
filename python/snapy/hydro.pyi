@@ -132,6 +132,16 @@ class HydroOptions:
         ...
 
     @overload
+    def fused_recon_riemann(self) -> bool:
+        """Get fused reconstruction/Riemann flag."""
+        ...
+
+    @overload
+    def fused_recon_riemann(self, value: bool) -> "HydroOptions":
+        """Set fused reconstruction/Riemann flag."""
+        ...
+
+    @overload
     def grav(self) -> ConstGravityOptions:
         """Get gravity options."""
         ...
