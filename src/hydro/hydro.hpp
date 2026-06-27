@@ -141,8 +141,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   torch::Tensor _forward_staged(double dt, torch::Tensor hydro_u,
                                 Variables const& other);
-  torch::Tensor _forward_fused_recon_riemann(double dt, torch::Tensor hydro_u,
-                                             Variables const& other);
+  torch::Tensor _forward_fused(double dt, torch::Tensor hydro_u,
+                               Variables const& other);
 
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };

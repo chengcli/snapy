@@ -9,6 +9,19 @@
 namespace snap {
 
 template <typename T>
+inline DISPATCH_MACRO void apply_projector_restore(
+    T* wl, T* wr, T face_pressure, FusedPrimitiveProjector projector,
+    T gas_constant) {
+  if (projector == FusedPrimitiveProjector::None) return;
+  wl[IPR] += face_pressure;
+  wr[IPR] += face_pressure;
+  if (projector == FusedPrimitiveProjector::Temperature) {
+    wl[IDN] = wl[IPR] / (wl[IDN] * gas_constant);
+    wr[IDN] = wr[IPR] / (wr[IDN] * gas_constant);
+  }
+}
+
+template <typename T>
 inline DISPATCH_MACRO void primitive_projector_impl(
     T const* w, T* wp, T* psf, T const* dx1f, int nvar, int nc3, int nc2,
     int nc1, int col, int is, int ie, FusedPrimitiveProjector projector, T grav,
