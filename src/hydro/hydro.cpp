@@ -20,6 +20,7 @@
 #include "../eos/ideal_moist.hpp"
 #include "fused_recon_riemann_dispatch.hpp"
 #include "hydro.hpp"
+#include "primitive_projector_dispatch.hpp"
 
 namespace snap {
 namespace {
@@ -629,12 +630,18 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
     TORCH_CHECK(eos != FusedEos::ShallowWater,
                 "dynamics.fused-recon-riemann primitive projectors are not "
                 "defined for shallow-water EOS");
-    w1 = pproj->forward(w, pmb->pcoord->dx1f);
-    psf = pproj->psf().to(w.options());
+    TORCH_CHECK(options->grav(),
+                "dynamics.fused-recon-riemann primitive projector requires "
+                "const-gravity forcing");
+    w1 = torch::empty_like(w);
+    psf = torch::empty({w.size(1), w.size(2), w.size(3) + 1}, w.options());
     dx1f = pmb->pcoord->dx1f.to(w.options());
     if (projector == FusedPrimitiveProjector::Temperature) {
       gas_constant = kintera::constants::Rgas / peos->species_weight();
     }
+    primitive_projector_dispatch(
+        w, w1, psf, dx1f, pmb->pcoord->il(), pmb->pcoord->iu() + 1, projector,
+        -options->grav()->grav1(), pproj->options->margin(), gas_constant);
   }
 
   if (u.size(3) > 1 && !options->disable_flux_x1()) {

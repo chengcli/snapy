@@ -103,8 +103,6 @@ class PrimitiveProjectorImpl
 
   torch::Tensor restore_inplace(torch::Tensor wlr);
 
-  torch::Tensor psf() const { return _psf; }
-
  private:
   //! cache
   torch::Tensor _psf;
