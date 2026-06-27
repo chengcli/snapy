@@ -1,12 +1,21 @@
 // kintera
 #include <kintera/utils/format.hpp>
 
+// C/C++
+#include <array>
+#include <mutex>
+#include <set>
+
 // snap
 #include <snap/snap.h>
 
+#include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
+#ifndef NOT_USE_NVSHMEM
+#include <torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp>
+#endif
 
 #include "../eos/ideal_moist.hpp"
 #include "fused_recon_riemann_dispatch.hpp"
@@ -30,6 +39,55 @@ FusedReconScheme fused_recon_scheme(std::string const& type,
               "weno5 reconstruction, but got ",
               type);
 }
+
+#ifndef NOT_USE_NVSHMEM
+void ensure_symmetric_group(LayoutImpl const& layout,
+                            std::string const& group_name) {
+  static std::mutex mutex;
+  static std::set<std::string> initialized;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (initialized.count(group_name)) return;
+  TORCH_CHECK(layout.comm != nullptr && layout.comm->store.defined(),
+              "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
+              "initialized process-group store");
+  c10d::symmetric_memory::set_backend("NVSHMEM");
+  c10d::symmetric_memory::set_signal_pad_size(std::max<size_t>(
+      1024, 4 * layout.options->process_world_size() * sizeof(uint32_t)));
+  c10d::symmetric_memory::set_group_info(
+      group_name, layout.options->process_rank(),
+      layout.options->process_world_size(), layout.comm->store);
+  initialized.insert(group_name);
+}
+
+torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
+                             bool exchange_dim2, bool exchange_dim3,
+                             torch::Device device) {
+  constexpr int kStride = 4;
+  std::vector<int> meta(4 * kStride, 0);
+  auto iloc = layout.loc_of(layout.options->rank());
+  int face = std::get<2>(iloc);
+  std::array<std::tuple<int, int, int>, 4> offsets = {
+      std::tuple<int, int, int>{0, -1, 0},
+      std::tuple<int, int, int>{0, +1, 0},
+      std::tuple<int, int, int>{-1, 0, 0},
+      std::tuple<int, int, int>{+1, 0, 0},
+  };
+  for (int side = 0; side < 4; ++side) {
+    bool dim_enabled = side <= SIDE_R ? exchange_dim2 : exchange_dim3;
+    if (!dim_enabled) continue;
+    int nb = layout.neighbor_rank(iloc, offsets[side]);
+    if (nb < 0) continue;
+    auto nb_loc = layout.loc_of(nb);
+    if (std::get<2>(nb_loc) == face) continue;
+    auto edge = CS_FACE_EDGES[face][side];
+    meta[side * kStride + 0] = 1;
+    meta[side * kStride + 1] = nb;
+    meta[side * kStride + 2] = edge.nside;
+    meta[side * kStride + 3] = edge.rev;
+  }
+  return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
+}
+#endif
 
 }  // namespace
 
@@ -467,19 +525,33 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
               riemann_type);
 
   auto playout = pmb->get_layout();
-  TORCH_CHECK(pmb->pcoord->options->type() == "cartesian",
-              "dynamics.fused-recon-riemann currently supports cartesian "
-              "coordinates only, but got ",
-              pmb->pcoord->options->type());
-  if (playout->options->type() == "cubed-sphere") {
+  bool cubed_sphere_layout = playout->options->type() == "cubed-sphere";
+  if (!cubed_sphere_layout) {
+    TORCH_CHECK(pmb->pcoord->options->type() == "cartesian",
+                "dynamics.fused-recon-riemann currently supports cartesian "
+                "coordinates or cubed-sphere layouts only, but got coordinate "
+                "type ",
+                pmb->pcoord->options->type(), " with layout type ",
+                playout->options->type());
+  } else {
 #ifdef NOT_USE_NVSHMEM
     TORCH_CHECK(false,
                 "dynamics.fused-recon-riemann on cubed-sphere layouts "
                 "requires an NVSHMEM-enabled build");
 #else
-    TORCH_CHECK(false,
-                "dynamics.fused-recon-riemann cubed-sphere NVSHMEM exchange "
-                "is not implemented in this build");
+    TORCH_CHECK(
+        playout->options->blocks_per_process() == 1,
+        "dynamics.fused-recon-riemann cubed-sphere symmetric-memory exchange "
+        "currently requires blocks_per_process=1 to avoid local-block launch "
+        "ordering deadlock, but got ",
+        playout->options->blocks_per_process());
+    TORCH_CHECK(playout->options->process_world_size() ==
+                    playout->options->world_size(),
+                "dynamics.fused-recon-riemann cubed-sphere symmetric-memory "
+                "exchange currently requires one block rank per process");
+    TORCH_CHECK(playout->has_process_group(),
+                "dynamics.fused-recon-riemann cubed-sphere symmetric-memory "
+                "exchange requires an initialized process group");
 #endif
   }
 
@@ -529,6 +601,43 @@ torch::Tensor HydroImpl::_forward_fused_recon_riemann(double dt,
         options->eos()->pressure_floor(), options->eos()->limiter(),
         inv_mu_ratio_m1, cv_ratio_m1, u0);
   }
+
+#ifndef NOT_USE_NVSHMEM
+  if (cubed_sphere_layout) {
+    bool exchange_dim2 = u.size(2) > 1 && !options->disable_flux_x2();
+    bool exchange_dim3 = u.size(1) > 1 && !options->disable_flux_x3();
+    if (exchange_dim2 || exchange_dim3) {
+      auto cs_layout =
+          dynamic_cast<CubedSphereLayoutImpl const*>(playout.get());
+      TORCH_CHECK(cs_layout != nullptr,
+                  "expected CubedSphereLayoutImpl for cubed-sphere layout");
+      std::string group_name = "snapy:fused-recon-riemann:cubed-sphere";
+      ensure_symmetric_group(*playout, group_name);
+      int edge_len = std::max<int>(w.size(1), w.size(2));
+      std::vector<int64_t> sizes = {4, w.size(0), edge_len, w.size(3)};
+      std::vector<int64_t> strides = {w.size(0) * edge_len * w.size(3),
+                                      edge_len * w.size(3), w.size(3), 1};
+      auto symm_buffer = c10d::symmetric_memory::empty_strided_p2p(
+          sizes, strides, w.scalar_type(), w.device(), group_name,
+          std::nullopt);
+      auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
+      auto side_meta =
+          make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
+      int face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
+      auto x2v = pmb->pcoord->x2v.to(w.options());
+      auto x2f = pmb->pcoord->x2f.to(w.options());
+      auto x3v = pmb->pcoord->x3v.to(w.options());
+      auto x3f = pmb->pcoord->x3f.to(w.options());
+      fused_cubed_sphere_exchange_cuda(
+          w, _flux2, _flux3, symm_buffer, symm->get_buffer_ptrs_dev(),
+          reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()), face,
+          symm->get_rank(), symm->get_world_size(), side_meta, x2v, x2f, x3v,
+          x3f, recon23_prim, recon23_vel, solver, eos, options->eos()->gammad(),
+          options->eos()->density_floor(), options->eos()->pressure_floor(),
+          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0);
+    }
+  }
+#endif
 
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
 
