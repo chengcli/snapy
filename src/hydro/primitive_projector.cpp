@@ -16,6 +16,7 @@
 #include <snap/mesh/meshblock.hpp>
 
 #include "primitive_projector.hpp"
+#include "primitive_projector_dispatch.hpp"
 
 namespace snap {
 
@@ -65,21 +66,23 @@ torch::Tensor PrimitiveProjectorImpl::forward(torch::Tensor w,
   int is = pcoord->il();
   int ie = pcoord->iu() + 1;
   auto grav = -phydro->options->grav()->grav1();
-  _psf.set_(calc_hydrostatic_pressure(w, grav, dz, is, ie));
+  auto result = torch::empty_like(w);
+  _psf.set_(torch::empty({w.size(1), w.size(2), w.size(3) + 1}, w.options()));
 
-  auto result = w.clone();
-
-  result[IPR] = calc_nonhydrostatic_pressure(w[IPR], _psf, options->margin());
-
+  double gas_constant = 0.;
+  FusedPrimitiveProjector projector = FusedPrimitiveProjector::None;
   if (options->type() == "temperature") {
-    auto Rd = kintera::constants::Rgas / phydro->peos->species_weight();
-    result[IDN] = w[IPR] / (w[IDN] * Rd);
+    gas_constant = kintera::constants::Rgas / phydro->peos->species_weight();
+    projector = FusedPrimitiveProjector::Temperature;
   } else if (options->type() == "density") {
-    // do nothing
+    projector = FusedPrimitiveProjector::Density;
   } else {
     throw std::runtime_error("Unknown primitive projector type: " +
                              options->type());
   }
+
+  primitive_projector_dispatch(w, result, _psf, dz, is, ie, projector, grav,
+                               options->margin(), gas_constant);
 
   return result;
 }

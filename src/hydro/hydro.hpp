@@ -37,7 +37,8 @@ struct HydroOptionsImpl {
     os << "* verbose = " << verbose() << "\n"
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
-       << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
+       << "* disable_flux_x3 = " << disable_flux_x3() << "\n"
+       << "* fused_recon_riemann = " << fused_recon_riemann() << "\n";
   }
 
   //! verbose
@@ -46,6 +47,7 @@ struct HydroOptionsImpl {
   ADD_ARG(bool, disable_flux_x1) = false;
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;
+  ADD_ARG(bool, fused_recon_riemann) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
@@ -136,6 +138,11 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
  private:
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();
+
+  torch::Tensor _forward_staged(double dt, torch::Tensor hydro_u,
+                                Variables const& other);
+  torch::Tensor _forward_fused(double dt, torch::Tensor hydro_u,
+                               Variables const& other);
 
   torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
 };

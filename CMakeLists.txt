@@ -100,7 +100,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/yamlpp.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/eigen.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ucx.cmake)
 
-if (CMAKE_CUDA_COMPILER)
+if (CUDA AND CMAKE_CUDA_COMPILER)
   find_package(CUDAToolkit REQUIRED)
 else()
   set(CUDAToolkit_FOUND OFF)
@@ -127,6 +127,8 @@ if (CUDAToolkit_FOUND)
 
   set(CMAKE_CUDA_ARCHITECTURES ${_cuda_arch_list})
 endif()
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/nvshmem.cmake)
 
 message(STATUS "${Blue}${PROJECT_NAME}-4. Setting up project libraries ...${ColorReset}")
 configure_file(${CMAKE_SOURCE_DIR}/configure.h.in configure.h @ONLY)
