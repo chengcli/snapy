@@ -105,6 +105,7 @@ Hydrodynamic solver configuration:
       disable_flux_x1: false
       disable_flux_x2: false
       disable_flux_x3: false
+      fused-recon-riemann: false
 
 Physical Forcing
 ----------------

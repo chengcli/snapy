@@ -94,6 +94,14 @@ HydroOptions
       :return: Disable flux x3 flag
       :rtype: bool
 
+   .. method:: fused_recon_riemann() -> bool
+               fused_recon_riemann(value: bool) -> HydroOptions
+
+      Get or set the fused reconstruction/Riemann CUDA path flag.
+
+      :return: Fused reconstruction/Riemann flag
+      :rtype: bool
+
    .. method:: eos() -> EquationOfStateOptions
                eos(value: EquationOfStateOptions) -> HydroOptions
 

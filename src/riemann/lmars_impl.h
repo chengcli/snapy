@@ -6,16 +6,17 @@
 // snap
 #include <snap/snap.h>
 
-#define WL(n) (wl[(n) * stride])
-#define WR(n) (wr[(n) * stride])
-#define FLX(n) (flx[(n) * stride])
+#define WL(n) (wl[(n) * stride_w])
+#define WR(n) (wr[(n) * stride_w])
+#define FLX(n) (flx[(n) * stride_f])
 #define SQR(x) ((x) * (x))
 
 namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
-                               T gammar, int dim, int ny, int stride) {
+                               T gammar, int dim, int ny, int stride_w,
+                               int stride_f) {
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;

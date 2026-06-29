@@ -8,6 +8,40 @@
 #include "hydro.hpp"
 
 namespace snap {
+namespace {
+
+bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
+                                              YAML::Node const& config) {
+  auto eos_type = op->eos() ? op->eos()->type() : "";
+  auto riemann_type = op->riemann() ? op->riemann()->type() : "";
+  auto recon1_type = op->recon1() && op->recon1()->interp()
+                         ? op->recon1()->interp()->type()
+                         : "";
+  auto recon23_type = op->recon23() && op->recon23()->interp()
+                          ? op->recon23()->interp()->type()
+                          : "";
+  bool eos_supported = eos_type == "ideal-gas" || eos_type == "ideal-moist" ||
+                       eos_type == "shallow-water";
+  bool riemann_supported = riemann_type == "lmars" || riemann_type == "hllc" ||
+                           riemann_type == "shallow-roe";
+  bool recon_supported = (recon1_type == "cp3" || recon1_type == "cp5" ||
+                          recon1_type == "weno3" || recon1_type == "weno5") &&
+                         (recon23_type == "cp3" || recon23_type == "cp5" ||
+                          recon23_type == "weno3" || recon23_type == "weno5");
+  bool combo_supported =
+      ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
+       (riemann_type == "lmars" || riemann_type == "hllc")) ||
+      (eos_type == "shallow-water" && riemann_type == "shallow-roe");
+  auto dist = config["distribute"];
+  bool layout_supported = true;
+  if (dist && dist["layout"].as<std::string>("slab") == "cubed-sphere") {
+    layout_supported = dist["blocks_per_process"].as<int>(1) == 1;
+  }
+  return eos_supported && riemann_supported && recon_supported &&
+         combo_supported && layout_supported;
+}
+
+}  // namespace
 
 HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
                                          bool verbose) {
@@ -48,6 +82,8 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
+    op->fused_recon_riemann() =
+        fused_recon_riemann_supported_by_options(op, config);
   }
 
   // --------------- forcings --------------- //
@@ -110,6 +146,7 @@ HydroOptions HydroOptionsImpl::clone() const {
   op->disable_flux_x1() = disable_flux_x1();
   op->disable_flux_x2() = disable_flux_x2();
   op->disable_flux_x3() = disable_flux_x3();
+  op->fused_recon_riemann() = fused_recon_riemann();
 
   if (grav()) op->grav() = grav()->clone();
   if (coriolis()) op->coriolis() = coriolis()->clone();
