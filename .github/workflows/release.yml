@@ -72,6 +72,7 @@ jobs:
             brew install netcdf
             TORCH_CMAKE_PREFIX_PATH=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')
             cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                  -DCUDA=OFF \
                   -DCMAKE_OSX_ARCHITECTURES=${{ env.MACOS_ARCH }} \
                   -DCMAKE_PREFIX_PATH="$TORCH_CMAKE_PREFIX_PATH"
             cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 3

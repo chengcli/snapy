@@ -80,6 +80,7 @@ jobs:
         run: |
           cmake -B ${{ github.workspace }}/build \
                 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DCUDA=OFF \
                 -DNETCDF=ON \
                 -DBUILD_TESTS=ON
 
