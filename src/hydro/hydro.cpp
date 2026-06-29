@@ -14,15 +14,8 @@
 namespace snap {
 namespace {
 
-bool fused_combo_supported(std::string const& eos_type,
-                           std::string const& riemann_type) {
-  return ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
-          (riemann_type == "lmars" || riemann_type == "hllc")) ||
-         (eos_type == "shallow-water" && riemann_type == "shallow-roe");
-}
-
-bool fused_recon_type_supported(std::string const& type) {
-  return type == "cp3" || type == "cp5" || type == "weno3" || type == "weno5";
+bool fused_runtime_supported(torch::Tensor const& u, Variables const& other) {
+  return u.is_cuda() && !other.count("solid");
 }
 
 }  // namespace
@@ -204,14 +197,7 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
-    auto eos_type = options->eos()->type();
-    auto riemann_type = options->riemann()->type();
-    bool supported =
-        u.is_cuda() && fused_combo_supported(eos_type, riemann_type) &&
-        fused_recon_type_supported(precon1->pinterp1->options->type()) &&
-        fused_recon_type_supported(precon23->pinterp1->options->type()) &&
-        !other.count("solid") && (!psed || eos_type == "ideal-moist");
-    if (!supported) {
+    if (!fused_runtime_supported(u, other)) {
       return _forward_staged(dt, u, other);
     }
     return _forward_fused(dt, u, other);

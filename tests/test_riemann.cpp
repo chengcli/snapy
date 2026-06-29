@@ -268,6 +268,44 @@ TEST(HydroOptions, auto_detects_supported_fused_recon_riemann) {
   std::remove(fname);
 }
 
+TEST(HydroOptions, auto_detects_fused_recon_riemann_for_cartesian_multiblock) {
+  auto config = std::string(
+                    "distribute:\n"
+                    "  layout: slab\n"
+                    "  blocks_per_process: 3\n\n") +
+                small_ideal_gas_config;
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_TRUE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, disables_fused_recon_riemann_for_cubed_sphere_multiblock) {
+  auto config = std::string(
+                    "distribute:\n"
+                    "  layout: cubed-sphere\n"
+                    "  blocks_per_process: 6\n\n") +
+                small_ideal_gas_config;
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_FALSE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
 TEST(HydroOptions, leaves_unsupported_fused_recon_riemann_off) {
   auto config = std::regex_replace(
       block_config, std::regex("riemann-solver:\\n    type: lmars"),
