@@ -283,13 +283,13 @@ __device__ void cs_coords(int side, int edge_pos, int i, int nc3, int nc2,
   if (side == CS_SIDE_L || side == CS_SIDE_R) {
     *k = edge_pos;
     *j = side == CS_SIDE_L ? nghost : nc2 - nghost - 1;
-    *face_pos = side == CS_SIDE_L ? nghost : nc2 - nghost + 1;
+    *face_pos = side == CS_SIDE_L ? nghost : nc2 - nghost;
     *alpha = x2f[side == CS_SIDE_L ? nghost : nc2 - nghost];
     *beta = x3v[edge_pos];
   } else {
     *k = side == CS_SIDE_B ? nghost : nc3 - nghost - 1;
     *j = edge_pos;
-    *face_pos = side == CS_SIDE_B ? nghost : nc3 - nghost + 1;
+    *face_pos = side == CS_SIDE_B ? nghost : nc3 - nghost;
     *alpha = x2v[edge_pos];
     *beta = x3f[side == CS_SIDE_B ? nghost : nc3 - nghost];
   }
@@ -373,7 +373,18 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
 
 __global__ void cs_sync_kernel(uint32_t** signal_pads, int rank,
                                int world_size) {
-  c10d::symmetric_memory::sync_remote_blocks<true, true>(
+  // Pack writes happen in the preceding kernel; use PyTorch's previous-kernel
+  // visibility pattern before the flux kernel reads remote symmetric memory.
+  c10d::symmetric_memory::sync_remote_blocks<false, true>(
+      signal_pads, rank, world_size);
+}
+
+__global__ void cs_release_reads_kernel(uint32_t** signal_pads, int rank,
+                                        int world_size) {
+  if (blockIdx.x != 1) return;
+  // Flux reads happen in the preceding kernel; release the read epoch before a
+  // later pack kernel rewrites the same symmetric-memory slots.
+  c10d::symmetric_memory::sync_remote_blocks<true, false>(
       signal_pads, rank, world_size);
 }
 
@@ -601,6 +612,10 @@ void fused_cubed_sphere_exchange_cuda(
         x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
         x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
   });
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+  cs_release_reads_kernel<<<2, std::max(32, symm_world_size), 0, stream>>>(
+      symm_signal_pads_dev, symm_rank, symm_world_size);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 }  // namespace snap
