@@ -92,13 +92,24 @@ void ensure_symmetric_group(LayoutImpl const& layout,
   TORCH_CHECK(layout.comm != nullptr && layout.comm->store.defined(),
               "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
               "initialized process-group store");
-  c10d::symmetric_memory::set_backend("NVSHMEM");
-  c10d::symmetric_memory::set_signal_pad_size(std::max<size_t>(
-      1024, 4 * layout.options->process_world_size() * sizeof(uint32_t)));
-  c10d::symmetric_memory::set_group_info(
-      group_name, layout.options->process_rank(),
-      layout.options->process_world_size(), layout.comm->store);
-  initialized.insert(group_name);
+  if (initialized.empty()) {
+    c10d::symmetric_memory::set_backend("NVSHMEM");
+    c10d::symmetric_memory::set_signal_pad_size(std::max<size_t>(
+        1024, 4 * layout.options->process_world_size() * sizeof(uint32_t)));
+  }
+
+  auto set_group_info_once = [&](std::string const& name) {
+    if (initialized.count(name)) return;
+    c10d::symmetric_memory::set_group_info(
+        name, layout.options->process_rank(),
+        layout.options->process_world_size(), layout.comm->store);
+    initialized.insert(name);
+  };
+
+  // PyTorch's NVSHMEM allocator bootstraps anonymous allocations through this
+  // default group; rendezvous below still uses the logical snap group.
+  set_group_info_once("0");
+  set_group_info_once(group_name);
 }
 
 torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
@@ -288,7 +299,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       std::vector<int64_t> strides = {w.size(0) * edge_len * w.size(3),
                                       edge_len * w.size(3), w.size(3), 1};
       auto symm_buffer = c10d::symmetric_memory::empty_strided_p2p(
-          sizes, strides, w.scalar_type(), w.device(), group_name,
+          sizes, strides, w.scalar_type(), w.device(), std::nullopt,
           std::nullopt);
       auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
       auto side_meta =
