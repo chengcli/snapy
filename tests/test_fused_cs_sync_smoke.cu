@@ -142,6 +142,16 @@ torch::Tensor make_symmetric_buffer(torch::Device device,
       sizes, strides, torch::kFloat64, device, std::nullopt, std::nullopt);
 }
 
+void clear_signal_slots(
+    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
+    std::shared_ptr<ProcessGroupContext> const& comm) {
+  auto signal_pad = symm->get_signal_pad(
+      symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
+  signal_pad.zero_();
+  (void)signal_pad.sum().item<int>();
+  if (comm) comm->barrier();
+}
+
 __device__ double device_payload(int rank, int side, int edge, int i, int v) {
   return static_cast<double>(10000 * rank + 1000 * side + 100 * edge +
                              10 * i + v);
@@ -208,6 +218,7 @@ TEST(FusedCubedSphereSymmetricMemory, PreviousKernelSyncCompletes) {
 
   auto symm_buffer = make_symmetric_buffer(ctx.device, group_name);
   auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
+  clear_signal_slots(symm, ctx.layout->comm);
 
   auto stream = at::cuda::getCurrentCUDAStream(ctx.device.index());
   int blocks = kSides * kEdgeLen * kNc1;
@@ -232,6 +243,7 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
 
   auto symm_buffer = make_symmetric_buffer(ctx.device, group_name);
   auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
+  clear_signal_slots(symm, ctx.layout->comm);
 
   auto stream = at::cuda::getCurrentCUDAStream(ctx.device.index());
   int blocks = kSides * kEdgeLen * kNc1;

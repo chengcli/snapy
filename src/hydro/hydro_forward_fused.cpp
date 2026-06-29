@@ -112,6 +112,16 @@ void ensure_symmetric_group(LayoutImpl const& layout,
   set_group_info_once(group_name);
 }
 
+void clear_fused_signal_slots(
+    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
+    std::shared_ptr<ProcessGroupContext> const& comm) {
+  auto signal_pad = symm->get_signal_pad(
+      symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
+  signal_pad.zero_();
+  (void)signal_pad.sum().item<int>();
+  if (comm) comm->barrier();
+}
+
 torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
                              bool exchange_dim2, bool exchange_dim3,
                              torch::Device device) {
@@ -302,6 +312,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
           sizes, strides, w.scalar_type(), w.device(), std::nullopt,
           std::nullopt);
       auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
+      clear_fused_signal_slots(symm, playout->comm);
       auto side_meta =
           make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
       int face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
