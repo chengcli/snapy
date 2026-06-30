@@ -78,17 +78,18 @@ torch::Tensor expected_cubed_sphere_coriolis(
   auto face = std::get<2>(
       block->get_layout()->loc_of(block->options->layout()->rank()));
   auto momentum = density.unsqueeze(0) * global_velocity;
+  cs_cart_to_contra_(momentum, mesh[1], mesh[0], face);
+  cs_contra_to_sph_(momentum, mesh[1], mesh[0], face);
 
   auto effective_omega = torch::empty_like(global_velocity);
   effective_omega[VEL1].fill_(omega[0]);
   effective_omega[VEL2].fill_(omega[1]);
   effective_omega[VEL3].fill_(omega[2]);
+  cs_cart_to_contra_(effective_omega, mesh[1], mesh[0], face);
+  cs_contra_to_sph_(effective_omega, mesh[1], mesh[0], face);
   if (traditional) {
-    auto radial = torch::zeros_like(global_velocity);
-    radial[VEL1].fill_(1.);
-    cs_contra_to_cart_(radial, mesh[1], mesh[0], face);
-    auto omega_radial = (effective_omega * radial).sum(0, true);
-    effective_omega = omega_radial * radial;
+    effective_omega[VEL2].zero_();
+    effective_omega[VEL3].zero_();
   }
 
   auto expected = torch::empty_like(global_velocity);
@@ -98,9 +99,9 @@ torch::Tensor expected_cubed_sphere_coriolis(
                          effective_omega[VEL3] * momentum[VEL1]);
   expected[VEL3] = 2. * (effective_omega[VEL2] * momentum[VEL1] -
                          effective_omega[VEL1] * momentum[VEL2]);
-  cs_cart_to_contra_(expected, mesh[1], mesh[0], face);
-  if (traditional) expected[VEL1].zero_();
+  cs_sph_to_contra_(expected, mesh[1], mesh[0], face);
   coord_vec_lower_(expected, coord->cosine_cell_kj);
+  if (traditional) expected[VEL1].zero_();
   return expected;
 }
 

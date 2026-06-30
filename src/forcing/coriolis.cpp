@@ -115,16 +115,18 @@ void CoriolisXYZImpl::reset() {
     alpha = register_buffer("alpha", mesh[1]);
     beta = register_buffer("beta", mesh[0]);
 
-    omega1 = omegaz * ones_like(mesh[0]);
-    omega2 = omegax * ones_like(mesh[0]);
-    omega3 = omegay * ones_like(mesh[0]);
-
-    radial =
-        torch::zeros({3, mesh[0].size(0), mesh[0].size(1), mesh[0].size(2)},
+    auto omega =
+        torch::empty({3, mesh[0].size(0), mesh[0].size(1), mesh[0].size(2)},
                      mesh[0].options());
-    radial[VEL1].fill_(1.);
-    cs_contra_to_cart_(radial, alpha, beta, face_id);
-    radial = register_buffer("radial", radial);
+    omega[VEL1].fill_(omegaz);
+    omega[VEL2].fill_(omegax);
+    omega[VEL3].fill_(omegay);
+    cs_cart_to_contra_(omega, alpha, beta, face_id);
+    cs_contra_to_sph_(omega, alpha, beta, face_id);
+
+    omega1 = omega[VEL1];
+    omega2 = omega[VEL2];
+    omega3 = omega[VEL3];
   } else {
     throw std::runtime_error("CoriolisXYZ: unsupported coordinate system");
   }
@@ -139,17 +141,14 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
   if (cubed_sphere) {
     auto force = w.narrow(0, IVX, 3).clone();
     force *= w[IDN].unsqueeze(0);
-    cs_contra_to_cart_(force, alpha, beta, face_id);
+    cs_contra_to_sph_(force, alpha, beta, face_id);
 
     auto o1 = omega1;
     auto o2 = omega2;
     auto o3 = omega3;
     if (traditional) {
-      auto omega_radial =
-          omega1 * radial[VEL1] + omega2 * radial[VEL2] + omega3 * radial[VEL3];
-      o1 = omega_radial * radial[VEL1];
-      o2 = omega_radial * radial[VEL2];
-      o3 = omega_radial * radial[VEL3];
+      o2 = torch::zeros_like(omega2);
+      o3 = torch::zeros_like(omega3);
     }
 
     auto m1 = force[VEL1].clone();
@@ -159,7 +158,7 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
     force[VEL2] = 2. * (o1 * m3 - o3 * m1);
     force[VEL3] = 2. * (o2 * m1 - o1 * m2);
 
-    cs_cart_to_contra_(force, alpha, beta, face_id);
+    cs_sph_to_contra_(force, alpha, beta, face_id);
     coord_vec_lower_(force, phydro->pmb->pcoord->cosine_cell_kj);
     if (traditional) {
       du.narrow(0, IVY, 2) += dt * force.narrow(0, VEL2, 2);
