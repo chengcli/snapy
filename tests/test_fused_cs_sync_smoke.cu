@@ -197,9 +197,10 @@ void clear_signal_slots(
   if (comm) comm->barrier();
 }
 
-__device__ double device_payload(int rank, int side, int edge, int i, int v) {
-  return static_cast<double>(10000 * rank + 1000 * side + 100 * edge +
-                             10 * i + v);
+__device__ double device_payload(int rank, int side, int state, int edge, int i,
+                                 int v) {
+  return static_cast<double>(100000 * rank + 10000 * side + 1000 * state +
+                             100 * edge + 10 * i + v);
 }
 
 __global__ void write_edge_payload_kernel(double* buffer, int rank) {
@@ -208,9 +209,13 @@ __global__ void write_edge_payload_kernel(double* buffer, int rank) {
   int edge = (line / kNc1) % kEdgeLen;
   int side = line / (kNc1 * kEdgeLen);
   int stride_var = kEdgeLen * kNc1;
-  int base = (((side * kStates) * kNvar) * kEdgeLen + edge) * kNc1 + i;
-  for (int v = 0; v < kNvar; ++v) {
-    buffer[base + v * stride_var] = device_payload(rank, side, edge, i, v);
+  for (int state = 0; state < kStates; ++state) {
+    int base =
+        (((side * kStates + state) * kNvar) * kEdgeLen + edge) * kNc1 + i;
+    for (int v = 0; v < kNvar; ++v) {
+      buffer[base + v * stride_var] =
+          device_payload(rank, side, state, edge, i, v);
+    }
   }
 }
 
@@ -231,13 +236,56 @@ __global__ void verify_remote_edge_kernel(void** buffer_ptrs, int const* meta,
   int rev = meta[side * kMetaStride + 2];
   int peer_edge = rev ? (kEdgeLen - 1 - edge) : edge;
   int stride_var = kEdgeLen * kNc1;
-  int remote_base =
-      (((peer_side * kStates) * kNvar) * kEdgeLen + peer_edge) * kNc1 + i;
   auto peer_buffer = static_cast<double const*>(buffer_ptrs[peer_rank]);
+  for (int state = 0; state < kStates; ++state) {
+    int remote_base =
+        (((peer_side * kStates + state) * kNvar) * kEdgeLen + peer_edge) *
+            kNc1 +
+        i;
+    for (int v = 0; v < kNvar; ++v) {
+      double actual = peer_buffer[remote_base + v * stride_var];
+      double expected =
+          device_payload(peer_rank, peer_side, state, peer_edge, i, v);
+      if (actual != expected) atomicAdd(errors, 1);
+    }
+  }
+}
+
+__global__ void verify_staged_remote_state_kernel(void** buffer_ptrs,
+                                                  int const* meta,
+                                                  int rank,
+                                                  int* errors) {
+  int line = blockIdx.x;
+  int i = line % kNc1;
+  int edge = (line / kNc1) % kEdgeLen;
+  int side = line / (kNc1 * kEdgeLen);
+  int peer_rank = meta[side * kHydroMetaStride + 1];
+  int peer_side = meta[side * kHydroMetaStride + 2];
+  int rev = meta[side * kHydroMetaStride + 3];
+  int peer_edge = rev ? (kEdgeLen - 1 - edge) : edge;
+  bool lower_side = side == SIDE_L || side == SIDE_B;
+  bool peer_lower_side = peer_side == SIDE_L || peer_side == SIDE_B;
+  int remote_state = peer_lower_side ? IRT : ILT;
+  int local_state = lower_side ? IRT : ILT;
+  int stride_var = kEdgeLen * kNc1;
+  int remote_base =
+      (((peer_side * kStates + remote_state) * kNvar) * kEdgeLen + peer_edge) *
+          kNc1 +
+      i;
+  int local_base =
+      (((side * kStates + local_state) * kNvar) * kEdgeLen + edge) * kNc1 + i;
+  auto peer_buffer = static_cast<double const*>(buffer_ptrs[peer_rank]);
+  auto local_buffer = static_cast<double const*>(buffer_ptrs[rank]);
   for (int v = 0; v < kNvar; ++v) {
-    double actual = peer_buffer[remote_base + v * stride_var];
-    double expected = device_payload(peer_rank, peer_side, peer_edge, i, v);
-    if (actual != expected) atomicAdd(errors, 1);
+    double remote_actual = peer_buffer[remote_base + v * stride_var];
+    double remote_expected =
+        device_payload(peer_rank, peer_side, remote_state, peer_edge, i, v);
+    double local_actual = local_buffer[local_base + v * stride_var];
+    double local_expected =
+        device_payload(rank, side, local_state, edge, i, v);
+    if (remote_actual != remote_expected || local_actual != local_expected) {
+      atomicAdd(errors, 1);
+    }
   }
 }
 
@@ -363,6 +411,41 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
       torch::zeros({1}, torch::dtype(torch::kInt32).device(ctx.device));
   verify_remote_edge_kernel<<<blocks, 1, 0, stream>>>(
       symm->get_buffer_ptrs_dev(), ctx.edge_meta.data_ptr<int>(),
+      errors.data_ptr<int>());
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+  AT_CUDA_CHECK(cudaStreamSynchronize(stream));
+
+  EXPECT_EQ(errors.cpu().item<int>(), 0);
+  if (ctx.layout->comm) ctx.layout->comm->barrier();
+}
+
+TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
+  require_cuda_6rank_or_skip();
+  auto ctx = make_smoke_context();
+  std::string group_name = "snapy:test:fused-cs-remote-state";
+  initialize_symmetric_memory_group(*ctx.layout, group_name);
+
+  auto symm_buffer = make_symmetric_buffer(ctx.device, group_name);
+  auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
+  clear_signal_slots(symm, ctx.layout->comm);
+
+  auto stream = at::cuda::getCurrentCUDAStream(ctx.device.index());
+  int blocks = kSides * kEdgeLen * kNc1;
+  write_edge_payload_kernel<<<blocks, 1, 0, stream>>>(
+      symm_buffer.data_ptr<double>(), symm->get_rank());
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+  sync_previous_kernel_writes<<<1, std::max(32, symm->get_world_size()), 0,
+                                stream>>>(
+      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      symm->get_rank(), symm->get_world_size());
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+  auto errors =
+      torch::zeros({1}, torch::dtype(torch::kInt32).device(ctx.device));
+  auto side_meta = make_hydro_side_meta(*ctx.layout, ctx.device);
+  verify_staged_remote_state_kernel<<<blocks, 1, 0, stream>>>(
+      symm->get_buffer_ptrs_dev(), side_meta.data_ptr<int>(), symm->get_rank(),
       errors.data_ptr<int>());
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   AT_CUDA_CHECK(cudaStreamSynchronize(stream));
