@@ -187,8 +187,8 @@ enum {
   CS_SIDE_R = 1,
   CS_SIDE_B = 2,
   CS_SIDE_T = 3,
-  CS_STATE_BOUNDARY = 0,
-  CS_STATE_SCRATCH = 1,
+  CS_STATE_LEFT = ILT,
+  CS_STATE_RIGHT = IRT,
   CS_NUM_STATES = 2,
   CS_META_ENABLED = 0,
   CS_META_PEER_RANK = 1,
@@ -431,31 +431,44 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
             &alpha, &beta, &k, &j, &face_pos);
   if (pos != face_pos) return;
   int il = nghost;
-  bool send_right_state = (side == CS_SIDE_L || side == CS_SIDE_B);
-  int start = send_right_state ? face_pos - (il - 1) : face_pos - il;
-  bool right_interp = !send_right_state;
-
-  T local[64];
+  int left_start = face_pos - il;
+  int right_start = face_pos - (il - 1);
+  T left[64], right[64];
   for (int v = 0; v < nvar; ++v) {
     auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    local[v] =
-        interp_shared_fused_impl(smem, v, start, axis_size, scheme, right_interp);
+    left[v] = interp_shared_fused_impl(smem, v, left_start, axis_size, scheme,
+                                       /*right=*/true);
+    right[v] = interp_shared_fused_impl(smem, v, right_start, axis_size, scheme,
+                                        /*right=*/false);
   }
   if (eos_limiter) {
-    local[IDN] = max(local[IDN], density_floor);
+    left[IDN] = max(left[IDN], density_floor);
+    right[IDN] = max(right[IDN], density_floor);
     if (eos != FusedEos::ShallowWater) {
-      local[IPR] = max(local[IPR], pressure_floor);
-      for (int v = ICY; v < nvar; ++v) local[v] = max(local[v], T(0));
+      left[IPR] = max(left[IPR], pressure_floor);
+      right[IPR] = max(right[IPR], pressure_floor);
+      for (int v = ICY; v < nvar; ++v) {
+        left[v] = max(left[v], T(0));
+        right[v] = max(right[v], T(0));
+      }
     }
   }
-  cs_contra_to_sph(local, face, alpha, beta);
+  cs_contra_to_sph(left, face, alpha, beta);
+  cs_contra_to_sph(right, face, alpha, beta);
 
   int buf_stride_var = edge_len * nc1;
-  int out = (((side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
-             edge_pos) *
-                nc1 +
-            i;
-  for (int v = 0; v < nvar; ++v) buf[out + v * buf_stride_var] = local[v];
+  int left_out =
+      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
+          nc1 +
+      i;
+  int right_out =
+      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
+          nc1 +
+      i;
+  for (int v = 0; v < nvar; ++v) {
+    buf[left_out + v * buf_stride_var] = left[v];
+    buf[right_out + v * buf_stride_var] = right[v];
+  }
 }
 
 __global__ void cs_sync_kernel(uint32_t** signal_pads, int rank,
@@ -506,14 +519,22 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
                       : edge_pos;
   auto peer_buf = static_cast<T const*>(buf_ptrs[peer_rank]);
   int buf_stride_var = edge_len * nc1;
-  int remote_off =
-      (((peer_side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
+  int remote_left_off =
+      (((peer_side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len +
        peer_edge) *
           nc1 +
       i;
-  int local_off =
-      (((side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
-       edge_pos) *
+  int remote_right_off =
+      (((peer_side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len +
+       peer_edge) *
+          nc1 +
+      i;
+  int local_left_off =
+      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
+          nc1 +
+      i;
+  int local_right_off =
+      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
           nc1 +
       i;
 
@@ -532,29 +553,32 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
             &alpha, &beta, &k, &j, &face_pos);
   if (pos != face_pos) return;
 
-  T own[64], remote[64], wl[64], wr[64];
+  T local_left[64], local_right[64], remote_left[64], remote_right[64], wl[64],
+      wr[64];
   for (int v = 0; v < nvar; ++v) {
-    own[v] = buf[local_off + v * buf_stride_var];
-    remote[v] = peer_buf[remote_off + v * buf_stride_var];
-  }
-  cs_sph_to_contra(own, face, alpha, beta);
-  cs_sph_to_contra(remote, face, alpha, beta);
-  if (eos_limiter) {
-    own[IDN] = max(own[IDN], density_floor);
-    remote[IDN] = max(remote[IDN], density_floor);
-    if (eos != FusedEos::ShallowWater) {
-      own[IPR] = max(own[IPR], pressure_floor);
-      remote[IPR] = max(remote[IPR], pressure_floor);
-      for (int v = ICY; v < nvar; ++v) {
-        own[v] = max(own[v], T(0));
-        remote[v] = max(remote[v], T(0));
-      }
-    }
+    local_left[v] = buf[local_left_off + v * buf_stride_var];
+    local_right[v] = buf[local_right_off + v * buf_stride_var];
+    remote_left[v] = peer_buf[remote_left_off + v * buf_stride_var];
+    remote_right[v] = peer_buf[remote_right_off + v * buf_stride_var];
   }
   bool lower_side = side == CS_SIDE_L || side == CS_SIDE_B;
   for (int v = 0; v < nvar; ++v) {
-    wl[v] = lower_side ? remote[v] : own[v];
-    wr[v] = lower_side ? own[v] : remote[v];
+    wl[v] = lower_side ? remote_left[v] : local_left[v];
+    wr[v] = lower_side ? local_right[v] : remote_right[v];
+  }
+  cs_sph_to_contra(wl, face, alpha, beta);
+  cs_sph_to_contra(wr, face, alpha, beta);
+  if (eos_limiter) {
+    wl[IDN] = max(wl[IDN], density_floor);
+    wr[IDN] = max(wr[IDN], density_floor);
+    if (eos != FusedEos::ShallowWater) {
+      wl[IPR] = max(wl[IPR], pressure_floor);
+      wr[IPR] = max(wr[IPR], pressure_floor);
+      for (int v = ICY; v < nvar; ++v) {
+        wl[v] = max(wl[v], T(0));
+        wr[v] = max(wr[v], T(0));
+      }
+    }
   }
   T wl_density = wl[IDN];
   T wr_density = wr[IDN];

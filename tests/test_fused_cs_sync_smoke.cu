@@ -325,8 +325,8 @@ TEST(FusedCubedSphereSymmetricMemory, OrientationMetadataMatchesStaged) {
 
 TEST(FusedCubedSphereSymmetricMemory, BoundaryStateConventionMatchesStaged) {
   require_cuda_6rank_or_skip();
-  // Staged hydro sends hydro_wr:-, i.e. Interp::left, to lower sides and
-  // hydro_wl:+, i.e. Interp::right, to upper sides.
+  // Staged hydro sends the local right state to lower-side neighbors and the
+  // local left state to upper-side neighbors.
   EXPECT_TRUE(fused_exchange_uses_right_state_start_for_side(SIDE_L));
   EXPECT_FALSE(fused_exchange_uses_right_interp_for_side(SIDE_L));
   EXPECT_FALSE(fused_exchange_uses_right_state_start_for_side(SIDE_R));
@@ -405,19 +405,22 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
   AT_CUDA_CHECK(cudaStreamSynchronize(
       at::cuda::getCurrentCUDAStream(ctx.device.index())));
 
-  auto boundary_state = symm_buffer.select(1, 0);
-  EXPECT_LT(std::abs(boundary_state.select(1, IDN).min().cpu().item<double>() -
-                     500.),
-            1.e-10);
-  EXPECT_LT(std::abs(boundary_state.select(1, IDN).max().cpu().item<double>() -
-                     500.),
-            1.e-10);
-  EXPECT_LT(boundary_state.select(1, IVX).abs().max().cpu().item<double>(),
-            1.e-10);
-  EXPECT_LT(boundary_state.select(1, IVY).abs().max().cpu().item<double>(),
-            1.e-10);
-  EXPECT_LT(boundary_state.select(1, IVZ).abs().max().cpu().item<double>(),
-            1.e-10);
+  auto expect_constant_state = [](torch::Tensor state, char const* label) {
+    EXPECT_LT(std::abs(state.select(1, IDN).min().cpu().item<double>() - 500.),
+              1.e-10)
+        << label;
+    EXPECT_LT(std::abs(state.select(1, IDN).max().cpu().item<double>() - 500.),
+              1.e-10)
+        << label;
+    EXPECT_LT(state.select(1, IVX).abs().max().cpu().item<double>(), 1.e-10)
+        << label;
+    EXPECT_LT(state.select(1, IVY).abs().max().cpu().item<double>(), 1.e-10)
+        << label;
+    EXPECT_LT(state.select(1, IVZ).abs().max().cpu().item<double>(), 1.e-10)
+        << label;
+  };
+  expect_constant_state(symm_buffer.select(1, ILT), "left state");
+  expect_constant_state(symm_buffer.select(1, IRT), "right state");
   auto errors =
       torch::zeros({1}, torch::dtype(torch::kInt32).device(ctx.device));
   auto stream = at::cuda::getCurrentCUDAStream(ctx.device.index());
