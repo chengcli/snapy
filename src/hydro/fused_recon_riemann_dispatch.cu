@@ -562,9 +562,11 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
     remote_right[v] = peer_buf[remote_right_off + v * buf_stride_var];
   }
   bool lower_side = side == CS_SIDE_L || side == CS_SIDE_B;
+  bool peer_lower_side = peer_side == CS_SIDE_L || peer_side == CS_SIDE_B;
   for (int v = 0; v < nvar; ++v) {
-    wl[v] = lower_side ? remote_left[v] : local_left[v];
-    wr[v] = lower_side ? local_right[v] : remote_right[v];
+    T remote = peer_lower_side ? remote_right[v] : remote_left[v];
+    wl[v] = lower_side ? remote : local_left[v];
+    wr[v] = lower_side ? local_right[v] : remote;
   }
   cs_sph_to_contra(wl, face, alpha, beta);
   cs_sph_to_contra(wr, face, alpha, beta);
