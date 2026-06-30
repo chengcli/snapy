@@ -15,7 +15,8 @@ void fused_recon_riemann_cuda(
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
     torch::Tensor u0, int shallow_roe_dir_yz, FusedPrimitiveProjector projector,
     torch::Tensor psf, torch::Tensor dx1f, double gas_constant,
-    torch::Tensor rho_grav);
+    torch::Tensor rho_grav, bool cubed_sphere, int face, torch::Tensor x2v,
+    torch::Tensor x2f, torch::Tensor x3v, torch::Tensor x3f);
 
 void fused_cubed_sphere_exchange_cuda(
     torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
