@@ -121,7 +121,7 @@ TORCH_MODULE(Coriolis123);
 class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
  public:
   //! data
-  torch::Tensor omega1, omega2, omega3, alpha, beta, radial;
+  torch::Tensor omega1, omega2, omega3, alpha, beta;
 
   //! cubed-sphere metadata
   int face_id = -1;
