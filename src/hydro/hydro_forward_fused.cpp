@@ -6,6 +6,8 @@
 #include <array>
 #include <mutex>
 #include <set>
+#include <string>
+#include <unordered_map>
 
 // snap
 #include <snap/snap.h>
@@ -122,10 +124,47 @@ void clear_fused_signal_slots(
   if (comm) comm->barrier();
 }
 
+struct FusedSymmetricExchangePool {
+  torch::Tensor buffer;
+  c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> symm;
+};
+
+uint64_t stable_alloc_id(std::string const& key) {
+  uint64_t hash = 1469598103934665603ull;
+  for (unsigned char c : key) {
+    hash ^= c;
+    hash *= 1099511628211ull;
+  }
+  return hash == 0 ? 1 : hash;
+}
+
+FusedSymmetricExchangePool& get_fused_symmetric_exchange_pool(
+    std::string const& group_name, c10::ScalarType dtype, torch::Device device,
+    std::vector<int64_t> const& sizes, std::vector<int64_t> const& strides) {
+  static std::mutex mutex;
+  static std::unordered_map<std::string, FusedSymmetricExchangePool> pools;
+
+  std::string key = group_name + ":device=" + std::to_string(device.index()) +
+                    ":dtype=" + std::to_string(static_cast<int>(dtype));
+  for (auto size : sizes) key += ":s" + std::to_string(size);
+  for (auto stride : strides) key += ":t" + std::to_string(stride);
+
+  std::lock_guard<std::mutex> lock(mutex);
+  auto it = pools.find(key);
+  if (it != pools.end()) return it->second;
+
+  auto buffer = c10d::symmetric_memory::empty_strided_p2p(
+      sizes, strides, dtype, device, std::nullopt, stable_alloc_id(key));
+  auto symm = c10d::symmetric_memory::rendezvous(buffer, group_name);
+  auto [inserted, _] = pools.emplace(
+      key, FusedSymmetricExchangePool{std::move(buffer), std::move(symm)});
+  return inserted->second;
+}
+
 torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
                              bool exchange_dim2, bool exchange_dim3,
                              torch::Device device) {
-  constexpr int kStride = 4;
+  constexpr int kStride = 6;
   std::vector<int> meta(4 * kStride, 0);
   auto iloc = layout.loc_of(layout.options->rank());
   int face = std::get<2>(iloc);
@@ -147,6 +186,8 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
     meta[side * kStride + 1] = nb;
     meta[side * kStride + 2] = edge.nside;
     meta[side * kStride + 3] = edge.rev;
+    meta[side * kStride + 4] = (side % 2) == (edge.nside % 2);
+    meta[side * kStride + 5] = (side - 1.5) * (edge.nside - 1.5) < 0;
   }
   return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
 }
@@ -217,6 +258,20 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 "exchange requires an initialized process group");
   }
 
+  CubedSphereLayoutImpl const* cs_layout = nullptr;
+  int face = 0;
+  torch::Tensor x2v, x2f, x3v, x3f;
+  if (cubed_sphere_layout) {
+    cs_layout = dynamic_cast<CubedSphereLayoutImpl const*>(playout.get());
+    TORCH_CHECK(cs_layout != nullptr,
+                "expected CubedSphereLayoutImpl for cubed-sphere layout");
+    face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
+    x2v = pmb->pcoord->x2v.to(w.options());
+    x2f = pmb->pcoord->x2f.to(w.options());
+    x3v = pmb->pcoord->x3v.to(w.options());
+    x3f = pmb->pcoord->x3f.to(w.options());
+  }
+
   peos->forward(u, w);
 
   auto recon1_prim = fused_recon_scheme(precon1->pinterp1->options->type(),
@@ -270,7 +325,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
         inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz, projector, psf,
-        dx1f, gas_constant, rho_grav);
+        dx1f, gas_constant, rho_grav, cubed_sphere_layout, face, x2v, x2f,
+        x3v, x3f);
   }
   if (u.size(3) > 1 && psed) {
     psed->forward(w, _flux1);
@@ -282,7 +338,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         options->eos()->pressure_floor(), options->eos()->limiter(),
         inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
         FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
-        torch::Tensor());
+        torch::Tensor(), cubed_sphere_layout, face, x2v, x2f, x3v, x3f);
   }
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     fused_recon_riemann_cuda(
@@ -291,46 +347,39 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         options->eos()->pressure_floor(), options->eos()->limiter(),
         inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
         FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
-        torch::Tensor());
+        torch::Tensor(), cubed_sphere_layout, face, x2v, x2f, x3v, x3f);
   }
 
   if (cubed_sphere_layout) {
     bool exchange_dim2 = u.size(2) > 1 && !options->disable_flux_x2();
     bool exchange_dim3 = u.size(1) > 1 && !options->disable_flux_x3();
     if (exchange_dim2 || exchange_dim3) {
-      auto cs_layout =
-          dynamic_cast<CubedSphereLayoutImpl const*>(playout.get());
-      TORCH_CHECK(cs_layout != nullptr,
-                  "expected CubedSphereLayoutImpl for cubed-sphere layout");
       std::string group_name = "snapy:fused-recon-riemann:cubed-sphere";
       ensure_symmetric_group(*playout, group_name);
       int edge_len = std::max<int>(w.size(1), w.size(2));
-      std::vector<int64_t> sizes = {4, w.size(0), edge_len, w.size(3)};
-      std::vector<int64_t> strides = {w.size(0) * edge_len * w.size(3),
-                                      edge_len * w.size(3), w.size(3), 1};
-      auto symm_buffer = c10d::symmetric_memory::empty_strided_p2p(
-          sizes, strides, w.scalar_type(), w.device(), std::nullopt,
-          std::nullopt);
-      auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
-      clear_fused_signal_slots(symm, playout->comm);
+      constexpr int kExchangeStates = 2;
+      std::vector<int64_t> sizes = {4, kExchangeStates, w.size(0), edge_len,
+                                    w.size(3)};
+      std::vector<int64_t> strides = {
+          kExchangeStates * w.size(0) * edge_len * w.size(3),
+          w.size(0) * edge_len * w.size(3), edge_len * w.size(3), w.size(3),
+          1};
+      auto& pool = get_fused_symmetric_exchange_pool(
+          group_name, w.scalar_type(), w.device(), sizes, strides);
+      clear_fused_signal_slots(pool.symm, playout->comm);
       auto side_meta =
           make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
-      int face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
-      auto x2v = pmb->pcoord->x2v.to(w.options());
-      auto x2f = pmb->pcoord->x2f.to(w.options());
-      auto x3v = pmb->pcoord->x3v.to(w.options());
-      auto x3f = pmb->pcoord->x3f.to(w.options());
       fused_cubed_sphere_exchange_cuda(
-          w, _flux2, _flux3, symm_buffer, symm->get_buffer_ptrs_dev(),
-          reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()), face,
-          symm->get_rank(), symm->get_world_size(), side_meta, x2v, x2f, x3v,
-          x3f, recon23_prim, recon23_vel, solver, eos, options->eos()->gammad(),
-          options->eos()->density_floor(), options->eos()->pressure_floor(),
-          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
-          shallow_roe_dir_yz, FusedPrimitiveProjector::None);
+          w, _flux2, _flux3, pool.buffer, pool.symm->get_buffer_ptrs_dev(),
+          reinterpret_cast<uint32_t**>(pool.symm->get_signal_pad_ptrs_dev()),
+          face, pool.symm->get_rank(), pool.symm->get_world_size(), side_meta,
+          x2v, x2f, x3v, x3f, recon23_prim, recon23_vel, solver, eos,
+          options->eos()->gammad(), options->eos()->density_floor(),
+          options->eos()->pressure_floor(), options->eos()->limiter(),
+          inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
+          FusedPrimitiveProjector::None);
     }
   }
-
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
 
   auto du = torch::zeros_like(_div);

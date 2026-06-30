@@ -19,6 +19,13 @@ namespace snap {
 namespace {
 
 template <typename T>
+__device__ void gnomonic_prim2local(T* w, int dim, T alpha, T beta);
+
+template <typename T>
+__device__ void gnomonic_flux2global(T* flux, int dim, T alpha, T beta,
+                                     int stride);
+
+template <typename T>
 __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                              int nc1, int dim, FusedReconScheme recon_prim,
                              FusedReconScheme recon_vel,
@@ -28,7 +35,9 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                              T const* cv_ratio_m1, T const* u0,
                              int shallow_roe_dir_yz,
                              FusedPrimitiveProjector projector, T const* psf,
-                             T const* dx1f, T gas_constant, T* rho_grav) {
+                             T const* dx1f, T gas_constant, T* rho_grav,
+                             bool cubed_sphere, int face, T const* x2v,
+                             T const* x2f, T const* x3v, T const* x3f) {
   int ncells = nc1 * nc2 * nc3;
   int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
   int stride_dim = dim == 3 ? 1 : (dim == 2 ? nc1 : nc1 * nc2);
@@ -37,17 +46,20 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   int line = blockIdx.x;
   int base = 0;
 
+  int i = 0;
+  int j = 0;
+  int k = 0;
   if (dim == 3) {
-    int j = line % nc2;
-    int k = line / nc2;
+    j = line % nc2;
+    k = line / nc2;
     base = k * nc2 * nc1 + j * nc1;
   } else if (dim == 2) {
-    int i = line % nc1;
-    int k = line / nc1;
+    i = line % nc1;
+    k = line / nc1;
     base = k * nc2 * nc1 + i;
   } else {
-    int i = line % nc1;
-    int j = line / nc1;
+    i = line % nc1;
+    j = line / nc1;
     base = j * nc1 + i;
   }
 
@@ -128,24 +140,45 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     return;
   }
 
+  T alpha = 0;
+  T beta = 0;
+  bool use_cubed_metric = cubed_sphere && dim != 3;
+  if (use_cubed_metric) {
+    if (dim == 2) {
+      alpha = x2f[pos];
+      beta = x3v[k];
+    } else {
+      alpha = x2v[j];
+      beta = x3f[pos];
+    }
+    T wl_density = wl_local[IDN];
+    T wr_density = wr_local[IDN];
+    gnomonic_prim2local(wl_local, dim, alpha, beta);
+    gnomonic_prim2local(wr_local, dim, alpha, beta);
+    wl_local[IDN] = wl_density;
+    wr_local[IDN] = wr_density;
+  }
+
   if (solver == FusedRiemannSolver::ShallowRoe) {
     shallow_roe_impl(flux + flat, wl_local, wr_local, dim, shallow_roe_dir_yz,
                      /*stride_w=*/1, /*stride_f=*/stride_var);
-    return;
-  }
-
-  T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
-  int ny = eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
-  eos_side_quantities(wl_local, wr_local, ny, eos, gammad, inv_mu_ratio_m1,
-                      cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
-
-  if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
-               er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
-               /*stride_f=*/stride_var);
   } else {
-    hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim, ny,
-              /*stride_w=*/1, /*stride_f=*/stride_var);
+    T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
+    int ny = eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
+    eos_side_quantities(wl_local, wr_local, ny, eos, gammad, inv_mu_ratio_m1,
+                        cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
+
+    if (solver == FusedRiemannSolver::LMARS) {
+      lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
+                 er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
+                 /*stride_f=*/stride_var);
+    } else {
+      hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
+                ny, /*stride_w=*/1, /*stride_f=*/stride_var);
+    }
+  }
+  if (use_cubed_metric) {
+    gnomonic_flux2global(flux + flat, dim, alpha, beta, stride_var);
   }
 }
 
@@ -154,11 +187,16 @@ enum {
   CS_SIDE_R = 1,
   CS_SIDE_B = 2,
   CS_SIDE_T = 3,
+  CS_STATE_BOUNDARY = 0,
+  CS_STATE_SCRATCH = 1,
+  CS_NUM_STATES = 2,
   CS_META_ENABLED = 0,
   CS_META_PEER_RANK = 1,
   CS_META_PEER_SIDE = 2,
   CS_META_REV = 3,
-  CS_META_STRIDE = 4,
+  CS_META_FLIP = 4,
+  CS_META_TRANS = 5,
+  CS_META_STRIDE = 6,
 };
 
 __device__ __constant__ int kCsLocalToCartIdx[6][3] = {
@@ -216,6 +254,52 @@ __device__ void cs_theta_phi(int face, T alpha, T beta, T* theta, T* phi) {
   z = max(T(-1), min(T(1), z));
   *theta = acos(z);
   *phi = atan2(y, x);
+}
+
+template <typename T>
+__device__ void gnomonic_sin_cos(int dim, T alpha, T beta, T* sin_theta,
+                                 T* cos_theta) {
+  (void)dim;
+  T x = tan(alpha);
+  T y = tan(beta);
+  T C = sqrt(T(1) + x * x);
+  T D = sqrt(T(1) + y * y);
+  *cos_theta = -x * y / (C * D);
+  *sin_theta = sqrt(T(1) + x * x + y * y) / (C * D);
+}
+
+template <typename T>
+__device__ void gnomonic_prim2local(T* w, int dim, T alpha, T beta) {
+  T sin_theta, cos_theta;
+  gnomonic_sin_cos(dim, alpha, beta, &sin_theta, &cos_theta);
+  T u2 = w[IVY];
+  T u3 = w[IVZ];
+  if (dim == 2) {
+    w[IVY] = sin_theta * u2;
+    w[IVZ] = cos_theta * u2 + u3;
+  } else {
+    w[IVY] = u2 + cos_theta * u3;
+    w[IVZ] = sin_theta * u3;
+  }
+}
+
+template <typename T>
+__device__ void gnomonic_flux2global(T* flux, int dim, T alpha, T beta,
+                                     int stride) {
+  T sin_theta, cos_theta;
+  gnomonic_sin_cos(dim, alpha, beta, &sin_theta, &cos_theta);
+  T f2 = flux[IVY * stride];
+  T f3 = flux[IVZ * stride];
+  T ty, tz;
+  if (dim == 2) {
+    ty = f2 / sin_theta;
+    tz = f3 - cos_theta * f2 / sin_theta;
+  } else {
+    ty = f2 - cos_theta * f3 / sin_theta;
+    tz = f3 / sin_theta;
+  }
+  flux[IVY * stride] = ty + tz * cos_theta;
+  flux[IVZ * stride] = tz + ty * cos_theta;
 }
 
 template <typename T>
@@ -349,7 +433,7 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   int il = nghost;
   bool send_right_state = (side == CS_SIDE_L || side == CS_SIDE_B);
   int start = send_right_state ? face_pos - (il - 1) : face_pos - il;
-  bool right_interp = send_right_state ? false : true;
+  bool right_interp = !send_right_state;
 
   T local[64];
   for (int v = 0; v < nvar; ++v) {
@@ -367,7 +451,10 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   cs_contra_to_sph(local, face, alpha, beta);
 
   int buf_stride_var = edge_len * nc1;
-  int out = ((side * nvar) * edge_len + edge_pos) * nc1 + i;
+  int out = (((side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
+             edge_pos) *
+                nc1 +
+            i;
   for (int v = 0; v < nvar; ++v) buf[out + v * buf_stride_var] = local[v];
 }
 
@@ -389,7 +476,7 @@ __global__ void cs_release_reads_kernel(uint32_t** signal_pads, int rank,
 }
 
 template <typename T>
-__global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
+__global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs,
                                int const* side_meta, int nvar, int nc3,
                                int nc2, int nc1, int face,
                                FusedReconScheme recon_prim,
@@ -419,29 +506,21 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
                       : edge_pos;
   auto peer_buf = static_cast<T const*>(buf_ptrs[peer_rank]);
   int buf_stride_var = edge_len * nc1;
-  int remote_off = ((peer_side * nvar) * edge_len + peer_edge) * nc1 + i;
+  int remote_off =
+      (((peer_side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
+       peer_edge) *
+          nc1 +
+      i;
+  int local_off =
+      (((side * CS_NUM_STATES + CS_STATE_BOUNDARY) * nvar) * edge_len +
+       edge_pos) *
+          nc1 +
+      i;
 
   int dim = side <= CS_SIDE_R ? 2 : 1;
   int axis_size = dim == 2 ? nc2 : nc3;
-  int stride_dim = dim == 2 ? nc1 : nc1 * nc2;
   int stride_var = nc1 * nc2 * nc3;
   int pos = threadIdx.x;
-  int base = 0;
-  if (side <= CS_SIDE_R) {
-    base = edge_pos * nc2 * nc1 + i;
-  } else {
-    base = edge_pos * nc1 + i;
-  }
-
-  extern __shared__ unsigned char memory[];
-  T* smem = reinterpret_cast<T*>(memory);
-  if (pos < axis_size) {
-    int in = base + pos * stride_dim;
-    for (int v = 0; v < nvar; ++v) {
-      smem[v * axis_size + pos] = w[v * stride_var + in];
-    }
-  }
-  __syncthreads();
 
   int nghost = (recon_prim == FusedReconScheme::CP3 ||
                 recon_prim == FusedReconScheme::WENO3)
@@ -452,18 +531,13 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
             &alpha, &beta, &k, &j, &face_pos);
   if (pos != face_pos) return;
-  int il = nghost;
-  bool own_is_right_state = (side == CS_SIDE_L || side == CS_SIDE_B);
-  int start = own_is_right_state ? face_pos - (il - 1) : face_pos - il;
-  bool right_interp = own_is_right_state ? false : true;
 
   T own[64], remote[64], wl[64], wr[64];
   for (int v = 0; v < nvar; ++v) {
-    auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    own[v] =
-        interp_shared_fused_impl(smem, v, start, axis_size, scheme, right_interp);
+    own[v] = buf[local_off + v * buf_stride_var];
     remote[v] = peer_buf[remote_off + v * buf_stride_var];
   }
+  cs_sph_to_contra(own, face, alpha, beta);
   cs_sph_to_contra(remote, face, alpha, beta);
   if (eos_limiter) {
     own[IDN] = max(own[IDN], density_floor);
@@ -482,6 +556,12 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
     wl[v] = lower_side ? remote[v] : own[v];
     wr[v] = lower_side ? own[v] : remote[v];
   }
+  T wl_density = wl[IDN];
+  T wr_density = wr[IDN];
+  gnomonic_prim2local(wl, dim, alpha, beta);
+  gnomonic_prim2local(wr, dim, alpha, beta);
+  wl[IDN] = wl_density;
+  wr[IDN] = wr_density;
 
   int flux_k = side <= CS_SIDE_R ? k : face_pos;
   int flux_j = side <= CS_SIDE_R ? face_pos : j;
@@ -490,6 +570,7 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
   if (solver == FusedRiemannSolver::ShallowRoe) {
     shallow_roe_impl(flux, wl, wr, dim, shallow_roe_dir_yz, /*stride_w=*/1,
                      /*stride_f=*/stride_var);
+    gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
     return;
   }
 
@@ -505,6 +586,7 @@ __global__ void cs_flux_kernel(T const* w, T* flux2, T* flux3, void** buf_ptrs,
     hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
               /*stride_f=*/stride_var);
   }
+  gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
 }
 
 }  // namespace
@@ -516,7 +598,9 @@ void fused_recon_riemann_cuda(
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1,
     torch::Tensor cv_ratio_m1, torch::Tensor u0, int shallow_roe_dir_yz,
     FusedPrimitiveProjector projector, torch::Tensor psf, torch::Tensor dx1f,
-    double gas_constant, torch::Tensor rho_grav) {
+    double gas_constant, torch::Tensor rho_grav, bool cubed_sphere, int face,
+    torch::Tensor x2v, torch::Tensor x2f, torch::Tensor x3v,
+    torch::Tensor x3f) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -548,7 +632,11 @@ void fused_recon_riemann_cuda(
         psf.defined() ? psf.data_ptr<scalar_t>() : nullptr,
         dx1f.defined() ? dx1f.data_ptr<scalar_t>() : nullptr,
         scalar_t(gas_constant),
-        rho_grav.defined() ? rho_grav.data_ptr<scalar_t>() : nullptr);
+        rho_grav.defined() ? rho_grav.data_ptr<scalar_t>() : nullptr,
+        cubed_sphere, face, x2v.defined() ? x2v.data_ptr<scalar_t>() : nullptr,
+        x2f.defined() ? x2f.data_ptr<scalar_t>() : nullptr,
+        x3v.defined() ? x3v.data_ptr<scalar_t>() : nullptr,
+        x3f.defined() ? x3f.data_ptr<scalar_t>() : nullptr);
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
@@ -598,8 +686,8 @@ void fused_cubed_sphere_exchange_cuda(
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_flux", [&] {
     size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
     cs_flux_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
-        w.data_ptr<scalar_t>(), flux2.defined() ? flux2.data_ptr<scalar_t>()
-                                                : nullptr,
+        symm_buffer.data_ptr<scalar_t>(),
+        flux2.defined() ? flux2.data_ptr<scalar_t>() : nullptr,
         flux3.defined() ? flux3.data_ptr<scalar_t>() : nullptr,
         symm_buffer_ptrs_dev, side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1,
         face, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
