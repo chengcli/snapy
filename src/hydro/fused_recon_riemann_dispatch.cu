@@ -190,13 +190,19 @@ enum {
   CS_STATE_LEFT = ILT,
   CS_STATE_RIGHT = IRT,
   CS_NUM_STATES = 2,
+  CS_NUM_SIDES = 4,
+  // side_meta layout (per side). PEER_PROCESS / PEER_LOCAL_BLOCK translate the
+  // neighbor block rank into (owning process, slot within that process) so the
+  // symmetric buffer_ptrs array (indexed by process rank) and the per-process
+  // shared buffer (sliced by local block) can both be addressed for arbitrary
+  // blocks_per_process. When the peer lives on this process, PEER_PROCESS ==
+  // this rank's process and buf_ptrs[self] resolves to the local buffer.
   CS_META_ENABLED = 0,
-  CS_META_PEER_RANK = 1,
-  CS_META_PEER_SIDE = 2,
-  CS_META_REV = 3,
-  CS_META_FLIP = 4,
-  CS_META_TRANS = 5,
-  CS_META_STRIDE = 6,
+  CS_META_PEER_PROCESS = 1,
+  CS_META_PEER_LOCAL_BLOCK = 2,
+  CS_META_PEER_SIDE = 3,
+  CS_META_REV = 4,
+  CS_META_STRIDE = 5,
 };
 
 __device__ __constant__ int kCsLocalToCartIdx[6][3] = {
@@ -382,6 +388,7 @@ __device__ void cs_coords(int side, int edge_pos, int i, int nc3, int nc2,
 template <typename T>
 __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
                                int nvar, int nc3, int nc2, int nc1, int face,
+                               int local_block,
                                FusedReconScheme recon_prim,
                                FusedReconScheme recon_vel, FusedEos eos,
                                T density_floor, T pressure_floor,
@@ -457,11 +464,15 @@ __global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
   cs_contra_to_sph(right, face, alpha, beta);
 
   int buf_stride_var = edge_len * nc1;
+  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
+  int block_base = local_block * block_stride;
   int left_out =
+      block_base +
       (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
           nc1 +
       i;
   int right_out =
+      block_base +
       (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
           nc1 +
       i;
@@ -491,7 +502,7 @@ __global__ void cs_release_reads_kernel(uint32_t** signal_pads, int rank,
 template <typename T>
 __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs,
                                int const* side_meta, int nvar, int nc3,
-                               int nc2, int nc1, int face,
+                               int nc2, int nc1, int face, int local_block,
                                FusedReconScheme recon_prim,
                                FusedReconScheme recon_vel,
                                FusedRiemannSolver solver, FusedEos eos,
@@ -512,34 +523,46 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
     return;
   }
 
-  int peer_rank = side_meta[side * CS_META_STRIDE + CS_META_PEER_RANK];
+  int peer_process = side_meta[side * CS_META_STRIDE + CS_META_PEER_PROCESS];
+  int peer_local_block =
+      side_meta[side * CS_META_STRIDE + CS_META_PEER_LOCAL_BLOCK];
   int peer_side = side_meta[side * CS_META_STRIDE + CS_META_PEER_SIDE];
   int rev = side_meta[side * CS_META_STRIDE + CS_META_REV];
   int peer_edge = rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos)
                       : edge_pos;
-  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_rank]);
+  // buf_ptrs is indexed by process rank. peer_process == this process (a peer
+  // panel co-resident on the same GPU) resolves to the local symmetric buffer;
+  // a remote process resolves to its NVSHMEM peer mapping. In both cases the
+  // owning panel's data lives in slice peer_local_block of that process buffer.
+  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_process]);
   int buf_stride_var = edge_len * nc1;
+  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
+  int local_base = local_block * block_stride;
+  int peer_base = peer_local_block * block_stride;
   int remote_left_off =
+      peer_base +
       (((peer_side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len +
        peer_edge) *
           nc1 +
       i;
   int remote_right_off =
+      peer_base +
       (((peer_side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len +
        peer_edge) *
           nc1 +
       i;
   int local_left_off =
+      local_base +
       (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
           nc1 +
       i;
   int local_right_off =
+      local_base +
       (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
           nc1 +
       i;
 
   int dim = side <= CS_SIDE_R ? 2 : 1;
-  int axis_size = dim == 2 ? nc2 : nc3;
   int stride_var = nc1 * nc2 * nc3;
   int pos = threadIdx.x;
 
@@ -667,18 +690,12 @@ void fused_recon_riemann_cuda(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_exchange_cuda(
-    torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
-    torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,
-    uint32_t** symm_signal_pads_dev, int face, int symm_rank,
-    int symm_world_size, torch::Tensor side_meta, torch::Tensor x2v,
-    torch::Tensor x2f, torch::Tensor x3v, torch::Tensor x3f,
-    FusedReconScheme recon_prim, FusedReconScheme recon_vel,
-    FusedRiemannSolver solver, FusedEos eos, double gammad,
-    double density_floor, double pressure_floor, bool eos_limiter,
-    torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
-    torch::Tensor u0, int shallow_roe_dir_yz,
-    FusedPrimitiveProjector projector) {
+void fused_cubed_sphere_pack_cuda(
+    torch::Tensor w, torch::Tensor symm_buffer, torch::Tensor side_meta,
+    int face, int local_block, torch::Tensor x2v, torch::Tensor x2f,
+    torch::Tensor x3v, torch::Tensor x3f, FusedReconScheme recon_prim,
+    FusedReconScheme recon_vel, FusedEos eos, double density_floor,
+    double pressure_floor, bool eos_limiter) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -693,21 +710,52 @@ void fused_cubed_sphere_exchange_cuda(
   int blocks = 4 * edge_len * nc1;
   auto stream = at::cuda::getCurrentCUDAStream();
 
-  AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_exchange",
-                             [&] {
+  AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_pack", [&] {
     size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
     cs_pack_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
         w.data_ptr<scalar_t>(), symm_buffer.data_ptr<scalar_t>(),
-        side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1, face, recon_prim,
-        recon_vel, eos, scalar_t(density_floor), scalar_t(pressure_floor),
-        eos_limiter, x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
-        x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
+        side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1, face, local_block,
+        recon_prim, recon_vel, eos, scalar_t(density_floor),
+        scalar_t(pressure_floor), eos_limiter, x2v.data_ptr<scalar_t>(),
+        x2f.data_ptr<scalar_t>(), x3v.data_ptr<scalar_t>(),
+        x3f.data_ptr<scalar_t>());
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
 
+void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
+                                  int symm_rank, int symm_world_size,
+                                  torch::Device device) {
+  at::cuda::CUDAGuard device_guard(device);
+  auto stream = at::cuda::getCurrentCUDAStream();
   cs_sync_kernel<<<1, std::max(32, symm_world_size), 0, stream>>>(
       symm_signal_pads_dev, symm_rank, symm_world_size);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+void fused_cubed_sphere_flux_cuda(
+    torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
+    torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,
+    torch::Tensor side_meta, int face, int local_block, torch::Tensor x2v,
+    torch::Tensor x2f, torch::Tensor x3v, torch::Tensor x3f,
+    FusedReconScheme recon_prim, FusedReconScheme recon_vel,
+    FusedRiemannSolver solver, FusedEos eos, double gammad,
+    double density_floor, double pressure_floor, bool eos_limiter,
+    torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0,
+    int shallow_roe_dir_yz) {
+  at::cuda::CUDAGuard device_guard(w.device());
+  int nc3 = w.size(1);
+  int nc2 = w.size(2);
+  int nc1 = w.size(3);
+  int nvar = w.size(0);
+  int edge_len = std::max(nc2, nc3);
+  int threads = edge_len;
+  TORCH_CHECK(threads <= 1024,
+              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
+              "exchange requires edge lines to fit in one CUDA block, but got ",
+              threads);
+  int blocks = 4 * edge_len * nc1;
+  auto stream = at::cuda::getCurrentCUDAStream();
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_flux", [&] {
     size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
@@ -716,18 +764,23 @@ void fused_cubed_sphere_exchange_cuda(
         flux2.defined() ? flux2.data_ptr<scalar_t>() : nullptr,
         flux3.defined() ? flux3.data_ptr<scalar_t>() : nullptr,
         symm_buffer_ptrs_dev, side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1,
-        face, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
+        face, local_block, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
         scalar_t(density_floor), scalar_t(pressure_floor), eos_limiter,
         inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
                                   : nullptr,
         cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr,
-        shallow_roe_dir_yz,
+        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, shallow_roe_dir_yz,
         x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
         x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
 
+void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
+                                     int symm_rank, int symm_world_size,
+                                     torch::Device device) {
+  at::cuda::CUDAGuard device_guard(device);
+  auto stream = at::cuda::getCurrentCUDAStream();
   cs_release_reads_kernel<<<2, std::max(32, symm_world_size), 0, stream>>>(
       symm_signal_pads_dev, symm_rank, symm_world_size);
   C10_CUDA_KERNEL_LAUNCH_CHECK();

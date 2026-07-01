@@ -12,6 +12,7 @@ namespace {
 
 bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
                                               YAML::Node const& config) {
+  (void)config;
   auto eos_type = op->eos() ? op->eos()->type() : "";
   auto riemann_type = op->riemann() ? op->riemann()->type() : "";
   auto recon1_type = op->recon1() && op->recon1()->interp()
@@ -32,13 +33,11 @@ bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
       ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
        (riemann_type == "lmars" || riemann_type == "hllc")) ||
       (eos_type == "shallow-water" && riemann_type == "shallow-roe");
-  auto dist = config["distribute"];
-  bool layout_supported = true;
-  if (dist && dist["layout"].as<std::string>("slab") == "cubed-sphere") {
-    layout_supported = dist["blocks_per_process"].as<int>(1) == 1;
-  }
+  // Cubed-sphere is now supported for any blocks_per_process: each process may
+  // own several panels co-resident on one GPU, exchanged through a shared
+  // per-process symmetric buffer sliced by local block (see hydro_forward_fused).
   return eos_supported && riemann_supported && recon_supported &&
-         combo_supported && layout_supported;
+         combo_supported;
 }
 
 }  // namespace
