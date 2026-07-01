@@ -214,9 +214,16 @@ __device__ __constant__ int kCsLocalToCartSgn[6][3] = {
 __device__ __constant__ int kCsCartToLocalIdx[6][3] = {
     {2, 0, 1}, {2, 1, 0}, {2, 0, 1},
     {0, 2, 1}, {2, 1, 0}, {0, 2, 1}};
+// Must be the exact sign/index inverse of kCsLocalToCartSgn/Idx so that
+// cs_sph_to_contra inverts cs_contra_to_sph on every panel; equivalently it
+// mirrors the host source-of-truth CS_CART_TO_LOCAL_VEL (cubed_sphere_layout.cpp).
+// Faces 2 (-X) and 4 (-Y) previously carried the local->cart signs instead of
+// the cart->local inverse, which flipped the recovered contravariant normal
+// velocity there and broke cross-panel mass conservation at every seam touching
+// those panels.
 __device__ __constant__ int kCsCartToLocalSgn[6][3] = {
-    {+1, +1, +1}, {+1, -1, +1}, {-1, -1, +1},
-    {+1, -1, +1}, {-1, +1, +1}, {-1, +1, +1}};
+    {+1, +1, +1}, {+1, -1, +1}, {+1, -1, -1},
+    {+1, -1, +1}, {+1, +1, -1}, {-1, +1, +1}};
 
 template <typename T>
 __device__ void cs_ab_to_xyz(int face, T alpha, T beta, T* x, T* y, T* z) {
