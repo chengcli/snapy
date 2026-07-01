@@ -31,7 +31,8 @@ constexpr int kEdgeLen = 8;
 constexpr int kNc1 = 3;
 constexpr int kStates = 2;
 constexpr int kMetaStride = 5;
-constexpr int kHydroMetaStride = 6;
+// hydro side_meta: [enabled, peer_process, peer_local_block, peer_side, rev]
+constexpr int kHydroMetaStride = 5;
 
 int env_int(char const* name, int fallback) {
   char const* value = std::getenv(name);
@@ -116,12 +117,10 @@ torch::Tensor make_hydro_side_meta(CubedSphereLayoutImpl const& layout,
     auto edge = CS_FACE_EDGES[face][side];
     EXPECT_EQ(nb, edge.nface);
     meta[side * kHydroMetaStride + 0] = 1;
-    meta[side * kHydroMetaStride + 1] = nb;
-    meta[side * kHydroMetaStride + 2] = edge.nside;
-    meta[side * kHydroMetaStride + 3] = edge.rev;
-    meta[side * kHydroMetaStride + 4] = (side % 2) == (edge.nside % 2);
-    meta[side * kHydroMetaStride + 5] =
-        (side - 1.5) * (edge.nside - 1.5) < 0;
+    meta[side * kHydroMetaStride + 1] = layout.options->owner_process_rank(nb);
+    meta[side * kHydroMetaStride + 2] = layout.options->local_block_index(nb);
+    meta[side * kHydroMetaStride + 3] = edge.nside;
+    meta[side * kHydroMetaStride + 4] = edge.rev;
   }
   return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
 }
@@ -260,8 +259,8 @@ __global__ void verify_staged_remote_state_kernel(void** buffer_ptrs,
   int edge = (line / kNc1) % kEdgeLen;
   int side = line / (kNc1 * kEdgeLen);
   int peer_rank = meta[side * kHydroMetaStride + 1];
-  int peer_side = meta[side * kHydroMetaStride + 2];
-  int rev = meta[side * kHydroMetaStride + 3];
+  int peer_side = meta[side * kHydroMetaStride + 3];
+  int rev = meta[side * kHydroMetaStride + 4];
   int peer_edge = rev ? (kEdgeLen - 1 - edge) : edge;
   bool lower_side = side == SIDE_L || side == SIDE_B;
   bool peer_lower_side = peer_side == SIDE_L || peer_side == SIDE_B;
@@ -297,8 +296,8 @@ __global__ void verify_hydro_remote_constant_kernel(void** buffer_ptrs,
   int edge = (line / kNc1) % kEdgeLen;
   int side = line / (kNc1 * kEdgeLen);
   int peer_rank = meta[side * kHydroMetaStride + 1];
-  int peer_side = meta[side * kHydroMetaStride + 2];
-  int rev = meta[side * kHydroMetaStride + 3];
+  int peer_side = meta[side * kHydroMetaStride + 3];
+  int rev = meta[side * kHydroMetaStride + 4];
   int peer_edge = rev ? (kEdgeLen - 1 - edge) : edge;
   int stride_var = kEdgeLen * kNc1;
   int remote_base =
@@ -477,14 +476,25 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
 
   auto iloc = ctx.layout->loc_of(ctx.layout->options->rank());
   int face = std::get<2>(iloc);
-  fused_cubed_sphere_exchange_cuda(
-      w, flux2, flux3, symm_buffer, symm->get_buffer_ptrs_dev(),
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()), face,
-      symm->get_rank(), symm->get_world_size(), side_meta, x2v, x2f, x3v, x3f,
-      FusedReconScheme::WENO5, FusedReconScheme::WENO5,
-      FusedRiemannSolver::ShallowRoe, FusedEos::ShallowWater, 1.4, 0., 0.,
-      false, torch::Tensor(), torch::Tensor(), torch::Tensor(), 1,
-      FusedPrimitiveProjector::None);
+  // One panel per process (blocks_per_process == 1), so local_block == 0 and the
+  // flat [side, state, var, edge, nc1] buffer is exactly this block's slice.
+  int local_block = 0;
+  fused_cubed_sphere_pack_cuda(
+      w, symm_buffer, side_meta, face, local_block, x2v, x2f, x3v, x3f,
+      FusedReconScheme::WENO5, FusedReconScheme::WENO5, FusedEos::ShallowWater,
+      0., 0., false);
+  fused_cubed_sphere_sync_cuda(
+      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      symm->get_rank(), symm->get_world_size(), ctx.device);
+  fused_cubed_sphere_flux_cuda(
+      w, flux2, flux3, symm_buffer, symm->get_buffer_ptrs_dev(), side_meta, face,
+      local_block, x2v, x2f, x3v, x3f, FusedReconScheme::WENO5,
+      FusedReconScheme::WENO5, FusedRiemannSolver::ShallowRoe,
+      FusedEos::ShallowWater, 1.4, 0., 0., false, torch::Tensor(),
+      torch::Tensor(), torch::Tensor(), 1);
+  fused_cubed_sphere_release_cuda(
+      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      symm->get_rank(), symm->get_world_size(), ctx.device);
   AT_CUDA_CHECK(cudaStreamSynchronize(
       at::cuda::getCurrentCUDAStream(ctx.device.index())));
 

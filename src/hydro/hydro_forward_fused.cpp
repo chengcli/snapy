@@ -4,6 +4,8 @@
 // C/C++
 #include <algorithm>
 #include <array>
+#include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -126,7 +128,22 @@ void clear_fused_signal_slots(
 
 struct FusedSymmetricExchangePool {
   torch::Tensor buffer;
+  //! non-null when the exchange spans multiple processes (NVSHMEM P2P)
   c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> symm;
+  //! single-process fallback: a device int64 tensor holding buffer.data_ptr()
+  //! so the flux kernel can index buf_ptrs[0] uniformly for same-GPU peers.
+  torch::Tensor self_ptr;
+
+  void** buffer_ptrs_dev() const {
+    if (symm) return symm->get_buffer_ptrs_dev();
+    return reinterpret_cast<void**>(self_ptr.data_ptr<int64_t>());
+  }
+  uint32_t** signal_pads_dev() const {
+    return symm ? reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev())
+                : nullptr;
+  }
+  int rank() const { return symm ? symm->get_rank() : 0; }
+  int world_size() const { return symm ? symm->get_world_size() : 1; }
 };
 
 uint64_t stable_alloc_id(std::string const& key) {
@@ -140,7 +157,8 @@ uint64_t stable_alloc_id(std::string const& key) {
 
 FusedSymmetricExchangePool& get_fused_symmetric_exchange_pool(
     std::string const& group_name, c10::ScalarType dtype, torch::Device device,
-    std::vector<int64_t> const& sizes, std::vector<int64_t> const& strides) {
+    std::vector<int64_t> const& sizes, std::vector<int64_t> const& strides,
+    bool use_symmetric) {
   static std::mutex mutex;
   static std::unordered_map<std::string, FusedSymmetricExchangePool> pools;
 
@@ -153,18 +171,79 @@ FusedSymmetricExchangePool& get_fused_symmetric_exchange_pool(
   auto it = pools.find(key);
   if (it != pools.end()) return it->second;
 
-  auto buffer = c10d::symmetric_memory::empty_strided_p2p(
-      sizes, strides, dtype, device, std::nullopt, stable_alloc_id(key));
-  auto symm = c10d::symmetric_memory::rendezvous(buffer, group_name);
-  auto [inserted, _] = pools.emplace(
-      key, FusedSymmetricExchangePool{std::move(buffer), std::move(symm)});
+  FusedSymmetricExchangePool pool;
+  if (use_symmetric) {
+    pool.buffer = c10d::symmetric_memory::empty_strided_p2p(
+        sizes, strides, dtype, device, std::nullopt, stable_alloc_id(key));
+    pool.symm = c10d::symmetric_memory::rendezvous(pool.buffer, group_name);
+  } else {
+    // Single process: all panels are co-resident on one GPU, so a plain
+    // contiguous buffer read by every local block (buf_ptrs[0]) is sufficient;
+    // no NVSHMEM group or signal-pad handshake is required.
+    pool.buffer =
+        torch::empty(sizes, torch::TensorOptions().dtype(dtype).device(device));
+    int64_t base = reinterpret_cast<int64_t>(pool.buffer.data_ptr());
+    pool.self_ptr = torch::tensor({base}, torch::dtype(torch::kInt64)).to(device);
+  }
+  auto [inserted, _] = pools.emplace(key, std::move(pool));
   return inserted->second;
+}
+
+//! \brief Reusable process-local barrier over the blocks_per_process worker
+//! threads. The fused cubed-sphere exchange runs pack -> sync -> flux -> release
+//! on one shared symmetric buffer; these barriers guarantee every local block
+//! has enqueued its pack before the single cross-process visibility sync, and
+//! that the sync is enqueued before any block reads peer state. All exchange
+//! kernels share the device's default stream, so enqueue order fixed by these
+//! barriers is the execution order, which removes the single-block launch
+//! ordering deadlock that made the old path require blocks_per_process == 1.
+class FusedExchangeBarrier {
+ public:
+  explicit FusedExchangeBarrier(int participants) : participants_(participants) {}
+  void wait() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    int gen = generation_;
+    if (++arrived_ == participants_) {
+      arrived_ = 0;
+      ++generation_;
+      cv_.notify_all();
+    } else {
+      cv_.wait(lock, [&] { return generation_ != gen; });
+    }
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  int participants_;
+  int arrived_ = 0;
+  int generation_ = 0;
+};
+
+FusedExchangeBarrier& get_fused_exchange_barrier(std::string const& key,
+                                                 int participants) {
+  static std::mutex mutex;
+  static std::unordered_map<std::string, std::unique_ptr<FusedExchangeBarrier>>
+      barriers;
+  std::lock_guard<std::mutex> lock(mutex);
+  auto it = barriers.find(key);
+  if (it == barriers.end()) {
+    it = barriers
+             .emplace(key, std::make_unique<FusedExchangeBarrier>(participants))
+             .first;
+  }
+  return *it->second;
 }
 
 torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
                              bool exchange_dim2, bool exchange_dim3,
                              torch::Device device) {
-  constexpr int kStride = 6;
+  // Per side: [enabled, peer_process, peer_local_block, peer_side, rev].
+  // neighbor_rank returns a global BLOCK rank; translate it into the owning
+  // process (to index the symmetric buffer_ptrs array) and the slot within that
+  // process (to index the shared buffer), so the exchange addresses same-GPU and
+  // cross-GPU peers uniformly. Must match the CS_META_* layout in the kernels.
+  constexpr int kStride = 5;
   std::vector<int> meta(4 * kStride, 0);
   auto iloc = layout.loc_of(layout.options->rank());
   int face = std::get<2>(iloc);
@@ -183,11 +262,10 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
     if (std::get<2>(nb_loc) == face) continue;
     auto edge = CS_FACE_EDGES[face][side];
     meta[side * kStride + 0] = 1;
-    meta[side * kStride + 1] = nb;
-    meta[side * kStride + 2] = edge.nside;
-    meta[side * kStride + 3] = edge.rev;
-    meta[side * kStride + 4] = (side % 2) == (edge.nside % 2);
-    meta[side * kStride + 5] = (side - 1.5) * (edge.nside - 1.5) < 0;
+    meta[side * kStride + 1] = layout.options->owner_process_rank(nb);
+    meta[side * kStride + 2] = layout.options->local_block_index(nb);
+    meta[side * kStride + 3] = edge.nside;
+    meta[side * kStride + 4] = edge.rev;
   }
   return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
 }
@@ -243,19 +321,15 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 pmb->pcoord->options->type(), " with layout type ",
                 playout->options->type());
   } else {
-    TORCH_CHECK(
-        playout->options->blocks_per_process() == 1,
-        "dynamics.fused-recon-riemann cubed-sphere symmetric-memory exchange "
-        "currently requires blocks_per_process=1 to avoid local-block launch "
-        "ordering deadlock, but got ",
-        playout->options->blocks_per_process());
-    TORCH_CHECK(playout->options->process_world_size() ==
-                    playout->options->world_size(),
-                "dynamics.fused-recon-riemann cubed-sphere symmetric-memory "
-                "exchange currently requires one block rank per process");
-    TORCH_CHECK(playout->has_process_group(),
-                "dynamics.fused-recon-riemann cubed-sphere symmetric-memory "
-                "exchange requires an initialized process group");
+    // Multi-block-per-process is supported: each process may own several panels
+    // co-resident on one GPU. A single shared per-process symmetric buffer is
+    // sliced by local block, and cross-panel peers are addressed by (owning
+    // process, local block). Cross-process exchange still needs the NVSHMEM
+    // process group; a single-process run (all panels on one GPU) does not.
+    TORCH_CHECK(playout->options->process_world_size() == 1 ||
+                    playout->has_process_group(),
+                "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
+                "initialized process group for multi-process runs");
   }
 
   CubedSphereLayoutImpl const* cs_layout = nullptr;
@@ -355,29 +429,64 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     bool exchange_dim3 = u.size(1) > 1 && !options->disable_flux_x3();
     if (exchange_dim2 || exchange_dim3) {
       std::string group_name = "snapy:fused-recon-riemann:cubed-sphere";
-      ensure_symmetric_group(*playout, group_name);
+      int bpp = std::max(1, playout->options->blocks_per_process());
+      int local_block =
+          playout->options->local_block_index(playout->options->rank());
+      bool multi_process = playout->options->process_world_size() > 1;
+      bool is_leader = local_block == 0;
+
       int edge_len = std::max<int>(w.size(1), w.size(2));
-      constexpr int kExchangeStates = 2;
-      std::vector<int64_t> sizes = {4, kExchangeStates, w.size(0), edge_len,
-                                    w.size(3)};
+      constexpr int kSides = 4;
+      constexpr int kStates = 2;
+      int64_t nvar = w.size(0), nc1 = w.size(3);
+      // shared per-process buffer: [blocks_per_process, side, state, var, edge,
+      // nc1]; every local block owns slice `local_block`.
+      std::vector<int64_t> sizes = {bpp, kSides, kStates, nvar, edge_len, nc1};
       std::vector<int64_t> strides = {
-          kExchangeStates * w.size(0) * edge_len * w.size(3),
-          w.size(0) * edge_len * w.size(3), edge_len * w.size(3), w.size(3),
-          1};
+          static_cast<int64_t>(kSides) * kStates * nvar * edge_len * nc1,
+          static_cast<int64_t>(kStates) * nvar * edge_len * nc1,
+          nvar * edge_len * nc1, edge_len * nc1, nc1, 1};
+
+      if (multi_process) ensure_symmetric_group(*playout, group_name);
       auto& pool = get_fused_symmetric_exchange_pool(
-          group_name, w.scalar_type(), w.device(), sizes, strides);
-      clear_fused_signal_slots(pool.symm, playout->comm);
+          group_name, w.scalar_type(), w.device(), sizes, strides,
+          multi_process);
       auto side_meta =
           make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
-      fused_cubed_sphere_exchange_cuda(
-          w, _flux2, _flux3, pool.buffer, pool.symm->get_buffer_ptrs_dev(),
-          reinterpret_cast<uint32_t**>(pool.symm->get_signal_pad_ptrs_dev()),
-          face, pool.symm->get_rank(), pool.symm->get_world_size(), side_meta,
-          x2v, x2f, x3v, x3f, recon23_prim, recon23_vel, solver, eos,
-          options->eos()->gammad(), options->eos()->density_floor(),
-          options->eos()->pressure_floor(), options->eos()->limiter(),
-          inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
-          FusedPrimitiveProjector::None);
+      auto& barrier = get_fused_exchange_barrier(group_name, bpp);
+
+      // (1) every local block reconstructs its panel-edge states into its slice
+      fused_cubed_sphere_pack_cuda(
+          w, pool.buffer, side_meta, face, local_block, x2v, x2f, x3v, x3f,
+          recon23_prim, recon23_vel, eos, options->eos()->density_floor(),
+          options->eos()->pressure_floor(), options->eos()->limiter());
+      barrier.wait();
+
+      // (2) one block per process publishes cross-process write visibility
+      if (multi_process && is_leader) {
+        clear_fused_signal_slots(pool.symm, playout->comm);
+        fused_cubed_sphere_sync_cuda(pool.signal_pads_dev(), pool.rank(),
+                                     pool.world_size(), w.device());
+      }
+      barrier.wait();
+
+      // (3) every local block overwrites its cross-panel boundary flux from own
+      //     + peer edge states (peer buffer selected by owning process rank)
+      fused_cubed_sphere_flux_cuda(
+          w, _flux2, _flux3, pool.buffer, pool.buffer_ptrs_dev(), side_meta,
+          face, local_block, x2v, x2f, x3v, x3f, recon23_prim, recon23_vel,
+          solver, eos, options->eos()->gammad(),
+          options->eos()->density_floor(), options->eos()->pressure_floor(),
+          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
+          shallow_roe_dir_yz);
+      barrier.wait();
+
+      // (4) one block per process closes the read epoch before the next step
+      if (multi_process && is_leader) {
+        fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
+                                        pool.world_size(), w.device());
+      }
+      barrier.wait();
     }
   }
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
