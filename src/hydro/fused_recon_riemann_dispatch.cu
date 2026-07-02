@@ -645,6 +645,158 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
   gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
 }
 
+// Process-level seam flux: one launch overwrites the cross-panel boundary flux
+// for ALL local panels. blockIdx.x decodes (panel, side, edge_pos, i); each
+// panel's own flux2/flux3 tensor and side_meta are addressed through the
+// per-panel pointer/metadata arrays gathered on the host. The per-interface math
+// is identical to cs_flux_kernel (same buffer indexing, transforms, Riemann);
+// panel p is local block p, so its packed edges live in slice p of the shared
+// buffer and its coords are the shared equiangular angular grid.
+template <typename T>
+__global__ void cs_flux_all_kernel(
+    T const* buf, void** flux2_ptrs, void** flux3_ptrs, void** buf_ptrs,
+    int const* side_meta_all, int const* faces, int nvar, int nc3, int nc2,
+    int nc1, FusedReconScheme recon_prim, FusedReconScheme recon_vel,
+    FusedRiemannSolver solver, FusedEos eos, T gammad, T density_floor,
+    T pressure_floor, bool eos_limiter, T const* inv_mu_ratio_m1,
+    T const* cv_ratio_m1, T const* u0, int shallow_roe_dir_yz, void** x2v_ptrs,
+    void** x2f_ptrs, void** x3v_ptrs, void** x3f_ptrs) {
+  int edge_len = max(nc2, nc3);
+  int lines_per_panel = CS_NUM_SIDES * edge_len * nc1;
+  int panel = blockIdx.x / lines_per_panel;
+  int line = blockIdx.x % lines_per_panel;
+  int local_block = panel;
+  int face = faces[panel];
+  T* flux2 = static_cast<T*>(flux2_ptrs[panel]);
+  T* flux3 = static_cast<T*>(flux3_ptrs[panel]);
+  int const* side_meta = side_meta_all + panel * CS_NUM_SIDES * CS_META_STRIDE;
+  // Per-panel angular coords (each tile may hold a different sub-grid when
+  // pxy > 1; for pxy == 1 these are identical across a process's panels).
+  T const* x2v = static_cast<T const*>(x2v_ptrs[panel]);
+  T const* x2f = static_cast<T const*>(x2f_ptrs[panel]);
+  T const* x3v = static_cast<T const*>(x3v_ptrs[panel]);
+  T const* x3f = static_cast<T const*>(x3f_ptrs[panel]);
+
+  int i = line % nc1;
+  int edge_pos = (line / nc1) % edge_len;
+  int side = line / (nc1 * edge_len);
+  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
+  if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
+      (side >= CS_SIDE_B && edge_pos >= nc2)) {
+    return;
+  }
+
+  int peer_process = side_meta[side * CS_META_STRIDE + CS_META_PEER_PROCESS];
+  int peer_local_block =
+      side_meta[side * CS_META_STRIDE + CS_META_PEER_LOCAL_BLOCK];
+  int peer_side = side_meta[side * CS_META_STRIDE + CS_META_PEER_SIDE];
+  int rev = side_meta[side * CS_META_STRIDE + CS_META_REV];
+  int peer_edge = rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos)
+                      : edge_pos;
+  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_process]);
+  int buf_stride_var = edge_len * nc1;
+  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
+  int local_base = local_block * block_stride;
+  int peer_base = peer_local_block * block_stride;
+  int remote_left_off =
+      peer_base +
+      (((peer_side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len +
+       peer_edge) *
+          nc1 +
+      i;
+  int remote_right_off =
+      peer_base +
+      (((peer_side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len +
+       peer_edge) *
+          nc1 +
+      i;
+  int local_left_off =
+      local_base +
+      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
+          nc1 +
+      i;
+  int local_right_off =
+      local_base +
+      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
+          nc1 +
+      i;
+
+  int dim = side <= CS_SIDE_R ? 2 : 1;
+  int stride_var = nc1 * nc2 * nc3;
+  int pos = threadIdx.x;
+
+  int nghost = (recon_prim == FusedReconScheme::CP3 ||
+                recon_prim == FusedReconScheme::WENO3)
+                   ? 2
+                   : 3;
+  int k, j, face_pos;
+  T alpha, beta;
+  cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
+            &alpha, &beta, &k, &j, &face_pos);
+  if (pos != face_pos) return;
+
+  T local_left[64], local_right[64], remote_left[64], remote_right[64], wl[64],
+      wr[64];
+  for (int v = 0; v < nvar; ++v) {
+    local_left[v] = buf[local_left_off + v * buf_stride_var];
+    local_right[v] = buf[local_right_off + v * buf_stride_var];
+    remote_left[v] = peer_buf[remote_left_off + v * buf_stride_var];
+    remote_right[v] = peer_buf[remote_right_off + v * buf_stride_var];
+  }
+  bool lower_side = side == CS_SIDE_L || side == CS_SIDE_B;
+  bool peer_lower_side = peer_side == CS_SIDE_L || peer_side == CS_SIDE_B;
+  for (int v = 0; v < nvar; ++v) {
+    T remote = peer_lower_side ? remote_right[v] : remote_left[v];
+    wl[v] = lower_side ? remote : local_left[v];
+    wr[v] = lower_side ? local_right[v] : remote;
+  }
+  cs_sph_to_contra(wl, face, alpha, beta);
+  cs_sph_to_contra(wr, face, alpha, beta);
+  if (eos_limiter) {
+    wl[IDN] = max(wl[IDN], density_floor);
+    wr[IDN] = max(wr[IDN], density_floor);
+    if (eos != FusedEos::ShallowWater) {
+      wl[IPR] = max(wl[IPR], pressure_floor);
+      wr[IPR] = max(wr[IPR], pressure_floor);
+      for (int v = ICY; v < nvar; ++v) {
+        wl[v] = max(wl[v], T(0));
+        wr[v] = max(wr[v], T(0));
+      }
+    }
+  }
+  T wl_density = wl[IDN];
+  T wr_density = wr[IDN];
+  gnomonic_prim2local(wl, dim, alpha, beta);
+  gnomonic_prim2local(wr, dim, alpha, beta);
+  wl[IDN] = wl_density;
+  wr[IDN] = wr_density;
+
+  int flux_k = side <= CS_SIDE_R ? k : face_pos;
+  int flux_j = side <= CS_SIDE_R ? face_pos : j;
+  int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
+  T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
+  if (solver == FusedRiemannSolver::ShallowRoe) {
+    shallow_roe_impl(flux, wl, wr, dim, shallow_roe_dir_yz, /*stride_w=*/1,
+                     /*stride_f=*/stride_var);
+    gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
+    return;
+  }
+
+  T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
+  int ny = nvar - ICY;
+  eos_side_quantities(wl, wr, ny, eos, gammad, inv_mu_ratio_m1, cv_ratio_m1,
+                      u0, &el, &er, &gl, &gr, &cl, &cr);
+
+  if (solver == FusedRiemannSolver::LMARS) {
+    lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
+               /*stride_w=*/1, /*stride_f=*/stride_var);
+  } else {
+    hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
+              /*stride_f=*/stride_var);
+  }
+  gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
+}
+
 }  // namespace
 
 void fused_recon_riemann_cuda(
@@ -779,6 +931,42 @@ void fused_cubed_sphere_flux_cuda(
         u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, shallow_roe_dir_yz,
         x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
         x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
+  });
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+void fused_cubed_sphere_flux_all_cuda(
+    torch::Tensor symm_buffer, void** flux2_ptrs_dev, void** flux3_ptrs_dev,
+    void** symm_buffer_ptrs_dev, torch::Tensor side_meta_all,
+    torch::Tensor faces, int nvar, int nc3, int nc2, int nc1, int bpp,
+    void** x2v_ptrs_dev, void** x2f_ptrs_dev, void** x3v_ptrs_dev,
+    void** x3f_ptrs_dev, c10::ScalarType dtype, FusedReconScheme recon_prim,
+    FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
+    double gammad, double density_floor, double pressure_floor,
+    bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
+    torch::Tensor u0, int shallow_roe_dir_yz, torch::Device device) {
+  at::cuda::CUDAGuard device_guard(device);
+  int edge_len = std::max(nc2, nc3);
+  int threads = edge_len;
+  TORCH_CHECK(threads <= 1024,
+              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
+              "exchange requires edge lines to fit in one CUDA block, but got ",
+              threads);
+  int blocks = bpp * 4 * edge_len * nc1;
+  auto stream = at::cuda::getCurrentCUDAStream();
+
+  AT_DISPATCH_FLOATING_TYPES(dtype, "fused_cubed_sphere_flux_all", [&] {
+    cs_flux_all_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
+        symm_buffer.data_ptr<scalar_t>(), flux2_ptrs_dev, flux3_ptrs_dev,
+        symm_buffer_ptrs_dev, side_meta_all.data_ptr<int>(),
+        faces.data_ptr<int>(), nvar, nc3, nc2, nc1, recon_prim, recon_vel,
+        solver, eos, scalar_t(gammad), scalar_t(density_floor),
+        scalar_t(pressure_floor), eos_limiter,
+        inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
+                                  : nullptr,
+        cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
+        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, shallow_roe_dir_yz,
+        x2v_ptrs_dev, x2f_ptrs_dev, x3v_ptrs_dev, x3f_ptrs_dev);
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

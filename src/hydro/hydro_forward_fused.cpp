@@ -116,16 +116,6 @@ void ensure_symmetric_group(LayoutImpl const& layout,
   set_group_info_once(group_name);
 }
 
-void clear_fused_signal_slots(
-    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
-    std::shared_ptr<ProcessGroupContext> const& comm) {
-  auto signal_pad = symm->get_signal_pad(
-      symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
-  signal_pad.zero_();
-  (void)signal_pad.sum().item<int>();
-  if (comm) comm->barrier();
-}
-
 struct FusedSymmetricExchangePool {
   torch::Tensor buffer;
   //! non-null when the exchange spans multiple processes (NVSHMEM P2P)
@@ -233,6 +223,62 @@ FusedExchangeBarrier& get_fused_exchange_barrier(std::string const& key,
              .first;
   }
   return *it->second;
+}
+
+//! \brief Per-process collection of the local panels' flux tensors / face ids /
+//! side metadata, so one leader-launched kernel can overwrite every panel's
+//! cross-panel boundary flux. Each panel writes its own local-block slot before
+//! the barrier; the leader assembles the device pointer arrays after it. The
+//! device arrays are kept alive here (persistent) so the async flux-all kernel
+//! never reads a freed pointer buffer.
+struct FusedSeamBatch {
+  //! _flux2/_flux3 are persistent HydroImpl buffers, so raw ptrs are stable.
+  std::vector<int64_t> flux2_ptr, flux3_ptr;   // per local block
+  std::vector<int32_t> faces;                   // per local block
+  //! side_meta / coords are transient per call; hold the tensors so their
+  //! device pointers stay valid until the async flux-all kernel completes.
+  std::vector<torch::Tensor> side_meta, x2v, x2f, x3v, x3f;
+  torch::Tensor flux2_dev, flux3_dev, faces_dev, side_meta_all;
+  torch::Tensor x2v_dev, x2f_dev, x3v_dev, x3f_dev;
+};
+
+FusedSeamBatch& get_fused_seam_batch(std::string const& key, int bpp) {
+  static std::mutex mutex;
+  static std::unordered_map<std::string, FusedSeamBatch> batches;
+  std::lock_guard<std::mutex> lock(mutex);
+  auto& b = batches[key];
+  if (static_cast<int>(b.faces.size()) != bpp) {
+    b.flux2_ptr.assign(bpp, 0);
+    b.flux3_ptr.assign(bpp, 0);
+    b.faces.assign(bpp, 0);
+    b.side_meta.assign(bpp, torch::Tensor());
+    b.x2v.assign(bpp, torch::Tensor());
+    b.x2f.assign(bpp, torch::Tensor());
+    b.x3v.assign(bpp, torch::Tensor());
+    b.x3f.assign(bpp, torch::Tensor());
+  }
+  return b;
+}
+
+//! One-time signal-pad zero after rendezvous. sync_remote_blocks self-restores
+//! the pad to zero after each sync+release, so the pad only needs clearing once
+//! (removing the per-substage .item() host<->device sync).
+void clear_fused_signal_slots_once(
+    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
+    std::shared_ptr<ProcessGroupContext> const& comm,
+    std::string const& group_name) {
+  static std::mutex mutex;
+  static std::set<std::string> cleared;
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (cleared.count(group_name)) return;
+    cleared.insert(group_name);
+  }
+  auto signal_pad = symm->get_signal_pad(
+      symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
+  signal_pad.zero_();
+  (void)signal_pad.sum().item<int>();  // one-time only
+  if (comm) comm->barrier();
 }
 
 torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
@@ -454,39 +500,73 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       auto side_meta =
           make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
       auto& barrier = get_fused_exchange_barrier(group_name, bpp);
+      auto& batch = get_fused_seam_batch(group_name, bpp);
 
-      // (1) every local block reconstructs its panel-edge states into its slice
+      // register this panel's flux tensors / face / coords / side_meta for the
+      // single process-level seam-flux launch (distinct local-block slots, so
+      // the concurrent workers never touch the same entry)
+      batch.flux2_ptr[local_block] = reinterpret_cast<int64_t>(_flux2.data_ptr());
+      batch.flux3_ptr[local_block] = reinterpret_cast<int64_t>(_flux3.data_ptr());
+      batch.faces[local_block] = face;
+      batch.side_meta[local_block] = side_meta;
+      batch.x2v[local_block] = x2v;
+      batch.x2f[local_block] = x2f;
+      batch.x3v[local_block] = x3v;
+      batch.x3f[local_block] = x3f;
+
+      // ---- Phase A: every local panel packs its edge states into its slice ----
       fused_cubed_sphere_pack_cuda(
           w, pool.buffer, side_meta, face, local_block, x2v, x2f, x3v, x3f,
           recon23_prim, recon23_vel, eos, options->eos()->density_floor(),
           options->eos()->pressure_floor(), options->eos()->limiter());
-      barrier.wait();
+      barrier.wait();  // all panels packed + registered
 
-      // (2) one block per process publishes cross-process write visibility
-      if (multi_process && is_leader) {
-        clear_fused_signal_slots(pool.symm, playout->comm);
-        fused_cubed_sphere_sync_cuda(pool.signal_pads_dev(), pool.rank(),
-                                     pool.world_size(), w.device());
+      // ---- Phase B: one leader per process runs the whole seam exchange on
+      // the GPU: cross-process visibility sync -> ONE flux kernel over ALL local
+      // panels (overwrites each panel's cross-panel boundary flux) -> close the
+      // read epoch. No per-panel flux launches and no per-substage .item(). ----
+      if (is_leader) {
+        if (multi_process) {
+          clear_fused_signal_slots_once(pool.symm, playout->comm, group_name);
+          fused_cubed_sphere_sync_cuda(pool.signal_pads_dev(), pool.rank(),
+                                       pool.world_size(), w.device());
+        }
+        auto i64 = torch::dtype(torch::kInt64);
+        auto ptr_tensor = [&](std::vector<torch::Tensor> const& ts) {
+          std::vector<int64_t> ptrs(ts.size());
+          for (size_t p = 0; p < ts.size(); ++p)
+            ptrs[p] = reinterpret_cast<int64_t>(ts[p].data_ptr());
+          return torch::tensor(ptrs, i64).to(w.device());
+        };
+        batch.flux2_dev = torch::tensor(batch.flux2_ptr, i64).to(w.device());
+        batch.flux3_dev = torch::tensor(batch.flux3_ptr, i64).to(w.device());
+        batch.x2v_dev = ptr_tensor(batch.x2v);
+        batch.x2f_dev = ptr_tensor(batch.x2f);
+        batch.x3v_dev = ptr_tensor(batch.x3v);
+        batch.x3f_dev = ptr_tensor(batch.x3f);
+        batch.faces_dev =
+            torch::tensor(batch.faces, torch::dtype(torch::kInt32)).to(w.device());
+        batch.side_meta_all = torch::stack(batch.side_meta, 0);
+        auto as_pp = [](torch::Tensor& t) {
+          return reinterpret_cast<void**>(t.data_ptr<int64_t>());
+        };
+        fused_cubed_sphere_flux_all_cuda(
+            pool.buffer, as_pp(batch.flux2_dev), as_pp(batch.flux3_dev),
+            pool.buffer_ptrs_dev(), batch.side_meta_all, batch.faces_dev,
+            static_cast<int>(nvar), static_cast<int>(w.size(1)),
+            static_cast<int>(w.size(2)), static_cast<int>(nc1), bpp,
+            as_pp(batch.x2v_dev), as_pp(batch.x2f_dev), as_pp(batch.x3v_dev),
+            as_pp(batch.x3f_dev), w.scalar_type(), recon23_prim, recon23_vel,
+            solver, eos, options->eos()->gammad(),
+            options->eos()->density_floor(), options->eos()->pressure_floor(),
+            options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
+            shallow_roe_dir_yz, w.device());
+        if (multi_process) {
+          fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
+                                          pool.world_size(), w.device());
+        }
       }
-      barrier.wait();
-
-      // (3) every local block overwrites its cross-panel boundary flux from own
-      //     + peer edge states (peer buffer selected by owning process rank)
-      fused_cubed_sphere_flux_cuda(
-          w, _flux2, _flux3, pool.buffer, pool.buffer_ptrs_dev(), side_meta,
-          face, local_block, x2v, x2f, x3v, x3f, recon23_prim, recon23_vel,
-          solver, eos, options->eos()->gammad(),
-          options->eos()->density_floor(), options->eos()->pressure_floor(),
-          options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
-          shallow_roe_dir_yz);
-      barrier.wait();
-
-      // (4) one block per process closes the read epoch before the next step
-      if (multi_process && is_leader) {
-        fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
-                                        pool.world_size(), w.device());
-      }
-      barrier.wait();
+      barrier.wait();  // seam flux enqueued before any panel's divergence
     }
   }
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
