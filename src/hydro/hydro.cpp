@@ -200,7 +200,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   // hydrostatic pressure correction
-  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  auto rho_grav = torch::zeros_like(w[IDN]);
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -219,6 +219,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wlr1 =
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
+    // Compute hydrostatic pressure correction
+    int is = pmb->pcoord->il();
+    int ie = pmb->pcoord->iu() + 1;
+    rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+                                 wlr1[IRT][IPR].slice(2, is, ie)) /
+                                pmb->pcoord->dx1f.slice(0, is, ie);
+
+    // riemann solver
     if (!options->disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
       if (options->verbose()) {
