@@ -17,10 +17,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   op->eos() = EquationOfStateOptionsImpl::from_yaml(filename, verbose);
   if (verbose) op->eos()->report(SINFO(HydroOptions));
 
-  // ---------- primitive projector ----------- //
-  op->proj() = PrimitiveProjectorOptionsImpl::from_yaml(filename);
-  if (op->proj() && verbose) op->proj()->report(SINFO(HydroOptions));
-
   // ------------- reconstruction ------------ //
   op->recon1() = ReconstructOptionsImpl::from_yaml(filename, "vertical");
   if (verbose) op->recon1()->report(SINFO(HydroOptions : vertical));
@@ -127,7 +123,6 @@ HydroOptions HydroOptionsImpl::clone() const {
 
   // TODO(cli)
   /*if (eos()) op->eos() = eos()->clone();
-  if (proj()) op->proj() = proj()->clone();
   if (recon1()) op->recon1() = recon1()->clone();
   if (recon23()) op->recon23() = recon23()->clone();
   if (riemann()) op->riemann() = riemann()->clone();

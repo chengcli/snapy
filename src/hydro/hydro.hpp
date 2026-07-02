@@ -14,8 +14,6 @@
 #include <snap/riemann/riemann_solver.hpp>
 #include <snap/sedimentation/sedimentation.hpp>
 
-#include "primitive_projector.hpp"
-
 // arg
 #include <snap/add_arg.h>
 
@@ -64,7 +62,6 @@ struct HydroOptionsImpl {
 
   //! submodule options
   ADD_ARG(EquationOfStateOptions, eos) = nullptr;
-  ADD_ARG(PrimitiveProjectorOptions, proj) = nullptr;
 
   ADD_ARG(ReconstructOptions, recon1) = nullptr;
   ADD_ARG(ReconstructOptions, recon23) = nullptr;
@@ -102,7 +99,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! owning submodules
   EquationOfState peos = nullptr;
   RiemannSolver priemann = nullptr;
-  PrimitiveProjector pproj = nullptr;
 
   Reconstruct precon1 = nullptr;
   Reconstruct precon23 = nullptr;
@@ -132,6 +128,13 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor flux2() const { return _flux2; }
   torch::Tensor flux3() const { return _flux3; }
   torch::Tensor implicit_mass_correction() const;
+
+ protected:
+  void _revise_x1inner_ghost(torch::Tensor const& w);
+  void _revise_x1outer_ghost(torch::Tensor const& w);
+
+  void _revise_x1inner_lr(torch::Tensor const& wl, torch::Tensor const& wr);
+  void _revise_x1outer_lr(torch::Tensor const& wl, torch::Tensor const& wt);
 
  private:
   //! Register all forcing modules

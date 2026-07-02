@@ -62,7 +62,7 @@ integration:
   implicit-scheme: 0
   nlim: -1
   tlim: 1000.
-  ncycle_out: 1
+  ncycle_out: 10
 
 outputs:
   - type: netcdf
