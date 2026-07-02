@@ -391,7 +391,6 @@ torch::Tensor HydroImpl::implicit_mass_correction() const {
 
 void HydroImpl::_revise_x1inner_lr(torch::Tensor const& wl,
                                    torch::Tensor const& wr) {
-
   int is = pmb->pcoord->il();
   wl[IPR].narrow(-1, is, 1) = wr[IPR].narrow(-1, is, 1);
   wl[IDN].narrow(-1, is, 1) = wr[IDN].narrow(-1, is, 1);
@@ -416,9 +415,11 @@ void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
 
   for (int n = 0; n < pcoord->options->nghost(); ++n) {
     auto dz = pmb->pcoord->dx1v[is - n - 1];
-    auto h = w[IPR].narrow(-1, is - n, 1).pow(a) + a * grav * dz / K.pow(1. / gamma);
+    auto h =
+        w[IPR].narrow(-1, is - n, 1).pow(a) + a * grav * dz / K.pow(1. / gamma);
     w[IPR].narrow(-1, is - n - 1, 1) = h.pow(1. / a);
-    w[IDN].narrow(-1, is - n - 1, 1) = (w[IPR].narrow(-1, is- n - 1, 1) / K).pow(1. / gamma);
+    w[IDN].narrow(-1, is - n - 1, 1) =
+        (w[IPR].narrow(-1, is - n - 1, 1) / K).pow(1. / gamma);
   }
 }
 
@@ -430,7 +431,7 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   auto rd_tv = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1);
   for (int n = 0; n < pcoord->options->nghost(); ++n) {
     auto dz = pmb->pcoord->dx1v[ie + n];
-    auto factor = torch::exp(- grav * dz / rd_tv);
+    auto factor = torch::exp(-grav * dz / rd_tv);
     w[IPR].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n, 1) * factor;
     w[IDN].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n + 1, 1) / rd_tv;
   }
