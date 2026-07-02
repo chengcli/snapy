@@ -14,9 +14,7 @@ geometry:
 distribute: {backend: nccl, layout: cubed-sphere, nb2: 1, nb3: 1, blocks_per_process: 6, verbose: false}
 
 dynamics:
-  equation-of-state: {type: ideal-moist, density-floor: 1.e-10, pressure-floor: 1.e-10, tracer-floor: 1.e-10, limiter: true, max-iter: 20, ftol: 1.e-6}
-  vertical-projection: {type: temperature, pressure-margin: 1.e-6}
-  reconstruct:
+  equation-of-state: {type: ideal-moist, density-floor: 1.e-10, pressure-floor: 1.e-10, tracer-floor: 1.e-10, limiter: true, max-iter: 20, ftol: 1.e-6}  reconstruct:
     vertical: {type: weno5, scale: true, shock: true}
     horizontal: {type: weno5, scale: true, shock: true}
   riemann-solver: {type: lmars}
