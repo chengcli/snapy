@@ -61,9 +61,8 @@ torch::Tensor bryan_saturation_pressure(torch::Tensor const& temp) {
       (kRcpLiquid - kRcpVapor) * kEps / (1. - 1. / kGamma);
 
   auto reduced_temp = temp / kT3;
-  return kP3 *
-         torch::exp(kBeta * (1. - 1. / reduced_temp) -
-                    kDelta * torch::log(reduced_temp));
+  return kP3 * torch::exp(kBeta * (1. - 1. / reduced_temp) -
+                          kDelta * torch::log(reduced_temp));
 }
 
 void set_user_output_callback(MeshBlock block,
@@ -119,9 +118,9 @@ void set_user_output_callback(MeshBlock block,
   };
 }
 
-torch::Tensor surface_mass_fractions(
-    std::vector<std::string> const& species, int nc3, int nc2, double qt,
-    torch::TensorOptions const& options) {
+torch::Tensor surface_mass_fractions(std::vector<std::string> const& species,
+                                     int nc3, int nc2, double qt,
+                                     torch::TensorOptions const& options) {
   int ny = static_cast<int>(species.size()) - 1;
   auto yfrac = torch::zeros({ny, nc3, nc2}, options);
 
@@ -152,8 +151,9 @@ void solve_virtual_temperature_perturbation(
     auto too_cold = torch::logical_and(mask, tv_mid < target_tv);
 
     temp_lo = torch::where(too_cold, temp_mid, temp_lo);
-    temp_hi = torch::where(torch::logical_and(mask, torch::logical_not(too_cold)),
-                           temp_mid, temp_hi);
+    temp_hi =
+        torch::where(torch::logical_and(mask, torch::logical_not(too_cold)),
+                     temp_mid, temp_hi);
   }
 
   temp_out = torch::where(mask, 0.5 * (temp_lo + temp_hi), temp0);
@@ -196,10 +196,9 @@ void initialize_block(MeshBlock block, Variables& vars,
 
   auto temp_state = torch::zeros({nc3, nc2, nc1}, options);
   auto pres_state = torch::zeros({nc3, nc2, nc1}, options);
-  auto xfrac_state =
-      torch::zeros(std::vector<int64_t>{nc3, nc2, nc1,
-                                        static_cast<int64_t>(species.size())},
-                   options);
+  auto xfrac_state = torch::zeros(
+      std::vector<int64_t>{nc3, nc2, nc1, static_cast<int64_t>(species.size())},
+      options);
 
   auto temp = Ts * torch::ones({nc3, nc2}, options);
   auto pres = Ps * torch::ones({nc3, nc2}, options);
@@ -208,12 +207,10 @@ void initialize_block(MeshBlock block, Variables& vars,
   thermo_x->forward(temp, pres, xfrac);
 
   double dz = pcoord->dx1f[il].item<double>();
-  thermo_x->extrapolate_dz(temp, pres, xfrac,
-                           kintera::ExtrapOptions()
-                               .dz(0.5 * dz)
-                               .grav(grav)
-                               .ds_dz(0.)
-                               .rainout(false));
+  thermo_x->extrapolate_dz(
+      temp, pres, xfrac,
+      kintera::ExtrapOptions().dz(0.5 * dz).grav(grav).ds_dz(0.).rainout(
+          false));
 
   for (int i = il; i <= iu; ++i) {
     temp_state.select(2, i).copy_(temp);
@@ -222,12 +219,9 @@ void initialize_block(MeshBlock block, Variables& vars,
 
     if (i < iu) {
       dz = pcoord->dx1f[i].item<double>();
-      thermo_x->extrapolate_dz(temp, pres, xfrac,
-                               kintera::ExtrapOptions()
-                                   .dz(dz)
-                                   .grav(grav)
-                                   .ds_dz(0.)
-                                   .rainout(false));
+      thermo_x->extrapolate_dz(
+          temp, pres, xfrac,
+          kintera::ExtrapOptions().dz(dz).grav(grav).ds_dz(0.).rainout(false));
     }
   }
 
@@ -246,8 +240,7 @@ void initialize_block(MeshBlock block, Variables& vars,
     auto xfrac_i = xfrac_state.select(2, i);
     auto conc_i = thermo_x->compute(
         "TPX->V", std::vector<torch::Tensor>{temp_i, pres_i, xfrac_i});
-    auto dens_i =
-        thermo_x->compute("V->D", std::vector<torch::Tensor>{conc_i});
+    auto dens_i = thermo_x->compute("V->D", std::vector<torch::Tensor>{conc_i});
     auto target_tv = pres_i / (dens_i * Rd) * (1. + amp);
 
     torch::Tensor temp_new;
@@ -269,8 +262,9 @@ void initialize_block(MeshBlock block, Variables& vars,
     w[IPR].select(2, i).copy_(pres_i);
     w[IDN].select(2, i).copy_(
         thermo_x->compute("V->D", std::vector<torch::Tensor>{conc_i}));
-    w.narrow(0, ICY, ny).select(3, i).copy_(
-        thermo_x->compute("X->Y", std::vector<torch::Tensor>{xfrac_i}));
+    w.narrow(0, ICY, ny)
+        .select(3, i)
+        .copy_(thermo_x->compute("X->Y", std::vector<torch::Tensor>{xfrac_i}));
   }
 
   vars["hydro_w"] = w;
