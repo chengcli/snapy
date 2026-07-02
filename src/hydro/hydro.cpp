@@ -27,16 +27,6 @@ void HydroImpl::reset() {
     SINFO(Hydro) << "EOS type: " << peos->options->type() << "\n";
   }
 
-  //// ---- (2) set up primitive projector model ---- ////
-  if (options->proj() != nullptr) {
-    pproj = PrimitiveProjectorImpl::create(options->proj(), this);
-
-    if (options->verbose()) {
-      SINFO(Hydro) << "Primitive projector type: " << pproj->options->type()
-                   << "\n";
-    }
-  }
-
   //// ---- (3) set up reconstruction-x1 model ---- ////
   precon1 = ReconstructImpl::create(options->recon1(), this, "recon1");
   if (options->verbose()) {
@@ -210,22 +200,35 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   // hydrostatic pressure correction
-  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  auto rho_grav = torch::zeros_like(w[IDN]);
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
-    torch::Tensor wtmp;
-    if (pproj) {
-      auto wp = pproj->forward(w, pmb->pcoord->dx1f);
-      wtmp = precon1->forward(wp, DIM1);
-      rho_grav = pproj->restore_inplace(wtmp);
-    } else {
-      wtmp = precon1->forward(w, DIM1);
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_ghost(w);
+      _revise_x1outer_ghost(w);
+    }
+
+    auto wtmp = precon1->forward(w, DIM1);
+
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+      _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
     }
 
     auto wlr1 =
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
+    // Compute hydrostatic pressure correction
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+                                   wlr1[IRT][IPR].slice(2, is, ie)) /
+                                  pmb->pcoord->dx1f.slice(0, is, ie);
+    }
+
+    // riemann solver
     if (!options->disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
       if (options->verbose()) {
@@ -394,6 +397,54 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {
   return picorr ? picorr->mass_correction() : torch::Tensor();
+}
+
+void HydroImpl::_revise_x1inner_lr(torch::Tensor const& wl,
+                                   torch::Tensor const& wr) {
+  int is = pmb->pcoord->il();
+  wl[IPR].narrow(-1, is, 1) = wr[IPR].narrow(-1, is, 1);
+  wl[IDN].narrow(-1, is, 1) = wr[IDN].narrow(-1, is, 1);
+}
+
+void HydroImpl::_revise_x1outer_lr(torch::Tensor const& wl,
+                                   torch::Tensor const& wr) {
+  int ie = pmb->pcoord->iu();
+  wr[IPR].narrow(-1, ie + 1, 1) = wl[IPR].narrow(-1, ie + 1, 1);
+  wr[IDN].narrow(-1, ie + 1, 1) = wl[IDN].narrow(-1, ie + 1, 1);
+}
+
+void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
+  auto pcoord = pmb->pcoord;
+  int is = pcoord->il();
+  auto grav = -options->grav()->grav1();
+
+  auto gamma = peos->compute("W->A", {w.narrow(-1, is, 1)});
+  auto gm = gamma - 1.;
+  auto a = gm / gamma;
+  auto K = w[IPR].narrow(-1, is, 1) / w[IDN].narrow(-1, is, 1).pow(gamma);
+
+  for (int n = 0; n < pcoord->options->nghost(); ++n) {
+    auto dz = pmb->pcoord->dx1v[is - n - 1];
+    auto h =
+        w[IPR].narrow(-1, is - n, 1).pow(a) + a * grav * dz / K.pow(1. / gamma);
+    w[IPR].narrow(-1, is - n - 1, 1) = h.pow(1. / a);
+    w[IDN].narrow(-1, is - n - 1, 1) =
+        (w[IPR].narrow(-1, is - n - 1, 1) / K).pow(1. / gamma);
+  }
+}
+
+void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
+  auto pcoord = pmb->pcoord;
+  int ie = pcoord->iu();
+  auto grav = -options->grav()->grav1();
+
+  auto rd_tv = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1);
+  for (int n = 0; n < pcoord->options->nghost(); ++n) {
+    auto dz = pmb->pcoord->dx1v[ie + n];
+    auto factor = torch::exp(-grav * dz / rd_tv);
+    w[IPR].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n, 1) * factor;
+    w[IDN].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n + 1, 1) / rd_tv;
+  }
 }
 
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,

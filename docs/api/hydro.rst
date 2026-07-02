@@ -102,14 +102,6 @@ HydroOptions
       :return: Equation of state options
       :rtype: EquationOfStateOptions
 
-   .. method:: proj() -> PrimitiveProjectorOptions
-               proj(value: PrimitiveProjectorOptions) -> HydroOptions
-
-      Get or set primitive projector options.
-
-      :return: Primitive projector options
-      :rtype: PrimitiveProjectorOptions
-
    .. method:: recon1() -> ReconstructOptions
                recon1(value: ReconstructOptions) -> HydroOptions
 
@@ -141,37 +133,3 @@ HydroOptions
 
       :return: Implicit correction options
       :rtype: ImplicitOptions
-
-PrimitiveProjectorOptions
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. class:: PrimitiveProjectorOptions
-
-   Primitive variable projector options.
-
-   .. staticmethod:: from_yaml(filename: str, verbose: bool = False) -> PrimitiveProjectorOptions
-
-      Load PrimitiveProjectorOptions from a YAML file.
-
-      :param filename: Path to YAML file
-      :type filename: str
-      :param verbose: Enable verbose output
-      :type verbose: bool, optional
-      :return: PrimitiveProjectorOptions loaded from file
-      :rtype: PrimitiveProjectorOptions
-
-   .. method:: type() -> str
-               type(value: str) -> PrimitiveProjectorOptions
-
-      Get or set the projector type.
-
-      :return: Projector type
-      :rtype: str
-
-   .. method:: margin() -> float
-               margin(value: float) -> PrimitiveProjectorOptions
-
-      Get or set the margin value.
-
-      :return: Margin value
-      :rtype: float

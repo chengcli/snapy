@@ -34,30 +34,10 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptionsImpl, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptionsImpl, diffusion)
       .ADD_OPTION(snap::EquationOfStateOptions, snap::HydroOptionsImpl, eos)
-      .ADD_OPTION(snap::PrimitiveProjectorOptions, snap::HydroOptionsImpl, proj)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon1)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon23)
       .ADD_OPTION(snap::RiemannSolverOptions, snap::HydroOptionsImpl, riemann)
       .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptionsImpl, icorr);
-
-  auto pyPrimitiveProjectorOptions =
-      py::class_<snap::PrimitiveProjectorOptionsImpl,
-                 snap::PrimitiveProjectorOptions>(m,
-                                                  "PrimitiveProjectorOptions");
-
-  pyPrimitiveProjectorOptions.def(py::init<>())
-      .def_static("from_yaml",
-                  py::overload_cast<std::string const &, bool>(
-                      &snap::PrimitiveProjectorOptionsImpl::from_yaml),
-                  py::arg("filename"), py::arg("verbose") = false)
-      .def("__repr__",
-           [](const snap::PrimitiveProjectorOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("PrimitiveProjectorOptions(\n{})", ss.str());
-           })
-      .ADD_OPTION(std::string, snap::PrimitiveProjectorOptionsImpl, type)
-      .ADD_OPTION(double, snap::PrimitiveProjectorOptionsImpl, margin);
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
       .def(py::init<snap::HydroOptions, torch::nn::Module *>(),

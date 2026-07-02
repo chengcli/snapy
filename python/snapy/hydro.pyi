@@ -16,54 +16,6 @@ from .riemann import RiemannSolverOptions
 # Type aliases
 bcfunc_t = Optional[Callable[[torch.Tensor, int, "BoundaryFuncOptions"], None]]
 
-# Hydro
-class PrimitiveProjectorOptions:
-    """
-    Primitive variable projector options.
-
-    This class manages primitive variable projection parameters.
-    """
-
-    def __init__(self) -> None:
-        """Initialize PrimitiveProjectorOptions with default values."""
-        ...
-
-    @staticmethod
-    def from_yaml(filename: str, verbose: bool = False) -> "PrimitiveProjectorOptions":
-        """
-        Load PrimitiveProjectorOptions from a YAML file.
-
-        Args:
-            filename: Path to YAML file
-            verbose: Enable verbose output
-
-        Returns:
-            PrimitiveProjectorOptions loaded from file
-        """
-        ...
-
-    def __repr__(self) -> str: ...
-
-    @overload
-    def type(self) -> str:
-        """Get the projector type."""
-        ...
-
-    @overload
-    def type(self, value: str) -> "PrimitiveProjectorOptions":
-        """Set the projector type."""
-        ...
-
-    @overload
-    def margin(self) -> float:
-        """Get the margin value."""
-        ...
-
-    @overload
-    def margin(self, value: float) -> "PrimitiveProjectorOptions":
-        """Set the margin value."""
-        ...
-
 class HydroOptions:
     """
     Hydrodynamics configuration options.
@@ -169,16 +121,6 @@ class HydroOptions:
     @overload
     def eos(self, value: "EquationOfStateOptions") -> "HydroOptions":
         """Set equation of state options."""
-        ...
-
-    @overload
-    def proj(self) -> PrimitiveProjectorOptions:
-        """Get primitive projector options."""
-        ...
-
-    @overload
-    def proj(self, value: PrimitiveProjectorOptions) -> "HydroOptions":
-        """Set primitive projector options."""
         ...
 
     @overload

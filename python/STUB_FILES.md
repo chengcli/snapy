@@ -112,7 +112,7 @@ The stub files are split into logical modules:
 - **`snapy/coordinate.pyi`**: `CoordinateOptions`, `Cartesian`
 - **`snapy/eos.pyi`**: `EquationOfStateOptions`, `EquationOfState`
 - **`snapy/forcing.pyi`**: `ConstGravityOptions`, `CoriolisOptions`
-- **`snapy/hydro.pyi`**: `HydroOptions`, `PrimitiveProjectorOptions`, `Hydro`
+- **`snapy/hydro.pyi`**: `HydroOptions`, `Hydro`
 - **`snapy/implicit.pyi`**: `ImplicitOptions`, `ImplicitHydro`, `ImplicitCorrection`
 - **`snapy/integrator.pyi`**: `IntegratorOptions`, `IntegratorWeight`, `Integrator`
 - **`snapy/layout.pyi`**: `DistributeInfo`, `SlabLayout`, `CubedLayout`, `CubedSphereLayout`
@@ -169,7 +169,7 @@ Thermodynamic equation of state for computing pressure, temperature, and other s
 Implements constant gravity and Coriolis forcing.
 
 ### Hydrodynamics (`pyhydro.cpp`)
-Main hydrodynamics module with options for reconstruction, Riemann solvers, and primitive variable projection.
+Main hydrodynamics module with options for reconstruction and Riemann solvers.
 
 ### Implicit Solvers (`pyimplicit.cpp`)
 Implicit time integration schemes for stiff terms.
