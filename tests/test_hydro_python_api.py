@@ -9,4 +9,3 @@ def test_hydro_options_exposes_fused_recon_riemann():
     assert options.fused_recon_riemann() is True
     assert options.fused_recon_riemann(False) is options
     assert options.fused_recon_riemann() is False
-
