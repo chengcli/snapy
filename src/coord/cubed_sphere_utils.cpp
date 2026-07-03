@@ -14,6 +14,16 @@
 #include "spherical_utils.hpp"
 
 namespace snap {
+namespace {
+
+int cs_face_id(char const *face) {
+  for (int n = 0; n < 6; ++n) {
+    if (strcmp(face, CS_FACE_NAMES[n]) == 0) return n;
+  }
+  throw std::runtime_error("invalid cubed-sphere face name");
+}
+
+}  // namespace
 
 /*!
  * beta   ^ (T,3)
@@ -34,20 +44,9 @@ static inline double cs_angle_to_center_u(double angle, int N) {
 
 Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta) {
   double a = tan(alpha), b = tan(beta);
-  if (strcmp(face, "+X") == 0)
-    return unit_vec3(1.0, a, b);
-  else if (strcmp(face, "-X") == 0)
-    return unit_vec3(-1.0, -a, b);
-  else if (strcmp(face, "+Y") == 0)
-    return unit_vec3(-a, 1.0, b);
-  else if (strcmp(face, "-Y") == 0)
-    return unit_vec3(a, -1.0, b);
-  else if (strcmp(face, "+Z") == 0)
-    return unit_vec3(-b, a, 1.0);
-  else if (strcmp(face, "-Z") == 0)
-    return unit_vec3(b, a, -1.0);
-  else
-    throw std::runtime_error("cs_ab_to_xyz: invalid face name");
+  double x, y, z;
+  cs_face_xyz_from_tan(cs_face_id(face), a, b, &x, &y, &z);
+  return unit_vec3(x, y, z);
 }
 
 void cs_xyz_to_ab(char const *face, Vec3 v, double *alpha, double *beta) {

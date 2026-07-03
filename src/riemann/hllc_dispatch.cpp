@@ -33,7 +33,7 @@ void call_hllc_cpu(at::TensorIterator& iter, int dim) {
             auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
             auto clr = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
             hllc_impl(out, wl, wr, *elr, *(elr + stride), *glr, *(glr + stride),
-                      *clr, *(clr + stride), dim, ny, stride);
+                      *clr, *(clr + stride), dim, ny, stride, stride);
           }
         },
         grain_size);

@@ -71,39 +71,6 @@ namespace {
 
 std::mutex g_cubed_sphere_comm_mutex;
 
-auto make_remote_order_key(int process_rank, int remote_process,
-                           int local_block, int remote_local_block,
-                           std::tuple<int, int, int> offset,
-                           std::tuple<int, int, int> peer_offset,
-                           SyncOptions const& opts) {
-  auto exchange_order_index = [&](std::tuple<int, int, int> off) {
-    int order = 0;
-    for (int dy = opts.dy_min(); dy <= opts.dy_max(); ++dy) {
-      for (int dx = opts.dx_min(); dx <= opts.dx_max(); ++dx) {
-        if (dy == 0 && dx == 0) continue;
-        if (opts.skip_corner() && std::abs(dy) + std::abs(dx) == 2) continue;
-        if (off == std::tuple<int, int, int>(dy, dx, 0)) {
-          return order;
-        }
-        order += 1;
-      }
-    }
-    return order;
-  };
-
-  int lower_process = std::min(process_rank, remote_process);
-  int upper_process = std::max(process_rank, remote_process);
-  int lower_block =
-      process_rank < remote_process ? local_block : remote_local_block;
-  int upper_block =
-      process_rank < remote_process ? remote_local_block : local_block;
-  auto lower_to_upper_offset =
-      process_rank < remote_process ? offset : peer_offset;
-  return std::make_tuple(lower_process, upper_process, lower_block, upper_block,
-                         exchange_order_index(lower_to_upper_offset),
-                         opts.phyid());
-}
-
 std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
                                            int peer_rank, int target_rank) {
   auto peer_iloc = layout.loc_of(peer_rank);
@@ -216,117 +183,61 @@ std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
 // face 5: -Z
 const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
-/*!
- * Each entry says: on face F, the global velocity component VEL{1,2,3}
- * corresponds to local component idx with sign sgn.
- */
 const CSVel CS_CART_TO_LOCAL_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, +1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, -1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, -1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_cart_to_local_vel(0, VEL1), cs_cart_to_local_vel(0, VEL2),
+     cs_cart_to_local_vel(0, VEL3)},
+    {cs_cart_to_local_vel(1, VEL1), cs_cart_to_local_vel(1, VEL2),
+     cs_cart_to_local_vel(1, VEL3)},
+    {cs_cart_to_local_vel(2, VEL1), cs_cart_to_local_vel(2, VEL2),
+     cs_cart_to_local_vel(2, VEL3)},
+    {cs_cart_to_local_vel(3, VEL1), cs_cart_to_local_vel(3, VEL2),
+     cs_cart_to_local_vel(3, VEL3)},
+    {cs_cart_to_local_vel(4, VEL1), cs_cart_to_local_vel(4, VEL2),
+     cs_cart_to_local_vel(4, VEL3)},
+    {cs_cart_to_local_vel(5, VEL1), cs_cart_to_local_vel(5, VEL2),
+     cs_cart_to_local_vel(5, VEL3)}};
 
-/*!
- * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
- * corresponds to global component idx with sign sgn.
- */
 const CSVel CS_LOCAL_TO_CART_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL2, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL2, -1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, -1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_local_to_cart_vel(0, VEL1), cs_local_to_cart_vel(0, VEL2),
+     cs_local_to_cart_vel(0, VEL3)},
+    {cs_local_to_cart_vel(1, VEL1), cs_local_to_cart_vel(1, VEL2),
+     cs_local_to_cart_vel(1, VEL3)},
+    {cs_local_to_cart_vel(2, VEL1), cs_local_to_cart_vel(2, VEL2),
+     cs_local_to_cart_vel(2, VEL3)},
+    {cs_local_to_cart_vel(3, VEL1), cs_local_to_cart_vel(3, VEL2),
+     cs_local_to_cart_vel(3, VEL3)},
+    {cs_local_to_cart_vel(4, VEL1), cs_local_to_cart_vel(4, VEL2),
+     cs_local_to_cart_vel(4, VEL3)},
+    {cs_local_to_cart_vel(5, VEL1), cs_local_to_cart_vel(5, VEL2),
+     cs_local_to_cart_vel(5, VEL3)}};
 
 const CSVel CS_G2L_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, +1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, -1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, -1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_cart_to_local_vel(0, VEL1), cs_cart_to_local_vel(0, VEL2),
+     cs_cart_to_local_vel(0, VEL3)},
+    {cs_cart_to_local_vel(1, VEL1), cs_cart_to_local_vel(1, VEL2),
+     cs_cart_to_local_vel(1, VEL3)},
+    {cs_cart_to_local_vel(2, VEL1), cs_cart_to_local_vel(2, VEL2),
+     cs_cart_to_local_vel(2, VEL3)},
+    {cs_cart_to_local_vel(3, VEL1), cs_cart_to_local_vel(3, VEL2),
+     cs_cart_to_local_vel(3, VEL3)},
+    {cs_cart_to_local_vel(4, VEL1), cs_cart_to_local_vel(4, VEL2),
+     cs_cart_to_local_vel(4, VEL3)},
+    {cs_cart_to_local_vel(5, VEL1), cs_cart_to_local_vel(5, VEL2),
+     cs_cart_to_local_vel(5, VEL3)}};
 
 const CSVel CS_L2G_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL2, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL2, -1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, -1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_local_to_cart_vel(0, VEL1), cs_local_to_cart_vel(0, VEL2),
+     cs_local_to_cart_vel(0, VEL3)},
+    {cs_local_to_cart_vel(1, VEL1), cs_local_to_cart_vel(1, VEL2),
+     cs_local_to_cart_vel(1, VEL3)},
+    {cs_local_to_cart_vel(2, VEL1), cs_local_to_cart_vel(2, VEL2),
+     cs_local_to_cart_vel(2, VEL3)},
+    {cs_local_to_cart_vel(3, VEL1), cs_local_to_cart_vel(3, VEL2),
+     cs_local_to_cart_vel(3, VEL3)},
+    {cs_local_to_cart_vel(4, VEL1), cs_local_to_cart_vel(4, VEL2),
+     cs_local_to_cart_vel(4, VEL3)},
+    {cs_local_to_cart_vel(5, VEL1), cs_local_to_cart_vel(5, VEL2),
+     cs_local_to_cart_vel(5, VEL3)}};
 
 /*!
  * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)
@@ -752,8 +663,6 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
             torch::empty_like(pmb->send_bufs[bid].back()));
       }
     }
-
-  // comm->sync_stream();
 }
 
 void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
@@ -762,8 +671,6 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
   if (options->verbose()) {
     SINFO(CubedSphereLayout) << "deserializing data from receive buffers\n";
   }
-
-  // comm->sync_device();
 
   auto pcoord = pmb->pcoord;
 
@@ -895,9 +802,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
     }
 }
 
-void CubedSphereLayoutImpl::exchange_remote(
-    MeshBlockImpl const* pmb, SyncOptions const& opts,
-    std::vector<c10::intrusive_ptr<c10d::Work>>& works) {
+void CubedSphereLayoutImpl::exchange_remote(MeshBlockImpl const* pmb,
+                                            SyncOptions const& opts,
+                                            std::vector<CommWorkPtr>& works) {
   TORCH_CHECK(
       owner() != nullptr,
       "[CubedSphereLayout:exchange_remote] layout has no owning MeshBlock");
@@ -966,51 +873,18 @@ void CubedSphereLayoutImpl::exchange_remote(
               "requires an initialized process group");
 
   std::lock_guard<std::mutex> lock(g_cubed_sphere_comm_mutex);
-  comm->group_start();
-
-  if (options->backend() == "nccl") {
-    std::sort(remote_ops.begin(), remote_ops.end(),
-              [&](RemoteExchangeOp const& lhs, RemoteExchangeOp const& rhs) {
-                return make_remote_order_key(
-                           options->process_rank(), lhs.remote_process,
-                           lhs.local_block, lhs.remote_local_block, lhs.offset,
-                           lhs.remote_offset, opts) <
-                       make_remote_order_key(
-                           options->process_rank(), rhs.remote_process,
-                           rhs.local_block, rhs.remote_local_block, rhs.offset,
-                           rhs.remote_offset, opts);
-              });
-
-    for (auto const& op : remote_ops) {
-      auto work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                 op.remote_process, op.recv_tag);
-      if (work) {
-        works.push_back(work);
-      }
+  for (auto const& op : remote_ops) {
+    auto send_work = comm->send(pmb->send_bufs[op.buffer_id], op.remote_process,
+                                op.send_tag);
+    if (send_work) {
+      works.push_back(send_work);
     }
-    for (auto const& op : remote_ops) {
-      auto work = comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                 op.remote_process, op.send_tag);
-      if (work) {
-        works.push_back(work);
-      }
-    }
-  } else {
-    for (auto const& op : remote_ops) {
-      auto send_work = comm->pg->send(pmb->send_bufs[op.buffer_id],
-                                      op.remote_process, op.send_tag);
-      if (send_work) {
-        works.push_back(send_work);
-      }
-      auto recv_work = comm->pg->recv(pmb->recv_bufs[op.buffer_id],
-                                      op.remote_process, op.recv_tag);
-      if (recv_work) {
-        works.push_back(recv_work);
-      }
+    auto recv_work = comm->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
+                                op.recv_tag);
+    if (recv_work) {
+      works.push_back(recv_work);
     }
   }
-
-  comm->group_end();
 }
 
 std::tuple<int, int, int> CubedSphereLayoutImpl::_remap_exchange_offset(

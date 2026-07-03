@@ -15,16 +15,26 @@
 namespace snap {
 
 template <typename T>
+inline DISPATCH_MACRO T ideal_moist_feps(T const* y, int ny, int nvapor,
+                                         T const* inv_mu_ratio_m1) {
+  T out = 1.;
+  for (int n = 0; n < nvapor; ++n) out += y[n] * inv_mu_ratio_m1[n];
+  for (int n = nvapor; n < ny; ++n) out -= y[n];
+  return out;
+}
+
+template <typename T>
+inline DISPATCH_MACRO T ideal_moist_fsig(T const* y, int ny,
+                                         T const* cv_ratio_m1) {
+  T out = 1.;
+  for (int n = 0; n < ny; ++n) out += y[n] * cv_ratio_m1[n];
+  return out;
+}
+
+template <typename T>
 inline DISPATCH_MACRO void ideal_moist_cons2prim(T* prim, T* cons, T* gammad,
                                                  T* feps, T* fsig, int nmass,
                                                  int stride) {
-  constexpr int IDN = Index::IDN;
-  constexpr int IVX = Index::IVX;
-  constexpr int IVY = Index::IVY;
-  constexpr int IVZ = Index::IVZ;
-  constexpr int IPR = Index::IPR;
-  constexpr int ICY = Index::ICY;
-
   // den -> mixr
   for (int n = 0; n < nmass; ++n) {
     PRIM(ICY + n) = CONS(ICY + n) / PRIM(IDN);

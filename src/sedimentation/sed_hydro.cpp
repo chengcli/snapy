@@ -1,3 +1,6 @@
+// kintera
+#include <kintera/constants.h>
+
 // snap
 #include <snap/snap.h>
 
@@ -5,9 +8,45 @@
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
 
+#include "../eos/ideal_moist.hpp"
+#include "sed_hydro_dispatch.hpp"
 #include "sedimentation.hpp"
 
 namespace snap {
+namespace {
+
+torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
+                                        torch::Tensor flux) {
+  auto pcoord = sed.phydro->pmb->pcoord;
+  auto peos = sed.phydro->peos;
+  auto vel = wr.narrow(0, IVX, 3).clone();
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
+
+  auto temp = peos->compute("W->T", {wr});
+  sed.vsed.set_(sed.psedvel->forward(wr[IDN], wr[IPR], temp));
+
+  // seal top boundary
+  int iu = pcoord->iu();
+  sed.vsed.slice(-1, iu + 1, sed.vsed.size(-1)).fill_(0.);
+
+  // seal bottom
+  int il = pcoord->il();
+  sed.vsed.slice(-1, 0, il + 1).fill_(0.);
+
+  // 5 is number of hydro variables
+  auto en = peos->compute("W->E", {wr}).index_select(0, sed.hydro_ids - 5);
+
+  auto rhos = wr[IDN] * wr.index_select(0, sed.hydro_ids);
+  auto rhos_vsed = rhos * sed.vsed;
+
+  flux.index_add_(0, sed.hydro_ids, rhos_vsed);
+  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
+  flux[IPR] += (sed.vsed * en).sum(0);
+
+  return flux;
+}
+
+}  // namespace
 
 SedHydroImpl::SedHydroImpl(SedHydroOptions const& options_,
                            torch::nn::Module* p)
@@ -29,9 +68,6 @@ void SedHydroImpl::reset() {
 
 torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
                                     torch::optional<torch::Tensor> out) {
-  auto pcoord = phydro->pmb->pcoord;
-  auto peos = phydro->peos;
-
   auto flux = out.value_or(torch::zeros_like(wr));
 
   // null-op
@@ -40,29 +76,48 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
     return flux;
   }
 
-  auto vel = wr.narrow(0, IVX, 3).clone();
-  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
+  auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(phydro->peos.get());
+  if (ideal_moist == nullptr || !wr.is_contiguous() || !flux.is_contiguous()) {
+    return sedimentation_flux_tensor(*this, wr, flux);
+  }
 
-  auto temp = peos->compute("W->T", {wr});
-  vsed.set_(psedvel->forward(wr[IDN], wr[IPR], temp));
+  auto pcoord = phydro->pmb->pcoord;
+  int ny = ideal_moist->pthermo->options->vapor_ids().size() +
+           ideal_moist->pthermo->options->cloud_ids().size() - 1;
+  int nvapor = ideal_moist->pthermo->options->vapor_ids().size() - 1;
+  vsed.set_(torch::empty(
+      {hydro_ids.size(0), wr.size(1), wr.size(2), wr.size(3)}, wr.options()));
 
-  // seal top boundary
-  int iu = pcoord->iu();
-  vsed.slice(-1, iu + 1, vsed.size(-1)).fill_(0.);
+  double mud = kintera::species_weights[0];
+  double gas_constant_dry = kintera::constants::Rgas / mud;
+  double cv_dry = kintera::species_cref_R[0] * gas_constant_dry;
+  auto cosine_cell_kj = pcoord->cosine_cell_kj.to(wr.options());
+  while (cosine_cell_kj.dim() > 2) {
+    TORCH_CHECK(cosine_cell_kj.size(-1) == 1,
+                "SedHydro kernel expects singleton trailing coordinate "
+                "dimensions, got cosine_cell_kj shape ",
+                cosine_cell_kj.sizes());
+    cosine_cell_kj = cosine_cell_kj.select(-1, 0);
+  }
+  if (cosine_cell_kj.dim() == 0) {
+    cosine_cell_kj = cosine_cell_kj.view({1, 1});
+  } else if (cosine_cell_kj.dim() == 1) {
+    cosine_cell_kj = cosine_cell_kj.view({1, cosine_cell_kj.size(0)});
+  }
+  cosine_cell_kj = cosine_cell_kj.expand({wr.size(1), wr.size(2)});
 
-  // seal bottom
-  int il = pcoord->il();
-  vsed.slice(-1, 0, il + 1).fill_(0.);
-
-  // 5 is number of hydro variables
-  auto en = peos->compute("W->E", {wr}).index_select(0, hydro_ids - 5);
-
-  auto rhos = wr[IDN] * wr.index_select(0, hydro_ids);
-  auto rhos_vsed = rhos * vsed;
-
-  flux.index_add_(0, hydro_ids, rhos_vsed);
-  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
-  flux[IPR] += (vsed * en).sum(0);
+  sedimentation_flux_dispatch(
+      wr, flux, vsed, cosine_cell_kj.contiguous(),
+      psedvel->radius.to(wr.options()).contiguous(),
+      psedvel->density.to(wr.options()).contiguous(),
+      psedvel->const_vsed.to(wr.options()).contiguous(),
+      hydro_ids.to(wr.device(), torch::kLong).contiguous(),
+      ideal_moist->inv_mu_ratio_m1.to(wr.options()).contiguous(),
+      ideal_moist->cv_ratio_m1.to(wr.options()).contiguous(),
+      ideal_moist->u0.to(wr.options()).contiguous(), pcoord->il(), pcoord->iu(),
+      ny, nvapor, -phydro->options->grav()->grav1(), gas_constant_dry, cv_dry,
+      psedvel->options->a_diameter(), psedvel->options->a_epsilon_LJ(),
+      psedvel->options->a_mass(), psedvel->options->upper_limit());
 
   return flux;
 }

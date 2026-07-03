@@ -109,6 +109,16 @@ class LayoutOptions:
         ...
 
     @overload
+    def device(self) -> str:
+        """Get execution device hint."""
+        ...
+
+    @overload
+    def device(self, value: str) -> "LayoutOptions":
+        """Set execution device hint."""
+        ...
+
+    @overload
     def master_addr(self) -> str:
         """Get master address."""
         ...
@@ -136,6 +146,26 @@ class LayoutOptions:
     @overload
     def root_rank(self, value: int) -> "LayoutOptions":
         """Set root rank."""
+        ...
+
+    @overload
+    def process_rank(self) -> int:
+        """Get process rank."""
+        ...
+
+    @overload
+    def process_rank(self, value: int) -> "LayoutOptions":
+        """Set process rank."""
+        ...
+
+    @overload
+    def process_world_size(self) -> int:
+        """Get process world size."""
+        ...
+
+    @overload
+    def process_world_size(self, value: int) -> "LayoutOptions":
+        """Set process world size."""
         ...
 
     @overload
@@ -167,6 +197,73 @@ class LayoutOptions:
     def local_rank(self, value: int) -> "LayoutOptions":
         """Set local rank."""
         ...
+
+    @overload
+    def blocks_per_process(self) -> int:
+        """Get number of local blocks per process."""
+        ...
+
+    @overload
+    def blocks_per_process(self, value: int) -> "LayoutOptions":
+        """Set number of local blocks per process."""
+        ...
+
+    @overload
+    def device_id(self) -> int:
+        """Get explicit device id."""
+        ...
+
+    @overload
+    def device_id(self, value: int) -> "LayoutOptions":
+        """Set explicit device id."""
+        ...
+
+
+class SyncOptions:
+    """Options controlling mesh ghost-zone synchronization."""
+
+    DIM1: int
+    DIM2: int
+    DIM3: int
+
+    def __init__(self) -> None: ...
+    def dz_min(self) -> int: ...
+    def dz_max(self) -> int: ...
+    def dx_min(self) -> int: ...
+    def dx_max(self) -> int: ...
+    def dy_min(self) -> int: ...
+    def dy_max(self) -> int: ...
+
+    @overload
+    def cross_panel_only(self) -> bool: ...
+    @overload
+    def cross_panel_only(self, value: bool) -> "SyncOptions": ...
+
+    @overload
+    def skip_corner(self) -> bool: ...
+    @overload
+    def skip_corner(self, value: bool) -> "SyncOptions": ...
+
+    @overload
+    def interpolate(self) -> bool: ...
+    @overload
+    def interpolate(self, value: bool) -> "SyncOptions": ...
+
+    @overload
+    def type(self) -> int: ...
+    @overload
+    def type(self, value: int) -> "SyncOptions": ...
+
+    @overload
+    def dim(self) -> int: ...
+    @overload
+    def dim(self, value: int) -> "SyncOptions": ...
+
+    @overload
+    def phyid(self) -> int: ...
+    @overload
+    def phyid(self, value: int) -> "SyncOptions": ...
+
 
 class Layout:
     """

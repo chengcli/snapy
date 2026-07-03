@@ -70,4 +70,23 @@ enum {
   VEL3 = 2   //!< Third velocity component
 };
 
+enum class FusedReconScheme : int {
+  CP3 = 0,
+  CP5 = 1,
+  WENO3 = 2,
+  WENO5 = 3,
+};
+
+enum class FusedRiemannSolver : int {
+  LMARS = 0,
+  HLLC = 1,
+  ShallowRoe = 2,
+};
+
+enum class FusedEos : int {
+  IdealGas = 0,
+  IdealMoist = 1,
+  ShallowWater = 2,
+};
+
 }  // namespace snap

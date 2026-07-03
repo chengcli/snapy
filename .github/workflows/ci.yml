@@ -65,15 +65,22 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
-            sudo apt-get install -y libnetcdf-dev nco
+            sudo apt-get install -y libnetcdf-dev libucx-dev nco autoconf automake libtool pkg-config
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             HOMEBREW_NO_AUTO_UPDATE=1 brew install netcdf nco
           fi
+
+      - name: Install commux UCX backend
+        if: runner.os == 'Linux'
+        run: |
+          pip install 'commux>=0.1.4'
+          python -c "import commux; commux.register(); print('commux import OK')"
 
       - name: Configure CMake
         run: |
           cmake -B ${{ github.workspace }}/build \
                 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DCUDA=OFF \
                 -DNETCDF=ON \
                 -DBUILD_TESTS=ON
 

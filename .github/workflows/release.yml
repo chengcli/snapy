@@ -72,6 +72,7 @@ jobs:
             brew install netcdf
             TORCH_CMAKE_PREFIX_PATH=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')
             cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                  -DCUDA=OFF \
                   -DCMAKE_OSX_ARCHITECTURES=${{ env.MACOS_ARCH }} \
                   -DCMAKE_PREFIX_PATH="$TORCH_CMAKE_PREFIX_PATH"
             cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 3
@@ -153,8 +154,8 @@ jobs:
             dnf config-manager --set-enabled PowerTools || \
             dnf config-manager --set-enabled codeready-builder-for-rhel-8-$(arch)-rpms
 
-            yum install -y netcdf-devel
-            pip install numpy 'cmake<=3.30' 'kintera>=2.1.0' 'torch==2.10.0'
+            yum install -y netcdf-devel ucx-devel autoconf automake libtool pkgconfig
+            pip install numpy 'cmake<=3.30' 'kintera>=2.1.0' 'commux>=0.1.4' 'torch==2.10.0'
 
             TORCH_CMAKE_PREFIX_PATH=$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')
             export LD_LIBRARY_PATH=$(python -c "import torch; print(torch.__path__[0] + '/lib')"):$(pwd)/build/lib:$LD_LIBRARY_PATH
@@ -163,10 +164,9 @@ jobs:
                   -DCUDA=ON
             cmake --build build --parallel 3
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-            NCCL_PREFIX_PATH=$(python -c 'import nvidia.nccl as m; print(m.__path__[0] + "/lib")')
-            export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/lib64:/usr/lib64:$NCCL_PREFIX_PATH:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/lib64:/usr/lib64:$LD_LIBRARY_PATH
             echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-            auditwheel repair --exclude lib*.so --exclude libnccl.so* -w {dest_dir} {wheel}
+            auditwheel repair --exclude lib*.so -w {dest_dir} {wheel}
         run: |
           pip install cibuildwheel
           python -m cibuildwheel --output-dir wheelhouse

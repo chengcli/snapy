@@ -1,0 +1,227 @@
+// C/C++
+#include <chrono>
+
+// snap
+#include <snap/snap.h>
+
+#include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
+
+#include "hydro.hpp"
+
+namespace snap {
+
+torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
+                                         Variables const& other) {
+  enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
+  bool has_solid = other.count("solid");
+  auto start = std::chrono::high_resolution_clock::now();
+
+  auto playout = pmb->get_layout();
+
+  //// ------------ (1) Calculate Primitives ------------ ////
+  auto const& w = other.at("hydro_w");
+
+  peos->forward(u, w);
+  if (options->verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    SINFO(Hydro) << "EOS time (s): " << elapsed.count() << "\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
+
+  if (has_solid) {
+    pmb->pib->mark_prim_solid_(w, other.at("solid"));
+  }
+
+  // hydrostatic pressure correction
+  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+
+  //// ------------ (2) Calculate dimension 1 flux ------------ ////
+  if (u.size(DIM1) > 1) {
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_ghost(w);
+      _revise_x1outer_ghost(w);
+    }
+
+    auto wtmp = precon1->forward(w, DIM1);
+
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+      _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+    }
+
+    auto wlr1 =
+        has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
+
+    // Compute hydrostatic pressure correction
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+                                   wlr1[IRT][IPR].slice(2, is, ie)) /
+                                  pmb->pcoord->dx1f.slice(0, is, ie);
+    }
+
+    // riemann solver
+    if (!options->disable_flux_x1()) {
+      priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
+      if (options->verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        SINFO(Hydro) << "Flux-x1 time (s): " << elapsed.count() << "\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
+    }
+
+    // add sedimentation flux
+    if (psed) psed->forward(w, _flux1);
+  }
+
+  //// ------------ (3.A) Calculate dimension 2 LR states ------------ ////
+  torch::Tensor wtmp2, wtmp3;
+  SyncOptions sync_opts;
+  sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
+  std::vector<CommWorkPtr> works;
+  Variables send_vars2, send_vars3;
+
+  if (u.size(DIM2) > 1) {
+    wtmp2 = precon23->forward(w, DIM2);
+
+    // sync left/right states across faces for cubed sphere layout
+    if (playout->options->type() == "cubed-sphere") {
+      send_vars2["hydro_wl:+"] = wtmp2[ILT];
+      send_vars2["hydro_wr:-"] = wtmp2[IRT];
+      pmb->begin_exchange(send_vars2, sync_opts.dim(DIM2));
+    }
+  }
+
+  //// ------------ (3.B) Calculate dimension 3 LR states ------------ ////
+  if (u.size(DIM3) > 1) {
+    wtmp3 = precon23->forward(w, DIM3);
+
+    // sync left/right states across faces for cubed sphere layout
+    if (playout->options->type() == "cubed-sphere") {
+      send_vars3["hydro_wl:+"] = wtmp3[ILT];
+      send_vars3["hydro_wr:-"] = wtmp3[IRT];
+      pmb->begin_exchange(send_vars3, sync_opts.dim(DIM3));
+    }
+  }
+
+  if (playout->options->type() == "cubed-sphere") {
+    bool exchange_dim2 = u.size(DIM2) > 1;
+    bool exchange_dim3 = u.size(DIM3) > 1;
+    if (exchange_dim2) {
+      pmb->launch_exchange(sync_opts.dim(DIM2), works);
+    }
+    if (exchange_dim3) {
+      pmb->launch_exchange(sync_opts.dim(DIM3), works);
+    }
+    if (exchange_dim2) {
+      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works);
+    }
+    if (exchange_dim3) {
+      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works);
+    }
+  }
+
+  //// ------------ (4.A) Calculate dimension 2 flux ------------ ////
+  if (u.size(DIM2) > 1) {
+    auto wlr2 =
+        has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
+    if (!options->disable_flux_x2()) {
+      priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+      if (options->verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        SINFO(Hydro) << "Flux-x2 time (s): " << elapsed.count() << "\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
+    }
+  }
+
+  //// ------------ (4.B) Calculate dimension 3 flux ------------ ////
+  if (u.size(DIM3) > 1) {
+    auto wlr3 =
+        has_solid ? pmb->pib->forward(wtmp3, DIM3, other.at("solid")) : wtmp3;
+    if (!options->disable_flux_x3()) {
+      priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
+      if (options->verbose()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        SINFO(Hydro) << "Flux-x3 time (s): " << elapsed.count() << "\n";
+        start = std::chrono::high_resolution_clock::now();
+      }
+    }
+  }
+
+  //// ------------ (5) Calculate flux divergence ------------ ////
+  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
+  if (options->verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    SINFO(Hydro) << "Divergence time (s): " << elapsed.count() << "\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
+
+  //// ------------ (6) Calculate external forcing ------------ ////
+  auto du = torch::zeros_like(_div);
+  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  du.index(interior) = -dt * _div.index(interior);
+
+  auto temp = peos->compute("W->T", {w});
+  for (auto& f : forcings) f.forward(du, w, temp, dt);
+
+  // apply hydrostatic correction
+  if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
+    du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());
+    du[IPR] +=
+        dt * w[IVX] * rho_grav * (1. - options->grav()->non_hydrostatic());
+  }
+
+  if (options->verbose()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    SINFO(Hydro) << "Forcing time (s): " << elapsed.count() << "\n";
+    start = std::chrono::high_resolution_clock::now();
+  }
+
+  //// ------------ (7) Perform implicit correction ------------ ////
+  if (picorr) {
+    torch::Tensor wi;
+    if (has_solid) {
+      wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
+                        other.at("fill_solid_hydro_w"), w);
+      du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
+    } else {
+      wi = w;
+    }
+
+    auto du0 = du.clone();
+    du[IPR].sub_(peos->internal_energy_offset(du));
+
+    torch::Tensor gamma;
+    if (options->eos()->type() == "aneos") {
+      auto cs = peos->compute("W->L", {w});
+      gamma = peos->compute("WL->A", {w, cs});
+    } else {
+      gamma = peos->compute("W->A", {wi});
+    }
+    picorr->forward(du, wi, gamma, dt);
+    du[IPR].add_(peos->internal_energy_offset(du));
+
+    _imp.copy_(du);
+    _imp.sub_(du0);
+
+    if (options->verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      SINFO(Hydro) << "Implicit time (s): " << elapsed.count() << "\n";
+      start = std::chrono::high_resolution_clock::now();
+    }
+  }
+
+  return du;
+}
+
+}  // namespace snap

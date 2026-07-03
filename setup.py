@@ -11,11 +11,10 @@ import sysconfig
 
 def parse_library_names(libdir):
     library_names = []
-    for root, _, files in os.walk(libdir):
-        for file in files:
-            if file.endswith((".a", ".so", ".dylib")):
-                file_name = os.path.basename(file)
-                library_names.append(file_name[3:].rsplit(".", 1)[0])
+    for file in os.listdir(libdir):
+        path = os.path.join(libdir, file)
+        if os.path.isfile(path) and file.endswith((".a", ".so", ".dylib")):
+            library_names.append(file[3:].rsplit(".", 1)[0])
 
     # add system netcdf library
     library_names.extend(['netcdf'])
@@ -33,6 +32,12 @@ def parse_library_names(libdir):
     return snap_non_cuda + other + snap_cuda
 
 site_dir = sysconfig.get_paths()["purelib"]
+try:
+    import commux
+except ImportError:
+    commux_dir = None
+else:
+    commux_dir = Path(commux.__file__).resolve().parent
 
 current_dir = os.getenv("WORKSPACE", Path().absolute())
 include_dirs = [
@@ -43,9 +48,13 @@ include_dirs = [
     f"{site_dir}/kintera",
     f"{site_dir}/pyharp",
 ]
+if commux_dir is not None:
+    include_dirs.append(f"{commux_dir}/include")
 
 # add homebrew directories if on MacOS
 lib_dirs = [f"{current_dir}/build/lib"]
+if commux_dir is not None:
+    lib_dirs.append(f"{commux_dir}/lib")
 if platform.system() == 'Darwin':
     lib_dirs.extend(['/opt/homebrew/lib'])
 else:
@@ -62,10 +71,14 @@ if sys.platform == "darwin":
         "-Wl,-rpath,@loader_path/../pydisort/lib",
         "-Wl,-rpath,@loader_path/../pyharp/lib",
         "-Wl,-rpath,@loader_path/../kintera/lib",
+        "-Wl,-rpath,@loader_path/../commux/lib",
     ]
 else:
     cuda_linker = []
     cuda_libraries = [lib for lib in libraries if "cuda" in lib]
+    cuda_runtime_dirs = [
+        Path("/opt/nvidia/hpc_sdk/Linux_x86_64/26.3/cuda/13.1/targets/x86_64-linux/lib")
+    ]
 
     if cuda_libraries:
         for lib in cuda_libraries:
@@ -82,6 +95,10 @@ else:
         "-Wl,-rpath,$ORIGIN/../pydisort/lib",
         "-Wl,-rpath,$ORIGIN/../pyharp/lib",
         "-Wl,-rpath,$ORIGIN/../kintera/lib",
+        "-Wl,-rpath,$ORIGIN/../commux/lib",
+    ]
+    extra_link_args += [
+        f"-Wl,-rpath,{path}" for path in cuda_runtime_dirs if path.exists()
     ]
     extra_link_args += cuda_linker
 
