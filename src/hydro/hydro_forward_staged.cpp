@@ -39,18 +39,31 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
-    torch::Tensor wtmp;
-    if (pproj) {
-      auto wp = pproj->forward(w, pmb->pcoord->dx1f);
-      wtmp = precon1->forward(wp, DIM1);
-      rho_grav = pproj->restore_inplace(wtmp);
-    } else {
-      wtmp = precon1->forward(w, DIM1);
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_ghost(w);
+      _revise_x1outer_ghost(w);
+    }
+
+    auto wtmp = precon1->forward(w, DIM1);
+
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+      _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
     }
 
     auto wlr1 =
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
+    // Compute hydrostatic pressure correction
+    if (options->grav() && (options->grav()->grav1() != 0)) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+                                   wlr1[IRT][IPR].slice(2, is, ie)) /
+                                  pmb->pcoord->dx1f.slice(0, is, ie);
+    }
+
+    // riemann solver
     if (!options->disable_flux_x1()) {
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
       if (options->verbose()) {

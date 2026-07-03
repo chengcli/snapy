@@ -1,3 +1,8 @@
+// C/C++
+#include <cctype>
+#include <cstdlib>
+#include <string>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -40,6 +45,38 @@ bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
          combo_supported;
 }
 
+bool fused_env_enabled(bool supported) {
+  auto const* value = std::getenv("FUSED");
+  if (value == nullptr || std::string(value).empty()) return supported;
+
+  std::string flag(value);
+  for (auto& c : flag) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  if (flag == "auto") return supported;
+  if (flag == "off") return false;
+  if (flag == "on") {
+    TORCH_CHECK(supported,
+                "FUSED requests dynamics.fused-recon-riemann, but this "
+                "configuration is not supported by the fused path");
+    return true;
+  }
+
+  TORCH_CHECK(false, "FUSED must be one of AUTO, ON, or OFF, but got ", value);
+}
+
+std::string fused_env_mode() {
+  auto const* value = std::getenv("FUSED");
+  if (value == nullptr || std::string(value).empty()) return "AUTO";
+
+  std::string flag(value);
+  for (auto& c : flag) {
+    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  }
+  return flag;
+}
+
 }  // namespace
 
 HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
@@ -77,8 +114,13 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
-    op->fused_recon_riemann() =
-        fused_recon_riemann_supported_by_options(op, config);
+    bool fused_supported = fused_recon_riemann_supported_by_options(op, config);
+    op->fused_recon_riemann() = fused_env_enabled(fused_supported);
+    SINFO(HydroOptions)
+        << "FUSED=" << fused_env_mode()
+        << " fused-recon-riemann="
+        << (op->fused_recon_riemann() ? "ON" : "OFF")
+        << " supported=" << (fused_supported ? "true" : "false") << "\n";
   }
 
   // --------------- forcings --------------- //

@@ -13,7 +13,6 @@
 #include "../riemann/lmars_impl.h"
 #include "../riemann/shallow_roe_impl.h"
 #include "fused_recon_riemann_dispatch.hpp"
-#include "primitive_projector_impl.h"
 
 namespace snap {
 namespace {
@@ -32,12 +31,11 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                              FusedRiemannSolver solver, FusedEos eos,
                              T gammad, T density_floor, T pressure_floor,
                              bool eos_limiter, T const* inv_mu_ratio_m1,
-                             T const* cv_ratio_m1, T const* u0,
-                             int shallow_roe_dir_yz,
-                             FusedPrimitiveProjector projector, T const* psf,
-                             T const* dx1f, T gas_constant, T* rho_grav,
-                             bool cubed_sphere, int face, T const* x2v,
-                             T const* x2f, T const* x3v, T const* x3f) {
+                             T const* cv_ratio_m1, T const* u0, int nvapor,
+                             int shallow_roe_dir_yz, bool revise_x1_lr,
+                             T const* dx1f, T* rho_grav, bool cubed_sphere,
+                             int face, T const* x2v, T const* x2f,
+                             T const* x3v, T const* x3f) {
   int ncells = nc1 * nc2 * nc3;
   int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
   int stride_dim = dim == 3 ? 1 : (dim == 2 ? nc1 : nc1 * nc2);
@@ -100,16 +98,14 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                                  /*right=*/false);
   }
 
-  if (projector != FusedPrimitiveProjector::None && dim == 3 && valid_face) {
-    int psf_base = 0;
-    if (dim == 3) {
-      int j = line % nc2;
-      int k = line / nc2;
-      psf_base = k * nc2 * (nc1 + 1) + j * (nc1 + 1);
+  if (revise_x1_lr && dim == 3 && valid_face) {
+    if (pos == il) {
+      wl_local[IPR] = wr_local[IPR];
+      wl_local[IDN] = wr_local[IDN];
+    } else if (pos == iu + 1) {
+      wr_local[IPR] = wl_local[IPR];
+      wr_local[IDN] = wl_local[IDN];
     }
-    T face_pressure = psf[psf_base + pos];
-    apply_projector_restore(wl_local, wr_local, face_pressure, projector,
-                            gas_constant);
   }
 
   if (eos_limiter && valid_face) {
@@ -125,13 +121,13 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     }
   }
 
-  if (projector != FusedPrimitiveProjector::None && dim == 3 && valid_face) {
+  if (revise_x1_lr && dim == 3 && valid_face) {
     left_pressure[pos] = wl_local[IPR];
     right_pressure[pos] = wr_local[IPR];
   }
   __syncthreads();
-  if (projector != FusedPrimitiveProjector::None && dim == 3 &&
-      rho_grav != nullptr && pos >= il && pos < iu) {
+  if (revise_x1_lr && dim == 3 && rho_grav != nullptr && pos >= il &&
+      pos < iu) {
     rho_grav[flat] = (left_pressure[pos + 1] - right_pressure[pos]) / dx1f[pos];
   }
 
@@ -165,8 +161,9 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   } else {
     T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
     int ny = eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
-    eos_side_quantities(wl_local, wr_local, ny, eos, gammad, inv_mu_ratio_m1,
-                        cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
+    eos_side_quantities(wl_local, wr_local, ny, nvapor, eos, gammad,
+                        inv_mu_ratio_m1, cv_ratio_m1, u0, &el, &er, &gl, &gr,
+                        &cl, &cr);
 
     if (solver == FusedRiemannSolver::LMARS) {
       lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
@@ -515,7 +512,7 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
                                FusedRiemannSolver solver, FusedEos eos,
                                T gammad, T density_floor, T pressure_floor,
                                bool eos_limiter, T const* inv_mu_ratio_m1,
-                               T const* cv_ratio_m1, T const* u0,
+                               T const* cv_ratio_m1, T const* u0, int nvapor,
                                int shallow_roe_dir_yz,
                                T const* x2v, T const* x2f, T const* x3v,
                                T const* x3f) {
@@ -632,8 +629,8 @@ __global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs
 
   T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
   int ny = nvar - ICY;
-  eos_side_quantities(wl, wr, ny, eos, gammad, inv_mu_ratio_m1, cv_ratio_m1,
-                      u0, &el, &er, &gl, &gr, &cl, &cr);
+  eos_side_quantities(wl, wr, ny, nvapor, eos, gammad, inv_mu_ratio_m1,
+                      cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
 
   if (solver == FusedRiemannSolver::LMARS) {
     lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
@@ -659,8 +656,8 @@ __global__ void cs_flux_all_kernel(
     int nc1, FusedReconScheme recon_prim, FusedReconScheme recon_vel,
     FusedRiemannSolver solver, FusedEos eos, T gammad, T density_floor,
     T pressure_floor, bool eos_limiter, T const* inv_mu_ratio_m1,
-    T const* cv_ratio_m1, T const* u0, int shallow_roe_dir_yz, void** x2v_ptrs,
-    void** x2f_ptrs, void** x3v_ptrs, void** x3f_ptrs) {
+    T const* cv_ratio_m1, T const* u0, int nvapor, int shallow_roe_dir_yz,
+    void** x2v_ptrs, void** x2f_ptrs, void** x3v_ptrs, void** x3f_ptrs) {
   int edge_len = max(nc2, nc3);
   int lines_per_panel = CS_NUM_SIDES * edge_len * nc1;
   int panel = blockIdx.x / lines_per_panel;
@@ -784,8 +781,8 @@ __global__ void cs_flux_all_kernel(
 
   T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
   int ny = nvar - ICY;
-  eos_side_quantities(wl, wr, ny, eos, gammad, inv_mu_ratio_m1, cv_ratio_m1,
-                      u0, &el, &er, &gl, &gr, &cl, &cr);
+  eos_side_quantities(wl, wr, ny, nvapor, eos, gammad, inv_mu_ratio_m1,
+                      cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
 
   if (solver == FusedRiemannSolver::LMARS) {
     lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
@@ -804,11 +801,11 @@ void fused_recon_riemann_cuda(
     FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
     double gammad, double density_floor, double pressure_floor,
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1,
-    torch::Tensor cv_ratio_m1, torch::Tensor u0, int shallow_roe_dir_yz,
-    FusedPrimitiveProjector projector, torch::Tensor psf, torch::Tensor dx1f,
-    double gas_constant, torch::Tensor rho_grav, bool cubed_sphere, int face,
-    torch::Tensor x2v, torch::Tensor x2f, torch::Tensor x3v,
-    torch::Tensor x3f) {
+    torch::Tensor cv_ratio_m1, torch::Tensor u0, int nvapor,
+    int shallow_roe_dir_yz, bool revise_x1_lr, torch::Tensor dx1f,
+    torch::Tensor rho_grav,
+    bool cubed_sphere, int face, torch::Tensor x2v, torch::Tensor x2f,
+    torch::Tensor x3v, torch::Tensor x3f) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -825,7 +822,7 @@ void fused_recon_riemann_cuda(
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_recon_riemann_cuda", [&] {
     size_t shared = static_cast<size_t>(axis_size) * nvar * sizeof(scalar_t);
-    if (projector != FusedPrimitiveProjector::None && dim == 3) {
+    if (revise_x1_lr && dim == 3) {
       shared += static_cast<size_t>(2) * axis_size * sizeof(scalar_t);
     }
     fused_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
@@ -835,11 +832,9 @@ void fused_recon_riemann_cuda(
         inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
                                   : nullptr,
         cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr,
-        shallow_roe_dir_yz, projector,
-        psf.defined() ? psf.data_ptr<scalar_t>() : nullptr,
+        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
+        shallow_roe_dir_yz, revise_x1_lr,
         dx1f.defined() ? dx1f.data_ptr<scalar_t>() : nullptr,
-        scalar_t(gas_constant),
         rho_grav.defined() ? rho_grav.data_ptr<scalar_t>() : nullptr,
         cubed_sphere, face, x2v.defined() ? x2v.data_ptr<scalar_t>() : nullptr,
         x2f.defined() ? x2f.data_ptr<scalar_t>() : nullptr,
@@ -901,7 +896,7 @@ void fused_cubed_sphere_flux_cuda(
     FusedRiemannSolver solver, FusedEos eos, double gammad,
     double density_floor, double pressure_floor, bool eos_limiter,
     torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0,
-    int shallow_roe_dir_yz) {
+    int nvapor, int shallow_roe_dir_yz) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -928,8 +923,8 @@ void fused_cubed_sphere_flux_cuda(
         inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
                                   : nullptr,
         cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, shallow_roe_dir_yz,
-        x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
+        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
+        shallow_roe_dir_yz, x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
         x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
@@ -944,7 +939,8 @@ void fused_cubed_sphere_flux_all_cuda(
     FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
     double gammad, double density_floor, double pressure_floor,
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
-    torch::Tensor u0, int shallow_roe_dir_yz, torch::Device device) {
+    torch::Tensor u0, int nvapor, int shallow_roe_dir_yz,
+    torch::Device device) {
   at::cuda::CUDAGuard device_guard(device);
   int edge_len = std::max(nc2, nc3);
   int threads = edge_len;
@@ -965,8 +961,9 @@ void fused_cubed_sphere_flux_all_cuda(
         inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
                                   : nullptr,
         cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, shallow_roe_dir_yz,
-        x2v_ptrs_dev, x2f_ptrs_dev, x3v_ptrs_dev, x3f_ptrs_dev);
+        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
+        shallow_roe_dir_yz, x2v_ptrs_dev, x2f_ptrs_dev, x3v_ptrs_dev,
+        x3f_ptrs_dev);
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

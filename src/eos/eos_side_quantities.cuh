@@ -13,7 +13,7 @@ namespace snap {
 
 template <typename T>
 inline DISPATCH_MACRO void eos_side_quantities(
-    T const* wl, T const* wr, int ny, FusedEos eos, T gammad,
+    T const* wl, T const* wr, int ny, int nvapor, FusedEos eos, T gammad,
     T const* inv_mu_ratio_m1, T const* cv_ratio_m1, T const* u0, T* el, T* er,
     T* gl, T* gr, T* cl, T* cr) {
   if (eos == FusedEos::IdealGas) {
@@ -37,8 +37,8 @@ inline DISPATCH_MACRO void eos_side_quantities(
       suml += yl[n];
       sumr += yr[n];
     }
-    T fepsl = ideal_moist_feps(yl, ny, inv_mu_ratio_m1);
-    T fepsr = ideal_moist_feps(yr, ny, inv_mu_ratio_m1);
+    T fepsl = ideal_moist_feps(yl, ny, nvapor, inv_mu_ratio_m1);
+    T fepsr = ideal_moist_feps(yr, ny, nvapor, inv_mu_ratio_m1);
     T fsigl = ideal_moist_fsig(yl, ny, cv_ratio_m1);
     T fsigr = ideal_moist_fsig(yr, ny, cv_ratio_m1);
     *el = wl[IPR] * fsigl / fepsl / (gammad - 1.);

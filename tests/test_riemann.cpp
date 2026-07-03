@@ -1,4 +1,5 @@
 // C/C++
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <regex>
@@ -105,7 +106,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_gas_projector_config = R"(
+const char *small_ideal_gas_gravity_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -122,10 +123,6 @@ dynamics:
     density-floor:  1.e-10
     pressure-floor: 1.e-10
     limiter: false
-
-  vertical-projection:
-    type: temperature
-    pressure-margin: 1.e-6
 
   reconstruct:
     vertical: {type: weno5, scale: false, shock: false}
@@ -223,6 +220,64 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
+const char *small_ideal_moist_lmars_cloud_config = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor: 1.e-10
+    pressure-floor: 1.e-10
+    limiter: true
+
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+
+  riemann-solver:
+    type: lmars
+
+forcing:
+  const-gravity:
+    grav1: -9.8
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1.e3, x2min: 0., x2max: 1.e3, x3min: 0., x3max: 1.e3}
+  cells: {nx1: 10, nx2: 8, nx3: 1, nghost: 3}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
+)";
+
 const char *small_shallow_water_config = R"(
 dynamics:
   equation-of-state:
@@ -255,6 +310,31 @@ boundary-condition:
 
 using namespace snap;
 
+namespace {
+
+struct ScopedEnv {
+  explicit ScopedEnv(char const* name_) : name(name_) {
+    auto* value = std::getenv(name);
+    if (value) {
+      had_value = true;
+      old_value = value;
+    }
+  }
+  ~ScopedEnv() {
+    if (had_value) {
+      setenv(name, old_value.c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+
+  char const* name;
+  bool had_value = false;
+  std::string old_value;
+};
+
+}  // namespace
+
 TEST(HydroOptions, auto_detects_supported_fused_recon_riemann) {
   char fname[80] = "/tmp/tempfile.XXXXXX";
   mkstemp(fname);
@@ -264,6 +344,84 @@ TEST(HydroOptions, auto_detects_supported_fused_recon_riemann) {
 
   auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
   EXPECT_TRUE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, fused_env_disables_supported_fused_recon_riemann) {
+  ScopedEnv env("FUSED");
+  setenv("FUSED", "OFF", 1);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << small_ideal_gas_config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_FALSE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, fused_env_auto_preserves_auto_detection) {
+  ScopedEnv env("FUSED");
+  setenv("FUSED", "AUTO", 1);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << small_ideal_gas_config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_TRUE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, fused_env_auto_falls_back_for_unsupported_configuration) {
+  ScopedEnv env("FUSED");
+  setenv("FUSED", "AUTO", 1);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << block_config;
+  outfile.close();
+
+  auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
+  EXPECT_FALSE(op_block->hydro()->fused_recon_riemann());
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, fused_env_rejects_invalid_value) {
+  ScopedEnv env("FUSED");
+  setenv("FUSED", "maybe", 1);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << small_ideal_gas_config;
+  outfile.close();
+
+  EXPECT_THROW((void)MeshBlockOptionsImpl::from_yaml(fname), c10::Error);
+
+  std::remove(fname);
+}
+
+TEST(HydroOptions, fused_env_on_rejects_unsupported_configuration) {
+  ScopedEnv env("FUSED");
+  setenv("FUSED", "ON", 1);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << block_config;
+  outfile.close();
+
+  EXPECT_THROW((void)MeshBlockOptionsImpl::from_yaml(fname), c10::Error);
 
   std::remove(fname);
 }
@@ -306,7 +464,7 @@ TEST(HydroOptions, auto_detects_fused_recon_riemann_for_cubed_sphere_bpp1) {
   std::remove(fname);
 }
 
-TEST(HydroOptions, disables_fused_recon_riemann_for_cubed_sphere_multiblock) {
+TEST(HydroOptions, auto_detects_fused_recon_riemann_for_cubed_sphere_multiblock) {
   auto config = std::string(
                     "distribute:\n"
                     "  layout: cubed-sphere\n"
@@ -320,7 +478,7 @@ TEST(HydroOptions, disables_fused_recon_riemann_for_cubed_sphere_multiblock) {
   outfile.close();
 
   auto op_block = MeshBlockOptionsImpl::from_yaml(fname);
-  EXPECT_FALSE(op_block->hydro()->fused_recon_riemann());
+  EXPECT_TRUE(op_block->hydro()->fused_recon_riemann());
 
   std::remove(fname);
 }
@@ -396,7 +554,7 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_lmars) {
   std::remove(fused_name);
 }
 
-TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_projector) {
+TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_gravity) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
   }
@@ -404,13 +562,13 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_projector) {
   char staged_name[80] = "/tmp/tempfile.XXXXXX";
   mkstemp(staged_name);
   std::ofstream staged_file(staged_name);
-  staged_file << small_ideal_gas_projector_config;
+  staged_file << small_ideal_gas_gravity_config;
   staged_file.close();
 
   char fused_name[80] = "/tmp/tempfile.XXXXXX";
   mkstemp(fused_name);
   std::ofstream fused_file(fused_name);
-  fused_file << small_ideal_gas_projector_config;
+  fused_file << small_ideal_gas_gravity_config;
   fused_file.close();
 
   auto staged_opts = MeshBlockOptionsImpl::from_yaml(staged_name);
@@ -506,6 +664,64 @@ TEST_P(DeviceTest,
   auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
   double tol = dtype == torch::kFloat32 ? 1.e-4 : 1.e-8;
   EXPECT_TRUE(torch::allclose(fused_du, staged_du, tol, tol));
+
+  std::remove(staged_name);
+  std::remove(fused_name);
+}
+
+TEST_P(DeviceTest,
+       fused_recon_riemann_matches_staged_ideal_moist_lmars_cloud) {
+  if (device.type() != torch::kCUDA) {
+    GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+
+  char staged_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(staged_name);
+  std::ofstream staged_file(staged_name);
+  staged_file << small_ideal_moist_lmars_cloud_config;
+  staged_file.close();
+
+  char fused_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fused_name);
+  std::ofstream fused_file(fused_name);
+  fused_file << small_ideal_moist_lmars_cloud_config;
+  fused_file.close();
+
+  kintera::init_species_from_yaml(staged_name);
+  auto staged_opts = MeshBlockOptionsImpl::from_yaml(staged_name);
+  kintera::init_species_from_yaml(fused_name);
+  auto fused_opts = MeshBlockOptionsImpl::from_yaml(fused_name);
+  staged_opts->hydro()->fused_recon_riemann() = false;
+  auto staged_block = MeshBlock(staged_opts);
+  auto fused_block = MeshBlock(fused_opts);
+  staged_block->to(device, dtype);
+  fused_block->to(device, dtype);
+
+  int nc1 = staged_block->pcoord->options->nc1();
+  int nc2 = staged_block->pcoord->options->nc2();
+  int nc3 = staged_block->pcoord->options->nc3();
+  int nvar = staged_block->phydro->peos->nvar();
+
+  torch::manual_seed(206);
+  auto w =
+      torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  w[IDN].mul_(0.1).add_(1.0);
+  w[IPR].mul_(1000.0).add_(1.e5);
+  w.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  w[ICY].mul_(1.e-3).add_(1.5e-2);
+  w[ICY + 1].mul_(1.e-3).add_(4.e-3);
+
+  auto u = staged_block->phydro->peos->compute("W->U", {w});
+  Variables staged_vars, fused_vars;
+  staged_vars["hydro_w"] = torch::empty_like(w);
+  fused_vars["hydro_w"] = torch::empty_like(w);
+
+  auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
+  auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  double tol = dtype == torch::kFloat32 ? 1.e-4 : 1.e-8;
+  auto max_diff = (fused_du - staged_du).abs().max().item<double>();
+  EXPECT_TRUE(torch::allclose(fused_du, staged_du, tol, tol))
+      << "max diff = " << max_diff;
 
   std::remove(staged_name);
   std::remove(fused_name);

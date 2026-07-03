@@ -107,6 +107,11 @@ Hydrodynamic solver configuration:
       disable_flux_x3: false
       fused-recon-riemann: false
 
+Set ``FUSED=OFF`` to disable the fused reconstruction/Riemann CUDA path. Set
+``FUSED=ON`` to require it, failing if the EOS/Riemann/reconstruction
+combination is unsupported. Set ``FUSED=AUTO`` or leave ``FUSED`` unset to use
+the fused path when supported and fall back to the staged path otherwise.
+
 Physical Forcing
 ----------------
 

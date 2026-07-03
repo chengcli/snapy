@@ -13,10 +13,10 @@ void fused_recon_riemann_cuda(
     FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
     double gammad, double density_floor, double pressure_floor,
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
-    torch::Tensor u0, int shallow_roe_dir_yz, FusedPrimitiveProjector projector,
-    torch::Tensor psf, torch::Tensor dx1f, double gas_constant,
-    torch::Tensor rho_grav, bool cubed_sphere, int face, torch::Tensor x2v,
-    torch::Tensor x2f, torch::Tensor x3v, torch::Tensor x3f);
+    torch::Tensor u0, int nvapor, int shallow_roe_dir_yz, bool revise_x1_lr,
+    torch::Tensor dx1f, torch::Tensor rho_grav, bool cubed_sphere, int face,
+    torch::Tensor x2v, torch::Tensor x2f, torch::Tensor x3v,
+    torch::Tensor x3f);
 
 // Multi-block-per-process cubed-sphere fused exchange, split into host-callable
 // phases so the caller can coordinate the concurrent local-block threads:
@@ -45,7 +45,7 @@ void fused_cubed_sphere_flux_cuda(
     FusedRiemannSolver solver, FusedEos eos, double gammad,
     double density_floor, double pressure_floor, bool eos_limiter,
     torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0,
-    int shallow_roe_dir_yz);
+    int nvapor, int shallow_roe_dir_yz);
 
 // Process-level seam flux: one launch overwrites the cross-panel boundary flux
 // for ALL local panels. flux2_ptrs_dev/flux3_ptrs_dev are device arrays of the
@@ -61,7 +61,7 @@ void fused_cubed_sphere_flux_all_cuda(
     FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
     double gammad, double density_floor, double pressure_floor,
     bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
-    torch::Tensor u0, int shallow_roe_dir_yz, torch::Device device);
+    torch::Tensor u0, int nvapor, int shallow_roe_dir_yz, torch::Device device);
 
 void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
                                      int symm_rank, int symm_world_size,

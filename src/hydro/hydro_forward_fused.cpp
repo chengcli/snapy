@@ -1,6 +1,3 @@
-// kintera
-#include <kintera/constants.h>
-
 // C/C++
 #include <algorithm>
 #include <array>
@@ -23,7 +20,6 @@
 #include "../sedimentation/sedimentation.hpp"
 #include "fused_recon_riemann_dispatch.hpp"
 #include "hydro.hpp"
-#include "primitive_projector_dispatch.hpp"
 
 namespace snap {
 namespace {
@@ -69,22 +65,6 @@ FusedRiemannSolver fused_riemann_solver(std::string const& type) {
               "dynamics.fused-recon-riemann supports Riemann solvers lmars, "
               "hllc, and shallow-roe, but got ",
               type);
-}
-
-FusedPrimitiveProjector fused_projector(PrimitiveProjector const& pproj) {
-  if (!pproj || pproj->options->type() == "none") {
-    return FusedPrimitiveProjector::None;
-  }
-  if (pproj->options->type() == "density") {
-    return FusedPrimitiveProjector::Density;
-  }
-  if (pproj->options->type() == "temperature") {
-    return FusedPrimitiveProjector::Temperature;
-  }
-  TORCH_CHECK(false,
-              "dynamics.fused-recon-riemann supports primitive projector "
-              "types density and temperature, but got ",
-              pproj->options->type());
 }
 
 void ensure_symmetric_group(LayoutImpl const& layout,
@@ -405,9 +385,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   auto solver = fused_riemann_solver(riemann_type);
   auto eos = fused_eos(eos_type);
   int shallow_roe_dir_yz = options->riemann()->dir() == "yz" ? 1 : 0;
-  auto projector = fused_projector(pproj);
 
   torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
+  int nvapor = 0;
   if (eos == FusedEos::IdealMoist) {
     auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(peos.get());
     TORCH_CHECK(ideal_moist != nullptr,
@@ -415,38 +395,30 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     inv_mu_ratio_m1 = ideal_moist->inv_mu_ratio_m1.to(w.options());
     cv_ratio_m1 = ideal_moist->cv_ratio_m1.to(w.options());
     u0 = ideal_moist->u0.to(w.options());
+    nvapor =
+        static_cast<int>(ideal_moist->pthermo->options->vapor_ids().size()) - 1;
   }
 
   torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
-  torch::Tensor w1 = w;
-  torch::Tensor psf, dx1f;
-  double gas_constant = 0.;
-  if (projector != FusedPrimitiveProjector::None) {
-    TORCH_CHECK(eos != FusedEos::ShallowWater,
-                "dynamics.fused-recon-riemann primitive projectors are not "
-                "defined for shallow-water EOS");
-    TORCH_CHECK(options->grav(),
-                "dynamics.fused-recon-riemann primitive projector requires "
-                "const-gravity forcing");
-    w1 = torch::empty_like(w);
-    psf = torch::empty({w.size(1), w.size(2), w.size(3) + 1}, w.options());
-    dx1f = pmb->pcoord->dx1f.to(w.options());
-    if (projector == FusedPrimitiveProjector::Temperature) {
-      gas_constant = kintera::constants::Rgas / peos->species_weight();
+  bool revise_x1_lr = options->grav() && (options->grav()->grav1() != 0);
+  torch::Tensor dx1f;
+
+  if (u.size(3) > 1) {
+    if (revise_x1_lr) {
+      _revise_x1inner_ghost(w);
+      _revise_x1outer_ghost(w);
+      dx1f = pmb->pcoord->dx1f.to(w.options());
     }
-    primitive_projector_dispatch(
-        w, w1, psf, dx1f, pmb->pcoord->il(), pmb->pcoord->iu() + 1, projector,
-        -options->grav()->grav1(), pproj->options->margin(), gas_constant);
   }
 
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(
-        w1, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
+        w, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz, projector, psf,
-        dx1f, gas_constant, rho_grav, cubed_sphere_layout, face, x2v, x2f,
-        x3v, x3f);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz,
+        revise_x1_lr, dx1f, rho_grav, cubed_sphere_layout, face, x2v, x2f, x3v,
+        x3f);
   }
   if (u.size(3) > 1 && psed) {
     psed->forward(w, _flux1);
@@ -456,18 +428,18 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         w, _flux2, /*dim=*/2, recon23_prim, recon23_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
-        FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
-        torch::Tensor(), cubed_sphere_layout, face, x2v, x2f, x3v, x3f);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz, false,
+        torch::Tensor(), torch::Tensor(), cubed_sphere_layout, face, x2v, x2f,
+        x3v, x3f);
   }
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     fused_recon_riemann_cuda(
         w, _flux3, /*dim=*/1, recon23_prim, recon23_vel, solver, eos,
         options->eos()->gammad(), options->eos()->density_floor(),
         options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, shallow_roe_dir_yz,
-        FusedPrimitiveProjector::None, torch::Tensor(), torch::Tensor(), 0.,
-        torch::Tensor(), cubed_sphere_layout, face, x2v, x2f, x3v, x3f);
+        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz, false,
+        torch::Tensor(), torch::Tensor(), cubed_sphere_layout, face, x2v, x2f,
+        x3v, x3f);
   }
 
   if (cubed_sphere_layout) {
@@ -560,7 +532,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
             solver, eos, options->eos()->gammad(),
             options->eos()->density_floor(), options->eos()->pressure_floor(),
             options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
-            shallow_roe_dir_yz, w.device());
+            nvapor, shallow_roe_dir_yz, w.device());
         if (multi_process) {
           fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
                                           pool.world_size(), w.device());

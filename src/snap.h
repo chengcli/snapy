@@ -89,10 +89,4 @@ enum class FusedEos : int {
   ShallowWater = 2,
 };
 
-enum class FusedPrimitiveProjector : int {
-  None = 0,
-  Density = 1,
-  Temperature = 2,
-};
-
 }  // namespace snap

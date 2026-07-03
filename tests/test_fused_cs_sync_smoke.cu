@@ -491,7 +491,7 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
       local_block, x2v, x2f, x3v, x3f, FusedReconScheme::WENO5,
       FusedReconScheme::WENO5, FusedRiemannSolver::ShallowRoe,
       FusedEos::ShallowWater, 1.4, 0., 0., false, torch::Tensor(),
-      torch::Tensor(), torch::Tensor(), 1);
+      torch::Tensor(), torch::Tensor(), 0, 1);
   fused_cubed_sphere_release_cuda(
       reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size(), ctx.device);
