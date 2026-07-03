@@ -40,6 +40,13 @@ Basic distributed setup using ``torchrun``:
              --master_addr="master_node" --master_port=29500 \
              simulation.py
 
+For non-``torchrun`` launchers, set ``MASTER_ADDR``, ``MASTER_PORT``,
+``RANK``/``PROCESS_RANK``, and ``WORLD_SIZE``/``PROCESS_WORLD_SIZE`` in every
+rank's environment. ``MASTER_PORT`` is required when more than one process
+participates; otherwise ranks may try to create or join different rendezvous
+stores. Single-process runs may omit ``MASTER_PORT`` and Snapy will choose a
+local random port.
+
 Python Code
 -----------
 

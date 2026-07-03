@@ -97,9 +97,13 @@ HydroOptions
    .. method:: fused_recon_riemann() -> bool
                fused_recon_riemann(value: bool) -> HydroOptions
 
-      Get or set the fused reconstruction/Riemann CUDA path flag.
+      Get or set the resolved fused reconstruction/Riemann CUDA path status.
+      For options loaded from YAML, the ``FUSED`` environment variable is the
+      selection control: ``FUSED=OFF`` disables the path, ``FUSED=ON`` requires
+      it and errors if unsupported, and ``FUSED=AUTO`` or an unset ``FUSED``
+      enables it only when the configuration is supported.
 
-      :return: Fused reconstruction/Riemann flag
+      :return: Resolved fused reconstruction/Riemann status
       :rtype: bool
 
    .. method:: eos() -> EquationOfStateOptions

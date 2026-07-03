@@ -68,12 +68,53 @@ TEST(LayoutOptions, DefaultsToAvailableCommunicationBackend) {
 
 TEST(LayoutOptions, RandomizesDefaultMasterPortWhenEnvUnset) {
   ScopedEnvVar master_port("MASTER_PORT");
+  ScopedEnvVar process_world_size("PROCESS_WORLD_SIZE");
+  ScopedEnvVar world_size("WORLD_SIZE");
   unsetenv("MASTER_PORT");
+  unsetenv("PROCESS_WORLD_SIZE");
+  unsetenv("WORLD_SIZE");
 
   auto opts = LayoutOptionsImpl::create();
 
   EXPECT_GE(opts->master_port(), 29500);
   EXPECT_LE(opts->master_port(), 29600);
+}
+
+TEST(LayoutOptions, RequiresMasterPortForMultiProcessWhenEnvUnset) {
+  ScopedEnvVar master_port("MASTER_PORT");
+  ScopedEnvVar process_world_size("PROCESS_WORLD_SIZE");
+  ScopedEnvVar world_size("WORLD_SIZE");
+  unsetenv("MASTER_PORT");
+  setenv("PROCESS_WORLD_SIZE", "2", 1);
+  unsetenv("WORLD_SIZE");
+
+  EXPECT_THROW((void)LayoutOptionsImpl::create(), c10::Error);
+}
+
+TEST(LayoutOptions, RequiresMasterPortWhenWorldSizeImpliesMultiProcess) {
+  ScopedEnvVar master_port("MASTER_PORT");
+  ScopedEnvVar process_world_size("PROCESS_WORLD_SIZE");
+  ScopedEnvVar world_size("WORLD_SIZE");
+  unsetenv("MASTER_PORT");
+  unsetenv("PROCESS_WORLD_SIZE");
+  setenv("WORLD_SIZE", "2", 1);
+
+  EXPECT_THROW((void)LayoutOptionsImpl::create(), c10::Error);
+}
+
+TEST(LayoutOptions, UsesProvidedMasterPortForMultiProcess) {
+  ScopedEnvVar master_port("MASTER_PORT");
+  ScopedEnvVar process_world_size("PROCESS_WORLD_SIZE");
+  ScopedEnvVar world_size("WORLD_SIZE");
+  setenv("MASTER_PORT", "29577", 1);
+  setenv("PROCESS_WORLD_SIZE", "2", 1);
+  setenv("WORLD_SIZE", "2", 1);
+
+  auto opts = LayoutOptionsImpl::create();
+
+  EXPECT_EQ(opts->master_port(), 29577);
+  EXPECT_EQ(opts->process_world_size(), 2);
+  EXPECT_EQ(opts->world_size(), 2);
 }
 
 TEST(ProcessGroupContext, SkipsSingleProcessCommunication) {

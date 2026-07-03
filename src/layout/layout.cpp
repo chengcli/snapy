@@ -129,15 +129,26 @@ LayoutOptionsImpl::LayoutOptionsImpl() {
   auto process_rank_env = get_env("PROCESS_RANK", get_env("RANK", "0"));
   auto process_world_size_env =
       get_env("PROCESS_WORLD_SIZE", get_env("WORLD_SIZE", "1"));
+  auto world_size_env = get_env("WORLD_SIZE", process_world_size_env);
+  int process_world_size_value = std::stoi(process_world_size_env);
+  int world_size_value = std::stoi(world_size_env);
   master_addr(get_env("MASTER_ADDR", "127.0.0.1"));
   auto master_port_env = std::getenv("MASTER_PORT");
-  master_port(master_port_env ? std::stoi(master_port_env)
-                              : random_master_port());
+  if (master_port_env) {
+    master_port(std::stoi(master_port_env));
+  } else {
+    TORCH_CHECK(process_world_size_value == 1 && world_size_value == 1,
+                "MASTER_PORT must be set for multi-process runs "
+                "(PROCESS_WORLD_SIZE=",
+                process_world_size_value, ", WORLD_SIZE=", world_size_value,
+                ") so all ranks rendezvous on the same TCPStore");
+    master_port(random_master_port());
+  }
   process_rank(std::stoi(process_rank_env));
   rank(std::stoi(get_env("RANK", process_rank_env)));
   local_rank(std::stoi(get_env("LOCAL_RANK", "0")));
-  process_world_size(std::stoi(process_world_size_env));
-  world_size(std::stoi(get_env("WORLD_SIZE", process_world_size_env)));
+  process_world_size(process_world_size_value);
+  world_size(world_size_value);
   device_id(std::stoi(get_env("DEVICE_ID", "-1")));
   device(get_env("DEVICE", "cpu"));
 }
