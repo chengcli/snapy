@@ -199,6 +199,37 @@ torch::Tensor HydroImpl::implicit_mass_correction() const {
   return picorr ? picorr->mass_correction() : torch::Tensor();
 }
 
+void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
+                                           torch::Tensor const& w, double dt,
+                                           Variables const& other) {
+  if (!picorr) return;
+
+  torch::Tensor wi;
+  if (other.count("solid")) {
+    wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
+                      other.at("fill_solid_hydro_w"), w);
+    du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
+  } else {
+    wi = w;
+  }
+
+  auto du0 = du.clone();
+  du[IPR].sub_(peos->internal_energy_offset(du));
+
+  torch::Tensor gamma;
+  if (options->eos()->type() == "aneos") {
+    auto cs = peos->compute("W->L", {w});
+    gamma = peos->compute("WL->A", {w, cs});
+  } else {
+    gamma = peos->compute("W->A", {wi});
+  }
+  picorr->forward(du, wi, gamma, dt);
+  du[IPR].add_(peos->internal_energy_offset(du));
+
+  _imp.copy_(du);
+  _imp.sub_(du0);
+}
+
 void HydroImpl::_revise_x1inner_lr(torch::Tensor const& wl,
                                    torch::Tensor const& wr) {
   int is = pmb->pcoord->il();

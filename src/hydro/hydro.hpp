@@ -137,6 +137,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   void _revise_x1inner_lr(torch::Tensor const& wl, torch::Tensor const& wr);
   void _revise_x1outer_lr(torch::Tensor const& wl, torch::Tensor const& wt);
+  void _apply_implicit_correction(torch::Tensor& du, torch::Tensor const& w,
+                                  double dt, Variables const& other);
 
  private:
   //! Register all forcing modules
