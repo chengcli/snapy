@@ -479,19 +479,33 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
   // One panel per process (blocks_per_process == 1), so local_block == 0 and the
   // flat [side, state, var, edge, nc1] buffer is exactly this block's slice.
   int local_block = 0;
+  FusedCubedSpherePanelParams panel_params{side_meta, face, local_block,
+                                           x2v, x2f, x3v, x3f};
   fused_cubed_sphere_pack_cuda(
-      w, symm_buffer, side_meta, face, local_block, x2v, x2f, x3v, x3f,
-      FusedReconScheme::WENO5, FusedReconScheme::WENO5, FusedEos::ShallowWater,
-      0., 0., false);
+      w, symm_buffer,
+      FusedCubedSpherePackParams{panel_params, FusedReconScheme::WENO5,
+                                 FusedReconScheme::WENO5,
+                                 FusedEos::ShallowWater, 0., 0., false});
   fused_cubed_sphere_sync_cuda(
       reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size(), ctx.device);
   fused_cubed_sphere_flux_cuda(
-      w, flux2, flux3, symm_buffer, symm->get_buffer_ptrs_dev(), side_meta, face,
-      local_block, x2v, x2f, x3v, x3f, FusedReconScheme::WENO5,
-      FusedReconScheme::WENO5, FusedRiemannSolver::ShallowRoe,
-      FusedEos::ShallowWater, 1.4, 0., 0., false, torch::Tensor(),
-      torch::Tensor(), torch::Tensor(), 0, 1);
+      w, flux2, flux3, symm_buffer, symm->get_buffer_ptrs_dev(),
+      FusedCubedSphereFluxParams{
+          panel_params,
+          FusedPhysicsParams{FusedReconScheme::WENO5,
+                             FusedReconScheme::WENO5,
+                             FusedRiemannSolver::ShallowRoe,
+                             FusedEos::ShallowWater,
+                             1.4,
+                             0.,
+                             0.,
+                             false,
+                             torch::Tensor(),
+                             torch::Tensor(),
+                             torch::Tensor(),
+                             0,
+                             1}});
   fused_cubed_sphere_release_cuda(
       reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size(), ctx.device);

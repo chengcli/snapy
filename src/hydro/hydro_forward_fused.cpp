@@ -411,35 +411,51 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     }
   }
 
+  auto make_physics_params = [&](FusedReconScheme recon_prim,
+                                 FusedReconScheme recon_vel) {
+    return FusedPhysicsParams{recon_prim,
+                              recon_vel,
+                              solver,
+                              eos,
+                              options->eos()->gammad(),
+                              options->eos()->density_floor(),
+                              options->eos()->pressure_floor(),
+                              options->eos()->limiter(),
+                              inv_mu_ratio_m1,
+                              cv_ratio_m1,
+                              u0,
+                              nvapor,
+                              shallow_roe_dir_yz};
+  };
+  FusedMetricParams metric_params{cubed_sphere_layout, face, x2v, x2f, x3v,
+                                  x3f};
+
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(
-        w, _flux1, /*dim=*/3, recon1_prim, recon1_vel, solver, eos,
-        options->eos()->gammad(), options->eos()->density_floor(),
-        options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz,
-        revise_x1_lr, dx1f, rho_grav, cubed_sphere_layout, face, x2v, x2f, x3v,
-        x3f);
+        w, _flux1,
+        FusedReconRiemannParams{
+            /*dim=*/3, make_physics_params(recon1_prim, recon1_vel),
+            FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
+            metric_params});
   }
   if (u.size(3) > 1 && psed) {
     psed->forward(w, _flux1);
   }
   if (u.size(2) > 1 && !options->disable_flux_x2()) {
     fused_recon_riemann_cuda(
-        w, _flux2, /*dim=*/2, recon23_prim, recon23_vel, solver, eos,
-        options->eos()->gammad(), options->eos()->density_floor(),
-        options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz, false,
-        torch::Tensor(), torch::Tensor(), cubed_sphere_layout, face, x2v, x2f,
-        x3v, x3f);
+        w, _flux2,
+        FusedReconRiemannParams{
+            /*dim=*/2, make_physics_params(recon23_prim, recon23_vel),
+            FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
+            metric_params});
   }
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     fused_recon_riemann_cuda(
-        w, _flux3, /*dim=*/1, recon23_prim, recon23_vel, solver, eos,
-        options->eos()->gammad(), options->eos()->density_floor(),
-        options->eos()->pressure_floor(), options->eos()->limiter(),
-        inv_mu_ratio_m1, cv_ratio_m1, u0, nvapor, shallow_roe_dir_yz, false,
-        torch::Tensor(), torch::Tensor(), cubed_sphere_layout, face, x2v, x2f,
-        x3v, x3f);
+        w, _flux3,
+        FusedReconRiemannParams{
+            /*dim=*/1, make_physics_params(recon23_prim, recon23_vel),
+            FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
+            metric_params});
   }
 
   if (cubed_sphere_layout) {
@@ -487,10 +503,14 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       batch.x3f[local_block] = x3f;
 
       // ---- Phase A: every local panel packs its edge states into its slice ----
+      FusedCubedSpherePanelParams panel_params{side_meta, face, local_block,
+                                               x2v, x2f, x3v, x3f};
       fused_cubed_sphere_pack_cuda(
-          w, pool.buffer, side_meta, face, local_block, x2v, x2f, x3v, x3f,
-          recon23_prim, recon23_vel, eos, options->eos()->density_floor(),
-          options->eos()->pressure_floor(), options->eos()->limiter());
+          w, pool.buffer,
+          FusedCubedSpherePackParams{
+              panel_params, recon23_prim, recon23_vel, eos,
+              options->eos()->density_floor(), options->eos()->pressure_floor(),
+              options->eos()->limiter()});
       barrier.wait();  // all panels packed + registered
 
       // ---- Phase B: one leader per process runs the whole seam exchange on
@@ -523,16 +543,25 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
           return reinterpret_cast<void**>(t.data_ptr<int64_t>());
         };
         fused_cubed_sphere_flux_all_cuda(
-            pool.buffer, as_pp(batch.flux2_dev), as_pp(batch.flux3_dev),
-            pool.buffer_ptrs_dev(), batch.side_meta_all, batch.faces_dev,
-            static_cast<int>(nvar), static_cast<int>(w.size(1)),
-            static_cast<int>(w.size(2)), static_cast<int>(nc1), bpp,
-            as_pp(batch.x2v_dev), as_pp(batch.x2f_dev), as_pp(batch.x3v_dev),
-            as_pp(batch.x3f_dev), w.scalar_type(), recon23_prim, recon23_vel,
-            solver, eos, options->eos()->gammad(),
-            options->eos()->density_floor(), options->eos()->pressure_floor(),
-            options->eos()->limiter(), inv_mu_ratio_m1, cv_ratio_m1, u0,
-            nvapor, shallow_roe_dir_yz, w.device());
+            pool.buffer,
+            FusedCubedSphereFluxAllPtrs{as_pp(batch.flux2_dev),
+                                        as_pp(batch.flux3_dev),
+                                        pool.buffer_ptrs_dev(),
+                                        as_pp(batch.x2v_dev),
+                                        as_pp(batch.x2f_dev),
+                                        as_pp(batch.x3v_dev),
+                                        as_pp(batch.x3f_dev)},
+            FusedCubedSphereFluxAllParams{
+                batch.side_meta_all,
+                batch.faces_dev,
+                static_cast<int>(nvar),
+                static_cast<int>(w.size(1)),
+                static_cast<int>(w.size(2)),
+                static_cast<int>(nc1),
+                bpp,
+                w.scalar_type(),
+                w.device(),
+                make_physics_params(recon23_prim, recon23_vel)});
         if (multi_process) {
           fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
                                           pool.world_size(), w.device());

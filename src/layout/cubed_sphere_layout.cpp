@@ -183,117 +183,61 @@ std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
 // face 5: -Z
 const char CS_FACE_NAMES[6][3] = {"+X", "+Y", "-X", "+Z", "-Y", "-Z"};
 
-/*!
- * Each entry says: on face F, the global velocity component VEL{1,2,3}
- * corresponds to local component idx with sign sgn.
- */
 const CSVel CS_CART_TO_LOCAL_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, +1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, -1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, -1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_cart_to_local_vel(0, VEL1), cs_cart_to_local_vel(0, VEL2),
+     cs_cart_to_local_vel(0, VEL3)},
+    {cs_cart_to_local_vel(1, VEL1), cs_cart_to_local_vel(1, VEL2),
+     cs_cart_to_local_vel(1, VEL3)},
+    {cs_cart_to_local_vel(2, VEL1), cs_cart_to_local_vel(2, VEL2),
+     cs_cart_to_local_vel(2, VEL3)},
+    {cs_cart_to_local_vel(3, VEL1), cs_cart_to_local_vel(3, VEL2),
+     cs_cart_to_local_vel(3, VEL3)},
+    {cs_cart_to_local_vel(4, VEL1), cs_cart_to_local_vel(4, VEL2),
+     cs_cart_to_local_vel(4, VEL3)},
+    {cs_cart_to_local_vel(5, VEL1), cs_cart_to_local_vel(5, VEL2),
+     cs_cart_to_local_vel(5, VEL3)}};
 
-/*!
- * Each entry says: on face F, the local velocity component VEL_{Z,X,Y}
- * corresponds to global component idx with sign sgn.
- */
 const CSVel CS_LOCAL_TO_CART_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL2, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL2, -1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, -1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_local_to_cart_vel(0, VEL1), cs_local_to_cart_vel(0, VEL2),
+     cs_local_to_cart_vel(0, VEL3)},
+    {cs_local_to_cart_vel(1, VEL1), cs_local_to_cart_vel(1, VEL2),
+     cs_local_to_cart_vel(1, VEL3)},
+    {cs_local_to_cart_vel(2, VEL1), cs_local_to_cart_vel(2, VEL2),
+     cs_local_to_cart_vel(2, VEL3)},
+    {cs_local_to_cart_vel(3, VEL1), cs_local_to_cart_vel(3, VEL2),
+     cs_local_to_cart_vel(3, VEL3)},
+    {cs_local_to_cart_vel(4, VEL1), cs_local_to_cart_vel(4, VEL2),
+     cs_local_to_cart_vel(4, VEL3)},
+    {cs_local_to_cart_vel(5, VEL1), cs_local_to_cart_vel(5, VEL2),
+     cs_local_to_cart_vel(5, VEL3)}};
 
 const CSVel CS_G2L_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, +1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL1, -1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL2, +1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, -1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_cart_to_local_vel(0, VEL1), cs_cart_to_local_vel(0, VEL2),
+     cs_cart_to_local_vel(0, VEL3)},
+    {cs_cart_to_local_vel(1, VEL1), cs_cart_to_local_vel(1, VEL2),
+     cs_cart_to_local_vel(1, VEL3)},
+    {cs_cart_to_local_vel(2, VEL1), cs_cart_to_local_vel(2, VEL2),
+     cs_cart_to_local_vel(2, VEL3)},
+    {cs_cart_to_local_vel(3, VEL1), cs_cart_to_local_vel(3, VEL2),
+     cs_cart_to_local_vel(3, VEL3)},
+    {cs_cart_to_local_vel(4, VEL1), cs_cart_to_local_vel(4, VEL2),
+     cs_cart_to_local_vel(4, VEL3)},
+    {cs_cart_to_local_vel(5, VEL1), cs_cart_to_local_vel(5, VEL2),
+     cs_cart_to_local_vel(5, VEL3)}};
 
 const CSVel CS_L2G_VEL[6][3] = {
-    /* face 0: */
-    [0] = {/* VEL1 */ {VEL2, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 1: */
-    [1] = {/* VEL1 */ {VEL3, +1},
-           /* VEL2 */ {VEL2, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 2: */
-    [2] = {/* VEL1 */ {VEL2, -1},
-           /* VEL2 */ {VEL3, -1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 3: */
-    [3] = {/* VEL1 */ {VEL1, +1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, -1}},
-    /* face 4: */
-    [4] = {/* VEL1 */ {VEL3, -1},
-           /* VEL2 */ {VEL2, +1},
-           /* VEL3 */ {VEL1, +1}},
-    /* face 5: */
-    [5] = {/* VEL1 */ {VEL1, -1},
-           /* VEL2 */ {VEL3, +1},
-           /* VEL3 */ {VEL2, +1}}};
+    {cs_local_to_cart_vel(0, VEL1), cs_local_to_cart_vel(0, VEL2),
+     cs_local_to_cart_vel(0, VEL3)},
+    {cs_local_to_cart_vel(1, VEL1), cs_local_to_cart_vel(1, VEL2),
+     cs_local_to_cart_vel(1, VEL3)},
+    {cs_local_to_cart_vel(2, VEL1), cs_local_to_cart_vel(2, VEL2),
+     cs_local_to_cart_vel(2, VEL3)},
+    {cs_local_to_cart_vel(3, VEL1), cs_local_to_cart_vel(3, VEL2),
+     cs_local_to_cart_vel(3, VEL3)},
+    {cs_local_to_cart_vel(4, VEL1), cs_local_to_cart_vel(4, VEL2),
+     cs_local_to_cart_vel(4, VEL3)},
+    {cs_local_to_cart_vel(5, VEL1), cs_local_to_cart_vel(5, VEL2),
+     cs_local_to_cart_vel(5, VEL3)}};
 
 /*!
  * Sides: 0=L, 1=R, 2=B, 3=T  (left, right, bottom, top)

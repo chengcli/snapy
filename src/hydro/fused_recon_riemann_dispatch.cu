@@ -2,40 +2,33 @@
 #include <ATen/Dispatch.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
-#include <torch/csrc/distributed/c10d/symm_mem/CUDASymmetricMemory-inl.h>
 
 // snap
 #include <snap/snap.h>
 
 #include "../eos/eos_side_quantities.cuh"
+#include "../coord/gnomonic_equiangle.h"
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
 #include "../riemann/shallow_roe_impl.h"
+#include "fused_dispatch_params.cuh"
 #include "fused_recon_riemann_dispatch.hpp"
 
 namespace snap {
 namespace {
 
 template <typename T>
-__device__ void gnomonic_prim2local(T* w, int dim, T alpha, T beta);
-
-template <typename T>
-__device__ void gnomonic_flux2global(T* flux, int dim, T alpha, T beta,
-                                     int stride);
-
-template <typename T>
-__global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
-                             int nc1, int dim, FusedReconScheme recon_prim,
-                             FusedReconScheme recon_vel,
-                             FusedRiemannSolver solver, FusedEos eos,
-                             T gammad, T density_floor, T pressure_floor,
-                             bool eos_limiter, T const* inv_mu_ratio_m1,
-                             T const* cv_ratio_m1, T const* u0, int nvapor,
-                             int shallow_roe_dir_yz, bool revise_x1_lr,
-                             T const* dx1f, T* rho_grav, bool cubed_sphere,
-                             int face, T const* x2v, T const* x2f,
-                             T const* x3v, T const* x3f) {
+__global__ void fused_kernel(T const* w, T* flux,
+                             DeviceFusedReconRiemannParams<T> params) {
+  int nvar = params.nvar;
+  int nc3 = params.nc3;
+  int nc2 = params.nc2;
+  int nc1 = params.nc1;
+  int dim = params.dim;
+  auto physics = params.physics;
+  auto x1_revision = params.x1_revision;
+  auto metric = params.metric;
   int ncells = nc1 * nc2 * nc3;
   int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
   int stride_dim = dim == 3 ? 1 : (dim == 2 ? nc1 : nc1 * nc2);
@@ -75,8 +68,8 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
 
   if (pos >= axis_size) return;
   int flat = base + pos * stride_dim;
-  int nghost = (recon_prim == FusedReconScheme::CP3 ||
-                recon_prim == FusedReconScheme::WENO3)
+  int nghost = (physics.recon_prim == FusedReconScheme::CP3 ||
+                physics.recon_prim == FusedReconScheme::WENO3)
                    ? 2
                    : 3;
   int il = nghost;
@@ -89,7 +82,8 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   int wr_start = min(max(pos - (il - 1), 0), axis_size - stencil);
   T wl_local[64], wr_local[64];
   for (int v = 0; v < nvar; ++v) {
-    auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
+    auto scheme =
+        (v == IDN || v >= ICY) ? physics.recon_prim : physics.recon_vel;
     wl_local[v] =
         interp_shared_fused_impl(smem, v, wl_start, axis_size, scheme,
                                  /*right=*/true);
@@ -98,7 +92,7 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
                                  /*right=*/false);
   }
 
-  if (revise_x1_lr && dim == 3 && valid_face) {
+  if (x1_revision.revise_lr && dim == 3 && valid_face) {
     if (pos == il) {
       wl_local[IPR] = wr_local[IPR];
       wl_local[IDN] = wr_local[IDN];
@@ -108,12 +102,12 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     }
   }
 
-  if (eos_limiter && valid_face) {
-    wl_local[IDN] = max(wl_local[IDN], density_floor);
-    wr_local[IDN] = max(wr_local[IDN], density_floor);
-    if (eos != FusedEos::ShallowWater) {
-      wl_local[IPR] = max(wl_local[IPR], pressure_floor);
-      wr_local[IPR] = max(wr_local[IPR], pressure_floor);
+  if (physics.eos_limiter && valid_face) {
+    wl_local[IDN] = max(wl_local[IDN], physics.density_floor);
+    wr_local[IDN] = max(wr_local[IDN], physics.density_floor);
+    if (physics.eos != FusedEos::ShallowWater) {
+      wl_local[IPR] = max(wl_local[IPR], physics.pressure_floor);
+      wr_local[IPR] = max(wr_local[IPR], physics.pressure_floor);
       for (int v = ICY; v < nvar; ++v) {
         wl_local[v] = max(wl_local[v], T(0.));
         wr_local[v] = max(wr_local[v], T(0.));
@@ -121,14 +115,16 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     }
   }
 
-  if (revise_x1_lr && dim == 3 && valid_face) {
+  if (x1_revision.revise_lr && dim == 3 && valid_face) {
     left_pressure[pos] = wl_local[IPR];
     right_pressure[pos] = wr_local[IPR];
   }
   __syncthreads();
-  if (revise_x1_lr && dim == 3 && rho_grav != nullptr && pos >= il &&
-      pos < iu) {
-    rho_grav[flat] = (left_pressure[pos + 1] - right_pressure[pos]) / dx1f[pos];
+  if (x1_revision.revise_lr && dim == 3 &&
+      x1_revision.rho_grav != nullptr && pos >= il && pos < iu) {
+    x1_revision.rho_grav[flat] =
+        (left_pressure[pos + 1] - right_pressure[pos]) /
+        x1_revision.dx1f[pos];
   }
 
   if (!valid_face) {
@@ -138,14 +134,14 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
 
   T alpha = 0;
   T beta = 0;
-  bool use_cubed_metric = cubed_sphere && dim != 3;
+  bool use_cubed_metric = metric.cubed_sphere && dim != 3;
   if (use_cubed_metric) {
     if (dim == 2) {
-      alpha = x2f[pos];
-      beta = x3v[k];
+      alpha = metric.x2f[pos];
+      beta = metric.x3v[k];
     } else {
-      alpha = x2v[j];
-      beta = x3f[pos];
+      alpha = metric.x2v[j];
+      beta = metric.x3f[pos];
     }
     T wl_density = wl_local[IDN];
     T wr_density = wr_local[IDN];
@@ -155,17 +151,19 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
     wr_local[IDN] = wr_density;
   }
 
-  if (solver == FusedRiemannSolver::ShallowRoe) {
-    shallow_roe_impl(flux + flat, wl_local, wr_local, dim, shallow_roe_dir_yz,
-                     /*stride_w=*/1, /*stride_f=*/stride_var);
+  if (physics.solver == FusedRiemannSolver::ShallowRoe) {
+    shallow_roe_impl(flux + flat, wl_local, wr_local, dim,
+                     physics.shallow_roe_dir_yz, /*stride_w=*/1,
+                     /*stride_f=*/stride_var);
   } else {
     T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
-    int ny = eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
-    eos_side_quantities(wl_local, wr_local, ny, nvapor, eos, gammad,
-                        inv_mu_ratio_m1, cv_ratio_m1, u0, &el, &er, &gl, &gr,
+    int ny = physics.eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
+    eos_side_quantities(wl_local, wr_local, ny, physics.nvapor, physics.eos,
+                        physics.gammad, physics.inv_mu_ratio_m1,
+                        physics.cv_ratio_m1, physics.u0, &el, &er, &gl, &gr,
                         &cl, &cr);
 
-    if (solver == FusedRiemannSolver::LMARS) {
+    if (physics.solver == FusedRiemannSolver::LMARS) {
       lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
                  er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
                  /*stride_f=*/stride_var);
@@ -179,638 +177,16 @@ __global__ void fused_kernel(T const* w, T* flux, int nvar, int nc3, int nc2,
   }
 }
 
-enum {
-  CS_SIDE_L = 0,
-  CS_SIDE_R = 1,
-  CS_SIDE_B = 2,
-  CS_SIDE_T = 3,
-  CS_STATE_LEFT = ILT,
-  CS_STATE_RIGHT = IRT,
-  CS_NUM_STATES = 2,
-  CS_NUM_SIDES = 4,
-  // side_meta layout (per side). PEER_PROCESS / PEER_LOCAL_BLOCK translate the
-  // neighbor block rank into (owning process, slot within that process) so the
-  // symmetric buffer_ptrs array (indexed by process rank) and the per-process
-  // shared buffer (sliced by local block) can both be addressed for arbitrary
-  // blocks_per_process. When the peer lives on this process, PEER_PROCESS ==
-  // this rank's process and buf_ptrs[self] resolves to the local buffer.
-  CS_META_ENABLED = 0,
-  CS_META_PEER_PROCESS = 1,
-  CS_META_PEER_LOCAL_BLOCK = 2,
-  CS_META_PEER_SIDE = 3,
-  CS_META_REV = 4,
-  CS_META_STRIDE = 5,
-};
-
-__device__ __constant__ int kCsLocalToCartIdx[6][3] = {
-    {1, 2, 0}, {2, 1, 0}, {1, 2, 0},
-    {0, 2, 1}, {2, 1, 0}, {0, 2, 1}};
-__device__ __constant__ int kCsLocalToCartSgn[6][3] = {
-    {+1, +1, +1}, {+1, -1, +1}, {-1, -1, +1},
-    {+1, +1, -1}, {-1, +1, +1}, {-1, +1, +1}};
-__device__ __constant__ int kCsCartToLocalIdx[6][3] = {
-    {2, 0, 1}, {2, 1, 0}, {2, 0, 1},
-    {0, 2, 1}, {2, 1, 0}, {0, 2, 1}};
-// Must be the exact sign/index inverse of kCsLocalToCartSgn/Idx so that
-// cs_sph_to_contra inverts cs_contra_to_sph on every panel; equivalently it
-// mirrors the host source-of-truth CS_CART_TO_LOCAL_VEL (cubed_sphere_layout.cpp).
-// Faces 2 (-X) and 4 (-Y) previously carried the local->cart signs instead of
-// the cart->local inverse, which flipped the recovered contravariant normal
-// velocity there and broke cross-panel mass conservation at every seam touching
-// those panels.
-__device__ __constant__ int kCsCartToLocalSgn[6][3] = {
-    {+1, +1, +1}, {+1, -1, +1}, {+1, -1, -1},
-    {+1, -1, +1}, {+1, +1, -1}, {-1, +1, +1}};
-
-template <typename T>
-__device__ void cs_ab_to_xyz(int face, T alpha, T beta, T* x, T* y, T* z) {
-  T a = tan(alpha);
-  T b = tan(beta);
-  if (face == 0) {
-    *x = 1;
-    *y = a;
-    *z = b;
-  } else if (face == 1) {
-    *x = -a;
-    *y = 1;
-    *z = b;
-  } else if (face == 2) {
-    *x = -1;
-    *y = -a;
-    *z = b;
-  } else if (face == 3) {
-    *x = -b;
-    *y = a;
-    *z = 1;
-  } else if (face == 4) {
-    *x = a;
-    *y = -1;
-    *z = b;
-  } else {
-    *x = b;
-    *y = a;
-    *z = -1;
-  }
-  T r = sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
-  *x /= r;
-  *y /= r;
-  *z /= r;
-}
-
-template <typename T>
-__device__ void cs_theta_phi(int face, T alpha, T beta, T* theta, T* phi) {
-  T x, y, z;
-  cs_ab_to_xyz(face, alpha, beta, &x, &y, &z);
-  z = max(T(-1), min(T(1), z));
-  *theta = acos(z);
-  *phi = atan2(y, x);
-}
-
-template <typename T>
-__device__ void gnomonic_sin_cos(int dim, T alpha, T beta, T* sin_theta,
-                                 T* cos_theta) {
-  (void)dim;
-  T x = tan(alpha);
-  T y = tan(beta);
-  T C = sqrt(T(1) + x * x);
-  T D = sqrt(T(1) + y * y);
-  *cos_theta = -x * y / (C * D);
-  *sin_theta = sqrt(T(1) + x * x + y * y) / (C * D);
-}
-
-template <typename T>
-__device__ void gnomonic_prim2local(T* w, int dim, T alpha, T beta) {
-  T sin_theta, cos_theta;
-  gnomonic_sin_cos(dim, alpha, beta, &sin_theta, &cos_theta);
-  T u2 = w[IVY];
-  T u3 = w[IVZ];
-  if (dim == 2) {
-    w[IVY] = sin_theta * u2;
-    w[IVZ] = cos_theta * u2 + u3;
-  } else {
-    w[IVY] = u2 + cos_theta * u3;
-    w[IVZ] = sin_theta * u3;
-  }
-}
-
-template <typename T>
-__device__ void gnomonic_flux2global(T* flux, int dim, T alpha, T beta,
-                                     int stride) {
-  T sin_theta, cos_theta;
-  gnomonic_sin_cos(dim, alpha, beta, &sin_theta, &cos_theta);
-  T f2 = flux[IVY * stride];
-  T f3 = flux[IVZ * stride];
-  T ty, tz;
-  if (dim == 2) {
-    ty = f2 / sin_theta;
-    tz = f3 - cos_theta * f2 / sin_theta;
-  } else {
-    ty = f2 - cos_theta * f3 / sin_theta;
-    tz = f3 / sin_theta;
-  }
-  flux[IVY * stride] = ty + tz * cos_theta;
-  flux[IVZ * stride] = tz + ty * cos_theta;
-}
-
-template <typename T>
-__device__ void cs_contra_to_sph(T* w, int face, T alpha, T beta) {
-  T x = tan(alpha);
-  T y = tan(beta);
-  T delta = sqrt(x * x + y * y + 1);
-  T C = sqrt(1 + x * x);
-  T D = sqrt(1 + y * y);
-  T vz = w[IVX], vx = w[IVY], vy = w[IVZ];
-  T cart[3];
-  cart[kCsLocalToCartIdx[face][VEL1]] =
-      kCsLocalToCartSgn[face][VEL1] * (vz - vx * x / D - vy * y / C) / delta;
-  cart[kCsLocalToCartIdx[face][VEL2]] =
-      kCsLocalToCartSgn[face][VEL2] * (vz * x + vx * D - (vy * x * y) / C) /
-      delta;
-  cart[kCsLocalToCartIdx[face][VEL3]] =
-      kCsLocalToCartSgn[face][VEL3] * (vz * y + vy * C - (vx * x * y) / D) /
-      delta;
-
-  T theta, phi;
-  cs_theta_phi(face, alpha, beta, &theta, &phi);
-  T st = sin(theta), ct = cos(theta), sp = sin(phi), cp = cos(phi);
-  T cx = cart[0], cy = cart[1], cz = cart[2];
-  w[IVX] = cx * st * cp + cy * st * sp + cz * ct;
-  w[IVY] = cx * ct * cp + cy * ct * sp - cz * st;
-  w[IVZ] = -cx * sp + cy * cp;
-}
-
-template <typename T>
-__device__ void cs_sph_to_contra(T* w, int face, T alpha, T beta) {
-  T theta, phi;
-  cs_theta_phi(face, alpha, beta, &theta, &phi);
-  T st = sin(theta), ct = cos(theta), sp = sin(phi), cp = cos(phi);
-  T vr = w[IVX], vt = w[IVY], vp = w[IVZ];
-  T cart[3];
-  cart[0] = vr * st * cp + vt * ct * cp - vp * sp;
-  cart[1] = vr * st * sp + vt * ct * sp + vp * cp;
-  cart[2] = vr * ct - vt * st;
-
-  T x = tan(alpha);
-  T y = tan(beta);
-  T delta = sqrt(x * x + y * y + 1);
-  T C = sqrt(1 + x * x);
-  T D = sqrt(1 + y * y);
-  T local[3];
-  local[kCsCartToLocalIdx[face][VEL1]] =
-      kCsCartToLocalSgn[face][VEL1] * cart[0];
-  local[kCsCartToLocalIdx[face][VEL2]] =
-      kCsCartToLocalSgn[face][VEL2] * cart[1];
-  local[kCsCartToLocalIdx[face][VEL3]] =
-      kCsCartToLocalSgn[face][VEL3] * cart[2];
-  T vz = local[0], vx = local[1], vy = local[2];
-  w[IVX] = (vz + x * vx + y * vy) / delta;
-  w[IVY] = D / delta * (vx - x * vz);
-  w[IVZ] = C / delta * (vy - y * vz);
-}
-
-template <typename T>
-__device__ void cs_coords(int side, int edge_pos, int i, int nc3, int nc2,
-                          int nc1, int nghost, T const* x2v, T const* x2f,
-                          T const* x3v, T const* x3f, T* alpha, T* beta,
-                          int* k, int* j, int* face_pos) {
-  (void)i;
-  if (side == CS_SIDE_L || side == CS_SIDE_R) {
-    *k = edge_pos;
-    *j = side == CS_SIDE_L ? nghost : nc2 - nghost - 1;
-    *face_pos = side == CS_SIDE_L ? nghost : nc2 - nghost;
-    *alpha = x2f[side == CS_SIDE_L ? nghost : nc2 - nghost];
-    *beta = x3v[edge_pos];
-  } else {
-    *k = side == CS_SIDE_B ? nghost : nc3 - nghost - 1;
-    *j = edge_pos;
-    *face_pos = side == CS_SIDE_B ? nghost : nc3 - nghost;
-    *alpha = x2v[edge_pos];
-    *beta = x3f[side == CS_SIDE_B ? nghost : nc3 - nghost];
-  }
-}
-
-template <typename T>
-__global__ void cs_pack_kernel(T const* w, T* buf, int const* side_meta,
-                               int nvar, int nc3, int nc2, int nc1, int face,
-                               int local_block,
-                               FusedReconScheme recon_prim,
-                               FusedReconScheme recon_vel, FusedEos eos,
-                               T density_floor, T pressure_floor,
-                               bool eos_limiter,
-                               T const* x2v, T const* x2f, T const* x3v,
-                               T const* x3f) {
-  int edge_len = max(nc2, nc3);
-  int line = blockIdx.x;
-  int i = line % nc1;
-  int edge_pos = (line / nc1) % edge_len;
-  int side = line / (nc1 * edge_len);
-  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
-  if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
-      (side >= CS_SIDE_B && edge_pos >= nc2)) {
-    return;
-  }
-
-  int dim = side <= CS_SIDE_R ? 2 : 1;
-  int axis_size = dim == 2 ? nc2 : nc3;
-  int stride_dim = dim == 2 ? nc1 : nc1 * nc2;
-  int stride_var = nc1 * nc2 * nc3;
-  int pos = threadIdx.x;
-  int base = 0;
-  if (side <= CS_SIDE_R) {
-    base = edge_pos * nc2 * nc1 + i;
-  } else {
-    base = edge_pos * nc1 + i;
-  }
-
-  extern __shared__ unsigned char memory[];
-  T* smem = reinterpret_cast<T*>(memory);
-  if (pos < axis_size) {
-    int in = base + pos * stride_dim;
-    for (int v = 0; v < nvar; ++v) {
-      smem[v * axis_size + pos] = w[v * stride_var + in];
-    }
-  }
-  __syncthreads();
-
-  int nghost = (recon_prim == FusedReconScheme::CP3 ||
-                recon_prim == FusedReconScheme::WENO3)
-                   ? 2
-                   : 3;
-  int k, j, face_pos;
-  T alpha, beta;
-  cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
-            &alpha, &beta, &k, &j, &face_pos);
-  if (pos != face_pos) return;
-  int il = nghost;
-  int left_start = face_pos - il;
-  int right_start = face_pos - (il - 1);
-  T left[64], right[64];
-  for (int v = 0; v < nvar; ++v) {
-    auto scheme = (v == IDN || v >= ICY) ? recon_prim : recon_vel;
-    left[v] = interp_shared_fused_impl(smem, v, left_start, axis_size, scheme,
-                                       /*right=*/true);
-    right[v] = interp_shared_fused_impl(smem, v, right_start, axis_size, scheme,
-                                        /*right=*/false);
-  }
-  if (eos_limiter) {
-    left[IDN] = max(left[IDN], density_floor);
-    right[IDN] = max(right[IDN], density_floor);
-    if (eos != FusedEos::ShallowWater) {
-      left[IPR] = max(left[IPR], pressure_floor);
-      right[IPR] = max(right[IPR], pressure_floor);
-      for (int v = ICY; v < nvar; ++v) {
-        left[v] = max(left[v], T(0));
-        right[v] = max(right[v], T(0));
-      }
-    }
-  }
-  cs_contra_to_sph(left, face, alpha, beta);
-  cs_contra_to_sph(right, face, alpha, beta);
-
-  int buf_stride_var = edge_len * nc1;
-  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
-  int block_base = local_block * block_stride;
-  int left_out =
-      block_base +
-      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-  int right_out =
-      block_base +
-      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-  for (int v = 0; v < nvar; ++v) {
-    buf[left_out + v * buf_stride_var] = left[v];
-    buf[right_out + v * buf_stride_var] = right[v];
-  }
-}
-
-__global__ void cs_sync_kernel(uint32_t** signal_pads, int rank,
-                               int world_size) {
-  // Pack writes happen in the preceding kernel; use PyTorch's previous-kernel
-  // visibility pattern before the flux kernel reads remote symmetric memory.
-  c10d::symmetric_memory::sync_remote_blocks<false, true>(
-      signal_pads, rank, world_size);
-}
-
-__global__ void cs_release_reads_kernel(uint32_t** signal_pads, int rank,
-                                        int world_size) {
-  if (blockIdx.x != 1) return;
-  // Flux reads happen in the preceding kernel; release the read epoch before a
-  // later pack kernel rewrites the same symmetric-memory slots.
-  c10d::symmetric_memory::sync_remote_blocks<true, false>(
-      signal_pads, rank, world_size);
-}
-
-template <typename T>
-__global__ void cs_flux_kernel(T const* buf, T* flux2, T* flux3, void** buf_ptrs,
-                               int const* side_meta, int nvar, int nc3,
-                               int nc2, int nc1, int face, int local_block,
-                               FusedReconScheme recon_prim,
-                               FusedReconScheme recon_vel,
-                               FusedRiemannSolver solver, FusedEos eos,
-                               T gammad, T density_floor, T pressure_floor,
-                               bool eos_limiter, T const* inv_mu_ratio_m1,
-                               T const* cv_ratio_m1, T const* u0, int nvapor,
-                               int shallow_roe_dir_yz,
-                               T const* x2v, T const* x2f, T const* x3v,
-                               T const* x3f) {
-  int edge_len = max(nc2, nc3);
-  int line = blockIdx.x;
-  int i = line % nc1;
-  int edge_pos = (line / nc1) % edge_len;
-  int side = line / (nc1 * edge_len);
-  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
-  if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
-      (side >= CS_SIDE_B && edge_pos >= nc2)) {
-    return;
-  }
-
-  int peer_process = side_meta[side * CS_META_STRIDE + CS_META_PEER_PROCESS];
-  int peer_local_block =
-      side_meta[side * CS_META_STRIDE + CS_META_PEER_LOCAL_BLOCK];
-  int peer_side = side_meta[side * CS_META_STRIDE + CS_META_PEER_SIDE];
-  int rev = side_meta[side * CS_META_STRIDE + CS_META_REV];
-  int peer_edge = rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos)
-                      : edge_pos;
-  // buf_ptrs is indexed by process rank. peer_process == this process (a peer
-  // panel co-resident on the same GPU) resolves to the local symmetric buffer;
-  // a remote process resolves to its NVSHMEM peer mapping. In both cases the
-  // owning panel's data lives in slice peer_local_block of that process buffer.
-  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_process]);
-  int buf_stride_var = edge_len * nc1;
-  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
-  int local_base = local_block * block_stride;
-  int peer_base = peer_local_block * block_stride;
-  int remote_left_off =
-      peer_base +
-      (((peer_side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len +
-       peer_edge) *
-          nc1 +
-      i;
-  int remote_right_off =
-      peer_base +
-      (((peer_side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len +
-       peer_edge) *
-          nc1 +
-      i;
-  int local_left_off =
-      local_base +
-      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-  int local_right_off =
-      local_base +
-      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-
-  int dim = side <= CS_SIDE_R ? 2 : 1;
-  int stride_var = nc1 * nc2 * nc3;
-  int pos = threadIdx.x;
-
-  int nghost = (recon_prim == FusedReconScheme::CP3 ||
-                recon_prim == FusedReconScheme::WENO3)
-                   ? 2
-                   : 3;
-  int k, j, face_pos;
-  T alpha, beta;
-  cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
-            &alpha, &beta, &k, &j, &face_pos);
-  if (pos != face_pos) return;
-
-  T local_left[64], local_right[64], remote_left[64], remote_right[64], wl[64],
-      wr[64];
-  for (int v = 0; v < nvar; ++v) {
-    local_left[v] = buf[local_left_off + v * buf_stride_var];
-    local_right[v] = buf[local_right_off + v * buf_stride_var];
-    remote_left[v] = peer_buf[remote_left_off + v * buf_stride_var];
-    remote_right[v] = peer_buf[remote_right_off + v * buf_stride_var];
-  }
-  bool lower_side = side == CS_SIDE_L || side == CS_SIDE_B;
-  bool peer_lower_side = peer_side == CS_SIDE_L || peer_side == CS_SIDE_B;
-  for (int v = 0; v < nvar; ++v) {
-    T remote = peer_lower_side ? remote_right[v] : remote_left[v];
-    wl[v] = lower_side ? remote : local_left[v];
-    wr[v] = lower_side ? local_right[v] : remote;
-  }
-  cs_sph_to_contra(wl, face, alpha, beta);
-  cs_sph_to_contra(wr, face, alpha, beta);
-  if (eos_limiter) {
-    wl[IDN] = max(wl[IDN], density_floor);
-    wr[IDN] = max(wr[IDN], density_floor);
-    if (eos != FusedEos::ShallowWater) {
-      wl[IPR] = max(wl[IPR], pressure_floor);
-      wr[IPR] = max(wr[IPR], pressure_floor);
-      for (int v = ICY; v < nvar; ++v) {
-        wl[v] = max(wl[v], T(0));
-        wr[v] = max(wr[v], T(0));
-      }
-    }
-  }
-  T wl_density = wl[IDN];
-  T wr_density = wr[IDN];
-  gnomonic_prim2local(wl, dim, alpha, beta);
-  gnomonic_prim2local(wr, dim, alpha, beta);
-  wl[IDN] = wl_density;
-  wr[IDN] = wr_density;
-
-  int flux_k = side <= CS_SIDE_R ? k : face_pos;
-  int flux_j = side <= CS_SIDE_R ? face_pos : j;
-  int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
-  T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
-  if (solver == FusedRiemannSolver::ShallowRoe) {
-    shallow_roe_impl(flux, wl, wr, dim, shallow_roe_dir_yz, /*stride_w=*/1,
-                     /*stride_f=*/stride_var);
-    gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
-    return;
-  }
-
-  T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
-  int ny = nvar - ICY;
-  eos_side_quantities(wl, wr, ny, nvapor, eos, gammad, inv_mu_ratio_m1,
-                      cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
-
-  if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
-               /*stride_w=*/1, /*stride_f=*/stride_var);
-  } else {
-    hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
-              /*stride_f=*/stride_var);
-  }
-  gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
-}
-
-// Process-level seam flux: one launch overwrites the cross-panel boundary flux
-// for ALL local panels. blockIdx.x decodes (panel, side, edge_pos, i); each
-// panel's own flux2/flux3 tensor and side_meta are addressed through the
-// per-panel pointer/metadata arrays gathered on the host. The per-interface math
-// is identical to cs_flux_kernel (same buffer indexing, transforms, Riemann);
-// panel p is local block p, so its packed edges live in slice p of the shared
-// buffer and its coords are the shared equiangular angular grid.
-template <typename T>
-__global__ void cs_flux_all_kernel(
-    T const* buf, void** flux2_ptrs, void** flux3_ptrs, void** buf_ptrs,
-    int const* side_meta_all, int const* faces, int nvar, int nc3, int nc2,
-    int nc1, FusedReconScheme recon_prim, FusedReconScheme recon_vel,
-    FusedRiemannSolver solver, FusedEos eos, T gammad, T density_floor,
-    T pressure_floor, bool eos_limiter, T const* inv_mu_ratio_m1,
-    T const* cv_ratio_m1, T const* u0, int nvapor, int shallow_roe_dir_yz,
-    void** x2v_ptrs, void** x2f_ptrs, void** x3v_ptrs, void** x3f_ptrs) {
-  int edge_len = max(nc2, nc3);
-  int lines_per_panel = CS_NUM_SIDES * edge_len * nc1;
-  int panel = blockIdx.x / lines_per_panel;
-  int line = blockIdx.x % lines_per_panel;
-  int local_block = panel;
-  int face = faces[panel];
-  T* flux2 = static_cast<T*>(flux2_ptrs[panel]);
-  T* flux3 = static_cast<T*>(flux3_ptrs[panel]);
-  int const* side_meta = side_meta_all + panel * CS_NUM_SIDES * CS_META_STRIDE;
-  // Per-panel angular coords (each tile may hold a different sub-grid when
-  // pxy > 1; for pxy == 1 these are identical across a process's panels).
-  T const* x2v = static_cast<T const*>(x2v_ptrs[panel]);
-  T const* x2f = static_cast<T const*>(x2f_ptrs[panel]);
-  T const* x3v = static_cast<T const*>(x3v_ptrs[panel]);
-  T const* x3f = static_cast<T const*>(x3f_ptrs[panel]);
-
-  int i = line % nc1;
-  int edge_pos = (line / nc1) % edge_len;
-  int side = line / (nc1 * edge_len);
-  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
-  if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
-      (side >= CS_SIDE_B && edge_pos >= nc2)) {
-    return;
-  }
-
-  int peer_process = side_meta[side * CS_META_STRIDE + CS_META_PEER_PROCESS];
-  int peer_local_block =
-      side_meta[side * CS_META_STRIDE + CS_META_PEER_LOCAL_BLOCK];
-  int peer_side = side_meta[side * CS_META_STRIDE + CS_META_PEER_SIDE];
-  int rev = side_meta[side * CS_META_STRIDE + CS_META_REV];
-  int peer_edge = rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos)
-                      : edge_pos;
-  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_process]);
-  int buf_stride_var = edge_len * nc1;
-  int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
-  int local_base = local_block * block_stride;
-  int peer_base = peer_local_block * block_stride;
-  int remote_left_off =
-      peer_base +
-      (((peer_side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len +
-       peer_edge) *
-          nc1 +
-      i;
-  int remote_right_off =
-      peer_base +
-      (((peer_side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len +
-       peer_edge) *
-          nc1 +
-      i;
-  int local_left_off =
-      local_base +
-      (((side * CS_NUM_STATES + CS_STATE_LEFT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-  int local_right_off =
-      local_base +
-      (((side * CS_NUM_STATES + CS_STATE_RIGHT) * nvar) * edge_len + edge_pos) *
-          nc1 +
-      i;
-
-  int dim = side <= CS_SIDE_R ? 2 : 1;
-  int stride_var = nc1 * nc2 * nc3;
-  int pos = threadIdx.x;
-
-  int nghost = (recon_prim == FusedReconScheme::CP3 ||
-                recon_prim == FusedReconScheme::WENO3)
-                   ? 2
-                   : 3;
-  int k, j, face_pos;
-  T alpha, beta;
-  cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, x2v, x2f, x3v, x3f,
-            &alpha, &beta, &k, &j, &face_pos);
-  if (pos != face_pos) return;
-
-  T local_left[64], local_right[64], remote_left[64], remote_right[64], wl[64],
-      wr[64];
-  for (int v = 0; v < nvar; ++v) {
-    local_left[v] = buf[local_left_off + v * buf_stride_var];
-    local_right[v] = buf[local_right_off + v * buf_stride_var];
-    remote_left[v] = peer_buf[remote_left_off + v * buf_stride_var];
-    remote_right[v] = peer_buf[remote_right_off + v * buf_stride_var];
-  }
-  bool lower_side = side == CS_SIDE_L || side == CS_SIDE_B;
-  bool peer_lower_side = peer_side == CS_SIDE_L || peer_side == CS_SIDE_B;
-  for (int v = 0; v < nvar; ++v) {
-    T remote = peer_lower_side ? remote_right[v] : remote_left[v];
-    wl[v] = lower_side ? remote : local_left[v];
-    wr[v] = lower_side ? local_right[v] : remote;
-  }
-  cs_sph_to_contra(wl, face, alpha, beta);
-  cs_sph_to_contra(wr, face, alpha, beta);
-  if (eos_limiter) {
-    wl[IDN] = max(wl[IDN], density_floor);
-    wr[IDN] = max(wr[IDN], density_floor);
-    if (eos != FusedEos::ShallowWater) {
-      wl[IPR] = max(wl[IPR], pressure_floor);
-      wr[IPR] = max(wr[IPR], pressure_floor);
-      for (int v = ICY; v < nvar; ++v) {
-        wl[v] = max(wl[v], T(0));
-        wr[v] = max(wr[v], T(0));
-      }
-    }
-  }
-  T wl_density = wl[IDN];
-  T wr_density = wr[IDN];
-  gnomonic_prim2local(wl, dim, alpha, beta);
-  gnomonic_prim2local(wr, dim, alpha, beta);
-  wl[IDN] = wl_density;
-  wr[IDN] = wr_density;
-
-  int flux_k = side <= CS_SIDE_R ? k : face_pos;
-  int flux_j = side <= CS_SIDE_R ? face_pos : j;
-  int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
-  T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
-  if (solver == FusedRiemannSolver::ShallowRoe) {
-    shallow_roe_impl(flux, wl, wr, dim, shallow_roe_dir_yz, /*stride_w=*/1,
-                     /*stride_f=*/stride_var);
-    gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
-    return;
-  }
-
-  T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
-  int ny = nvar - ICY;
-  eos_side_quantities(wl, wr, ny, nvapor, eos, gammad, inv_mu_ratio_m1,
-                      cv_ratio_m1, u0, &el, &er, &gl, &gr, &cl, &cr);
-
-  if (solver == FusedRiemannSolver::LMARS) {
-    lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
-               /*stride_w=*/1, /*stride_f=*/stride_var);
-  } else {
-    hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
-              /*stride_f=*/stride_var);
-  }
-  gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
-}
-
 }  // namespace
 
-void fused_recon_riemann_cuda(
-    torch::Tensor w, torch::Tensor flux, int dim, FusedReconScheme recon_prim,
-    FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
-    double gammad, double density_floor, double pressure_floor,
-    bool eos_limiter, torch::Tensor inv_mu_ratio_m1,
-    torch::Tensor cv_ratio_m1, torch::Tensor u0, int nvapor,
-    int shallow_roe_dir_yz, bool revise_x1_lr, torch::Tensor dx1f,
-    torch::Tensor rho_grav,
-    bool cubed_sphere, int face, torch::Tensor x2v, torch::Tensor x2f,
-    torch::Tensor x3v, torch::Tensor x3f) {
+void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
+                              FusedReconRiemannParams const& params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
   int nc1 = w.size(3);
   int nvar = w.size(0);
+  int dim = params.dim;
   int axis_size = dim == 3 ? nc1 : (dim == 2 ? nc2 : nc3);
   TORCH_CHECK(axis_size <= 1024,
               "dynamics.fused-recon-riemann shared-memory kernel requires "
@@ -822,159 +198,37 @@ void fused_recon_riemann_cuda(
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_recon_riemann_cuda", [&] {
     size_t shared = static_cast<size_t>(axis_size) * nvar * sizeof(scalar_t);
-    if (revise_x1_lr && dim == 3) {
+    if (params.x1_revision.revise_lr && dim == 3) {
       shared += static_cast<size_t>(2) * axis_size * sizeof(scalar_t);
     }
+    DeviceFusedReconRiemannParams<scalar_t> device_params{
+        nvar,
+        nc3,
+        nc2,
+        nc1,
+        dim,
+        make_device_physics<scalar_t>(params.physics),
+        {params.x1_revision.revise_lr,
+         params.x1_revision.dx1f.defined()
+             ? params.x1_revision.dx1f.data_ptr<scalar_t>()
+             : nullptr,
+         params.x1_revision.rho_grav.defined()
+             ? params.x1_revision.rho_grav.data_ptr<scalar_t>()
+             : nullptr},
+        {params.metric.cubed_sphere,
+         params.metric.face,
+         params.metric.x2v.defined() ? params.metric.x2v.data_ptr<scalar_t>()
+                                     : nullptr,
+         params.metric.x2f.defined() ? params.metric.x2f.data_ptr<scalar_t>()
+                                     : nullptr,
+         params.metric.x3v.defined() ? params.metric.x3v.data_ptr<scalar_t>()
+                                     : nullptr,
+         params.metric.x3f.defined() ? params.metric.x3f.data_ptr<scalar_t>()
+                                     : nullptr}};
     fused_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
-        w.data_ptr<scalar_t>(), flux.data_ptr<scalar_t>(), nvar, nc3, nc2, nc1,
-        dim, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
-        scalar_t(density_floor), scalar_t(pressure_floor), eos_limiter,
-        inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
-                                  : nullptr,
-        cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
-        shallow_roe_dir_yz, revise_x1_lr,
-        dx1f.defined() ? dx1f.data_ptr<scalar_t>() : nullptr,
-        rho_grav.defined() ? rho_grav.data_ptr<scalar_t>() : nullptr,
-        cubed_sphere, face, x2v.defined() ? x2v.data_ptr<scalar_t>() : nullptr,
-        x2f.defined() ? x2f.data_ptr<scalar_t>() : nullptr,
-        x3v.defined() ? x3v.data_ptr<scalar_t>() : nullptr,
-        x3f.defined() ? x3f.data_ptr<scalar_t>() : nullptr);
+        w.data_ptr<scalar_t>(), flux.data_ptr<scalar_t>(), device_params);
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_pack_cuda(
-    torch::Tensor w, torch::Tensor symm_buffer, torch::Tensor side_meta,
-    int face, int local_block, torch::Tensor x2v, torch::Tensor x2f,
-    torch::Tensor x3v, torch::Tensor x3f, FusedReconScheme recon_prim,
-    FusedReconScheme recon_vel, FusedEos eos, double density_floor,
-    double pressure_floor, bool eos_limiter) {
-  at::cuda::CUDAGuard device_guard(w.device());
-  int nc3 = w.size(1);
-  int nc2 = w.size(2);
-  int nc1 = w.size(3);
-  int nvar = w.size(0);
-  int edge_len = std::max(nc2, nc3);
-  int threads = edge_len;
-  TORCH_CHECK(threads <= 1024,
-              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
-              "exchange requires edge lines to fit in one CUDA block, but got ",
-              threads);
-  int blocks = 4 * edge_len * nc1;
-  auto stream = at::cuda::getCurrentCUDAStream();
-
-  AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_pack", [&] {
-    size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
-    cs_pack_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
-        w.data_ptr<scalar_t>(), symm_buffer.data_ptr<scalar_t>(),
-        side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1, face, local_block,
-        recon_prim, recon_vel, eos, scalar_t(density_floor),
-        scalar_t(pressure_floor), eos_limiter, x2v.data_ptr<scalar_t>(),
-        x2f.data_ptr<scalar_t>(), x3v.data_ptr<scalar_t>(),
-        x3f.data_ptr<scalar_t>());
-  });
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
-void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
-                                  int symm_rank, int symm_world_size,
-                                  torch::Device device) {
-  at::cuda::CUDAGuard device_guard(device);
-  auto stream = at::cuda::getCurrentCUDAStream();
-  cs_sync_kernel<<<1, std::max(32, symm_world_size), 0, stream>>>(
-      symm_signal_pads_dev, symm_rank, symm_world_size);
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
-void fused_cubed_sphere_flux_cuda(
-    torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
-    torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,
-    torch::Tensor side_meta, int face, int local_block, torch::Tensor x2v,
-    torch::Tensor x2f, torch::Tensor x3v, torch::Tensor x3f,
-    FusedReconScheme recon_prim, FusedReconScheme recon_vel,
-    FusedRiemannSolver solver, FusedEos eos, double gammad,
-    double density_floor, double pressure_floor, bool eos_limiter,
-    torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1, torch::Tensor u0,
-    int nvapor, int shallow_roe_dir_yz) {
-  at::cuda::CUDAGuard device_guard(w.device());
-  int nc3 = w.size(1);
-  int nc2 = w.size(2);
-  int nc1 = w.size(3);
-  int nvar = w.size(0);
-  int edge_len = std::max(nc2, nc3);
-  int threads = edge_len;
-  TORCH_CHECK(threads <= 1024,
-              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
-              "exchange requires edge lines to fit in one CUDA block, but got ",
-              threads);
-  int blocks = 4 * edge_len * nc1;
-  auto stream = at::cuda::getCurrentCUDAStream();
-
-  AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_flux", [&] {
-    size_t shared = static_cast<size_t>(edge_len) * nvar * sizeof(scalar_t);
-    cs_flux_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
-        symm_buffer.data_ptr<scalar_t>(),
-        flux2.defined() ? flux2.data_ptr<scalar_t>() : nullptr,
-        flux3.defined() ? flux3.data_ptr<scalar_t>() : nullptr,
-        symm_buffer_ptrs_dev, side_meta.data_ptr<int>(), nvar, nc3, nc2, nc1,
-        face, local_block, recon_prim, recon_vel, solver, eos, scalar_t(gammad),
-        scalar_t(density_floor), scalar_t(pressure_floor), eos_limiter,
-        inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
-                                  : nullptr,
-        cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
-        shallow_roe_dir_yz, x2v.data_ptr<scalar_t>(), x2f.data_ptr<scalar_t>(),
-        x3v.data_ptr<scalar_t>(), x3f.data_ptr<scalar_t>());
-  });
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
-void fused_cubed_sphere_flux_all_cuda(
-    torch::Tensor symm_buffer, void** flux2_ptrs_dev, void** flux3_ptrs_dev,
-    void** symm_buffer_ptrs_dev, torch::Tensor side_meta_all,
-    torch::Tensor faces, int nvar, int nc3, int nc2, int nc1, int bpp,
-    void** x2v_ptrs_dev, void** x2f_ptrs_dev, void** x3v_ptrs_dev,
-    void** x3f_ptrs_dev, c10::ScalarType dtype, FusedReconScheme recon_prim,
-    FusedReconScheme recon_vel, FusedRiemannSolver solver, FusedEos eos,
-    double gammad, double density_floor, double pressure_floor,
-    bool eos_limiter, torch::Tensor inv_mu_ratio_m1, torch::Tensor cv_ratio_m1,
-    torch::Tensor u0, int nvapor, int shallow_roe_dir_yz,
-    torch::Device device) {
-  at::cuda::CUDAGuard device_guard(device);
-  int edge_len = std::max(nc2, nc3);
-  int threads = edge_len;
-  TORCH_CHECK(threads <= 1024,
-              "dynamics.fused-recon-riemann cubed-sphere shared-memory "
-              "exchange requires edge lines to fit in one CUDA block, but got ",
-              threads);
-  int blocks = bpp * 4 * edge_len * nc1;
-  auto stream = at::cuda::getCurrentCUDAStream();
-
-  AT_DISPATCH_FLOATING_TYPES(dtype, "fused_cubed_sphere_flux_all", [&] {
-    cs_flux_all_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
-        symm_buffer.data_ptr<scalar_t>(), flux2_ptrs_dev, flux3_ptrs_dev,
-        symm_buffer_ptrs_dev, side_meta_all.data_ptr<int>(),
-        faces.data_ptr<int>(), nvar, nc3, nc2, nc1, recon_prim, recon_vel,
-        solver, eos, scalar_t(gammad), scalar_t(density_floor),
-        scalar_t(pressure_floor), eos_limiter,
-        inv_mu_ratio_m1.defined() ? inv_mu_ratio_m1.data_ptr<scalar_t>()
-                                  : nullptr,
-        cv_ratio_m1.defined() ? cv_ratio_m1.data_ptr<scalar_t>() : nullptr,
-        u0.defined() ? u0.data_ptr<scalar_t>() : nullptr, nvapor,
-        shallow_roe_dir_yz, x2v_ptrs_dev, x2f_ptrs_dev, x3v_ptrs_dev,
-        x3f_ptrs_dev);
-  });
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
-void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
-                                     int symm_rank, int symm_world_size,
-                                     torch::Device device) {
-  at::cuda::CUDAGuard device_guard(device);
-  auto stream = at::cuda::getCurrentCUDAStream();
-  cs_release_reads_kernel<<<2, std::max(32, symm_world_size), 0, stream>>>(
-      symm_signal_pads_dev, symm_rank, symm_world_size);
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
 }  // namespace snap
