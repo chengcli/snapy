@@ -84,9 +84,9 @@ void ensure_symmetric_group(LayoutImpl const& layout,
 
   auto set_group_info_once = [&](std::string const& name) {
     if (initialized.count(name)) return;
-    c10d::symmetric_memory::set_group_info(
-        name, layout.options->process_rank(),
-        layout.options->process_world_size(), layout.comm->store);
+    c10d::symmetric_memory::set_group_info(name, layout.options->process_rank(),
+                                           layout.options->process_world_size(),
+                                           layout.comm->store);
     initialized.insert(name);
   };
 
@@ -153,23 +153,26 @@ FusedSymmetricExchangePool& get_fused_symmetric_exchange_pool(
     pool.buffer =
         torch::empty(sizes, torch::TensorOptions().dtype(dtype).device(device));
     int64_t base = reinterpret_cast<int64_t>(pool.buffer.data_ptr());
-    pool.self_ptr = torch::tensor({base}, torch::dtype(torch::kInt64)).to(device);
+    pool.self_ptr =
+        torch::tensor({base}, torch::dtype(torch::kInt64)).to(device);
   }
   auto [inserted, _] = pools.emplace(key, std::move(pool));
   return inserted->second;
 }
 
 //! \brief Reusable process-local barrier over the blocks_per_process worker
-//! threads. The fused cubed-sphere exchange runs pack -> sync -> flux -> release
-//! on one shared symmetric buffer; these barriers guarantee every local block
-//! has enqueued its pack before the single cross-process visibility sync, and
-//! that the sync is enqueued before any block reads peer state. All exchange
-//! kernels share the device's default stream, so enqueue order fixed by these
-//! barriers is the execution order, which removes the single-block launch
-//! ordering deadlock that made the old path require blocks_per_process == 1.
+//! threads. The fused cubed-sphere exchange runs pack -> sync -> flux ->
+//! release on one shared symmetric buffer; these barriers guarantee every local
+//! block has enqueued its pack before the single cross-process visibility sync,
+//! and that the sync is enqueued before any block reads peer state. All
+//! exchange kernels share the device's default stream, so enqueue order fixed
+//! by these barriers is the execution order, which removes the single-block
+//! launch ordering deadlock that made the old path require blocks_per_process
+//! == 1.
 class FusedExchangeBarrier {
  public:
-  explicit FusedExchangeBarrier(int participants) : participants_(participants) {}
+  explicit FusedExchangeBarrier(int participants)
+      : participants_(participants) {}
   void wait() {
     std::unique_lock<std::mutex> lock(mutex_);
     int gen = generation_;
@@ -213,8 +216,8 @@ FusedExchangeBarrier& get_fused_exchange_barrier(std::string const& key,
 //! never reads a freed pointer buffer.
 struct FusedSeamBatch {
   //! _flux2/_flux3 are persistent HydroImpl buffers, so raw ptrs are stable.
-  std::vector<int64_t> flux2_ptr, flux3_ptr;   // per local block
-  std::vector<int32_t> faces;                   // per local block
+  std::vector<int64_t> flux2_ptr, flux3_ptr;  // per local block
+  std::vector<int32_t> faces;                 // per local block
   //! side_meta / coords are transient per call; hold the tensors so their
   //! device pointers stay valid until the async flux-all kernel completes.
   std::vector<torch::Tensor> side_meta, x2v, x2f, x3v, x3f;
@@ -267,8 +270,9 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
   // Per side: [enabled, peer_process, peer_local_block, peer_side, rev].
   // neighbor_rank returns a global BLOCK rank; translate it into the owning
   // process (to index the symmetric buffer_ptrs array) and the slot within that
-  // process (to index the shared buffer), so the exchange addresses same-GPU and
-  // cross-GPU peers uniformly. Must match the CS_META_* layout in the kernels.
+  // process (to index the shared buffer), so the exchange addresses same-GPU
+  // and cross-GPU peers uniformly. Must match the CS_META_* layout in the
+  // kernels.
   constexpr int kStride = 5;
   std::vector<int> meta(4 * kStride, 0);
   auto iloc = layout.loc_of(layout.options->rank());
@@ -352,10 +356,11 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     // sliced by local block, and cross-panel peers are addressed by (owning
     // process, local block). Cross-process exchange still needs the NVSHMEM
     // process group; a single-process run (all panels on one GPU) does not.
-    TORCH_CHECK(playout->options->process_world_size() == 1 ||
-                    playout->has_process_group(),
-                "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
-                "initialized process group for multi-process runs");
+    TORCH_CHECK(
+        playout->options->process_world_size() == 1 ||
+            playout->has_process_group(),
+        "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
+        "initialized process group for multi-process runs");
   }
 
   CubedSphereLayoutImpl const* cs_layout = nullptr;
@@ -427,8 +432,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                               nvapor,
                               shallow_roe_dir_yz};
   };
-  FusedMetricParams metric_params{cubed_sphere_layout, face, x2v, x2f, x3v,
-                                  x3f};
+  FusedMetricParams metric_params{
+      cubed_sphere_layout, face, x2v, x2f, x3v, x3f};
 
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(
@@ -479,7 +484,10 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       std::vector<int64_t> strides = {
           static_cast<int64_t>(kSides) * kStates * nvar * edge_len * nc1,
           static_cast<int64_t>(kStates) * nvar * edge_len * nc1,
-          nvar * edge_len * nc1, edge_len * nc1, nc1, 1};
+          nvar * edge_len * nc1,
+          edge_len * nc1,
+          nc1,
+          1};
 
       if (multi_process) ensure_symmetric_group(*playout, group_name);
       auto& pool = get_fused_symmetric_exchange_pool(
@@ -493,8 +501,10 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       // register this panel's flux tensors / face / coords / side_meta for the
       // single process-level seam-flux launch (distinct local-block slots, so
       // the concurrent workers never touch the same entry)
-      batch.flux2_ptr[local_block] = reinterpret_cast<int64_t>(_flux2.data_ptr());
-      batch.flux3_ptr[local_block] = reinterpret_cast<int64_t>(_flux3.data_ptr());
+      batch.flux2_ptr[local_block] =
+          reinterpret_cast<int64_t>(_flux2.data_ptr());
+      batch.flux3_ptr[local_block] =
+          reinterpret_cast<int64_t>(_flux3.data_ptr());
       batch.faces[local_block] = face;
       batch.side_meta[local_block] = side_meta;
       batch.x2v[local_block] = x2v;
@@ -502,21 +512,23 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       batch.x3v[local_block] = x3v;
       batch.x3f[local_block] = x3f;
 
-      // ---- Phase A: every local panel packs its edge states into its slice ----
-      FusedCubedSpherePanelParams panel_params{side_meta, face, local_block,
-                                               x2v, x2f, x3v, x3f};
+      // ---- Phase A: every local panel packs its edge states into its slice
+      // ----
+      FusedCubedSpherePanelParams panel_params{
+          side_meta, face, local_block, x2v, x2f, x3v, x3f};
       fused_cubed_sphere_pack_cuda(
           w, pool.buffer,
-          FusedCubedSpherePackParams{
-              panel_params, recon23_prim, recon23_vel, eos,
-              options->eos()->density_floor(), options->eos()->pressure_floor(),
-              options->eos()->limiter()});
+          FusedCubedSpherePackParams{panel_params, recon23_prim, recon23_vel,
+                                     eos, options->eos()->density_floor(),
+                                     options->eos()->pressure_floor(),
+                                     options->eos()->limiter()});
       barrier.wait();  // all panels packed + registered
 
       // ---- Phase B: one leader per process runs the whole seam exchange on
-      // the GPU: cross-process visibility sync -> ONE flux kernel over ALL local
-      // panels (overwrites each panel's cross-panel boundary flux) -> close the
-      // read epoch. No per-panel flux launches and no per-substage .item(). ----
+      // the GPU: cross-process visibility sync -> ONE flux kernel over ALL
+      // local panels (overwrites each panel's cross-panel boundary flux) ->
+      // close the read epoch. No per-panel flux launches and no per-substage
+      // .item(). ----
       if (is_leader) {
         if (multi_process) {
           clear_fused_signal_slots_once(pool.symm, playout->comm, group_name);
@@ -537,30 +549,23 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         batch.x3v_dev = ptr_tensor(batch.x3v);
         batch.x3f_dev = ptr_tensor(batch.x3f);
         batch.faces_dev =
-            torch::tensor(batch.faces, torch::dtype(torch::kInt32)).to(w.device());
+            torch::tensor(batch.faces, torch::dtype(torch::kInt32))
+                .to(w.device());
         batch.side_meta_all = torch::stack(batch.side_meta, 0);
         auto as_pp = [](torch::Tensor& t) {
           return reinterpret_cast<void**>(t.data_ptr<int64_t>());
         };
         fused_cubed_sphere_flux_all_cuda(
             pool.buffer,
-            FusedCubedSphereFluxAllPtrs{as_pp(batch.flux2_dev),
-                                        as_pp(batch.flux3_dev),
-                                        pool.buffer_ptrs_dev(),
-                                        as_pp(batch.x2v_dev),
-                                        as_pp(batch.x2f_dev),
-                                        as_pp(batch.x3v_dev),
-                                        as_pp(batch.x3f_dev)},
+            FusedCubedSphereFluxAllPtrs{
+                as_pp(batch.flux2_dev), as_pp(batch.flux3_dev),
+                pool.buffer_ptrs_dev(), as_pp(batch.x2v_dev),
+                as_pp(batch.x2f_dev), as_pp(batch.x3v_dev),
+                as_pp(batch.x3f_dev)},
             FusedCubedSphereFluxAllParams{
-                batch.side_meta_all,
-                batch.faces_dev,
-                static_cast<int>(nvar),
-                static_cast<int>(w.size(1)),
-                static_cast<int>(w.size(2)),
-                static_cast<int>(nc1),
-                bpp,
-                w.scalar_type(),
-                w.device(),
+                batch.side_meta_all, batch.faces_dev, static_cast<int>(nvar),
+                static_cast<int>(w.size(1)), static_cast<int>(w.size(2)),
+                static_cast<int>(nc1), bpp, w.scalar_type(), w.device(),
                 make_physics_params(recon23_prim, recon23_vel)});
         if (multi_process) {
           fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),

@@ -122,4 +122,3 @@ inline DeviceCubedSpherePanelParams<T> make_device_panel(
 }
 
 }  // namespace snap
-

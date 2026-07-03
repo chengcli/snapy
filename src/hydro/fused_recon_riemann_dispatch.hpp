@@ -76,9 +76,8 @@ struct FusedCubedSpherePackParams {
   bool eos_limiter;
 };
 
-void fused_cubed_sphere_pack_cuda(
-    torch::Tensor w, torch::Tensor symm_buffer,
-    FusedCubedSpherePackParams const& params);
+void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
+                                  FusedCubedSpherePackParams const& params);
 
 void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
                                   int symm_rank, int symm_world_size,
@@ -89,10 +88,11 @@ struct FusedCubedSphereFluxParams {
   FusedPhysicsParams physics;
 };
 
-void fused_cubed_sphere_flux_cuda(
-    torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
-    torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,
-    FusedCubedSphereFluxParams const& params);
+void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
+                                  torch::Tensor flux3,
+                                  torch::Tensor symm_buffer,
+                                  void** symm_buffer_ptrs_dev,
+                                  FusedCubedSphereFluxParams const& params);
 
 // Process-level seam flux: one launch overwrites the cross-panel boundary flux
 // for ALL local panels. flux2_ptrs_dev/flux3_ptrs_dev are device arrays of the

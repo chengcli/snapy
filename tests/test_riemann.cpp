@@ -313,8 +313,8 @@ using namespace snap;
 namespace {
 
 struct ScopedEnv {
-  explicit ScopedEnv(char const* name_) : name(name_) {
-    auto* value = std::getenv(name);
+  explicit ScopedEnv(char const *name_) : name(name_) {
+    auto *value = std::getenv(name);
     if (value) {
       had_value = true;
       old_value = value;
@@ -328,7 +328,7 @@ struct ScopedEnv {
     }
   }
 
-  char const* name;
+  char const *name;
   bool had_value = false;
   std::string old_value;
 };
@@ -464,7 +464,8 @@ TEST(HydroOptions, auto_detects_fused_recon_riemann_for_cubed_sphere_bpp1) {
   std::remove(fname);
 }
 
-TEST(HydroOptions, auto_detects_fused_recon_riemann_for_cubed_sphere_multiblock) {
+TEST(HydroOptions,
+     auto_detects_fused_recon_riemann_for_cubed_sphere_multiblock) {
   auto config = std::string(
                     "distribute:\n"
                     "  layout: cubed-sphere\n"
@@ -669,8 +670,7 @@ TEST_P(DeviceTest,
   std::remove(fused_name);
 }
 
-TEST_P(DeviceTest,
-       fused_recon_riemann_matches_staged_ideal_moist_lmars_cloud) {
+TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_moist_lmars_cloud) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
   }

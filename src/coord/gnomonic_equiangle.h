@@ -42,8 +42,7 @@ inline DISPATCH_MACRO void gnomonic_sin_cos(int dim, T alpha, T beta,
 }
 
 template <typename T>
-inline DISPATCH_MACRO void gnomonic_prim2local(T* w, int dim, T alpha,
-                                               T beta) {
+inline DISPATCH_MACRO void gnomonic_prim2local(T* w, int dim, T alpha, T beta) {
   T sin_theta, cos_theta;
   gnomonic_sin_cos(dim, alpha, beta, &sin_theta, &cos_theta);
   T u2 = w[IVY];

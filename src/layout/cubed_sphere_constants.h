@@ -22,18 +22,18 @@ struct CSVel {
 };
 
 inline DISPATCH_MACRO CSVel cs_cart_to_local_vel(int face, int component) {
-  const int idx[6][3] = {
-      {VEL3, VEL1, VEL2}, {VEL3, VEL2, VEL1}, {VEL3, VEL1, VEL2},
-      {VEL1, VEL3, VEL2}, {VEL3, VEL2, VEL1}, {VEL1, VEL3, VEL2}};
+  const int idx[6][3] = {{VEL3, VEL1, VEL2}, {VEL3, VEL2, VEL1},
+                         {VEL3, VEL1, VEL2}, {VEL1, VEL3, VEL2},
+                         {VEL3, VEL2, VEL1}, {VEL1, VEL3, VEL2}};
   const int sgn[6][3] = {{+1, +1, +1}, {+1, -1, +1}, {+1, -1, -1},
                          {+1, -1, +1}, {+1, +1, -1}, {-1, +1, +1}};
   return {idx[face][component], sgn[face][component]};
 }
 
 inline DISPATCH_MACRO CSVel cs_local_to_cart_vel(int face, int component) {
-  const int idx[6][3] = {
-      {VEL2, VEL3, VEL1}, {VEL3, VEL2, VEL1}, {VEL2, VEL3, VEL1},
-      {VEL1, VEL3, VEL2}, {VEL3, VEL2, VEL1}, {VEL1, VEL3, VEL2}};
+  const int idx[6][3] = {{VEL2, VEL3, VEL1}, {VEL3, VEL2, VEL1},
+                         {VEL2, VEL3, VEL1}, {VEL1, VEL3, VEL2},
+                         {VEL3, VEL2, VEL1}, {VEL1, VEL3, VEL2}};
   const int sgn[6][3] = {{+1, +1, +1}, {+1, -1, +1}, {-1, -1, +1},
                          {+1, +1, -1}, {-1, +1, +1}, {-1, +1, +1}};
   return {idx[face][component], sgn[face][component]};

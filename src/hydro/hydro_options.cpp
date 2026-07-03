@@ -40,7 +40,8 @@ bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
       (eos_type == "shallow-water" && riemann_type == "shallow-roe");
   // Cubed-sphere is now supported for any blocks_per_process: each process may
   // own several panels co-resident on one GPU, exchanged through a shared
-  // per-process symmetric buffer sliced by local block (see hydro_forward_fused).
+  // per-process symmetric buffer sliced by local block (see
+  // hydro_forward_fused).
   return eos_supported && riemann_supported && recon_supported &&
          combo_supported;
 }
@@ -116,11 +117,11 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
     bool fused_supported = fused_recon_riemann_supported_by_options(op, config);
     op->fused_recon_riemann() = fused_env_enabled(fused_supported);
-    SINFO(HydroOptions)
-        << "FUSED=" << fused_env_mode()
-        << " fused-recon-riemann="
-        << (op->fused_recon_riemann() ? "ON" : "OFF")
-        << " supported=" << (fused_supported ? "true" : "false") << "\n";
+    SINFO(HydroOptions) << "FUSED=" << fused_env_mode()
+                        << " fused-recon-riemann="
+                        << (op->fused_recon_riemann() ? "ON" : "OFF")
+                        << " supported=" << (fused_supported ? "true" : "false")
+                        << "\n";
   }
 
   // --------------- forcings --------------- //
