@@ -24,7 +24,7 @@ requires-python = ">=3.10"
 dependencies = [
   "numpy",
   "pyyaml",
-  "kintera>=2.1.0",
+  "kintera>=2.4.2",
   "commux>=0.1.4; platform_system == 'Linux'",
 ]
 classifiers = [

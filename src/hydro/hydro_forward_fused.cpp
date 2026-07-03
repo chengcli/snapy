@@ -589,6 +589,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     du[IPR] +=
         dt * w[IVX] * rho_grav * (1. - options->grav()->non_hydrostatic());
   }
+  _apply_implicit_correction(du, w, dt, other);
   return du;
 }
 

@@ -188,30 +188,7 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
 
   //// ------------ (7) Perform implicit correction ------------ ////
   if (picorr) {
-    torch::Tensor wi;
-    if (has_solid) {
-      wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
-                        other.at("fill_solid_hydro_w"), w);
-      du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
-    } else {
-      wi = w;
-    }
-
-    auto du0 = du.clone();
-    du[IPR].sub_(peos->internal_energy_offset(du));
-
-    torch::Tensor gamma;
-    if (options->eos()->type() == "aneos") {
-      auto cs = peos->compute("W->L", {w});
-      gamma = peos->compute("WL->A", {w, cs});
-    } else {
-      gamma = peos->compute("W->A", {wi});
-    }
-    picorr->forward(du, wi, gamma, dt);
-    du[IPR].add_(peos->internal_energy_offset(du));
-
-    _imp.copy_(du);
-    _imp.sub_(du0);
+    _apply_implicit_correction(du, w, dt, other);
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
