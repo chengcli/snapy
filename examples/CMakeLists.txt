@@ -5,6 +5,7 @@
 setup_problem(shock)
 setup_problem(straka)
 setup_problem(bryan)
+setup_problem(jupiter_evap_precip_1d)
 setup_problem(jupiter_dry_mesh)
 setup_problem(run_hydro)
 setup_problem(shallow_xy)
