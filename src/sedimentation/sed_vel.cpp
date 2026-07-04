@@ -42,14 +42,20 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   std::vector<int64_t> vec(temp.dim() + 1, 1);
   vec[0] = -1;
 
-  // cope with float precision
-  auto eta = (5.0 / 16.0) * std::sqrt(M_PI * KBoltz) * std::sqrt(m) *
-             torch::sqrt(temp) * torch::pow(KBoltz / epsilon_LJ * temp, 0.16) /
-             (M_PI * d * d * 1.22);
+  // Dynamic viscosity from Chapman-Enskog theory
+  auto reduced_temp = KBoltz * temp / epsilon_LJ;
 
-  // Calculate mean free path, lambda
+  auto eta =
+      (5.0 / 16.0) *
+      std::sqrt(m * KBoltz / M_PI) *
+      torch::sqrt(temp) *
+      torch::pow(reduced_temp, 0.16) /
+      (d * d * 1.22);
+
+  // Effective molecular mean free path
   auto lambda =
-      (eta * std::sqrt(M_PI * sqr(KBoltz))) / (pres * std::sqrt(2.0 * m));
+      eta / pres *
+      torch::sqrt(M_PI * KBoltz * temp / (2.0 * m));
 
   // Calculate Knudsen number, Kn
   auto Kn = lambda / radius.view(vec);

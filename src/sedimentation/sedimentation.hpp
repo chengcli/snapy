@@ -62,7 +62,8 @@ struct SedVelOptionsImpl {
   ADD_ARG(double, a_diameter) = 2.827e-10;
 
   //! Lennard-Jones potential [J]
-  ADD_ARG(double, a_epsilon_LJ) = 59.7e-7;
+  //! H2 characteristic temperature: 59.7K
+  ADD_ARG(double, a_epsilon_LJ) = 8.24e-22;
 
   //! molecular mass of background atmosphere, default to H2 [kg]
   ADD_ARG(double, a_mass) = 3.34e-27;

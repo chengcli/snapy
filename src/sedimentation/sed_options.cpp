@@ -104,7 +104,7 @@ SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
   }
 
   op->a_diameter() = node["a-diameter"].as<double>(2.827e-10);
-  op->a_epsilon_LJ() = node["a-epsilon-LJ"].as<double>(59.7e-7);
+  op->a_epsilon_LJ() = node["a-epsilon-LJ"].as<double>(8.24e-22);
   op->a_mass() = node["a-mass"].as<double>(3.34e-27);
   op->upper_limit() = node["upper-limit"].as<double>(5.e3);
 
