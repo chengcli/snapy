@@ -269,12 +269,18 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   int ie = pcoord->iu();
   auto grav = -options->grav()->grav1();
 
-  auto rd_tv = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1);
+  auto gamma = peos->compute("W->A", {w.narrow(-1, ie, 1)});
+  auto gm = gamma - 1.;
+  auto a = gm / gamma;
+  auto K = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1).pow(gamma);
+
   for (int n = 0; n < pcoord->options->nghost(); ++n) {
     auto dz = pmb->pcoord->dx1v[ie + n];
-    auto factor = torch::exp(-grav * dz / rd_tv);
-    w[IPR].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n, 1) * factor;
-    w[IDN].narrow(-1, ie + n + 1, 1) = w[IPR].narrow(-1, ie + n + 1, 1) / rd_tv;
+    auto h =
+        w[IPR].narrow(-1, ie + n, 1).pow(a) - a * grav * dz / K.pow(1. / gamma);
+    w[IPR].narrow(-1, ie + n + 1, 1) = h.pow(1. / a);
+    w[IDN].narrow(-1, ie + n + 1, 1) =
+        (w[IPR].narrow(-1, ie + n + 1, 1) / K).pow(1. / gamma);
   }
 }
 
