@@ -80,7 +80,7 @@ target_link_libraries(${namel}_${buildl}
 if(PNETCDF_LIBRARIES)
   get_filename_component(PNETCDF_LIBRARY_DIR "${PNETCDF_LIBRARY}" DIRECTORY)
   set_property(TARGET ${namel}_${buildl} APPEND PROPERTY
-    BUILD_RPATH "${PNETCDF_LIBRARY_DIR};$ORIGIN/../pnc/lib")
+    BUILD_RPATH "${PNETCDF_LIBRARY_DIR};$ORIGIN/../pinc/lib")
 endif()
 
 if(UCX_FOUND)

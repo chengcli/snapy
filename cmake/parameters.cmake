@@ -31,13 +31,13 @@ else()
   set(PNETCDF_OPTION "PNETCDFOUTPUT")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c
-            "import pnc; print(pnc.include_dir); print(pnc.library_dir / 'libpnc.so')"
+            "import pinc; print(pinc.include_dir); print(pinc.library_dir / 'libpnc.so')"
     OUTPUT_VARIABLE _pnc_info
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE _pnc_probe)
   if(NOT _pnc_probe EQUAL 0)
     message(FATAL_ERROR
-            "PNETCDF=ON now requires Python package 'pnc' in ${Python3_EXECUTABLE}")
+            "PNETCDF=ON now requires Python package 'pinc' in ${Python3_EXECUTABLE}")
   endif()
   string(REPLACE "\n" ";" _pnc_lines "${_pnc_info}")
   list(GET _pnc_lines 0 PNETCDF_INCLUDE_DIR)
