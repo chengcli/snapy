@@ -4,9 +4,9 @@ geometry:
   cells: {nx1: 64, nx2: 256, nx3: 1, nghost: 3}
 
 distribute:
-  backend: gloo
+  backend: ucx
   layout: slab
-  nb2: 2
+  nb2: 1
   nb3: 1
   verbose: false
 
@@ -55,7 +55,7 @@ scalar:
 outputs:
   - type: restart
     dt: 300.
-  - type: netcdf
+  - type: pnetcdf
     variables: [prim, uov, scalar_prim]
     dt: 300.
 

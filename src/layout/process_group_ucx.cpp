@@ -22,6 +22,9 @@ void set_default_env(char const* name, char const* value) {
 void ProcessGroupContext::_init_ucx() {
   set_default_env("COMMUX_COALESCE", "1");
   set_default_env("COMMUX_GROUP", "1");
+  if (options_->device() == "cpu") {
+    set_default_env("UCX_TLS", "^cuda_copy,cuda_ipc,gdr_copy");
+  }
   ucx_ = c10::make_intrusive<commux::ProcessGroupUCX>(
       store, options_->process_rank(), options_->process_world_size());
   owns_process_group_ = true;
