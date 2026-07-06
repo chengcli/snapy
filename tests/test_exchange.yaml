@@ -16,7 +16,6 @@ scalar:
   names: [tr0, tr1]
 
 distribute:
-  backend: gloo
   layout: cubed-sphere
   #layout: slab
   nb2: 1
