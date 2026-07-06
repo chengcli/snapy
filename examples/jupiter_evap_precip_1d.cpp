@@ -13,6 +13,7 @@
 
 // kintera
 #include <kintera/constants.h>
+
 #include <kintera/kinetics/evolve_implicit.hpp>
 #include <kintera/kinetics/kinetics.hpp>
 #include <kintera/thermo/thermo.hpp>
@@ -83,7 +84,8 @@ void set_user_output_callback(MeshBlock block,
   };
 }
 
-void add_pocket_species(torch::Tensor& w, int offset, torch::Tensor const& amp) {
+void add_pocket_species(torch::Tensor& w, int offset,
+                        torch::Tensor const& amp) {
   if (offset >= 0) {
     w[ICY + offset] += amp;
   }
@@ -120,8 +122,8 @@ void initialize_block(MeshBlock block, Variables& vars,
 
   auto temp = Ts * torch::ones({nc3, nc2}, options);
   auto pres = Ps * torch::ones({nc3, nc2}, options);
-  auto xfrac = torch::zeros({nc3, nc2, static_cast<int64_t>(species.size())},
-                            options);
+  auto xfrac =
+      torch::zeros({nc3, nc2, static_cast<int64_t>(species.size())}, options);
 
   for (int n = 1; n <= ny; ++n) {
     auto xmixr = config["problem"]["x" + species[n]].as<double>(0.);
@@ -132,8 +134,7 @@ void initialize_block(MeshBlock block, Variables& vars,
   auto dz = pcoord->dx1f[il].item<double>();
   thermo_x->extrapolate_dz(
       temp, pres, xfrac,
-      kintera::ExtrapOptions().dz(0.5 * dz).grav(grav).ds_dz(0.).rainout(
-          true));
+      kintera::ExtrapOptions().dz(0.5 * dz).grav(grav).ds_dz(0.).rainout(true));
 
   int i = il;
   for (; i <= iu; ++i) {
@@ -251,7 +252,8 @@ int main(int argc, char** argv) {
     auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
     std::vector<int64_t> view_shape(del_conc.dim(), 1);
     view_shape[del_conc.dim() - 1] = -1;
-    auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(view_shape);
+    auto del_rho =
+        del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(view_shape);
     hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
 
     int redo = block->check_redo(vars);

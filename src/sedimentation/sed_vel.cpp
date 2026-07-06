@@ -45,17 +45,11 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   // Dynamic viscosity from Chapman-Enskog theory
   auto reduced_temp = KBoltz * temp / epsilon_LJ;
 
-  auto eta =
-      (5.0 / 16.0) *
-      std::sqrt(m * KBoltz / M_PI) *
-      torch::sqrt(temp) *
-      torch::pow(reduced_temp, 0.16) /
-      (d * d * 1.22);
+  auto eta = (5.0 / 16.0) * std::sqrt(m * KBoltz / M_PI) * torch::sqrt(temp) *
+             torch::pow(reduced_temp, 0.16) / (d * d * 1.22);
 
   // Effective molecular mean free path
-  auto lambda =
-      eta / pres *
-      torch::sqrt(M_PI * KBoltz * temp / (2.0 * m));
+  auto lambda = eta / pres * torch::sqrt(M_PI * KBoltz * temp / (2.0 * m));
 
   // Calculate Knudsen number, Kn
   auto Kn = lambda / radius.view(vec);
