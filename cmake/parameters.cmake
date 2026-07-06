@@ -31,7 +31,7 @@ else()
   set(PNETCDF_OPTION "PNETCDFOUTPUT")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c
-            "import pinc; print(pinc.include_dir); print(pinc.library_dir / 'libpnc.so')"
+            "import pinc; print(pinc.include_dir); print(pinc.library_dir / 'libpinc.so')"
     OUTPUT_VARIABLE _pnc_info
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE _pnc_probe)
