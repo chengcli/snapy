@@ -544,8 +544,12 @@ double MeshBlockImpl::local_max_time_step(Variables const &vars) const {
 }
 
 void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
-  advance_local(vars, dt, stage);
+  // Exchange BEFORE reconstruction consumes the ghosts (same count per step):
+  // host-side operator-split source terms applied between forward calls
+  // (e.g. condensation on hydro_u) are then synced before use, removing a
+  // one-signed seam bias on the cubed sphere.
   exchange_ghost_zones(vars);
+  advance_local(vars, dt, stage);
 }
 
 void MeshBlockImpl::exchange(Variables &vars, SyncOptions const &opts) const {
