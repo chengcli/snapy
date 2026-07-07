@@ -330,6 +330,18 @@ torch::Tensor CoordinateImpl::cell_volume() const {
                        {dx3f.unsqueeze(1), dx2f.outer(dx1f).unsqueeze(0)});
 }
 
+torch::Tensor CoordinateImpl::hydrostatic_grav_source(
+    torch::Tensor pface_l, torch::Tensor pface_r, torch::Tensor pcell) const {
+  // Plane-parallel form; pcell unused (no geometric source).
+  int is = il();
+  int ie = iu() + 1;
+  auto G = torch::zeros_like(pcell);
+  G.slice(2, is, ie) =
+      (pface_l.slice(2, is + 1, ie + 1) - pface_r.slice(2, is, ie)) /
+      dx1f.slice(0, is, ie);
+  return G;
+}
+
 torch::Tensor CoordinateImpl::find_cell_index(
     torch::Tensor const& coords) const {
   torch::Tensor index = torch::zeros_like(coords, torch::dtype(torch::kInt64));

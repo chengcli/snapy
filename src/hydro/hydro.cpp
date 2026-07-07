@@ -187,7 +187,12 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
-    if (!fused_runtime_supported(u, other)) {
+    // Fused kernel computes the plane-parallel hydrostatic correction
+    // internally; fall back to staged on curvilinear coordinates when active.
+    bool metric_grav = options->grav() && options->grav()->grav1() != 0 &&
+                       options->grav()->non_hydrostatic() < 1. &&
+                       pmb->pcoord->options->type() != "cartesian";
+    if (!fused_runtime_supported(u, other) || metric_grav) {
       return _forward_staged(dt, u, other);
     }
     return _forward_fused(dt, u, other);
