@@ -22,8 +22,8 @@ void GnomonicEquiangleImpl::reset() {
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
-  TORCH_CHECK(op->interp_order() == 2,
-              "Only 2nd order interpolation is supported");
+  TORCH_CHECK(op->interp_order() == 2 || op->interp_order() == 4,
+              "Only 2nd or 4th order ghost interpolation is supported");
   TORCH_CHECK(
       op->interp_order() <= 2 * op->nghost(),
       "Ghost zone size must be at least half of the interpolation order");
