@@ -21,7 +21,11 @@
 namespace snap {
 namespace {
 
-#define SNAP_PNC_CHECK(call)                                             \
+using SnapPincOffset = PINC_Offset;
+#define SNAP_PINC_COMM_WORLD PINC_COMM_WORLD
+#define SNAP_PINC_INFO_NULL PINC_INFO_NULL
+
+#define SNAP_PINC_CHECK(call)                                            \
   do {                                                                   \
     int status__ = (call);                                               \
     if (status__ != NC_NOERR) {                                          \
@@ -30,13 +34,14 @@ namespace {
     }                                                                    \
   } while (false)
 
-void put_vara_float(int ncid, int varid, const PNC_Offset* start,
-                    const PNC_Offset* count, const float* data) {
+void put_vara_float(int ncid, int varid, const SnapPincOffset* start,
+                    const SnapPincOffset* count, const float* data) {
   int req = -1;
   int status = NC_NOERR;
-  SNAP_PNC_CHECK(ncmpix_iput_vara_float(ncid, varid, start, count, data, &req));
-  SNAP_PNC_CHECK(ncmpix_wait_all(ncid, 1, &req, &status));
-  SNAP_PNC_CHECK(status);
+  SNAP_PINC_CHECK(
+      ncmpix_iput_vara_float(ncid, varid, start, count, data, &req));
+  SNAP_PINC_CHECK(ncmpix_wait_all(ncid, 1, &req, &status));
+  SNAP_PINC_CHECK(status);
 }
 
 }  // namespace
@@ -109,8 +114,8 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
                       "." + number + ".nc";
 
   int ifile;
-  SNAP_PNC_CHECK(ncmpix_create(PNC_COMM_WORLD, fname.c_str(), NC_CLOBBER,
-                               PNC_INFO_NULL, &ifile));
+  SNAP_PINC_CHECK(ncmpix_create(SNAP_PINC_COMM_WORLD, fname.c_str(), NC_CLOBBER,
+                                SNAP_PINC_INFO_NULL, &ifile));
 
   int ncells1 = out_ie - out_is + 1;
   int ncells2 = out_je - out_js + 1;
@@ -147,67 +152,67 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     nb3 = 1;
   }
 
-  PNC_Offset nx1 = static_cast<PNC_Offset>(ncells1) * nb1;
-  PNC_Offset nx2 = static_cast<PNC_Offset>(ncells2) * nb2;
-  PNC_Offset nx3 = static_cast<PNC_Offset>(ncells3) * nb3;
-  PNC_Offset nx1f = ncells1 > 1 ? nx1 + 1 : nx1;
-  PNC_Offset nx2f = ncells2 > 1 ? nx2 + 1 : nx2;
-  PNC_Offset nx3f = ncells3 > 1 ? nx3 + 1 : nx3;
+  SnapPincOffset nx1 = static_cast<SnapPincOffset>(ncells1) * nb1;
+  SnapPincOffset nx2 = static_cast<SnapPincOffset>(ncells2) * nb2;
+  SnapPincOffset nx3 = static_cast<SnapPincOffset>(ncells3) * nb3;
+  SnapPincOffset nx1f = ncells1 > 1 ? nx1 + 1 : nx1;
+  SnapPincOffset nx2f = ncells2 > 1 ? nx2 + 1 : nx2;
+  SnapPincOffset nx3f = ncells3 > 1 ? nx3 + 1 : nx3;
 
   int idt, idx1, idx2, idx3, idx1f, idx2f, idx3f;
-  SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "time", NC_UNLIMITED, &idt));
-  SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x1", nx1, &idx1));
-  if (ncells1 > 1) SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x1f", nx1f, &idx1f));
-  SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x2", nx2, &idx2));
-  if (ncells2 > 1) SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x2f", nx2f, &idx2f));
-  SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x3", nx3, &idx3));
-  if (ncells3 > 1) SNAP_PNC_CHECK(ncmpix_def_dim(ifile, "x3f", nx3f, &idx3f));
+  SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "time", NC_UNLIMITED, &idt));
+  SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x1", nx1, &idx1));
+  if (ncells1 > 1) SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x1f", nx1f, &idx1f));
+  SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x2", nx2, &idx2));
+  if (ncells2 > 1) SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x2f", nx2f, &idx2f));
+  SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x3", nx3, &idx3));
+  if (ncells3 > 1) SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "x3f", nx3f, &idx3f));
 
   int ivt, ivx1, ivx2, ivx3, ivx1f, ivx2f, ivx3f;
-  SNAP_PNC_CHECK(ncmpix_def_var(ifile, "time", NC_FLOAT, 1, &idt, &ivt));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivt, "axis", 1, "T"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivt, "units", 1, "s"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivt, "long_name", 4, "time"));
+  SNAP_PINC_CHECK(ncmpix_def_var(ifile, "time", NC_FLOAT, 1, &idt, &ivt));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivt, "axis", 1, "T"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivt, "units", 1, "s"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivt, "long_name", 4, "time"));
 
-  SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x1", NC_FLOAT, 1, &idx1, &ivx1));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx1, "axis", 1, "Z"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx1, "units", 1, "m"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx1, "long_name", 27,
-                                     "Z-coordinate at cell center"));
+  SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x1", NC_FLOAT, 1, &idx1, &ivx1));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx1, "axis", 1, "Z"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx1, "units", 1, "m"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx1, "long_name", 27,
+                                      "Z-coordinate at cell center"));
   if (ncells1 > 1) {
-    SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x1f", NC_FLOAT, 1, &idx1f, &ivx1f));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx1f, "units", 1, "m"));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx1f, "long_name", 25,
-                                       "Z-coordinate at cell face"));
+    SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x1f", NC_FLOAT, 1, &idx1f, &ivx1f));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx1f, "units", 1, "m"));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx1f, "long_name", 25,
+                                        "Z-coordinate at cell face"));
   }
 
-  SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x2", NC_FLOAT, 1, &idx2, &ivx2));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx2, "axis", 1, "X"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx2, "units", 1, "m"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx2, "long_name", 27,
-                                     "X-coordinate at cell center"));
+  SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x2", NC_FLOAT, 1, &idx2, &ivx2));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "axis", 1, "X"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "units", 1, "m"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "long_name", 27,
+                                      "X-coordinate at cell center"));
   if (ncells2 > 1) {
-    SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x2f", NC_FLOAT, 1, &idx2f, &ivx2f));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "units", 1, "m"));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "long_name", 25,
-                                       "Y-coordinate at cell face"));
+    SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x2f", NC_FLOAT, 1, &idx2f, &ivx2f));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "units", 1, "m"));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "long_name", 25,
+                                        "Y-coordinate at cell face"));
   }
 
-  SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x3", NC_FLOAT, 1, &idx3, &ivx3));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx3, "axis", 1, "Y"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx3, "units", 1, "m"));
-  SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx3, "long_name", 27,
-                                     "Y-coordinate at cell center"));
+  SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x3", NC_FLOAT, 1, &idx3, &ivx3));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "axis", 1, "Y"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "units", 1, "m"));
+  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "long_name", 27,
+                                      "Y-coordinate at cell center"));
   if (ncells3 > 1) {
-    SNAP_PNC_CHECK(ncmpix_def_var(ifile, "x3f", NC_FLOAT, 1, &idx3f, &ivx3f));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "units", 1, "m"));
-    SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "long_name", 25,
-                                       "X-coordinate at cell face"));
+    SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x3f", NC_FLOAT, 1, &idx3f, &ivx3f));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "units", 1, "m"));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "long_name", 25,
+                                        "X-coordinate at cell face"));
   }
 
   int nbtotal = nb1 * nb2 * nb3;
-  SNAP_PNC_CHECK(ncmpix_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT,
-                                    1, &nbtotal));
+  SNAP_PINC_CHECK(ncmpix_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT,
+                                     1, &nbtotal));
 
   OutputData* pdata = pfirst_data_;
   int total_vars = 0;
@@ -258,61 +263,62 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
       auto const& raw_name = varnames[n];
       auto name = sanitize_netcdf_name(raw_name);
       if (grid == "CCF" && ncells1 > 1)
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis1, ivar));
       else if (grid == "CFC" && ncells2 > 1)
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis2, ivar));
       else if (grid == "FCC" && ncells3 > 1)
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis3, ivar));
       else if (grid == "--C")
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis, ivar));
       else if (grid == "-CC")
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 3, iaxis_23, ivar));
       else if (grid == "--F")
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 2, iaxis1, ivar));
       else if (grid == "---")
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 1, iaxis, ivar));
       else
-        SNAP_PNC_CHECK(
+        SNAP_PINC_CHECK(
             ncmpix_def_var(ifile, name.c_str(), NC_FLOAT, 4, iaxis, ivar));
 
       auto attr = pmeta->GetUnits(raw_name);
       if (attr != "") {
-        SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, *ivar, "units", attr.length(),
-                                           attr.c_str()));
+        SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, *ivar, "units",
+                                            attr.length(), attr.c_str()));
       }
       attr = pmeta->GetLongName(raw_name);
       if (attr != "") {
-        SNAP_PNC_CHECK(ncmpix_put_att_text(ifile, *ivar, "long_name",
-                                           attr.length(), attr.c_str()));
+        SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, *ivar, "long_name",
+                                            attr.length(), attr.c_str()));
       }
       ivar++;
     }
     pdata = pdata->pnext;
   }
 
-  SNAP_PNC_CHECK(ncmpix_enddef(ifile));
+  SNAP_PINC_CHECK(ncmpix_enddef(ifile));
 
   std::vector<float> data(nfaces1 * nfaces3 * nfaces2);
-  PNC_Offset start[4] = {0, static_cast<PNC_Offset>(ncells1) * lx1,
-                         static_cast<PNC_Offset>(ncells3) * lx3,
-                         static_cast<PNC_Offset>(ncells2) * lx2};
-  PNC_Offset count[4] = {1, ncells1, ncells3, ncells2};
-  PNC_Offset count1[4] = {1, nfaces1, ncells3, ncells2};
-  PNC_Offset count2[4] = {1, ncells1, nfaces3, ncells2};
-  PNC_Offset count3[4] = {1, ncells1, ncells3, nfaces2};
-  PNC_Offset start_23[3] = {0, start[2], start[3]};
-  PNC_Offset count_23[3] = {1, ncells3, ncells2};
+  SnapPincOffset start[4] = {0, static_cast<SnapPincOffset>(ncells1) * lx1,
+                             static_cast<SnapPincOffset>(ncells3) * lx3,
+                             static_cast<SnapPincOffset>(ncells2) * lx2};
+  SnapPincOffset count[4] = {1, ncells1, ncells3, ncells2};
+  SnapPincOffset count1[4] = {1, nfaces1, ncells3, ncells2};
+  SnapPincOffset count2[4] = {1, ncells1, nfaces3, ncells2};
+  SnapPincOffset count3[4] = {1, ncells1, ncells3, nfaces2};
+  SnapPincOffset start_23[3] = {0, start[2], start[3]};
+  SnapPincOffset count_23[3] = {1, ncells3, ncells2};
 
   float timef = current_time;
-  PNC_Offset stime = 0, ctime = 1;
-  SNAP_PNC_CHECK(ncmpix_put_vara_float_all(ifile, ivt, &stime, &ctime, &timef));
+  SnapPincOffset stime = 0, ctime = 1;
+  SNAP_PINC_CHECK(
+      ncmpix_put_vara_float_all(ifile, ivt, &stime, &ctime, &timef));
 
   int coord_is = options->x1_slice() ? islice : out_is;
   int coord_ie = options->x1_slice() ? islice : out_ie;
@@ -321,9 +327,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
   int coord_ks = options->x3_slice() ? kslice : out_ks;
   int coord_ke = options->x3_slice() ? kslice : out_ke;
 
-  PNC_Offset start_x1[1] = {start[1]};
-  PNC_Offset count_x1[1] = {ncells1};
-  PNC_Offset count_x1f[1] = {nfaces1};
+  SnapPincOffset start_x1[1] = {start[1]};
+  SnapPincOffset count_x1[1] = {ncells1};
+  SnapPincOffset count_x1f[1] = {nfaces1};
   for (int i = coord_is; i <= coord_ie; ++i)
     data[i - coord_is] = pmb->pcoord->x1v[i].item<float>();
   put_vara_float(ifile, ivx1, start_x1, count_x1, data.data());
@@ -333,9 +339,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     put_vara_float(ifile, ivx1f, start_x1, count_x1f, data.data());
   }
 
-  PNC_Offset start_x2[1] = {start[3]};
-  PNC_Offset count_x2[1] = {ncells2};
-  PNC_Offset count_x2f[1] = {nfaces2};
+  SnapPincOffset start_x2[1] = {start[3]};
+  SnapPincOffset count_x2[1] = {ncells2};
+  SnapPincOffset count_x2f[1] = {nfaces2};
   for (int j = coord_js; j <= coord_je; ++j) {
     data[j - coord_js] =
         pmb->pcoord->x2v[j].item<float>() + (face % 3) * M_PI / 2.;
@@ -349,9 +355,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     put_vara_float(ifile, ivx2f, start_x2, count_x2f, data.data());
   }
 
-  PNC_Offset start_x3[1] = {start[2]};
-  PNC_Offset count_x3[1] = {ncells3};
-  PNC_Offset count_x3f[1] = {nfaces3};
+  SnapPincOffset start_x3[1] = {start[2]};
+  SnapPincOffset count_x3[1] = {ncells3};
+  SnapPincOffset count_x3f[1] = {nfaces3};
   for (int k = coord_ks; k <= coord_ke; ++k) {
     data[k - coord_ks] =
         pmb->pcoord->x3v[k].item<float>() + (face / 3) * M_PI / 2.;
@@ -436,12 +442,14 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     pdata = pdata->pnext;
   }
 
-  SNAP_PNC_CHECK(ncmpix_close(ifile));
+  SNAP_PINC_CHECK(ncmpix_close(ifile));
   ClearOutputData();
   if (pmb != pmb_in) delete pmb;
 }
 
-#undef SNAP_PNC_CHECK
+#undef SNAP_PINC_CHECK
+#undef SNAP_PINC_INFO_NULL
+#undef SNAP_PINC_COMM_WORLD
 
 }  // namespace snap
 

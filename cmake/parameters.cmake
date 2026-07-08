@@ -32,15 +32,15 @@ else()
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c
             "import pinc; print(pinc.include_dir); print(pinc.library_dir / 'libpinc.so')"
-    OUTPUT_VARIABLE _pnc_info
+    OUTPUT_VARIABLE _pinc_info
     OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE _pnc_probe)
-  if(NOT _pnc_probe EQUAL 0)
+    RESULT_VARIABLE _pinc_probe)
+  if(NOT _pinc_probe EQUAL 0)
     message(FATAL_ERROR
             "PNETCDF=ON now requires Python package 'pinc' in ${Python3_EXECUTABLE}")
   endif()
-  string(REPLACE "\n" ";" _pnc_lines "${_pnc_info}")
-  list(GET _pnc_lines 0 PNETCDF_INCLUDE_DIR)
-  list(GET _pnc_lines 1 PNETCDF_LIBRARY)
+  string(REPLACE "\n" ";" _pinc_lines "${_pinc_info}")
+  list(GET _pinc_lines 0 PNETCDF_INCLUDE_DIR)
+  list(GET _pinc_lines 1 PNETCDF_LIBRARY)
   set(PNETCDF_LIBRARIES "${PNETCDF_LIBRARY}")
 endif()
