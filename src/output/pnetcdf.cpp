@@ -21,7 +21,6 @@
 namespace snap {
 namespace {
 
-using SnapPincOffset = PINC_Offset;
 #define SNAP_PINC_COMM_WORLD PINC_COMM_WORLD
 #define SNAP_PINC_INFO_NULL PINC_INFO_NULL
 
@@ -34,8 +33,8 @@ using SnapPincOffset = PINC_Offset;
     }                                                                    \
   } while (false)
 
-void put_vara_float(int ncid, int varid, const SnapPincOffset* start,
-                    const SnapPincOffset* count, const float* data) {
+void put_vara_float(int ncid, int varid, const PINC_Offset* start,
+                    const PINC_Offset* count, const float* data) {
   int req = -1;
   int status = NC_NOERR;
   SNAP_PINC_CHECK(
@@ -152,12 +151,12 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     nb3 = 1;
   }
 
-  SnapPincOffset nx1 = static_cast<SnapPincOffset>(ncells1) * nb1;
-  SnapPincOffset nx2 = static_cast<SnapPincOffset>(ncells2) * nb2;
-  SnapPincOffset nx3 = static_cast<SnapPincOffset>(ncells3) * nb3;
-  SnapPincOffset nx1f = ncells1 > 1 ? nx1 + 1 : nx1;
-  SnapPincOffset nx2f = ncells2 > 1 ? nx2 + 1 : nx2;
-  SnapPincOffset nx3f = ncells3 > 1 ? nx3 + 1 : nx3;
+  PINC_Offset nx1 = static_cast<PINC_Offset>(ncells1) * nb1;
+  PINC_Offset nx2 = static_cast<PINC_Offset>(ncells2) * nb2;
+  PINC_Offset nx3 = static_cast<PINC_Offset>(ncells3) * nb3;
+  PINC_Offset nx1f = ncells1 > 1 ? nx1 + 1 : nx1;
+  PINC_Offset nx2f = ncells2 > 1 ? nx2 + 1 : nx2;
+  PINC_Offset nx3f = ncells3 > 1 ? nx3 + 1 : nx3;
 
   int idt, idx1, idx2, idx3, idx1f, idx2f, idx3f;
   SNAP_PINC_CHECK(ncmpix_def_dim(ifile, "time", NC_UNLIMITED, &idt));
@@ -305,18 +304,18 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
   SNAP_PINC_CHECK(ncmpix_enddef(ifile));
 
   std::vector<float> data(nfaces1 * nfaces3 * nfaces2);
-  SnapPincOffset start[4] = {0, static_cast<SnapPincOffset>(ncells1) * lx1,
-                             static_cast<SnapPincOffset>(ncells3) * lx3,
-                             static_cast<SnapPincOffset>(ncells2) * lx2};
-  SnapPincOffset count[4] = {1, ncells1, ncells3, ncells2};
-  SnapPincOffset count1[4] = {1, nfaces1, ncells3, ncells2};
-  SnapPincOffset count2[4] = {1, ncells1, nfaces3, ncells2};
-  SnapPincOffset count3[4] = {1, ncells1, ncells3, nfaces2};
-  SnapPincOffset start_23[3] = {0, start[2], start[3]};
-  SnapPincOffset count_23[3] = {1, ncells3, ncells2};
+  PINC_Offset start[4] = {0, static_cast<PINC_Offset>(ncells1) * lx1,
+                          static_cast<PINC_Offset>(ncells3) * lx3,
+                          static_cast<PINC_Offset>(ncells2) * lx2};
+  PINC_Offset count[4] = {1, ncells1, ncells3, ncells2};
+  PINC_Offset count1[4] = {1, nfaces1, ncells3, ncells2};
+  PINC_Offset count2[4] = {1, ncells1, nfaces3, ncells2};
+  PINC_Offset count3[4] = {1, ncells1, ncells3, nfaces2};
+  PINC_Offset start_23[3] = {0, start[2], start[3]};
+  PINC_Offset count_23[3] = {1, ncells3, ncells2};
 
   float timef = current_time;
-  SnapPincOffset stime = 0, ctime = 1;
+  PINC_Offset stime = 0, ctime = 1;
   SNAP_PINC_CHECK(
       ncmpix_put_vara_float_all(ifile, ivt, &stime, &ctime, &timef));
 
@@ -327,9 +326,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
   int coord_ks = options->x3_slice() ? kslice : out_ks;
   int coord_ke = options->x3_slice() ? kslice : out_ke;
 
-  SnapPincOffset start_x1[1] = {start[1]};
-  SnapPincOffset count_x1[1] = {ncells1};
-  SnapPincOffset count_x1f[1] = {nfaces1};
+  PINC_Offset start_x1[1] = {start[1]};
+  PINC_Offset count_x1[1] = {ncells1};
+  PINC_Offset count_x1f[1] = {nfaces1};
   for (int i = coord_is; i <= coord_ie; ++i)
     data[i - coord_is] = pmb->pcoord->x1v[i].item<float>();
   put_vara_float(ifile, ivx1, start_x1, count_x1, data.data());
@@ -339,9 +338,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     put_vara_float(ifile, ivx1f, start_x1, count_x1f, data.data());
   }
 
-  SnapPincOffset start_x2[1] = {start[3]};
-  SnapPincOffset count_x2[1] = {ncells2};
-  SnapPincOffset count_x2f[1] = {nfaces2};
+  PINC_Offset start_x2[1] = {start[3]};
+  PINC_Offset count_x2[1] = {ncells2};
+  PINC_Offset count_x2f[1] = {nfaces2};
   for (int j = coord_js; j <= coord_je; ++j) {
     data[j - coord_js] =
         pmb->pcoord->x2v[j].item<float>() + (face % 3) * M_PI / 2.;
@@ -355,9 +354,9 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     put_vara_float(ifile, ivx2f, start_x2, count_x2f, data.data());
   }
 
-  SnapPincOffset start_x3[1] = {start[2]};
-  SnapPincOffset count_x3[1] = {ncells3};
-  SnapPincOffset count_x3f[1] = {nfaces3};
+  PINC_Offset start_x3[1] = {start[2]};
+  PINC_Offset count_x3[1] = {ncells3};
+  PINC_Offset count_x3f[1] = {nfaces3};
   for (int k = coord_ks; k <= coord_ke; ++k) {
     data[k - coord_ks] =
         pmb->pcoord->x3v[k].item<float>() + (face / 3) * M_PI / 2.;
