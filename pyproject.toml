@@ -6,6 +6,7 @@ requires = [
   "build",
   "kintera>=2.1.0",
   "commux>=0.1.4; platform_system == 'Linux'",
+  "pinc>=0.1.2",
   "torch==2.10.0",
   "ninja",
   ]
