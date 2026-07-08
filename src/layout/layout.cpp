@@ -29,10 +29,14 @@ int random_master_port() {
 }
 
 std::string default_backend() {
+#ifdef USE_UCX
   struct utsname system_info;
   if (uname(&system_info) == 0 && std::string(system_info.sysname) == "Darwin")
     return "gloo";
   return "ucx";
+#else
+  return "gloo";
+#endif
 }
 
 struct LocalExchangeKey {

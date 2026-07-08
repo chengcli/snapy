@@ -64,7 +64,7 @@ void call_lmars_mps(at::TensorIterator& iter, int dim) {
 
   // energy -> enthalpy
   hl += 0.5 * wl.narrow(0, IVX, 3).square().sum(0) + wl[IPR] / wl[IDN];
-  hr += 0.5 * wr.narrow(0, IVX, 3).square().sum(0) + wr[IPR] / wr[IPR];
+  hr += 0.5 * wr.narrow(0, IVX, 3).square().sum(0) + wr[IPR] / wr[IDN];
 
   auto rhobar = 0.5 * (wl[IDN] + wr[IDN]);
   auto gamma_bar = 0.5 * (gammal + gammar);
