@@ -12,7 +12,6 @@ dynamics:
     type: ideal-gas
 
 distribute:
-  backend: gloo
   layout: slab
   nb2: 1
   nb3: 1

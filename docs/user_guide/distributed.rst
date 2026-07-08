@@ -12,21 +12,20 @@ Snapy uses domain decomposition to split the computational domain across multipl
 Setup
 -----
 
-Linux builds use the installed ``commux`` package for UCX communication. Select
-UCX as the backend without specifying a communication device:
+Linux/Unix runtime systems use UCX by default. macOS runtime systems use Gloo by
+default. Select a different distributed backend with the ``BACKEND`` environment
+variable:
 
-.. code-block:: yaml
+.. code-block:: bash
 
-    distribute:
-      backend: ucx
+    export BACKEND=gloo
 
-UCX is the default backend on builds configured with UCX, so the ``backend``
-entry may be omitted. Set ``backend: gloo`` or ``BACKEND=gloo`` to opt into
-Gloo.
+The YAML ``distribute`` block controls layout shape only; ``backend`` entries in
+YAML are ignored.
 
 Communication automatically follows each tensor's device type. For CUDA
 execution, build with ``-DCUDA=ON`` and set ``DEVICE=cuda`` when launching the
-provided examples. ``BACKEND`` overrides the configured transport.
+provided examples.
 
 Basic distributed setup using ``torchrun``:
 

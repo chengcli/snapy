@@ -29,5 +29,18 @@ if(NOT PNETCDF OR NOT DEFINED PNETCDF)
   set(PNETCDF_OPTION "NO_PNETCDFOUTPUT")
 else()
   set(PNETCDF_OPTION "PNETCDFOUTPUT")
-  find_package(PNetCDF REQUIRED)
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+            "import pinc; print(pinc.include_dir); print(pinc.library_dir / 'libpinc.so')"
+    OUTPUT_VARIABLE _pinc_info
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _pinc_probe)
+  if(NOT _pinc_probe EQUAL 0)
+    message(FATAL_ERROR
+            "PNETCDF=ON now requires Python package 'pinc' in ${Python3_EXECUTABLE}")
+  endif()
+  string(REPLACE "\n" ";" _pinc_lines "${_pinc_info}")
+  list(GET _pinc_lines 0 PNETCDF_INCLUDE_DIR)
+  list(GET _pinc_lines 1 PNETCDF_LIBRARY)
+  set(PNETCDF_LIBRARIES "${PNETCDF_LIBRARY}")
 endif()

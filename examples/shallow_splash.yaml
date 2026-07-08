@@ -16,7 +16,6 @@ geometry:
     nghost: 3
 
 distribute:
-  backend: gloo
   layout: cubed-sphere
   nb2: 1
   nb3: 1
@@ -56,7 +55,7 @@ scalar:
   names: [tracer]
 
 outputs:
-  - type: netcdf
+  - type: pnetcdf
     variables: [prim, scalar_prim]
     dt: 1.E5
 

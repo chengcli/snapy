@@ -1,4 +1,5 @@
 // yaml
+#include <sys/utsname.h>
 #include <yaml-cpp/yaml.h>
 
 #include <condition_variable>
@@ -25,6 +26,17 @@ int random_master_port() {
   std::mt19937 gen(rd());
   std::uniform_int_distribution<int> dist(29500, 29600);
   return dist(gen);
+}
+
+std::string default_backend() {
+#ifdef USE_UCX
+  struct utsname system_info;
+  if (uname(&system_info) == 0 && std::string(system_info.sysname) == "Darwin")
+    return "gloo";
+  return "ucx";
+#else
+  return "gloo";
+#endif
 }
 
 struct LocalExchangeKey {
@@ -120,9 +132,7 @@ LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
 }  // namespace
 
 LayoutOptionsImpl::LayoutOptionsImpl() {
-#ifdef USE_UCX
-  backend("ucx");
-#endif
+  backend(get_env("BACKEND", default_backend()));
 
   // These enrionment variables will be set by torch.distributed.launch
   // Override by them if they are present
@@ -166,8 +176,7 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   op->py(node["nb3"].as<int>(1));
   op->px(node["nb2"].as<int>(1));
   op->pz(node["nb1"].as<int>(1));
-  op->backend() =
-      get_env("BACKEND", node["backend"].as<std::string>(op->backend()));
+  op->backend() = get_env("BACKEND", op->backend());
   op->device() = get_env("DEVICE", "cpu");
   op->verbose() = node["verbose"].as<bool>(verbose);
 

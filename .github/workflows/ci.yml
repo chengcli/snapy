@@ -73,7 +73,7 @@ jobs:
       - name: Install commux UCX backend
         if: runner.os == 'Linux'
         run: |
-          pip install 'commux>=0.1.4'
+          pip install 'commux>=0.1.4' 'pinc>=0.2.0'
           python -c "import commux; commux.register(); print('commux import OK')"
 
       - name: Configure CMake

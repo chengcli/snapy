@@ -13,7 +13,7 @@ species:
     u0_R: 0.
 
   - name: NH3
-    composition: {H: 2, O: 1}
+    composition: {N: 1, H: 3}
     cv_R: 2.5
     u0_R: 0.
 
@@ -53,24 +53,23 @@ species:
     u0_R: -1.2e4
 
 geometry:
-  type: gnomonic-equiangle
-
+  type: cartesian
   bounds:
-    x1min: 69911000
-    x1max: 70211000
-    x2min_pi: -0.25
-    x2max_pi: 0.25
-    x3min_pi: -0.25
-    x3max_pi: 0.25
+    x1min: 0.
+    x1max: 300.e3
+    x2min: 0.
+    x2max: 1.
+    x3min: 0.
+    x3max: 1
 
   cells:
-    nx1: 24
-    nx2: 16
-    nx3: 16
+    nx1: 128
+    nx2: 1
+    nx3: 1
     nghost: 3
 
 distribute:
-  layout: cubed-sphere
+  layout: slab
   nb2: 1
   nb3: 1
   blocks_per_process: 1
@@ -79,11 +78,11 @@ distribute:
 dynamics:
   equation-of-state:
     type: ideal-moist
-    density-floor: 1.e-10
-    pressure-floor: 1.e-10
-    tracer-floor: 1.e-10
+    density-floor: 1.e-16
+    pressure-floor: 1.e-16
+    tracer-floor: 1.e-20
     limiter: true
-    max-iter: 40
+    max-iter: 20
     ftol: 1.e-6
 
   reconstruct:
@@ -94,31 +93,22 @@ dynamics:
     type: hllc
 
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.e9
-    max-iter: 5
-
   external:
     x1-inner: reflecting
     x1-outer: reflecting
-    x2-inner: custom
-    x2-outer: custom
-    x3-inner: custom
-    x3-outer: custom
 
 integration:
   type: rk3
-  cfl: 0.45
-  implicit-scheme: 9
-  nlim: 4
-  tlim: 1.e4
-  ncycle_out: 1
+  cfl: 100.
+  implicit-scheme: 1
+  nlim: -1
+  tlim: 2.e5
+  ncycle_out: 200
 
 outputs:
   - type: netcdf
-    variables: [prim, uov, thermo]
-    dt: 2.5e3
+    variables: [prim, uov, thermo, path]
+    dt: 1.e3
 
 forcing:
   const-gravity:
@@ -136,9 +126,9 @@ sedimentation:
     NH4SH(s,p): 1500.
 
   const-vsed:
-    H2O(l,p): -2.0
-    NH3(s,p): -2.0
-    NH4SH(s,p): -2.0
+    H2O(l,p): -1.0
+    NH3(s,p): -1.0
+    NH4SH(s,p): -1.0
 
 reactions:
   - equation: H2O => H2O(l)
@@ -147,7 +137,7 @@ reactions:
 
   - equation: H2O(l) => H2O(l,p)
     type: coagulation
-    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
+    rate-constant: {A: 1.e-5, b: 0, Ea_R: 0.}
 
   - equation: H2O(l,p) => H2O
     type: evaporation
@@ -159,11 +149,11 @@ reactions:
 
   - equation: NH3(s) => NH3(s,p)
     type: coagulation
-    rate-constant: {A: 0.01, b: 0, Ea_R: 2.}
+    rate-constant: {A: 1.e-5, b: 0, Ea_R: 0.}
 
   - equation: NH3(s,p) => NH3
     type: evaporation
-    rate-constant: {formula: nh3_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+    rate-constant: {formula: nh3_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 25.e-6, diameter: 1.0e-4}
 
   - equation: NH3 + H2S <=> NH4SH(s)
     type: nucleation
@@ -171,11 +161,11 @@ reactions:
 
   - equation: NH4SH(s) => NH4SH(s,p)
     type: coagulation
-    rate-constant: {A: 0.01, b: 0, Ea_R: 0.}
+    rate-constant: {A: 1.e-5, b: 0, Ea_R: 0.}
 
   - equation: NH4SH(s,p) => NH3 + H2S
     type: evaporation
-    rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+    rate-constant: {formula: nh3_h2s_lewis, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 43.e-6, diameter: 1.0e-4}
 
 problem:
   Ps: 100.e5
@@ -184,3 +174,8 @@ problem:
   xH2O: 3.e-3
   xNH3: 3.2e-4
   xH2S: 1.e-5
+  pocket-center: 280.e3
+  pocket-width: 10.0e3
+  qH2Olp: 1.0e-2
+  qNH3sp: 1.0e-2
+  qNH4SHsp: 1.0e-2

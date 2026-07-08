@@ -8,11 +8,12 @@ option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" OFF)
 option(CUDA "Enable CUDA support" OFF)
 option(NETCDF "Build with netcdf support" ON)
-option(PNETCDF "Build with pnetcdf support" OFF)
 if(APPLE)
   option(UCX "Build the UCX communication backend" OFF)
+  option(PNETCDF "Build with pnetcdf support" OFF)
 else()
   option(UCX "Build the UCX communication backend" ON)
+  option(PNETCDF "Build with pnetcdf support" ON)
 endif()
 
 project(

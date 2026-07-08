@@ -86,12 +86,13 @@ class NetcdfOutput : public OutputType {
   void combine_blocks(MeshBlockImpl* pmb, bool) override;
 };
 
-class PnetcdfOutput : public OutputType {
+class PNetcdfOutput : public OutputType {
  public:
-  explicit PnetcdfOutput(OutputOptions const& options_);
-  ~PnetcdfOutput() {}
+  explicit PNetcdfOutput(OutputOptions const& options_);
+  ~PNetcdfOutput() {}
   void write_output_file(MeshBlockImpl* pmb, Variables const& vars, double time,
                          bool final_write) override;
+  void combine_blocks(MeshBlockImpl* pmb, bool) override {}
 };
 
 class FITSOutput : public OutputType {

@@ -6,6 +6,7 @@ requires = [
   "build",
   "kintera>=2.1.0",
   "commux>=0.1.4; platform_system == 'Linux'",
+  "pinc>=0.2.0; platform_system == 'Linux'",
   "torch==2.10.0",
   "ninja",
   ]
@@ -26,6 +27,7 @@ dependencies = [
   "pyyaml",
   "kintera>=2.4.2",
   "commux>=0.1.4; platform_system == 'Linux'",
+  "pinc>=0.2.0; platform_system == 'Linux'",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

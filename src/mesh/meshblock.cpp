@@ -153,6 +153,12 @@ void MeshBlockImpl::reset() {
       output_types.push_back(std::make_shared<RestartOutput>(out_op));
     } else if (out_op->file_type() == "netcdf") {
       output_types.push_back(std::make_shared<NetcdfOutput>(out_op));
+    } else if (out_op->file_type() == "pnetcdf") {
+#ifdef PNETCDFOUTPUT
+      output_types.push_back(std::make_shared<PNetcdfOutput>(out_op));
+#else
+      throw std::runtime_error("Output type 'pnetcdf' requires PNETCDF=ON.");
+#endif
       /*} else if (out_op.file_type() == "hdf5") {
         output_types.push_back(
             std::make_shared<HDF5Output>(out_op));*/
