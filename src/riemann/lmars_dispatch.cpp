@@ -19,20 +19,22 @@ void call_lmars_cpu(at::TensorIterator& iter, int dim) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_lmars_cpu", [&] {
-    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(0), 0);
+    auto stride = at::native::ensure_nonempty_stride(iter.output(0), 0);
     auto ny = nhydro - ICY;
 
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int i = 0; i < n; i++) {
             auto out = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
-            auto wl = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            auto wr = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
-            auto elr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
-            auto glr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
+            auto face_pressure =
+                reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
+            auto wl = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+            auto wr = reinterpret_cast<scalar_t*>(data[3] + i * strides[3]);
+            auto elr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
+            auto glr = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
             lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr,
-                       *(glr + stride), dim, ny, stride, stride);
+                       *(glr + stride), dim, ny, stride, stride, face_pressure);
           }
         },
         grain_size);
@@ -41,6 +43,7 @@ void call_lmars_cpu(at::TensorIterator& iter, int dim) {
 
 void call_lmars_mps(at::TensorIterator& iter, int dim) {
   auto flx = iter.output(0);
+  auto face_pressure = iter.output(1).squeeze(0);
   auto wl = iter.input(0);
   auto wr = iter.input(1);
   auto hlr = iter.input(2);  // el
@@ -71,6 +74,7 @@ void call_lmars_mps(at::TensorIterator& iter, int dim) {
   auto cbar = torch::sqrt(gamma_bar * 0.5 * (wl[IPR] + wr[IPR]) / rhobar);
   auto pbar =
       0.5 * (wl[IPR] + wr[IPR]) + 0.5 * (rhobar * cbar) * (wl[ivx] - wr[ivx]);
+  face_pressure.copy_(pbar);
   auto ubar =
       0.5 * (wl[ivx] + wr[ivx]) + 0.5 / (rhobar * cbar) * (wl[IPR] - wr[IPR]);
 

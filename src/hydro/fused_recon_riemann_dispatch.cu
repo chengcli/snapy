@@ -11,6 +11,7 @@
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
+#include "../riemann/roe_impl.h"
 #include "../riemann/shallow_roe_impl.h"
 #include "fused_dispatch_params.cuh"
 #include "fused_recon_riemann_dispatch.hpp"
@@ -26,6 +27,7 @@ __global__ void fused_kernel(T const* w, T* flux,
   int nc2 = params.nc2;
   int nc1 = params.nc1;
   int dim = params.dim;
+  T* face_pressure = params.face_pressure;
   auto physics = params.physics;
   auto x1_revision = params.x1_revision;
   auto metric = params.metric;
@@ -129,6 +131,7 @@ __global__ void fused_kernel(T const* w, T* flux,
 
   if (!valid_face) {
     for (int v = 0; v < nvar; ++v) flux[v * stride_var + flat] = 0.;
+    if (face_pressure != nullptr) face_pressure[flat] = 0.;
     return;
   }
 
@@ -156,6 +159,7 @@ __global__ void fused_kernel(T const* w, T* flux,
                      physics.shallow_roe_dir_yz, /*stride_w=*/1,
                      /*stride_f=*/stride_var);
   } else {
+    T* face_pressure_out = face_pressure != nullptr ? face_pressure + flat : nullptr;
     T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
     int ny = physics.eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
     eos_side_quantities(wl_local, wr_local, ny, physics.nvapor, physics.eos,
@@ -166,10 +170,16 @@ __global__ void fused_kernel(T const* w, T* flux,
     if (physics.solver == FusedRiemannSolver::LMARS) {
       lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
                  er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
-                 /*stride_f=*/stride_var);
-    } else {
+                 /*stride_f=*/stride_var, face_pressure_out);
+    } else if (physics.solver == FusedRiemannSolver::HLLC) {
       hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
-                ny, /*stride_w=*/1, /*stride_f=*/stride_var);
+                ny, /*stride_w=*/1, /*stride_f=*/stride_var,
+                face_pressure_out);
+    } else {
+      roe_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
+               ny, physics.eos, physics.nvapor, physics.gammad,
+               physics.inv_mu_ratio_m1, physics.cv_ratio_m1, physics.u0,
+               /*stride_w=*/1, /*stride_f=*/stride_var, face_pressure_out);
     }
   }
   if (use_cubed_metric) {
@@ -180,6 +190,7 @@ __global__ void fused_kernel(T const* w, T* flux,
 }  // namespace
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
+                              torch::Tensor face_pressure,
                               FusedReconRiemannParams const& params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
@@ -207,6 +218,7 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
         nc2,
         nc1,
         dim,
+        face_pressure.defined() ? face_pressure.data_ptr<scalar_t>() : nullptr,
         make_device_physics<scalar_t>(params.physics),
         {params.x1_revision.revise_lr,
          params.x1_revision.dx1f.defined()

@@ -23,7 +23,10 @@ void ShallowRoeSolverImpl::reset() {
 }
 
 torch::Tensor ShallowRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                            int dim, torch::Tensor flx) {
+                                            int dim, torch::Tensor flx,
+                                            torch::Tensor face_pressure) {
+  TORCH_CHECK(!face_pressure.defined(),
+              "Face-pressure output is not implemented for ShallowRoeSolver");
   auto peos = phydro->peos;
   auto pcoord = phydro->pmb->pcoord;
 

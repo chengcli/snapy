@@ -129,6 +129,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor flux1() const { return _flux1; }
   torch::Tensor flux2() const { return _flux2; }
   torch::Tensor flux3() const { return _flux3; }
+  torch::Tensor face_pressure1() const { return _face_pressure1; }
   torch::Tensor implicit_mass_correction() const;
 
  protected:
@@ -149,7 +150,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _forward_fused(double dt, torch::Tensor hydro_u,
                                Variables const& other);
 
-  torch::Tensor _flux1, _flux2, _flux3, _div, _imp;
+  torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _imp;
 };
 
 TORCH_MODULE(Hydro);

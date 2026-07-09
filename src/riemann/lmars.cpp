@@ -28,7 +28,8 @@ void LmarsSolverImpl::reset() {
 }
 
 torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                       int dim, torch::Tensor flx) {
+                                       int dim, torch::Tensor flx,
+                                       torch::Tensor face_pressure) {
   auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
 
@@ -67,11 +68,15 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
       TORCH_CHECK(false, "Invalid dimension: ", dim);
   }
 
+  auto face_pressure_out =
+      face_pressure.defined() ? face_pressure : torch::empty_like(wl[IDN]);
+
   auto iter = at::TensorIteratorConfig()
                   .resize_outputs(false)
                   .check_all_same_dtype(true)
                   .declare_static_shape(flx.sizes(), /*squash_dims=*/0)
                   .add_output(flx)
+                  .add_owned_output(face_pressure_out.unsqueeze(0))
                   .add_input(wl)
                   .add_input(wr)
                   .add_input(elr)

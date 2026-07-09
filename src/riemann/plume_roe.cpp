@@ -43,7 +43,10 @@ void PlumeRoeSolverImpl::reset() {
 }
 
 torch::Tensor PlumeRoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                          int dim, torch::Tensor flx) {
+                                          int dim, torch::Tensor flx,
+                                          torch::Tensor face_pressure) {
+  TORCH_CHECK(!face_pressure.defined(),
+              "Face-pressure output is not implemented for PlumeRoeSolver");
   auto peos = phydro->peos;
 
   if (dim != 1) {

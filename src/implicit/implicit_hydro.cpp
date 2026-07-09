@@ -154,8 +154,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
           .add_input(_delta)
           .build();
 
-  auto grav1 = phydro->options->grav()->grav1() *
-               phydro->options->grav()->non_hydrostatic();
+  // Linearize the FULL gravity: du always carries it (body force + rho_grav
+  // sum to grav1); scaling by non_hydrostatic() drops the gravity coupling
+  // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
+  auto grav1 = phydro->options->grav()->grav1();
 
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);

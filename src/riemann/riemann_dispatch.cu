@@ -16,19 +16,21 @@ void call_lmars_cuda(at::TensorIterator& iter, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_lmars_cuda", [&]() {
-    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(0), 0);
+    auto stride = at::native::ensure_nonempty_stride(iter.output(0), 0);
     auto ny = nhydro - ICY;
 
-    native::gpu_kernel<5>(
-        iter, [=] GPU_LAMBDA(char* const data[5], unsigned int strides[5]) {
+    native::gpu_kernel<6>(
+        iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto wr = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto elr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto glr = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          lmars_impl(out, wl, wr, *elr, *(elr + stride),
-                     *glr, *(glr + stride), dim, ny, stride, stride);
+          auto face_pressure =
+              reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto wl = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto wr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto elr = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto glr = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr,
+                     *(glr + stride), dim, ny, stride, stride, face_pressure);
         });
   });
 }
@@ -37,21 +39,23 @@ void call_hllc_cuda(at::TensorIterator& iter, int dim) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.common_dtype(), "call_hllc_cuda", [&]() {
-    auto nhydro = at::native::ensure_nonempty_size(iter.output(), 0);
-    auto stride = at::native::ensure_nonempty_stride(iter.output(), 0);
+    auto nhydro = at::native::ensure_nonempty_size(iter.output(0), 0);
+    auto stride = at::native::ensure_nonempty_stride(iter.output(0), 0);
     auto ny = nhydro - ICY;
 
-    native::gpu_kernel<6>(
-        iter, [=] GPU_LAMBDA(char* const data[6], unsigned int strides[6]) {
+    native::gpu_kernel<7>(
+        iter, [=] GPU_LAMBDA(char* const data[7], unsigned int strides[7]) {
           auto out = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto wl = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto wr = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto elr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto glr = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto clr = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
-          hllc_impl(out, wl, wr, *elr, *(elr + stride),
-                    *glr, *(glr + stride), *clr, *(clr + stride), dim, ny,
-                    stride, stride);
+          auto face_pressure =
+              reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+          auto wl = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          auto wr = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
+          auto elr = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
+          auto glr = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
+          auto clr = reinterpret_cast<scalar_t*>(data[6] + strides[6]);
+          hllc_impl(out, wl, wr, *elr, *(elr + stride), *glr,
+                    *(glr + stride), *clr, *(clr + stride), dim, ny, stride,
+                    stride, face_pressure);
         });
   });
 }

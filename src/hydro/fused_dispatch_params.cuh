@@ -45,6 +45,7 @@ struct DeviceFusedReconRiemannParams {
   int nc2;
   int nc1;
   int dim;
+  T* face_pressure;
   DeviceFusedPhysicsParams<T> physics;
   DeviceFusedX1RevisionParams<T> x1_revision;
   DeviceFusedMetricParams<T> metric;

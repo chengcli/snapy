@@ -22,8 +22,8 @@ void GnomonicEquiangleImpl::reset() {
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
-  TORCH_CHECK(op->interp_order() == 2,
-              "Only 2nd order interpolation is supported");
+  TORCH_CHECK(op->interp_order() == 2 || op->interp_order() == 4,
+              "Only 2nd or 4th order ghost interpolation is supported");
   TORCH_CHECK(
       op->interp_order() <= 2 * op->nghost(),
       "Ghost zone size must be at least half of the interpolation order");
@@ -355,9 +355,9 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
 torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
                                              torch::Tensor flux1,
                                              torch::Tensor flux2,
-                                             torch::Tensor flux3) {
+                                             torch::Tensor flux3,
+                                             torch::Tensor face_pressure1) {
   std::string eos_type = pmb->phydro->peos->options->type();
-
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
 
   auto cosine = cosine_cell_kj;
@@ -380,8 +380,18 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   } else {
     pr = prim[IPR];
     rho = prim[IDN];
-    // Update flux 1 (excluded from shallow water case)
-    auto src1 = (2.0 * pr + rho * (v2 * v_2 + v3 * v_3)) / radius;
+    auto src1 = rho * (v2 * v_2 + v3 * v_3) / radius;
+    if (face_pressure1.defined()) {
+      int si = il();
+      int ei = iu() + 1;
+      src1.slice(-1, si, ei) += (CoordinateImpl::face_area1(si + 1, ei + 1) *
+                                     face_pressure1.slice(-1, si + 1, ei + 1) -
+                                 CoordinateImpl::face_area1(si, ei) *
+                                     face_pressure1.slice(-1, si, ei)) /
+                                cell_volume().slice(-1, si, ei);
+    } else {
+      src1 += 2.0 * pr / radius;
+    }
     div[IVX] -= src1;
   }
 
