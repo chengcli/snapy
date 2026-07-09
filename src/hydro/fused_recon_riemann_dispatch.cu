@@ -177,6 +177,8 @@ __global__ void fused_kernel(T const* w, T* flux,
                 face_pressure_out);
     } else {
       roe_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
+               ny, physics.eos, physics.nvapor, physics.gammad,
+               physics.inv_mu_ratio_m1, physics.cv_ratio_m1, physics.u0,
                /*stride_w=*/1, /*stride_f=*/stride_var, face_pressure_out);
     }
   }

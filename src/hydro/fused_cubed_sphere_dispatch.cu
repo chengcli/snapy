@@ -296,7 +296,9 @@ __device__ void cs_flux_common(
     hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
               /*stride_f=*/stride_var);
   } else {
-    roe_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, /*stride_w=*/1,
+    roe_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, physics.eos,
+             physics.nvapor, physics.gammad, physics.inv_mu_ratio_m1,
+             physics.cv_ratio_m1, physics.u0, /*stride_w=*/1,
              /*stride_f=*/stride_var);
   }
   gnomonic_flux2global(flux, dim, alpha, beta, stride_var);

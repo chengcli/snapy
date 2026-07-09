@@ -233,12 +233,11 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
       coord_src1_i * prim[IDN] * (prim[IVY].square() + prim[IVZ].square());
   if (eos_type != "shallow-water") {
     if (face_pressure1.defined()) {
-      src1.slice(-1, si, ei) +=
-          (CoordinateImpl::face_area1(si + 1, ei + 1) *
-               face_pressure1.slice(-1, si + 1, ei + 1) -
-           CoordinateImpl::face_area1(si, ei) *
-               face_pressure1.slice(-1, si, ei)) /
-          vol.slice(-1, si, ei);
+      src1.slice(-1, si, ei) += (CoordinateImpl::face_area1(si + 1, ei + 1) *
+                                     face_pressure1.slice(-1, si + 1, ei + 1) -
+                                 CoordinateImpl::face_area1(si, ei) *
+                                     face_pressure1.slice(-1, si, ei)) /
+                                vol.slice(-1, si, ei);
     } else {
       src1 += 2.0 * coord_src1_i * prim[IPR];
     }

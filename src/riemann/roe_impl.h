@@ -6,6 +6,8 @@
 // snap
 #include <snap/snap.h>
 
+#include "../eos/ideal_moist_impl.h"
+
 #define SQR(x) ((x) * (x))
 #define WL(n) (wl[(n) * stride_w])
 #define WR(n) (wr[(n) * stride_w])
@@ -15,8 +17,10 @@ namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
-                             T gammal, T gammar, T cl, T cr, int dim,
-                             int stride_w, int stride_f,
+                             T gammal, T gammar, T cl, T cr, int dim, int ny,
+                             FusedEos eos, int nvapor, T gammad,
+                             T const* inv_mu_ratio_m1, T const* cv_ratio_m1,
+                             T const* u0, int stride_w, int stride_f,
                              T* face_pressure = nullptr) {
   auto TINY_NUMBER = T(1.0e-10);
 
@@ -24,24 +28,34 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  T etl = el + T(0.5) * WL(IDN) *
-                   (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
-  T etr = er + T(0.5) * WR(IDN) *
-                   (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
+  T etl = el + T(0.5) * WL(IDN) * (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  T etr = er + T(0.5) * WR(IDN) * (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
   T sqrtdl = sqrt(WL(IDN));
   T sqrtdr = sqrt(WR(IDN));
   T isdlpdr = T(1) / (sqrtdl + sqrtdr);
 
-  T d = sqrtdl * sqrtdr;
+  T rhobar = sqrtdl * sqrtdr;
   T v1 = (sqrtdl * WL(ivx) + sqrtdr * WR(ivx)) * isdlpdr;
   T v2 = (sqrtdl * WL(ivy) + sqrtdr * WR(ivy)) * isdlpdr;
   T v3 = (sqrtdl * WL(ivz) + sqrtdr * WR(ivz)) * isdlpdr;
-  T h = ((etl + WL(IPR)) / sqrtdl + (etr + WR(IPR)) / sqrtdr) * isdlpdr;
+  T hl = (etl + WL(IPR)) / WL(IDN);
+  T hr = (etr + WR(IPR)) / WR(IDN);
+  T h = (hl * sqrtdl + hr * sqrtdr) * isdlpdr;
   if (face_pressure != nullptr) *face_pressure = h;
 
-  T fl0 = WL(IDN) * WL(ivx);
-  T fr0 = WR(IDN) * WR(ivx);
+  T dryl = T(1);
+  T dryr = T(1);
+  for (int n = 0; n < ny; ++n) {
+    dryl -= WL(ICY + n);
+    dryr -= WR(ICY + n);
+  }
+
+  T rhol0 = WL(IDN) * dryl;
+  T rhor0 = WR(IDN) * dryr;
+
+  T fl0 = rhol0 * WL(ivx);
+  T fr0 = rhor0 * WR(ivx);
 
   T fl1 = WL(IDN) * WL(ivx) * WL(ivx) + WL(IPR);
   T fr1 = WR(IDN) * WR(ivx) * WR(ivx) + WR(IPR);
@@ -55,6 +69,27 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   T fl4 = (etl + WL(IPR)) * WL(ivx);
   T fr4 = (etr + WR(IPR)) * WR(ivx);
 
+  T qbar[64];
+  qbar[0] = (rhol0 / sqrtdl + rhor0 / sqrtdr) * isdlpdr;
+  for (int n = 0; n < ny; ++n) {
+    auto rholn = WL(IDN) * WL(ICY + n);
+    auto rhorn = WR(IDN) * WR(ICY + n);
+    qbar[1 + n] = (rholn / sqrtdl + rhorn / sqrtdr) * isdlpdr;
+  }
+
+  T gamma_roe = T(0.5) * (gammal + gammar);
+  T offset = T(0);
+  if (eos == FusedEos::IdealMoist) {
+    T feps = ideal_moist_feps(qbar + 1, ny, nvapor, inv_mu_ratio_m1);
+    T fsig = ideal_moist_fsig(qbar + 1, ny, cv_ratio_m1);
+    gamma_roe = T(1) + (gammad - T(1)) * feps / fsig;
+
+    offset = qbar[0] * u0[0];
+    for (int n = 0; n < ny; ++n) {
+      offset += qbar[1 + n] * u0[1 + n];
+    }
+  }
+
   T du0 = WR(IDN) - WL(IDN);
   T du1 = WR(IDN) * WR(ivx) - WL(IDN) * WL(ivx);
   T du2 = WR(IDN) * WR(ivy) - WL(IDN) * WL(ivy);
@@ -66,79 +101,104 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   FLX(ivy) = T(0.5) * (fl2 + fr2);
   FLX(ivz) = T(0.5) * (fl3 + fr3);
   FLX(IPR) = T(0.5) * (fl4 + fr4);
+  for (int n = 0; n < ny; ++n) {
+    auto rholn = WL(IDN) * WL(ICY + n);
+    auto rhorn = WR(IDN) * WR(ICY + n);
+    FLX(ICY + n) = T(0.5) * (rholn * WL(ivx) + rhorn * WR(ivx));
+  }
 
   T vsq = v1 * v1 + v2 * v2 + v3 * v3;
-  T gamma_roe = T(0.5) * (gammal + gammar);
   T gm1_roe = gamma_roe - T(1);
-  T q = h - T(0.5) * vsq;
-  T cs_sq = q > T(0) ? gm1_roe * q : TINY_NUMBER;
+  T q = h - T(0.5) * vsq - offset;
+  T cs_sq = max(gm1_roe * max(q, TINY_NUMBER), TINY_NUMBER);
   T cs = sqrt(cs_sq);
 
-  T ev0 = v1 - cs;
-  T ev1 = v1;
-  T ev2 = v1;
-  T ev3 = v1;
-  T ev4 = v1 + cs;
-
-  T na = T(0.5) / cs_sq;
-  T a0 = (du0 * (T(0.5) * gm1_roe * vsq + v1 * cs) -
-          du1 * (gm1_roe * v1 + cs) - du2 * gm1_roe * v2 -
-          du3 * gm1_roe * v3 + du4 * gm1_roe) *
-         na;
-
-  T a1 = -du0 * v2 + du2;
-  T a2 = -du0 * v3 + du3;
-
-  T qa = gm1_roe / cs_sq;
-  T a3 = du0 * (T(1) - na * gm1_roe * vsq) + du1 * qa * v1 +
-         du2 * qa * v2 + du3 * qa * v3 - du4 * qa;
-
-  T a4 = (du0 * (T(0.5) * gm1_roe * vsq - v1 * cs) -
-          du1 * (gm1_roe * v1 - cs) - du2 * gm1_roe * v2 -
-          du3 * gm1_roe * v3 + du4 * gm1_roe) *
-         na;
-
-  T coeff0 = -T(0.5) * abs(ev0) * a0;
-  T coeff1 = -T(0.5) * abs(ev1) * a1;
-  T coeff2 = -T(0.5) * abs(ev2) * a2;
-  T coeff3 = -T(0.5) * abs(ev3) * a3;
-  T coeff4 = -T(0.5) * abs(ev4) * a4;
+  T lam_m = v1 - cs;
+  T lam_0 = v1;
+  T lam_p = v1 + cs;
+  T spd_m = abs(lam_m);
+  T spd_0 = abs(lam_0);
+  T spd_p = abs(lam_p);
 
   bool llf_flag = false;
-  T dens = WL(IDN) + a0;
-  if (dens < T(0)) llf_flag = true;
-  dens += a3;
-  if (dens < T(0)) llf_flag = true;
+  T du = WR(ivx) - WL(ivx);
+  T dv = WR(ivy) - WL(ivy);
+  T dw = WR(ivz) - WL(ivz);
+  T dp = WR(IPR) - WL(IPR);
 
-  FLX(IDN) += coeff0 + coeff3 + coeff4;
-  FLX(ivx) += coeff0 * (v1 - cs) + coeff3 * v1 + coeff4 * (v1 + cs);
-  FLX(ivy) += coeff0 * v2 + coeff1 + coeff3 * v2 + coeff4 * v2;
-  FLX(ivz) += coeff0 * v3 + coeff2 + coeff3 * v3 + coeff4 * v3;
-  FLX(IPR) += coeff0 * (h - v1 * cs) + coeff1 * v2 + coeff2 * v3 +
-              coeff3 * T(0.5) * vsq + coeff4 * (h + v1 * cs);
+  T alpha_m = -T(0.5) * rhobar / cs * du + T(0.5) * dp / cs_sq;
+  T alpha_p = +T(0.5) * rhobar / cs * du + T(0.5) * dp / cs_sq;
+  T alpha_v = rhobar * dv;
+  T alpha_w = rhobar * dw;
 
-  if (ev0 > T(0)) {
+  T alpha0 = T(0);
+  T alpha_comp0 = rhor0 - rhol0 - dp / cs_sq * qbar[0];
+  T rho_first = rhol0 + alpha_m * qbar[0];
+  if (rho_first < T(0)) llf_flag = true;
+  T rho_second = rho_first + alpha_comp0;
+  if (rho_second < T(0)) llf_flag = true;
+  alpha0 += alpha_comp0;
+  FLX(IDN) -= T(0.5) * (spd_m * alpha_m * qbar[0] + spd_0 * alpha_comp0 +
+                        spd_p * alpha_p * qbar[0]);
+
+  for (int n = 0; n < ny; ++n) {
+    auto rholn = WL(IDN) * WL(ICY + n);
+    auto rhorn = WR(IDN) * WR(ICY + n);
+    auto alpha_n = rhorn - rholn - dp / cs_sq * qbar[1 + n];
+    auto rho1 = rholn + alpha_m * qbar[1 + n];
+    if (rho1 < T(0)) llf_flag = true;
+    auto rho2 = rho1 + alpha_n;
+    if (rho2 < T(0)) llf_flag = true;
+    alpha0 += alpha_n;
+    FLX(ICY + n) -= T(0.5) * (spd_m * alpha_m * qbar[1 + n] + spd_0 * alpha_n +
+                              spd_p * alpha_p * qbar[1 + n]);
+  }
+
+  FLX(ivx) -= T(0.5) * (spd_m * alpha_m * (v1 - cs) + spd_0 * (v1 * alpha0) +
+                        spd_p * alpha_p * (v1 + cs));
+  FLX(ivy) -= T(0.5) * (spd_m * alpha_m * v2 + spd_0 * (v2 * alpha0 + alpha_v) +
+                        spd_p * alpha_p * v2);
+  FLX(ivz) -= T(0.5) * (spd_m * alpha_m * v3 + spd_0 * (v3 * alpha0 + alpha_w) +
+                        spd_p * alpha_p * v3);
+  FLX(IPR) -=
+      T(0.5) * (spd_m * alpha_m * (h - v1 * cs) +
+                spd_0 * (rhobar * (hr - hl - v1 * du) + alpha0 * h - dp) +
+                spd_p * alpha_p * (h + v1 * cs));
+
+  if (lam_m > T(0)) {
     FLX(IDN) = fl0;
     FLX(ivx) = fl1;
     FLX(ivy) = fl2;
     FLX(ivz) = fl3;
     FLX(IPR) = fl4;
+    for (int n = 0; n < ny; ++n) {
+      FLX(ICY + n) = WL(IDN) * WL(ICY + n) * WL(ivx);
+    }
   }
-  if (ev4 < T(0)) {
+  if (lam_p < T(0)) {
     FLX(IDN) = fr0;
     FLX(ivx) = fr1;
     FLX(ivy) = fr2;
     FLX(ivz) = fr3;
     FLX(IPR) = fr4;
+    for (int n = 0; n < ny; ++n) {
+      FLX(ICY + n) = WR(IDN) * WR(ICY + n) * WR(ivx);
+    }
   }
 
   if (llf_flag) {
     T a = T(0.5) * max(abs(WL(ivx)) + cl, abs(WR(ivx)) + cr);
-    FLX(IDN) = T(0.5) * (fl0 + fr0) - a * du0;
+    FLX(IDN) = T(0.5) * (fl0 + fr0) - a * (rhor0 - rhol0);
     FLX(ivx) = T(0.5) * (fl1 + fr1) - a * du1;
     FLX(ivy) = T(0.5) * (fl2 + fr2) - a * du2;
     FLX(ivz) = T(0.5) * (fl3 + fr3) - a * du3;
     FLX(IPR) = T(0.5) * (fl4 + fr4) - a * du4;
+    for (int n = 0; n < ny; ++n) {
+      auto rholn = WL(IDN) * WL(ICY + n);
+      auto rhorn = WR(IDN) * WR(ICY + n);
+      FLX(ICY + n) =
+          T(0.5) * (rholn * WL(ivx) + rhorn * WR(ivx)) - a * (rhorn - rholn);
+    }
   }
 }
 

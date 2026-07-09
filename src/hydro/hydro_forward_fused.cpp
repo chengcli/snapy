@@ -46,8 +46,9 @@ bool fused_combo_supported(std::string const& eos_type,
            (riemann_type == "lmars" || riemann_type == "hllc" ||
             riemann_type == "roe")) ||
           (eos_type == "ideal-moist" &&
-          (riemann_type == "lmars" || riemann_type == "hllc")) ||
-         (eos_type == "shallow-water" && riemann_type == "shallow-roe");
+           (riemann_type == "lmars" || riemann_type == "hllc" ||
+            riemann_type == "roe")) ||
+          (eos_type == "shallow-water" && riemann_type == "shallow-roe"));
 }
 
 FusedEos fused_eos(std::string const& type) {

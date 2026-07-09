@@ -752,14 +752,67 @@ TEST(RiemannSolver, roe_writes_face_pressure_output) {
   EXPECT_GT(torch::abs(flx).sum().item<double>(), 0.0);
 }
 
+TEST(RiemannSolver, roe_writes_face_pressure_output_ideal_moist) {
+  auto config =
+      std::regex_replace(std::string(small_ideal_moist_lmars_cloud_config),
+                         std::regex("type: lmars"), "type: roe");
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  kintera::init_species_from_yaml(fname);
+  auto opts = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(opts);
+  block->to(torch::kCPU, torch::kDouble);
+  std::remove(fname);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = block->phydro->peos->nvar();
+
+  torch::manual_seed(80);
+  auto wl = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  auto wr = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  wl[IDN].mul_(0.1).add_(1.0);
+  wr[IDN].mul_(0.1).add_(1.0);
+  wl[IPR].mul_(1000.0).add_(1.e5);
+  wr[IPR].mul_(1000.0).add_(1.e5);
+  wl.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  wr.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  wl[ICY].mul_(1.e-3).add_(1.5e-2);
+  wr[ICY].mul_(1.e-3).add_(1.5e-2);
+  wl[ICY + 1].mul_(1.e-3).add_(4.e-3);
+  wr[ICY + 1].mul_(1.e-3).add_(4.e-3);
+
+  auto ul = block->phydro->peos->compute("W->U", {wl});
+  auto ur = block->phydro->peos->compute("W->U", {wr});
+  auto sqrtdl = torch::sqrt(wl[IDN]);
+  auto sqrtdr = torch::sqrt(wr[IDN]);
+  auto expected =
+      ((ul[IPR] + wl[IPR]) / sqrtdl + (ur[IPR] + wr[IPR]) / sqrtdr) /
+      (sqrtdl + sqrtdr);
+
+  auto flx = torch::zeros_like(wl);
+  auto face_pressure = torch::zeros({nc3, nc2, nc1}, torch::kFloat64);
+  block->phydro->priemann->forward(wl, wr, DIM1, flx, face_pressure);
+
+  EXPECT_TRUE(torch::allclose(face_pressure, expected, 1.e-10, 1.e-10));
+  EXPECT_GT(torch::abs(flx).sum().item<double>(), 0.0);
+}
+
 TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_roe) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
   }
 
-  auto staged_config = std::regex_replace(std::string(small_ideal_gas_config),
-                                          std::regex("type: lmars"),
-                                          "type: roe");
+  auto staged_config =
+      std::regex_replace(std::string(small_ideal_gas_config),
+                         std::regex("type: lmars"), "type: roe");
   char staged_name[80] = "/tmp/tempfile.XXXXXX";
   mkstemp(staged_name);
   std::ofstream staged_file(staged_name);
@@ -1117,6 +1170,69 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_moist_lmars_cloud) {
   int nvar = staged_block->phydro->peos->nvar();
 
   torch::manual_seed(206);
+  auto w =
+      torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  w[IDN].mul_(0.1).add_(1.0);
+  w[IPR].mul_(1000.0).add_(1.e5);
+  w.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  w[ICY].mul_(1.e-3).add_(1.5e-2);
+  w[ICY + 1].mul_(1.e-3).add_(4.e-3);
+
+  auto u = staged_block->phydro->peos->compute("W->U", {w});
+  Variables staged_vars, fused_vars;
+  staged_vars["hydro_w"] = torch::empty_like(w);
+  fused_vars["hydro_w"] = torch::empty_like(w);
+
+  auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
+  auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  double tol = dtype == torch::kFloat32 ? 1.e-4 : 1.e-8;
+  auto max_diff = (fused_du - staged_du).abs().max().item<double>();
+  EXPECT_TRUE(torch::allclose(fused_du, staged_du, tol, tol))
+      << "max diff = " << max_diff;
+
+  std::remove(staged_name);
+  std::remove(fused_name);
+}
+
+TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_moist_roe_cloud) {
+  if (device.type() != torch::kCUDA) {
+    GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+
+  auto staged_config =
+      std::regex_replace(std::string(small_ideal_moist_lmars_cloud_config),
+                         std::regex("type: lmars"), "type: roe");
+  char staged_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(staged_name);
+  std::ofstream staged_file(staged_name);
+  staged_file << staged_config;
+  staged_file.close();
+
+  auto fused_config = std::regex_replace(
+      staged_config, std::regex("riemann-solver:\\n    type: roe"),
+      "fused-recon-riemann: true\n\n  riemann-solver:\n    type: roe");
+  char fused_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fused_name);
+  std::ofstream fused_file(fused_name);
+  fused_file << fused_config;
+  fused_file.close();
+
+  kintera::init_species_from_yaml(staged_name);
+  auto staged_opts = MeshBlockOptionsImpl::from_yaml(staged_name);
+  kintera::init_species_from_yaml(fused_name);
+  auto fused_opts = MeshBlockOptionsImpl::from_yaml(fused_name);
+  staged_opts->hydro()->fused_recon_riemann() = false;
+  auto staged_block = MeshBlock(staged_opts);
+  auto fused_block = MeshBlock(fused_opts);
+  staged_block->to(device, dtype);
+  fused_block->to(device, dtype);
+
+  int nc1 = staged_block->pcoord->options->nc1();
+  int nc2 = staged_block->pcoord->options->nc2();
+  int nc3 = staged_block->pcoord->options->nc3();
+  int nvar = staged_block->phydro->peos->nvar();
+
+  torch::manual_seed(207);
   auto w =
       torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
   w[IDN].mul_(0.1).add_(1.0);
