@@ -191,14 +191,6 @@ class CoordinateImpl {
 
   virtual torch::Tensor cell_volume() const;
 
-  //! Hydrostatic gravity source ("rho_grav") from the one-sided x1 face
-  //! pressures (ILT/IRT rows, face dim = nc1+1) and the cell pressure.
-  //! Base: plane-parallel (p_top - p_bot)/dx1f. Curvilinear coordinates
-  //! override with a metric-consistent form matching their flux divergence.
-  virtual torch::Tensor hydrostatic_grav_source(torch::Tensor pface_l,
-                                                torch::Tensor pface_r,
-                                                torch::Tensor pcell) const;
-
   virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
   virtual std::array<double, 3> vec_from_cartesian(

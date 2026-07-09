@@ -54,11 +54,13 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
     auto wlr1 =
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
-    // Compute hydrostatic pressure correction (coordinate supplies the
-    // discretization; cartesian base is bit-identical to the old inline form)
+    // Compute hydrostatic pressure correction
     if (options->grav() && (options->grav()->grav1() != 0)) {
-      rho_grav = pmb->pcoord->hydrostatic_grav_source(wlr1[ILT][IPR],
-                                                      wlr1[IRT][IPR], w[IPR]);
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+                                   wlr1[IRT][IPR].slice(2, is, ie)) /
+                                  pmb->pcoord->dx1f.slice(0, is, ie);
     }
 
     // riemann solver

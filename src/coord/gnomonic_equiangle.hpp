@@ -42,10 +42,6 @@ class GnomonicEquiangleImpl
 
   torch::Tensor cell_volume() const override;
 
-  torch::Tensor hydrostatic_grav_source(torch::Tensor pface_l,
-                                        torch::Tensor pface_r,
-                                        torch::Tensor pcell) const override;
-
   void interp_ghost(torch::Tensor var,
                     std::tuple<int, int, int> const& offset) const override;
 

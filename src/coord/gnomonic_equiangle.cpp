@@ -183,24 +183,6 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          dx1f.unsqueeze(0).unsqueeze(1);
 }
 
-torch::Tensor GnomonicEquiangleImpl::hydrostatic_grav_source(
-    torch::Tensor pface_l, torch::Tensor pface_r, torch::Tensor pcell) const {
-  // Metric-consistent form matching the x1 momentum budget
-  // -[A1 p_f]'/V + 2 p_c/r: the plane-parallel difference does not
-  // telescope against the r^2-weighted divergence.
-  int is = il();
-  int ie = iu() + 1;
-  auto A1 = face_area1();    // [nc3, nc2, nc1+1]
-  auto vol = cell_volume();  // [nc3, nc2, nc1]
-  auto G = torch::zeros_like(pcell);
-  G.slice(2, is, ie) =
-      (A1.slice(2, is + 1, ie + 1) * pface_l.slice(2, is + 1, ie + 1) -
-       A1.slice(2, is, ie) * pface_r.slice(2, is, ie)) /
-          vol.slice(2, is, ie) -
-      2.0 * pcell.slice(2, is, ie) / x1v.slice(0, is, ie);
-  return G;
-}
-
 void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   auto [dy, dx, dz] = offset;
