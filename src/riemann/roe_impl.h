@@ -1,347 +1,150 @@
-// C/C++ headers
+#pragma once
 
-#include <algorithm>  // max()
-#include <cmath>      // sqrt()
+// base
+#include <configure.h>
 
-namespace {
-// prototype for function to compute Roe fluxes from eigenmatrices
-inline void RoeFlux(const Real wroe[], const Real du[], const Real wli[],
-                    Real flx[], Real eigenvalues[], int &flag);
+// snap
+#include <snap/snap.h>
 
-// (gamma-1) and isothermal sound speed made global so can be shared with flux
-// fn
-Real gm1, iso_cs;
-}  // namespace
+#define SQR(x) ((x) * (x))
+#define WL(n) (wl[(n) * stride_w])
+#define WR(n) (wr[(n) * stride_w])
+#define FLX(n) (flx[(n) * stride_f])
 
-//----------------------------------------------------------------------------------------
-//! \fn void Hydro::RiemannSolver
-//! \brief The Roe Riemann solver for hydrodynamics (both adiabatic and
-//! isothermal)
+namespace snap {
 
-void Hydro::RiemannSolver(const int k, const int j, const int il, const int iu,
-                          const int ivx, AthenaArray<Real> &wl,
-                          AthenaArray<Real> &wr, AthenaArray<Real> &flx,
-                          const AthenaArray<Real> &dxw) {
-  int ivy = IVX + ((ivx - IVX) + 1) % 3;
-  int ivz = IVX + ((ivx - IVX) + 2) % 3;
-  Real wli[(NHYDRO)], wri[(NHYDRO)], wroe[(NHYDRO)];
-  Real flxi[(NHYDRO)], fl[(NHYDRO)], fr[(NHYDRO)];
-  gm1 = pmy_block->peos->GetGamma() - 1.0;
-  iso_cs = pmy_block->peos->GetIsoSoundSpeed();
+template <typename T>
+void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
+                             T gammal, T gammar, T cl, T cr, int dim,
+                             int stride_w, int stride_f,
+                             T* face_pressure = nullptr) {
+  auto TINY_NUMBER = T(1.0e-10);
 
-  Real ev[(NHYDRO)], du[(NHYDRO)];
+  auto ivx = IPR - dim;
+  auto ivy = IVX + ((ivx - IVX) + 1) % 3;
+  auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-#pragma omp simd private(wli, wri, wroe, flxi, fl, fr, ev, du)
-  for (int i = il; i <= iu; ++i) {
-    //--- Step 1.  Load L/R states into local variables
-    wli[IDN] = wl(IDN, i);
-    wli[IVX] = wl(ivx, i);
-    wli[IVY] = wl(ivy, i);
-    wli[IVZ] = wl(ivz, i);
-    if (NON_BAROTROPIC_EOS) wli[IPR] = wl(IPR, i);
+  T etl = el + T(0.5) * WL(IDN) *
+                   (SQR(WL(IVX)) + SQR(WL(IVY)) + SQR(WL(IVZ)));
+  T etr = er + T(0.5) * WR(IDN) *
+                   (SQR(WR(IVX)) + SQR(WR(IVY)) + SQR(WR(IVZ)));
 
-    wri[IDN] = wr(IDN, i);
-    wri[IVX] = wr(ivx, i);
-    wri[IVY] = wr(ivy, i);
-    wri[IVZ] = wr(ivz, i);
-    if (NON_BAROTROPIC_EOS) wri[IPR] = wr(IPR, i);
+  T sqrtdl = sqrt(WL(IDN));
+  T sqrtdr = sqrt(WR(IDN));
+  T isdlpdr = T(1) / (sqrtdl + sqrtdr);
 
-    //--- Step 2.  Compute Roe-averaged data from left- and right-states
+  T d = sqrtdl * sqrtdr;
+  T v1 = (sqrtdl * WL(ivx) + sqrtdr * WR(ivx)) * isdlpdr;
+  T v2 = (sqrtdl * WL(ivy) + sqrtdr * WR(ivy)) * isdlpdr;
+  T v3 = (sqrtdl * WL(ivz) + sqrtdr * WR(ivz)) * isdlpdr;
+  T h = ((etl + WL(IPR)) / sqrtdl + (etr + WR(IPR)) / sqrtdr) * isdlpdr;
+  if (face_pressure != nullptr) *face_pressure = h;
 
-    Real sqrtdl = std::sqrt(wli[IDN]);
-    Real sqrtdr = std::sqrt(wri[IDN]);
-    Real isdlpdr = 1.0 / (sqrtdl + sqrtdr);
+  T fl0 = WL(IDN) * WL(ivx);
+  T fr0 = WR(IDN) * WR(ivx);
 
-    wroe[IDN] = sqrtdl * sqrtdr;
-    wroe[IVX] = (sqrtdl * wli[IVX] + sqrtdr * wri[IVX]) * isdlpdr;
-    wroe[IVY] = (sqrtdl * wli[IVY] + sqrtdr * wri[IVY]) * isdlpdr;
-    wroe[IVZ] = (sqrtdl * wli[IVZ] + sqrtdr * wri[IVZ]) * isdlpdr;
+  T fl1 = WL(IDN) * WL(ivx) * WL(ivx) + WL(IPR);
+  T fr1 = WR(IDN) * WR(ivx) * WR(ivx) + WR(IPR);
 
-    // Following Roe(1981), the enthalpy H=(E+P)/d is averaged for adiabatic
-    // flows, rather than E or P directly.  sqrtdl*hl = sqrtdl*(el+pl)/dl =
-    // (el+pl)/sqrtdl
-    Real el, er;
-    if (NON_BAROTROPIC_EOS) {
-      el = wli[IPR] / gm1 +
-           0.5 * wli[IDN] * (SQR(wli[IVX]) + SQR(wli[IVY]) + SQR(wli[IVZ]));
-      er = wri[IPR] / gm1 +
-           0.5 * wri[IDN] * (SQR(wri[IVX]) + SQR(wri[IVY]) + SQR(wri[IVZ]));
-      wroe[IPR] =
-          ((el + wli[IPR]) / sqrtdl + (er + wri[IPR]) / sqrtdr) * isdlpdr;
-    }
+  T fl2 = WL(IDN) * WL(ivx) * WL(ivy);
+  T fr2 = WR(IDN) * WR(ivx) * WR(ivy);
 
-    //--- Step 3.  Compute L/R fluxes
+  T fl3 = WL(IDN) * WL(ivx) * WL(ivz);
+  T fr3 = WR(IDN) * WR(ivx) * WR(ivz);
 
-    Real mxl = wli[IDN] * wli[IVX];
-    Real mxr = wri[IDN] * wri[IVX];
+  T fl4 = (etl + WL(IPR)) * WL(ivx);
+  T fr4 = (etr + WR(IPR)) * WR(ivx);
 
-    fl[IDN] = mxl;
-    fr[IDN] = mxr;
+  T du0 = WR(IDN) - WL(IDN);
+  T du1 = WR(IDN) * WR(ivx) - WL(IDN) * WL(ivx);
+  T du2 = WR(IDN) * WR(ivy) - WL(IDN) * WL(ivy);
+  T du3 = WR(IDN) * WR(ivz) - WL(IDN) * WL(ivz);
+  T du4 = etr - etl;
 
-    fl[IVX] = mxl * wli[IVX];
-    fr[IVX] = mxr * wri[IVX];
+  FLX(IDN) = T(0.5) * (fl0 + fr0);
+  FLX(ivx) = T(0.5) * (fl1 + fr1);
+  FLX(ivy) = T(0.5) * (fl2 + fr2);
+  FLX(ivz) = T(0.5) * (fl3 + fr3);
+  FLX(IPR) = T(0.5) * (fl4 + fr4);
 
-    fl[IVY] = mxl * wli[IVY];
-    fr[IVY] = mxr * wri[IVY];
+  T vsq = v1 * v1 + v2 * v2 + v3 * v3;
+  T gamma_roe = T(0.5) * (gammal + gammar);
+  T gm1_roe = gamma_roe - T(1);
+  T q = h - T(0.5) * vsq;
+  T cs_sq = q > T(0) ? gm1_roe * q : TINY_NUMBER;
+  T cs = sqrt(cs_sq);
 
-    fl[IVZ] = mxl * wli[IVZ];
-    fr[IVZ] = mxr * wri[IVZ];
+  T ev0 = v1 - cs;
+  T ev1 = v1;
+  T ev2 = v1;
+  T ev3 = v1;
+  T ev4 = v1 + cs;
 
-    if (NON_BAROTROPIC_EOS) {
-      fl[IVX] += wli[IPR];
-      fr[IVX] += wri[IPR];
-      fl[IEN] = (el + wli[IPR]) * wli[IVX];
-      fr[IEN] = (er + wri[IPR]) * wri[IVX];
-    } else {
-      fl[IVX] += (iso_cs * iso_cs) * wli[IDN];
-      fr[IVX] += (iso_cs * iso_cs) * wri[IDN];
-    }
+  T na = T(0.5) / cs_sq;
+  T a0 = (du0 * (T(0.5) * gm1_roe * vsq + v1 * cs) -
+          du1 * (gm1_roe * v1 + cs) - du2 * gm1_roe * v2 -
+          du3 * gm1_roe * v3 + du4 * gm1_roe) *
+         na;
 
-    //--- Step 4.  Compute Roe fluxes.
+  T a1 = -du0 * v2 + du2;
+  T a2 = -du0 * v3 + du3;
 
-    du[IDN] = wri[IDN] - wli[IDN];
-    du[IVX] = wri[IDN] * wri[IVX] - wli[IDN] * wli[IVX];
-    du[IVY] = wri[IDN] * wri[IVY] - wli[IDN] * wli[IVY];
-    du[IVZ] = wri[IDN] * wri[IVZ] - wli[IDN] * wli[IVZ];
-    if (NON_BAROTROPIC_EOS) du[IEN] = er - el;
+  T qa = gm1_roe / cs_sq;
+  T a3 = du0 * (T(1) - na * gm1_roe * vsq) + du1 * qa * v1 +
+         du2 * qa * v2 + du3 * qa * v3 - du4 * qa;
 
-    flxi[IDN] = 0.5 * (fl[IDN] + fr[IDN]);
-    flxi[IVX] = 0.5 * (fl[IVX] + fr[IVX]);
-    flxi[IVY] = 0.5 * (fl[IVY] + fr[IVY]);
-    flxi[IVZ] = 0.5 * (fl[IVZ] + fr[IVZ]);
-    if (NON_BAROTROPIC_EOS) flxi[IEN] = 0.5 * (fl[IEN] + fr[IEN]);
+  T a4 = (du0 * (T(0.5) * gm1_roe * vsq - v1 * cs) -
+          du1 * (gm1_roe * v1 - cs) - du2 * gm1_roe * v2 -
+          du3 * gm1_roe * v3 + du4 * gm1_roe) *
+         na;
 
-    int llf_flag = 0;
-    RoeFlux(wroe, du, wli, flxi, ev, llf_flag);
+  T coeff0 = -T(0.5) * abs(ev0) * a0;
+  T coeff1 = -T(0.5) * abs(ev1) * a1;
+  T coeff2 = -T(0.5) * abs(ev2) * a2;
+  T coeff3 = -T(0.5) * abs(ev3) * a3;
+  T coeff4 = -T(0.5) * abs(ev4) * a4;
 
-    //--- Step 5.  Overwrite with upwind flux if flow is supersonic
+  bool llf_flag = false;
+  T dens = WL(IDN) + a0;
+  if (dens < T(0)) llf_flag = true;
+  dens += a3;
+  if (dens < T(0)) llf_flag = true;
 
-    if (ev[0] >= 0.0) {
-      flxi[IDN] = fl[IDN];
-      flxi[IVX] = fl[IVX];
-      flxi[IVY] = fl[IVY];
-      flxi[IVZ] = fl[IVZ];
-      if (NON_BAROTROPIC_EOS) flxi[IEN] = fl[IEN];
-    }
-    if (ev[NWAVE - 1] <= 0.0) {
-      flxi[IDN] = fr[IDN];
-      flxi[IVX] = fr[IVX];
-      flxi[IVY] = fr[IVY];
-      flxi[IVZ] = fr[IVZ];
-      if (NON_BAROTROPIC_EOS) flxi[IEN] = fr[IEN];
-    }
+  FLX(IDN) += coeff0 + coeff3 + coeff4;
+  FLX(ivx) += coeff0 * (v1 - cs) + coeff3 * v1 + coeff4 * (v1 + cs);
+  FLX(ivy) += coeff0 * v2 + coeff1 + coeff3 * v2 + coeff4 * v2;
+  FLX(ivz) += coeff0 * v3 + coeff2 + coeff3 * v3 + coeff4 * v3;
+  FLX(IPR) += coeff0 * (h - v1 * cs) + coeff1 * v2 + coeff2 * v3 +
+              coeff3 * T(0.5) * vsq + coeff4 * (h + v1 * cs);
 
-    //--- Step 6.  Overwrite with LLF flux if any of intermediate states are
-    // negative
-
-    if (llf_flag != 0) {
-      Real cl = pmy_block->peos->SoundSpeed(wli);
-      Real cr = pmy_block->peos->SoundSpeed(wri);
-      Real a =
-          0.5 * std::max((std::abs(wli[IVX]) + cl), (std::abs(wri[IVX]) + cr));
-
-      flxi[IDN] = 0.5 * (fl[IDN] + fr[IDN]) - a * du[IDN];
-      flxi[IVX] = 0.5 * (fl[IVX] + fr[IVX]) - a * du[IVX];
-      flxi[IVY] = 0.5 * (fl[IVY] + fr[IVY]) - a * du[IVY];
-      flxi[IVZ] = 0.5 * (fl[IVZ] + fr[IVZ]) - a * du[IVZ];
-      if (NON_BAROTROPIC_EOS) {
-        flxi[IEN] = 0.5 * (fl[IEN] + fr[IEN]) - a * du[IEN];
-      }
-    }
-
-    //--- Step 7. Store results into 3D array of fluxes
-
-    flx(IDN, k, j, i) = flxi[IDN];
-    flx(ivx, k, j, i) = flxi[IVX];
-    flx(ivy, k, j, i) = flxi[IVY];
-    flx(ivz, k, j, i) = flxi[IVZ];
-    if (NON_BAROTROPIC_EOS) flx(IEN, k, j, i) = flxi[IEN];
+  if (ev0 > T(0)) {
+    FLX(IDN) = fl0;
+    FLX(ivx) = fl1;
+    FLX(ivy) = fl2;
+    FLX(ivz) = fl3;
+    FLX(IPR) = fl4;
   }
-  return;
+  if (ev4 < T(0)) {
+    FLX(IDN) = fr0;
+    FLX(ivx) = fr1;
+    FLX(ivy) = fr2;
+    FLX(ivz) = fr3;
+    FLX(IPR) = fr4;
+  }
+
+  if (llf_flag) {
+    T a = T(0.5) * max(abs(WL(ivx)) + cl, abs(WR(ivx)) + cr);
+    FLX(IDN) = T(0.5) * (fl0 + fr0) - a * du0;
+    FLX(ivx) = T(0.5) * (fl1 + fr1) - a * du1;
+    FLX(ivy) = T(0.5) * (fl2 + fr2) - a * du2;
+    FLX(ivz) = T(0.5) * (fl3 + fr3) - a * du3;
+    FLX(IPR) = T(0.5) * (fl4 + fr4) - a * du4;
+  }
 }
 
-namespace {
-//----------------------------------------------------------------------------------------
-//! \fn RoeFlux()
-//! \brief Computes Roe fluxes for the conserved variables.
-//!
-//! Computes Roe fluxes for the conserved variables, that is
-//!           F[n] = 0.5*(F_l + F_r) - SUM_m(coeff[m]*rem[n][m])
-//! where     coeff[n] = 0.5*ev[n]*SUM_m(dU[m]*lem[n][m])
-//! and the rem[n][m] and lem[n][m] are matrices of the L- and R-eigenvectors of
-//! Roe's matrix "A". Also returns the eigenvalues through the argument list.
-//!
-//! INPUT:
-//!  - wroe: vector of Roe averaged primitive variables
-//!  - du: Ur - Ul, difference in L/R-states in conserved variables
-//!  - wli: Wl, left state in primitive variables
-//!  - flx: (F_l + F_r)/2
-//! OUTPUT:
-//!  - flx: final Roe flux
-//!  - ev: vector of eingenvalues
-//!  - llf_flag: flag set to 1 if d<0 in any intermediate state
-//! \note
-//!  The order of the components in the input vectors should be:
-//!     (IDN,IVX,IVY,IVZ,[IPR])
-//!
-//! REFERENCES:
-//! - J. Stone, T. Gardiner, P. Teuben, J. Hawley, & J. Simon "Athena: A new
-//! code for
-//!   astrophysical MHD", ApJS, (2008), Appendix A.  Equation numbers refer to
-//!   this paper.
-#pragma omp declare simd simdlen(SIMD_WIDTH) notinbranch
-inline void RoeFlux(const Real wroe[], const Real du[], const Real wli[],
-                    Real flx[], Real ev[], int &llf_flag) {
-  Real d = wroe[IDN];
-  Real v1 = wroe[IVX];
-  Real v2 = wroe[IVY];
-  Real v3 = wroe[IVZ];
+}  // namespace snap
 
-  //--- Adiabatic hydrodynamics
-  if (NON_BAROTROPIC_EOS) {
-    Real h = wroe[IPR];
-    Real vsq = v1 * v1 + v2 * v2 + v3 * v3;
-    Real q = h - 0.5 * vsq;
-    Real cs_sq = (q < 0.0) ? (TINY_NUMBER) : gm1 * q;
-    Real cs = std::sqrt(cs_sq);
-
-    // Compute eigenvalues (eq. B2)
-    ev[0] = v1 - cs;
-    ev[1] = v1;
-    ev[2] = v1;
-    ev[3] = v1;
-    ev[4] = v1 + cs;
-
-    // Compute projection of dU onto L-eigenvectors using matrix elements from
-    // eq. B4
-    Real a[(NHYDRO)];
-    Real na = 0.5 / cs_sq;
-    a[0] = du[0] * (0.5 * gm1 * vsq + v1 * cs);
-    a[0] -= du[1] * (gm1 * v1 + cs);
-    a[0] -= du[2] * gm1 * v2;
-    a[0] -= du[3] * gm1 * v3;
-    a[0] += du[4] * gm1;
-    a[0] *= na;
-
-    a[1] = du[0] * (-v2);
-    a[1] += du[2];
-
-    a[2] = du[0] * (-v3);
-    a[2] += du[3];
-
-    Real qa = gm1 / cs_sq;
-    a[3] = du[0] * (1.0 - na * gm1 * vsq);
-    a[3] += du[1] * qa * v1;
-    a[3] += du[2] * qa * v2;
-    a[3] += du[3] * qa * v3;
-    a[3] -= du[4] * qa;
-
-    a[4] = du[0] * (0.5 * gm1 * vsq - v1 * cs);
-    a[4] -= du[1] * (gm1 * v1 - cs);
-    a[4] -= du[2] * gm1 * v2;
-    a[4] -= du[3] * gm1 * v3;
-    a[4] += du[4] * gm1;
-    a[4] *= na;
-
-    Real coeff[(NHYDRO)];
-    coeff[0] = -0.5 * std::abs(ev[0]) * a[0];
-    coeff[1] = -0.5 * std::abs(ev[1]) * a[1];
-    coeff[2] = -0.5 * std::abs(ev[2]) * a[2];
-    coeff[3] = -0.5 * std::abs(ev[3]) * a[3];
-    coeff[4] = -0.5 * std::abs(ev[4]) * a[4];
-
-    // compute density in intermediate states and check that it is positive, set
-    // flag This requires computing the [0][*] components of the
-    // right-eigenmatrix
-    Real dens =
-        wli[IDN] + a[0];  // rem[0][0]=1, so don't bother to compute or store
-    if (dens < 0.0) llf_flag = 1;
-
-    dens += a[3];  // rem[0][3]=1, so don't bother to compute or store
-    if (dens < 0.0) llf_flag = 1;
-
-    // Now multiply projection with R-eigenvectors from eq. B3 and SUM into
-    // output fluxes
-    flx[0] += coeff[0];
-    flx[0] += coeff[3];
-    flx[0] += coeff[4];
-
-    flx[1] += coeff[0] * (v1 - cs);
-    flx[1] += coeff[3] * v1;
-    flx[1] += coeff[4] * (v1 + cs);
-
-    flx[2] += coeff[0] * v2;
-    flx[2] += coeff[1];
-    flx[2] += coeff[3] * v2;
-    flx[2] += coeff[4] * v2;
-
-    flx[3] += coeff[0] * v3;
-    flx[3] += coeff[2];
-    flx[3] += coeff[3] * v3;
-    flx[3] += coeff[4] * v3;
-
-    flx[4] += coeff[0] * (h - v1 * cs);
-    flx[4] += coeff[1] * v2;
-    flx[4] += coeff[2] * v3;
-    flx[4] += coeff[3] * 0.5 * vsq;
-    flx[4] += coeff[4] * (h + v1 * cs);
-
-    //--- Isothermal hydrodynamics
-
-  } else {
-    // Compute eigenvalues (eq. B6)
-    ev[0] = v1 - iso_cs;
-    ev[1] = v1;
-    ev[2] = v1;
-    ev[3] = v1 + iso_cs;
-
-    // Compute projection of dU onto L-eigenvectors using matrix elements from
-    // eq. B7
-    Real a[(NHYDRO)];
-    a[0] = du[0] * (0.5 + 0.5 * v1 / iso_cs);
-    a[0] -= du[1] * 0.5 / iso_cs;
-
-    a[1] = du[0] * (-v2);
-    a[1] += du[2];
-
-    a[2] = du[0] * (-v3);
-    a[2] += du[3];
-
-    a[3] = du[0] * (0.5 - 0.5 * v1 / iso_cs);
-    a[3] += du[1] * 0.5 / iso_cs;
-
-    Real coeff[(NHYDRO)];
-    coeff[0] = -0.5 * std::abs(ev[0]) * a[0];
-    coeff[1] = -0.5 * std::abs(ev[1]) * a[1];
-    coeff[2] = -0.5 * std::abs(ev[2]) * a[2];
-    coeff[3] = -0.5 * std::abs(ev[3]) * a[3];
-
-    // compute density in intermediate states and check that it is positive, set
-    // flag This requires computing the [0][*] components of the
-    // right-eigenmatrix
-    Real dens =
-        wli[IDN] + a[0];  // rem[0][0]=1, so don't bother to compute or store
-    if (dens < 0.0) llf_flag = 1;
-
-    dens += a[3];  // rem[0][3]=1, so don't bother to compute or store
-    if (dens < 0.0) llf_flag = 1;
-
-    // Now multiply projection with R-eigenvectors from eq. B3 and SUM into
-    // output fluxes
-    flx[0] += coeff[0];
-    flx[0] += coeff[3];
-
-    flx[1] += coeff[0] * (v1 - iso_cs);
-    flx[1] += coeff[3] * (v1 + iso_cs);
-
-    flx[2] += coeff[0] * v2;
-    flx[2] += coeff[1];
-    flx[2] += coeff[3] * v2;
-
-    flx[3] += coeff[0] * v3;
-    flx[3] += coeff[2];
-    flx[3] += coeff[3] * v3;
-  }
-  return;
-}
-}  // namespace
+#undef FLX
+#undef WR
+#undef WL
+#undef SQR

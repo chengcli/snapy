@@ -80,7 +80,8 @@ enum class FusedReconScheme : int {
 enum class FusedRiemannSolver : int {
   LMARS = 0,
   HLLC = 1,
-  ShallowRoe = 2,
+  Roe = 2,
+  ShallowRoe = 3,
 };
 
 enum class FusedEos : int {

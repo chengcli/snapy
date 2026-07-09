@@ -11,6 +11,7 @@
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
+#include "../riemann/roe_impl.h"
 #include "../riemann/shallow_roe_impl.h"
 #include "fused_dispatch_params.cuh"
 #include "fused_recon_riemann_dispatch.hpp"
@@ -158,6 +159,7 @@ __global__ void fused_kernel(T const* w, T* flux,
                      physics.shallow_roe_dir_yz, /*stride_w=*/1,
                      /*stride_f=*/stride_var);
   } else {
+    T* face_pressure_out = face_pressure != nullptr ? face_pressure + flat : nullptr;
     T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
     int ny = physics.eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
     eos_side_quantities(wl_local, wr_local, ny, physics.nvapor, physics.eos,
@@ -166,45 +168,16 @@ __global__ void fused_kernel(T const* w, T* flux,
                         &cl, &cr);
 
     if (physics.solver == FusedRiemannSolver::LMARS) {
-      if (face_pressure != nullptr) {
-        T rhobar = T(0.5) * (wl_local[IDN] + wr_local[IDN]);
-        T gamma_bar = T(0.5) * (gl + gr);
-        T cbar =
-            sqrt(T(0.5) * gamma_bar * (wl_local[IPR] + wr_local[IPR]) / rhobar);
-        face_pressure[flat] =
-            T(0.5) * (wl_local[IPR] + wr_local[IPR]) +
-            T(0.5) * (rhobar * cbar) * (wl_local[IVX] - wr_local[IVX]);
-      }
       lmars_impl(flux + flat, wl_local, wr_local, el / wl_local[IDN],
                  er / wr_local[IDN], gl, gr, dim, ny, /*stride_w=*/1,
-                 /*stride_f=*/stride_var);
-    } else {
-      if (face_pressure != nullptr) {
-        T rhoa = T(0.5) * (wl_local[IDN] + wr_local[IDN]);
-        T ca = T(0.5) * (cl + cr);
-        T pmid = T(0.5) * (wl_local[IPR] + wr_local[IPR] +
-                           (wl_local[IVX] - wr_local[IVX]) * rhoa * ca);
-        T ql = (pmid <= wl_local[IPR])
-                   ? T(1)
-                   : sqrt(T(1) + (gl + T(1)) / (T(2) * gl) *
-                                       (pmid / wl_local[IPR] - T(1)));
-        T qr = (pmid <= wr_local[IPR])
-                   ? T(1)
-                   : sqrt(T(1) + (gr + T(1)) / (T(2) * gr) *
-                                       (pmid / wr_local[IPR] - T(1)));
-        T al = wl_local[IVX] - cl * ql;
-        T ar = wr_local[IVX] + cr * qr;
-        T vxl = wl_local[IVX] - al;
-        T vxr = wr_local[IVX] - ar;
-        T tl = wl_local[IPR] + vxl * wl_local[IDN] * wl_local[IVX];
-        T tr = wr_local[IPR] + vxr * wr_local[IDN] * wr_local[IVX];
-        T ml = wl_local[IDN] * vxl;
-        T mr = -(wr_local[IDN] * vxr);
-        T cp = (ml * tr + mr * tl) / (ml + mr);
-        face_pressure[flat] = max(cp, T(0));
-      }
+                 /*stride_f=*/stride_var, face_pressure_out);
+    } else if (physics.solver == FusedRiemannSolver::HLLC) {
       hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
-                ny, /*stride_w=*/1, /*stride_f=*/stride_var);
+                ny, /*stride_w=*/1, /*stride_f=*/stride_var,
+                face_pressure_out);
+    } else {
+      roe_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
+               /*stride_w=*/1, /*stride_f=*/stride_var, face_pressure_out);
     }
   }
   if (use_cubed_metric) {

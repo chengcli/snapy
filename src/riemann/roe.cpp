@@ -6,10 +6,6 @@
 #include "riemann_solver.hpp"
 
 namespace snap {
-torch::Tensor _compute_uroe(torch::Tensor wroe, EquationOfState peos) {
-  return wroe;
-}
-
 void RoeSolverImpl::reset() {
   TORCH_CHECK(phydro, "[RoeSolver] parent is nullptr");
 }
@@ -17,8 +13,6 @@ void RoeSolverImpl::reset() {
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                                      int dim, torch::Tensor flx,
                                      torch::Tensor face_pressure) {
-  TORCH_CHECK(!face_pressure.defined(),
-              "Face-pressure output is not implemented for RoeSolver");
   auto peos = phydro->peos;
 
   // dim, ivx, ivy, ivz
@@ -29,11 +23,11 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
 
-  auto el = peos->compute("W->U", {wl});
+  auto el = peos->compute("W->U", {wl})[IPR];
   auto gammal = peos->compute("W->A", {wl});
   auto cl = peos->compute("WA->L", {wl, gammal});
 
-  auto er = peos->compute("W->U", {wr});
+  auto er = peos->compute("W->U", {wr})[IPR];
   auto gammar = peos->compute("W->A", {wr});
   auto cr = peos->compute("WA->L", {wr, gammar});
 
@@ -52,6 +46,9 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   // flows, rather than E or P directly.  sqrtdl*hl = sqrtdl*(el+pl)/dl =
   // (el+pl)/sqrtdl
   wroe[IPR] = ((el + wl[IPR]) / sqrtdl + (er + wr[IPR]) / sqrtdr) * isdlpdr;
+  if (face_pressure.defined()) {
+    face_pressure.copy_(wroe[IPR]);
+  }
 
   //--- Step 3.  Compute L/R fluxes
   auto fl = torch::zeros_like(wl);
@@ -77,20 +74,13 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
       wr[IDN] * wr.narrow(0, IVX, 3) - wl[IDN] * wl.narrow(0, IVX, 3);
   du[IPR] = er - el;
 
-  flx.set_(0.5 * (fl + fr));
+  auto out = 0.5 * (fl + fr);
 
   auto vsq = wroe.narrow(0, IVX, 3).square().sum(0);
   auto q = wroe[IPR] - 0.5 * vsq;
-  auto qi = (q < 0.).to(torch::kInt);
-
-  // FIXME: compute uroe
-  auto uroe = _compute_uroe(wroe, peos);
-
-  auto wroe1 = peos->compute("U->W", {uroe});
-  auto gamma_roe = peos->compute("W->A", {wroe1});
-
-  auto cs = peos->compute("WA->L", {wroe1, gamma_roe});
-  auto cs_sq = cs.square();
+  auto gamma_roe = 0.5 * (gammal + gammar);
+  auto cs_sq = torch::clamp_min((gamma_roe - 1.0) * q, 1.0e-10);
+  auto cs = torch::sqrt(cs_sq);
   auto gm1_roe = gamma_roe - 1.0;
 
   // Compute eigenvalues (eq. B2)
@@ -133,34 +123,35 @@ torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
 
   // Now multiply projection with R-eigenvectors from eq. B3 and SUM into
   // output fluxes
-  flx[IDN] += coeff[0] + coeff[3] + coeff[4];
+  out[IDN] += coeff[0] + coeff[3] + coeff[4];
 
-  flx[ivx] += coeff[0] * (wroe[ivx] - cs) + coeff[3] * wroe[ivx] +
+  out[ivx] += coeff[0] * (wroe[ivx] - cs) + coeff[3] * wroe[ivx] +
               coeff[4] * (wroe[ivx] + cs);
 
-  flx[ivy] += coeff[0] * wroe[ivy] + coeff[1] + coeff[3] * wroe[ivy] +
+  out[ivy] += coeff[0] * wroe[ivy] + coeff[1] + coeff[3] * wroe[ivy] +
               coeff[4] * wroe[ivy];
 
-  flx[ivz] += coeff[0] * wroe[ivz] + coeff[2] + coeff[3] * wroe[ivz] +
+  out[ivz] += coeff[0] * wroe[ivz] + coeff[2] + coeff[3] * wroe[ivz] +
               coeff[4] * wroe[ivz];
 
-  flx[IPR] += coeff[0] * (wroe[IPR] - wroe[ivx] * cs) + coeff[1] * wroe[ivy] +
+  out[IPR] += coeff[0] * (wroe[IPR] - wroe[ivx] * cs) + coeff[1] * wroe[ivy] +
               coeff[2] * wroe[ivz] + coeff[3] * 0.5 * vsq +
               coeff[4] * (wroe[IPR] + wroe[ivx] * cs);
 
   //--- Step 5.  Overwrite with upwind flux if flow is supersonic
   auto evi = (ev[0] > 0).to(torch::kInt);
-  flx = evi * fl + (1 - evi) * flx;
+  out = evi * fl + (1 - evi) * out;
 
   evi = (ev[4] < 0).to(torch::kInt);
-  flx = evi * fr + (1 - evi) * flx;
+  out = evi * fr + (1 - evi) * out;
 
   //--- Step 6.  Overwrite with LLF flux if any of intermediate states are
   // negative
   auto cmax =
       0.5 * torch::max(torch::abs(wl[ivx]) + cl, torch::abs(wr[ivx]) + cr);
-  flx = llf_flag * (0.5 * (fl + fr) - cmax * du) + (1 - llf_flag) * flx;
+  out = llf_flag * (0.5 * (fl + fr) - cmax * du) + (1 - llf_flag) * out;
 
+  flx.copy_(out);
   return flx;
 }
 }  // namespace snap

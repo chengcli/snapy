@@ -42,7 +42,10 @@ FusedReconScheme fused_recon_scheme(std::string const& type,
 
 bool fused_combo_supported(std::string const& eos_type,
                            std::string const& riemann_type) {
-  return ((eos_type == "ideal-gas" || eos_type == "ideal-moist") &&
+  return ((eos_type == "ideal-gas" &&
+           (riemann_type == "lmars" || riemann_type == "hllc" ||
+            riemann_type == "roe")) ||
+          (eos_type == "ideal-moist" &&
           (riemann_type == "lmars" || riemann_type == "hllc")) ||
          (eos_type == "shallow-water" && riemann_type == "shallow-roe");
 }
@@ -60,10 +63,11 @@ FusedEos fused_eos(std::string const& type) {
 FusedRiemannSolver fused_riemann_solver(std::string const& type) {
   if (type == "lmars") return FusedRiemannSolver::LMARS;
   if (type == "hllc") return FusedRiemannSolver::HLLC;
+  if (type == "roe") return FusedRiemannSolver::Roe;
   if (type == "shallow-roe") return FusedRiemannSolver::ShallowRoe;
   TORCH_CHECK(false,
               "dynamics.fused-recon-riemann supports Riemann solvers lmars, "
-              "hllc, and shallow-roe, but got ",
+              "hllc, roe, and shallow-roe, but got ",
               type);
 }
 

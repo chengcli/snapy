@@ -76,7 +76,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
                   .check_all_same_dtype(true)
                   .declare_static_shape(flx.sizes(), /*squash_dims=*/0)
                   .add_output(flx)
-                  .add_output(face_pressure_out.unsqueeze(0))
+                  .add_owned_output(face_pressure_out.unsqueeze(0))
                   .add_input(wl)
                   .add_input(wr)
                   .add_input(elr)

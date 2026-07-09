@@ -15,6 +15,7 @@
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
+#include "../riemann/roe_impl.h"
 #include "../riemann/shallow_roe_impl.h"
 #include "../layout/cubed_sphere_constants.h"
 #include "fused_dispatch_params.cuh"
@@ -291,9 +292,12 @@ __device__ void cs_flux_common(
   if (physics.solver == FusedRiemannSolver::LMARS) {
     lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
                /*stride_w=*/1, /*stride_f=*/stride_var);
-  } else {
+  } else if (physics.solver == FusedRiemannSolver::HLLC) {
     hllc_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, ny, /*stride_w=*/1,
               /*stride_f=*/stride_var);
+  } else {
+    roe_impl(flux, wl, wr, el, er, gl, gr, cl, cr, dim, /*stride_w=*/1,
+             /*stride_f=*/stride_var);
   }
   gnomonic_flux2global(flux, dim, alpha, beta, stride_var);
 }

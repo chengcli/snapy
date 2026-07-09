@@ -30,7 +30,7 @@ struct RiemannSolverOptionsImpl {
   }
 
   // type of Riemann solver
-  ADD_ARG(std::string, type) = "roe";
+  ADD_ARG(std::string, type) = "hllc";
 
   // used in shallow water equations
   ADD_ARG(std::string, dir) = "omni";
@@ -88,6 +88,9 @@ class UpwindSolverImpl : public torch::nn::Cloneable<UpwindSolverImpl>,
   }
   void reset() override {}
   using RiemannSolverImpl::forward;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(UpwindSolver);
 
@@ -107,6 +110,9 @@ class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(RoeSolver);
 
@@ -126,6 +132,9 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(LmarsSolver);
 
@@ -145,6 +154,9 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(HLLCSolver);
 
@@ -164,6 +176,9 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(ShallowRoeSolver);
 
@@ -194,6 +209,9 @@ class PlumeRoeSolverImpl : public torch::nn::Cloneable<PlumeRoeSolverImpl>,
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;
+
+ protected:
+  FORWARD_HAS_DEFAULT_ARGS({4, torch::nn::AnyValue(torch::Tensor())})
 };
 TORCH_MODULE(PlumeRoeSolver);
 }  // namespace snap
