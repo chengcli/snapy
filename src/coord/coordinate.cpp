@@ -426,8 +426,7 @@ torch::Tensor CoordinateImpl::curl(torch::Tensor velocity) const {
 }
 
 torch::Tensor CoordinateImpl::forward(torch::Tensor prim, torch::Tensor flux1,
-                                      torch::Tensor flux2,
-                                      torch::Tensor flux3,
+                                      torch::Tensor flux2, torch::Tensor flux3,
                                       torch::Tensor face_pressure1) {
   (void)prim;
   (void)face_pressure1;

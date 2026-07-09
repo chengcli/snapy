@@ -72,8 +72,7 @@ class RiemannSolverImpl {
   //! Solver the Riemann problem
   virtual torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                                 torch::Tensor vel_or_flux,
-                                torch::Tensor face_pressure =
-                                    torch::Tensor());
+                                torch::Tensor face_pressure = torch::Tensor());
 };
 using RiemannSolver = std::shared_ptr<RiemannSolverImpl>;
 
@@ -191,7 +190,7 @@ class PlumeRoeSolverImpl : public torch::nn::Cloneable<PlumeRoeSolverImpl>,
    * d(Q2)/dt = - d(F2)/dx
    * d(Q3)/dt = - d(F3)/dx
    * d(Q4)/dt = - d(F4)/dx
-  */
+   */
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
                         torch::Tensor out,
                         torch::Tensor face_pressure = torch::Tensor()) override;

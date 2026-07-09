@@ -178,10 +178,9 @@ TEST(SphericalPolar, geometry_matches_athena_reference_formulas) {
   auto expected_area2 = radial_area23.unsqueeze(0).unsqueeze(1) *
                         sin_face.unsqueeze(0).unsqueeze(2) *
                         pcoord->dx3f.unsqueeze(1).unsqueeze(2);
-  auto expected_area3 =
-      (radial_area23.unsqueeze(0).unsqueeze(1) *
-       pcoord->dx2f.unsqueeze(0).unsqueeze(2))
-          .expand({pcoord->x3f.size(0), -1, -1});
+  auto expected_area3 = (radial_area23.unsqueeze(0).unsqueeze(1) *
+                         pcoord->dx2f.unsqueeze(0).unsqueeze(2))
+                            .expand({pcoord->x3f.size(0), -1, -1});
   auto expected_vol = radial_volume.unsqueeze(0).unsqueeze(1) *
                       polar_area1.unsqueeze(0).unsqueeze(2) *
                       pcoord->dx3f.unsqueeze(1).unsqueeze(2);
@@ -193,26 +192,26 @@ TEST(SphericalPolar, geometry_matches_athena_reference_formulas) {
 
   auto sin_m = torch::abs(x2m.sin());
   auto sin_p = torch::abs(x2p.sin());
-  auto expected_src1_i = (radial_area23 / radial_volume).unsqueeze(0).unsqueeze(0);
+  auto expected_src1_i =
+      (radial_area23 / radial_volume).unsqueeze(0).unsqueeze(0);
   auto expected_src2_i =
       (pcoord->dx1f / ((x1m + x1p) * radial_volume)).unsqueeze(0).unsqueeze(0);
   auto expected_src1_j =
       ((sin_p - sin_m) / polar_area1).unsqueeze(0).unsqueeze(-1);
-  auto expected_src2_j =
-      ((sin_p - sin_m) / ((sin_m + sin_p) * polar_area1))
-          .unsqueeze(0)
-          .unsqueeze(-1);
+  auto expected_src2_j = ((sin_p - sin_m) / ((sin_m + sin_p) * polar_area1))
+                             .unsqueeze(0)
+                             .unsqueeze(-1);
 
-  EXPECT_TRUE(torch::allclose(pcoord->coord_src1_i, expected_src1_i, 1.e-12,
-                              1.e-12));
-  EXPECT_TRUE(torch::allclose(pcoord->coord_src2_i, expected_src2_i, 1.e-12,
-                              1.e-12));
-  EXPECT_TRUE(torch::allclose(pcoord->coord_src1_j, expected_src1_j, 1.e-12,
-                              1.e-12));
-  EXPECT_TRUE(torch::allclose(pcoord->coord_src2_j, expected_src2_j, 1.e-12,
-                              1.e-12));
-  EXPECT_TRUE(torch::allclose(pcoord->coord_src3_j, expected_src1_j, 1.e-12,
-                              1.e-12));
+  EXPECT_TRUE(
+      torch::allclose(pcoord->coord_src1_i, expected_src1_i, 1.e-12, 1.e-12));
+  EXPECT_TRUE(
+      torch::allclose(pcoord->coord_src2_i, expected_src2_i, 1.e-12, 1.e-12));
+  EXPECT_TRUE(
+      torch::allclose(pcoord->coord_src1_j, expected_src1_j, 1.e-12, 1.e-12));
+  EXPECT_TRUE(
+      torch::allclose(pcoord->coord_src2_j, expected_src2_j, 1.e-12, 1.e-12));
+  EXPECT_TRUE(
+      torch::allclose(pcoord->coord_src3_j, expected_src1_j, 1.e-12, 1.e-12));
 }
 
 TEST(GnomonicEquiangle, l2g) {
@@ -554,7 +553,8 @@ TEST_P(DeviceTest, radial_source_uses_face_pressure_in_x1_momentum) {
   EXPECT_TRUE(torch::allclose(div_lo[IVX], div_hi[IVX], 1.e-8, 1.e-8));
 }
 
-TEST_P(DeviceTest, spherical_polar_radial_source_uses_face_pressure_in_x1_momentum) {
+TEST_P(DeviceTest,
+       spherical_polar_radial_source_uses_face_pressure_in_x1_momentum) {
   auto fname = write_temp_config(spherical_polar_config);
   auto op = MeshBlockOptionsImpl::from_yaml(fname);
   auto block = MeshBlock(op);
@@ -586,8 +586,8 @@ TEST_P(DeviceTest, spherical_polar_radial_source_uses_face_pressure_in_x1_moment
   auto div_face_hi =
       pcoord->forward(prim_hi, flux1, flux2, flux3, face_pressure);
 
-  EXPECT_FALSE(torch::allclose(div_no_face_lo[IVX], div_no_face_hi[IVX], 1.e-6,
-                               1.e-6));
+  EXPECT_FALSE(
+      torch::allclose(div_no_face_lo[IVX], div_no_face_hi[IVX], 1.e-6, 1.e-6));
   EXPECT_TRUE(
       torch::allclose(div_face_lo[IVX], div_face_hi[IVX], 1.e-6, 1.e-6));
 }

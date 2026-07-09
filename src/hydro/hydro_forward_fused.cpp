@@ -434,8 +434,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   };
   FusedMetricParams metric_params{
       cubed_sphere_layout, face, x2v, x2f, x3v, x3f};
-  auto face_pressure1 = eos == FusedEos::ShallowWater ? torch::Tensor()
-                                                      : _face_pressure1;
+  auto face_pressure1 =
+      eos == FusedEos::ShallowWater ? torch::Tensor() : _face_pressure1;
 
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(

@@ -34,8 +34,7 @@ void call_lmars_cpu(at::TensorIterator& iter, int dim) {
             auto elr = reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
             auto glr = reinterpret_cast<scalar_t*>(data[5] + i * strides[5]);
             lmars_impl(out, wl, wr, *elr, *(elr + stride), *glr,
-                       *(glr + stride), dim, ny, stride, stride,
-                       face_pressure);
+                       *(glr + stride), dim, ny, stride, stride, face_pressure);
           }
         },
         grain_size);

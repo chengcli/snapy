@@ -638,13 +638,12 @@ TEST(RiemannSolver, hllc_writes_face_pressure_output) {
 
   auto rhoa = 0.5 * (wl[IDN] + wr[IDN]);
   auto ca = 0.5 * (cl + cr);
-  auto pmid =
-      0.5 * (wl[IPR] + wr[IPR] + (wl[IVX] - wr[IVX]) * rhoa * ca);
-  auto ql = torch::sqrt(1.0 + (gamma_l + 1) / (2 * gamma_l) *
-                                  (pmid / wl[IPR] - 1.0));
+  auto pmid = 0.5 * (wl[IPR] + wr[IPR] + (wl[IVX] - wr[IVX]) * rhoa * ca);
+  auto ql =
+      torch::sqrt(1.0 + (gamma_l + 1) / (2 * gamma_l) * (pmid / wl[IPR] - 1.0));
   ql = torch::where(pmid <= wl[IPR], torch::ones_like(ql), ql);
-  auto qr = torch::sqrt(1.0 + (gamma_r + 1) / (2 * gamma_r) *
-                                  (pmid / wr[IPR] - 1.0));
+  auto qr =
+      torch::sqrt(1.0 + (gamma_r + 1) / (2 * gamma_r) * (pmid / wr[IPR] - 1.0));
   qr = torch::where(pmid <= wr[IPR], torch::ones_like(qr), qr);
   auto al = wl[IVX] - cl * ql;
   auto ar = wr[IVX] + cr * qr;

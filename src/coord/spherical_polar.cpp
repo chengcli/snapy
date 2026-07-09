@@ -49,8 +49,8 @@ void SphericalPolarImpl::reset() {
 
   auto opts = torch::TensorOptions().dtype(torch::kFloat64);
 
-  cosine_cell_kj =
-      register_buffer("cosine_cell_kj", torch::zeros({op->nc3(), op->nc2(), 1}, opts));
+  cosine_cell_kj = register_buffer(
+      "cosine_cell_kj", torch::zeros({op->nc3(), op->nc2(), 1}, opts));
   cosine_face2_kj = register_buffer(
       "cosine_face2_kj", torch::zeros({op->nc3(), op->nc2() + 1, 1}, opts));
   cosine_face3_kj = register_buffer(
@@ -96,10 +96,9 @@ void SphericalPolarImpl::reset() {
       "coord_src1_j",
       ((sin_p - sin_m) / polar_volume).unsqueeze(0).unsqueeze(-1));
   coord_src2_j = register_buffer(
-      "coord_src2_j",
-      ((sin_p - sin_m) / ((sin_m + sin_p) * polar_volume))
-          .unsqueeze(0)
-          .unsqueeze(-1));
+      "coord_src2_j", ((sin_p - sin_m) / ((sin_m + sin_p) * polar_volume))
+                          .unsqueeze(0)
+                          .unsqueeze(-1));
   coord_src3_j = register_buffer(
       "coord_src3_j",
       ((sin_p - sin_m) / polar_volume).unsqueeze(0).unsqueeze(-1));
@@ -149,10 +148,9 @@ void SphericalPolarImpl::reset_coordinates(
   auto polar_volume = torch::abs(theta_m.cos() - theta_p.cos());
   coord_src1_j.copy_(
       ((sin_p - sin_m) / polar_volume).unsqueeze(0).unsqueeze(-1));
-  coord_src2_j.copy_(
-      ((sin_p - sin_m) / ((sin_m + sin_p) * polar_volume))
-          .unsqueeze(0)
-          .unsqueeze(-1));
+  coord_src2_j.copy_(((sin_p - sin_m) / ((sin_m + sin_p) * polar_volume))
+                         .unsqueeze(0)
+                         .unsqueeze(-1));
   coord_src3_j.copy_(
       ((sin_p - sin_m) / polar_volume).unsqueeze(0).unsqueeze(-1));
 }
@@ -185,34 +183,30 @@ torch::Tensor SphericalPolarImpl::face_area1() const {
 }
 
 torch::Tensor SphericalPolarImpl::face_area2() const {
-  auto radial =
-      0.5 * (x1f.slice(0, 1, options->nc1() + 1).square() -
-             x1f.slice(0, 0, options->nc1()).square());
+  auto radial = 0.5 * (x1f.slice(0, 1, options->nc1() + 1).square() -
+                       x1f.slice(0, 0, options->nc1()).square());
   return radial.unsqueeze(0).unsqueeze(1) *
          x2f.sin().abs().unsqueeze(0).unsqueeze(2) *
          dx3f.unsqueeze(1).unsqueeze(2);
 }
 
 torch::Tensor SphericalPolarImpl::face_area3() const {
-  auto radial =
-      0.5 * (x1f.slice(0, 1, options->nc1() + 1).square() -
-             x1f.slice(0, 0, options->nc1()).square());
+  auto radial = 0.5 * (x1f.slice(0, 1, options->nc1() + 1).square() -
+                       x1f.slice(0, 0, options->nc1()).square());
   return (radial.unsqueeze(0).unsqueeze(1) * dx2f.unsqueeze(0).unsqueeze(2))
       .expand({x3f.size(0), -1, -1});
 }
 
 torch::Tensor SphericalPolarImpl::cell_volume() const {
-  auto radial =
-      ((x1f.slice(0, 1, options->nc1() + 1).pow(3) -
-        x1f.slice(0, 0, options->nc1()).pow(3)) /
-       3.0)
-          .unsqueeze(0)
-          .unsqueeze(1);
-  auto polar =
-      torch::abs(x2f.slice(0, 0, options->nc2()).cos() -
-                 x2f.slice(0, 1, options->nc2() + 1).cos())
-          .unsqueeze(0)
-          .unsqueeze(2);
+  auto radial = ((x1f.slice(0, 1, options->nc1() + 1).pow(3) -
+                  x1f.slice(0, 0, options->nc1()).pow(3)) /
+                 3.0)
+                    .unsqueeze(0)
+                    .unsqueeze(1);
+  auto polar = torch::abs(x2f.slice(0, 0, options->nc2()).cos() -
+                          x2f.slice(0, 1, options->nc2() + 1).cos())
+                   .unsqueeze(0)
+                   .unsqueeze(2);
   return radial * polar * dx3f.unsqueeze(1).unsqueeze(2);
 }
 
@@ -235,8 +229,8 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
 
   auto vol = cell_volume();
 
-  auto src1 = coord_src1_i * prim[IDN] *
-              (prim[IVY].square() + prim[IVZ].square());
+  auto src1 =
+      coord_src1_i * prim[IDN] * (prim[IVY].square() + prim[IVZ].square());
   if (eos_type != "shallow-water") {
     if (face_pressure1.defined()) {
       auto pressure_src = torch::zeros_like(prim[IDN]);
@@ -260,15 +254,13 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
   div[IVY] -= coord_src1_i * coord_src1_j * m_pp;
   div[IVY].slice(-1, si, ei) +=
       coord_src2_i.slice(-1, si, ei) *
-      (CoordinateImpl::face_area1(si, ei) *
-           flux1[IVY].slice(DIM1, si, ei) +
+      (CoordinateImpl::face_area1(si, ei) * flux1[IVY].slice(DIM1, si, ei) +
        CoordinateImpl::face_area1(si + 1, ei + 1) *
            flux1[IVY].slice(DIM1, si + 1, ei + 1));
 
   div[IVZ].slice(-1, si, ei) +=
       coord_src2_i.slice(-1, si, ei) *
-      (CoordinateImpl::face_area1(si, ei) *
-           flux1[IVZ].slice(DIM1, si, ei) +
+      (CoordinateImpl::face_area1(si, ei) * flux1[IVZ].slice(DIM1, si, ei) +
        CoordinateImpl::face_area1(si + 1, ei + 1) *
            flux1[IVZ].slice(DIM1, si + 1, ei + 1));
   if (use_x2_fluxes) {
