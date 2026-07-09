@@ -71,7 +71,9 @@ class RiemannSolverImpl {
 
   //! Solver the Riemann problem
   virtual torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                                torch::Tensor vel_or_flux);
+                                torch::Tensor vel_or_flux,
+                                torch::Tensor face_pressure =
+                                    torch::Tensor());
 };
 using RiemannSolver = std::shared_ptr<RiemannSolverImpl>;
 
@@ -104,7 +106,8 @@ class RoeSolverImpl : public torch::nn::Cloneable<RoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor out) override;
+                        torch::Tensor out,
+                        torch::Tensor face_pressure = torch::Tensor()) override;
 };
 TORCH_MODULE(RoeSolver);
 
@@ -122,7 +125,8 @@ class LmarsSolverImpl : public torch::nn::Cloneable<LmarsSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor out) override;
+                        torch::Tensor out,
+                        torch::Tensor face_pressure = torch::Tensor()) override;
 };
 TORCH_MODULE(LmarsSolver);
 
@@ -140,7 +144,8 @@ class HLLCSolverImpl : public torch::nn::Cloneable<HLLCSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor out) override;
+                        torch::Tensor out,
+                        torch::Tensor face_pressure = torch::Tensor()) override;
 };
 TORCH_MODULE(HLLCSolver);
 
@@ -158,7 +163,8 @@ class ShallowRoeSolverImpl : public torch::nn::Cloneable<ShallowRoeSolverImpl>,
 
   //! Solver the Riemann problem
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor out) override;
+                        torch::Tensor out,
+                        torch::Tensor face_pressure = torch::Tensor()) override;
 };
 TORCH_MODULE(ShallowRoeSolver);
 
@@ -185,9 +191,10 @@ class PlumeRoeSolverImpl : public torch::nn::Cloneable<PlumeRoeSolverImpl>,
    * d(Q2)/dt = - d(F2)/dx
    * d(Q3)/dt = - d(F3)/dx
    * d(Q4)/dt = - d(F4)/dx
-   */
+  */
   torch::Tensor forward(torch::Tensor wl, torch::Tensor wr, int dim,
-                        torch::Tensor out) override;
+                        torch::Tensor out,
+                        torch::Tensor face_pressure = torch::Tensor()) override;
 };
 TORCH_MODULE(PlumeRoeSolver);
 }  // namespace snap

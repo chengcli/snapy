@@ -434,10 +434,12 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   };
   FusedMetricParams metric_params{
       cubed_sphere_layout, face, x2v, x2f, x3v, x3f};
+  auto face_pressure1 = eos == FusedEos::ShallowWater ? torch::Tensor()
+                                                      : _face_pressure1;
 
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     fused_recon_riemann_cuda(
-        w, _flux1,
+        w, _flux1, face_pressure1,
         FusedReconRiemannParams{
             /*dim=*/3, make_physics_params(recon1_prim, recon1_vel),
             FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
@@ -448,7 +450,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   }
   if (u.size(2) > 1 && !options->disable_flux_x2()) {
     fused_recon_riemann_cuda(
-        w, _flux2,
+        w, _flux2, torch::Tensor(),
         FusedReconRiemannParams{
             /*dim=*/2, make_physics_params(recon23_prim, recon23_vel),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
@@ -456,7 +458,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   }
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     fused_recon_riemann_cuda(
-        w, _flux3,
+        w, _flux3, torch::Tensor(),
         FusedReconRiemannParams{
             /*dim=*/1, make_physics_params(recon23_prim, recon23_vel),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
@@ -575,7 +577,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       barrier.wait();  // seam flux enqueued before any panel's divergence
     }
   }
-  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
+  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
 
   auto du = torch::zeros_like(_div);
   auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));

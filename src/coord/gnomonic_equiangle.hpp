@@ -54,7 +54,9 @@ class GnomonicEquiangleImpl
   void flux2global3_(torch::Tensor const& flux) const override;
 
   torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
-                        torch::Tensor flux2, torch::Tensor flux3) override;
+                        torch::Tensor flux2, torch::Tensor flux3,
+                        torch::Tensor face_pressure1 = torch::Tensor())
+      override;
 
  private:
   torch::Tensor _interp_ghost_LR(torch::Tensor buf, bool flip) const;

@@ -16,7 +16,8 @@ namespace snap {
 template <typename T>
 void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
                               T gammar, T cl, T cr, int dim, int ny,
-                              int stride_w, int stride_f) {
+                              int stride_w, int stride_f,
+                              T *face_pressure = nullptr) {
   auto TINY_NUMBER = 1.0e-10;
 
   auto ivx = IPR - dim;
@@ -68,6 +69,7 @@ void DISPATCH_MACRO hllc_impl(T *flx, T *wl, T *wr, T el, T er, T gammal,
   // ...and the pressure at the contact surface
   auto cp = (ml * tr + mr * tl) / (ml + mr);
   cp = cp > 0.0 ? cp : 0.0;
+  if (face_pressure != nullptr) *face_pressure = cp;
 
   //--- Step 6. Compute L/R fluxes along the line bm, bp
 

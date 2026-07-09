@@ -95,8 +95,11 @@ void HydroImpl::reset() {
   if (nc1 > 1) {
     _flux1 = register_buffer(
         "F1", torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
+    _face_pressure1 = register_buffer(
+        "P1", torch::zeros({nc3, nc2, nc1}, torch::kFloat64));
   } else {
     _flux1 = register_buffer("F1", torch::Tensor());
+    _face_pressure1 = register_buffer("P1", torch::Tensor());
   }
 
   if (nc2 > 1) {

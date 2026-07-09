@@ -16,7 +16,7 @@ namespace snap {
 template <typename T>
 void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
                                T gammar, int dim, int ny, int stride_w,
-                               int stride_f) {
+                               int stride_f, T *face_pressure = nullptr) {
   auto ivx = IPR - dim;
   auto ivy = IVX + ((ivx - IVX) + 1) % 3;
   auto ivz = IVX + ((ivx - IVX) + 2) % 3;
@@ -37,6 +37,7 @@ void DISPATCH_MACRO lmars_impl(T *flx, T *wl, T *wr, T hl, T hr, T gammal,
 
   auto pbar = 0.5 * (wli[IPR] + wri[IPR]) +
               0.5 * (rhobar * cbar) * (wli[IVX] - wri[IVX]);
+  if (face_pressure != nullptr) *face_pressure = pbar;
 
   auto ubar = 0.5 * (wli[IVX] + wri[IVX]) +
               0.5 / (rhobar * cbar) * (wli[IPR] - wri[IPR]);

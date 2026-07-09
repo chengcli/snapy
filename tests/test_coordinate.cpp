@@ -1,11 +1,21 @@
 // external
 #include <gtest/gtest.h>
 
+// C/C++
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <string>
+
+// POSIX
+#include <unistd.h>
+
 // snap
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/coord/gnomonic_equiangle.hpp>
+#include <snap/coord/spherical_polar.hpp>
 #include <snap/coord/spherical_utils.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -14,6 +24,100 @@
 #include "device_testing.hpp"
 
 using namespace snap;
+
+namespace {
+
+const char *gnomonic_radial_config = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    gammad: 1.4
+
+geometry:
+  type: gnomonic-equiangle
+  cells: {nx1: 6, nx2: 6, nx3: 6, nghost: 2}
+  bounds:
+    x1min: 1.
+    x1max: 2.
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom
+)";
+
+const char *spherical_polar_config = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    gammad: 1.4
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+geometry:
+  type: spherical-polar
+  cells: {nx1: 4, nx2: 4, nx3: 4, nghost: 1}
+  bounds:
+    x1min: 1.
+    x1max: 2.
+    x2min_pi: 0.25
+    x2max_pi: 0.75
+    x3min_pi: -0.5
+    x3max_pi: 0.5
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: periodic
+    x3-outer: periodic
+)";
+
+std::string write_temp_config(char const *config) {
+  char fname[] = "/tmp/test-coordinate-XXXXXX";
+  int fd = mkstemp(fname);
+  EXPECT_NE(fd, -1);
+  if (fd != -1) close(fd);
+
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+  return fname;
+}
+
+}  // namespace
 
 TEST(GnomonicEquiangle, area_vol) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
@@ -31,6 +135,84 @@ TEST(GnomonicEquiangle, area_vol) {
 
   auto vol = pcoord->cell_volume();
   std::cout << "volume = \n" << vol << std::endl;
+}
+
+TEST(SphericalPolar, geometry_matches_athena_reference_formulas) {
+  auto fname = write_temp_config(spherical_polar_config);
+  auto op = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op);
+  std::remove(fname.c_str());
+
+  auto pcoord = std::dynamic_pointer_cast<SphericalPolarImpl>(block->pcoord);
+  ASSERT_TRUE(pcoord != nullptr);
+
+  auto area1 = pcoord->face_area1();
+  auto area2 = pcoord->face_area2();
+  auto area3 = pcoord->face_area3();
+  auto vol = pcoord->cell_volume();
+
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+
+  auto x1m = pcoord->x1f.slice(0, 0, nc1);
+  auto x1p = pcoord->x1f.slice(0, 1, nc1 + 1);
+  auto x2m = pcoord->x2f.slice(0, 0, nc2);
+  auto x2p = pcoord->x2f.slice(0, 1, nc2 + 1);
+
+  auto expected_x1v =
+      0.75 * (x1p.pow(4) - x1m.pow(4)) / (x1p.pow(3) - x1m.pow(3));
+  auto expected_x2v =
+      ((x2p.sin() - x2p * x2p.cos()) - (x2m.sin() - x2m * x2m.cos())) /
+      (x2m.cos() - x2p.cos());
+  EXPECT_TRUE(torch::allclose(pcoord->x1v, expected_x1v, 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(pcoord->x2v, expected_x2v, 1.e-12, 1.e-12));
+
+  auto radial_area23 = 0.5 * (x1p.square() - x1m.square());
+  auto radial_volume = (x1p.pow(3) - x1m.pow(3)) / 3.0;
+  auto polar_area1 = torch::abs(x2m.cos() - x2p.cos());
+  auto sin_face = torch::abs(pcoord->x2f.sin());
+
+  auto expected_area1 = pcoord->x1f.square().unsqueeze(0).unsqueeze(1) *
+                        polar_area1.unsqueeze(0).unsqueeze(2) *
+                        pcoord->dx3f.unsqueeze(1).unsqueeze(2);
+  auto expected_area2 = radial_area23.unsqueeze(0).unsqueeze(1) *
+                        sin_face.unsqueeze(0).unsqueeze(2) *
+                        pcoord->dx3f.unsqueeze(1).unsqueeze(2);
+  auto expected_area3 =
+      (radial_area23.unsqueeze(0).unsqueeze(1) *
+       pcoord->dx2f.unsqueeze(0).unsqueeze(2))
+          .expand({pcoord->x3f.size(0), -1, -1});
+  auto expected_vol = radial_volume.unsqueeze(0).unsqueeze(1) *
+                      polar_area1.unsqueeze(0).unsqueeze(2) *
+                      pcoord->dx3f.unsqueeze(1).unsqueeze(2);
+
+  EXPECT_TRUE(torch::allclose(area1, expected_area1, 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(area2, expected_area2, 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(area3, expected_area3, 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(vol, expected_vol, 1.e-12, 1.e-12));
+
+  auto sin_m = torch::abs(x2m.sin());
+  auto sin_p = torch::abs(x2p.sin());
+  auto expected_src1_i = (radial_area23 / radial_volume).unsqueeze(0).unsqueeze(0);
+  auto expected_src2_i =
+      (pcoord->dx1f / ((x1m + x1p) * radial_volume)).unsqueeze(0).unsqueeze(0);
+  auto expected_src1_j =
+      ((sin_p - sin_m) / polar_area1).unsqueeze(0).unsqueeze(-1);
+  auto expected_src2_j =
+      ((sin_p - sin_m) / ((sin_m + sin_p) * polar_area1))
+          .unsqueeze(0)
+          .unsqueeze(-1);
+
+  EXPECT_TRUE(torch::allclose(pcoord->coord_src1_i, expected_src1_i, 1.e-12,
+                              1.e-12));
+  EXPECT_TRUE(torch::allclose(pcoord->coord_src2_i, expected_src2_i, 1.e-12,
+                              1.e-12));
+  EXPECT_TRUE(torch::allclose(pcoord->coord_src1_j, expected_src1_j, 1.e-12,
+                              1.e-12));
+  EXPECT_TRUE(torch::allclose(pcoord->coord_src2_j, expected_src2_j, 1.e-12,
+                              1.e-12));
+  EXPECT_TRUE(torch::allclose(pcoord->coord_src3_j, expected_src1_j, 1.e-12,
+                              1.e-12));
 }
 
 TEST(GnomonicEquiangle, l2g) {
@@ -339,6 +521,75 @@ TEST_P(DeviceTest, flux_projection3) {
 
   coord_vec_raise_(prim.narrow(0, IVX, 3), cthf.narrow(0, 0, nc3));
   EXPECT_TRUE(torch::allclose(prim, prim_ori));
+}
+
+TEST_P(DeviceTest, radial_source_uses_face_pressure_in_x1_momentum) {
+  auto fname = write_temp_config(gnomonic_radial_config);
+  auto op = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+  std::remove(fname.c_str());
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+  auto prim_lo = torch::zeros({5, nc3, nc2, nc1}, opts);
+  auto prim_hi = torch::zeros_like(prim_lo);
+  prim_lo[IDN].fill_(1.0);
+  prim_hi[IDN].fill_(1.0);
+  prim_lo[IPR].fill_(3.0);
+  prim_hi[IPR].fill_(11.0);
+
+  auto flux1 = torch::zeros_like(prim_lo);
+  auto face_pressure = torch::full({nc3, nc2, nc1}, 5.0, opts);
+
+  auto div_lo = pcoord->forward(prim_lo, flux1, torch::Tensor(),
+                                torch::Tensor(), face_pressure);
+  auto div_hi = pcoord->forward(prim_hi, flux1, torch::Tensor(),
+                                torch::Tensor(), face_pressure);
+
+  EXPECT_TRUE(torch::allclose(div_lo[IVX], div_hi[IVX], 1.e-8, 1.e-8));
+}
+
+TEST_P(DeviceTest, spherical_polar_radial_source_uses_face_pressure_in_x1_momentum) {
+  auto fname = write_temp_config(spherical_polar_config);
+  auto op = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+  std::remove(fname.c_str());
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+  auto prim_lo = torch::zeros({5, nc3, nc2, nc1}, opts);
+  auto prim_hi = torch::zeros_like(prim_lo);
+  prim_lo[IDN].fill_(1.0);
+  prim_hi[IDN].fill_(1.0);
+  prim_lo[IPR].fill_(3.0);
+  prim_hi[IPR].fill_(11.0);
+
+  auto flux1 = torch::zeros_like(prim_lo);
+  auto flux2 = torch::zeros_like(prim_lo);
+  auto flux3 = torch::zeros_like(prim_lo);
+  auto face_pressure = torch::full({nc3, nc2, nc1}, 5.0, opts);
+
+  auto div_no_face_lo = pcoord->forward(prim_lo, flux1, flux2, flux3);
+  auto div_no_face_hi = pcoord->forward(prim_hi, flux1, flux2, flux3);
+  auto div_face_lo =
+      pcoord->forward(prim_lo, flux1, flux2, flux3, face_pressure);
+  auto div_face_hi =
+      pcoord->forward(prim_hi, flux1, flux2, flux3, face_pressure);
+
+  EXPECT_FALSE(torch::allclose(div_no_face_lo[IVX], div_no_face_hi[IVX], 1.e-6,
+                               1.e-6));
+  EXPECT_TRUE(
+      torch::allclose(div_face_lo[IVX], div_face_hi[IVX], 1.e-6, 1.e-6));
 }
 
 int main(int argc, char **argv) {

@@ -34,7 +34,11 @@ RiemannSolverImpl::RiemannSolverImpl(const RiemannSolverOptions& options_,
 }
 
 torch::Tensor RiemannSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                         int dim, torch::Tensor vel) {
+                                         int dim, torch::Tensor vel,
+                                         torch::Tensor face_pressure) {
+  TORCH_CHECK(!face_pressure.defined(),
+              "Face-pressure output is not implemented for Riemann solver type ",
+              options->type());
   auto ui = (vel > 0).to(torch::kInt);
   return vel * (ui * wl + (1 - ui) * wr);
 }

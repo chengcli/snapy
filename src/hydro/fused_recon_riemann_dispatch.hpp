@@ -47,6 +47,7 @@ struct FusedReconRiemannParams {
 };
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
+                              torch::Tensor face_pressure,
                               FusedReconRiemannParams const& params);
 
 // Multi-block-per-process cubed-sphere fused exchange, split into host-callable

@@ -151,6 +151,57 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
+const char *small_ideal_gas_cubed_sphere_hllc_config = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    gammad: 1.4
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    limiter: false
+
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+
+  riemann-solver:
+    type: hllc
+
+distribute:
+  layout: cubed-sphere
+  blocks_per_process: 1
+  verbose: false
+
+geometry:
+  type: gnomonic-equiangle
+  bounds:
+    x1min: 1.
+    x1max: 2.
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+  cells: {nx1: 8, nx2: 6, nx3: 6, nghost: 3}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom
+)";
+
 const char *small_ideal_gas_implicit_config = R"(
 reference-state:
   Tref: 300.
@@ -549,6 +600,112 @@ TEST(HydroOptions, leaves_unsupported_fused_recon_riemann_off) {
   std::remove(fname);
 }
 
+TEST(RiemannSolver, hllc_writes_face_pressure_output) {
+  auto config = std::regex_replace(std::string(small_ideal_gas_config),
+                                   std::regex("type: lmars"), "type: hllc");
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << config;
+  outfile.close();
+
+  auto opts = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(opts);
+  block->to(torch::kCPU, torch::kDouble);
+  std::remove(fname);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = block->phydro->peos->nvar();
+
+  torch::manual_seed(77);
+  auto wl = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  auto wr = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  wl[IDN].add_(1.0);
+  wr[IDN].add_(1.0);
+  wl[IPR].add_(1.0);
+  wr[IPR].add_(1.0);
+  wl.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  wr.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+
+  auto gamma_l = block->phydro->peos->compute("W->A", {wl});
+  auto gamma_r = block->phydro->peos->compute("W->A", {wr});
+  auto cl = block->phydro->peos->compute("WA->L", {wl, gamma_l});
+  auto cr = block->phydro->peos->compute("WA->L", {wr, gamma_r});
+
+  auto rhoa = 0.5 * (wl[IDN] + wr[IDN]);
+  auto ca = 0.5 * (cl + cr);
+  auto pmid =
+      0.5 * (wl[IPR] + wr[IPR] + (wl[IVX] - wr[IVX]) * rhoa * ca);
+  auto ql = torch::sqrt(1.0 + (gamma_l + 1) / (2 * gamma_l) *
+                                  (pmid / wl[IPR] - 1.0));
+  ql = torch::where(pmid <= wl[IPR], torch::ones_like(ql), ql);
+  auto qr = torch::sqrt(1.0 + (gamma_r + 1) / (2 * gamma_r) *
+                                  (pmid / wr[IPR] - 1.0));
+  qr = torch::where(pmid <= wr[IPR], torch::ones_like(qr), qr);
+  auto al = wl[IVX] - cl * ql;
+  auto ar = wr[IVX] + cr * qr;
+  auto vxl = wl[IVX] - al;
+  auto vxr = wr[IVX] - ar;
+  auto tl = wl[IPR] + vxl * wl[IDN] * wl[IVX];
+  auto tr = wr[IPR] + vxr * wr[IDN] * wr[IVX];
+  auto ml = wl[IDN] * vxl;
+  auto mr = -(wr[IDN] * vxr);
+  auto expected = ((ml * tr + mr * tl) / (ml + mr)).clamp_min(0.0);
+
+  auto flx = torch::zeros_like(wl);
+  auto face_pressure = torch::zeros({nc3, nc2, nc1}, torch::kFloat64);
+  block->phydro->priemann->forward(wl, wr, DIM1, flx, face_pressure);
+
+  EXPECT_TRUE(torch::allclose(face_pressure, expected, 1.e-10, 1.e-10));
+}
+
+TEST(RiemannSolver, lmars_writes_face_pressure_output) {
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream outfile(fname);
+  outfile << small_ideal_gas_config;
+  outfile.close();
+
+  auto opts = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(opts);
+  block->to(torch::kCPU, torch::kDouble);
+  std::remove(fname);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int nvar = block->phydro->peos->nvar();
+
+  torch::manual_seed(78);
+  auto wl = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  auto wr = torch::rand({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  wl[IDN].add_(1.0);
+  wr[IDN].add_(1.0);
+  wl[IPR].add_(1.0);
+  wr[IPR].add_(1.0);
+  wl.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+  wr.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+
+  auto gamma_l = block->phydro->peos->compute("W->A", {wl});
+  auto gamma_r = block->phydro->peos->compute("W->A", {wr});
+  auto rhobar = 0.5 * (wl[IDN] + wr[IDN]);
+  auto gamma_bar = 0.5 * (gamma_l + gamma_r);
+  auto cbar = torch::sqrt(gamma_bar * 0.5 * (wl[IPR] + wr[IPR]) / rhobar);
+  auto expected =
+      0.5 * (wl[IPR] + wr[IPR]) + 0.5 * (rhobar * cbar) * (wl[IVX] - wr[IVX]);
+
+  auto flx = torch::zeros_like(wl);
+  auto face_pressure = torch::zeros({nc3, nc2, nc1}, torch::kFloat64);
+  block->phydro->priemann->forward(wl, wr, DIM1, flx, face_pressure);
+
+  EXPECT_TRUE(torch::allclose(face_pressure, expected, 1.e-10, 1.e-10));
+}
+
 TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_lmars) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
@@ -648,6 +805,60 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_gravity) {
   auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
   auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
   EXPECT_TRUE(torch::allclose(fused_du, staged_du, 1.e-8, 1.e-8));
+
+  std::remove(staged_name);
+  std::remove(fused_name);
+}
+
+TEST_P(DeviceTest, fused_recon_riemann_matches_staged_cubed_sphere_hllc) {
+  if (device.type() != torch::kCUDA) {
+    GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+
+  char staged_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(staged_name);
+  std::ofstream staged_file(staged_name);
+  staged_file << small_ideal_gas_cubed_sphere_hllc_config;
+  staged_file.close();
+
+  auto fused_config = std::regex_replace(
+      std::string(small_ideal_gas_cubed_sphere_hllc_config),
+      std::regex("riemann-solver:\\n    type: hllc"),
+      "fused-recon-riemann: true\n\n  riemann-solver:\n    type: hllc");
+  char fused_name[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fused_name);
+  std::ofstream fused_file(fused_name);
+  fused_file << fused_config;
+  fused_file.close();
+
+  auto staged_opts = MeshBlockOptionsImpl::from_yaml(staged_name);
+  auto fused_opts = MeshBlockOptionsImpl::from_yaml(fused_name);
+  staged_opts->hydro()->fused_recon_riemann() = false;
+  auto staged_block = MeshBlock(staged_opts);
+  auto fused_block = MeshBlock(fused_opts);
+  staged_block->to(device, dtype);
+  fused_block->to(device, dtype);
+
+  int nc1 = staged_block->pcoord->options->nc1();
+  int nc2 = staged_block->pcoord->options->nc2();
+  int nc3 = staged_block->pcoord->options->nc3();
+  int nvar = staged_block->phydro->peos->nvar();
+
+  torch::manual_seed(902);
+  auto w =
+      torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  w[IDN].add_(1.0);
+  w[IPR].add_(1.0);
+  w.narrow(0, IVX, 3).sub_(0.5).mul_(0.1);
+
+  auto u = staged_block->phydro->peos->compute("W->U", {w});
+  Variables staged_vars, fused_vars;
+  staged_vars["hydro_w"] = torch::empty_like(w);
+  fused_vars["hydro_w"] = torch::empty_like(w);
+
+  auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
+  auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  EXPECT_TRUE(torch::allclose(fused_du, staged_du, 1.e-7, 1.e-7));
 
   std::remove(staged_name);
   std::remove(fused_name);

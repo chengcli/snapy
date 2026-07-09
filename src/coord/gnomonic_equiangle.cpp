@@ -355,9 +355,9 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
 torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
                                              torch::Tensor flux1,
                                              torch::Tensor flux2,
-                                             torch::Tensor flux3) {
+                                             torch::Tensor flux3,
+                                             torch::Tensor face_pressure1) {
   std::string eos_type = pmb->phydro->peos->options->type();
-
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
 
   auto cosine = cosine_cell_kj;
@@ -380,8 +380,21 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
   } else {
     pr = prim[IPR];
     rho = prim[IDN];
-    // Update flux 1 (excluded from shallow water case)
-    auto src1 = (2.0 * pr + rho * (v2 * v_2 + v3 * v_3)) / radius;
+    auto src1 = rho * (v2 * v_2 + v3 * v_3) / radius;
+    if (face_pressure1.defined()) {
+      int si = il();
+      int ei = iu() + 1;
+      auto pressure_src = torch::zeros_like(pr);
+      pressure_src.slice(-1, si, ei) =
+          (CoordinateImpl::face_area1(si + 1, ei + 1) *
+               face_pressure1.slice(-1, si + 1, ei + 1) -
+           CoordinateImpl::face_area1(si, ei) *
+               face_pressure1.slice(-1, si, ei)) /
+          cell_volume().slice(-1, si, ei);
+      src1 += pressure_src;
+    } else {
+      src1 += 2.0 * pr / radius;
+    }
     div[IVX] -= src1;
   }
 

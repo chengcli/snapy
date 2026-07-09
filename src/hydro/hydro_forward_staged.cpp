@@ -65,7 +65,10 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
 
     // riemann solver
     if (!options->disable_flux_x1()) {
-      priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1);
+      auto face_pressure1 = options->eos()->type() == "shallow-water"
+                                ? torch::Tensor()
+                                : _face_pressure1;
+      priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1, face_pressure1);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -156,7 +159,7 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
-  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3));
+  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

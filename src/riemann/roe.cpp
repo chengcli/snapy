@@ -15,7 +15,10 @@ void RoeSolverImpl::reset() {
 }
 
 torch::Tensor RoeSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
-                                     int dim, torch::Tensor flx) {
+                                     int dim, torch::Tensor flx,
+                                     torch::Tensor face_pressure) {
+  TORCH_CHECK(!face_pressure.defined(),
+              "Face-pressure output is not implemented for RoeSolver");
   auto peos = phydro->peos;
 
   // dim, ivx, ivy, ivz

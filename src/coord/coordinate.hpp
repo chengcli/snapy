@@ -230,7 +230,9 @@ class CoordinateImpl {
   virtual torch::Tensor curl(torch::Tensor velocity) const;
 
   virtual torch::Tensor forward(torch::Tensor prim, torch::Tensor flux1,
-                                torch::Tensor flux2, torch::Tensor flux3);
+                                torch::Tensor flux2, torch::Tensor flux3,
+                                torch::Tensor face_pressure1 =
+                                    torch::Tensor());
 };
 using Coordinate = std::shared_ptr<CoordinateImpl>;
 
