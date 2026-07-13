@@ -120,6 +120,9 @@ class CoordinateImpl {
   torch::Tensor dx1f, dx2f, dx3f;
   torch::Tensor dx1v, dx2v, dx3v;
 
+  //! lazy caches for grid-constant geometry (see *_cached() below)
+  mutable torch::Tensor _farea1, _farea2, _farea3, _vol;
+
   virtual ~CoordinateImpl() = default;
 
   int il() const { return options->nx1() > 1 ? options->nghost() : 0; }
@@ -176,20 +179,51 @@ class CoordinateImpl {
 
   virtual torch::Tensor face_area1() const;
   torch::Tensor face_area1(int is, int ie) const {
-    return face_area1().slice(2, is, ie);
+    return face_area1_cached().slice(2, is, ie);
   }
 
   virtual torch::Tensor face_area2() const;
   torch::Tensor face_area2(int js, int je) const {
-    return face_area2().slice(1, js, je);
+    return face_area2_cached().slice(1, js, je);
   }
 
   virtual torch::Tensor face_area3() const;
   torch::Tensor face_area3(int ks, int ke) const {
-    return face_area3().slice(0, ks, ke);
+    return face_area3_cached().slice(0, ks, ke);
   }
 
   virtual torch::Tensor cell_volume() const;
+
+  //! cached geometry: face_area*/cell_volume are grid constants recomputed by
+  //! the virtual getters on every call. The caches are filled lazily via the
+  //! virtual getters (so subclass geometry is honored), invalidated by
+  //! reset_coordinates(), and refreshed when the module moves device.
+  torch::Tensor const& face_area1_cached() const {
+    if (!_farea1.defined() || _farea1.device() != x1f.device())
+      _farea1 = face_area1();
+    return _farea1;
+  }
+  torch::Tensor const& face_area2_cached() const {
+    if (!_farea2.defined() || _farea2.device() != x1f.device())
+      _farea2 = face_area2();
+    return _farea2;
+  }
+  torch::Tensor const& face_area3_cached() const {
+    if (!_farea3.defined() || _farea3.device() != x1f.device())
+      _farea3 = face_area3();
+    return _farea3;
+  }
+  torch::Tensor const& cell_volume_cached() const {
+    if (!_vol.defined() || _vol.device() != x1f.device())
+      _vol = cell_volume();
+    return _vol;
+  }
+  void clear_geometry_cache() const {
+    _farea1.reset();
+    _farea2.reset();
+    _farea3.reset();
+    _vol.reset();
+  }
 
   virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
