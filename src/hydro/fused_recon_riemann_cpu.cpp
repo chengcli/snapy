@@ -138,7 +138,9 @@ T interp_line_weno5_coeff(T const *line, T const *coeff, int v, int start,
 
 //! precomputed coefficient tables (forward and row-reversed), built once per
 //! kernel invocation instead of per (face, variable, side) -- identical
-//! values, so results are bitwise unchanged
+//! values. NOTE: like the CUDA kernel this path reconstructs with
+//! scale=false and applies no shock limiter -- HydroImpl::forward refuses
+//! the fused path when reconstruct.scale/shock are set.
 template <typename T>
 struct InterpTables {
   T cp3[2][3], cp5[2][5], w3[2][12], w5[2][45];

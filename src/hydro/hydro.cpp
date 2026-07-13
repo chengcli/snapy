@@ -201,8 +201,20 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // the ideal-gas EOS takes the CPU fused path (the combination validated
     // against the staged path); ideal-moist / shallow-water on CPU require an
     // explicit FUSED=on. CUDA tensors take the exact same decision as before.
+    // The fused kernel (CUDA and this CPU port alike) reconstructs with
+    // scale=false and has no shock limiter, whereas the staged path honors
+    // reconstruct.scale / reconstruct.shock. Selecting fused for such a case
+    // would silently change the physics, so refuse it outright -- including
+    // under an explicit FUSED=on -- and fall back to staged.
+    bool const recon_fusable =
+        !precon1->options->shock() && !precon23->options->shock() &&
+        !precon1->pinterp1->options->scale() &&
+        !precon23->pinterp1->options->scale() &&
+        !precon1->pinterp2->options->scale() &&
+        !precon23->pinterp2->options->scale();
+
     if (!supported && u.device().is_cpu() && !other.count("solid") && !psed &&
-        options->riemann()->type() != "roe" &&
+        options->riemann()->type() != "roe" && recon_fusable &&
         pmb->pcoord->options->type() == "cartesian" &&
         pmb->get_layout()->options->type() != "cubed-sphere") {
       char const* fused_env = std::getenv("FUSED");
@@ -336,7 +348,7 @@ void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
   auto a = gm / gamma;
   auto K = w[IPR].narrow(-1, is, 1) / w[IDN].narrow(-1, is, 1).pow(gamma);
 
-  // loop invariants (were recomputed every iteration; same values, same bits)
+  // loop invariants (were recomputed every iteration; same values)
   auto inv_gamma = 1. / gamma;
   auto inv_a = 1. / a;
   auto ag = a * grav;
@@ -368,7 +380,7 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   auto a = gm / gamma;
   auto K = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1).pow(gamma);
 
-  // loop invariants (were recomputed every iteration; same values, same bits)
+  // loop invariants (were recomputed every iteration; same values)
   auto inv_gamma = 1. / gamma;
   auto inv_a = 1. / a;
   auto ag = a * grav;
