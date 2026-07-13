@@ -33,12 +33,20 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
 
+  // ideal-gas gamma is a constant of the run: fill glr once instead of
+  // allocating gammad * ones_like on every call
+  bool const_gamma = peos->options->type() == "ideal-gas";
+  if (const_gamma && !_gamma_const_filled) {
+    glr.fill_(peos->options->gammad());
+    _gamma_const_filled = true;
+  }
+
   elr[ILT] = peos->compute("W->I", {wl}) / wl[IDN];
 
   if (peos->options->type() == "aneos") {
     clr[ILT] = peos->compute("W->L", {wl});
     glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
-  } else {
+  } else if (!const_gamma) {
     glr[ILT] = peos->compute("W->A", {wl});
   }
 
@@ -47,7 +55,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   if (peos->options->type() == "aneos") {
     clr = peos->compute("W->L", {wr});
     glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
-  } else {
+  } else if (!const_gamma) {
     glr[IRT] = peos->compute("W->A", {wr});
   }
 

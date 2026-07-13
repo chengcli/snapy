@@ -34,8 +34,14 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
     pmb->pib->mark_prim_solid_(w, other.at("solid"));
   }
 
-  // hydrostatic pressure correction
-  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  // hydrostatic pressure correction (persistent scratch, zeroed per stage)
+  if (!_rho_grav.defined() || _rho_grav.sizes() != w[IDN].sizes() ||
+      _rho_grav.device() != w.device()) {
+    _rho_grav = torch::zeros_like(w[IDN]);
+  } else {
+    _rho_grav.zero_();
+  }
+  torch::Tensor rho_grav = _rho_grav;
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -168,9 +174,18 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
   }
 
   //// ------------ (6) Calculate external forcing ------------ ////
-  auto du = torch::zeros_like(_div);
-  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
-  du.index(interior) = -dt * _div.index(interior);
+  // du = -dt * _div everywhere. Ghost values of du are never read: the
+  // conserved ghost zones are overwritten by the boundary functions /
+  // ghost exchange before the next flux computation, and outputs write the
+  // interior only. This replaces zeros_like + part() + two masked indexing
+  // ops per stage with one copy + one scalar multiply into a persistent
+  // buffer.
+  if (!_du.defined() || _du.sizes() != _div.sizes() ||
+      _du.device() != _div.device()) {
+    _du = torch::empty_like(_div);
+  }
+  _du.copy_(_div).mul_(-dt);
+  auto du = _du;
 
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);

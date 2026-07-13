@@ -58,6 +58,10 @@ class RiemannSolverImpl {
   //! data
   torch::Tensor elr, clr, glr;
 
+  //! true once glr has been filled with the constant gammad of an ideal-gas
+  //! EOS (it never changes), so the per-call W->A ones_like+mul is skipped
+  bool _gamma_const_filled = false;
+
   //! options with which this `RiemannSolver` was constructed
   RiemannSolverOptions options;
 

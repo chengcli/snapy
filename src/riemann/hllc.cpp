@@ -33,11 +33,24 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
 
+  // ideal-gas gamma is a constant of the run: fill glr once, and form the
+  // sound speed in place in the persistent clr buffer instead of allocating
+  // ones_like/sqrt temporaries on every call
+  bool const_gamma = peos->options->type() == "ideal-gas";
+  if (const_gamma && !_gamma_const_filled) {
+    glr.fill_(peos->options->gammad());
+    _gamma_const_filled = true;
+  }
+
   elr[ILT] = peos->compute("W->I", {wl});
 
   if (peos->options->type() == "aneos") {
     clr[ILT] = peos->compute("W->L", {wl});
     glr[ILT] = peos->compute("WL->A", {wl, clr[ILT]});
+  } else if (const_gamma) {
+    // same op order as WA->L's sqrt(gamma * pres / dens), so bit-identical
+    auto cl = clr[ILT];
+    cl.copy_(wl[IPR]).mul_(peos->options->gammad()).div_(wl[IDN]).sqrt_();
   } else {
     glr[ILT] = peos->compute("W->A", {wl});
     clr[ILT] = peos->compute("WA->L", {wl, glr[ILT]});
@@ -48,6 +61,10 @@ torch::Tensor HLLCSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   if (peos->options->type() == "aneos") {
     clr[IRT] = peos->compute("W->L", {wr});
     glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
+  } else if (const_gamma) {
+    // same op order as WA->L's sqrt(gamma * pres / dens), so bit-identical
+    auto cr = clr[IRT];
+    cr.copy_(wr[IPR]).mul_(peos->options->gammad()).div_(wr[IDN]).sqrt_();
   } else {
     glr[IRT] = peos->compute("W->A", {wr});
     clr[IRT] = peos->compute("WA->L", {wr, glr[IRT]});
