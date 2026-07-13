@@ -2,6 +2,8 @@
 
 // C/C++
 #include <algorithm>
+#include <cstdlib>
+#include <string>
 
 // snap
 #include <snap/snap.h>
@@ -190,7 +192,27 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   if (options->fused_recon_riemann()) {
-    if (!fused_runtime_supported(u, other)) {
+    bool supported = fused_runtime_supported(u, other);
+    // CPU fused path (fused_recon_riemann_cpu.cpp): cartesian coordinates
+    // only -- the cubed-sphere metric/seam exchange is CUDA-only -- no
+    // sedimentation or solid boundaries, and not the roe solver (the CPU
+    // kernel implements lmars/hllc/shallow-roe only). Under FUSED=auto only
+    // the ideal-gas EOS takes the CPU fused path (the combination validated
+    // against the staged path); ideal-moist / shallow-water on CPU require an
+    // explicit FUSED=on. CUDA tensors take the exact same decision as before.
+    if (!supported && u.device().is_cpu() && !other.count("solid") && !psed &&
+        options->riemann()->type() != "roe" &&
+        pmb->pcoord->options->type() == "cartesian" &&
+        pmb->get_layout()->options->type() != "cubed-sphere") {
+      char const* fused_env = std::getenv("FUSED");
+      bool explicit_on = fused_env != nullptr &&
+                         (std::string(fused_env) == "on" ||
+                          std::string(fused_env) == "ON" ||
+                          std::string(fused_env) == "On" ||
+                          std::string(fused_env) == "1");
+      supported = explicit_on || options->eos()->type() == "ideal-gas";
+    }
+    if (!supported) {
       return _forward_staged(dt, u, other);
     }
     return _forward_fused(dt, u, other);

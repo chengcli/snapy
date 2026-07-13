@@ -50,6 +50,12 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
                               torch::Tensor face_pressure,
                               FusedReconRiemannParams const& params);
 
+//! CPU port of the fused kernel (fused_recon_riemann_cpu.cpp). Cartesian
+//! layouts only; params.metric.cubed_sphere must be false.
+void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
+                             torch::Tensor face_pressure,
+                             FusedReconRiemannParams const& params);
+
 // Multi-block-per-process cubed-sphere fused exchange, split into host-callable
 // phases so the caller can coordinate the concurrent local-block threads:
 // every local block packs its edge states into slice `local_block` of a shared
