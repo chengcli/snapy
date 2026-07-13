@@ -22,6 +22,9 @@ struct FusedPhysicsParams {
   torch::Tensor u0;
   int nvapor;
   int shallow_roe_dir_yz;
+  //! honor reconstruct.scale in WENO schemes (CPU kernel only; the CUDA
+  //! kernel does not read this field and keeps its scale=false behavior)
+  bool recon_scale = false;
 };
 
 struct FusedX1RevisionParams {

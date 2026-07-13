@@ -186,7 +186,7 @@ struct InterpTables {
 template <typename T>
 T interp_line_fused(T const *line, int v, int start, int axis_size,
                     FusedReconScheme scheme, bool right,
-                    InterpTables<T> const &tab) {
+                    InterpTables<T> const &tab, bool scale) {
   int s = right ? 1 : 0;
   if (scheme == FusedReconScheme::CP3) {
     return interp_line_poly_coeff<T, 3>(line, tab.cp3[s], v, start, axis_size);
@@ -196,10 +196,10 @@ T interp_line_fused(T const *line, int v, int start, int axis_size,
   }
   if (scheme == FusedReconScheme::WENO3) {
     return interp_line_weno3_coeff(line, tab.w3[s], v, start, axis_size,
-                                   /*scale=*/false);
+                                   scale);
   }
   return interp_line_weno5_coeff(line, tab.w5[s], v, start, axis_size,
-                                 /*scale=*/false);
+                                 scale);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,8 +208,8 @@ T interp_line_fused(T const *line, int v, int start, int axis_size,
 template <typename T>
 void fused_line_cpu(T const *w, T *flux,
                     DeviceFusedReconRiemannParams<T> const &params, int line,
-                    InterpTables<T> const &tab, T *line_buf, T *wl_buf,
-                    T *wr_buf, T *lp_buf, T *rp_buf) {
+                    InterpTables<T> const &tab, bool recon_scale, T *line_buf,
+                    T *wl_buf, T *wr_buf, T *lp_buf, T *rp_buf) {
   int nvar = params.nvar;
   int nc3 = params.nc3;
   int nc2 = params.nc2;
@@ -267,9 +267,9 @@ void fused_line_cpu(T const *w, T *flux,
       auto scheme =
           (v == IDN || v >= ICY) ? physics.recon_prim : physics.recon_vel;
       wl_local[v] = interp_line_fused(line_buf, v, wl_start, axis_size, scheme,
-                                      /*right=*/true, tab);
+                                      /*right=*/true, tab, recon_scale);
       wr_local[v] = interp_line_fused(line_buf, v, wr_start, axis_size, scheme,
-                                      /*right=*/false, tab);
+                                      /*right=*/false, tab, recon_scale);
     }
 
     if (revise && valid_face) {
@@ -412,7 +412,8 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
       std::vector<scalar_t> lp_buf(axis_size), rp_buf(axis_size);
       for (int64_t line = b; line < e; ++line) {
         fused_line_cpu<scalar_t>(w_ptr, flux_ptr, device_params,
-                                 static_cast<int>(line), tab, line_buf.data(),
+                                 static_cast<int>(line), tab,
+                                 params.physics.recon_scale, line_buf.data(),
                                  wl_buf.data(), wr_buf.data(), lp_buf.data(),
                                  rp_buf.data());
       }

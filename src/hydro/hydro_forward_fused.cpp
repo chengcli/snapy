@@ -404,14 +404,24 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   peos->forward(u, w);
   _vsec("eos-cons2prim");
 
+  // reconstruct.shock means ALL variables take the (shock-capturing) prim
+  // scheme -- the staged path routes everything through interp1 in that case
+  // (reconstruct.cpp) -- so the velocity group stops mapping weno->cp.
+  // CPU ONLY: the CUDA kernel predates scale/shock support and must keep
+  // receiving exactly its historical scheme inputs (velocity group = cp,
+  // scale ignored); honoring the flags on GPU is an upstream change.
+  bool const shock1 = on_cpu && precon1->options->shock();
+  bool const shock23 = on_cpu && precon23->options->shock();
+  bool const scale1 = on_cpu && precon1->pinterp1->options->scale();
+  bool const scale23 = on_cpu && precon23->pinterp1->options->scale();
   auto recon1_prim = fused_recon_scheme(precon1->pinterp1->options->type(),
                                         /*velocity_group=*/false);
   auto recon1_vel = fused_recon_scheme(precon1->pinterp1->options->type(),
-                                       /*velocity_group=*/true);
+                                       /*velocity_group=*/!shock1);
   auto recon23_prim = fused_recon_scheme(precon23->pinterp1->options->type(),
                                          /*velocity_group=*/false);
   auto recon23_vel = fused_recon_scheme(precon23->pinterp1->options->type(),
-                                        /*velocity_group=*/true);
+                                        /*velocity_group=*/!shock23);
   auto solver = fused_riemann_solver(riemann_type);
   auto eos = fused_eos(eos_type);
   int shallow_roe_dir_yz = options->riemann()->dir() == "yz" ? 1 : 0;
@@ -450,7 +460,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   _vsec("revise-ghost");
 
   auto make_physics_params = [&](FusedReconScheme recon_prim,
-                                 FusedReconScheme recon_vel) {
+                                 FusedReconScheme recon_vel, bool recon_scale) {
     return FusedPhysicsParams{recon_prim,
                               recon_vel,
                               solver,
@@ -463,7 +473,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                               cv_ratio_m1,
                               u0,
                               nvapor,
-                              shallow_roe_dir_yz};
+                              shallow_roe_dir_yz,
+                              recon_scale};
   };
   FusedMetricParams metric_params{
       cubed_sphere_layout, face, x2v, x2f, x3v, x3f};
@@ -488,7 +499,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   if (u.size(3) > 1 && !options->disable_flux_x1()) {
     run_fused(_flux1, face_pressure1,
               FusedReconRiemannParams{
-                  /*dim=*/3, make_physics_params(recon1_prim, recon1_vel),
+                  /*dim=*/3, make_physics_params(recon1_prim, recon1_vel, scale1),
                   FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
                   metric_params});
   }
@@ -500,7 +511,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     run_fused(
         _flux2, torch::Tensor(),
         FusedReconRiemannParams{
-            /*dim=*/2, make_physics_params(recon23_prim, recon23_vel),
+            /*dim=*/2, make_physics_params(recon23_prim, recon23_vel, scale23),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
             metric_params});
   }
@@ -509,7 +520,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     run_fused(
         _flux3, torch::Tensor(),
         FusedReconRiemannParams{
-            /*dim=*/1, make_physics_params(recon23_prim, recon23_vel),
+            /*dim=*/1, make_physics_params(recon23_prim, recon23_vel, scale23),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
             metric_params});
   }
@@ -617,7 +628,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 batch.side_meta_all, batch.faces_dev, static_cast<int>(nvar),
                 static_cast<int>(w.size(1)), static_cast<int>(w.size(2)),
                 static_cast<int>(nc1), bpp, w.scalar_type(), w.device(),
-                make_physics_params(recon23_prim, recon23_vel)});
+                make_physics_params(recon23_prim, recon23_vel, scale23)});
         if (multi_process) {
           fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
                                           pool.world_size(), w.device());
