@@ -2,6 +2,7 @@
 
 // C/C++
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <string>
 
@@ -228,6 +229,10 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
                                            torch::Tensor const& w, double dt,
                                            Variables const& other) {
   if (!picorr) return;
+  // scheme 0 is the null operation: on CPU skip the wrapper too (du.clone,
+  // energy-offset round trip, W->A temporary) -- ~0.1 ms/step of dispatch.
+  // Gated to CPU so GPU behavior is exactly unchanged.
+  if (picorr->options->scheme() == 0 && du.device().is_cpu()) return;
 
   torch::Tensor wi;
   if (other.count("solid")) {
@@ -269,10 +274,62 @@ void HydroImpl::_revise_x1outer_lr(torch::Tensor const& wl,
   wr[IDN].narrow(-1, ie + 1, 1) = wl[IDN].narrow(-1, ie + 1, 1);
 }
 
+// scalar CPU implementation of the hydrostatic ghost-cell extrapolation for
+// constant-gamma (ideal-gas) EOS; mirrors the tensor code in
+// _revise_x1{inner,outer}_ghost term for term
+void HydroImpl::_revise_x1_ghost_cpu_ideal(torch::Tensor const& w,
+                                           bool inner) {
+  auto pcoord = pmb->pcoord;
+  int nghost = pcoord->options->nghost();
+  int anchor = inner ? pcoord->il() : pcoord->iu();
+  double grav = -options->grav()->grav1();
+  double gamma = options->eos()->gammad();
+  double gm = gamma - 1.;
+  double a = gm / gamma;
+  double inv_gamma = 1. / gamma;
+  double inv_a = 1. / a;
+  double ag = a * grav;
+
+  int64_t nc3 = w.size(1), nc2 = w.size(2), nc1 = w.size(3);
+  double* base = w.data_ptr<double>();
+  double* rho = base + IDN * nc3 * nc2 * nc1;
+  double* prs = base + IPR * nc3 * nc2 * nc1;
+  double const* dx1v = pcoord->dx1v.data_ptr<double>();
+
+  for (int64_t k = 0; k < nc3; ++k) {
+    for (int64_t j = 0; j < nc2; ++j) {
+      int64_t off = (k * nc2 + j) * nc1;
+      double K = prs[off + anchor] / std::pow(rho[off + anchor], gamma);
+      double Kpow = std::pow(K, inv_gamma);
+      for (int n = 0; n < nghost; ++n) {
+        int src = inner ? anchor - n : anchor + n;
+        int dst = inner ? src - 1 : src + 1;
+        double dz = dx1v[inner ? dst : src];
+        double h = std::pow(prs[off + src], a) +
+                   (inner ? ag * dz / Kpow : -(ag * dz / Kpow));
+        prs[off + dst] = std::pow(h, inv_a);
+        rho[off + dst] = std::pow(prs[off + dst] / K, inv_gamma);
+      }
+    }
+  }
+}
+
 void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
   auto pcoord = pmb->pcoord;
   int is = pcoord->il();
   auto grav = -options->grav()->grav1();
+
+  // CPU fast path: ideal-gas gamma is a scalar and the recurrence touches
+  // only nghost cells per column; a direct loop replaces ~40 dispatched
+  // tensor ops per call (measured 0.69 ms/step on a 64x4 block). Same
+  // formulas and evaluation order as the tensor code below; falls through
+  // for CUDA tensors and non-ideal-gas EOS.
+  if (w.device().is_cpu() && w.is_contiguous() &&
+      w.scalar_type() == torch::kFloat64 &&
+      peos->options->type() == "ideal-gas") {
+    _revise_x1_ghost_cpu_ideal(w, /*inner=*/true);
+    return;
+  }
 
   auto gamma = peos->compute("W->A", {w.narrow(-1, is, 1)});
   auto gm = gamma - 1.;
@@ -298,6 +355,13 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   auto pcoord = pmb->pcoord;
   int ie = pcoord->iu();
   auto grav = -options->grav()->grav1();
+
+  if (w.device().is_cpu() && w.is_contiguous() &&
+      w.scalar_type() == torch::kFloat64 &&
+      peos->options->type() == "ideal-gas") {
+    _revise_x1_ghost_cpu_ideal(w, /*inner=*/false);
+    return;
+  }
 
   auto gamma = peos->compute("W->A", {w.narrow(-1, ie, 1)});
   auto gm = gamma - 1.;

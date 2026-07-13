@@ -429,7 +429,14 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         static_cast<int>(ideal_moist->pthermo->options->vapor_ids().size()) - 1;
   }
 
-  torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  // persistent scratch (same buffers the staged path reuses)
+  if (!_rho_grav.defined() || _rho_grav.sizes() != w[IDN].sizes() ||
+      _rho_grav.device() != w.device()) {
+    _rho_grav = torch::zeros_like(w[IDN]);
+  } else {
+    _rho_grav.zero_();
+  }
+  torch::Tensor rho_grav = _rho_grav;
   bool revise_x1_lr = options->grav() && (options->grav()->grav1() != 0);
   torch::Tensor dx1f;
 
@@ -622,7 +629,15 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
   _vsec("divergence");
 
-  auto du = torch::zeros_like(_div);
+  // persistent du, zeroed per stage (ghost du must stay exactly zero: the
+  // forcings add to it and rank-boundary corner ghosts survive the exchange)
+  if (!_du.defined() || _du.sizes() != _div.sizes() ||
+      _du.device() != _div.device()) {
+    _du = torch::zeros_like(_div);
+  } else {
+    _du.zero_();
+  }
+  auto du = _du;
   auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
   du.index(interior) = -dt * _div.index(interior);
 
