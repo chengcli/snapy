@@ -1,7 +1,10 @@
 // C/C++
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <condition_variable>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -310,6 +313,15 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
 torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                                         Variables const& other) {
   bool const on_cpu = u.device().is_cpu();
+  auto _vt = std::chrono::high_resolution_clock::now();
+  static bool const _vprof = std::getenv("SNAPY_FUSED_PROF") != nullptr;
+  auto _vsec = [&](char const* name) {
+    if (!_vprof) return;
+    auto now = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> el = now - _vt;
+    std::cout << "fused " << name << " time (s): " << el.count() << "\n";
+    _vt = now;
+  };
 #ifdef NOT_USE_CUDA
   TORCH_CHECK(on_cpu,
               "dynamics.fused-recon-riemann on CUDA tensors requires a "
@@ -388,7 +400,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     x3f = pmb->pcoord->x3f.to(w.options());
   }
 
+  _vsec("pre");
   peos->forward(u, w);
+  _vsec("eos-cons2prim");
 
   auto recon1_prim = fused_recon_scheme(precon1->pinterp1->options->type(),
                                         /*velocity_group=*/false);
@@ -426,6 +440,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       dx1f = pmb->pcoord->dx1f.to(w.options());
     }
   }
+  _vsec("revise-ghost");
 
   auto make_physics_params = [&](FusedReconScheme recon_prim,
                                  FusedReconScheme recon_vel) {
@@ -470,6 +485,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                   FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
                   metric_params});
   }
+  _vsec("kernel-x1");
   if (u.size(3) > 1 && psed) {
     psed->forward(w, _flux1);
   }
@@ -481,6 +497,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
             metric_params});
   }
+  _vsec("kernel-x2");
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
     run_fused(
         _flux3, torch::Tensor(),
@@ -603,6 +620,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     }
   }
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+  _vsec("divergence");
 
   auto du = torch::zeros_like(_div);
   auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
@@ -616,7 +634,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     du[IPR] +=
         dt * w[IVX] * rho_grav * (1. - options->grav()->non_hydrostatic());
   }
+  _vsec("du+forcing+WtoT");
   _apply_implicit_correction(du, w, dt, other);
+  _vsec("implicit");
   return du;
 }
 
