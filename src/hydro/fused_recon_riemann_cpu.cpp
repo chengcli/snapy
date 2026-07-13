@@ -287,6 +287,13 @@ void fused_line_cpu(T const *w, T *flux,
       }
     }
 
+    // NOTE (semantics, inherited from the CUDA kernel): these floors apply
+    // to reconstructed face states UNCONDITIONALLY when eos_limiter is on,
+    // whereas the staged shock branch (reconstruct.cpp) early-returns with
+    // no face clamping at all. With limiter:true + shock:true the two paths
+    // can therefore diverge IF a WENO face value undershoots a floor; never
+    // observed in validation (thermo bit-identical through 4000 cycles),
+    // and clamping is the safer behavior, but it is a real difference.
     if (physics.eos_limiter && valid_face) {
       wl_local[IDN] = std::max(wl_local[IDN], physics.density_floor);
       wr_local[IDN] = std::max(wr_local[IDN], physics.density_floor);

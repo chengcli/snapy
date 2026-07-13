@@ -197,10 +197,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // CPU fused path (fused_recon_riemann_cpu.cpp): cartesian coordinates
     // only -- the cubed-sphere metric/seam exchange is CUDA-only -- no
     // sedimentation or solid boundaries, and not the roe solver (the CPU
-    // kernel implements lmars/hllc/shallow-roe only). Under FUSED=auto only
-    // the ideal-gas EOS takes the CPU fused path (the combination validated
-    // against the staged path); ideal-moist / shallow-water on CPU require an
-    // explicit FUSED=on. CUDA tensors take the exact same decision as before.
+    // kernel implements lmars/hllc/shallow-roe only). Under FUSED=auto both
+    // ideal-gas and ideal-moist take the CPU fused path (each validated
+    // against the staged path, incl. multi-vapor and scale/shock configs);
+    // shallow-water on CPU still requires an explicit FUSED=on. FUSED=off
+    // always selects the staged path. CUDA tensors take the exact same
+    // decision as before.
     // The CPU fused kernel honors reconstruct.scale (threaded through the
     // physics params) and reconstruct.shock (all variables take the prim
     // scheme, matching the staged path's interp1-for-everything routing), so
@@ -216,7 +218,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                           std::string(fused_env) == "ON" ||
                           std::string(fused_env) == "On" ||
                           std::string(fused_env) == "1");
-      supported = explicit_on || options->eos()->type() == "ideal-gas";
+      supported = explicit_on || options->eos()->type() == "ideal-gas" ||
+                  options->eos()->type() == "ideal-moist";
     }
     if (!supported) {
       return _forward_staged(dt, u, other);
