@@ -76,7 +76,15 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 
-  auto result = torch::zeros(vec, w.options());
+  // persistent per-dim buffer: _apply_inplace + the dummy-region fills
+  // overwrite every element along `dim`, so no zeroing is needed
+  TORCH_CHECK(dim >= 1 && dim <= 3, "Invalid dim: ", dim);
+  auto& result = _result[dim];
+  if (!result.defined() || result.sizes().vec() != vec ||
+      result.device() != w.device() ||
+      result.scalar_type() != w.scalar_type()) {
+    result = torch::empty(vec, w.options());
+  }
 
   auto dim_size = w.size(dim);
   int nghost = pinterp1->stencils() / 2 + 1;
@@ -96,6 +104,13 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
     _apply_inplace(dim, il, iu, w, pinterp1, result);
     return result;
   }
+
+  // NOTE: do NOT merge the density and velocity/pressure groups even though
+  // both interp options say the same type: InterpImpl::create special-cases
+  // the module NAME, so for type weno5 "interp1" is Weno5Interp while
+  // "interp2" is Center5Interp (CP5) -- the velocity group is intentionally
+  // reconstructed with the linear scheme (same mapping as the fused CUDA
+  // path).
 
   /* modify velocity/pressure variables
   if (dim_size > 2 * nghost) {

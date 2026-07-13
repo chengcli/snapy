@@ -94,6 +94,12 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
 
   //! w -> [wl, wr]
   torch::Tensor forward(torch::Tensor w, int dim);
+
+ private:
+  //! persistent per-dim result buffers (dim in 1..3). Fully overwritten on
+  //! every call, so no zeroing is needed; per-dim because the staged forward
+  //! keeps the dim-2 and dim-3 results alive simultaneously.
+  torch::Tensor _result[4];
 };
 
 TORCH_MODULE(Reconstruct);
