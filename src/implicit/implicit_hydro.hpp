@@ -81,6 +81,7 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   void ensure_workspace(torch::Tensor const& w);
 
   torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr;
+  torch::Tensor _farea1c, _volc;  //! cached contiguous geometry for the iterator
 };
 TORCH_MODULE(ImplicitHydro);
 

@@ -255,7 +255,14 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
     wi = w;
   }
 
-  auto du0 = du.clone();
+  // persistent snapshot instead of a fresh clone every stage
+  if (!_du0imp.defined() || _du0imp.sizes() != du.sizes() ||
+      _du0imp.device() != du.device() ||
+      _du0imp.scalar_type() != du.scalar_type()) {
+    _du0imp = torch::empty_like(du);
+  }
+  _du0imp.copy_(du);
+  auto const& du0 = _du0imp;
   du[IPR].sub_(peos->internal_energy_offset(du));
 
   torch::Tensor gamma;

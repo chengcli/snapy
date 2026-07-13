@@ -138,6 +138,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   void _revise_x1_ghost_cpu_ideal(torch::Tensor const& w, bool inner);
   void _revise_x1_ghost_cpu_gamma(torch::Tensor const& w, bool inner,
                                   torch::Tensor const& gamma);
+  torch::Tensor _du0imp;  //! persistent du snapshot for the implicit wrapper
 
   void _revise_x1inner_lr(torch::Tensor const& wl, torch::Tensor const& wr);
   void _revise_x1outer_lr(torch::Tensor const& wl, torch::Tensor const& wt);

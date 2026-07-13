@@ -1,6 +1,9 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+// C/C++
+#include <cstdlib>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -63,6 +66,8 @@ void ImplicitHydroImpl::reset() {
   _du0 = register_buffer("du0", torch::empty({0}, torch::kFloat64));
   _corr = register_buffer("corr", torch::empty({0}, torch::kFloat64));
   _mass_corr = register_buffer("mass_corr", torch::empty({0}, torch::kFloat64));
+  _farea1c = register_buffer("farea1c", torch::empty({0}, torch::kFloat64));
+  _volc = register_buffer("volc", torch::empty({0}, torch::kFloat64));
 }
 
 void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
@@ -87,6 +92,16 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
     }
   };
 
+  // grid-constant geometry, staged once in the layout the iterator wants
+  // (was .unsqueeze(0).contiguous() -- a fresh copy -- on every call)
+  auto pcoord2 = phydro->pmb->pcoord;
+  if (needs_reset(_farea1c, pcoord2->face_area1().unsqueeze(0).sizes().vec())) {
+    _farea1c.set_(pcoord2->face_area1().unsqueeze(0).contiguous());
+  }
+  if (needs_reset(_volc, pcoord2->cell_volume().unsqueeze(0).sizes().vec())) {
+    _volc.set_(pcoord2->cell_volume().unsqueeze(0).contiguous());
+  }
+
   maybe_resize(_a, abc_shape);
   maybe_resize(_b, abc_shape);
   maybe_resize(_c, abc_shape);
@@ -107,8 +122,23 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
   auto pcoord = phydro->pmb->pcoord;
   auto interior = phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
-  auto cos_theta = pcoord->cosine_cell_kj;
-  auto sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
+
+  // Cartesian metric: cosine_cell_kj is identically zero, so the frame
+  // projection below is v2 += v3*0, v3 *= 1 and coord_vec_raise_ reduces to
+  // (v2, v3) -> (v2/1 - v3*0, -v2*0 + v3/1) -- exact identities. Skip the
+  // whole project/de-project apparatus (and the per-call sqrt on a grid
+  // constant) on CPU; GPU takes the original path unchanged.
+  // SNAPY_IMPLICIT_NOFAST=1 forces the original path (validation toggle:
+  // enabled-vs-disabled in the same binary must be bit-identical)
+  static bool const nofast = std::getenv("SNAPY_IMPLICIT_NOFAST") != nullptr;
+  bool const flat_cpu = !nofast && du.device().is_cpu() &&
+                        pcoord->options->type() == "cartesian";
+
+  torch::Tensor cos_theta, sin_theta;
+  if (!flat_cpu) {
+    cos_theta = pcoord->cosine_cell_kj;
+    sin_theta = torch::sqrt(1.0 - cos_theta * cos_theta);
+  }
 
   /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
     TORCH_CHECK(false, "[ImplicitHydro] NaN encountered before implicit solve");
@@ -126,12 +156,14 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
             1);
   }
 
-  /// (1) Project to local orthonormal frame
-  w[IVY] += w[IVZ] * cos_theta;
-  w[IVZ] *= sin_theta;
+  /// (1) Project to local orthonormal frame (exact identity on cartesian)
+  if (!flat_cpu) {
+    w[IVY] += w[IVZ] * cos_theta;
+    w[IVZ] *= sin_theta;
 
-  coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
-  pcoord->prim2local1_(du);
+    coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
+    pcoord->prim2local1_(du);
+  }
 
   //// -------- Solve block-tridiagonal matrix --------- ////
   auto iter =
@@ -144,10 +176,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
           .add_owned_output(_mass_corr.index(interior))
           .add_owned_input(w.index(interior))
           .add_owned_input(gamma.unsqueeze(0).index(interior))
-          .add_owned_input(
-              pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
-          .add_owned_input(
-              pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
+          .add_owned_input(_farea1c.index(interior))
+          .add_owned_input(_volc.index(interior))
           .add_input(_a)
           .add_input(_b)
           .add_input(_c)
@@ -173,10 +203,12 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          nvapor);
   }
 
-  /// (3) De-project from local orthonormal frame
-  w[IVZ] /= sin_theta;
-  w[IVY] -= w[IVZ] * cos_theta;
-  pcoord->flux2global1_(du);
+  /// (3) De-project from local orthonormal frame (exact identity on cartesian)
+  if (!flat_cpu) {
+    w[IVZ] /= sin_theta;
+    w[IVY] -= w[IVZ] * cos_theta;
+    pcoord->flux2global1_(du);
+  }
 
   _corr.copy_(du);
   _corr.sub_(_du0);
