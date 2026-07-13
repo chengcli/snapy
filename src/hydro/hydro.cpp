@@ -257,13 +257,18 @@ void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
   auto a = gm / gamma;
   auto K = w[IPR].narrow(-1, is, 1) / w[IDN].narrow(-1, is, 1).pow(gamma);
 
+  // loop invariants (were recomputed every iteration; same values, same bits)
+  auto inv_gamma = 1. / gamma;
+  auto inv_a = 1. / a;
+  auto ag = a * grav;
+  auto Kpow = K.pow(inv_gamma);
+
   for (int n = 0; n < pcoord->options->nghost(); ++n) {
     auto dz = pmb->pcoord->dx1v[is - n - 1];
-    auto h =
-        w[IPR].narrow(-1, is - n, 1).pow(a) + a * grav * dz / K.pow(1. / gamma);
-    w[IPR].narrow(-1, is - n - 1, 1) = h.pow(1. / a);
+    auto h = w[IPR].narrow(-1, is - n, 1).pow(a) + ag * dz / Kpow;
+    w[IPR].narrow(-1, is - n - 1, 1) = h.pow(inv_a);
     w[IDN].narrow(-1, is - n - 1, 1) =
-        (w[IPR].narrow(-1, is - n - 1, 1) / K).pow(1. / gamma);
+        (w[IPR].narrow(-1, is - n - 1, 1) / K).pow(inv_gamma);
   }
 }
 
@@ -277,13 +282,18 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   auto a = gm / gamma;
   auto K = w[IPR].narrow(-1, ie, 1) / w[IDN].narrow(-1, ie, 1).pow(gamma);
 
+  // loop invariants (were recomputed every iteration; same values, same bits)
+  auto inv_gamma = 1. / gamma;
+  auto inv_a = 1. / a;
+  auto ag = a * grav;
+  auto Kpow = K.pow(inv_gamma);
+
   for (int n = 0; n < pcoord->options->nghost(); ++n) {
     auto dz = pmb->pcoord->dx1v[ie + n];
-    auto h =
-        w[IPR].narrow(-1, ie + n, 1).pow(a) - a * grav * dz / K.pow(1. / gamma);
-    w[IPR].narrow(-1, ie + n + 1, 1) = h.pow(1. / a);
+    auto h = w[IPR].narrow(-1, ie + n, 1).pow(a) - ag * dz / Kpow;
+    w[IPR].narrow(-1, ie + n + 1, 1) = h.pow(inv_a);
     w[IDN].narrow(-1, ie + n + 1, 1) =
-        (w[IPR].narrow(-1, ie + n + 1, 1) / K).pow(1. / gamma);
+        (w[IPR].narrow(-1, ie + n + 1, 1) / K).pow(inv_gamma);
   }
 }
 
