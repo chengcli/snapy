@@ -174,18 +174,20 @@ torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
   }
 
   //// ------------ (6) Calculate external forcing ------------ ////
-  // du = -dt * _div everywhere. Ghost values of du are never read: the
-  // conserved ghost zones are overwritten by the boundary functions /
-  // ghost exchange before the next flux computation, and outputs write the
-  // interior only. This replaces zeros_like + part() + two masked indexing
-  // ops per stage with one copy + one scalar multiply into a persistent
-  // buffer.
+  // Persistent du buffer, zeroed per stage: identical semantics to the
+  // original zeros_like (ghost du must be exactly zero each stage -- the
+  // forcings add to ghost du, and at rank boundaries corner ghosts survive
+  // the exchange, so any ghost deviation perturbs the run at the 1e-7
+  // level), minus the per-stage allocation.
   if (!_du.defined() || _du.sizes() != _div.sizes() ||
       _du.device() != _div.device()) {
-    _du = torch::empty_like(_div);
+    _du = torch::zeros_like(_div);
+  } else {
+    _du.zero_();
   }
-  _du.copy_(_div).mul_(-dt);
   auto du = _du;
+  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  du.index(interior) = -dt * _div.index(interior);
 
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
