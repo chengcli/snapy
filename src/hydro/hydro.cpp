@@ -326,6 +326,48 @@ void HydroImpl::_revise_x1_ghost_cpu_ideal(torch::Tensor const& w,
   }
 }
 
+// scalar CPU implementation of the same recurrence for a PER-COLUMN gamma
+// (ideal-moist): gamma comes from the tensor-path W->A on the anchor slice,
+// so the anchor thermodynamics matches the tensor code exactly; the ghost
+// recurrence mirrors it term for term (std::pow vs vectorized pow rounding
+// only, same class as the ideal-gas fast path)
+void HydroImpl::_revise_x1_ghost_cpu_gamma(torch::Tensor const& w, bool inner,
+                                           torch::Tensor const& gamma) {
+  auto pcoord = pmb->pcoord;
+  int nghost = pcoord->options->nghost();
+  int anchor = inner ? pcoord->il() : pcoord->iu();
+  double grav = -options->grav()->grav1();
+
+  int64_t nc3 = w.size(1), nc2 = w.size(2), nc1 = w.size(3);
+  double* base = w.data_ptr<double>();
+  double* rho = base + IDN * nc3 * nc2 * nc1;
+  double* prs = base + IPR * nc3 * nc2 * nc1;
+  double const* dx1v = pcoord->dx1v.data_ptr<double>();
+  double const* gam = gamma.data_ptr<double>();
+
+  for (int64_t k = 0; k < nc3; ++k) {
+    for (int64_t j = 0; j < nc2; ++j) {
+      int64_t off = (k * nc2 + j) * nc1;
+      double g = gam[k * nc2 + j];
+      double a = (g - 1.) / g;
+      double inv_gamma = 1. / g;
+      double inv_a = 1. / a;
+      double ag = a * grav;
+      double K = prs[off + anchor] / std::pow(rho[off + anchor], g);
+      double Kpow = std::pow(K, inv_gamma);
+      for (int n = 0; n < nghost; ++n) {
+        int src = inner ? anchor - n : anchor + n;
+        int dst = inner ? src - 1 : src + 1;
+        double dz = dx1v[inner ? dst : src];
+        double h = std::pow(prs[off + src], a) +
+                   (inner ? ag * dz / Kpow : -(ag * dz / Kpow));
+        prs[off + dst] = std::pow(h, inv_a);
+        rho[off + dst] = std::pow(prs[off + dst] / K, inv_gamma);
+      }
+    }
+  }
+}
+
 void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
   auto pcoord = pmb->pcoord;
   int is = pcoord->il();
@@ -337,10 +379,17 @@ void HydroImpl::_revise_x1inner_ghost(torch::Tensor const& w) {
   // formulas and evaluation order as the tensor code below; falls through
   // for CUDA tensors and non-ideal-gas EOS.
   if (w.device().is_cpu() && w.is_contiguous() &&
-      w.scalar_type() == torch::kFloat64 &&
-      peos->options->type() == "ideal-gas") {
-    _revise_x1_ghost_cpu_ideal(w, /*inner=*/true);
-    return;
+      w.scalar_type() == torch::kFloat64) {
+    if (peos->options->type() == "ideal-gas") {
+      _revise_x1_ghost_cpu_ideal(w, /*inner=*/true);
+      return;
+    }
+    if (peos->options->type() == "ideal-moist") {
+      // per-column gamma from the same W->A the tensor path uses
+      auto gcol = peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
+      _revise_x1_ghost_cpu_gamma(w, /*inner=*/true, gcol);
+      return;
+    }
   }
 
   auto gamma = peos->compute("W->A", {w.narrow(-1, is, 1)});
@@ -369,10 +418,16 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   auto grav = -options->grav()->grav1();
 
   if (w.device().is_cpu() && w.is_contiguous() &&
-      w.scalar_type() == torch::kFloat64 &&
-      peos->options->type() == "ideal-gas") {
-    _revise_x1_ghost_cpu_ideal(w, /*inner=*/false);
-    return;
+      w.scalar_type() == torch::kFloat64) {
+    if (peos->options->type() == "ideal-gas") {
+      _revise_x1_ghost_cpu_ideal(w, /*inner=*/false);
+      return;
+    }
+    if (peos->options->type() == "ideal-moist") {
+      auto gcol = peos->compute("W->A", {w.narrow(-1, ie, 1)}).contiguous();
+      _revise_x1_ghost_cpu_gamma(w, /*inner=*/false, gcol);
+      return;
+    }
   }
 
   auto gamma = peos->compute("W->A", {w.narrow(-1, ie, 1)});
