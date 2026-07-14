@@ -137,12 +137,27 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   }
 
   if (nvar() > IPR) {
-    auto mom = cons.narrow(0, IVX, 3).clone();
-    coord_vec_raise_(mom, pcoord->cosine_cell_kj);
+    // Cartesian metric: coord_vec_raise_ at cth==0 is an exact identity
+    // (v2 -> v2/1 - v3*0, v3 -> -v2*0 + v3/1), so the raised momentum
+    // equals the stored momentum and the clone + raise can be skipped.
+    // CPU only; other coordinates and CUDA take the original path.
+    torch::Tensor mom;
+    if (cons.device().is_cpu() && pcoord->options->type() == "cartesian") {
+      mom = cons.narrow(0, IVX, 3);
+    } else {
+      mom = cons.narrow(0, IVX, 3).clone();
+      coord_vec_raise_(mom, pcoord->cosine_cell_kj);
+    }
     auto rho = cons[IDN] + cons.narrow(0, ICY, ny).sum(0);
     auto ke = 0.5 * (mom * cons.narrow(0, IVX, 3)).sum(0) / rho;
-    auto min_temp = options->temperature_floor() * torch::ones_like(ke);
-    auto min_ie = compute("UT->I", {cons, min_temp});
+    // grid-shaped constant; was re-allocated every call
+    if (!_min_temp_buf.defined() || _min_temp_buf.sizes() != ke.sizes() ||
+        _min_temp_buf.device() != ke.device() ||
+        _min_temp_buf.scalar_type() != ke.scalar_type()) {
+      _min_temp_buf = torch::empty_like(ke);
+      _min_temp_buf.fill_(options->temperature_floor());
+    }
+    auto min_ie = compute("UT->I", {cons, _min_temp_buf});
     cons[IPR].clamp_min_(ke + min_ie);
   }
 

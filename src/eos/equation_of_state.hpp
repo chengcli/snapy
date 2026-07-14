@@ -77,6 +77,8 @@ class EquationOfStateImpl {
 
   //! non-owning reference to parent
   HydroImpl const* phydro = nullptr;
+  //! cached temperature-floor field for the conserved limiter
+  torch::Tensor _min_temp_buf;
 
   EquationOfStateImpl() : options(EquationOfStateOptionsImpl::create()) {}
   explicit EquationOfStateImpl(EquationOfStateOptions const& options_,

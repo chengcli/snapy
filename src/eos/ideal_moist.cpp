@@ -181,7 +181,11 @@ void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor& prim) {
   out = prim.narrow(0, IVX, 3);
   torch::div_out(out, cons.narrow(0, IVX, 3), prim[IDN]);
 
-  coord_vec_raise_(out, pcoord->cosine_cell_kj);
+  // exact identity on cartesian (cth == 0); skip on CPU
+  if (!(prim.device().is_cpu() &&
+        pcoord->options->type() == "cartesian")) {
+    coord_vec_raise_(out, pcoord->cosine_cell_kj);
+  }
 
   auto ke = 0.5 * (prim.narrow(0, IVX, 3) * cons.narrow(0, IVX, 3)).sum(0);
   auto ie = cons[IPR] - ke;
