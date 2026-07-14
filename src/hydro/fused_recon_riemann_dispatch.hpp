@@ -47,6 +47,9 @@ struct FusedReconRiemannParams {
   FusedPhysicsParams physics;
   FusedX1RevisionParams x1_revision;
   FusedMetricParams metric;
+  //! grid ghost width for the CPU kernel's ghost-line skip (0 = process all
+  //! lines, the historical behavior; the CUDA kernel does not read this)
+  int grid_nghost = 0;
 };
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,

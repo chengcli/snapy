@@ -480,6 +480,10 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       cubed_sphere_layout, face, x2v, x2f, x3v, x3f};
   auto face_pressure1 =
       eos == FusedEos::ShallowWater ? torch::Tensor() : _face_pressure1;
+  // fluxes on ghost lines are never consumed (du takes the divergence over
+  // the interior only, and rho_grav ghost rows must stay zero); the CPU
+  // kernel skips those lines outright. 0 would mean "process all lines".
+  int const grid_nghost = pmb->pcoord->options->nghost();
 
   // device dispatch: CUDA tensors take exactly the same kernel launches as
   // before; CPU tensors go to the host port of the same kernel
@@ -501,7 +505,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
               FusedReconRiemannParams{
                   /*dim=*/3, make_physics_params(recon1_prim, recon1_vel, scale1),
                   FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
-                  metric_params});
+                  metric_params, grid_nghost});
   }
   _vsec("kernel-x1");
   if (u.size(3) > 1 && psed) {
@@ -513,7 +517,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         FusedReconRiemannParams{
             /*dim=*/2, make_physics_params(recon23_prim, recon23_vel, scale23),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
-            metric_params});
+            metric_params, grid_nghost});
   }
   _vsec("kernel-x2");
   if (u.size(1) > 1 && !options->disable_flux_x3()) {
@@ -522,7 +526,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         FusedReconRiemannParams{
             /*dim=*/1, make_physics_params(recon23_prim, recon23_vel, scale23),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
-            metric_params});
+            metric_params, grid_nghost});
   }
 
   if (cubed_sphere_layout) {

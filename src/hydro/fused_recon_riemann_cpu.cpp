@@ -412,12 +412,36 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
     auto *flux_ptr = flux.data_ptr<scalar_t>();
     InterpTables<scalar_t> const tab;
 
+    // ghost-line skip: fluxes on lines outside the interior of the
+    // non-swept dimensions are never consumed downstream (the divergence is
+    // taken over the interior only and the flux buffers are zero-initialized
+    // at registration, so skipped lines read as zero forever). grid_nghost
+    // == 0 restores the historical process-every-line behavior.
+    int const gng = params.grid_nghost;
+    auto line_active = [&](int64_t line) -> bool {
+      if (gng <= 0) return true;
+      if (dim == 3) {
+        int64_t j = line % nc2, k = line / nc2;
+        return (nc2 == 1 || (j >= gng && j < nc2 - gng)) &&
+               (nc3 == 1 || (k >= gng && k < nc3 - gng));
+      }
+      if (dim == 2) {
+        int64_t i = line % nc1, k = line / nc1;
+        return (nc1 == 1 || (i >= gng && i < nc1 - gng)) &&
+               (nc3 == 1 || (k >= gng && k < nc3 - gng));
+      }
+      int64_t i = line % nc1, j = line / nc1;
+      return (nc1 == 1 || (i >= gng && i < nc1 - gng)) &&
+             (nc2 == 1 || (j >= gng && j < nc2 - gng));
+    };
+
     at::parallel_for(0, nlines, /*grain_size=*/1, [&](int64_t b, int64_t e) {
       std::vector<scalar_t> line_buf(int64_t(nvar) * axis_size);
       std::vector<scalar_t> wl_buf(int64_t(nvar) * axis_size);
       std::vector<scalar_t> wr_buf(int64_t(nvar) * axis_size);
       std::vector<scalar_t> lp_buf(axis_size), rp_buf(axis_size);
       for (int64_t line = b; line < e; ++line) {
+        if (!line_active(line)) continue;
         fused_line_cpu<scalar_t>(w_ptr, flux_ptr, device_params,
                                  static_cast<int>(line), tab,
                                  params.physics.recon_scale, line_buf.data(),
