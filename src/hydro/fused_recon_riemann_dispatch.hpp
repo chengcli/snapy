@@ -57,9 +57,12 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
                               FusedReconRiemannParams const& params);
 
 //! CPU port of the fused kernel (fused_recon_riemann_cpu.cpp). Cartesian
-//! layouts only; params.metric.cubed_sphere must be false.
+//! layouts only; params.metric.cubed_sphere must be false. `solid` (optional,
+//! contiguous bool [nc3,nc2,nc1]) enables the internal-boundary face-state
+//! revision (reflective wall), matching the staged pib->forward; the caller
+//! must have applied mark_prim_solid_ to `w` first.
 void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
-                             torch::Tensor face_pressure,
+                             torch::Tensor face_pressure, torch::Tensor solid,
                              FusedReconRiemannParams const& params);
 
 // Multi-block-per-process cubed-sphere fused exchange, split into host-callable

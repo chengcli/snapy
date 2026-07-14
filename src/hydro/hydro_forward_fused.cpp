@@ -350,9 +350,13 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
               "dynamics.fused-recon-riemann supports at most 32 mass "
               "fractions, but got ",
               w.size(0) - ICY);
-  TORCH_CHECK(!other.count("solid"),
-              "dynamics.fused-recon-riemann does not yet support solid "
-              "internal-boundary state revision");
+  // CPU: solid internal boundaries are supported (the CPU kernel applies the
+  // pib->forward face-state revision inline). The CUDA kernel does not have
+  // it, and fused_runtime_supported already routes CUDA+solid to staged --
+  // this check only guards against future callers bypassing that gate.
+  TORCH_CHECK(on_cpu || !other.count("solid"),
+              "dynamics.fused-recon-riemann on CUDA does not yet support "
+              "solid internal-boundary state revision");
 
   auto eos_type = options->eos()->type();
   auto riemann_type = options->riemann()->type();
@@ -402,6 +406,13 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
 
   _vsec("pre");
   peos->forward(u, w);
+  // cons2prim recomputes w in solid cells; re-mark them with the wall
+  // constants exactly as the staged path does before reconstruction
+  torch::Tensor solid;
+  if (other.count("solid")) {
+    solid = other.at("solid").contiguous();
+    pmb->pib->mark_prim_solid_(w, solid);
+  }
   _vsec("eos-cons2prim");
 
   // reconstruct.shock means ALL variables take the (shock-capturing) prim
@@ -490,7 +501,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   auto run_fused = [&](torch::Tensor const& flx, torch::Tensor const& fp,
                        FusedReconRiemannParams const& p) {
     if (on_cpu) {
-      fused_recon_riemann_cpu(w, flx, fp, p);
+      fused_recon_riemann_cpu(w, flx, fp, solid, p);
       return;
     }
 #ifndef NOT_USE_CUDA

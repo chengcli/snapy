@@ -208,8 +208,9 @@ T interp_line_fused(T const *line, int v, int start, int axis_size,
 template <typename T>
 void fused_line_cpu(T const *w, T *flux,
                     DeviceFusedReconRiemannParams<T> const &params, int line,
-                    InterpTables<T> const &tab, bool recon_scale, T *line_buf,
-                    T *wl_buf, T *wr_buf, T *lp_buf, T *rp_buf) {
+                    InterpTables<T> const &tab, bool recon_scale,
+                    bool const *solid, T *line_buf, T *wl_buf, T *wr_buf,
+                    T *lp_buf, T *rp_buf) {
   int nvar = params.nvar;
   int nc3 = params.nc3;
   int nc2 = params.nc2;
@@ -284,6 +285,30 @@ void fused_line_cpu(T const *w, T *flux,
         // an upstream staged-vs-fused discrepancy.
         wr_local[IPR] = wl_local[IPR];
         wr_local[IDN] = wl_local[IDN];
+      }
+    }
+
+    // solid internal-boundary revision, transcribed statement-for-statement
+    // from InternalBoundaryImpl::forward (internal_boundary.cpp): a face
+    // whose right cell is solid takes the mirrored left state with the
+    // normal velocity sign-flipped (reflective wall), and vice versa; the
+    // left-state revision reads the ALREADY-REVISED right state, matching
+    // the staged op order. Placed exactly where the staged path calls
+    // pib->forward: after the hydrostatic L/R revision, before anything
+    // reads the face states (rho_grav below uses post-solid pressures).
+    if (solid != nullptr) {
+      int flat = base + pos * stride_dim;
+      bool sr = solid[flat];  // cell at the face's right (staged solidl)
+      // staged solidr = solid.roll(1) with edge fix: index 0 maps to itself
+      bool sl = pos > 0 ? solid[flat - stride_dim] : sr;
+      if (sr || sl) {
+        int ivx = IPR - dim;
+        for (int v = 0; v < nvar; ++v) {
+          if (sr) wr_local[v] = wl_local[v];
+          if (sl) wl_local[v] = wr_local[v];
+        }
+        if (sr) wr_local[ivx] = -wl_local[ivx];
+        if (sl) wl_local[ivx] = -wr_local[ivx];
       }
     }
 
@@ -364,7 +389,7 @@ void fused_line_cpu(T const *w, T *flux,
 }  // namespace
 
 void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
-                             torch::Tensor face_pressure,
+                             torch::Tensor face_pressure, torch::Tensor solid,
                              FusedReconRiemannParams const &params) {
   TORCH_CHECK(w.device().is_cpu() && flux.device().is_cpu(),
               "fused_recon_riemann_cpu requires CPU tensors");
@@ -379,6 +404,11 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
               "face_pressure tensor");
   TORCH_CHECK(params.physics.solver != FusedRiemannSolver::Roe,
               "fused_recon_riemann_cpu does not implement the roe solver");
+  TORCH_CHECK(!solid.defined() ||
+                  (solid.device().is_cpu() && solid.is_contiguous() &&
+                   solid.scalar_type() == torch::kBool),
+              "fused_recon_riemann_cpu requires a contiguous CPU bool solid "
+              "tensor");
 
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -410,6 +440,7 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
 
     auto const *w_ptr = w.data_ptr<scalar_t>();
     auto *flux_ptr = flux.data_ptr<scalar_t>();
+    bool const *solid_ptr = solid.defined() ? solid.data_ptr<bool>() : nullptr;
     InterpTables<scalar_t> const tab;
 
     // ghost-line skip: fluxes on lines outside the interior of the
@@ -444,9 +475,9 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
         if (!line_active(line)) continue;
         fused_line_cpu<scalar_t>(w_ptr, flux_ptr, device_params,
                                  static_cast<int>(line), tab,
-                                 params.physics.recon_scale, line_buf.data(),
-                                 wl_buf.data(), wr_buf.data(), lp_buf.data(),
-                                 rp_buf.data());
+                                 params.physics.recon_scale, solid_ptr,
+                                 line_buf.data(), wl_buf.data(), wr_buf.data(),
+                                 lp_buf.data(), rp_buf.data());
       }
     });
   });

@@ -196,19 +196,21 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool supported = fused_runtime_supported(u, other);
     // CPU fused path (fused_recon_riemann_cpu.cpp): cartesian coordinates
     // only -- the cubed-sphere metric/seam exchange is CUDA-only -- no
-    // sedimentation or solid boundaries, and not the roe solver (the CPU
-    // kernel implements lmars/hllc/shallow-roe only). Under FUSED=auto both
-    // ideal-gas and ideal-moist take the CPU fused path (each validated
-    // against the staged path, incl. multi-vapor and scale/shock configs);
-    // shallow-water on CPU still requires an explicit FUSED=on. FUSED=off
-    // always selects the staged path. CUDA tensors take the exact same
-    // decision as before.
+    // sedimentation, and not the roe solver (the CPU kernel implements
+    // lmars/hllc/shallow-roe only). Solid internal boundaries ARE supported
+    // on CPU (the kernel applies the pib->forward face revision inline);
+    // CUDA+solid keeps falling back to staged via fused_runtime_supported.
+    // Under FUSED=auto both ideal-gas and ideal-moist take the CPU fused
+    // path (each validated against the staged path, incl. multi-vapor,
+    // scale/shock, and solid configs); shallow-water on CPU still requires
+    // an explicit FUSED=on. FUSED=off always selects the staged path. CUDA
+    // tensors take the exact same decision as before.
     // The CPU fused kernel honors reconstruct.scale (threaded through the
     // physics params) and reconstruct.shock (all variables take the prim
     // scheme, matching the staged path's interp1-for-everything routing), so
     // those flags no longer force a fallback here. The CUDA kernel still
     // ignores both -- its selection path below is deliberately unchanged.
-    if (!supported && u.device().is_cpu() && !other.count("solid") && !psed &&
+    if (!supported && u.device().is_cpu() && !psed &&
         options->riemann()->type() != "roe" &&
         pmb->pcoord->options->type() == "cartesian" &&
         pmb->get_layout()->options->type() != "cubed-sphere") {
