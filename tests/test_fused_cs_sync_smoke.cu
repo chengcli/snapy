@@ -47,20 +47,6 @@ torch::Device select_cuda_device() {
   return torch::Device(torch::kCUDA, local_rank);
 }
 
-void require_cuda_6rank_or_skip() {
-  if (!torch::cuda::is_available()) {
-    GTEST_SKIP() << "CUDA runtime is unavailable";
-  }
-  int world_size = env_int("WORLD_SIZE", 1);
-  if (world_size != 6) {
-    GTEST_SKIP() << "test_fused_cs_sync_smoke requires torchrun with 6 ranks";
-  }
-  int device_count = c10::cuda::device_count();
-  if (device_count < world_size) {
-    GTEST_SKIP() << "test_fused_cs_sync_smoke requires 6 CUDA devices";
-  }
-}
-
 LayoutOptions make_layout_options() {
   auto opts = LayoutOptionsImpl::create();
   opts->type("cubed-sphere");
@@ -132,6 +118,21 @@ bool fused_exchange_uses_right_state_start_for_side(int side) {
 
 bool fused_exchange_uses_right_interp_for_side(int side) {
   return !fused_exchange_uses_right_state_start_for_side(side);
+}
+
+bool cuda_6rank_available_or_skip() {
+  if (!torch::cuda::is_available()) {
+    return false;
+  }
+  int world_size = env_int("WORLD_SIZE", 1);
+  if (world_size != 6) {
+    return false;
+  }
+  int device_count = c10::cuda::device_count();
+  if (device_count < world_size) {
+    return false;
+  }
+  return true;
 }
 
 void initialize_symmetric_memory_group(LayoutImpl const &layout,
@@ -318,7 +319,8 @@ __global__ void verify_hydro_remote_constant_kernel(void **buffer_ptrs,
 } // namespace
 
 TEST(FusedCubedSphereSymmetricMemory, RendezvousCompletes) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
   std::string group_name = "snapy:test:fused-cs-rendezvous";
   initialize_symmetric_memory_group(*ctx.layout, group_name);
@@ -331,7 +333,8 @@ TEST(FusedCubedSphereSymmetricMemory, RendezvousCompletes) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, PreviousKernelSyncCompletes) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
   std::string group_name = "snapy:test:fused-cs-sync";
   initialize_symmetric_memory_group(*ctx.layout, group_name);
@@ -357,7 +360,8 @@ TEST(FusedCubedSphereSymmetricMemory, PreviousKernelSyncCompletes) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, OrientationMetadataMatchesStaged) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
 
   auto meta = ctx.edge_meta.cpu();
@@ -378,7 +382,8 @@ TEST(FusedCubedSphereSymmetricMemory, OrientationMetadataMatchesStaged) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, BoundaryStateConventionMatchesStaged) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   // Staged hydro sends the local right state to lower-side neighbors and the
   // local left state to upper-side neighbors.
   EXPECT_TRUE(fused_exchange_uses_right_state_start_for_side(SIDE_L));
@@ -392,7 +397,8 @@ TEST(FusedCubedSphereSymmetricMemory, BoundaryStateConventionMatchesStaged) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
   std::string group_name = "snapy:test:fused-cs-remote-read";
   initialize_symmetric_memory_group(*ctx.layout, group_name);
@@ -427,7 +433,8 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
   std::string group_name = "snapy:test:fused-cs-remote-state";
   initialize_symmetric_memory_group(*ctx.layout, group_name);
@@ -463,7 +470,8 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
 }
 
 TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
-  require_cuda_6rank_or_skip();
+  if (!cuda_6rank_available_or_skip())
+    GTEST_SKIP();
   auto ctx = make_smoke_context();
   std::string group_name = "snapy:test:fused-cs-constant-state";
   initialize_symmetric_memory_group(*ctx.layout, group_name);

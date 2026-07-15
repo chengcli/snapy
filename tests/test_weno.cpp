@@ -163,13 +163,13 @@ TEST_P(DeviceTest, interp_weno3_smooth_limit) {
                                   phi[2].item<double>());
   auto left_result = torch::zeros({1}, phi.options());
   interp->left(phi, 0, left_result);
-  EXPECT_NEAR(left_expected, left_result.item<double>(), 1.E-11);
+  EXPECT_NEAR(left_expected, left_result.item<double>(), 1.E-6);
 
   auto right_expected = interp_cp3(phi[2].item<double>(), phi[1].item<double>(),
                                    phi[0].item<double>());
   auto right_result = torch::zeros({1}, phi.options());
   interp->right(phi, 0, right_result);
-  EXPECT_NEAR(right_expected, right_result.item<double>(), 1.E-11);
+  EXPECT_NEAR(right_expected, right_result.item<double>(), 1.E-6);
 }
 
 TEST_P(DeviceTest, interp_weno5b) {

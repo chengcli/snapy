@@ -17,7 +17,13 @@ if(NOT _status EQUAL 0)
   message(FATAL_ERROR "Failed to download reference file with exit code ${_status}")
 endif()
 
-execute_process(COMMAND ln -sf ../bin/shallow_splash.yaml shallow_splash.yaml)
+file(READ "../bin/shallow_splash.yaml" config)
+file(READ "../configure.h" configure_h)
+if(configure_h MATCHES "NO_PNETCDFOUTPUT")
+  string(REPLACE "type: pnetcdf" "type: netcdf" config "${config}")
+endif()
+file(REMOVE "shallow_splash.yaml")
+file(WRITE "shallow_splash.yaml" "${config}")
 
 execute_process(
   COMMAND torchrun --no-python --nproc-per-node=6 ../bin/shallow_splash.${buildl}
