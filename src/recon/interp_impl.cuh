@@ -109,7 +109,7 @@ __device__ T interp_shared_fused_impl(T const *line, int v, int start,
                                       int axis_size, FusedReconScheme scheme,
                                       bool right, bool scale) {
   if (scheme == FusedReconScheme::CP3) {
-    constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
+    constexpr T cm[3] = {1. / 3., 5. / 6., -1. / 6.};
     T c[3];
     for (int k = 0; k < 3; ++k)
       c[k] = right ? cm[2 - k] : cm[k];
