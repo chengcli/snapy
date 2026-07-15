@@ -55,8 +55,8 @@ __device__ T interp_shared_weno3_coeff_impl(T const *line, T const *coeff,
   T beta0 = SQR(_vvdot<3>(phi, c3));
   T beta1 = SQR(_vvdot<3>(phi, c4));
 
-  T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
-  T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
+  T alpha0 = (2.0 / 3.0) / SQR(beta0 + 1e-6);
+  T alpha1 = (1.0 / 3.0) / SQR(beta1 + 1e-6);
 
   return (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
 }
@@ -109,7 +109,7 @@ __device__ T interp_shared_fused_impl(T const *line, int v, int start,
                                       int axis_size, FusedReconScheme scheme,
                                       bool right, bool scale) {
   if (scheme == FusedReconScheme::CP3) {
-    constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
+    constexpr T cm[3] = {1. / 3., 5. / 6., -1. / 6.};
     T c[3];
     for (int k = 0; k < 3; ++k)
       c[k] = right ? cm[2 - k] : cm[k];

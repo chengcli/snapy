@@ -265,12 +265,14 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     auto area = pcoord->face_area1();
     auto ny = peos->nvar() - 5;
     int il = pcoord->il();
+    int iu = pcoord->iu();
 
     if (ny > 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
       pod->name = get_hydro_names(pmb, "path_");
-      auto u_sum = (u * vol).narrow(0, ICY, ny).sum(-1) / area.select(-1, il);
+      auto u_sum = (u * vol).narrow(0, ICY, ny).slice(-1, il, iu + 1).sum(-1) /
+                   area.select(-1, il);
 
       pod->data.CopyFromTensor(u_sum);
       AppendOutputDataNode(pod);

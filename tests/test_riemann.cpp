@@ -27,7 +27,7 @@ enum {
   DIM3 = 1,
 };
 
-const char *block_config = R"(
+const char* block_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -66,7 +66,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_gas_config = R"(
+const char* small_ideal_gas_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -106,7 +106,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_gas_gravity_config = R"(
+const char* small_ideal_gas_gravity_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -151,7 +151,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_gas_cubed_sphere_hllc_config = R"(
+const char* small_ideal_gas_cubed_sphere_hllc_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -202,7 +202,7 @@ boundary-condition:
     x3-outer: custom
 )";
 
-const char *small_ideal_gas_implicit_config = R"(
+const char* small_ideal_gas_implicit_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -250,7 +250,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_moist_sedimentation_config = R"(
+const char* small_ideal_moist_sedimentation_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -319,7 +319,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_ideal_moist_lmars_cloud_config = R"(
+const char* small_ideal_moist_lmars_cloud_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -377,7 +377,7 @@ boundary-condition:
     x3-outer: reflecting
 )";
 
-const char *small_shallow_water_config = R"(
+const char* small_shallow_water_config = R"(
 dynamics:
   equation-of-state:
     type: shallow-water
@@ -411,9 +411,15 @@ using namespace snap;
 
 namespace {
 
+int env_int(char const* name, int fallback) {
+  char const* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') return fallback;
+  return std::stoi(value);
+}
+
 struct ScopedEnv {
-  explicit ScopedEnv(char const *name_) : name(name_) {
-    auto *value = std::getenv(name);
+  explicit ScopedEnv(char const* name_) : name(name_) {
+    auto* value = std::getenv(name);
     if (value) {
       had_value = true;
       old_value = value;
@@ -427,7 +433,7 @@ struct ScopedEnv {
     }
   }
 
-  char const *name;
+  char const* name;
   bool had_value = false;
   std::string old_value;
 };
@@ -984,7 +990,7 @@ TEST_P(DeviceTest, fused_recon_riemann_honors_weno_scale_and_shock) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
   }
 
-  for (auto const &options : {std::pair{true, false}, std::pair{false, true},
+  for (auto const& options : {std::pair{true, false}, std::pair{false, true},
                               std::pair{true, true}}) {
     SCOPED_TRACE(testing::Message()
                  << "scale=" << options.first << " shock=" << options.second);
@@ -1050,6 +1056,10 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_gravity) {
 TEST_P(DeviceTest, fused_recon_riemann_matches_staged_cubed_sphere_hllc) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+  if (env_int("WORLD_SIZE", 1) != 6) {
+    GTEST_SKIP()
+        << "cubed-sphere fused reconstruction/Riemann test requires 6 ranks";
   }
 
   char staged_name[80] = "/tmp/tempfile.XXXXXX";
@@ -1476,7 +1486,7 @@ TEST_P(DeviceTest, test_hllc) {
   std::remove(fname);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();
