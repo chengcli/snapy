@@ -10,14 +10,14 @@
 // snap
 #include <snap/snap.h>
 
-#include "../eos/eos_side_quantities.cuh"
 #include "../coord/gnomonic_equiangle.h"
+#include "../eos/eos_side_quantities.cuh"
+#include "../layout/cubed_sphere_constants.h"
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
 #include "../riemann/roe_impl.h"
 #include "../riemann/shallow_roe_impl.h"
-#include "../layout/cubed_sphere_constants.h"
 #include "fused_dispatch_params.cuh"
 #include "fused_recon_riemann_dispatch.hpp"
 
@@ -43,9 +43,9 @@ enum {
 
 template <typename T>
 __device__ void cs_coords(int side, int edge_pos, int i, int nc3, int nc2,
-                          int nc1, int nghost, T const* x2v, T const* x2f,
-                          T const* x3v, T const* x3f, T* alpha, T* beta,
-                          int* k, int* j, int* face_pos) {
+                          int nc1, int nghost, T const *x2v, T const *x2f,
+                          T const *x3v, T const *x3f, T *alpha, T *beta, int *k,
+                          int *j, int *face_pos) {
   (void)i;
   if (side == CS_SIDE_L || side == CS_SIDE_R) {
     *k = edge_pos;
@@ -63,7 +63,7 @@ __device__ void cs_coords(int side, int edge_pos, int i, int nc3, int nc2,
 }
 
 template <typename T>
-__global__ void cs_pack_kernel(T const* w, T* buf,
+__global__ void cs_pack_kernel(T const *w, T *buf,
                                DeviceCubedSpherePackParams<T> params) {
   int nvar = params.nvar;
   int nc3 = params.nc3;
@@ -75,7 +75,8 @@ __global__ void cs_pack_kernel(T const* w, T* buf,
   int i = line % nc1;
   int edge_pos = (line / nc1) % edge_len;
   int side = line / (nc1 * edge_len);
-  if (!panel.side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
+  if (!panel.side_meta[side * CS_META_STRIDE + CS_META_ENABLED])
+    return;
   if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
       (side >= CS_SIDE_B && edge_pos >= nc2)) {
     return;
@@ -86,11 +87,10 @@ __global__ void cs_pack_kernel(T const* w, T* buf,
   int stride_dim = dim == 2 ? nc1 : nc1 * nc2;
   int stride_var = nc1 * nc2 * nc3;
   int pos = threadIdx.x;
-  int base = side <= CS_SIDE_R ? edge_pos * nc2 * nc1 + i
-                               : edge_pos * nc1 + i;
+  int base = side <= CS_SIDE_R ? edge_pos * nc2 * nc1 + i : edge_pos * nc1 + i;
 
   extern __shared__ unsigned char memory[];
-  T* smem = reinterpret_cast<T*>(memory);
+  T *smem = reinterpret_cast<T *>(memory);
   if (pos < axis_size) {
     int in = base + pos * stride_dim;
     for (int v = 0; v < nvar; ++v) {
@@ -107,19 +107,19 @@ __global__ void cs_pack_kernel(T const* w, T* buf,
   T alpha, beta;
   cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, panel.x2v, panel.x2f,
             panel.x3v, panel.x3f, &alpha, &beta, &k, &j, &face_pos);
-  if (pos != face_pos) return;
+  if (pos != face_pos)
+    return;
 
   int il = nghost;
   int left_start = face_pos - il;
   int right_start = face_pos - (il - 1);
   T left[64], right[64];
   for (int v = 0; v < nvar; ++v) {
-    auto scheme =
-        (v == IDN || v >= ICY) ? params.recon_prim : params.recon_vel;
+    auto scheme = (v == IDN || v >= ICY) ? params.recon_prim : params.recon_vel;
     left[v] = interp_shared_fused_impl(smem, v, left_start, axis_size, scheme,
-                                       /*right=*/true);
+                                       /*right=*/true, params.recon_scale);
     right[v] = interp_shared_fused_impl(smem, v, right_start, axis_size, scheme,
-                                        /*right=*/false);
+                                        /*right=*/false, params.recon_scale);
   }
   if (params.eos_limiter) {
     left[IDN] = max(left[IDN], params.density_floor);
@@ -155,34 +155,36 @@ __global__ void cs_pack_kernel(T const* w, T* buf,
   }
 }
 
-__global__ void cs_sync_kernel(uint32_t** signal_pads, int rank,
+__global__ void cs_sync_kernel(uint32_t **signal_pads, int rank,
                                int world_size) {
-  c10d::symmetric_memory::sync_remote_blocks<false, true>(
-      signal_pads, rank, world_size);
+  c10d::symmetric_memory::sync_remote_blocks<false, true>(signal_pads, rank,
+                                                          world_size);
 }
 
-__global__ void cs_release_reads_kernel(uint32_t** signal_pads, int rank,
+__global__ void cs_release_reads_kernel(uint32_t **signal_pads, int rank,
                                         int world_size) {
-  if (blockIdx.x != 1) return;
-  c10d::symmetric_memory::sync_remote_blocks<true, false>(
-      signal_pads, rank, world_size);
+  if (blockIdx.x != 1)
+    return;
+  c10d::symmetric_memory::sync_remote_blocks<true, false>(signal_pads, rank,
+                                                          world_size);
 }
 
 template <typename T>
-__device__ void cs_flux_common(
-    DeviceCubedSphereFluxParams<T> params, int i, int edge_pos, int side) {
-  T const* buf = params.buf;
-  T* flux2 = params.flux2;
-  T* flux3 = params.flux3;
-  void** buf_ptrs = params.buf_ptrs;
+__device__ void cs_flux_common(DeviceCubedSphereFluxParams<T> params, int i,
+                               int edge_pos, int side) {
+  T const *buf = params.buf;
+  T *flux2 = params.flux2;
+  T *flux3 = params.flux3;
+  void **buf_ptrs = params.buf_ptrs;
   int nvar = params.nvar;
   int nc3 = params.nc3;
   int nc2 = params.nc2;
   int nc1 = params.nc1;
   auto panel = params.panel;
   auto physics = params.physics;
-  int const* side_meta = panel.side_meta;
-  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED]) return;
+  int const *side_meta = panel.side_meta;
+  if (!side_meta[side * CS_META_STRIDE + CS_META_ENABLED])
+    return;
   if ((side <= CS_SIDE_R && edge_pos >= nc3) ||
       (side >= CS_SIDE_B && edge_pos >= nc2)) {
     return;
@@ -193,9 +195,9 @@ __device__ void cs_flux_common(
       side_meta[side * CS_META_STRIDE + CS_META_PEER_LOCAL_BLOCK];
   int peer_side = side_meta[side * CS_META_STRIDE + CS_META_PEER_SIDE];
   int rev = side_meta[side * CS_META_STRIDE + CS_META_REV];
-  int peer_edge = rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos)
-                      : edge_pos;
-  auto peer_buf = static_cast<T const*>(buf_ptrs[peer_process]);
+  int peer_edge =
+      rev ? ((side <= CS_SIDE_R ? nc3 : nc2) - 1 - edge_pos) : edge_pos;
+  auto peer_buf = static_cast<T const *>(buf_ptrs[peer_process]);
   int edge_len = max(nc2, nc3);
   int buf_stride_var = edge_len * nc1;
   int block_stride = CS_NUM_SIDES * CS_NUM_STATES * nvar * edge_len * nc1;
@@ -233,7 +235,8 @@ __device__ void cs_flux_common(
   T alpha, beta;
   cs_coords(side, edge_pos, i, nc3, nc2, nc1, nghost, panel.x2v, panel.x2f,
             panel.x3v, panel.x3f, &alpha, &beta, &k, &j, &face_pos);
-  if (threadIdx.x != face_pos) return;
+  if (threadIdx.x != face_pos)
+    return;
 
   T local_left[64], local_right[64], remote_left[64], remote_right[64], wl[64],
       wr[64];
@@ -275,7 +278,7 @@ __device__ void cs_flux_common(
   int flux_j = side <= CS_SIDE_R ? face_pos : j;
   int flux_flat = flux_k * nc2 * nc1 + flux_j * nc1 + i;
   int stride_var = nc1 * nc2 * nc3;
-  T* flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
+  T *flux = side <= CS_SIDE_R ? flux2 + flux_flat : flux3 + flux_flat;
   if (physics.solver == FusedRiemannSolver::ShallowRoe) {
     shallow_roe_impl(flux, wl, wr, dim, physics.shallow_roe_dir_yz,
                      /*stride_w=*/1, /*stride_f=*/stride_var);
@@ -286,8 +289,8 @@ __device__ void cs_flux_common(
   T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
   int ny = nvar - ICY;
   eos_side_quantities(wl, wr, ny, physics.nvapor, physics.eos, physics.gammad,
-                      physics.inv_mu_ratio_m1, physics.cv_ratio_m1,
-                      physics.u0, &el, &er, &gl, &gr, &cl, &cr);
+                      physics.inv_mu_ratio_m1, physics.cv_ratio_m1, physics.u0,
+                      &el, &er, &gl, &gr, &cl, &cr);
 
   if (physics.solver == FusedRiemannSolver::LMARS) {
     lmars_impl(flux, wl, wr, el / wl[IDN], er / wr[IDN], gl, gr, dim, ny,
@@ -316,10 +319,11 @@ __global__ void cs_flux_kernel(DeviceCubedSphereFluxParams<T> params) {
 }
 
 template <typename T>
-__global__ void cs_flux_all_kernel(
-    DeviceCubedSphereFluxParams<T> base_params, void** flux2_ptrs,
-    void** flux3_ptrs, int const* side_meta_all, int const* faces,
-    void** x2v_ptrs, void** x2f_ptrs, void** x3v_ptrs, void** x3f_ptrs) {
+__global__ void cs_flux_all_kernel(DeviceCubedSphereFluxParams<T> base_params,
+                                   void **flux2_ptrs, void **flux3_ptrs,
+                                   int const *side_meta_all, int const *faces,
+                                   void **x2v_ptrs, void **x2f_ptrs,
+                                   void **x3v_ptrs, void **x3f_ptrs) {
   (void)base_params.physics.recon_vel;
   int edge_len = max(base_params.nc2, base_params.nc3);
   int lines_per_panel = CS_NUM_SIDES * edge_len * base_params.nc1;
@@ -329,24 +333,23 @@ __global__ void cs_flux_all_kernel(
   int edge_pos = (line / base_params.nc1) % edge_len;
   int side = line / (base_params.nc1 * edge_len);
   auto params = base_params;
-  params.flux2 = static_cast<T*>(flux2_ptrs[panel]);
-  params.flux3 = static_cast<T*>(flux3_ptrs[panel]);
+  params.flux2 = static_cast<T *>(flux2_ptrs[panel]);
+  params.flux3 = static_cast<T *>(flux3_ptrs[panel]);
   params.panel.side_meta =
       side_meta_all + panel * CS_NUM_SIDES * CS_META_STRIDE;
   params.panel.face = faces[panel];
   params.panel.local_block = panel;
-  params.panel.x2v = static_cast<T const*>(x2v_ptrs[panel]);
-  params.panel.x2f = static_cast<T const*>(x2f_ptrs[panel]);
-  params.panel.x3v = static_cast<T const*>(x3v_ptrs[panel]);
-  params.panel.x3f = static_cast<T const*>(x3f_ptrs[panel]);
+  params.panel.x2v = static_cast<T const *>(x2v_ptrs[panel]);
+  params.panel.x2f = static_cast<T const *>(x2f_ptrs[panel]);
+  params.panel.x3v = static_cast<T const *>(x3v_ptrs[panel]);
+  params.panel.x3f = static_cast<T const *>(x3f_ptrs[panel]);
   cs_flux_common(params, i, edge_pos, side);
 }
 
-}  // namespace
+} // namespace
 
-void fused_cubed_sphere_pack_cuda(
-    torch::Tensor w, torch::Tensor symm_buffer,
-    FusedCubedSpherePackParams const& params) {
+void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
+                                  FusedCubedSpherePackParams const &params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -371,6 +374,7 @@ void fused_cubed_sphere_pack_cuda(
         make_device_panel<scalar_t>(params.panel),
         params.recon_prim,
         params.recon_vel,
+        params.recon_scale,
         params.eos,
         scalar_t(params.density_floor),
         scalar_t(params.pressure_floor),
@@ -382,7 +386,7 @@ void fused_cubed_sphere_pack_cuda(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
+void fused_cubed_sphere_sync_cuda(uint32_t **symm_signal_pads_dev,
                                   int symm_rank, int symm_world_size,
                                   torch::Device device) {
   at::cuda::CUDAGuard device_guard(device);
@@ -392,10 +396,11 @@ void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_flux_cuda(
-    torch::Tensor w, torch::Tensor flux2, torch::Tensor flux3,
-    torch::Tensor symm_buffer, void** symm_buffer_ptrs_dev,
-    FusedCubedSphereFluxParams const& params) {
+void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
+                                  torch::Tensor flux3,
+                                  torch::Tensor symm_buffer,
+                                  void **symm_buffer_ptrs_dev,
+                                  FusedCubedSphereFluxParams const &params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -429,7 +434,7 @@ void fused_cubed_sphere_flux_cuda(
 
 void fused_cubed_sphere_flux_all_cuda(
     torch::Tensor symm_buffer, FusedCubedSphereFluxAllPtrs ptrs,
-    FusedCubedSphereFluxAllParams const& params) {
+    FusedCubedSphereFluxAllParams const &params) {
   at::cuda::CUDAGuard device_guard(params.device);
   int edge_len = std::max(params.nc2, params.nc3);
   int threads = edge_len;
@@ -460,7 +465,7 @@ void fused_cubed_sphere_flux_all_cuda(
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
+void fused_cubed_sphere_release_cuda(uint32_t **symm_signal_pads_dev,
                                      int symm_rank, int symm_world_size,
                                      torch::Device device) {
   at::cuda::CUDAGuard device_guard(device);
@@ -470,4 +475,4 @@ void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-}  // namespace snap
+} // namespace snap

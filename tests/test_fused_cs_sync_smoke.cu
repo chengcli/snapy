@@ -11,8 +11,8 @@
 
 // torch
 #include <ATen/cuda/CUDAContext.h>
-#include <c10/cuda/CUDAFunctions.h>
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <torch/csrc/distributed/c10d/symm_mem/CUDASymmetricMemory-inl.h>
 #include <torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp>
 #include <torch/torch.h>
@@ -34,9 +34,10 @@ constexpr int kMetaStride = 5;
 // hydro side_meta: [enabled, peer_process, peer_local_block, peer_side, rev]
 constexpr int kHydroMetaStride = 5;
 
-int env_int(char const* name, int fallback) {
-  char const* value = std::getenv(name);
-  if (value == nullptr || value[0] == '\0') return fallback;
+int env_int(char const *name, int fallback) {
+  char const *value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0')
+    return fallback;
   return std::stoi(value);
 }
 
@@ -73,7 +74,7 @@ LayoutOptions make_layout_options() {
   return opts;
 }
 
-torch::Tensor make_edge_meta(CubedSphereLayoutImpl const& layout,
+torch::Tensor make_edge_meta(CubedSphereLayoutImpl const &layout,
                              torch::Device device) {
   auto iloc = layout.loc_of(layout.options->rank());
   int face = std::get<2>(iloc);
@@ -97,7 +98,7 @@ torch::Tensor make_edge_meta(CubedSphereLayoutImpl const& layout,
   return torch::tensor(meta, torch::dtype(torch::kInt32)).to(device);
 }
 
-torch::Tensor make_hydro_side_meta(CubedSphereLayoutImpl const& layout,
+torch::Tensor make_hydro_side_meta(CubedSphereLayoutImpl const &layout,
                                    torch::Device device) {
   auto iloc = layout.loc_of(layout.options->rank());
   int face = std::get<2>(iloc);
@@ -133,8 +134,8 @@ bool fused_exchange_uses_right_interp_for_side(int side) {
   return !fused_exchange_uses_right_state_start_for_side(side);
 }
 
-void initialize_symmetric_memory_group(LayoutImpl const& layout,
-                                       std::string const& group_name) {
+void initialize_symmetric_memory_group(LayoutImpl const &layout,
+                                       std::string const &group_name) {
   static std::set<std::string> initialized;
   if (initialized.empty()) {
     c10d::symmetric_memory::set_backend("NVSHMEM");
@@ -142,11 +143,12 @@ void initialize_symmetric_memory_group(LayoutImpl const& layout,
         1024, layout.options->process_world_size() * sizeof(uint32_t)));
   }
 
-  auto set_group_info_once = [&](std::string const& name) {
-    if (initialized.count(name)) return;
-    c10d::symmetric_memory::set_group_info(
-        name, layout.options->process_rank(),
-        layout.options->process_world_size(), layout.comm->store);
+  auto set_group_info_once = [&](std::string const &name) {
+    if (initialized.count(name))
+      return;
+    c10d::symmetric_memory::set_group_info(name, layout.options->process_rank(),
+                                           layout.options->process_world_size(),
+                                           layout.comm->store);
     initialized.insert(name);
   };
 
@@ -176,24 +178,25 @@ SmokeContext make_smoke_context() {
 }
 
 torch::Tensor make_symmetric_buffer(torch::Device device,
-                                    std::string const& group_name) {
+                                    std::string const &group_name) {
   (void)group_name;
   std::vector<int64_t> sizes = {kSides, kStates, kNvar, kEdgeLen, kNc1};
-  std::vector<int64_t> strides = {
-      kStates * kNvar * kEdgeLen * kNc1, kNvar * kEdgeLen * kNc1,
-      kEdgeLen * kNc1, kNc1, 1};
+  std::vector<int64_t> strides = {kStates * kNvar * kEdgeLen * kNc1,
+                                  kNvar * kEdgeLen * kNc1, kEdgeLen * kNc1,
+                                  kNc1, 1};
   return c10d::symmetric_memory::empty_strided_p2p(
       sizes, strides, torch::kFloat64, device, std::nullopt, std::nullopt);
 }
 
 void clear_signal_slots(
-    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
-    std::shared_ptr<ProcessGroupContext> const& comm) {
+    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const &symm,
+    std::shared_ptr<ProcessGroupContext> const &comm) {
   auto signal_pad = symm->get_signal_pad(
       symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
   signal_pad.zero_();
   (void)signal_pad.sum().item<int>();
-  if (comm) comm->barrier();
+  if (comm)
+    comm->barrier();
 }
 
 __device__ double device_payload(int rank, int side, int state, int edge, int i,
@@ -202,7 +205,7 @@ __device__ double device_payload(int rank, int side, int state, int edge, int i,
                              100 * edge + 10 * i + v);
 }
 
-__global__ void write_edge_payload_kernel(double* buffer, int rank) {
+__global__ void write_edge_payload_kernel(double *buffer, int rank) {
   int line = blockIdx.x;
   int i = line % kNc1;
   int edge = (line / kNc1) % kEdgeLen;
@@ -218,14 +221,14 @@ __global__ void write_edge_payload_kernel(double* buffer, int rank) {
   }
 }
 
-__global__ void sync_previous_kernel_writes(uint32_t** signal_pads, int rank,
+__global__ void sync_previous_kernel_writes(uint32_t **signal_pads, int rank,
                                             int world_size) {
-  c10d::symmetric_memory::sync_remote_blocks<false, true>(
-      signal_pads, rank, world_size);
+  c10d::symmetric_memory::sync_remote_blocks<false, true>(signal_pads, rank,
+                                                          world_size);
 }
 
-__global__ void verify_remote_edge_kernel(void** buffer_ptrs, int const* meta,
-                                          int* errors) {
+__global__ void verify_remote_edge_kernel(void **buffer_ptrs, int const *meta,
+                                          int *errors) {
   int line = blockIdx.x;
   int i = line % kNc1;
   int edge = (line / kNc1) % kEdgeLen;
@@ -235,7 +238,7 @@ __global__ void verify_remote_edge_kernel(void** buffer_ptrs, int const* meta,
   int rev = meta[side * kMetaStride + 2];
   int peer_edge = rev ? (kEdgeLen - 1 - edge) : edge;
   int stride_var = kEdgeLen * kNc1;
-  auto peer_buffer = static_cast<double const*>(buffer_ptrs[peer_rank]);
+  auto peer_buffer = static_cast<double const *>(buffer_ptrs[peer_rank]);
   for (int state = 0; state < kStates; ++state) {
     int remote_base =
         (((peer_side * kStates + state) * kNvar) * kEdgeLen + peer_edge) *
@@ -245,15 +248,15 @@ __global__ void verify_remote_edge_kernel(void** buffer_ptrs, int const* meta,
       double actual = peer_buffer[remote_base + v * stride_var];
       double expected =
           device_payload(peer_rank, peer_side, state, peer_edge, i, v);
-      if (actual != expected) atomicAdd(errors, 1);
+      if (actual != expected)
+        atomicAdd(errors, 1);
     }
   }
 }
 
-__global__ void verify_staged_remote_state_kernel(void** buffer_ptrs,
-                                                  int const* meta,
-                                                  int rank,
-                                                  int* errors) {
+__global__ void verify_staged_remote_state_kernel(void **buffer_ptrs,
+                                                  int const *meta, int rank,
+                                                  int *errors) {
   int line = blockIdx.x;
   int i = line % kNc1;
   int edge = (line / kNc1) % kEdgeLen;
@@ -273,24 +276,23 @@ __global__ void verify_staged_remote_state_kernel(void** buffer_ptrs,
       i;
   int local_base =
       (((side * kStates + local_state) * kNvar) * kEdgeLen + edge) * kNc1 + i;
-  auto peer_buffer = static_cast<double const*>(buffer_ptrs[peer_rank]);
-  auto local_buffer = static_cast<double const*>(buffer_ptrs[rank]);
+  auto peer_buffer = static_cast<double const *>(buffer_ptrs[peer_rank]);
+  auto local_buffer = static_cast<double const *>(buffer_ptrs[rank]);
   for (int v = 0; v < kNvar; ++v) {
     double remote_actual = peer_buffer[remote_base + v * stride_var];
     double remote_expected =
         device_payload(peer_rank, peer_side, remote_state, peer_edge, i, v);
     double local_actual = local_buffer[local_base + v * stride_var];
-    double local_expected =
-        device_payload(rank, side, local_state, edge, i, v);
+    double local_expected = device_payload(rank, side, local_state, edge, i, v);
     if (remote_actual != remote_expected || local_actual != local_expected) {
       atomicAdd(errors, 1);
     }
   }
 }
 
-__global__ void verify_hydro_remote_constant_kernel(void** buffer_ptrs,
-                                                    int const* meta,
-                                                    int* errors) {
+__global__ void verify_hydro_remote_constant_kernel(void **buffer_ptrs,
+                                                    int const *meta,
+                                                    int *errors) {
   int line = blockIdx.x;
   int i = line % kNc1;
   int edge = (line / kNc1) % kEdgeLen;
@@ -302,16 +304,18 @@ __global__ void verify_hydro_remote_constant_kernel(void** buffer_ptrs,
   int stride_var = kEdgeLen * kNc1;
   int remote_base =
       (((peer_side * kStates) * kNvar) * kEdgeLen + peer_edge) * kNc1 + i;
-  auto peer_buffer = static_cast<double const*>(buffer_ptrs[peer_rank]);
+  auto peer_buffer = static_cast<double const *>(buffer_ptrs[peer_rank]);
   double density = peer_buffer[remote_base + IDN * stride_var];
-  if (fabs(density - 500.) > 1.e-10) atomicAdd(errors, 1);
+  if (fabs(density - 500.) > 1.e-10)
+    atomicAdd(errors, 1);
   for (int v = IVX; v <= IVZ; ++v) {
     double velocity = peer_buffer[remote_base + v * stride_var];
-    if (fabs(velocity) > 1.e-10) atomicAdd(errors, 1);
+    if (fabs(velocity) > 1.e-10)
+      atomicAdd(errors, 1);
   }
 }
 
-}  // namespace
+} // namespace
 
 TEST(FusedCubedSphereSymmetricMemory, RendezvousCompletes) {
   require_cuda_6rank_or_skip();
@@ -322,7 +326,8 @@ TEST(FusedCubedSphereSymmetricMemory, RendezvousCompletes) {
   auto symm_buffer = make_symmetric_buffer(ctx.device, group_name);
   auto symm = c10d::symmetric_memory::rendezvous(symm_buffer, group_name);
   EXPECT_EQ(symm->get_world_size(), 6);
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }
 
 TEST(FusedCubedSphereSymmetricMemory, PreviousKernelSyncCompletes) {
@@ -343,11 +348,12 @@ TEST(FusedCubedSphereSymmetricMemory, PreviousKernelSyncCompletes) {
 
   sync_previous_kernel_writes<<<1, std::max(32, symm->get_world_size()), 0,
                                 stream>>>(
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size());
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   AT_CUDA_CHECK(cudaStreamSynchronize(stream));
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }
 
 TEST(FusedCubedSphereSymmetricMemory, OrientationMetadataMatchesStaged) {
@@ -367,7 +373,8 @@ TEST(FusedCubedSphereSymmetricMemory, OrientationMetadataMatchesStaged) {
     EXPECT_EQ(meta[side * kMetaStride + 4].item<int>(),
               (side - 1.5) * (edge.nside - 1.5) < 0);
   }
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }
 
 TEST(FusedCubedSphereSymmetricMemory, BoundaryStateConventionMatchesStaged) {
@@ -402,7 +409,7 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
 
   sync_previous_kernel_writes<<<1, std::max(32, symm->get_world_size()), 0,
                                 stream>>>(
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size());
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 
@@ -415,7 +422,8 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteEdgePayloadMatches) {
   AT_CUDA_CHECK(cudaStreamSynchronize(stream));
 
   EXPECT_EQ(errors.cpu().item<int>(), 0);
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }
 
 TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
@@ -436,7 +444,7 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
 
   sync_previous_kernel_writes<<<1, std::max(32, symm->get_world_size()), 0,
                                 stream>>>(
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size());
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 
@@ -450,7 +458,8 @@ TEST(FusedCubedSphereSymmetricMemory, RemoteStateSelectionMatchesStaged) {
   AT_CUDA_CHECK(cudaStreamSynchronize(stream));
 
   EXPECT_EQ(errors.cpu().item<int>(), 0);
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }
 
 TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
@@ -476,43 +485,36 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
 
   auto iloc = ctx.layout->loc_of(ctx.layout->options->rank());
   int face = std::get<2>(iloc);
-  // One panel per process (blocks_per_process == 1), so local_block == 0 and the
-  // flat [side, state, var, edge, nc1] buffer is exactly this block's slice.
+  // One panel per process (blocks_per_process == 1), so local_block == 0 and
+  // the flat [side, state, var, edge, nc1] buffer is exactly this block's
+  // slice.
   int local_block = 0;
-  FusedCubedSpherePanelParams panel_params{side_meta, face, local_block,
-                                           x2v, x2f, x3v, x3f};
+  FusedCubedSpherePanelParams panel_params{side_meta, face, local_block, x2v,
+                                           x2f,       x3v,  x3f};
   fused_cubed_sphere_pack_cuda(
       w, symm_buffer,
       FusedCubedSpherePackParams{panel_params, FusedReconScheme::WENO5,
-                                 FusedReconScheme::WENO5,
+                                 FusedReconScheme::WENO5, false,
                                  FusedEos::ShallowWater, 0., 0., false});
   fused_cubed_sphere_sync_cuda(
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size(), ctx.device);
   fused_cubed_sphere_flux_cuda(
       w, flux2, flux3, symm_buffer, symm->get_buffer_ptrs_dev(),
       FusedCubedSphereFluxParams{
           panel_params,
-          FusedPhysicsParams{FusedReconScheme::WENO5,
-                             FusedReconScheme::WENO5,
-                             FusedRiemannSolver::ShallowRoe,
-                             FusedEos::ShallowWater,
-                             1.4,
-                             0.,
-                             0.,
-                             false,
-                             torch::Tensor(),
-                             torch::Tensor(),
-                             torch::Tensor(),
-                             0,
-                             1}});
+          FusedPhysicsParams{FusedReconScheme::WENO5, FusedReconScheme::WENO5,
+                             false, FusedRiemannSolver::ShallowRoe,
+                             FusedEos::ShallowWater, 1.4, 0., 0., false,
+                             torch::Tensor(), torch::Tensor(), torch::Tensor(),
+                             0, 1}});
   fused_cubed_sphere_release_cuda(
-      reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev()),
+      reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev()),
       symm->get_rank(), symm->get_world_size(), ctx.device);
   AT_CUDA_CHECK(cudaStreamSynchronize(
       at::cuda::getCurrentCUDAStream(ctx.device.index())));
 
-  auto expect_constant_state = [](torch::Tensor state, char const* label) {
+  auto expect_constant_state = [](torch::Tensor state, char const *label) {
     EXPECT_LT(std::abs(state.select(1, IDN).min().cpu().item<double>() - 500.),
               1.e-10)
         << label;
@@ -532,13 +534,14 @@ TEST(FusedCubedSphereSymmetricMemory, ConstantStateExchangeHasZeroMassFlux) {
       torch::zeros({1}, torch::dtype(torch::kInt32).device(ctx.device));
   auto stream = at::cuda::getCurrentCUDAStream(ctx.device.index());
   verify_hydro_remote_constant_kernel<<<kSides * kEdgeLen * kNc1, 1, 0,
-                                        stream>>>(
-      symm->get_buffer_ptrs_dev(), side_meta.data_ptr<int>(),
-      errors.data_ptr<int>());
+                                        stream>>>(symm->get_buffer_ptrs_dev(),
+                                                  side_meta.data_ptr<int>(),
+                                                  errors.data_ptr<int>());
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   AT_CUDA_CHECK(cudaStreamSynchronize(stream));
   EXPECT_EQ(errors.cpu().item<int>(), 0);
   EXPECT_LT(flux2[IDN].abs().max().cpu().item<double>(), 1.e-10);
   EXPECT_LT(flux3[IDN].abs().max().cpu().item<double>(), 1.e-10);
-  if (ctx.layout->comm) ctx.layout->comm->barrier();
+  if (ctx.layout->comm)
+    ctx.layout->comm->barrier();
 }

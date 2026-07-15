@@ -11,6 +11,7 @@ namespace snap {
 struct FusedPhysicsParams {
   FusedReconScheme recon_prim;
   FusedReconScheme recon_vel;
+  bool recon_scale;
   FusedRiemannSolver solver;
   FusedEos eos;
   double gammad;
@@ -48,7 +49,7 @@ struct FusedReconRiemannParams {
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
                               torch::Tensor face_pressure,
-                              FusedReconRiemannParams const& params);
+                              FusedReconRiemannParams const &params);
 
 // Multi-block-per-process cubed-sphere fused exchange, split into host-callable
 // phases so the caller can coordinate the concurrent local-block threads:
@@ -71,6 +72,7 @@ struct FusedCubedSpherePackParams {
   FusedCubedSpherePanelParams panel;
   FusedReconScheme recon_prim;
   FusedReconScheme recon_vel;
+  bool recon_scale;
   FusedEos eos;
   double density_floor;
   double pressure_floor;
@@ -78,9 +80,9 @@ struct FusedCubedSpherePackParams {
 };
 
 void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
-                                  FusedCubedSpherePackParams const& params);
+                                  FusedCubedSpherePackParams const &params);
 
-void fused_cubed_sphere_sync_cuda(uint32_t** symm_signal_pads_dev,
+void fused_cubed_sphere_sync_cuda(uint32_t **symm_signal_pads_dev,
                                   int symm_rank, int symm_world_size,
                                   torch::Device device);
 
@@ -92,8 +94,8 @@ struct FusedCubedSphereFluxParams {
 void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
                                   torch::Tensor flux3,
                                   torch::Tensor symm_buffer,
-                                  void** symm_buffer_ptrs_dev,
-                                  FusedCubedSphereFluxParams const& params);
+                                  void **symm_buffer_ptrs_dev,
+                                  FusedCubedSphereFluxParams const &params);
 
 // Process-level seam flux: one launch overwrites the cross-panel boundary flux
 // for ALL local panels. flux2_ptrs_dev/flux3_ptrs_dev are device arrays of the
@@ -101,13 +103,13 @@ void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
 // int array of each panel's face id, and side_meta_all is [bpp, 4, kStride].
 // Coords are the shared equiangular angular grid (same for every panel).
 struct FusedCubedSphereFluxAllPtrs {
-  void** flux2;
-  void** flux3;
-  void** symm_buffer;
-  void** x2v;
-  void** x2f;
-  void** x3v;
-  void** x3f;
+  void **flux2;
+  void **flux3;
+  void **symm_buffer;
+  void **x2v;
+  void **x2f;
+  void **x3v;
+  void **x3f;
 };
 
 struct FusedCubedSphereFluxAllParams {
@@ -125,9 +127,9 @@ struct FusedCubedSphereFluxAllParams {
 
 void fused_cubed_sphere_flux_all_cuda(
     torch::Tensor symm_buffer, FusedCubedSphereFluxAllPtrs ptrs,
-    FusedCubedSphereFluxAllParams const& params);
+    FusedCubedSphereFluxAllParams const &params);
 
-void fused_cubed_sphere_release_cuda(uint32_t** symm_signal_pads_dev,
+void fused_cubed_sphere_release_cuda(uint32_t **symm_signal_pads_dev,
                                      int symm_rank, int symm_world_size,
                                      torch::Device device);
 
