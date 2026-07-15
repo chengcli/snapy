@@ -56,12 +56,6 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
       continue;
     }
 
-    if (vscale != 0.0) {
-      phi[0] /= vscale;
-      phi[1] /= vscale;
-      phi[2] /= vscale;
-    }
-
     T p0 = _vvdot<3>(phi, c1);
     T p1 = _vvdot<3>(phi, c2);
 

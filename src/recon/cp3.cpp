@@ -11,7 +11,7 @@ namespace snap {
 
 void Center3InterpImpl::reset() {
   cm = register_buffer(
-      "cm", torch::tensor({-1. / 3., 5. / 6., -1. / 6.}, torch::kFloat64));
+      "cm", torch::tensor({1. / 3., 5. / 6., -1. / 6.}, torch::kFloat64));
   cp = register_buffer("cp", cm.flip({0}));
 }
 
