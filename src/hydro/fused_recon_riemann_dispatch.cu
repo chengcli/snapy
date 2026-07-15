@@ -6,8 +6,8 @@
 // snap
 #include <snap/snap.h>
 
-#include "../eos/eos_side_quantities.cuh"
 #include "../coord/gnomonic_equiangle.h"
+#include "../eos/eos_side_quantities.cuh"
 #include "../recon/interp_impl.cuh"
 #include "../riemann/hllc_impl.h"
 #include "../riemann/lmars_impl.h"
@@ -20,14 +20,14 @@ namespace snap {
 namespace {
 
 template <typename T>
-__global__ void fused_kernel(T const* w, T* flux,
+__global__ void fused_kernel(T const *w, T *flux,
                              DeviceFusedReconRiemannParams<T> params) {
   int nvar = params.nvar;
   int nc3 = params.nc3;
   int nc2 = params.nc2;
   int nc1 = params.nc1;
   int dim = params.dim;
-  T* face_pressure = params.face_pressure;
+  T *face_pressure = params.face_pressure;
   auto physics = params.physics;
   auto x1_revision = params.x1_revision;
   auto metric = params.metric;
@@ -57,9 +57,9 @@ __global__ void fused_kernel(T const* w, T* flux,
   }
 
   extern __shared__ unsigned char memory[];
-  T* smem = reinterpret_cast<T*>(memory);
-  T* left_pressure = smem + nvar * axis_size;
-  T* right_pressure = left_pressure + axis_size;
+  T *smem = reinterpret_cast<T *>(memory);
+  T *left_pressure = smem + nvar * axis_size;
+  T *right_pressure = left_pressure + axis_size;
   if (pos < axis_size) {
     int flat = base + pos * stride_dim;
     for (int v = 0; v < nvar; ++v) {
@@ -68,7 +68,8 @@ __global__ void fused_kernel(T const* w, T* flux,
   }
   __syncthreads();
 
-  if (pos >= axis_size) return;
+  if (pos >= axis_size)
+    return;
   int flat = base + pos * stride_dim;
   int nghost = (physics.recon_prim == FusedReconScheme::CP3 ||
                 physics.recon_prim == FusedReconScheme::WENO3)
@@ -86,19 +87,18 @@ __global__ void fused_kernel(T const* w, T* flux,
   for (int v = 0; v < nvar; ++v) {
     auto scheme =
         (v == IDN || v >= ICY) ? physics.recon_prim : physics.recon_vel;
-    wl_local[v] =
-        interp_shared_fused_impl(smem, v, wl_start, axis_size, scheme,
-                                 /*right=*/true);
+    wl_local[v] = interp_shared_fused_impl(smem, v, wl_start, axis_size, scheme,
+                                           /*right=*/true, physics.recon_scale);
     wr_local[v] =
         interp_shared_fused_impl(smem, v, wr_start, axis_size, scheme,
-                                 /*right=*/false);
+                                 /*right=*/false, physics.recon_scale);
   }
 
   if (x1_revision.revise_lr && dim == 3 && valid_face) {
     if (pos == il) {
       wl_local[IPR] = wr_local[IPR];
       wl_local[IDN] = wr_local[IDN];
-    } else if (pos == iu + 1) {
+    } else if (pos == iu) {
       wr_local[IPR] = wl_local[IPR];
       wr_local[IDN] = wl_local[IDN];
     }
@@ -122,16 +122,17 @@ __global__ void fused_kernel(T const* w, T* flux,
     right_pressure[pos] = wr_local[IPR];
   }
   __syncthreads();
-  if (x1_revision.revise_lr && dim == 3 &&
-      x1_revision.rho_grav != nullptr && pos >= il && pos < iu) {
+  if (x1_revision.revise_lr && dim == 3 && x1_revision.rho_grav != nullptr &&
+      pos >= il && pos < iu) {
     x1_revision.rho_grav[flat] =
-        (left_pressure[pos + 1] - right_pressure[pos]) /
-        x1_revision.dx1f[pos];
+        (left_pressure[pos + 1] - right_pressure[pos]) / x1_revision.dx1f[pos];
   }
 
   if (!valid_face) {
-    for (int v = 0; v < nvar; ++v) flux[v * stride_var + flat] = 0.;
-    if (face_pressure != nullptr) face_pressure[flat] = 0.;
+    for (int v = 0; v < nvar; ++v)
+      flux[v * stride_var + flat] = 0.;
+    if (face_pressure != nullptr)
+      face_pressure[flat] = 0.;
     return;
   }
 
@@ -159,7 +160,8 @@ __global__ void fused_kernel(T const* w, T* flux,
                      physics.shallow_roe_dir_yz, /*stride_w=*/1,
                      /*stride_f=*/stride_var);
   } else {
-    T* face_pressure_out = face_pressure != nullptr ? face_pressure + flat : nullptr;
+    T *face_pressure_out =
+        face_pressure != nullptr ? face_pressure + flat : nullptr;
     T el = 0., er = 0., gl = 0., gr = 0., cl = 0., cr = 0.;
     int ny = physics.eos == FusedEos::ShallowWater ? 0 : nvar - ICY;
     eos_side_quantities(wl_local, wr_local, ny, physics.nvapor, physics.eos,
@@ -173,11 +175,10 @@ __global__ void fused_kernel(T const* w, T* flux,
                  /*stride_f=*/stride_var, face_pressure_out);
     } else if (physics.solver == FusedRiemannSolver::HLLC) {
       hllc_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
-                ny, /*stride_w=*/1, /*stride_f=*/stride_var,
-                face_pressure_out);
+                ny, /*stride_w=*/1, /*stride_f=*/stride_var, face_pressure_out);
     } else {
-      roe_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim,
-               ny, physics.eos, physics.nvapor, physics.gammad,
+      roe_impl(flux + flat, wl_local, wr_local, el, er, gl, gr, cl, cr, dim, ny,
+               physics.eos, physics.nvapor, physics.gammad,
                physics.inv_mu_ratio_m1, physics.cv_ratio_m1, physics.u0,
                /*stride_w=*/1, /*stride_f=*/stride_var, face_pressure_out);
     }
@@ -187,11 +188,11 @@ __global__ void fused_kernel(T const* w, T* flux,
   }
 }
 
-}  // namespace
+} // namespace
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
                               torch::Tensor face_pressure,
-                              FusedReconRiemannParams const& params) {
+                              FusedReconRiemannParams const &params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
   int nc2 = w.size(2);
@@ -227,8 +228,7 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
          params.x1_revision.rho_grav.defined()
              ? params.x1_revision.rho_grav.data_ptr<scalar_t>()
              : nullptr},
-        {params.metric.cubed_sphere,
-         params.metric.face,
+        {params.metric.cubed_sphere, params.metric.face,
          params.metric.x2v.defined() ? params.metric.x2v.data_ptr<scalar_t>()
                                      : nullptr,
          params.metric.x2f.defined() ? params.metric.x2f.data_ptr<scalar_t>()
@@ -243,4 +243,4 @@ void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-}  // namespace snap
+} // namespace snap

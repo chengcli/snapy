@@ -39,10 +39,10 @@ __device__ T interp_shared_weno3_coeff_impl(T const *line, T const *coeff,
   T const *c3 = c2 + 3;
   T const *c4 = c3 + 3;
   T const *src = line + v * axis_size + start;
-  T vscale =
-      scale ? (fabs(src[0]) + fabs(src[1]) + fabs(src[2])) / 3.0 : 1.0;
+  T vscale = scale ? (fabs(src[0]) + fabs(src[1]) + fabs(src[2])) / 3.0 : 1.0;
 
-  if (vscale == 0.0) return 0.0;
+  if (vscale == 0.0)
+    return 0.0;
 
   T phi[3];
   phi[0] = src[0] / vscale;
@@ -80,7 +80,8 @@ __device__ T interp_shared_weno5_coeff_impl(T const *line, T const *coeff,
                          5.0
                    : 1.0;
 
-  if (vscale == 0.0) return 0.0;
+  if (vscale == 0.0)
+    return 0.0;
 
   T phi[5];
   for (int k = 0; k < 5; ++k) {
@@ -91,12 +92,9 @@ __device__ T interp_shared_weno5_coeff_impl(T const *line, T const *coeff,
   T p1 = _vvdot<5>(phi, c2);
   T p2 = _vvdot<5>(phi, c3);
 
-  T beta0 =
-      13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
-  T beta1 =
-      13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
-  T beta2 =
-      13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
+  T beta0 = 13. / 12. * SQR(_vvdot<5>(phi, c4)) + .25 * SQR(_vvdot<5>(phi, c5));
+  T beta1 = 13. / 12. * SQR(_vvdot<5>(phi, c6)) + .25 * SQR(_vvdot<5>(phi, c7));
+  T beta2 = 13. / 12. * SQR(_vvdot<5>(phi, c8)) + .25 * SQR(_vvdot<5>(phi, c9));
 
   T alpha0 = .3 / SQR(beta0 + 1e-6);
   T alpha1 = .6 / SQR(beta1 + 1e-6);
@@ -109,18 +107,19 @@ __device__ T interp_shared_weno5_coeff_impl(T const *line, T const *coeff,
 template <typename T>
 __device__ T interp_shared_fused_impl(T const *line, int v, int start,
                                       int axis_size, FusedReconScheme scheme,
-                                      bool right) {
+                                      bool right, bool scale) {
   if (scheme == FusedReconScheme::CP3) {
     constexpr T cm[3] = {-1. / 3., 5. / 6., -1. / 6.};
     T c[3];
-    for (int k = 0; k < 3; ++k) c[k] = right ? cm[2 - k] : cm[k];
+    for (int k = 0; k < 3; ++k)
+      c[k] = right ? cm[2 - k] : cm[k];
     return interp_shared_poly_coeff_impl<T, 3>(line, c, v, start, axis_size);
   }
   if (scheme == FusedReconScheme::CP5) {
-    constexpr T cm[5] = {-1. / 20., 9. / 20., 47. / 60., -13. / 60.,
-                         1. / 30.};
+    constexpr T cm[5] = {-1. / 20., 9. / 20., 47. / 60., -13. / 60., 1. / 30.};
     T c[5];
-    for (int k = 0; k < 5; ++k) c[k] = right ? cm[4 - k] : cm[k];
+    for (int k = 0; k < 5; ++k)
+      c[k] = right ? cm[4 - k] : cm[k];
     return interp_shared_poly_coeff_impl<T, 5>(line, c, v, start, axis_size);
   }
   if (scheme == FusedReconScheme::WENO3) {
@@ -134,8 +133,7 @@ __device__ T interp_shared_fused_impl(T const *line, int v, int start,
         c[r * 3 + k] = right ? cm[r][2 - k] : cm[r][k];
       }
     }
-    return interp_shared_weno3_coeff_impl(line, c, v, start, axis_size,
-                                          /*scale=*/false);
+    return interp_shared_weno3_coeff_impl(line, c, v, start, axis_size, scale);
   }
 
   constexpr T cm[9][5] = {{-1. / 6., 5. / 6., 1. / 3., 0., 0.},
@@ -153,8 +151,7 @@ __device__ T interp_shared_fused_impl(T const *line, int v, int start,
       c[r * 5 + k] = right ? cm[r][4 - k] : cm[r][k];
     }
   }
-  return interp_shared_weno5_coeff_impl(line, c, v, start, axis_size,
-                                        /*scale=*/false);
+  return interp_shared_weno5_coeff_impl(line, c, v, start, axis_size, scale);
 }
 
 // polynomial
@@ -182,7 +179,8 @@ __device__ void interp_poly_impl(T *out, T *inp, T *coeff, int nvar,
   __syncthreads();
 
   // drop last few threads
-  if (!active) return;
+  if (!active)
+    return;
 
   for (int j = 0; j < nvar; ++j) {
     OUT(j, id) = interp_shared_poly_coeff_impl<T, N>(sinp, scoeff, j, id, nt);
@@ -206,7 +204,7 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int nvar,
 
   // Load coefficient into shared memory
   T *scoeff = smem + nt * nvar;
-  constexpr int N = 12;  // Number of coefficients for WENO3
+  constexpr int N = 12; // Number of coefficients for WENO3
   for (int i = id; i < N; i += nt) {
     scoeff[i] = coeff[i];
   }
@@ -216,11 +214,11 @@ __device__ void interp_weno3_impl(T *out, T *inp, T *coeff, int nvar,
   __syncthreads();
 
   // drop last few threads
-  if (!active) return;
+  if (!active)
+    return;
 
   for (int j = 0; j < nvar; ++j) {
-    OUT(j, id) =
-        interp_shared_weno3_coeff_impl(sinp, scoeff, j, id, nt, scale);
+    OUT(j, id) = interp_shared_weno3_coeff_impl(sinp, scoeff, j, id, nt, scale);
   }
 };
 
@@ -241,7 +239,7 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
 
   // Load coefficient into shared memory
   T *scoeff = smem + nt * nvar;
-  constexpr int N = 45;  // Number of coefficients for WENO5
+  constexpr int N = 45; // Number of coefficients for WENO5
   for (int i = id; i < N; i += nt) {
     scoeff[i] = coeff[i];
   }
@@ -251,7 +249,8 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
   __syncthreads();
 
   // drop last few threads
-  if (!active) return;
+  if (!active)
+    return;
 
   // first thread print shared memory array
   // if (id == 0) {
@@ -260,12 +259,11 @@ __device__ void interp_weno5_impl(T *out, T *inp, T *coeff, int nvar,
   //}
 
   for (int j = 0; j < nvar; ++j) {
-    OUT(j, id) =
-        interp_shared_weno5_coeff_impl(sinp, scoeff, j, id, nt, scale);
+    OUT(j, id) = interp_shared_weno5_coeff_impl(sinp, scoeff, j, id, nt, scale);
   }
 };
 
-}  // namespace snap
+} // namespace snap
 
 #undef SQR
 #undef INP

@@ -170,8 +170,8 @@ dynamics:
     limiter: false
 
   reconstruct:
-    vertical: {type: weno5, scale: false, shock: false}
-    horizontal: {type: weno5, scale: false, shock: false}
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
 
   riemann-solver:
     type: hllc
@@ -431,6 +431,70 @@ struct ScopedEnv {
   bool had_value = false;
   std::string old_value;
 };
+
+void expect_fused_reconstruct_options_match_staged(torch::Device device,
+                                                   torch::Dtype dtype,
+                                                   bool scale, bool shock) {
+  auto replacement = std::string("scale: ") + (scale ? "true" : "false") +
+                     ", shock: " + (shock ? "true" : "false");
+  auto config =
+      std::regex_replace(std::string(small_ideal_gas_config),
+                         std::regex("scale: false, shock: false"), replacement);
+
+  char fname[80] = "/tmp/tempfile.XXXXXX";
+  mkstemp(fname);
+  std::ofstream file(fname);
+  file << config;
+  file.close();
+
+  auto staged_opts = MeshBlockOptionsImpl::from_yaml(fname);
+  auto fused_opts = MeshBlockOptionsImpl::from_yaml(fname);
+  staged_opts->hydro()->fused_recon_riemann() = false;
+  fused_opts->hydro()->fused_recon_riemann() = true;
+  auto staged_block = MeshBlock(staged_opts);
+  auto fused_block = MeshBlock(fused_opts);
+  staged_block->to(device, dtype);
+  fused_block->to(device, dtype);
+
+  int nc1 = staged_block->pcoord->options->nc1();
+  int nc2 = staged_block->pcoord->options->nc2();
+  int nc3 = staged_block->pcoord->options->nc3();
+  int nvar = staged_block->phydro->peos->nvar();
+
+  torch::manual_seed(1200 + 10 * static_cast<int>(scale) +
+                     static_cast<int>(shock));
+  auto w =
+      torch::rand({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
+  w[IDN].mul_(0.2).add_(1.0);
+  w[IPR].mul_(2.e4).add_(8.e4);
+  w.narrow(0, IVX, 3).sub_(0.5).mul_(20.0);
+
+  auto u = staged_block->phydro->peos->compute("W->U", {w});
+  Variables staged_vars, fused_vars;
+  staged_vars["hydro_w"] = torch::empty_like(w);
+  fused_vars["hydro_w"] = torch::empty_like(w);
+
+  auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
+  auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  if (dtype == torch::kFloat64) {
+    EXPECT_TRUE(torch::allclose(fused_du, staged_du, 1.e-6, 1.e-6));
+  }
+  auto pcoord = staged_block->pcoord;
+  EXPECT_TRUE(torch::allclose(
+      fused_block->phydro->flux1().slice(DIM1, pcoord->il(), pcoord->iu() + 2),
+      staged_block->phydro->flux1().slice(DIM1, pcoord->il(), pcoord->iu() + 2),
+      1.e-6, 1.e-6));
+  EXPECT_TRUE(torch::allclose(
+      fused_block->phydro->flux2().slice(DIM2, pcoord->jl(), pcoord->ju() + 2),
+      staged_block->phydro->flux2().slice(DIM2, pcoord->jl(), pcoord->ju() + 2),
+      1.e-6, 1.e-6));
+  EXPECT_TRUE(torch::allclose(
+      fused_block->phydro->flux3().slice(DIM3, pcoord->kl(), pcoord->ku() + 2),
+      staged_block->phydro->flux3().slice(DIM3, pcoord->kl(), pcoord->ku() + 2),
+      1.e-6, 1.e-6));
+
+  std::remove(fname);
+}
 
 }  // namespace
 
@@ -915,6 +979,20 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_lmars) {
   std::remove(fused_name);
 }
 
+TEST_P(DeviceTest, fused_recon_riemann_honors_weno_scale_and_shock) {
+  if (device.type() != torch::kCUDA) {
+    GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
+  }
+
+  for (auto const &options : {std::pair{true, false}, std::pair{false, true},
+                              std::pair{true, true}}) {
+    SCOPED_TRACE(testing::Message()
+                 << "scale=" << options.first << " shock=" << options.second);
+    expect_fused_reconstruct_options_match_staged(device, dtype, options.first,
+                                                  options.second);
+  }
+}
+
 TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_gravity) {
   if (device.type() != torch::kCUDA) {
     GTEST_SKIP() << "fused reconstruction/Riemann path is CUDA-only";
@@ -959,6 +1037,10 @@ TEST_P(DeviceTest, fused_recon_riemann_matches_staged_ideal_gas_gravity) {
 
   auto staged_du = staged_block->phydro->forward(1.e-4, u.clone(), staged_vars);
   auto fused_du = fused_block->phydro->forward(1.e-4, u.clone(), fused_vars);
+  int outer_face = staged_block->pcoord->iu() + 1;
+  EXPECT_TRUE(torch::allclose(
+      fused_block->phydro->flux1().select(DIM1, outer_face),
+      staged_block->phydro->flux1().select(DIM1, outer_face), 1.e-6, 1.e-6));
   EXPECT_TRUE(torch::allclose(fused_du, staged_du, 1.e-8, 1.e-8));
 
   std::remove(staged_name);

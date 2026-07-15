@@ -24,13 +24,15 @@
 namespace snap {
 namespace {
 
-FusedReconScheme fused_recon_scheme(std::string const& type,
-                                    bool velocity_group) {
+FusedReconScheme fused_recon_scheme(std::string const &type,
+                                    bool velocity_group, bool shock) {
   if (type == "weno5") {
-    return velocity_group ? FusedReconScheme::CP5 : FusedReconScheme::WENO5;
+    return velocity_group && !shock ? FusedReconScheme::CP5
+                                    : FusedReconScheme::WENO5;
   }
   if (type == "weno3") {
-    return velocity_group ? FusedReconScheme::CP3 : FusedReconScheme::WENO3;
+    return velocity_group && !shock ? FusedReconScheme::CP3
+                                    : FusedReconScheme::WENO3;
   }
   if (type == "cp5") return FusedReconScheme::CP5;
   if (type == "cp3") return FusedReconScheme::CP3;
@@ -40,8 +42,8 @@ FusedReconScheme fused_recon_scheme(std::string const& type,
               type);
 }
 
-bool fused_combo_supported(std::string const& eos_type,
-                           std::string const& riemann_type) {
+bool fused_combo_supported(std::string const &eos_type,
+                           std::string const &riemann_type) {
   return ((eos_type == "ideal-gas" &&
            (riemann_type == "lmars" || riemann_type == "hllc" ||
             riemann_type == "roe")) ||
@@ -51,7 +53,7 @@ bool fused_combo_supported(std::string const& eos_type,
           (eos_type == "shallow-water" && riemann_type == "shallow-roe"));
 }
 
-FusedEos fused_eos(std::string const& type) {
+FusedEos fused_eos(std::string const &type) {
   if (type == "ideal-gas") return FusedEos::IdealGas;
   if (type == "ideal-moist") return FusedEos::IdealMoist;
   if (type == "shallow-water") return FusedEos::ShallowWater;
@@ -61,7 +63,7 @@ FusedEos fused_eos(std::string const& type) {
               type);
 }
 
-FusedRiemannSolver fused_riemann_solver(std::string const& type) {
+FusedRiemannSolver fused_riemann_solver(std::string const &type) {
   if (type == "lmars") return FusedRiemannSolver::LMARS;
   if (type == "hllc") return FusedRiemannSolver::HLLC;
   if (type == "roe") return FusedRiemannSolver::Roe;
@@ -72,8 +74,8 @@ FusedRiemannSolver fused_riemann_solver(std::string const& type) {
               type);
 }
 
-void ensure_symmetric_group(LayoutImpl const& layout,
-                            std::string const& group_name) {
+void ensure_symmetric_group(LayoutImpl const &layout,
+                            std::string const &group_name) {
   static std::mutex mutex;
   static std::set<std::string> initialized;
   std::lock_guard<std::mutex> lock(mutex);
@@ -87,7 +89,7 @@ void ensure_symmetric_group(LayoutImpl const& layout,
         1024, 4 * layout.options->process_world_size() * sizeof(uint32_t)));
   }
 
-  auto set_group_info_once = [&](std::string const& name) {
+  auto set_group_info_once = [&](std::string const &name) {
     if (initialized.count(name)) return;
     c10d::symmetric_memory::set_group_info(name, layout.options->process_rank(),
                                            layout.options->process_world_size(),
@@ -109,19 +111,19 @@ struct FusedSymmetricExchangePool {
   //! so the flux kernel can index buf_ptrs[0] uniformly for same-GPU peers.
   torch::Tensor self_ptr;
 
-  void** buffer_ptrs_dev() const {
+  void **buffer_ptrs_dev() const {
     if (symm) return symm->get_buffer_ptrs_dev();
-    return reinterpret_cast<void**>(self_ptr.data_ptr<int64_t>());
+    return reinterpret_cast<void **>(self_ptr.data_ptr<int64_t>());
   }
-  uint32_t** signal_pads_dev() const {
-    return symm ? reinterpret_cast<uint32_t**>(symm->get_signal_pad_ptrs_dev())
+  uint32_t **signal_pads_dev() const {
+    return symm ? reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev())
                 : nullptr;
   }
   int rank() const { return symm ? symm->get_rank() : 0; }
   int world_size() const { return symm ? symm->get_world_size() : 1; }
 };
 
-uint64_t stable_alloc_id(std::string const& key) {
+uint64_t stable_alloc_id(std::string const &key) {
   uint64_t hash = 1469598103934665603ull;
   for (unsigned char c : key) {
     hash ^= c;
@@ -130,9 +132,9 @@ uint64_t stable_alloc_id(std::string const& key) {
   return hash == 0 ? 1 : hash;
 }
 
-FusedSymmetricExchangePool& get_fused_symmetric_exchange_pool(
-    std::string const& group_name, c10::ScalarType dtype, torch::Device device,
-    std::vector<int64_t> const& sizes, std::vector<int64_t> const& strides,
+FusedSymmetricExchangePool &get_fused_symmetric_exchange_pool(
+    std::string const &group_name, c10::ScalarType dtype, torch::Device device,
+    std::vector<int64_t> const &sizes, std::vector<int64_t> const &strides,
     bool use_symmetric) {
   static std::mutex mutex;
   static std::unordered_map<std::string, FusedSymmetricExchangePool> pools;
@@ -198,7 +200,7 @@ class FusedExchangeBarrier {
   int generation_ = 0;
 };
 
-FusedExchangeBarrier& get_fused_exchange_barrier(std::string const& key,
+FusedExchangeBarrier &get_fused_exchange_barrier(std::string const &key,
                                                  int participants) {
   static std::mutex mutex;
   static std::unordered_map<std::string, std::unique_ptr<FusedExchangeBarrier>>
@@ -230,11 +232,11 @@ struct FusedSeamBatch {
   torch::Tensor x2v_dev, x2f_dev, x3v_dev, x3f_dev;
 };
 
-FusedSeamBatch& get_fused_seam_batch(std::string const& key, int bpp) {
+FusedSeamBatch &get_fused_seam_batch(std::string const &key, int bpp) {
   static std::mutex mutex;
   static std::unordered_map<std::string, FusedSeamBatch> batches;
   std::lock_guard<std::mutex> lock(mutex);
-  auto& b = batches[key];
+  auto &b = batches[key];
   if (static_cast<int>(b.faces.size()) != bpp) {
     b.flux2_ptr.assign(bpp, 0);
     b.flux3_ptr.assign(bpp, 0);
@@ -252,9 +254,9 @@ FusedSeamBatch& get_fused_seam_batch(std::string const& key, int bpp) {
 //! the pad to zero after each sync+release, so the pad only needs clearing once
 //! (removing the per-substage .item() host<->device sync).
 void clear_fused_signal_slots_once(
-    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const& symm,
-    std::shared_ptr<ProcessGroupContext> const& comm,
-    std::string const& group_name) {
+    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const &symm,
+    std::shared_ptr<ProcessGroupContext> const &comm,
+    std::string const &group_name) {
   static std::mutex mutex;
   static std::set<std::string> cleared;
   {
@@ -269,7 +271,7 @@ void clear_fused_signal_slots_once(
   if (comm) comm->barrier();
 }
 
-torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
+torch::Tensor make_side_meta(CubedSphereLayoutImpl const &layout,
                              bool exchange_dim2, bool exchange_dim3,
                              torch::Device device) {
   // Per side: [enabled, peer_process, peer_local_block, peer_side, rev].
@@ -308,7 +310,7 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
 }  // namespace
 
 torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
-                                        Variables const& other) {
+                                        Variables const &other) {
 #ifdef NOT_USE_CUDA
   TORCH_CHECK(false,
               "dynamics.fused-recon-riemann requires a CUDA-enabled build");
@@ -318,7 +320,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
               "dynamics.fused-recon-riemann requires CUDA tensors");
   TORCH_CHECK(other.count("hydro_w"),
               "dynamics.fused-recon-riemann requires hydro_w primitives");
-  auto const& w = other.at("hydro_w");
+  auto const &w = other.at("hydro_w");
   TORCH_CHECK(w.is_cuda(),
               "dynamics.fused-recon-riemann requires CUDA primitive tensors");
   TORCH_CHECK(w.is_contiguous() && u.is_contiguous(),
@@ -368,11 +370,11 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
         "initialized process group for multi-process runs");
   }
 
-  CubedSphereLayoutImpl const* cs_layout = nullptr;
+  CubedSphereLayoutImpl const *cs_layout = nullptr;
   int face = 0;
   torch::Tensor x2v, x2f, x3v, x3f;
   if (cubed_sphere_layout) {
-    cs_layout = dynamic_cast<CubedSphereLayoutImpl const*>(playout.get());
+    cs_layout = dynamic_cast<CubedSphereLayoutImpl const *>(playout.get());
     TORCH_CHECK(cs_layout != nullptr,
                 "expected CubedSphereLayoutImpl for cubed-sphere layout");
     face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
@@ -384,14 +386,18 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
 
   peos->forward(u, w);
 
-  auto recon1_prim = fused_recon_scheme(precon1->pinterp1->options->type(),
-                                        /*velocity_group=*/false);
-  auto recon1_vel = fused_recon_scheme(precon1->pinterp1->options->type(),
-                                       /*velocity_group=*/true);
-  auto recon23_prim = fused_recon_scheme(precon23->pinterp1->options->type(),
-                                         /*velocity_group=*/false);
-  auto recon23_vel = fused_recon_scheme(precon23->pinterp1->options->type(),
-                                        /*velocity_group=*/true);
+  auto recon1_prim =
+      fused_recon_scheme(precon1->pinterp1->options->type(),
+                         /*velocity_group=*/false, precon1->options->shock());
+  auto recon1_vel =
+      fused_recon_scheme(precon1->pinterp1->options->type(),
+                         /*velocity_group=*/true, precon1->options->shock());
+  auto recon23_prim =
+      fused_recon_scheme(precon23->pinterp1->options->type(),
+                         /*velocity_group=*/false, precon23->options->shock());
+  auto recon23_vel =
+      fused_recon_scheme(precon23->pinterp1->options->type(),
+                         /*velocity_group=*/true, precon23->options->shock());
   auto solver = fused_riemann_solver(riemann_type);
   auto eos = fused_eos(eos_type);
   int shallow_roe_dir_yz = options->riemann()->dir() == "yz" ? 1 : 0;
@@ -399,7 +405,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
   int nvapor = 0;
   if (eos == FusedEos::IdealMoist) {
-    auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(peos.get());
+    auto ideal_moist = dynamic_cast<IdealMoistImpl const *>(peos.get());
     TORCH_CHECK(ideal_moist != nullptr,
                 "dynamics.fused-recon-riemann expected IdealMoistImpl");
     inv_mu_ratio_m1 = ideal_moist->inv_mu_ratio_m1.to(w.options());
@@ -422,9 +428,10 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   }
 
   auto make_physics_params = [&](FusedReconScheme recon_prim,
-                                 FusedReconScheme recon_vel) {
+                                 FusedReconScheme recon_vel, bool recon_scale) {
     return FusedPhysicsParams{recon_prim,
                               recon_vel,
+                              recon_scale,
                               solver,
                               eos,
                               options->eos()->gammad(),
@@ -446,7 +453,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     fused_recon_riemann_cuda(
         w, _flux1, face_pressure1,
         FusedReconRiemannParams{
-            /*dim=*/3, make_physics_params(recon1_prim, recon1_vel),
+            /*dim=*/3,
+            make_physics_params(recon1_prim, recon1_vel,
+                                precon1->pinterp1->options->scale()),
             FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
             metric_params});
   }
@@ -457,7 +466,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     fused_recon_riemann_cuda(
         w, _flux2, torch::Tensor(),
         FusedReconRiemannParams{
-            /*dim=*/2, make_physics_params(recon23_prim, recon23_vel),
+            /*dim=*/2,
+            make_physics_params(recon23_prim, recon23_vel,
+                                precon23->pinterp1->options->scale()),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
             metric_params});
   }
@@ -465,7 +476,9 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     fused_recon_riemann_cuda(
         w, _flux3, torch::Tensor(),
         FusedReconRiemannParams{
-            /*dim=*/1, make_physics_params(recon23_prim, recon23_vel),
+            /*dim=*/1,
+            make_physics_params(recon23_prim, recon23_vel,
+                                precon23->pinterp1->options->scale()),
             FusedX1RevisionParams{false, torch::Tensor(), torch::Tensor()},
             metric_params});
   }
@@ -497,13 +510,13 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
           1};
 
       if (multi_process) ensure_symmetric_group(*playout, group_name);
-      auto& pool = get_fused_symmetric_exchange_pool(
+      auto &pool = get_fused_symmetric_exchange_pool(
           group_name, w.scalar_type(), w.device(), sizes, strides,
           multi_process);
       auto side_meta =
           make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
-      auto& barrier = get_fused_exchange_barrier(group_name, bpp);
-      auto& batch = get_fused_seam_batch(group_name, bpp);
+      auto &barrier = get_fused_exchange_barrier(group_name, bpp);
+      auto &batch = get_fused_seam_batch(group_name, bpp);
 
       // register this panel's flux tensors / face / coords / side_meta for the
       // single process-level seam-flux launch (distinct local-block slots, so
@@ -526,7 +539,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       fused_cubed_sphere_pack_cuda(
           w, pool.buffer,
           FusedCubedSpherePackParams{panel_params, recon23_prim, recon23_vel,
-                                     eos, options->eos()->density_floor(),
+                                     precon23->pinterp1->options->scale(), eos,
+                                     options->eos()->density_floor(),
                                      options->eos()->pressure_floor(),
                                      options->eos()->limiter()});
       barrier.wait();  // all panels packed + registered
@@ -543,7 +557,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                                        pool.world_size(), w.device());
         }
         auto i64 = torch::dtype(torch::kInt64);
-        auto ptr_tensor = [&](std::vector<torch::Tensor> const& ts) {
+        auto ptr_tensor = [&](std::vector<torch::Tensor> const &ts) {
           std::vector<int64_t> ptrs(ts.size());
           for (size_t p = 0; p < ts.size(); ++p)
             ptrs[p] = reinterpret_cast<int64_t>(ts[p].data_ptr());
@@ -559,8 +573,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
             torch::tensor(batch.faces, torch::dtype(torch::kInt32))
                 .to(w.device());
         batch.side_meta_all = torch::stack(batch.side_meta, 0);
-        auto as_pp = [](torch::Tensor& t) {
-          return reinterpret_cast<void**>(t.data_ptr<int64_t>());
+        auto as_pp = [](torch::Tensor &t) {
+          return reinterpret_cast<void **>(t.data_ptr<int64_t>());
         };
         fused_cubed_sphere_flux_all_cuda(
             pool.buffer,
@@ -573,7 +587,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 batch.side_meta_all, batch.faces_dev, static_cast<int>(nvar),
                 static_cast<int>(w.size(1)), static_cast<int>(w.size(2)),
                 static_cast<int>(nc1), bpp, w.scalar_type(), w.device(),
-                make_physics_params(recon23_prim, recon23_vel)});
+                make_physics_params(recon23_prim, recon23_vel,
+                                    precon23->pinterp1->options->scale())});
         if (multi_process) {
           fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
                                           pool.world_size(), w.device());
@@ -589,7 +604,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   du.index(interior) = -dt * _div.index(interior);
 
   auto temp = peos->compute("W->T", {w});
-  for (auto& f : forcings) f.forward(du, w, temp, dt);
+  for (auto &f : forcings) f.forward(du, w, temp, dt);
 
   if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
     du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());
