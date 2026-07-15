@@ -99,8 +99,8 @@ inline DISPATCH_MACRO T interp_weno3(T const& phim1, T const& phi,
   T beta0 = (phim1 - phi) * (phim1 - phi);
   T beta1 = (phi - phip1) * (phi - phip1);
 
-  T alpha0 = (1.0 / 3.0) / sqr(beta0 + 1e-6);
-  T alpha1 = (2.0 / 3.0) / sqr(beta1 + 1e-6);
+  T alpha0 = (2.0 / 3.0) / sqr(beta0 + 1e-6);
+  T alpha1 = (1.0 / 3.0) / sqr(beta1 + 1e-6);
 
   return (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1);
 };

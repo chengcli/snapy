@@ -10,7 +10,7 @@
 namespace snap {
 
 template <int N, typename T>
-DISPATCH_MACRO inline T _vvdot(T *v1, T *v2) {
+DISPATCH_MACRO inline T _vvdot(T* v1, T* v2) {
   T out = 0.;
   for (int i = 0; i < N; ++i) {
     out += v1[i] * v2[i];
@@ -20,7 +20,7 @@ DISPATCH_MACRO inline T _vvdot(T *v1, T *v2) {
 
 // polynomial
 template <typename T, int N>
-DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
+DISPATCH_MACRO void interp_poly_impl(T* out, T* inp, T* coeff, int stride1,
                                      int stride2, int stride_out, int nvar) {
   for (int j = 0; j < nvar; ++j) {
     OUT(j) = 0.;
@@ -32,13 +32,13 @@ DISPATCH_MACRO void interp_poly_impl(T *out, T *inp, T *coeff, int stride1,
 
 // WENO 3 interpolation
 template <typename T>
-DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
+DISPATCH_MACRO void interp_weno3_impl(T* out, T* inp, T* coeff, int stride1,
                                       int stride2, int stride_out, int nvar,
                                       double scale) {
-  T *c1 = coeff;
-  T *c2 = c1 + 3;
-  T *c3 = c2 + 3;
-  T *c4 = c3 + 3;
+  T* c1 = coeff;
+  T* c2 = c1 + 3;
+  T* c3 = c2 + 3;
+  T* c4 = c3 + 3;
 
   T phi[3];
 
@@ -62,8 +62,8 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
     T beta0 = SQR(_vvdot<3>(phi, c3));
     T beta1 = SQR(_vvdot<3>(phi, c4));
 
-    T alpha0 = (1.0 / 3.0) / SQR(beta0 + 1e-6);
-    T alpha1 = (2.0 / 3.0) / SQR(beta1 + 1e-6);
+    T alpha0 = (2.0 / 3.0) / SQR(beta0 + 1e-6);
+    T alpha1 = (1.0 / 3.0) / SQR(beta1 + 1e-6);
 
     OUT(j) = (alpha0 * p0 + alpha1 * p1) / (alpha0 + alpha1) * vscale;
   }
@@ -71,18 +71,18 @@ DISPATCH_MACRO void interp_weno3_impl(T *out, T *inp, T *coeff, int stride1,
 
 // WENO 5 interpolation
 template <typename T>
-DISPATCH_MACRO void interp_weno5_impl(T *out, T *inp, T *coeff, int stride1,
+DISPATCH_MACRO void interp_weno5_impl(T* out, T* inp, T* coeff, int stride1,
                                       int stride2, int stride_out, int nvar,
                                       double scale) {
-  T *c1 = coeff;
-  T *c2 = c1 + 5;
-  T *c3 = c2 + 5;
-  T *c4 = c3 + 5;
-  T *c5 = c4 + 5;
-  T *c6 = c5 + 5;
-  T *c7 = c6 + 5;
-  T *c8 = c7 + 5;
-  T *c9 = c8 + 5;
+  T* c1 = coeff;
+  T* c2 = c1 + 5;
+  T* c3 = c2 + 5;
+  T* c4 = c3 + 5;
+  T* c5 = c4 + 5;
+  T* c6 = c5 + 5;
+  T* c7 = c6 + 5;
+  T* c8 = c7 + 5;
+  T* c9 = c8 + 5;
 
   T phi[5];
 

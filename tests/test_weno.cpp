@@ -151,6 +151,27 @@ TEST_P(DeviceTest, interp_weno3a) {
   EXPECT_NEAR(result, expected_result, 1.E-10);
 }
 
+TEST_P(DeviceTest, interp_weno3_smooth_limit) {
+  Weno3Interp interp;
+  interp->to(device, torch::kFloat64);
+
+  constexpr double eps = 1.e-7;
+  auto phi = torch::tensor({1. + eps, 1. + 2. * eps, 1. + 4. * eps},
+                           torch::device(device).dtype(torch::kFloat64));
+
+  auto left_expected = interp_cp3(phi[0].item<double>(), phi[1].item<double>(),
+                                  phi[2].item<double>());
+  auto left_result = torch::zeros({1}, phi.options());
+  interp->left(phi, 0, left_result);
+  EXPECT_NEAR(left_expected, left_result.item<double>(), 1.E-11);
+
+  auto right_expected = interp_cp3(phi[2].item<double>(), phi[1].item<double>(),
+                                   phi[0].item<double>());
+  auto right_result = torch::zeros({1}, phi.options());
+  interp->right(phi, 0, right_result);
+  EXPECT_NEAR(right_expected, right_result.item<double>(), 1.E-11);
+}
+
 TEST_P(DeviceTest, interp_weno5b) {
   double phim2 = 1.0;
   double phim1 = 2.0;
@@ -633,7 +654,7 @@ TEST(weno5, interp_weno5b) {
   std::cout << "1) " << result << std::endl;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();

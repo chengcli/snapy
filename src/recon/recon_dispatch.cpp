@@ -87,8 +87,8 @@ void call_weno3_mps(at::TensorIterator& iter, torch::Tensor coeff, int dim,
     wu /= wscale.unsqueeze(-1);
   }
 
-  auto alpha1 = 1. / 3. / (wu.matmul(c3).square() + 1e-6).square();
-  auto alpha2 = 2. / 3. / (wu.matmul(c4).square() + 1e-6).square();
+  auto alpha1 = 2. / 3. / (wu.matmul(c3).square() + 1e-6).square();
+  auto alpha2 = 1. / 3. / (wu.matmul(c4).square() + 1e-6).square();
 
   torch::add_out(result, alpha1 * wu.matmul(c1), alpha2 * wu.matmul(c2));
   result /= alpha1 + alpha2;
