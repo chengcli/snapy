@@ -31,6 +31,14 @@ struct FusedX1RevisionParams {
   bool revise_lr;
   torch::Tensor dx1f;
   torch::Tensor rho_grav;
+  // Per-face gates for the hydrostatic WALL revision at il/iu. On an
+  // x1-decomposed grid (cubed nb1>1) an internal seam is not a physical wall,
+  // so its wall swap must be suppressed (else it clobbers exchanged neighbor
+  // data -- S2). Default true = both faces revised (single-block behavior,
+  // and the CUDA path, unchanged). These do NOT gate rho_grav: the
+  // hydrostatic divergence correction runs at every interior face regardless.
+  bool revise_inner = true;
+  bool revise_outer = true;
 };
 
 struct FusedMetricParams {

@@ -459,12 +459,20 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   }
   torch::Tensor rho_grav = _rho_grav;
   bool revise_x1_lr = options->grav() && (options->grav()->grav1() != 0);
+  // Per-face physical-boundary gating (S2): the hydrostatic x1 wall revision is
+  // a physical-wall op; at an internal x1 seam (cubed nb1>1) it must be skipped
+  // so it doesn't clobber exchanged neighbor data. reset()'s bfunc nulling
+  // already makes is_physical_boundary false at seams, true at real walls, so
+  // slab / single-rank keep both faces and stay bit-identical. dx1f and the
+  // rho_grav correction are NOT gated -- they run wherever gravity is on.
+  bool phys_x1inner = pmb->options->is_physical_boundary(0, 0, -1);
+  bool phys_x1outer = pmb->options->is_physical_boundary(0, 0, 1);
   torch::Tensor dx1f;
 
   if (u.size(3) > 1) {
     if (revise_x1_lr) {
-      _revise_x1inner_ghost(w);
-      _revise_x1outer_ghost(w);
+      if (phys_x1inner) _revise_x1inner_ghost(w);
+      if (phys_x1outer) _revise_x1outer_ghost(w);
       dx1f = pmb->pcoord->dx1f.to(w.options());
     }
   }
@@ -515,7 +523,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
     run_fused(_flux1, face_pressure1,
               FusedReconRiemannParams{
                   /*dim=*/3, make_physics_params(recon1_prim, recon1_vel, scale1),
-                  FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav},
+                  FusedX1RevisionParams{revise_x1_lr, dx1f, rho_grav,
+                                        phys_x1inner, phys_x1outer},
                   metric_params, grid_nghost});
   }
   _vsec("kernel-x1");

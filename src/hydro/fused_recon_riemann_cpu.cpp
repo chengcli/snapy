@@ -209,6 +209,7 @@ template <typename T>
 void fused_line_cpu(T const *w, T *flux,
                     DeviceFusedReconRiemannParams<T> const &params, int line,
                     InterpTables<T> const &tab, bool recon_scale,
+                    bool revise_inner, bool revise_outer,
                     bool const *solid, T *line_buf, T *wl_buf, T *wr_buf,
                     T *lp_buf, T *rp_buf) {
   int nvar = params.nvar;
@@ -274,10 +275,10 @@ void fused_line_cpu(T const *w, T *flux,
     }
 
     if (revise && valid_face) {
-      if (pos == il) {
+      if (pos == il && revise_inner) {
         wl_local[IPR] = wr_local[IPR];
         wl_local[IDN] = wr_local[IDN];
-      } else if (pos == iu) {
+      } else if (pos == iu && revise_outer) {
         // NOTE: deliberately pos == iu (the top INTERIOR face, matching the
         // staged _revise_x1outer_lr at pcoord->iu()+1). The CUDA kernel uses
         // pos == iu + 1, which is one past the last face the divergence
@@ -475,7 +476,9 @@ void fused_recon_riemann_cpu(torch::Tensor w, torch::Tensor flux,
         if (!line_active(line)) continue;
         fused_line_cpu<scalar_t>(w_ptr, flux_ptr, device_params,
                                  static_cast<int>(line), tab,
-                                 params.physics.recon_scale, solid_ptr,
+                                 params.physics.recon_scale,
+                                 params.x1_revision.revise_inner,
+                                 params.x1_revision.revise_outer, solid_ptr,
                                  line_buf.data(), wl_buf.data(), wr_buf.data(),
                                  lp_buf.data(), rp_buf.data());
       }
