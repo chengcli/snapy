@@ -174,9 +174,6 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   prim.masked_fill_(torch::isnan(prim), 0.);
   prim[IDN].clamp_min_(options->density_floor());
 
-  // options->thermo() is unset for species-free EOS types (e.g. ideal-gas);
-  // guard it the same way apply_conserved_limiter_ already does, otherwise
-  // this dereferences a null thermo and corrupts prim with garbage tracers.
   if (options->thermo()) {
     int ny = options->thermo()->vapor_ids().size() +
              options->thermo()->cloud_ids().size() - 1;
