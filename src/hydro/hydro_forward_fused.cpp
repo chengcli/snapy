@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <condition_variable>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -14,7 +15,6 @@
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
-#include <torch/csrc/distributed/c10d/symm_mem/SymmetricMemory.hpp>
 
 #include "../eos/ideal_moist.hpp"
 #include "../sedimentation/sedimentation.hpp"
@@ -24,7 +24,7 @@
 namespace snap {
 namespace {
 
-FusedReconScheme fused_recon_scheme(std::string const &type,
+FusedReconScheme fused_recon_scheme(std::string const& type,
                                     bool velocity_group, bool shock) {
   if (type == "weno5") {
     return velocity_group && !shock ? FusedReconScheme::CP5
@@ -42,8 +42,8 @@ FusedReconScheme fused_recon_scheme(std::string const &type,
               type);
 }
 
-bool fused_combo_supported(std::string const &eos_type,
-                           std::string const &riemann_type) {
+bool fused_combo_supported(std::string const& eos_type,
+                           std::string const& riemann_type) {
   return ((eos_type == "ideal-gas" &&
            (riemann_type == "lmars" || riemann_type == "hllc" ||
             riemann_type == "roe")) ||
@@ -53,7 +53,7 @@ bool fused_combo_supported(std::string const &eos_type,
           (eos_type == "shallow-water" && riemann_type == "shallow-roe"));
 }
 
-FusedEos fused_eos(std::string const &type) {
+FusedEos fused_eos(std::string const& type) {
   if (type == "ideal-gas") return FusedEos::IdealGas;
   if (type == "ideal-moist") return FusedEos::IdealMoist;
   if (type == "shallow-water") return FusedEos::ShallowWater;
@@ -63,7 +63,7 @@ FusedEos fused_eos(std::string const &type) {
               type);
 }
 
-FusedRiemannSolver fused_riemann_solver(std::string const &type) {
+FusedRiemannSolver fused_riemann_solver(std::string const& type) {
   if (type == "lmars") return FusedRiemannSolver::LMARS;
   if (type == "hllc") return FusedRiemannSolver::HLLC;
   if (type == "roe") return FusedRiemannSolver::Roe;
@@ -74,70 +74,44 @@ FusedRiemannSolver fused_riemann_solver(std::string const &type) {
               type);
 }
 
-void ensure_symmetric_group(LayoutImpl const &layout,
-                            std::string const &group_name) {
-  static std::mutex mutex;
-  static std::set<std::string> initialized;
-  std::lock_guard<std::mutex> lock(mutex);
-  if (initialized.count(group_name)) return;
-  TORCH_CHECK(layout.comm != nullptr && layout.comm->store.defined(),
-              "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
-              "initialized process-group store");
-  if (initialized.empty()) {
-    c10d::symmetric_memory::set_backend("NVSHMEM");
-    c10d::symmetric_memory::set_signal_pad_size(std::max<size_t>(
-        1024, 4 * layout.options->process_world_size() * sizeof(uint32_t)));
-  }
+constexpr int kFusedCubedSphereExchangeTag =
+    std::numeric_limits<int>::max() - 113;
 
-  auto set_group_info_once = [&](std::string const &name) {
-    if (initialized.count(name)) return;
-    c10d::symmetric_memory::set_group_info(name, layout.options->process_rank(),
-                                           layout.options->process_world_size(),
-                                           layout.comm->store);
-    initialized.insert(name);
-  };
-
-  // PyTorch's NVSHMEM allocator bootstraps anonymous allocations through this
-  // default group; rendezvous below still uses the logical snap group.
-  set_group_info_once("0");
-  set_group_info_once(group_name);
-}
-
-struct FusedSymmetricExchangePool {
+struct FusedExchangePool {
   torch::Tensor buffer;
-  //! non-null when the exchange spans multiple processes (NVSHMEM P2P)
-  c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> symm;
-  //! single-process fallback: a device int64 tensor holding buffer.data_ptr()
-  //! so the flux kernel can index buf_ptrs[0] uniformly for same-GPU peers.
-  torch::Tensor self_ptr;
+  std::vector<torch::Tensor> peer_buffers;
+  torch::Tensor buffer_ptrs;
 
-  void **buffer_ptrs_dev() const {
-    if (symm) return symm->get_buffer_ptrs_dev();
-    return reinterpret_cast<void **>(self_ptr.data_ptr<int64_t>());
+  void** buffer_ptrs_dev() const {
+    return reinterpret_cast<void**>(buffer_ptrs.data_ptr<int64_t>());
   }
-  uint32_t **signal_pads_dev() const {
-    return symm ? reinterpret_cast<uint32_t **>(symm->get_signal_pad_ptrs_dev())
-                : nullptr;
+
+  void prepare_peer_buffers(std::set<int> const& peers, int rank,
+                            int world_size) {
+    if (static_cast<int>(peer_buffers.size()) != world_size) {
+      peer_buffers.resize(world_size);
+    }
+    std::vector<int64_t> pointers(world_size, 0);
+    pointers[rank] = reinterpret_cast<int64_t>(buffer.data_ptr());
+    for (int peer : peers) {
+      TORCH_CHECK(peer >= 0 && peer < world_size, "invalid fused UCX peer ",
+                  peer, " for world size ", world_size);
+      if (!peer_buffers[peer].defined()) {
+        peer_buffers[peer] = torch::empty_strided(
+            buffer.sizes(), buffer.strides(), buffer.options());
+      }
+      pointers[peer] = reinterpret_cast<int64_t>(peer_buffers[peer].data_ptr());
+    }
+    buffer_ptrs = torch::tensor(pointers, torch::dtype(torch::kInt64))
+                      .to(buffer.device());
   }
-  int rank() const { return symm ? symm->get_rank() : 0; }
-  int world_size() const { return symm ? symm->get_world_size() : 1; }
 };
 
-uint64_t stable_alloc_id(std::string const &key) {
-  uint64_t hash = 1469598103934665603ull;
-  for (unsigned char c : key) {
-    hash ^= c;
-    hash *= 1099511628211ull;
-  }
-  return hash == 0 ? 1 : hash;
-}
-
-FusedSymmetricExchangePool &get_fused_symmetric_exchange_pool(
-    std::string const &group_name, c10::ScalarType dtype, torch::Device device,
-    std::vector<int64_t> const &sizes, std::vector<int64_t> const &strides,
-    bool use_symmetric) {
+FusedExchangePool& get_fused_exchange_pool(
+    std::string const& group_name, c10::ScalarType dtype, torch::Device device,
+    std::vector<int64_t> const& sizes, std::vector<int64_t> const& strides) {
   static std::mutex mutex;
-  static std::unordered_map<std::string, FusedSymmetricExchangePool> pools;
+  static std::unordered_map<std::string, FusedExchangePool> pools;
 
   std::string key = group_name + ":device=" + std::to_string(device.index()) +
                     ":dtype=" + std::to_string(static_cast<int>(dtype));
@@ -148,30 +122,42 @@ FusedSymmetricExchangePool &get_fused_symmetric_exchange_pool(
   auto it = pools.find(key);
   if (it != pools.end()) return it->second;
 
-  FusedSymmetricExchangePool pool;
-  if (use_symmetric) {
-    pool.buffer = c10d::symmetric_memory::empty_strided_p2p(
-        sizes, strides, dtype, device, std::nullopt, stable_alloc_id(key));
-    pool.symm = c10d::symmetric_memory::rendezvous(pool.buffer, group_name);
-  } else {
-    // Single process: all panels are co-resident on one GPU, so a plain
-    // contiguous buffer read by every local block (buf_ptrs[0]) is sufficient;
-    // no NVSHMEM group or signal-pad handshake is required.
-    pool.buffer =
-        torch::empty(sizes, torch::TensorOptions().dtype(dtype).device(device));
-    int64_t base = reinterpret_cast<int64_t>(pool.buffer.data_ptr());
-    pool.self_ptr =
-        torch::tensor({base}, torch::dtype(torch::kInt64)).to(device);
-  }
+  FusedExchangePool pool;
+  pool.buffer = torch::empty_strided(
+      sizes, strides, torch::TensorOptions().dtype(dtype).device(device));
   auto [inserted, _] = pools.emplace(key, std::move(pool));
   return inserted->second;
 }
 
+void exchange_fused_buffers_ucx(
+    FusedExchangePool& pool, std::set<int> const& peers,
+    std::shared_ptr<ProcessGroupContext> const& comm) {
+  TORCH_CHECK(comm != nullptr && comm->initialized() && comm->is_ucx(),
+              "dynamics.fused-recon-riemann multi-process cubed-sphere "
+              "exchange requires backend=ucx");
+
+  std::vector<CommWorkPtr> works;
+  works.reserve(2 * peers.size());
+  for (int peer : peers) {
+    std::vector<torch::Tensor> send_tensors{pool.buffer};
+    std::vector<torch::Tensor> recv_tensors{pool.peer_buffers[peer]};
+    if (auto work =
+            comm->send(send_tensors, peer, kFusedCubedSphereExchangeTag)) {
+      works.push_back(std::move(work));
+    }
+    if (auto work =
+            comm->recv(recv_tensors, peer, kFusedCubedSphereExchangeTag)) {
+      works.push_back(std::move(work));
+    }
+  }
+  for (auto const& work : works) work->wait();
+}
+
 //! \brief Reusable process-local barrier over the blocks_per_process worker
-//! threads. The fused cubed-sphere exchange runs pack -> sync -> flux ->
-//! release on one shared symmetric buffer; these barriers guarantee every local
-//! block has enqueued its pack before the single cross-process visibility sync,
-//! and that the sync is enqueued before any block reads peer state. All
+//! threads. The fused cubed-sphere exchange runs pack -> UCX exchange -> flux
+//! on one shared process-local buffer; these barriers guarantee every local
+//! block has enqueued its pack before the leader starts transport and that the
+//! transport completes before any block reads peer state. All
 //! exchange kernels share the device's default stream, so enqueue order fixed
 //! by these barriers is the execution order, which removes the single-block
 //! launch ordering deadlock that made the old path require blocks_per_process
@@ -200,7 +186,7 @@ class FusedExchangeBarrier {
   int generation_ = 0;
 };
 
-FusedExchangeBarrier &get_fused_exchange_barrier(std::string const &key,
+FusedExchangeBarrier& get_fused_exchange_barrier(std::string const& key,
                                                  int participants) {
   static std::mutex mutex;
   static std::unordered_map<std::string, std::unique_ptr<FusedExchangeBarrier>>
@@ -223,8 +209,9 @@ FusedExchangeBarrier &get_fused_exchange_barrier(std::string const &key,
 //! never reads a freed pointer buffer.
 struct FusedSeamBatch {
   //! _flux2/_flux3 are persistent HydroImpl buffers, so raw ptrs are stable.
-  std::vector<int64_t> flux2_ptr, flux3_ptr;  // per local block
-  std::vector<int32_t> faces;                 // per local block
+  std::vector<int64_t> flux2_ptr, flux3_ptr;   // per local block
+  std::vector<int32_t> faces;                  // per local block
+  std::vector<std::vector<int>> remote_peers;  // per local block
   //! side_meta / coords are transient per call; hold the tensors so their
   //! device pointers stay valid until the async flux-all kernel completes.
   std::vector<torch::Tensor> side_meta, x2v, x2f, x3v, x3f;
@@ -232,15 +219,16 @@ struct FusedSeamBatch {
   torch::Tensor x2v_dev, x2f_dev, x3v_dev, x3f_dev;
 };
 
-FusedSeamBatch &get_fused_seam_batch(std::string const &key, int bpp) {
+FusedSeamBatch& get_fused_seam_batch(std::string const& key, int bpp) {
   static std::mutex mutex;
   static std::unordered_map<std::string, FusedSeamBatch> batches;
   std::lock_guard<std::mutex> lock(mutex);
-  auto &b = batches[key];
+  auto& b = batches[key];
   if (static_cast<int>(b.faces.size()) != bpp) {
     b.flux2_ptr.assign(bpp, 0);
     b.flux3_ptr.assign(bpp, 0);
     b.faces.assign(bpp, 0);
+    b.remote_peers.assign(bpp, {});
     b.side_meta.assign(bpp, torch::Tensor());
     b.x2v.assign(bpp, torch::Tensor());
     b.x2f.assign(bpp, torch::Tensor());
@@ -250,36 +238,16 @@ FusedSeamBatch &get_fused_seam_batch(std::string const &key, int bpp) {
   return b;
 }
 
-//! One-time signal-pad zero after rendezvous. sync_remote_blocks self-restores
-//! the pad to zero after each sync+release, so the pad only needs clearing once
-//! (removing the per-substage .item() host<->device sync).
-void clear_fused_signal_slots_once(
-    c10::intrusive_ptr<c10d::symmetric_memory::SymmetricMemory> const &symm,
-    std::shared_ptr<ProcessGroupContext> const &comm,
-    std::string const &group_name) {
-  static std::mutex mutex;
-  static std::set<std::string> cleared;
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (cleared.count(group_name)) return;
-    cleared.insert(group_name);
-  }
-  auto signal_pad = symm->get_signal_pad(
-      symm->get_rank(), {2 * symm->get_world_size()}, torch::kInt32);
-  signal_pad.zero_();
-  (void)signal_pad.sum().item<int>();  // one-time only
-  if (comm) comm->barrier();
-}
-
-torch::Tensor make_side_meta(CubedSphereLayoutImpl const &layout,
+torch::Tensor make_side_meta(CubedSphereLayoutImpl const& layout,
                              bool exchange_dim2, bool exchange_dim3,
-                             torch::Device device) {
+                             torch::Device device,
+                             std::vector<int>* remote_peers) {
   // Per side: [enabled, peer_process, peer_local_block, peer_side, rev].
   // neighbor_rank returns a global BLOCK rank; translate it into the owning
-  // process (to index the symmetric buffer_ptrs array) and the slot within that
-  // process (to index the shared buffer), so the exchange addresses same-GPU
-  // and cross-GPU peers uniformly. Must match the CS_META_* layout in the
-  // kernels.
+  // process (to index the exchange buffer pointer array) and the slot within
+  // that process (to index the shared buffer), so the exchange addresses
+  // same-GPU and cross-GPU peers uniformly. Must match the CS_META_* layout in
+  // the kernels.
   constexpr int kStride = 5;
   std::vector<int> meta(4 * kStride, 0);
   auto iloc = layout.loc_of(layout.options->rank());
@@ -291,15 +259,19 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const &layout,
       std::tuple<int, int, int>{+1, 0, 0},
   };
   for (int side = 0; side < 4; ++side) {
-    bool dim_enabled = side <= SIDE_R ? exchange_dim2 : exchange_dim3;
-    if (!dim_enabled) continue;
     int nb = layout.neighbor_rank(iloc, offsets[side]);
     if (nb < 0) continue;
     auto nb_loc = layout.loc_of(nb);
     if (std::get<2>(nb_loc) == face) continue;
+    int peer_process = layout.options->owner_process_rank(nb);
+    if (peer_process != layout.options->process_rank()) {
+      remote_peers->push_back(peer_process);
+    }
+    bool dim_enabled = side <= SIDE_R ? exchange_dim2 : exchange_dim3;
+    if (!dim_enabled) continue;
     auto edge = CS_FACE_EDGES[face][side];
     meta[side * kStride + 0] = 1;
-    meta[side * kStride + 1] = layout.options->owner_process_rank(nb);
+    meta[side * kStride + 1] = peer_process;
     meta[side * kStride + 2] = layout.options->local_block_index(nb);
     meta[side * kStride + 3] = edge.nside;
     meta[side * kStride + 4] = edge.rev;
@@ -310,7 +282,7 @@ torch::Tensor make_side_meta(CubedSphereLayoutImpl const &layout,
 }  // namespace
 
 torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
-                                        Variables const &other) {
+                                        Variables const& other) {
 #ifdef NOT_USE_CUDA
   TORCH_CHECK(false,
               "dynamics.fused-recon-riemann requires a CUDA-enabled build");
@@ -320,7 +292,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
               "dynamics.fused-recon-riemann requires CUDA tensors");
   TORCH_CHECK(other.count("hydro_w"),
               "dynamics.fused-recon-riemann requires hydro_w primitives");
-  auto const &w = other.at("hydro_w");
+  auto const& w = other.at("hydro_w");
   TORCH_CHECK(w.is_cuda(),
               "dynamics.fused-recon-riemann requires CUDA primitive tensors");
   TORCH_CHECK(w.is_contiguous() && u.is_contiguous(),
@@ -359,22 +331,27 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 playout->options->type());
   } else {
     // Multi-block-per-process is supported: each process may own several panels
-    // co-resident on one GPU. A single shared per-process symmetric buffer is
-    // sliced by local block, and cross-panel peers are addressed by (owning
-    // process, local block). Cross-process exchange still needs the NVSHMEM
-    // process group; a single-process run (all panels on one GPU) does not.
+    // co-resident on one GPU. A shared per-process exchange buffer is sliced by
+    // local block, and cross-panel peers are addressed by (owning process,
+    // local block). Cross-process exchange uses UCX; a single-process run (all
+    // panels on one GPU) does not need a process group.
     TORCH_CHECK(
         playout->options->process_world_size() == 1 ||
             playout->has_process_group(),
         "dynamics.fused-recon-riemann cubed-sphere exchange requires an "
         "initialized process group for multi-process runs");
+    TORCH_CHECK(
+        playout->options->process_world_size() == 1 ||
+            (playout->comm != nullptr && playout->comm->is_ucx()),
+        "dynamics.fused-recon-riemann multi-process cubed-sphere exchange "
+        "requires backend=ucx");
   }
 
-  CubedSphereLayoutImpl const *cs_layout = nullptr;
+  CubedSphereLayoutImpl const* cs_layout = nullptr;
   int face = 0;
   torch::Tensor x2v, x2f, x3v, x3f;
   if (cubed_sphere_layout) {
-    cs_layout = dynamic_cast<CubedSphereLayoutImpl const *>(playout.get());
+    cs_layout = dynamic_cast<CubedSphereLayoutImpl const*>(playout.get());
     TORCH_CHECK(cs_layout != nullptr,
                 "expected CubedSphereLayoutImpl for cubed-sphere layout");
     face = std::get<2>(cs_layout->loc_of(cs_layout->options->rank()));
@@ -405,7 +382,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   torch::Tensor inv_mu_ratio_m1, cv_ratio_m1, u0;
   int nvapor = 0;
   if (eos == FusedEos::IdealMoist) {
-    auto ideal_moist = dynamic_cast<IdealMoistImpl const *>(peos.get());
+    auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(peos.get());
     TORCH_CHECK(ideal_moist != nullptr,
                 "dynamics.fused-recon-riemann expected IdealMoistImpl");
     inv_mu_ratio_m1 = ideal_moist->inv_mu_ratio_m1.to(w.options());
@@ -509,14 +486,13 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
           nc1,
           1};
 
-      if (multi_process) ensure_symmetric_group(*playout, group_name);
-      auto &pool = get_fused_symmetric_exchange_pool(
-          group_name, w.scalar_type(), w.device(), sizes, strides,
-          multi_process);
-      auto side_meta =
-          make_side_meta(*cs_layout, exchange_dim2, exchange_dim3, w.device());
-      auto &barrier = get_fused_exchange_barrier(group_name, bpp);
-      auto &batch = get_fused_seam_batch(group_name, bpp);
+      auto& pool = get_fused_exchange_pool(group_name, w.scalar_type(),
+                                           w.device(), sizes, strides);
+      std::vector<int> remote_peers;
+      auto side_meta = make_side_meta(*cs_layout, exchange_dim2, exchange_dim3,
+                                      w.device(), &remote_peers);
+      auto& barrier = get_fused_exchange_barrier(group_name, bpp);
+      auto& batch = get_fused_seam_batch(group_name, bpp);
 
       // register this panel's flux tensors / face / coords / side_meta for the
       // single process-level seam-flux launch (distinct local-block slots, so
@@ -526,6 +502,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
       batch.flux3_ptr[local_block] =
           reinterpret_cast<int64_t>(_flux3.data_ptr());
       batch.faces[local_block] = face;
+      batch.remote_peers[local_block] = std::move(remote_peers);
       batch.side_meta[local_block] = side_meta;
       batch.x2v[local_block] = x2v;
       batch.x2f[local_block] = x2f;
@@ -545,19 +522,23 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                                      options->eos()->limiter()});
       barrier.wait();  // all panels packed + registered
 
-      // ---- Phase B: one leader per process runs the whole seam exchange on
-      // the GPU: cross-process visibility sync -> ONE flux kernel over ALL
-      // local panels (overwrites each panel's cross-panel boundary flux) ->
-      // close the read epoch. No per-panel flux launches and no per-substage
-      // .item(). ----
+      // ---- Phase B: one leader per process exchanges the packed buffer with
+      // each remote UCX neighbor, then launches ONE flux kernel over ALL local
+      // panels (overwriting each panel's cross-panel boundary flux). ----
       if (is_leader) {
+        std::set<int> peer_processes;
+        for (auto const& block_peers : batch.remote_peers) {
+          peer_processes.insert(block_peers.begin(), block_peers.end());
+        }
+        int process_rank = playout->options->process_rank();
+        int process_world_size = playout->options->process_world_size();
+        pool.prepare_peer_buffers(peer_processes, process_rank,
+                                  process_world_size);
         if (multi_process) {
-          clear_fused_signal_slots_once(pool.symm, playout->comm, group_name);
-          fused_cubed_sphere_sync_cuda(pool.signal_pads_dev(), pool.rank(),
-                                       pool.world_size(), w.device());
+          exchange_fused_buffers_ucx(pool, peer_processes, playout->comm);
         }
         auto i64 = torch::dtype(torch::kInt64);
-        auto ptr_tensor = [&](std::vector<torch::Tensor> const &ts) {
+        auto ptr_tensor = [&](std::vector<torch::Tensor> const& ts) {
           std::vector<int64_t> ptrs(ts.size());
           for (size_t p = 0; p < ts.size(); ++p)
             ptrs[p] = reinterpret_cast<int64_t>(ts[p].data_ptr());
@@ -573,8 +554,8 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
             torch::tensor(batch.faces, torch::dtype(torch::kInt32))
                 .to(w.device());
         batch.side_meta_all = torch::stack(batch.side_meta, 0);
-        auto as_pp = [](torch::Tensor &t) {
-          return reinterpret_cast<void **>(t.data_ptr<int64_t>());
+        auto as_pp = [](torch::Tensor& t) {
+          return reinterpret_cast<void**>(t.data_ptr<int64_t>());
         };
         fused_cubed_sphere_flux_all_cuda(
             pool.buffer,
@@ -589,10 +570,6 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
                 static_cast<int>(nc1), bpp, w.scalar_type(), w.device(),
                 make_physics_params(recon23_prim, recon23_vel,
                                     precon23->pinterp1->options->scale())});
-        if (multi_process) {
-          fused_cubed_sphere_release_cuda(pool.signal_pads_dev(), pool.rank(),
-                                          pool.world_size(), w.device());
-        }
       }
       barrier.wait();  // seam flux enqueued before any panel's divergence
     }
@@ -604,7 +581,7 @@ torch::Tensor HydroImpl::_forward_fused(double dt, torch::Tensor u,
   du.index(interior) = -dt * _div.index(interior);
 
   auto temp = peos->compute("W->T", {w});
-  for (auto &f : forcings) f.forward(du, w, temp, dt);
+  for (auto& f : forcings) f.forward(du, w, temp, dt);
 
   if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
     du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());

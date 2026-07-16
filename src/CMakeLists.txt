@@ -142,16 +142,6 @@ if (CUDAToolkit_FOUND)
       ${C10_CUDA_LIBRARY}
       )
 
-  target_include_directories(${namel}_cuda_${buildl}
-      SYSTEM PUBLIC ${NVSHMEM_INCLUDE_DIR})
-  if(NVSHMEM_TORCH_TARGET)
-    target_link_libraries(${namel}_cuda_${buildl}
-        PUBLIC ${NVSHMEM_TORCH_TARGET})
-  else()
-    target_link_libraries(${namel}_cuda_${buildl}
-        PUBLIC ${NVSHMEM_LIBRARY})
-  endif()
-
   add_library(snapy::snap_cu ALIAS ${namel}_cuda_${buildl})
 endif()
 

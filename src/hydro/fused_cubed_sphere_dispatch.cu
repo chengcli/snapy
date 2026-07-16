@@ -2,7 +2,6 @@
 #include <ATen/Dispatch.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
-#include <torch/csrc/distributed/c10d/symm_mem/CUDASymmetricMemory-inl.h>
 
 // C/C++
 #include <algorithm>
@@ -153,20 +152,6 @@ __global__ void cs_pack_kernel(T const *w, T *buf,
     buf[left_out + v * buf_stride_var] = left[v];
     buf[right_out + v * buf_stride_var] = right[v];
   }
-}
-
-__global__ void cs_sync_kernel(uint32_t **signal_pads, int rank,
-                               int world_size) {
-  c10d::symmetric_memory::sync_remote_blocks<false, true>(signal_pads, rank,
-                                                          world_size);
-}
-
-__global__ void cs_release_reads_kernel(uint32_t **signal_pads, int rank,
-                                        int world_size) {
-  if (blockIdx.x != 1)
-    return;
-  c10d::symmetric_memory::sync_remote_blocks<true, false>(signal_pads, rank,
-                                                          world_size);
 }
 
 template <typename T>
@@ -348,7 +333,8 @@ __global__ void cs_flux_all_kernel(DeviceCubedSphereFluxParams<T> base_params,
 
 } // namespace
 
-void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
+void fused_cubed_sphere_pack_cuda(torch::Tensor w,
+                                  torch::Tensor exchange_buffer,
                                   FusedCubedSpherePackParams const &params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
@@ -380,26 +366,16 @@ void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
         scalar_t(params.pressure_floor),
         params.eos_limiter};
     cs_pack_kernel<scalar_t><<<blocks, threads, shared, stream>>>(
-        w.data_ptr<scalar_t>(), symm_buffer.data_ptr<scalar_t>(),
+        w.data_ptr<scalar_t>(), exchange_buffer.data_ptr<scalar_t>(),
         device_params);
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-void fused_cubed_sphere_sync_cuda(uint32_t **symm_signal_pads_dev,
-                                  int symm_rank, int symm_world_size,
-                                  torch::Device device) {
-  at::cuda::CUDAGuard device_guard(device);
-  auto stream = at::cuda::getCurrentCUDAStream();
-  cs_sync_kernel<<<1, std::max(32, symm_world_size), 0, stream>>>(
-      symm_signal_pads_dev, symm_rank, symm_world_size);
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
 void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
                                   torch::Tensor flux3,
-                                  torch::Tensor symm_buffer,
-                                  void **symm_buffer_ptrs_dev,
+                                  torch::Tensor exchange_buffer,
+                                  void **exchange_buffer_ptrs_dev,
                                   FusedCubedSphereFluxParams const &params) {
   at::cuda::CUDAGuard device_guard(w.device());
   int nc3 = w.size(1);
@@ -417,10 +393,10 @@ void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "fused_cubed_sphere_flux", [&] {
     DeviceCubedSphereFluxParams<scalar_t> device_params{
-        symm_buffer.data_ptr<scalar_t>(),
+        exchange_buffer.data_ptr<scalar_t>(),
         flux2.defined() ? flux2.data_ptr<scalar_t>() : nullptr,
         flux3.defined() ? flux3.data_ptr<scalar_t>() : nullptr,
-        symm_buffer_ptrs_dev,
+        exchange_buffer_ptrs_dev,
         nvar,
         nc3,
         nc2,
@@ -433,7 +409,7 @@ void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
 }
 
 void fused_cubed_sphere_flux_all_cuda(
-    torch::Tensor symm_buffer, FusedCubedSphereFluxAllPtrs ptrs,
+    torch::Tensor exchange_buffer, FusedCubedSphereFluxAllPtrs ptrs,
     FusedCubedSphereFluxAllParams const &params) {
   at::cuda::CUDAGuard device_guard(params.device);
   int edge_len = std::max(params.nc2, params.nc3);
@@ -447,10 +423,10 @@ void fused_cubed_sphere_flux_all_cuda(
 
   AT_DISPATCH_FLOATING_TYPES(params.dtype, "fused_cubed_sphere_flux_all", [&] {
     DeviceCubedSphereFluxParams<scalar_t> device_params{
-        symm_buffer.data_ptr<scalar_t>(),
+        exchange_buffer.data_ptr<scalar_t>(),
         nullptr,
         nullptr,
-        ptrs.symm_buffer,
+        ptrs.exchange_buffer,
         params.nvar,
         params.nc3,
         params.nc2,
@@ -462,16 +438,6 @@ void fused_cubed_sphere_flux_all_cuda(
         params.side_meta_all.data_ptr<int>(), params.faces.data_ptr<int>(),
         ptrs.x2v, ptrs.x2f, ptrs.x3v, ptrs.x3f);
   });
-  C10_CUDA_KERNEL_LAUNCH_CHECK();
-}
-
-void fused_cubed_sphere_release_cuda(uint32_t **symm_signal_pads_dev,
-                                     int symm_rank, int symm_world_size,
-                                     torch::Device device) {
-  at::cuda::CUDAGuard device_guard(device);
-  auto stream = at::cuda::getCurrentCUDAStream();
-  cs_release_reads_kernel<<<2, std::max(32, symm_world_size), 0, stream>>>(
-      symm_signal_pads_dev, symm_rank, symm_world_size);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 

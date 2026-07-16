@@ -49,15 +49,12 @@ struct FusedReconRiemannParams {
 
 void fused_recon_riemann_cuda(torch::Tensor w, torch::Tensor flux,
                               torch::Tensor face_pressure,
-                              FusedReconRiemannParams const &params);
+                              FusedReconRiemannParams const& params);
 
-// Multi-block-per-process cubed-sphere fused exchange, split into host-callable
-// phases so the caller can coordinate the concurrent local-block threads:
-// every local block packs its edge states into slice `local_block` of a shared
-// per-process symmetric buffer, one designated block publishes cross-process
-// visibility (sync), every local block computes and overwrites its cross-panel
-// boundary flux (reading own + peer slices, peer selected by process rank), and
-// one designated block closes the read epoch (release).
+// Multi-block-per-process cubed-sphere fused exchange. Every local block packs
+// edge states into slice `local_block` of a shared per-process buffer. The host
+// exchanges that buffer with remote peers, then one kernel computes and
+// overwrites every local panel's cross-panel boundary flux.
 struct FusedCubedSpherePanelParams {
   torch::Tensor side_meta;
   int face;
@@ -79,12 +76,9 @@ struct FusedCubedSpherePackParams {
   bool eos_limiter;
 };
 
-void fused_cubed_sphere_pack_cuda(torch::Tensor w, torch::Tensor symm_buffer,
-                                  FusedCubedSpherePackParams const &params);
-
-void fused_cubed_sphere_sync_cuda(uint32_t **symm_signal_pads_dev,
-                                  int symm_rank, int symm_world_size,
-                                  torch::Device device);
+void fused_cubed_sphere_pack_cuda(torch::Tensor w,
+                                  torch::Tensor exchange_buffer,
+                                  FusedCubedSpherePackParams const& params);
 
 struct FusedCubedSphereFluxParams {
   FusedCubedSpherePanelParams panel;
@@ -93,9 +87,9 @@ struct FusedCubedSphereFluxParams {
 
 void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
                                   torch::Tensor flux3,
-                                  torch::Tensor symm_buffer,
-                                  void **symm_buffer_ptrs_dev,
-                                  FusedCubedSphereFluxParams const &params);
+                                  torch::Tensor exchange_buffer,
+                                  void** exchange_buffer_ptrs_dev,
+                                  FusedCubedSphereFluxParams const& params);
 
 // Process-level seam flux: one launch overwrites the cross-panel boundary flux
 // for ALL local panels. flux2_ptrs_dev/flux3_ptrs_dev are device arrays of the
@@ -103,13 +97,13 @@ void fused_cubed_sphere_flux_cuda(torch::Tensor w, torch::Tensor flux2,
 // int array of each panel's face id, and side_meta_all is [bpp, 4, kStride].
 // Coords are the shared equiangular angular grid (same for every panel).
 struct FusedCubedSphereFluxAllPtrs {
-  void **flux2;
-  void **flux3;
-  void **symm_buffer;
-  void **x2v;
-  void **x2f;
-  void **x3v;
-  void **x3f;
+  void** flux2;
+  void** flux3;
+  void** exchange_buffer;
+  void** x2v;
+  void** x2f;
+  void** x3v;
+  void** x3f;
 };
 
 struct FusedCubedSphereFluxAllParams {
@@ -126,11 +120,7 @@ struct FusedCubedSphereFluxAllParams {
 };
 
 void fused_cubed_sphere_flux_all_cuda(
-    torch::Tensor symm_buffer, FusedCubedSphereFluxAllPtrs ptrs,
-    FusedCubedSphereFluxAllParams const &params);
-
-void fused_cubed_sphere_release_cuda(uint32_t **symm_signal_pads_dev,
-                                     int symm_rank, int symm_world_size,
-                                     torch::Device device);
+    torch::Tensor exchange_buffer, FusedCubedSphereFluxAllPtrs ptrs,
+    FusedCubedSphereFluxAllParams const& params);
 
 }  // namespace snap

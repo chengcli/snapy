@@ -129,8 +129,6 @@ if (CUDAToolkit_FOUND)
   set(CMAKE_CUDA_ARCHITECTURES ${_cuda_arch_list})
 endif()
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/nvshmem.cmake)
-
 message(STATUS "${Blue}${PROJECT_NAME}-4. Setting up project libraries ...${ColorReset}")
 configure_file(${CMAKE_SOURCE_DIR}/configure.h.in configure.h @ONLY)
 add_subdirectory(src)

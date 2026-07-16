@@ -40,7 +40,7 @@ bool fused_recon_riemann_supported_by_options(HydroOptions const& op,
       (eos_type == "shallow-water" && riemann_type == "shallow-roe");
   // Cubed-sphere is now supported for any blocks_per_process: each process may
   // own several panels co-resident on one GPU, exchanged through a shared
-  // per-process symmetric buffer sliced by local block (see
+  // per-process packed buffer sliced by local block (see
   // hydro_forward_fused).
   return eos_supported && riemann_supported && recon_supported &&
          combo_supported;
