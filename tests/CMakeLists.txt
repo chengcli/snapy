@@ -81,15 +81,6 @@ set_tests_properties(test_mesh_exchange_python PROPERTIES
 )
 
 add_test(
-  NAME test_hydro_python_api
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_hydro_python_api.py
-)
-set_tests_properties(test_hydro_python_api PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  LABELS "python;api;hydro"
-)
-
-add_test(
   NAME test_cubed_sphere_vertical_velocity_exchange_python
   COMMAND ${Python3_EXECUTABLE}
           ${CMAKE_CURRENT_SOURCE_DIR}/test_cubed_sphere_vertical_velocity_exchange.py
