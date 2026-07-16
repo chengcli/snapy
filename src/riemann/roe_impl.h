@@ -16,9 +16,14 @@
 namespace snap {
 
 template <typename T>
+inline DISPATCH_MACRO T roe_max(T a, T b) {
+  return a > b ? a : b;
+}
+
+template <typename T>
 void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
                              T gammal, T gammar, T cl, T cr, int dim, int ny,
-                             FusedEos eos, int nvapor, T gammad,
+                             bool ideal_moist, int nvapor, T gammad,
                              T const* inv_mu_ratio_m1, T const* cv_ratio_m1,
                              T const* u0, int stride_w, int stride_f,
                              T* face_pressure = nullptr) {
@@ -42,7 +47,6 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   T hl = (etl + WL(IPR)) / WL(IDN);
   T hr = (etr + WR(IPR)) / WR(IDN);
   T h = (hl * sqrtdl + hr * sqrtdr) * isdlpdr;
-  if (face_pressure != nullptr) *face_pressure = h;
 
   T dryl = T(1);
   T dryr = T(1);
@@ -79,7 +83,7 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
 
   T gamma_roe = T(0.5) * (gammal + gammar);
   T offset = T(0);
-  if (eos == FusedEos::IdealMoist) {
+  if (ideal_moist) {
     T feps = ideal_moist_feps(qbar + 1, ny, nvapor, inv_mu_ratio_m1);
     T fsig = ideal_moist_fsig(qbar + 1, ny, cv_ratio_m1);
     gamma_roe = T(1) + (gammad - T(1)) * feps / fsig;
@@ -110,8 +114,12 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   T vsq = v1 * v1 + v2 * v2 + v3 * v3;
   T gm1_roe = gamma_roe - T(1);
   T q = h - T(0.5) * vsq - offset;
-  T cs_sq = max(gm1_roe * max(q, TINY_NUMBER), TINY_NUMBER);
+  T cs_sq = roe_max(gm1_roe * roe_max(q, TINY_NUMBER), TINY_NUMBER);
   T cs = sqrt(cs_sq);
+  if (face_pressure != nullptr) {
+    *face_pressure =
+        T(0.5) * (WL(IPR) + WR(IPR) + rhobar * cs * (WL(ivx) - WR(ivx)));
+  }
 
   T lam_m = v1 - cs;
   T lam_0 = v1;
@@ -187,7 +195,7 @@ void DISPATCH_MACRO roe_impl(T* flx, T const* wl, T const* wr, T el, T er,
   }
 
   if (llf_flag) {
-    T a = T(0.5) * max(abs(WL(ivx)) + cl, abs(WR(ivx)) + cr);
+    T a = T(0.5) * roe_max(abs(WL(ivx)) + cl, abs(WR(ivx)) + cr);
     FLX(IDN) = T(0.5) * (fl0 + fr0) - a * (rhor0 - rhol0);
     FLX(ivx) = T(0.5) * (fl1 + fr1) - a * du1;
     FLX(ivy) = T(0.5) * (fl2 + fr2) - a * du2;

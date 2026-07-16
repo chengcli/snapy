@@ -126,7 +126,6 @@ void initialize_hydrostatic_column(MeshBlock const& block, Variables& vars) {
 }  // namespace
 
 TEST(HydrostaticAtmosphere, cubed_sphere_remains_at_rest) {
-  setenv("FUSED", "OFF", 1);
   torch::set_num_threads(1);
   torch::set_num_interop_threads(1);
 

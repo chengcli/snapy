@@ -13,7 +13,7 @@
 
 namespace py = pybind11;
 
-void bind_hydro(py::module &m) {
+void bind_hydro(py::module& m) {
   auto pyHydroOptions =
       py::class_<snap::HydroOptionsImpl, snap::HydroOptions>(m, "HydroOptions");
 
@@ -21,7 +21,7 @@ void bind_hydro(py::module &m) {
       .def_static("from_yaml", &snap::HydroOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
       .def("__repr__",
-           [](const snap::HydroOptions &a) {
+           [](const snap::HydroOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("HydroOptions(\n{})", ss.str());
@@ -30,7 +30,6 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(bool, snap::HydroOptionsImpl, disable_flux_x1)
       .ADD_OPTION(bool, snap::HydroOptionsImpl, disable_flux_x2)
       .ADD_OPTION(bool, snap::HydroOptionsImpl, disable_flux_x3)
-      .ADD_OPTION(bool, snap::HydroOptionsImpl, fused_recon_riemann)
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptionsImpl, grav)
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptionsImpl, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptionsImpl, diffusion)
@@ -41,7 +40,7 @@ void bind_hydro(py::module &m) {
       .ADD_OPTION(snap::ImplicitOptions, snap::HydroOptionsImpl, icorr);
 
   ADD_SNAP_MODULE(Hydro, HydroOptions)
-      .def(py::init<snap::HydroOptions, torch::nn::Module *>(),
+      .def(py::init<snap::HydroOptions, torch::nn::Module*>(),
            py::arg("options"), py::arg("block") = nullptr)
       .def("max_time_step", &snap::HydroImpl::max_time_step);
 }

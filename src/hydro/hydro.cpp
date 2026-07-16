@@ -12,14 +12,6 @@
 #include "hydro.hpp"
 
 namespace snap {
-namespace {
-
-bool fused_runtime_supported(torch::Tensor const& u, Variables const& other) {
-  return u.is_cuda() && !other.count("solid");
-}
-
-}  // namespace
-
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
     : options(options_) {
   pmb = dynamic_cast<MeshBlockImpl const*>(p);
@@ -185,17 +177,6 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
   double dt = dt_min.min().item<double>();
   if (pdiffusion) dt = std::min(dt, pdiffusion->max_time_step(w));
   return dt;
-}
-
-torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
-                                 Variables const& other) {
-  if (options->fused_recon_riemann()) {
-    if (!fused_runtime_supported(u, other)) {
-      return _forward_staged(dt, u, other);
-    }
-    return _forward_fused(dt, u, other);
-  }
-  return _forward_staged(dt, u, other);
 }
 
 torch::Tensor HydroImpl::implicit_mass_correction() const {
