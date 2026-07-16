@@ -27,7 +27,7 @@ using namespace snap;
 
 namespace {
 
-const char *gnomonic_radial_config = R"(
+const char* gnomonic_radial_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -63,7 +63,7 @@ boundary-condition:
     x3-outer: custom
 )";
 
-const char *spherical_polar_config = R"(
+const char* spherical_polar_config = R"(
 reference-state:
   Tref: 300.
   Pref: 1.e5
@@ -105,7 +105,7 @@ boundary-condition:
     x3-outer: periodic
 )";
 
-std::string write_temp_config(char const *config) {
+std::string write_temp_config(char const* config) {
   char fname[] = "/tmp/test-coordinate-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
@@ -553,6 +553,78 @@ TEST_P(DeviceTest, radial_source_uses_face_pressure_in_x1_momentum) {
   EXPECT_TRUE(torch::allclose(div_lo[IVX], div_hi[IVX], 1.e-8, 1.e-8));
 }
 
+TEST_P(DeviceTest, radial_source_preserves_face_pressure_gradient) {
+  auto fname = write_temp_config(gnomonic_radial_config);
+  auto op = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+  std::remove(fname.c_str());
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int si = pcoord->il();
+  int ei = pcoord->iu() + 1;
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+  auto prim = torch::zeros({5, nc3, nc2, nc1}, opts);
+  prim[IDN].fill_(1.0);
+  auto face_pressure = pcoord->x1f.slice(0, 0, nc1)
+                           .to(opts)
+                           .view({1, 1, nc1})
+                           .expand({nc3, nc2, nc1});
+  auto flux1 = torch::zeros_like(prim);
+  flux1[IVX].copy_(face_pressure);
+
+  auto div = pcoord->forward(prim, flux1, torch::Tensor(), torch::Tensor(),
+                             face_pressure);
+  auto radial_div = div[IVX].slice(-1, si, ei);
+  auto expected = (face_pressure.slice(-1, si + 1, ei + 1) -
+                   face_pressure.slice(-1, si, ei)) /
+                  pcoord->dx1f.slice(0, si, ei);
+
+  EXPECT_TRUE(torch::allclose(radial_div, expected, 1.e-6, 1.e-6))
+      << "radial_div=" << radial_div << "\nexpected=" << expected;
+}
+
+TEST_P(DeviceTest,
+       spherical_polar_radial_source_preserves_face_pressure_gradient) {
+  auto fname = write_temp_config(spherical_polar_config);
+  auto op = MeshBlockOptionsImpl::from_yaml(fname);
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+  std::remove(fname.c_str());
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  int si = pcoord->il();
+  int ei = pcoord->iu() + 1;
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+  auto prim = torch::zeros({5, nc3, nc2, nc1}, opts);
+  prim[IDN].fill_(1.0);
+  auto face_pressure = pcoord->x1f.slice(0, 0, nc1)
+                           .to(opts)
+                           .view({1, 1, nc1})
+                           .expand({nc3, nc2, nc1});
+  auto flux1 = torch::zeros_like(prim);
+  flux1[IVX].copy_(face_pressure);
+  auto flux2 = torch::zeros_like(prim);
+  auto flux3 = torch::zeros_like(prim);
+
+  auto div = pcoord->forward(prim, flux1, flux2, flux3, face_pressure);
+  auto radial_div = div[IVX].slice(-1, si, ei);
+  auto expected = (face_pressure.slice(-1, si + 1, ei + 1) -
+                   face_pressure.slice(-1, si, ei)) /
+                  pcoord->dx1f.slice(0, si, ei);
+
+  EXPECT_TRUE(torch::allclose(radial_div, expected, 1.e-6, 1.e-6))
+      << "radial_div=" << radial_div << "\nexpected=" << expected;
+}
+
 TEST_P(DeviceTest,
        spherical_polar_radial_source_uses_face_pressure_in_x1_momentum) {
   auto fname = write_temp_config(spherical_polar_config);
@@ -592,7 +664,7 @@ TEST_P(DeviceTest,
       torch::allclose(div_face_lo[IVX], div_face_hi[IVX], 1.e-6, 1.e-6));
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 
   int result = RUN_ALL_TESTS();
