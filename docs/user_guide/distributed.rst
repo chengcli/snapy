@@ -248,10 +248,6 @@ UCX transports for the cluster:
     export DEVICE=cuda
     export UCX_TLS=rc,cuda_copy,cuda_ipc
 
-The fused cubed-sphere CUDA path also uses this UCX backend. It exchanges one
-packed edge-state buffer with each neighboring process before launching the
-fused seam-flux kernel; no separate symmetric-memory runtime is required.
-
 Load Balancing
 --------------
 

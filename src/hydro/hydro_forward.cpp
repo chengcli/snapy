@@ -11,8 +11,8 @@
 
 namespace snap {
 
-torch::Tensor HydroImpl::_forward_staged(double dt, torch::Tensor u,
-                                         Variables const& other) {
+torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
+                                 Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   bool has_solid = other.count("solid");
   auto start = std::chrono::high_resolution_clock::now();

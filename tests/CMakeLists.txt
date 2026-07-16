@@ -30,45 +30,6 @@ setup_test(test_diffusion_moist)
 setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 
-if(CUDAToolkit_FOUND AND UCX_FOUND)
-  add_executable(test_fused_cs_ucx_smoke.${buildl}
-    test_fused_cs_ucx_smoke.cu)
-
-  set_target_properties(test_fused_cs_ucx_smoke.${buildl}
-    PROPERTIES
-      COMPILE_FLAGS ${CMAKE_CXX_FLAGS_${buildu}}
-      CUDA_SEPARABLE_COMPILATION ON)
-
-  target_include_directories(
-    test_fused_cs_ucx_smoke.${buildl}
-    PRIVATE ${CMAKE_BINARY_DIR}
-            ${KINTERA_INCLUDE_DIR}
-            ${SNAP_INCLUDE_DIR}
-            ${HARP_INCLUDE_DIR}
-            ${NETCDF_INCLUDES}
-            ${TORCH_INCLUDE_DIR}
-            ${TORCH_API_INCLUDE_DIR})
-
-  target_link_libraries(test_fused_cs_ucx_smoke.${buildl}
-    PRIVATE snapy::snap
-            snapy::snap_cu
-            gtest_main)
-
-  if (UNIX AND NOT APPLE)
-    target_link_options(test_fused_cs_ucx_smoke.${buildl}
-      PRIVATE -Wl,--no-as-needed)
-  endif()
-
-  add_test(
-    NAME test_fused_cs_ucx_smoke.${buildl}
-    COMMAND torchrun
-            --no-python
-            --nproc-per-node=6
-            $<TARGET_FILE:test_fused_cs_ucx_smoke.${buildl}>)
-  set_tests_properties(test_fused_cs_ucx_smoke.${buildl} PROPERTIES
-    LABELS "cuda;ucx;cubed-sphere;fused")
-endif()
-
 if(UCX_FOUND)
   add_test(
     NAME test_exchange_ucx
