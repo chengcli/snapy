@@ -976,8 +976,27 @@ int MeshBlockImpl::check_redo(Variables &vars) {
   auto hydro_u = vars.at("hydro_u");
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
   auto redo_rho = hydro_u.index(interior)[IDN].min().item<double>() <= 0.;
-  auto redo_pres = hydro_u.size(0) > IPR &&
-                   hydro_u.index(interior)[IPR].min().item<double>() <= 0.;
+  // Positivity must be tested on the PHYSICAL pressure, not the conserved
+  // energy hydro_u[IPR] (in the conserved vector IPR is total energy). For an
+  // EOS whose internal energy is referenced to a nonzero temperature (h2diss
+  // NASA-9, ref 300 K) that energy is legitimately negative wherever T < T_ref,
+  // so the old check fired a fatal (dt-halving-proof) redo on a valid cold
+  // layer. Screen cheaply on the conserved energy (for a 0
+  // K-referenced EOS E <= 0  =>  P <= 0 -- one direction only, but it is the
+  // direction we need: the screen never misses a genuine negative pressure) and
+  // confirm with a cons2prim pressure check only when it trips.
+  // Behavior-identical to the old check on any run that never trips the screen
+  // (all current ideal-gas/moist production). NOTE: under eos.limiter=true
+  // cons2prim floors P to pressure_floor(>0), so this pressure-redo is a no-op
+  // there and pathological states are absorbed by the limiter floor instead; a
+  // valid cold state has physical P>0 far above the floor, so the C5 fix still
+  // holds.
+  bool redo_pres = false;
+  if (hydro_u.size(0) > IPR &&
+      hydro_u.index(interior)[IPR].min().item<double>() <= 0.) {
+    auto w = phydro->peos->forward(hydro_u);
+    redo_pres = w.index(interior)[IPR].min().item<double>() <= 0.;
+  }
 
   if (redo_rho || redo_pres) {
     SINFO(MeshBlock)
