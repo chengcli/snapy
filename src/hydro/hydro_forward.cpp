@@ -39,16 +39,28 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
-    if (options->grav() && (options->grav()->grav1() != 0)) {
-      _revise_x1inner_ghost(w);
-      _revise_x1outer_ghost(w);
+    // Hydrostatic wall revision is a PHYSICAL-boundary operation: it rebuilds
+    // the x1 boundary in isentropic balance. On a domain decomposed in x1
+    // (cubed nb1>1), a block's local il/iu at an internal seam is NOT a
+    // physical boundary — the neighbor's data has already been exchanged
+    // there — so applying the wall extrapolation would clobber the true
+    // neighbor state. Gate each face on whether it is actually physical.
+    // (Slab / single-rank: every block owns the whole x1 column, so both
+    // faces are physical and behavior is unchanged — bit-identical.)
+    bool grav1 = options->grav() && (options->grav()->grav1() != 0);
+    bool phys_x1inner = pmb->options->is_physical_boundary(0, 0, -1);
+    bool phys_x1outer = pmb->options->is_physical_boundary(0, 0, 1);
+
+    if (grav1) {
+      if (phys_x1inner) _revise_x1inner_ghost(w);
+      if (phys_x1outer) _revise_x1outer_ghost(w);
     }
 
     auto wtmp = precon1->forward(w, DIM1);
 
-    if (options->grav() && (options->grav()->grav1() != 0)) {
-      _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
-      _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+    if (grav1) {
+      if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+      if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
     }
 
     auto wlr1 =
