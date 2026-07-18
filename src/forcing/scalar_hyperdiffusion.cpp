@@ -208,6 +208,8 @@ void ScalarHyperdiffusionImpl::reset() {
                 "' cannot be diffused.");
     hydro_ids.push_back(ICY + id - 1);
   }
+  field_ids = register_buffer(
+      "field_ids", torch::tensor(hydro_ids, torch::dtype(torch::kInt64)));
 
   // Build the reference bound from the complete panel, not the local block,
   // so decomposition does not change K4 at block boundaries.
@@ -257,10 +259,7 @@ torch::Tensor ScalarHyperdiffusionImpl::forward(torch::Tensor du,
   auto coord = pmb->pcoord;
   auto density = w[IDN];
 
-  std::vector<torch::Tensor> selected;
-  selected.reserve(hydro_ids.size());
-  for (auto id : hydro_ids) selected.push_back(w[id]);
-  auto scalar = torch::stack(selected);
+  auto scalar = w.index_select(0, field_ids);
   auto intermediate = laplacian->forward(scalar, density);
 
   Variables exchange_vars;
@@ -274,9 +273,7 @@ torch::Tensor ScalarHyperdiffusionImpl::forward(torch::Tensor du,
   flux.x2.mul_(coeff);
   flux.x3.mul_(coeff);
   auto tendency = -coord->divergence(torch::Tensor(), flux.x2, flux.x3);
-  for (int n = 0; n < hydro_ids.size(); ++n) {
-    du[hydro_ids[n]].add_(dt * tendency[n]);
-  }
+  du.index_add_(0, field_ids, dt * tendency);
 
   if (vel1_field >= 0) {
     auto il = coord->il();

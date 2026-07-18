@@ -246,6 +246,7 @@ class ScalarHyperdiffusionImpl
  private:
   std::vector<int64_t> hydro_ids;
   int vel1_field = -1;
+  torch::Tensor field_ids;
   torch::Tensor k4;
   torch::Tensor lambda_grid;
 };
