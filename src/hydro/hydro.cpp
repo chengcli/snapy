@@ -176,6 +176,8 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
 
   double dt = dt_min.min().item<double>();
   if (pdiffusion) dt = std::min(dt, pdiffusion->max_time_step(w));
+  if (pscalar_hyperdiffusion)
+    dt = std::min(dt, pscalar_hyperdiffusion->max_time_step(w));
   return dt;
 }
 

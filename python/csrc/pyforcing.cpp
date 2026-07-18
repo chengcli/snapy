@@ -10,14 +10,14 @@
 
 namespace py = pybind11;
 
-void bind_forcing(py::module &m) {
+void bind_forcing(py::module& m) {
   auto pyConstGravityOptions =
       py::class_<snap::ConstGravityOptionsImpl, snap::ConstGravityOptions>(
           m, "ConstGravityOptions");
 
   pyConstGravityOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::ConstGravityOptions &a) {
+           [](const snap::ConstGravityOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("ConstGravityOptions(\n{})", ss.str());
@@ -32,7 +32,7 @@ void bind_forcing(py::module &m) {
 
   pyCoriolisOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::CoriolisOptions &a) {
+           [](const snap::CoriolisOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("CoriolisOptions(\n{})", ss.str());
@@ -47,11 +47,27 @@ void bind_forcing(py::module &m) {
 
   pyDiffusionOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::DiffusionOptions &a) {
+           [](const snap::DiffusionOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("DiffusionOptions(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::DiffusionOptionsImpl, nu_iso)
       .ADD_OPTION(double, snap::DiffusionOptionsImpl, kappa_iso);
+
+  auto pyScalarHyperdiffusionOptions =
+      py::class_<snap::ScalarHyperdiffusionOptionsImpl,
+                 snap::ScalarHyperdiffusionOptions>(
+          m, "ScalarHyperdiffusionOptions");
+
+  pyScalarHyperdiffusionOptions.def(py::init<>())
+      .def("__repr__",
+           [](const snap::ScalarHyperdiffusionOptions& a) {
+             std::stringstream ss;
+             a->report(ss);
+             return fmt::format("ScalarHyperdiffusionOptions(\n{})", ss.str());
+           })
+      .ADD_OPTION(double, snap::ScalarHyperdiffusionOptionsImpl, damping_time)
+      .ADD_OPTION(std::vector<std::string>,
+                  snap::ScalarHyperdiffusionOptionsImpl, fields);
 }

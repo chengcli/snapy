@@ -190,6 +190,67 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
 };
 TORCH_MODULE(Diffusion);
 
+//////// (3b) Cubed-sphere scalar hyperdiffusion ////////
+
+struct ScalarHyperdiffusionOptionsImpl {
+  static std::shared_ptr<ScalarHyperdiffusionOptionsImpl> create() {
+    return std::make_shared<ScalarHyperdiffusionOptionsImpl>();
+  }
+  static std::shared_ptr<ScalarHyperdiffusionOptionsImpl> from_yaml(
+      YAML::Node const& forcing);
+
+  std::shared_ptr<ScalarHyperdiffusionOptionsImpl> clone() const {
+    return std::make_shared<ScalarHyperdiffusionOptionsImpl>(*this);
+  }
+  void report(std::ostream& os) const {
+    os << "-- scalar hyperdiffusion options --\n";
+    os << "* damping_time = " << damping_time() << "\n"
+       << "* fields = " << fmt::format("{}", fields()) << "\n";
+  }
+
+  ADD_ARG(double, damping_time) = 0.;
+  ADD_ARG(std::vector<std::string>, fields) = {};
+};
+using ScalarHyperdiffusionOptions =
+    std::shared_ptr<ScalarHyperdiffusionOptionsImpl>;
+
+class ScalarLaplacianImpl : public torch::nn::Module {
+ public:
+  explicit ScalarLaplacianImpl(HydroImpl const* phydro_ = nullptr)
+      : phydro(phydro_) {}
+
+  torch::Tensor forward(torch::Tensor scalar, torch::Tensor density) const;
+
+ private:
+  HydroImpl const* phydro = nullptr;
+};
+TORCH_MODULE(ScalarLaplacian);
+
+class ScalarHyperdiffusionImpl
+    : public torch::nn::Cloneable<ScalarHyperdiffusionImpl> {
+ public:
+  ScalarHyperdiffusionOptions options;
+  HydroImpl const* phydro = nullptr;
+  ScalarLaplacian laplacian = nullptr;
+
+  ScalarHyperdiffusionImpl()
+      : options(ScalarHyperdiffusionOptionsImpl::create()) {}
+  explicit ScalarHyperdiffusionImpl(ScalarHyperdiffusionOptions const& options_,
+                                    torch::nn::Module* p = nullptr);
+
+  void reset() override;
+  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
+                        double dt);
+  double max_time_step(torch::Tensor w) const;
+
+ private:
+  std::vector<int64_t> hydro_ids;
+  int vel1_field = -1;
+  torch::Tensor k4;
+  torch::Tensor lambda_grid;
+};
+TORCH_MODULE(ScalarHyperdiffusion);
+
 //////// (4) Frictional Heating ////////
 
 struct FricHeatOptionsImpl {
