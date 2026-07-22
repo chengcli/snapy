@@ -41,7 +41,9 @@ torch::Tensor FricHeatImpl::forward(torch::Tensor du, torch::Tensor w,
   int nvapor = w.size(0) - 5 - ncloud;  // 5 = IDN, IPR, IVX, IVY, IVZ
 
   auto yfrac = w.narrow(0, ICY + nvapor, ncloud);
-  auto grav = -phydro->options->grav()->grav1();
+  // signed grav1: falling precip (vsed<0, grav1<0) HEATS, matching athena
+  // chemistry.cpp AddFrictionalHeating (u += dt*rho*q*vsed*grav, both signed).
+  auto grav = phydro->options->grav()->grav1();
   du[IPR] += dt * w[IDN] * (yfrac * vsed).sum(0) * grav;
 
   return du;
