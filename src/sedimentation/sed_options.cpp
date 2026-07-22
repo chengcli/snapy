@@ -103,6 +103,15 @@ SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
     op->const_vsed()[it - species.begin()] = r.second.as<double>();
   }
 
+  // every particle needs a positive radius (Stokes) or a non-zero const-vsed
+  // (prescribed velocity); r = 0 in the Stokes branch is a NaN (kn = inf)
+  auto names = op->species();
+  for (size_t i = 0; i < op->particle_ids().size(); ++i) {
+    TORCH_CHECK(op->radius()[i] > 0. || op->const_vsed()[i] != 0.,
+                "Sedimentation particle '", names[i],
+                "' needs radius > 0 or a non-zero const-vsed.");
+  }
+
   op->a_diameter() = node["a-diameter"].as<double>(2.827e-10);
   op->a_epsilon_LJ() = node["a-epsilon-LJ"].as<double>(8.24e-22);
   op->a_mass() = node["a-mass"].as<double>(3.34e-27);
