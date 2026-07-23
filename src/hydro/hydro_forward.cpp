@@ -1,5 +1,7 @@
 // C/C++
 #include <chrono>
+#include <cstdlib>
+#include <string>
 
 // snap
 #include <snap/snap.h>
@@ -51,16 +53,64 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool phys_x1inner = pmb->options->is_physical_boundary(0, 0, -1);
     bool phys_x1outer = pmb->options->is_physical_boundary(0, 0, 1);
 
+    static const bool wb_x1 = [] {
+      const char* e = std::getenv("SNAPY_WB_X1");
+      return e && std::string(e) != "0";
+    }();
+
     if (grav1) {
       if (phys_x1inner) _revise_x1inner_ghost(w);
       if (phys_x1outer) _revise_x1outer_ghost(w);
     }
 
-    auto wtmp = precon1->forward(w, DIM1);
-
-    if (grav1) {
-      if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
-      if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+    torch::Tensor wtmp;
+    if (grav1 && wb_x1) {
+      // Well-balanced: reconstruct the hydrostatic PRESSURE + DENSITY
+      // PERTURBATION so weno5 never sees the steep vertical stratification (the
+      // grid-scale couplet that rings at the moist cloud base). References are
+      // integrated from the current field each step (top-anchored pressure,
+      // isentropic density) and restored at the faces -- athena
+      // ChangeToPerturbation / RestoreFromPerturbation.
+      // The references are integrated per BLOCK: an internal x1 seam
+      // would get inconsistent references from its two neighbors (the
+      // S2 failure class). Require the block to own the full column.
+      TORCH_CHECK(phys_x1inner && phys_x1outer,
+                  "[Hydro] SNAPY_WB_X1 requires nb1 = 1 (each block "
+                  "owns the full x1 column); an internal x1 seam would "
+                  "get inconsistent hydrostatic references.");
+      // The non-shock reconstruction path applies the EOS floors, which
+      // would clamp legitimately NEGATIVE perturbations to the floor.
+      TORCH_CHECK(options->recon1()->shock() || !options->eos()->limiter(),
+                  "[Hydro] SNAPY_WB_X1 requires recon1.shock=true or the EOS "
+                  "limiter off: reconstruction-stage density/pressure floors "
+                  "corrupt perturbation variables.");
+      auto ref = _hydro_ref_x1(w);
+      auto const& psf_lo = ref[0];
+      auto const& pref = ref[1];
+      auto const& dsf = ref[2];
+      auto const& dref = ref[3];
+      auto w_work = w.clone();
+      w_work[IPR] -= pref;
+      w_work[IDN] -= dref;
+      wtmp = precon1->forward(w_work, DIM1);
+      // Restore full face pressure/density; floor any nonlinear-WENO overshoot
+      // that would go non-positive (the references are tiny near the top) back
+      // to the reference. At rest the perturbation is ~0 so the floor never
+      // fires and well-balancing is preserved.
+      {
+        auto pl = wtmp[ILT][IPR] + psf_lo, pr = wtmp[IRT][IPR] + psf_lo;
+        wtmp[ILT][IPR].copy_(torch::where(pl > 0., pl, psf_lo));
+        wtmp[IRT][IPR].copy_(torch::where(pr > 0., pr, psf_lo));
+        auto dl = wtmp[ILT][IDN] + dsf, dr = wtmp[IRT][IDN] + dsf;
+        wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, dsf));
+        wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, dsf));
+      }
+    } else {
+      wtmp = precon1->forward(w, DIM1);
+      if (grav1) {
+        if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+        if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+      }
     }
 
     auto wlr1 =

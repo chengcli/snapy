@@ -2,6 +2,7 @@
 
 // C/C++
 #include <algorithm>
+#include <limits>
 
 // snap
 #include <snap/snap.h>
@@ -266,6 +267,58 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
     w[IDN].narrow(-1, ie + n + 1, 1) =
         (w[IPR].narrow(-1, ie + n + 1, 1) / K).pow(1. / gamma);
   }
+}
+
+std::vector<torch::Tensor> HydroImpl::_hydro_ref_x1(
+    torch::Tensor const& w) const {
+  auto pcoord = pmb->pcoord;
+  int is = pcoord->il();
+  int iu = pcoord->iu();
+  double g = -options->grav()->grav1();  // downward magnitude (>0)
+
+  auto rho = w[IDN];                 // [nc3,nc2,nc1]
+  auto dx1f = pcoord->dx1f;          // [nc1]
+  auto dp = g * rho * dx1f;          // hydrostatic drop across each cell
+  auto cum = torch::cumsum(dp, -1);  // cum(i) = sum_{0..i} dp
+
+  // Anchor at the TOP interior face (above cell iu) by isothermal half-cell
+  // extrapolation, then integrate DOWNWARD -- athena ChangeToPerturbation. A
+  // top anchor keeps the perturbation small RELATIVE to P in the low-pressure
+  // upper atmosphere (where the CH4 kink lives) instead of piling the
+  // integration drift there, which a bottom anchor did and it went unstable.
+  auto RdT_top = w[IPR].select(-1, iu) / rho.select(-1, iu);  // [nc3,nc2]
+  auto anchor =
+      (w[IPR].select(-1, iu) * torch::exp(-g * 0.5 * dx1f[iu] / RdT_top))
+          .unsqueeze(-1);                          // [nc3,nc2,1]
+  auto cum_iu = cum.select(-1, iu).unsqueeze(-1);  // [nc3,nc2,1]
+  auto psf_lo = anchor + cum_iu - cum + dp;  // pressure at lower face of cell i
+  auto psf_hi = psf_lo - dp;                 // pressure at upper face of cell i
+
+  // Guard the ghost-region extrapolation: in an extreme domain the
+  // hydrostatic continuation through the outer ghost cells could reach
+  // <= 0 and poison the near-boundary stencils with NaN via the log/pow
+  // below. Clamping is the identity for any healthy (positive) column.
+  psf_lo.clamp_min_(std::numeric_limits<double>::min());
+  psf_hi.clamp_min_(std::numeric_limits<double>::min());
+
+  // cell pressure reference = log-mean of the two face pressures (exact for an
+  // isothermal layer); guard the near-equal branch.
+  auto ratio = psf_lo / psf_hi;
+  auto pref = torch::where((ratio - 1.).abs() < 1e-6, 0.5 * (psf_lo + psf_hi),
+                           dp / torch::log(ratio));
+
+  // Isentropic density reference from the bottom cell:
+  // rho_ref(P)=(P/K)^(1/gamma), K = P_bot / rho_bot^gamma. Decomposing density
+  // too keeps the reconstructed face (rho, P) pair thermodynamically consistent
+  // -- reconstructing full density against a perturbation pressure was the
+  // destabilizing mismatch.
+  auto gam = peos->compute("W->A", {w.narrow(-1, is, 1)});  // [nc3,nc2,1]
+  auto Kbot = w[IPR].select(-1, is).unsqueeze(-1) /
+              rho.select(-1, is).unsqueeze(-1).pow(gam);  // [nc3,nc2,1]
+  auto dref = (pref / Kbot).pow(1.0 / gam);
+  auto dsf = (psf_lo / Kbot).pow(1.0 / gam);
+
+  return {psf_lo, pref, dsf, dref};
 }
 
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,
