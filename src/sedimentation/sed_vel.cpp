@@ -59,8 +59,9 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
 
   // Calculate vsed
   auto grav = psed->phydro->options->grav()->grav1();
-  auto stokes = beta / (9.0 * eta) *
-                (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
+  auto stokes =
+      beta / (9.0 * eta) *
+      (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
 
   // a non-zero const_vsed is the whole velocity (prescribed, athena convention)
   auto cvsed = const_vsed.view(vec);
