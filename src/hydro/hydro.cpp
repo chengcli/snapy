@@ -188,6 +188,13 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
                                            Variables const& other) {
   if (!picorr) return;
 
+  // Implicit x1 solve has no cross-rank coupling, so nb1 > 1 would silently
+  // solve each rank's own sub-column. Full column <=> both x1 faces physical.
+  TORCH_CHECK(pmb->options->is_physical_boundary(0, 0, -1) &&
+                  pmb->options->is_physical_boundary(0, 0, 1),
+              "[Hydro] implicit scheme requires nb1 = 1 (no x1 decomposition): "
+              "the vertical solve has no cross-rank coupling.");
+
   torch::Tensor wi;
   if (other.count("solid")) {
     wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),

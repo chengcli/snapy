@@ -58,12 +58,14 @@ torch::Tensor SedVelImpl::forward(torch::Tensor dens, torch::Tensor pres,
   auto beta = 1.0 + Kn * (1.256 + 0.4 * torch::exp(-1.1 / Kn));
 
   // Calculate vsed
-  auto grav = -psed->phydro->options->grav()->grav1();
-  auto vel = beta / (9.0 * eta) *
-             (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
+  auto grav = psed->phydro->options->grav()->grav1();
+  auto stokes =
+      beta / (9.0 * eta) *
+      (2.0 * sqr(radius.view(vec)) * grav * (density.view(vec) - dens));
 
-  // add a constant sedimentation velocity
-  vel += const_vsed.view(vec);
+  // a non-zero const_vsed is the whole velocity (prescribed, athena convention)
+  auto cvsed = const_vsed.view(vec);
+  auto vel = torch::where(cvsed != 0.0, cvsed, stokes);
 
   return vel.clamp(-options->upper_limit(), options->upper_limit());
 }

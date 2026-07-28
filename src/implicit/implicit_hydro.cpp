@@ -26,8 +26,15 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
 }
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
+  int s = node.as<int>();
+  // scheme 0 == "none": an implicit object that does nothing. Treat it as if
+  // the `implicit-scheme` key were absent (return nullptr) so `implicit-scheme:
+  // 0` is a true explicit spelling that also runs at nb1>1, instead of tripping
+  // the nb1 guard on a phantom no-op object. picorr != null now faithfully
+  // means "implicit is active".
+  if (s == 0) return nullptr;
   auto op = ImplicitOptionsImpl::create();
-  op->scheme(node.as<int>());
+  op->scheme(s);
   return op;
 }
 
