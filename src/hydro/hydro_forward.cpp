@@ -63,17 +63,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // resting stratification generates zero flux residual regardless of the
     // reconstruction. Engaged whenever gravity is on and the scheme is
     // defined: the state carries a pressure row, and the block owns the full
-    // x1 column (references are integrated per block; an internal x1 seam
-    // would get inconsistent references from its two neighbors).
-    bool wb_x1 = grav1 && w.size(0) > IPR &&
-                 options->eos()->type() != "shallow-water" && phys_x1inner &&
-                 phys_x1outer;
-    if (grav1 && !wb_x1 && !(phys_x1inner && phys_x1outer)) {
-      TORCH_WARN_ONCE(
-          "[Hydro] well-balanced x1 reconstruction disabled: the block does "
-          "not own the full x1 column (nb1 > 1); hydrostatic references "
-          "cannot span an internal x1 seam.");
-    }
+    // x1 column, OR it spans a vertical (nb1>1) decomposition -- in which case
+    // _hydro_ref_x1 makes the reference continuous across the x1 process seams
+    // with a distributed scan, so WB now engages under x1 decomposition too.
+    bool wb_x1 =
+        grav1 && w.size(0) > IPR && options->eos()->type() != "shallow-water";
 
     torch::Tensor wtmp;
     if (wb_x1) {
@@ -94,13 +88,18 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         int ng = pmb->pcoord->options->nghost();
         int is = pmb->pcoord->il();
         int iu = pmb->pcoord->iu();
+        // Only at PHYSICAL x1 walls. At an internal seam (nb1>1) the ghost
+        // perturbation must come from the neighbor (already halo-exchanged),
+        // not a mirror of this block's own interior.
         for (int c : {(int)IPR, (int)IDN}) {
-          w_work[c]
-              .narrow(-1, is - ng, ng)
-              .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
-          w_work[c]
-              .narrow(-1, iu + 1, ng)
-              .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+          if (phys_x1inner)
+            w_work[c]
+                .narrow(-1, is - ng, ng)
+                .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
+          if (phys_x1outer)
+            w_work[c]
+                .narrow(-1, iu + 1, ng)
+                .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
         }
       }
       // floor=false: the reconstruction-stage EOS floors would clamp

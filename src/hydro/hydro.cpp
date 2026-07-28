@@ -300,8 +300,38 @@ std::vector<torch::Tensor> HydroImpl::_hydro_ref_x1(
       (w[IPR].select(-1, iu) * torch::exp(-g * 0.5 * dx1f[iu] / RdT_top))
           .unsqueeze(-1);                          // [nc3,nc2,1]
   auto cum_iu = cum.select(-1, iu).unsqueeze(-1);  // [nc3,nc2,1]
-  auto psf_lo = anchor + cum_iu - cum + dp;  // pressure at lower face of cell i
-  auto psf_hi = psf_lo - dp;                 // pressure at upper face of cell i
+
+  // Global x1 reference across a vertical (nb1>1) decomposition: make the
+  // hydrostatic reference continuous over the x1 process seams. The block
+  // owning x1-outer anchors at the true domain top; every block below receives
+  // the running seam-face pressure from the block above and passes on that
+  // value plus its own interior hydrostatic drop (= its bottom-face pressure).
+  // A serial top->bottom scan along the x1 process column. nb1 == 1 (no x1
+  // neighbor) => A == anchor, bit-identical to the single-block reference.
+  auto A = anchor;
+  auto layout = pmb->get_layout();
+  if (layout && layout->has_process_group() && !layout->options->periodic_z() &&
+      layout->options->pz() >
+          1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
+                // send/recv at nb1=1)
+    auto iloc = layout->loc_of(layout->options->rank());
+    int above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
+    int below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner
+    constexpr int kWbRefTag = 0x7715;
+    if (above >= 0) {
+      std::vector<torch::Tensor> rbuf = {torch::empty_like(anchor)};
+      layout->comm->recv(rbuf, above, kWbRefTag)->wait();
+      A = rbuf[0];
+    }
+    if (below >= 0) {
+      std::vector<torch::Tensor> sbuf = {
+          A + dp.narrow(-1, is, iu - is + 1).sum(-1, /*keepdim=*/true)};
+      layout->comm->send(sbuf, below, kWbRefTag)->wait();
+    }
+  }
+
+  auto psf_lo = A + cum_iu - cum + dp;  // pressure at lower face of cell i
+  auto psf_hi = psf_lo - dp;            // pressure at upper face of cell i
 
   // In an extreme domain the hydrostatic continuation through the outer
   // ghost cells could reach <= 0 and poison the near-boundary stencils with
@@ -340,6 +370,46 @@ std::vector<torch::Tensor> HydroImpl::_hydro_ref_x1(
     auto hi = torch::maximum(psf_lo, psf_hi).narrow(-1, 2, nc1 - 4);
     auto mid = pref.narrow(-1, 2, nc1 - 4);
     mid.copy_(torch::where((six >= lo) & (six <= hi), six, mid));
+
+    // At an internal x1 seam the outermost two ghost cells lie inside the
+    // neighbor's interior, where the neighbor evaluates the centered
+    // quadrature row. Evaluate them here with the edge-clamped stencils of
+    // the same degree-5 interpolant instead of the 2-point mean, so the two
+    // blocks' cell references agree at O(dx^6) rather than O(dx^2) across
+    // the seam (the remaining difference is integration-order roundoff,
+    // which the seam-flux average absorbs). At a physical wall the ghost
+    // perturbations are overwritten by the parity fill, so gate to seams to
+    // keep walls bitwise-unchanged.
+    constexpr double w6e[2][6] = {
+        {95. / 288., 1427. / 1440., -133. / 240., 241. / 720., -173. / 1440.,
+         3. / 160.},
+        {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
+         -11. / 1440.},
+    };
+    bool phys_in = pmb->options->is_physical_boundary(0, 0, -1);
+    bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
+    if (!phys_in) {
+      for (int j : {0, 1}) {  // stencil faces 0..5, row sigma = j
+        auto val = w6e[j][0] * faces.select(-1, 0);
+        for (int m = 1; m < 6; ++m) val = val + w6e[j][m] * faces.select(-1, m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(torch::where((val >= flo) & (val <= fhi), val, cur));
+      }
+    }
+    if (!phys_out) {
+      for (int j : {nc1 - 2, nc1 - 1}) {  // faces nc1-5..nc1; rows 3,4 are the
+        int sigma = j - (nc1 - 5);        // mirror images of rows 1,0
+        auto val = w6e[4 - sigma][5] * faces.select(-1, nc1 - 5);
+        for (int m = 1; m < 6; ++m)
+          val = val + w6e[4 - sigma][5 - m] * faces.select(-1, nc1 - 5 + m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(torch::where((val >= flo) & (val <= fhi), val, cur));
+      }
+    }
   } else {
     auto ratio = psf_lo / psf_hi;
     pref = torch::where((ratio - 1.).abs() < 1e-6, 0.5 * (psf_lo + psf_hi),
