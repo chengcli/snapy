@@ -79,6 +79,11 @@ void RelaxBotCompImpl::reset() {
 
 torch::Tensor RelaxBotCompImpl::forward(torch::Tensor du, torch::Tensor w,
                                         torch::Tensor temp, double dt) {
+  // Applies at the physical lower x1 boundary only: under an x1-decomposed
+  // layout (nb1 > 1) a rank whose lower face is an internal block interface
+  // must not force there.
+  if (!phydro->pmb->options->is_physical_boundary(0, 0, -1)) return du;
+
   auto bottom =
       phydro->pmb->part({0, 0, -1}, PartOptions().exterior(false).depth(1));
   auto bottom3 = phydro->pmb->part(

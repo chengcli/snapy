@@ -39,6 +39,11 @@ void BotHeatImpl::reset() {
 
 torch::Tensor BotHeatImpl::forward(torch::Tensor du, torch::Tensor w,
                                    torch::Tensor temp, double dt) {
+  // Applies at the physical lower x1 boundary only: under an x1-decomposed
+  // layout (nb1 > 1) a rank whose lower face is an internal block interface
+  // must not force there.
+  if (!phydro->pmb->options->is_physical_boundary(0, 0, -1)) return du;
+
   auto pcoord = phydro->pmb->pcoord;
 
   int il = pcoord->il();
