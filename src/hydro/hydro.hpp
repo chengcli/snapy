@@ -5,6 +5,8 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 
+#include <vector>
+
 // snap
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/forcing/forcing.hpp>
@@ -136,12 +138,22 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   void _revise_x1inner_lr(torch::Tensor const& wl, torch::Tensor const& wr);
   void _revise_x1outer_lr(torch::Tensor const& wl, torch::Tensor const& wt);
+
+  // Per-column hydrostatic references for the well-balanced x1
+  // reconstruction: {psf_lo (face pressure), pref (cell pressure), dsf (face
+  // density), dref (cell density)}, rebuilt from the current field on every
+  // call.
+  std::vector<torch::Tensor> _hydro_ref_x1(torch::Tensor const& w) const;
   void _apply_implicit_correction(torch::Tensor& du, torch::Tensor const& w,
                                   double dt, Variables const& other);
 
  private:
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();
+
+  //! x1 grid uniformity (-1 unknown, 0 non-uniform, 1 uniform), probed once;
+  //! selects the six-face vs log-mean cell-pressure reference
+  mutable int x1_uniform_ = -1;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _imp;
 };

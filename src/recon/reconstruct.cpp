@@ -72,7 +72,7 @@ void ReconstructImpl::reset() {
   pinterp2 = InterpImpl::create(options->interp(), this, "interp2");
 }
 
-torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
+torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim, bool floor) {
   auto vec = w.sizes().vec();
   vec.insert(vec.begin(), 2);
 
@@ -128,7 +128,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   // density
   _apply_inplace(dim, il, iu, w.narrow(0, IDN, 1), pinterp1,
                  result.narrow(1, IDN, 1));
-  if (eos->limiter()) {
+  if (eos->limiter() && floor) {
     result.select(1, IDN).clamp_min_(eos->density_floor());
   }
 
@@ -136,7 +136,7 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim) {
   int len = std::min((int)IPR, nvar - 1);
   _apply_inplace(dim, il, iu, w.narrow(0, IVX, len), pinterp2,
                  result.narrow(1, IVX, len));
-  if (eos->limiter() && result.size(1) > IPR) {
+  if (eos->limiter() && floor && result.size(1) > IPR) {
     result.select(1, IPR).clamp_min_(eos->pressure_floor());
   }
 

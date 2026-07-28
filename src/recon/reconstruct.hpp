@@ -93,7 +93,10 @@ class ReconstructImpl : public torch::nn::Cloneable<ReconstructImpl> {
   void reset() override;
 
   //! w -> [wl, wr]
-  torch::Tensor forward(torch::Tensor w, int dim);
+  // floor=false skips the reconstruction-stage density/pressure floors (the
+  // caller reconstructs perturbation variables that are legitimately
+  // negative and enforces positivity itself); the scalar floor is kept.
+  torch::Tensor forward(torch::Tensor w, int dim, bool floor = true);
 };
 
 TORCH_MODULE(Reconstruct);
