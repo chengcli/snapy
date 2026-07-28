@@ -155,6 +155,74 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // add sedimentation flux
     if (psed) psed->forward(w, _flux1);
+
+    // Make internal x1 seam fluxes single-valued. The two ranks sharing an
+    // internal x1 face each compute the face flux from their own
+    // reconstruction. When the two are not bit-identical (e.g. a reference
+    // rebuilt per block, as the well-balanced reconstruction does once it
+    // spans seams), the shared face carries two different flux values --
+    // a spurious source/sink of mass, momentum, and energy at the seam.
+    // Exchange the seam-face slab with the x1 neighbors and set both sides
+    // to the average: averaging is symmetric, so both ranks hold
+    // bit-identical values and the conserved sums telescope exactly across
+    // the seam, independent of reconstruction details (same principle as
+    // flux correction at mesh-refinement boundaries). The scalar advective
+    // flux upwinds by this mass flux afterwards and inherits the property.
+    // No exchange, no behavior change at nb1 = 1.
+    if (!options->disable_flux_x1() && playout &&
+        playout->has_process_group() && playout->options->pz() > 1) {
+      auto iloc = playout->loc_of(playout->options->rank());
+      int above = playout->neighbor_rank(iloc, {0, 0, 1});
+      int below = playout->neighbor_rank(iloc, {0, 0, -1});
+      if (above >= 0 || below >= 0) {
+        constexpr int kSeamFluxUpTag = 0x7720;  // payload travels upward
+        constexpr int kSeamFluxDnTag = 0x7721;  // payload travels downward
+        int il = pmb->pcoord->il();
+        int iu = pmb->pcoord->iu();
+        int nv = _flux1.size(0);
+        bool has_fp = _face_pressure1.defined() && _face_pressure1.numel() > 0;
+
+        // Pack the flux slab and the face pressure into ONE contiguous tensor
+        // per direction: some backends restrict send/recv to a single tensor,
+        // and one message per seam is cheaper anyway. torch::cat allocates
+        // fresh storage, so the payload cannot alias the flux buffers while a
+        // send is in flight.
+        auto pack = [&](int face) {
+          auto f = _flux1.select(-1, face);
+          if (!has_fp) return f.clone();
+          return torch::cat({f, _face_pressure1.select(-1, face).unsqueeze(0)},
+                            0);
+        };
+        auto unpack = [&](int face, torch::Tensor const& avg) {
+          _flux1.select(-1, face).copy_(avg.narrow(0, 0, nv));
+          if (has_fp) _face_pressure1.select(-1, face).copy_(avg[nv]);
+        };
+
+        std::vector<CommWorkPtr> seam_sends;
+        std::vector<torch::Tensor> up_mine, dn_mine;
+        if (above >= 0) {
+          up_mine = {pack(iu + 1)};
+          seam_sends.push_back(
+              playout->comm->send(up_mine, above, kSeamFluxUpTag));
+        }
+        if (below >= 0) {
+          dn_mine = {pack(il)};
+          seam_sends.push_back(
+              playout->comm->send(dn_mine, below, kSeamFluxDnTag));
+        }
+        if (above >= 0) {
+          std::vector<torch::Tensor> theirs = {torch::empty_like(up_mine[0])};
+          playout->comm->recv(theirs, above, kSeamFluxDnTag)->wait();
+          unpack(iu + 1, 0.5 * (up_mine[0] + theirs[0]));
+        }
+        if (below >= 0) {
+          std::vector<torch::Tensor> theirs = {torch::empty_like(dn_mine[0])};
+          playout->comm->recv(theirs, below, kSeamFluxUpTag)->wait();
+          unpack(il, 0.5 * (dn_mine[0] + theirs[0]));
+        }
+        for (auto& sw : seam_sends) sw->wait();
+      }
+    }
   }
 
   //// ------------ (3.A) Calculate dimension 2 LR states ------------ ////
