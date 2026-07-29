@@ -51,10 +51,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool phys_x1inner = pmb->options->is_physical_boundary(0, 0, -1);
     bool phys_x1outer = pmb->options->is_physical_boundary(0, 0, 1);
 
-    if (grav1) {
+    /*if (grav1) {
       if (phys_x1inner) _revise_x1inner_ghost(w);
       if (phys_x1outer) _revise_x1outer_ghost(w);
-    }
+    }*/
 
     // Well-balanced x1 reconstruction: decompose pressure and density into a
     // discretely hydrostatic reference + perturbation, reconstruct only the
@@ -71,37 +71,33 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     torch::Tensor wtmp;
     if (wb_x1) {
-      auto ref = _hydro_ref_x1(w);
-      auto const& psf_lo = ref[0];
-      auto const& pref = ref[1];
-      auto const& dsf = ref[2];
-      auto const& dref = ref[3];
+      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
       auto w_work = w.clone();
       w_work[IPR] -= pref;
       w_work[IDN] -= dref;
+
       // Even-parity ghost perturbations at the walls: p'(is-m) = p'(is+m-1),
       // rho' likewise. The isentropic ghost fill is its own O(dz^2)
       // hydrostatic model, so the perturbation it implies carries a wall
       // offset the reconstruction would read as a kink; even parity is also
       // the physically correct wall condition for p' and rho'.
-      {
-        int ng = pmb->pcoord->options->nghost();
-        int is = pmb->pcoord->il();
-        int iu = pmb->pcoord->iu();
-        // Only at PHYSICAL x1 walls. At an internal seam (nb1>1) the ghost
-        // perturbation must come from the neighbor (already halo-exchanged),
-        // not a mirror of this block's own interior.
-        for (int c : {(int)IPR, (int)IDN}) {
-          if (phys_x1inner)
-            w_work[c]
-                .narrow(-1, is - ng, ng)
-                .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
-          if (phys_x1outer)
-            w_work[c]
-                .narrow(-1, iu + 1, ng)
-                .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
-        }
+      int ng = pmb->pcoord->options->nghost();
+      int is = pmb->pcoord->il();
+      int iu = pmb->pcoord->iu();
+      // Only at PHYSICAL x1 walls. At an internal seam (nb1>1) the ghost
+      // perturbation must come from the neighbor (already halo-exchanged),
+      // not a mirror of this block's own interior.
+      for (int c : {(int)IPR, (int)IDN}) {
+        if (phys_x1inner)
+          w_work[c]
+              .narrow(-1, is - ng, ng)
+              .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
+        if (phys_x1outer)
+          w_work[c]
+              .narrow(-1, iu + 1, ng)
+              .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
       }
+
       // floor=false: the reconstruction-stage EOS floors would clamp
       // legitimately negative perturbations; positivity of the restored
       // faces is enforced below instead.
@@ -110,14 +106,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       // that would go non-positive (the references are tiny near the top) back
       // to the reference. At rest the perturbation is ~0 so the floor never
       // fires and well-balancing is preserved.
-      {
-        auto pl = wtmp[ILT][IPR] + psf_lo, pr = wtmp[IRT][IPR] + psf_lo;
-        wtmp[ILT][IPR].copy_(torch::where(pl > 0., pl, psf_lo));
-        wtmp[IRT][IPR].copy_(torch::where(pr > 0., pr, psf_lo));
-        auto dl = wtmp[ILT][IDN] + dsf, dr = wtmp[IRT][IDN] + dsf;
-        wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, dsf));
-        wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, dsf));
-      }
+      auto pl = wtmp[ILT][IPR] + psf_lo;
+      auto pr = wtmp[IRT][IPR] + psf_lo;
+      wtmp[ILT][IPR].copy_(torch::where(pl > 0., pl, psf_lo));
+      wtmp[IRT][IPR].copy_(torch::where(pr > 0., pr, psf_lo));
+      auto dl = wtmp[ILT][IDN] + dsf, dr = wtmp[IRT][IDN] + dsf;
+      wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, dsf));
+      wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, dsf));
     } else {
       wtmp = precon1->forward(w, DIM1);
       if (grav1) {

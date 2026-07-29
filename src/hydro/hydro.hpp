@@ -143,7 +143,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   // reconstruction: {psf_lo (face pressure), pref (cell pressure), dsf (face
   // density), dref (cell density)}, rebuilt from the current field on every
   // call.
-  std::vector<torch::Tensor> _hydro_ref_x1(torch::Tensor const& w) const;
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+  _hydro_ref_x1(torch::Tensor const& w) const;
   void _apply_implicit_correction(torch::Tensor& du, torch::Tensor const& w,
                                   double dt, Variables const& other);
 

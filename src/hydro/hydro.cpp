@@ -276,8 +276,8 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   }
 }
 
-std::vector<torch::Tensor> HydroImpl::_hydro_ref_x1(
-    torch::Tensor const& w) const {
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   auto pcoord = pmb->pcoord;
   int is = pcoord->il();
   int iu = pcoord->iu();
