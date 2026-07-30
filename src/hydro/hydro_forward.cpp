@@ -127,8 +127,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
     // Compute hydrostatic pressure correction
-    if (options->grav() && (options->grav()->grav1() != 0)
-        && (options->grav()->non_hydrostatic() < 1.)) {
+    if (options->grav() && (options->grav()->grav1() != 0) &&
+        (options->grav()->non_hydrostatic() < 1.)) {
       int is = pmb->pcoord->il();
       int ie = pmb->pcoord->iu() + 1;
       rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
