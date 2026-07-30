@@ -2,7 +2,6 @@
 
 // C/C++
 #include <algorithm>
-#include <limits>
 
 // snap
 #include <snap/snap.h>
@@ -11,6 +10,7 @@
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
+#include "hydro_dispatch.hpp"
 
 namespace snap {
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
@@ -281,25 +281,7 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   auto pcoord = pmb->pcoord;
   int is = pcoord->il();
   int iu = pcoord->iu();
-  int nc1 = w.size(-1);
   double g = -options->grav()->grav1();  // downward magnitude (>0)
-
-  auto rho = w[IDN];                 // [nc3,nc2,nc1]
-  auto dx1f = pcoord->dx1f;          // [nc1]
-  auto dp = g * rho * dx1f;          // hydrostatic drop across each cell
-  auto cum = torch::cumsum(dp, -1);  // cum(i) = sum_{0..i} dp
-
-  // Face pressures integrated DOWNWARD from an isothermal half-cell anchor
-  // above the top interior cell. The top anchor keeps the perturbation small
-  // relative to P everywhere (a bottom anchor piles the integration residual
-  // into the low-pressure top, where it exceeds P itself). The anchor value
-  // cancels from the momentum balance for any cell estimator that is LINEAR
-  // in the face values.
-  auto RdT_top = w[IPR].select(-1, iu) / rho.select(-1, iu);  // [nc3,nc2]
-  auto anchor =
-      (w[IPR].select(-1, iu) * torch::exp(-g * 0.5 * dx1f[iu] / RdT_top))
-          .unsqueeze(-1);                          // [nc3,nc2,1]
-  auto cum_iu = cum.select(-1, iu).unsqueeze(-1);  // [nc3,nc2,1]
 
   // Global x1 reference across a vertical (nb1>1) decomposition: make the
   // hydrostatic reference continuous over the x1 process seams. The block
@@ -307,125 +289,56 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // the running seam-face pressure from the block above and passes on that
   // value plus its own interior hydrostatic drop (= its bottom-face pressure).
   // A serial top->bottom scan along the x1 process column. nb1 == 1 (no x1
-  // neighbor) => A == anchor, bit-identical to the single-block reference.
-  auto A = anchor;
+  // neighbor) => an empty anchor tells the backend to compute the local top
+  // anchor.
+  torch::Tensor anchor;
+  int below = -1;
   auto layout = pmb->get_layout();
   if (layout && layout->has_process_group() && !layout->options->periodic_z() &&
       layout->options->pz() >
           1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
                 // send/recv at nb1=1)
     auto iloc = layout->loc_of(layout->options->rank());
-    int above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
-    int below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner
+    int above = layout->neighbor_rank(iloc, {0, 0, 1});  // toward x1-outer
+    below = layout->neighbor_rank(iloc, {0, 0, -1});     // toward x1-inner
     constexpr int kWbRefTag = 0x7715;
     if (above >= 0) {
-      std::vector<torch::Tensor> rbuf = {torch::empty_like(anchor)};
+      std::vector<torch::Tensor> rbuf = {
+          torch::empty({w.size(1), w.size(2), 1}, w.options())};
       layout->comm->recv(rbuf, above, kWbRefTag)->wait();
-      A = rbuf[0];
-    }
-    if (below >= 0) {
-      std::vector<torch::Tensor> sbuf = {
-          A + dp.narrow(-1, is, iu - is + 1).sum(-1, /*keepdim=*/true)};
-      layout->comm->send(sbuf, below, kWbRefTag)->wait();
+      anchor = rbuf[0];
     }
   }
 
-  auto psf_lo = A + cum_iu - cum + dp;  // pressure at lower face of cell i
-  auto psf_hi = psf_lo - dp;            // pressure at upper face of cell i
-
-  // In an extreme domain the hydrostatic continuation through the outer
-  // ghost cells could reach <= 0 and poison the near-boundary stencils with
-  // NaN via the pow below. Clamping is the identity for any healthy column.
-  psf_lo.clamp_min_(std::numeric_limits<double>::min());
-  psf_hi.clamp_min_(std::numeric_limits<double>::min());
-
-  // Cell pressure reference = estimate of the cell AVERAGE of the exact
-  // hydrostatic pressure from the face values. On a uniform grid, a six-face
-  // quadrature (exact through degree 5) guarded to fall back to the 2-point
-  // mean where the wide stencil leaves the cell's own face interval (kinks).
-  // The 2-point log-mean is exact only for an isothermal layer -- O(dz^2) on
-  // any other stratification, which leaves e.g. a dry adiabat with p' != 0
-  // and a phantom force. Non-uniform grid: the quadrature weights do not
-  // apply; keep the log-mean.
   if (x1_uniform_ < 0) {
-    auto d = dx1f.to(torch::kCPU);
+    auto d = pcoord->dx1f.to(torch::kCPU);
     x1_uniform_ =
         ((d.max() - d.min()).item<double>() < 1e-10 * d.mean().item<double>())
             ? 1
             : 0;
   }
 
-  torch::Tensor pref;
-  if (x1_uniform_ == 1) {
-    pref = 0.5 * (psf_lo + psf_hi);
-    // face pressures 0..nc1: face i = lower face of cell i, plus the top face
-    auto faces = torch::cat({psf_lo, psf_hi.narrow(-1, nc1 - 1, 1)}, -1);
-    constexpr double w6[6] = {11. / 1440., -31. / 480., 401. / 720.,
-                              401. / 720., -31. / 480., 11. / 1440.};
-    auto six = w6[0] * faces.narrow(-1, 0, nc1 - 4);
-    for (int k = 1; k < 6; ++k) {
-      six = six + w6[k] * faces.narrow(-1, k, nc1 - 4);
-    }
-    auto lo = torch::minimum(psf_lo, psf_hi).narrow(-1, 2, nc1 - 4);
-    auto hi = torch::maximum(psf_lo, psf_hi).narrow(-1, 2, nc1 - 4);
-    auto mid = pref.narrow(-1, 2, nc1 - 4);
-    mid.copy_(torch::where((six >= lo) & (six <= hi), six, mid));
+  auto gam = peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
+  auto ref_options = w.options();
+  auto ref_sizes = w.sizes().slice(1).vec();
+  auto psf_lo = torch::empty(ref_sizes, ref_options);
+  auto psf_hi = torch::empty(ref_sizes, ref_options);
+  auto pref = torch::empty(ref_sizes, ref_options);
+  auto dsf = torch::empty(ref_sizes, ref_options);
+  auto dref = torch::empty(ref_sizes, ref_options);
+  bool phys_in = pmb->options->is_physical_boundary(0, 0, -1);
+  bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
 
-    // At an internal x1 seam the outermost two ghost cells lie inside the
-    // neighbor's interior, where the neighbor evaluates the centered
-    // quadrature row. Evaluate them here with the edge-clamped stencils of
-    // the same degree-5 interpolant instead of the 2-point mean, so the two
-    // blocks' cell references agree at O(dx^6) rather than O(dx^2) across
-    // the seam (the remaining difference is integration-order roundoff,
-    // which the seam-flux average absorbs). At a physical wall the ghost
-    // perturbations are overwritten by the parity fill, so gate to seams to
-    // keep walls bitwise-unchanged.
-    constexpr double w6e[2][6] = {
-        {95. / 288., 1427. / 1440., -133. / 240., 241. / 720., -173. / 1440.,
-         3. / 160.},
-        {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
-         -11. / 1440.},
-    };
-    bool phys_in = pmb->options->is_physical_boundary(0, 0, -1);
-    bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
-    if (!phys_in) {
-      for (int j : {0, 1}) {  // stencil faces 0..5, row sigma = j
-        auto val = w6e[j][0] * faces.select(-1, 0);
-        for (int m = 1; m < 6; ++m) val = val + w6e[j][m] * faces.select(-1, m);
-        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
-        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
-        auto cur = pref.select(-1, j);
-        cur.copy_(torch::where((val >= flo) & (val <= fhi), val, cur));
-      }
-    }
-    if (!phys_out) {
-      for (int j : {nc1 - 2, nc1 - 1}) {  // faces nc1-5..nc1; rows 3,4 are the
-        int sigma = j - (nc1 - 5);        // mirror images of rows 1,0
-        auto val = w6e[4 - sigma][5] * faces.select(-1, nc1 - 5);
-        for (int m = 1; m < 6; ++m)
-          val = val + w6e[4 - sigma][5 - m] * faces.select(-1, nc1 - 5 + m);
-        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
-        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
-        auto cur = pref.select(-1, j);
-        cur.copy_(torch::where((val >= flo) & (val <= fhi), val, cur));
-      }
-    }
-  } else {
-    auto ratio = psf_lo / psf_hi;
-    pref = torch::where((ratio - 1.).abs() < 1e-6, 0.5 * (psf_lo + psf_hi),
-                        dp / torch::log(ratio));
+  auto dx1f = pcoord->dx1f.contiguous();
+  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, gam, psf_lo,
+                                psf_hi, pref, dsf, dref, is, iu, g,
+                                x1_uniform_ == 1, phys_in, phys_out);
+
+  if (below >= 0) {
+    constexpr int kWbRefTag = 0x7715;
+    std::vector<torch::Tensor> sbuf = {psf_lo.narrow(-1, is, 1).contiguous()};
+    layout->comm->send(sbuf, below, kWbRefTag)->wait();
   }
-
-  // Isentropic density reference from the bottom cell:
-  // rho_ref(P)=(P/K)^(1/gamma), K = P_bot / rho_bot^gamma. Decomposing density
-  // too keeps the reconstructed face (rho, P) pair thermodynamically consistent
-  // -- reconstructing full density against a perturbation pressure was the
-  // destabilizing mismatch.
-  auto gam = peos->compute("W->A", {w.narrow(-1, is, 1)});  // [nc3,nc2,1]
-  auto Kbot = w[IPR].select(-1, is).unsqueeze(-1) /
-              rho.select(-1, is).unsqueeze(-1).pow(gam);  // [nc3,nc2,1]
-  auto dref = (pref / Kbot).pow(1.0 / gam);
-  auto dsf = (psf_lo / Kbot).pow(1.0 / gam);
 
   return {psf_lo, pref, dsf, dref};
 }
