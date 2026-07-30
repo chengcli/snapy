@@ -110,7 +110,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       auto pr = wtmp[IRT][IPR] + psf_lo;
       wtmp[ILT][IPR].copy_(torch::where(pl > 0., pl, psf_lo));
       wtmp[IRT][IPR].copy_(torch::where(pr > 0., pr, psf_lo));
-      auto dl = wtmp[ILT][IDN] + dsf, dr = wtmp[IRT][IDN] + dsf;
+
+      auto dl = wtmp[ILT][IDN] + dsf;
+      auto dr = wtmp[IRT][IDN] + dsf;
       wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, dsf));
       wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, dsf));
     } else {
@@ -125,7 +127,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
     // Compute hydrostatic pressure correction
-    if (options->grav() && (options->grav()->grav1() != 0)) {
+    if (options->grav() && (options->grav()->grav1() != 0)
+        && (options->grav()->non_hydrostatic() < 1.)) {
       int is = pmb->pcoord->il();
       int ie = pmb->pcoord->iu() + 1;
       rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
