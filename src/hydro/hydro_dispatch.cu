@@ -15,12 +15,21 @@ hydro_ref_x1_cuda_kernel(T const *w, T const *dx1f, T const *anchor,
                          T const *gam, T *psf_lo, T *psf_hi, T *pref, T *dsf,
                          T *dref, int ncolumns, int nc1, int is, int iu, T grav,
                          bool uniform, bool phys_in, bool phys_out) {
-  int column = blockIdx.x * blockDim.x + threadIdx.x;
-  if (column >= ncolumns)
-    return;
-  hydro_ref_x1_impl(w, dx1f, anchor, gam, psf_lo, psf_hi, pref, dsf, dref,
-                    column, ncolumns, nc1, is, iu, grav, uniform, phys_in,
-                    phys_out);
+  int column = blockIdx.x;
+  __shared__ T kbot;
+  __shared__ T inv_gamma;
+
+  if (threadIdx.x == 0) {
+    hydro_ref_x1_scan_impl(w, dx1f, anchor, gam, psf_lo, psf_hi, column,
+                           ncolumns, nc1, is, iu, grav, &kbot, &inv_gamma);
+  }
+  __syncthreads();
+
+  for (int i = threadIdx.x; i < nc1; i += blockDim.x) {
+    hydro_ref_x1_cell_impl(w, dx1f, psf_lo, psf_hi, pref, dsf, dref, column, i,
+                           ncolumns, nc1, grav, uniform, phys_in, phys_out,
+                           kbot, inv_gamma);
+  }
 }
 
 void hydro_ref_x1_cuda(torch::Tensor const &w, torch::Tensor const &dx1f,
@@ -32,8 +41,8 @@ void hydro_ref_x1_cuda(torch::Tensor const &w, torch::Tensor const &dx1f,
   at::cuda::CUDAGuard device_guard(w.device());
   int ncolumns = w.size(1) * w.size(2);
   int nc1 = w.size(3);
-  int threads = 128;
-  int blocks = (ncolumns + threads - 1) / threads;
+  int threads = 256;
+  int blocks = ncolumns;
   auto stream = at::cuda::getCurrentCUDAStream();
 
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "hydro_ref_x1_cuda", [&] {
