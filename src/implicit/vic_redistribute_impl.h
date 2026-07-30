@@ -17,48 +17,66 @@
 namespace snap {
 
 // Split form of the MS-VIC redistribution around ForwardSweep
-// (forward_sweep_impl.h). The serial work (backward substitution + the
-// per-column reduction sums) stays per-column here; the per-cell redistribution
-// map moves to vic_redistribute_cell() so it can run as a cell-parallel kernel.
+// (forward_sweep_impl.h). Backward substitution retains its required serial
+// layer dependency. The reduction terms and per-cell redistribution map are
+// exposed separately so CUDA can parallelize them.
 //
 // `scratch` is the column's reduction storage. scratch[0]=sum_k A_k^2,
 // scratch[1]=B_dry, scratch[2+n]=B_species[n]. DU is NOT written here.
+template <typename T, int N>
+void DISPATCH_MACRO vic_backward_substitute(Eigen::Matrix<T, N, N>* a,
+                                            Eigen::Matrix<T, N, 1>* delta,
+                                            int il, int iu) {
+  for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
+}
+
+// Return cell i's contribution to one reduction quantity. reduction=0 is
+// sum(A_i^2), reduction=1 is B_dry, and reduction=2+n is B_species[n].
+template <typename T, int N>
+T DISPATCH_MACRO vic_reduction_term(T* du, T* w, Eigen::Matrix<T, N, 1>* delta,
+                                    T* vol, int i, int reduction, int ny,
+                                    int stride1, int stride2) {
+  if (reduction == 0) {
+    T a_i = W(IDN, i) * VOL(i);
+    return a_i * a_i;
+  }
+
+  T explicit_total = DU(IDN, i);
+  for (int n = 0; n < ny; ++n) explicit_total += DU(ICY + n, i);
+  T residual_volume = (explicit_total - delta[i](0)) * VOL(i);
+
+  if (reduction == 1) {
+    T dryfrac = 1;
+    for (int n = 0; n < ny; ++n) dryfrac -= W(ICY + n, i);
+    return residual_volume * dryfrac;
+  }
+
+  return residual_volume * W(ICY + reduction - 2, i);
+}
+
+template <typename T, int N>
+void DISPATCH_MACRO vic_column_reduce(T* du, T* w,
+                                      Eigen::Matrix<T, N, 1>* delta, T* vol,
+                                      T* scratch, int il, int iu, int ny,
+                                      int stride1, int stride2) {
+  for (int reduction = 0; reduction < 2 + ny; ++reduction) {
+    T sum = 0;
+    for (int i = il; i <= iu; ++i)
+      sum += vic_reduction_term(du, w, delta, vol, i, reduction, ny, stride1,
+                                stride2);
+    scratch[reduction] = sum;
+  }
+}
+
+// Serial convenience wrapper used by the CPU path and unit tests.
 template <typename T, int N>
 void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
                                         Eigen::Matrix<T, N, 1>* delta, T* vol,
                                         T* scratch, int il, int iu, int dir,
                                         int ny, int stride1, int stride2) {
-  // backward substitution
-  for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
-
-  // Per-column reduction sums for the exact MS-VIC formula.
-  T sum_a2 = 0;
-  T b_dry = 0;
-
-  for (int i = il; i <= iu; ++i) {
-    T explicit_total = DU(IDN, i);
-    T dryfrac = 1;
-    for (int n = 0; n < ny; ++n) {
-      explicit_total += DU(ICY + n, i);
-      dryfrac -= W(ICY + n, i);
-    }
-
-    T a_i = W(IDN, i) * VOL(i);
-    sum_a2 += a_i * a_i;
-    b_dry += (explicit_total - delta[i](0)) * dryfrac * VOL(i);
-  }
-  scratch[0] = sum_a2;
-  scratch[1] = b_dry;
-
-  for (int n = 0; n < ny; ++n) {
-    T b_species = 0;
-    for (int i = il; i <= iu; ++i) {
-      T explicit_total = DU(IDN, i);
-      for (int m = 0; m < ny; ++m) explicit_total += DU(ICY + m, i);
-      b_species += (explicit_total - delta[i](0)) * W(ICY + n, i) * VOL(i);
-    }
-    scratch[2 + n] = b_species;
-  }
+  (void)dir;
+  vic_backward_substitute(a, delta, il, iu);
+  vic_column_reduce(du, w, delta, vol, scratch, il, iu, ny, stride1, stride2);
 }
 
 // Per-cell MS-VIC redistribution map. Reads delta, W, VOL and the per-column

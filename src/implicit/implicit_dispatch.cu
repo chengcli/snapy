@@ -1,11 +1,16 @@
 // eigen
 #include <Eigen/Dense>
 
+// C/C++
+#include <array>
+
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
+#include <ATen/cuda/CUDAContext.h>
 #include <ATen/native/ReduceOpsUtils.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAException.h>
 #include <c10/core/ScalarType.h>
 
 // snap
@@ -19,6 +24,44 @@
 #include "vic_redistribute_impl.h"
 
 namespace snap {
+
+template <typename T, int N, typename OffsetCalculator>
+__global__ void vic_reduce_cuda_kernel(OffsetCalculator offset_calc,
+                                       std::array<char *, 10> data,
+                                       int64_t ncol, int nlayer, int ny,
+                                       int stride1, int stride2) {
+  constexpr int kThreads = 128;
+  __shared__ T sums[kThreads];
+
+  int reductions = 2 + ny;
+  int64_t task = blockIdx.x;
+  int64_t col = task / reductions;
+  if (col >= ncol) return;
+  int reduction = task % reductions;
+
+  auto offsets = offset_calc.get(col);
+  auto du = reinterpret_cast<T *>(data[0] + offsets[0]);
+  auto w = reinterpret_cast<T *>(data[2] + offsets[2]);
+  auto vol = reinterpret_cast<T *>(data[5] + offsets[5]);
+  auto c = reinterpret_cast<Eigen::Matrix<T, N, N> *>(data[8] + offsets[8]);
+  auto delta =
+      reinterpret_cast<Eigen::Matrix<T, N, 1> *>(data[9] + offsets[9]);
+
+  T sum = 0;
+  for (int i = threadIdx.x; i < nlayer; i += blockDim.x) {
+    sum += vic_reduction_term(du, w, delta, vol, i, reduction, ny, stride1,
+                              stride2);
+  }
+  sums[threadIdx.x] = sum;
+  __syncthreads();
+
+  for (int width = kThreads / 2; width > 0; width /= 2) {
+    if (threadIdx.x < width) sums[threadIdx.x] += sums[threadIdx.x + width];
+    __syncthreads();
+  }
+
+  if (threadIdx.x == 0) c[0].data()[reduction] = sums[0];
+}
 
 // Phase 1 of the partial VIC solve: assemble the block-tridiagonal coefficients
 // a, b, c. This is parallelized over EVERY cell (column x layer), not just per
@@ -83,21 +126,28 @@ void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
 
     using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
 
-    native::gpu_kernel<10>(
-        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
-          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto gamma = reinterpret_cast<scalar_t*>(data[3] + strides[3]);
-          auto area = reinterpret_cast<scalar_t*>(data[4] + strides[4]);
-          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
-          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
-          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
-          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
+    int64_t ncol = iter.numel();
+    auto offset_calc = ::make_offset_calculator<10>(iter);
+    std::array<char *, 10> data;
+    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
 
-          vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
-                                 nlayer - 1, dir, ny, stride1, stride2,
-                                 first_block, last_block, periodic, a, b, c);
-        });
+    int64_t total = ncol * (int64_t)nlayer;
+    at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
+      int col = idx / nlayer;
+      int i = idx % nlayer;
+      auto offsets = offset_calc.get(col);
+      auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
+      auto gamma = reinterpret_cast<scalar_t *>(data[3] + offsets[3]);
+      auto area = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
+      auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto a = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
+      auto b = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
+      auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
+
+      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1,
+                             dt, grav, dir, ny, stride1, stride2, first_block,
+                             last_block, periodic);
+    });
   });
 }
 
@@ -121,8 +171,6 @@ void vic_solve_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
     native::gpu_kernel<10>(
         iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
           auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto w = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          auto vol = reinterpret_cast<scalar_t*>(data[5] + strides[5]);
           auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
           auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
           auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
@@ -130,11 +178,24 @@ void vic_solve_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
 
           ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
                        stride2, first_block, last_block);
-          // c is dead after ForwardSweep; reuse its column memory to stash the
-          // per-column reduction scalars for the redistribution map.
-          vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0, nlayer - 1,
-                              dir, ny, stride1, stride2);
+          vic_backward_substitute(a, delta, 0, nlayer - 1);
         });
+
+    // c is dead after ForwardSweep. Reuse its column memory for the reduction
+    // scalars consumed by the redistribution map. Each block reduces one
+    // quantity for one column across all vertical layers.
+    int64_t ncol = iter.numel();
+    auto offset_calc = ::make_offset_calculator<10>(iter);
+    std::array<char *, 10> data;
+    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
+
+    constexpr int threads = 128;
+    int64_t blocks = ncol * (2 + ny);
+    auto stream = at::cuda::getCurrentCUDAStream();
+    vic_reduce_cuda_kernel<scalar_t, N>
+        <<<blocks, threads, 0, stream>>>(offset_calc, data, ncol, nlayer, ny,
+                                        stride1, stride2);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
   });
 }
 

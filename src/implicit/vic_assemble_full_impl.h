@@ -14,10 +14,10 @@ namespace snap {
 
 template <typename T>
 void DISPATCH_MACRO vic_assemble_full_impl(
-    T* du, T* w, T* gamma, T* area, T* vol, double dt, double grav, int is,
-    int ie, int dir, int ny, int stride1, int stride2, bool first_block,
-    bool last_block, bool periodic, Eigen::Matrix<T, 5, 5>* a,
-    Eigen::Matrix<T, 5, 5>* b, Eigen::Matrix<T, 5, 5>* c) {
+    Eigen::Matrix<T, 5, 5>* a, Eigen::Matrix<T, 5, 5>* b,
+    Eigen::Matrix<T, 5, 5>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
+    int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
+    bool first_block, bool last_block, bool periodic) {
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -42,23 +42,14 @@ void DISPATCH_MACRO vic_assemble_full_impl(
   T wl[5], wr[5];  // left/right primitive variables of cell i-1 and i
   T gm1, cs;
 
-  // 3. calculate and save flux Jacobian matrix
-  for (int i = 0; i < 2; ++i) {
-    int j = is - 1 + i;
-    CopyPrimitives(wl, wr, w, j, stride1, stride2, ny);
-    gm1 = GAMMA(j) - 1.;
-    if (i == 0) {
-      FluxJacobian(dfdq_prev, gm1, wr, dir);
-    } else {
-      FluxJacobian(dfdq_curr, gm1, wr, dir);
-    }
-  }
+  // Interface i-1/2 and the Jacobians in cells i-1 and i.
+  CopyPrimitives(wl, wr, w, i, stride1, stride2, ny);
+  gm1 = GAMMA(i - 1) - 1.;
+  FluxJacobian(dfdq_prev, gm1, wl, dir);
+  gm1 = GAMMA(i) - 1.;
+  FluxJacobian(dfdq_curr, gm1, wr, dir);
 
-  // 5. set up diffusion matrix and tridiagonal coefficients
-  // left edge
-  CopyPrimitives(wl, wr, w, is, stride1, stride2, ny);
-
-  gm1 = 0.5 * (GAMMA(is - 1) + GAMMA(is)) - 1.;
+  gm1 = 0.5 * (GAMMA(i - 1) + GAMMA(i)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -67,42 +58,35 @@ void DISPATCH_MACRO vic_assemble_full_impl(
 
   Am.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
 
-  for (int i = is; i <= ie; ++i) {
-    CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
-    gm1 = GAMMA(i + 1) - 1.;
-    FluxJacobian(dfdq_next, gm1, wr, dir);
+  // Interface i+1/2 and the Jacobian in cell i+1.
+  CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
+  gm1 = GAMMA(i + 1) - 1.;
+  FluxJacobian(dfdq_next, gm1, wr, dir);
 
-    // right edge
-    gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
-    RoeAverage(prim, gm1, wl, wr);
+  gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
+  RoeAverage(prim, gm1, wl, wr);
 
-    cs = SoundSpeed(prim, gm1);
-    Eigenvalue(Lambda, prim[IVX + dir], cs);
-    Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
+  cs = SoundSpeed(prim, gm1);
+  Eigenvalue(Lambda, prim[IVX + dir], cs);
+  Eigenvector(Rmat, Rimat, prim, cs, gm1, dir);
 
-    Ap.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
+  Ap.noalias() = Rmat * Lambda.asDiagonal() * Rimat;
 
-    T const& area_i = AREA(i);
-    T const& area_ip1 = AREA(i + 1);
-    T half_inv_vol = 0.5 / VOL(i);
+  T const& area_i = AREA(i);
+  T const& area_ip1 = AREA(i + 1);
+  T half_inv_vol = 0.5 / VOL(i);
 
-    // set up diagonals a, b, c, and Jacobian of the forcing function
-    a[i] = (Am * area_i + Ap * area_ip1 + (area_ip1 - area_i) * dfdq_curr) *
-               half_inv_vol -
-           Phi;
-    a[i].diagonal() += Dt;
-    b[i] = -(Am + dfdq_prev) * area_i * half_inv_vol;
-    c[i] = -(Ap - dfdq_next) * area_ip1 * half_inv_vol;
+  // Set up diagonals a, b, c, and the forcing-function Jacobian.
+  a[i] = (Am * area_i + Ap * area_ip1 + (area_ip1 - area_i) * dfdq_curr) *
+             half_inv_vol -
+         Phi;
+  a[i].diagonal() += Dt;
+  b[i] = -(Am + dfdq_prev) * area_i * half_inv_vol;
+  c[i] = -(Ap - dfdq_next) * area_ip1 * half_inv_vol;
 
-    // Shift one cell: i -> i+1
-    Am = Ap;
-    dfdq_prev = dfdq_curr;
-    dfdq_curr = dfdq_next;
-  }
-
-  // 5. fix boundary condition
-  if (first_block && !periodic) a[is] += b[is] * Bnd.asDiagonal();
-  if (last_block && !periodic) a[ie] += c[ie] * Bnd.asDiagonal();
+  // Fix boundary conditions for the cells at the ends of the column.
+  if (i == is && first_block && !periodic) a[i] += b[i] * Bnd.asDiagonal();
+  if (i == ie && last_block && !periodic) a[i] += c[i] * Bnd.asDiagonal();
 }
 
 }  // namespace snap
