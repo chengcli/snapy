@@ -38,6 +38,11 @@ void TopSpongeLyrImpl::reset() {
 
 torch::Tensor TopSpongeLyrImpl::forward(torch::Tensor du, torch::Tensor w,
                                         torch::Tensor temp, double dt) {
+  // Applies at the physical upper x1 boundary only: under an x1-decomposed
+  // layout (nb1 > 1) a rank whose upper face is an internal block interface
+  // must not force there.
+  if (!phydro->pmb->options->is_physical_boundary(0, 0, 1)) return du;
+
   auto pcoord = phydro->pmb->pcoord;
   int il = pcoord->il();
   int iu = pcoord->iu();

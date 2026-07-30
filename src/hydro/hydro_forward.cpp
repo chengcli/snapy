@@ -51,23 +51,84 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool phys_x1inner = pmb->options->is_physical_boundary(0, 0, -1);
     bool phys_x1outer = pmb->options->is_physical_boundary(0, 0, 1);
 
-    if (grav1) {
+    /*if (grav1) {
       if (phys_x1inner) _revise_x1inner_ghost(w);
       if (phys_x1outer) _revise_x1outer_ghost(w);
-    }
+    }*/
 
-    auto wtmp = precon1->forward(w, DIM1);
+    // Well-balanced x1 reconstruction: decompose pressure and density into a
+    // discretely hydrostatic reference + perturbation, reconstruct only the
+    // perturbations, restore the reference at the faces. The restored faces
+    // satisfy psf_lo(i) - psf_hi(i) = g*rho(i)*dx1f(i) identically, so a
+    // resting stratification generates zero flux residual regardless of the
+    // reconstruction. Engaged whenever gravity is on and the scheme is
+    // defined: the state carries a pressure row, and the block owns the full
+    // x1 column, OR it spans a vertical (nb1>1) decomposition -- in which case
+    // _hydro_ref_x1 makes the reference continuous across the x1 process seams
+    // with a distributed scan, so WB now engages under x1 decomposition too.
+    bool wb_x1 =
+        grav1 && w.size(0) > IPR && options->eos()->type() != "shallow-water";
 
-    if (grav1) {
-      if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
-      if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+    torch::Tensor wtmp;
+    if (wb_x1) {
+      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
+      auto w_work = w.clone();
+      w_work[IPR] -= pref;
+      w_work[IDN] -= dref;
+
+      // Even-parity ghost perturbations at the walls: p'(is-m) = p'(is+m-1),
+      // rho' likewise. The isentropic ghost fill is its own O(dz^2)
+      // hydrostatic model, so the perturbation it implies carries a wall
+      // offset the reconstruction would read as a kink; even parity is also
+      // the physically correct wall condition for p' and rho'.
+      int ng = pmb->pcoord->options->nghost();
+      int is = pmb->pcoord->il();
+      int iu = pmb->pcoord->iu();
+      // Only at PHYSICAL x1 walls. At an internal seam (nb1>1) the ghost
+      // perturbation must come from the neighbor (already halo-exchanged),
+      // not a mirror of this block's own interior.
+      for (int c : {(int)IPR, (int)IDN}) {
+        if (phys_x1inner)
+          w_work[c]
+              .narrow(-1, is - ng, ng)
+              .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
+        if (phys_x1outer)
+          w_work[c]
+              .narrow(-1, iu + 1, ng)
+              .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+      }
+
+      // floor=false: the reconstruction-stage EOS floors would clamp
+      // legitimately negative perturbations; positivity of the restored
+      // faces is enforced below instead.
+      wtmp = precon1->forward(w_work, DIM1, /*floor=*/false);
+      // Restore full face pressure/density; floor any nonlinear-WENO overshoot
+      // that would go non-positive (the references are tiny near the top) back
+      // to the reference. At rest the perturbation is ~0 so the floor never
+      // fires and well-balancing is preserved.
+      auto pl = wtmp[ILT][IPR] + psf_lo;
+      auto pr = wtmp[IRT][IPR] + psf_lo;
+      wtmp[ILT][IPR].copy_(torch::where(pl > 0., pl, psf_lo));
+      wtmp[IRT][IPR].copy_(torch::where(pr > 0., pr, psf_lo));
+
+      auto dl = wtmp[ILT][IDN] + dsf;
+      auto dr = wtmp[IRT][IDN] + dsf;
+      wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, dsf));
+      wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, dsf));
+    } else {
+      wtmp = precon1->forward(w, DIM1);
+      if (grav1) {
+        if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
+        if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
+      }
     }
 
     auto wlr1 =
         has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
 
     // Compute hydrostatic pressure correction
-    if (options->grav() && (options->grav()->grav1() != 0)) {
+    if (options->grav() && (options->grav()->grav1() != 0) &&
+        (options->grav()->non_hydrostatic() < 1.)) {
       int is = pmb->pcoord->il();
       int ie = pmb->pcoord->iu() + 1;
       rho_grav.slice(2, is, ie) = (wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
@@ -91,6 +152,74 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // add sedimentation flux
     if (psed) psed->forward(w, _flux1);
+
+    // Make internal x1 seam fluxes single-valued. The two ranks sharing an
+    // internal x1 face each compute the face flux from their own
+    // reconstruction. When the two are not bit-identical (e.g. a reference
+    // rebuilt per block, as the well-balanced reconstruction does once it
+    // spans seams), the shared face carries two different flux values --
+    // a spurious source/sink of mass, momentum, and energy at the seam.
+    // Exchange the seam-face slab with the x1 neighbors and set both sides
+    // to the average: averaging is symmetric, so both ranks hold
+    // bit-identical values and the conserved sums telescope exactly across
+    // the seam, independent of reconstruction details (same principle as
+    // flux correction at mesh-refinement boundaries). The scalar advective
+    // flux upwinds by this mass flux afterwards and inherits the property.
+    // No exchange, no behavior change at nb1 = 1.
+    if (!options->disable_flux_x1() && playout &&
+        playout->has_process_group() && playout->options->pz() > 1) {
+      auto iloc = playout->loc_of(playout->options->rank());
+      int above = playout->neighbor_rank(iloc, {0, 0, 1});
+      int below = playout->neighbor_rank(iloc, {0, 0, -1});
+      if (above >= 0 || below >= 0) {
+        constexpr int kSeamFluxUpTag = 0x7720;  // payload travels upward
+        constexpr int kSeamFluxDnTag = 0x7721;  // payload travels downward
+        int il = pmb->pcoord->il();
+        int iu = pmb->pcoord->iu();
+        int nv = _flux1.size(0);
+        bool has_fp = _face_pressure1.defined() && _face_pressure1.numel() > 0;
+
+        // Pack the flux slab and the face pressure into ONE contiguous tensor
+        // per direction: some backends restrict send/recv to a single tensor,
+        // and one message per seam is cheaper anyway. torch::cat allocates
+        // fresh storage, so the payload cannot alias the flux buffers while a
+        // send is in flight.
+        auto pack = [&](int face) {
+          auto f = _flux1.select(-1, face);
+          if (!has_fp) return f.clone();
+          return torch::cat({f, _face_pressure1.select(-1, face).unsqueeze(0)},
+                            0);
+        };
+        auto unpack = [&](int face, torch::Tensor const& avg) {
+          _flux1.select(-1, face).copy_(avg.narrow(0, 0, nv));
+          if (has_fp) _face_pressure1.select(-1, face).copy_(avg[nv]);
+        };
+
+        std::vector<CommWorkPtr> seam_sends;
+        std::vector<torch::Tensor> up_mine, dn_mine;
+        if (above >= 0) {
+          up_mine = {pack(iu + 1)};
+          seam_sends.push_back(
+              playout->comm->send(up_mine, above, kSeamFluxUpTag));
+        }
+        if (below >= 0) {
+          dn_mine = {pack(il)};
+          seam_sends.push_back(
+              playout->comm->send(dn_mine, below, kSeamFluxDnTag));
+        }
+        if (above >= 0) {
+          std::vector<torch::Tensor> theirs = {torch::empty_like(up_mine[0])};
+          playout->comm->recv(theirs, above, kSeamFluxDnTag)->wait();
+          unpack(iu + 1, 0.5 * (up_mine[0] + theirs[0]));
+        }
+        if (below >= 0) {
+          std::vector<torch::Tensor> theirs = {torch::empty_like(dn_mine[0])};
+          playout->comm->recv(theirs, below, kSeamFluxUpTag)->wait();
+          unpack(il, 0.5 * (dn_mine[0] + theirs[0]));
+        }
+        for (auto& sw : seam_sends) sw->wait();
+      }
+    }
   }
 
   //// ------------ (3.A) Calculate dimension 2 LR states ------------ ////

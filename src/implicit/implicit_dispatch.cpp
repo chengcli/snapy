@@ -78,7 +78,6 @@ void vic_assemble_full_cpu(at::TensorIterator& iter, double dt, double grav,
     iter.for_each(
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
-            auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
             auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
             auto gamma =
                 reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
@@ -88,9 +87,11 @@ void vic_assemble_full_cpu(at::TensorIterator& iter, double dt, double grav,
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
 
-            vic_assemble_full_impl(du, w, gamma, area, vol, dt, grav, 0,
-                                   nlayer - 1, dir, ny, stride1, stride2,
-                                   first_block, last_block, periodic, a, b, c);
+            for (int i = 0; i < nlayer; ++i) {
+              vic_assemble_full_impl(
+                  a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt, grav, dir,
+                  ny, stride1, stride2, first_block, last_block, periodic);
+            }
           }
         },
         grain_size);

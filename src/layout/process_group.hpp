@@ -26,8 +26,6 @@ class CommWork {
 };
 using CommWorkPtr = std::shared_ptr<CommWork>;
 
-void sync_tensor_streams(std::vector<torch::Tensor> const& tensors);
-
 class ProcessGroupContext {
  public:
   static std::shared_ptr<ProcessGroupContext> create(LayoutOptions const& opts);

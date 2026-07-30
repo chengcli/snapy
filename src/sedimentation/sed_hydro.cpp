@@ -115,7 +115,7 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
       ideal_moist->inv_mu_ratio_m1.to(wr.options()).contiguous(),
       ideal_moist->cv_ratio_m1.to(wr.options()).contiguous(),
       ideal_moist->u0.to(wr.options()).contiguous(), pcoord->il(), pcoord->iu(),
-      ny, nvapor, -phydro->options->grav()->grav1(), gas_constant_dry, cv_dry,
+      ny, nvapor, phydro->options->grav()->grav1(), gas_constant_dry, cv_dry,
       psedvel->options->a_diameter(), psedvel->options->a_epsilon_LJ(),
       psedvel->options->a_mass(), psedvel->options->upper_limit());
 

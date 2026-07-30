@@ -10,6 +10,7 @@
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
+#include "hydro_dispatch.hpp"
 
 namespace snap {
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
@@ -188,6 +189,13 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
                                            Variables const& other) {
   if (!picorr) return;
 
+  // Implicit x1 solve has no cross-rank coupling, so nb1 > 1 would silently
+  // solve each rank's own sub-column. Full column <=> both x1 faces physical.
+  TORCH_CHECK(pmb->options->is_physical_boundary(0, 0, -1) &&
+                  pmb->options->is_physical_boundary(0, 0, 1),
+              "[Hydro] implicit scheme requires nb1 = 1 (no x1 decomposition): "
+              "the vertical solve has no cross-rank coupling.");
+
   torch::Tensor wi;
   if (other.count("solid")) {
     wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
@@ -266,6 +274,73 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
     w[IDN].narrow(-1, ie + n + 1, 1) =
         (w[IPR].narrow(-1, ie + n + 1, 1) / K).pow(1. / gamma);
   }
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
+  auto pcoord = pmb->pcoord;
+  int is = pcoord->il();
+  int iu = pcoord->iu();
+  double g = -options->grav()->grav1();  // downward magnitude (>0)
+
+  // Global x1 reference across a vertical (nb1>1) decomposition: make the
+  // hydrostatic reference continuous over the x1 process seams. The block
+  // owning x1-outer anchors at the true domain top; every block below receives
+  // the running seam-face pressure from the block above and passes on that
+  // value plus its own interior hydrostatic drop (= its bottom-face pressure).
+  // A serial top->bottom scan along the x1 process column. nb1 == 1 (no x1
+  // neighbor) => an empty anchor tells the backend to compute the local top
+  // anchor.
+  torch::Tensor anchor;
+  int below = -1;
+  auto layout = pmb->get_layout();
+  if (layout && layout->has_process_group() && !layout->options->periodic_z() &&
+      layout->options->pz() >
+          1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
+                // send/recv at nb1=1)
+    auto iloc = layout->loc_of(layout->options->rank());
+    int above = layout->neighbor_rank(iloc, {0, 0, 1});  // toward x1-outer
+    below = layout->neighbor_rank(iloc, {0, 0, -1});     // toward x1-inner
+    constexpr int kWbRefTag = 0x7715;
+    if (above >= 0) {
+      std::vector<torch::Tensor> rbuf = {
+          torch::empty({w.size(1), w.size(2), 1}, w.options())};
+      layout->comm->recv(rbuf, above, kWbRefTag)->wait();
+      anchor = rbuf[0];
+    }
+  }
+
+  if (x1_uniform_ < 0) {
+    auto d = pcoord->dx1f.to(torch::kCPU);
+    x1_uniform_ =
+        ((d.max() - d.min()).item<double>() < 1e-10 * d.mean().item<double>())
+            ? 1
+            : 0;
+  }
+
+  auto gam = peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
+  auto ref_options = w.options();
+  auto ref_sizes = w.sizes().slice(1).vec();
+  auto psf_lo = torch::empty(ref_sizes, ref_options);
+  auto psf_hi = torch::empty(ref_sizes, ref_options);
+  auto pref = torch::empty(ref_sizes, ref_options);
+  auto dsf = torch::empty(ref_sizes, ref_options);
+  auto dref = torch::empty(ref_sizes, ref_options);
+  bool phys_in = pmb->options->is_physical_boundary(0, 0, -1);
+  bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
+
+  auto dx1f = pcoord->dx1f.contiguous();
+  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, gam, psf_lo,
+                                psf_hi, pref, dsf, dref, is, iu, g,
+                                x1_uniform_ == 1, phys_in, phys_out);
+
+  if (below >= 0) {
+    constexpr int kWbRefTag = 0x7715;
+    std::vector<torch::Tensor> sbuf = {psf_lo.narrow(-1, is, 1).contiguous()};
+    layout->comm->send(sbuf, below, kWbRefTag)->wait();
+  }
+
+  return {psf_lo, pref, dsf, dref};
 }
 
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,

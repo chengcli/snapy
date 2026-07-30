@@ -124,6 +124,11 @@ TEST(GnomonicEquiangle, area_vol) {
   auto block = MeshBlock(op);
 
   auto pcoord = block->pcoord;
+  for (auto const& spacing : {pcoord->dx1f, pcoord->dx1v, pcoord->dx2f,
+                              pcoord->dx2v, pcoord->dx3f, pcoord->dx3v}) {
+    EXPECT_EQ(spacing.scalar_type(), torch::kFloat64);
+  }
+
   auto area1 = pcoord->face_area1();
   std::cout << "area1 = \n" << area1 << std::endl;
 

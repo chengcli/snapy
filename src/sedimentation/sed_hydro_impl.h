@@ -62,11 +62,18 @@ inline DISPATCH_MACRO void sedimentation_flux_impl(
   for (int p = 0; p < nparticle; ++p) {
     int hydro_id = static_cast<int>(hydro_ids[p]);
     int species_id = hydro_id - ICY;
-    T r = radius[p];
-    T kn = lambda / r;
-    T beta = T(1) + kn * (T(1.256) + T(0.4) * exp(-T(1.1) / kn));
-    T vsed = beta / (T(9) * eta) * (T(2) * r * r * grav * (density[p] - rho)) +
-             const_vsed[p];
+    // A non-zero const_vsed is the whole velocity (prescribed, athena
+    // convention); otherwise Stokes. grav is the SIGNED x1 acceleration,
+    // so dense particles settle toward -x1.
+    T vsed;
+    if (const_vsed[p] != T(0)) {
+      vsed = const_vsed[p];
+    } else {
+      T r = radius[p];
+      T kn = lambda / r;
+      T beta = T(1) + kn * (T(1.256) + T(0.4) * exp(-T(1.1) / kn));
+      vsed = beta / (T(9) * eta) * (T(2) * r * r * grav * (density[p] - rho));
+    }
     if (vsed < -upper_limit) vsed = -upper_limit;
     if (vsed > upper_limit) vsed = upper_limit;
     vsed *= sedimenting;
