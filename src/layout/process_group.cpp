@@ -147,7 +147,6 @@ bool ProcessGroupContext::initialized() const {
 
 CommWorkPtr ProcessGroupContext::send(std::vector<torch::Tensor>& tensors,
                                       int peer, int tag) const {
-  sync_tensor_streams(tensors);
   if (ucx_) {
     check_ucx_tensor_support(tensors);
     return std::make_shared<C10dWork>(ucx_->send(tensors, peer, tag));
@@ -161,7 +160,6 @@ CommWorkPtr ProcessGroupContext::send(std::vector<torch::Tensor>& tensors,
 
 CommWorkPtr ProcessGroupContext::recv(std::vector<torch::Tensor>& tensors,
                                       int peer, int tag) const {
-  sync_tensor_streams(tensors);
   if (ucx_) {
     check_ucx_tensor_support(tensors);
     return std::make_shared<C10dWork>(ucx_->recv(tensors, peer, tag));
@@ -274,10 +272,6 @@ CommWorkPtr ProcessGroupContext::end_coalescing() const {
   if (!supports_coalescing()) return nullptr;
   return std::make_shared<C10dWork>(ucx_->endCoalescing());
 }
-
-#ifdef NOT_USE_CUDA
-void sync_tensor_streams(std::vector<torch::Tensor> const&) {}
-#endif
 
 #ifndef USE_UCX
 void ProcessGroupContext::_init_ucx() {

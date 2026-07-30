@@ -20,6 +20,9 @@ void set_default_env(char const* name, char const* value) {
 }  // namespace
 
 void ProcessGroupContext::_init_ucx() {
+  // commux owns CUDA stream synchronization. In particular, grouped point-to-
+  // point operations are flushed after one stream synchronization at
+  // endCoalescing(); synchronizing each buffer here would defeat that batching.
   set_default_env("COMMUX_COALESCE", "1");
   set_default_env("COMMUX_GROUP", "1");
   if (options_->device() == "cpu") {
