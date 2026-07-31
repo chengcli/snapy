@@ -185,4 +185,15 @@ void cs_contra_to_sph_(torch::Tensor const &vel, torch::Tensor alpha,
 void cs_sph_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
                        torch::Tensor beta, int face_id);
 
+//! Build the static pointwise velocity transform used at a cubed-sphere edge.
+//! If cosine is defined, the coordinate metric raise/lower operation is
+//! composed into the matrix for conserved variables.
+torch::Tensor cs_velocity_transform_matrix(
+    torch::Tensor alpha, torch::Tensor beta, int face_id, bool to_spherical,
+    torch::Tensor cosine = torch::Tensor());
+
+//! Apply a cached [3,3,...] pointwise velocity transform in place.
+void cs_apply_velocity_transform_(torch::Tensor const &vel,
+                                  torch::Tensor const &matrix);
+
 }  // namespace snap

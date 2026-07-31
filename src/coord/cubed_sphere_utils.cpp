@@ -10,6 +10,8 @@
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
+#include "coord_dispatch.hpp"
+#include "coord_utils.hpp"
 #include "cubed_sphere_utils.hpp"
 #include "spherical_utils.hpp"
 
@@ -252,6 +254,83 @@ void cs_sph_to_contra_(torch::Tensor const &vel, torch::Tensor alpha,
   auto [theta, phi] = cs_ab_to_theta_phi(alpha, beta, face_id);
   sph_contra_to_cart_(vel, theta, phi);
   cs_cart_to_contra_(vel, alpha, beta, face_id);
+}
+
+torch::Tensor cs_velocity_transform_matrix(torch::Tensor alpha,
+                                           torch::Tensor beta, int face_id,
+                                           bool to_spherical,
+                                           torch::Tensor cosine) {
+  TORCH_CHECK(alpha.sizes() == beta.sizes(),
+              "cubed-sphere transform coordinates must have matching shapes");
+  TORCH_CHECK(alpha.scalar_type() == beta.scalar_type() &&
+                  alpha.device() == beta.device(),
+              "cubed-sphere transform coordinates must have matching dtype "
+              "and device");
+  if (cosine.defined()) {
+    TORCH_CHECK(cosine.sizes() == alpha.sizes(),
+                "cubed-sphere transform cosine has incompatible shape");
+    TORCH_CHECK(cosine.scalar_type() == alpha.scalar_type() &&
+                    cosine.device() == alpha.device(),
+                "cubed-sphere transform cosine must match coordinate dtype "
+                "and device");
+  }
+
+  auto spatial = alpha.sizes().vec();
+  auto vector_shape = spatial;
+  vector_shape.insert(vector_shape.begin(), 3);
+  auto matrix_shape = vector_shape;
+  matrix_shape.insert(matrix_shape.begin() + 1, 3);
+  auto matrix = torch::empty(matrix_shape, alpha.options());
+
+  for (int input = 0; input < 3; ++input) {
+    auto basis = torch::zeros(vector_shape, alpha.options());
+    basis[input].fill_(1.);
+    if (to_spherical) {
+      if (cosine.defined()) coord_vec_raise_(basis, cosine);
+      cs_contra_to_sph_(basis, alpha, beta, face_id);
+    } else {
+      cs_sph_to_contra_(basis, alpha, beta, face_id);
+      if (cosine.defined()) coord_vec_lower_(basis, cosine);
+    }
+    matrix.select(1, input).copy_(basis);
+  }
+  return matrix;
+}
+
+void cs_apply_velocity_transform_(torch::Tensor const &vel,
+                                  torch::Tensor const &matrix) {
+  TORCH_CHECK(vel.dim() >= 2 && vel.size(0) == 3,
+              "cubed-sphere velocity must have shape [3,...], got ",
+              vel.sizes());
+  TORCH_CHECK(matrix.dim() == vel.dim() + 1 && matrix.size(0) == 3 &&
+                  matrix.size(1) == 3,
+              "cubed-sphere matrix must have shape [3,3,...], got ",
+              matrix.sizes());
+  TORCH_CHECK(matrix.scalar_type() == vel.scalar_type() &&
+                  matrix.device() == vel.device(),
+              "cubed-sphere matrix must match velocity dtype and device");
+  for (int dim = 1; dim < vel.dim(); ++dim) {
+    TORCH_CHECK(
+        matrix.size(dim + 1) == 1 || matrix.size(dim + 1) == vel.size(dim),
+        "cubed-sphere matrix spatial shape ", matrix.sizes(),
+        " cannot broadcast to velocity shape ", vel.sizes());
+  }
+
+  auto spatial = vel[0];
+  at::TensorIteratorConfig config;
+  config.resize_outputs(false)
+      .check_all_same_dtype(true)
+      .declare_static_shape(spatial.sizes())
+      .add_owned_output(vel[0])
+      .add_owned_output(vel[1])
+      .add_owned_output(vel[2]);
+  for (int output = 0; output < 3; ++output) {
+    for (int input = 0; input < 3; ++input) {
+      config.add_owned_input(matrix[output][input].expand_as(spatial));
+    }
+  }
+  auto iter = config.build();
+  at::native::call_cs_matrix_vec(vel.device().type(), iter);
 }
 
 }  // namespace snap

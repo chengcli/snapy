@@ -90,6 +90,17 @@ bool buffer_matches(torch::Tensor const& buffer, torch::Tensor const& source) {
          buffer.device() == source.device();
 }
 
+std::string velocity_transform_key(SyncOptions const& opts, int buffer_id,
+                                   bool to_spherical,
+                                   torch::Tensor const& velocity) {
+  std::ostringstream key;
+  key << opts.dim() << ':' << opts.type() << ':' << buffer_id << ':'
+      << to_spherical << ':' << velocity.scalar_type() << ':'
+      << velocity.device();
+  for (auto size : velocity.sizes()) key << ':' << size;
+  return key.str();
+}
+
 std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
                                            int peer_rank, int target_rank) {
   auto peer_iloc = layout.loc_of(peer_rank);
@@ -107,6 +118,38 @@ std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
 }
 
 }  // namespace
+
+torch::Tensor const& CubedSphereLayoutImpl::_velocity_transform(
+    SyncOptions const& opts, int buffer_id, bool to_spherical,
+    torch::Tensor alpha, torch::Tensor beta, torch::Tensor cosine,
+    torch::Tensor const& velocity) const {
+  auto key = velocity_transform_key(opts, buffer_id, to_spherical, velocity);
+  auto found = _velocity_transform_cache.find(key);
+  if (found != _velocity_transform_cache.end()) return found->second;
+
+  if (alpha.scalar_type() != velocity.scalar_type() ||
+      alpha.device() != velocity.device()) {
+    alpha = alpha.to(velocity.options());
+    beta = beta.to(velocity.options());
+  }
+  if (cosine.defined() && (cosine.scalar_type() != velocity.scalar_type() ||
+                           cosine.device() != velocity.device())) {
+    cosine = cosine.to(velocity.options());
+  }
+
+  // Cubed-sphere angular geometry and its metric are constant along x1.
+  // Cache one radial plane and broadcast it when applying the transform.
+  alpha = alpha.narrow(-1, 0, 1);
+  beta = beta.narrow(-1, 0, 1);
+  if (cosine.defined()) cosine = cosine.narrow(-1, 0, 1);
+
+  int face_id = std::get<2>(loc_of(options->rank()));
+  auto matrix = cs_velocity_transform_matrix(
+      alpha, beta, face_id, to_spherical,
+      opts.type() == kConserved ? cosine : torch::Tensor());
+  return _velocity_transform_cache.emplace(std::move(key), std::move(matrix))
+      .first->second;
+}
 
 /*!
  * ----------------------------
@@ -675,12 +718,17 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         switch (opts.type()) {
           case kConserved: {
             auto vel = var_send.narrow(0, IVX, 3);
-            coord_vec_raise_(vel, cosine_cell.index(sub3));
-            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/true, alpha,
+                                    beta, cosine_cell.index(sub3), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kPrimitive: {
             auto vel = var_send.narrow(0, IVX, 3);
-            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/true, alpha,
+                                    beta, torch::Tensor(), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kScalar:
             break;
@@ -849,12 +897,17 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
         switch (opts.type()) {
           case kConserved: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
-            coord_vec_lower_(vel, cosine_cell.index(sub3));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/false, alpha,
+                                    beta, cosine_cell.index(sub3), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kPrimitive: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/false, alpha,
+                                    beta, torch::Tensor(), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kScalar:
             break;
