@@ -91,6 +91,17 @@ set_tests_properties(test_cubed_sphere_vertical_velocity_exchange_python PROPERT
   LABELS "python;exchange;cubed-sphere;diagnostic"
 )
 
+add_test(
+  NAME test_jit_user_forcing_python
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_jit_user_forcing.py
+)
+set_tests_properties(test_jit_user_forcing_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 30
+  ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python"
+  LABELS "python;forcing"
+)
+
 file(GLOB inputs *.yaml *.py)
 # create tests folder if does not exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)

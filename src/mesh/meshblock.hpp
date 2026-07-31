@@ -10,6 +10,7 @@
 #include <torch/nn/module.h>
 #include <torch/nn/modules/common.h>
 #include <torch/nn/modules/container/any.h>
+#include <torch/script.h>
 
 // harp
 #include <harp/integrator/integrator.hpp>
@@ -105,8 +106,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! user output
   std::function<Variables(Variables const&)> user_output_callback;
 
-  //! user forcing increments applied during advance_local
-  std::function<Variables(Variables const&, double, int)> user_forcing_callback;
+  //! immutable TorchScript forcings applied in registration order
+  std::vector<std::shared_ptr<torch::jit::Module>> user_stage_forcings;
+
+  void set_user_stage_forcings(std::vector<std::string> const& filenames);
 
   //! outputs
   std::vector<std::shared_ptr<OutputType>> output_types;

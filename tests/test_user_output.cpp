@@ -10,10 +10,12 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -127,6 +129,37 @@ std::shared_ptr<MeshBlockImpl> make_3d_block() {
 
 bool contains(std::vector<std::string> const& names, std::string const& name) {
   return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+std::filesystem::path save_stage_forcing(std::string const& name,
+                                         double density_increment,
+                                         bool unsupported = false,
+                                         bool scalar = false) {
+  auto path = std::filesystem::temp_directory_path() / (name + ".pt");
+  torch::jit::Module module(name);
+  std::string scalar_body =
+      scalar ? "  scalar_ds = torch.full_like(variables[\"scalar_s\"], "
+               "0.25)\n"
+             : "";
+  std::string output;
+  if (unsupported) {
+    output = "  return {\"unsupported\": hydro_du}\n";
+  } else if (scalar) {
+    output = "  return {\"hydro_du\": hydro_du, \"scalar_ds\": scalar_ds}\n";
+  } else {
+    output = "  return {\"hydro_du\": hydro_du}\n";
+  }
+  module.define(
+      "def forward(self, variables: Dict[str, Tensor], dt: float, stage: int) "
+      "-> Dict[str, Tensor]:\n"
+      "  hydro_u = variables[\"hydro_u\"]\n"
+      "  latitude = variables[\"coord.latitude\"]\n"
+      "  hydro_du = torch.zeros_like(hydro_u)\n"
+      "  hydro_du[0] = " +
+      std::to_string(density_increment) + " + torch.zeros_like(latitude)\n" +
+      scalar_body + output);
+  module.save(path.string());
+  return path;
 }
 
 }  // namespace
@@ -371,7 +404,7 @@ TEST(OutputSlice, netcdf_writes_selected_coordinate_and_collapsed_dimension) {
 }
 #endif
 
-TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
+TEST(UserForcing, scripted_stage_forcings_add_tendencies_in_list_order) {
   auto block = make_block("ideal-gas", {"tracer_a"});
   int nc1 = block->pcoord->options->nc1();
   int nc2 = block->pcoord->options->nc2();
@@ -387,32 +420,63 @@ TEST(UserForcing, callback_adds_extra_hydro_and_scalar_tendencies) {
       torch::ones({1, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
   vars["scalar_r"] = vars["scalar_s"] / vars["hydro_u"][IDN].unsqueeze(0);
 
-  block->user_forcing_callback = [](Variables const& forcing_vars, double dt,
-                                    int stage) {
-    EXPECT_DOUBLE_EQ(dt, 0.0);
-    EXPECT_EQ(stage, 0);
-    EXPECT_TRUE(forcing_vars.count("hydro_u"));
-    EXPECT_TRUE(forcing_vars.count("scalar_s"));
-
-    Variables out;
-    out["hydro_du"] = torch::zeros_like(forcing_vars.at("hydro_u"));
-    out["hydro_du"][IDN].fill_(0.5);
-    out["scalar_ds"] = torch::full_like(forcing_vars.at("scalar_s"), 0.25);
-    return out;
-  };
+  auto first =
+      save_stage_forcing("snapy_stage_forcing_first", 0.25, false, true);
+  auto second = save_stage_forcing("snapy_stage_forcing_second", 0.5);
+  block->set_user_stage_forcings({first.string(), second.string()});
 
   block->advance_local(vars, 0.0, 0);
 
   auto hydro_u = vars.at("hydro_u");
-  auto scalar_s = vars.at("scalar_s");
-
-  EXPECT_TRUE(torch::allclose(hydro_u[IDN], torch::full_like(hydro_u[IDN], 1.5),
-                              1.e-12, 1.e-12));
-  EXPECT_TRUE(torch::allclose(scalar_s, torch::full_like(scalar_s, 1.25),
-                              1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(
+      hydro_u[IDN], torch::full_like(hydro_u[IDN], 1.75), 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(vars["scalar_s"],
+                              torch::full_like(vars["scalar_s"], 1.25), 1.e-12,
+                              1.e-12));
+  std::filesystem::remove(first);
+  std::filesystem::remove(second);
 }
 
-TEST(UserForcing, callback_rejects_unsupported_keys) {
+TEST(UserForcing, scripted_module_is_shared_across_parallel_blocks) {
+  auto first_block = make_block("ideal-gas");
+  auto second_block = make_block("ideal-gas");
+  auto forcing = save_stage_forcing("snapy_stage_forcing_parallel", 0.25);
+  first_block->set_user_stage_forcings({forcing.string()});
+  second_block->user_stage_forcings = first_block->user_stage_forcings;
+
+  ASSERT_EQ(first_block->user_stage_forcings[0].get(),
+            second_block->user_stage_forcings[0].get());
+
+  auto advance = [](std::shared_ptr<MeshBlockImpl> const& block) {
+    int nc1 = block->pcoord->options->nc1();
+    int nc2 = block->pcoord->options->nc2();
+    int nc3 = block->pcoord->options->nc3();
+    Variables vars;
+    vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                   torch::kFloat64);
+    vars["hydro_w"][IDN].fill_(1.0);
+    vars["hydro_w"][IPR].fill_(3.0);
+    vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
+    block->advance_local(vars, 0.0, 0);
+    return vars["hydro_u"][IDN].clone();
+  };
+
+  auto first = std::async(std::launch::async, advance, first_block);
+  auto second = std::async(std::launch::async, advance, second_block);
+  ASSERT_EQ(first.wait_for(std::chrono::seconds(10)),
+            std::future_status::ready);
+  ASSERT_EQ(second.wait_for(std::chrono::seconds(10)),
+            std::future_status::ready);
+  auto first_density = first.get();
+  auto second_density = second.get();
+  EXPECT_TRUE(
+      torch::allclose(first_density, torch::full_like(first_density, 1.25)));
+  EXPECT_TRUE(
+      torch::allclose(second_density, torch::full_like(second_density, 1.25)));
+  std::filesystem::remove(forcing);
+}
+
+TEST(UserForcing, scripted_stage_forcing_rejects_unsupported_keys) {
   auto block = make_block("ideal-gas");
   int nc1 = block->pcoord->options->nc1();
   int nc2 = block->pcoord->options->nc2();
@@ -425,14 +489,12 @@ TEST(UserForcing, callback_rejects_unsupported_keys) {
   vars["hydro_w"][IPR].fill_(3.0);
   vars["hydro_u"] = block->phydro->peos->compute("W->U", {vars["hydro_w"]});
 
-  block->user_forcing_callback = [](Variables const& forcing_vars, double,
-                                    int) {
-    Variables out;
-    out["hydro_w"] = torch::zeros_like(forcing_vars.at("hydro_u"));
-    return out;
-  };
+  auto forcing =
+      save_stage_forcing("snapy_stage_forcing_unsupported", 0.0, true);
+  block->set_user_stage_forcings({forcing.string()});
 
   EXPECT_THROW(block->advance_local(vars, 0.0, 0), c10::Error);
+  std::filesystem::remove(forcing);
 }
 
 TEST(OutputSelection, hydro_fields_depend_on_eos_and_requested_mode) {

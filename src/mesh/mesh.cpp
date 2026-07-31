@@ -328,6 +328,16 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
   run_block_jobs([&](size_t i) { blocks[i]->exchange_ghost_zones(vars[i]); });
 }
 
+void MeshImpl::set_user_stage_forcings(
+    std::vector<std::string> const& filenames) {
+  TORCH_CHECK(!blocks.empty(),
+              "Mesh::set_user_stage_forcings requires at least one block");
+  blocks.front()->set_user_stage_forcings(filenames);
+  for (size_t i = 1; i < blocks.size(); ++i) {
+    blocks[i]->user_stage_forcings = blocks.front()->user_stage_forcings;
+  }
+}
+
 void MeshImpl::exchange(MeshVariables& vars, SyncOptions const& opts) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::exchange expects one Variables map per local MeshBlock");

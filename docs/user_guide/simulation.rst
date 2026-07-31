@@ -208,17 +208,34 @@ Register custom output callbacks:
     # Register callback
     block.set_user_output_func(user_output)
 
-Register custom forcing callbacks:
+Register saved TorchScript stage forcings:
 
 .. code-block:: python
 
-    def user_forcing(vars, dt, stage):
-        rho = vars["hydro_u"][snapy.kIDN, :, :, :]
-        hydro_du = torch.zeros_like(vars["hydro_u"])
-        hydro_du[snapy.kIDN] = 0.01 * dt * rho
-        return {"hydro_du": hydro_du}
+    from typing import Dict
 
-    block.set_user_forcing_func(user_forcing)
+    class UserForcing(torch.nn.Module):
+        def forward(
+            self,
+            variables: Dict[str, torch.Tensor],
+            dt: float,
+            stage: int,
+        ) -> Dict[str, torch.Tensor]:
+            hydro_u = variables["hydro_u"]
+            rho = hydro_u[snapy.kIDN]
+            hydro_du = torch.zeros_like(hydro_u)
+            hydro_du[snapy.kIDN] = 0.01 * dt * rho
+            return {"hydro_du": hydro_du}
+
+    torch.jit.script(UserForcing().eval()).save("forcing.pt")
+    mesh.set_user_stage_forcings(["forcing.pt"])
+
+The ``variables`` dictionary contains the live model variables and recursive
+named buffers from the current ``MeshBlock`` (for example ``coord.x1v`` and
+``coord.latitude``). Tensor storage is shared rather than copied. Registered
+modules run sequentially in list order during every integration stage.
+Because a mesh shares the modules across its local blocks, ``forward`` must not
+mutate module state.
 
 GPU Acceleration
 ----------------

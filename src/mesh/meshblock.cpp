@@ -29,6 +29,34 @@ static void set_scalar_primitive(Variables &vars, torch::Tensor const &scalar_s,
   }
 }
 
+static c10::impl::GenericDict stage_forcing_variables(
+    MeshBlockImpl const &block, Variables const &vars) {
+  c10::impl::GenericDict inputs(c10::StringType::get(), c10::TensorType::get());
+  for (auto const &item : block.named_buffers(/*recurse=*/true)) {
+    inputs.insert(item.key(), item.value());
+  }
+  for (auto const &[name, value] : vars) {
+    inputs.insert_or_assign(name, value);
+  }
+  return inputs;
+}
+
+static Variables stage_forcing_result(c10::IValue const &result, size_t index) {
+  TORCH_CHECK(result.isGenericDict(), "User stage forcing ", index,
+              " must return Dict[str, Tensor], but returned ", result.tagKind(),
+              ".");
+  Variables output;
+  for (auto const &item : result.toGenericDict()) {
+    TORCH_CHECK(item.key().isString(), "User stage forcing ", index,
+                " returned a dictionary with a non-string key.");
+    TORCH_CHECK(item.value().isTensor(), "User stage forcing ", index,
+                " returned a non-Tensor value for key '",
+                item.key().toStringRef(), "'.");
+    output.emplace(item.key().toStringRef(), item.value().toTensor());
+  }
+  return output;
+}
+
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const &options_)
     : options(options_) {
   int nc1 = options->coord()->nc1();
@@ -53,6 +81,21 @@ MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const &options_)
 MeshBlockImpl::~MeshBlockImpl() {
   // destroy signal handler
   SignalHandler::Destroy();
+}
+
+void MeshBlockImpl::set_user_stage_forcings(
+    std::vector<std::string> const &filenames) {
+  std::vector<std::shared_ptr<torch::jit::Module>> loaded;
+  loaded.reserve(filenames.size());
+  auto device = torch::Device(options->device_str());
+  for (auto const &filename : filenames) {
+    auto module =
+        std::make_shared<torch::jit::Module>(torch::jit::load(filename));
+    module->to(device);
+    module->eval();
+    loaded.push_back(std::move(module));
+  }
+  user_stage_forcings = std::move(loaded);
 }
 
 void MeshBlockImpl::reset() {
@@ -619,45 +662,54 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   }
 
-  // (3.C) user forcing callback
-  if (static_cast<bool>(user_forcing_callback)) {
-    auto extra_forcing = user_forcing_callback(vars, dt, stage);
-
+  // (3.C) user stage forcings
+  auto apply_extra_forcing = [&](Variables const &extra_forcing,
+                                 std::string const &source) {
     auto hydro_it = extra_forcing.find("hydro_du");
     if (hydro_it != extra_forcing.end()) {
-      TORCH_CHECK(hydro_it->second.sizes() == fut_hydro_du.sizes(),
-                  "User forcing callback returned hydro_du with shape ",
-                  hydro_it->second.sizes(), ", expected ", fut_hydro_du.sizes(),
-                  ".");
+      TORCH_CHECK(hydro_it->second.sizes() == fut_hydro_du.sizes(), source,
+                  " returned hydro_du with shape ", hydro_it->second.sizes(),
+                  ", expected ", fut_hydro_du.sizes(), ".");
       fut_hydro_du.add_(hydro_it->second);
     }
 
     auto scalar_it = extra_forcing.find("scalar_ds");
     if (scalar_it != extra_forcing.end()) {
-      TORCH_CHECK(pscalar->nvar() > 0,
-                  "User forcing callback returned scalar_ds, but no scalar "
-                  "variables are configured on this MeshBlock.");
-      TORCH_CHECK(fut_scalar_ds.defined(),
-                  "User forcing callback returned scalar_ds before native "
-                  "scalar tendencies were initialized.");
-      TORCH_CHECK(scalar_it->second.sizes() == fut_scalar_ds.sizes(),
-                  "User forcing callback returned scalar_ds with shape ",
-                  scalar_it->second.sizes(), ", expected ",
-                  fut_scalar_ds.sizes(), ".");
+      TORCH_CHECK(
+          pscalar->nvar() > 0, source,
+          " returned scalar_ds, but no scalar variables are configured on "
+          "this MeshBlock.");
+      TORCH_CHECK(fut_scalar_ds.defined(), source,
+                  " returned scalar_ds before native scalar tendencies were "
+                  "initialized.");
+      TORCH_CHECK(scalar_it->second.sizes() == fut_scalar_ds.sizes(), source,
+                  " returned scalar_ds with shape ", scalar_it->second.sizes(),
+                  ", expected ", fut_scalar_ds.sizes(), ".");
       fut_scalar_ds.add_(scalar_it->second);
     }
 
     for (auto const &[name, _] : extra_forcing) {
-      TORCH_CHECK(name == "hydro_du" || name == "scalar_ds",
-                  "User forcing callback returned unsupported key '", name,
+      TORCH_CHECK(name == "hydro_du" || name == "scalar_ds", source,
+                  " returned unsupported key '", name,
                   "'. Expected one or both of: hydro_du, scalar_ds.");
     }
+  };
 
+  if (!user_stage_forcings.empty()) {
+    auto inputs = stage_forcing_variables(*this, vars);
+    for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
+      auto result = user_stage_forcings[i]->forward({inputs, dt, stage});
+      apply_extra_forcing(stage_forcing_result(result, i),
+                          "User stage forcing " + std::to_string(i));
+    }
+  }
+
+  if (!user_stage_forcings.empty()) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
       SINFO(MeshBlock) << "stage " << stage
-                       << " user forcing time (s): " << elapsed.count()
+                       << " user stage forcing time (s): " << elapsed.count()
                        << std::endl;
       start = std::chrono::high_resolution_clock::now();
     }
