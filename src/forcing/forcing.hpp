@@ -122,6 +122,7 @@ class CoriolisXYZImpl : public torch::nn::Cloneable<CoriolisXYZImpl> {
  public:
   //! data
   torch::Tensor omega1, omega2, omega3, alpha, beta;
+  torch::Tensor contra_to_spherical, spherical_to_covariant;
 
   //! cubed-sphere metadata
   int face_id = -1;

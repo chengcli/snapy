@@ -216,8 +216,8 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   }
 
   // implicit correction
-  if (ContainVariable("implicit")) {
-    auto du = pmb->phydro->named_buffers()["M"];
+  if (ContainVariable("implicit") && pmb->phydro->picorr) {
+    auto du = pmb->phydro->picorr->correction();
 
     // density
     pod = new OutputData;

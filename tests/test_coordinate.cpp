@@ -303,6 +303,54 @@ TEST_P(DeviceTest, contra_sph) {
   }
 }
 
+TEST_P(DeviceTest, cached_cubed_sphere_velocity_matrices_match_direct) {
+  auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+  auto block = MeshBlock(op);
+  block->to(device, dtype);
+
+  auto pcoord = block->pcoord;
+  int nc1 = pcoord->options->nc1();
+  int nc2 = pcoord->options->nc2();
+  int nc3 = pcoord->options->nc3();
+  auto opts = torch::TensorOptions().dtype(dtype).device(device);
+  auto mesh = torch::meshgrid({pcoord->x3v, pcoord->x2v, pcoord->x1v}, "ij");
+  auto alpha = mesh[1];
+  auto beta = mesh[0];
+  auto cosine = pcoord->cosine_cell_kj.expand({nc3, nc2, nc1});
+
+  for (int face = 0; face < 6; ++face) {
+    for (bool conserved : {false, true}) {
+      auto contra = torch::randn({3, nc3, nc2, nc1}, opts);
+      auto expected_sph = contra.clone();
+      if (conserved) coord_vec_raise_(expected_sph, cosine);
+      cs_contra_to_sph_(expected_sph, alpha, beta, face);
+
+      auto alpha_plane = alpha.narrow(-1, 0, 1);
+      auto beta_plane = beta.narrow(-1, 0, 1);
+      auto metric_plane = conserved ? cosine.narrow(-1, 0, 1) : torch::Tensor();
+      auto to_sph = cs_velocity_transform_matrix(alpha_plane, beta_plane, face,
+                                                 true, metric_plane);
+      EXPECT_EQ(to_sph.size(-1), 1);
+      auto actual_sph = contra.clone();
+      cs_apply_velocity_transform_(actual_sph, to_sph);
+      EXPECT_TRUE(torch::allclose(actual_sph, expected_sph, 1.e-4, 1.e-5))
+          << "to spherical face=" << face << " conserved=" << conserved;
+
+      auto sph = torch::randn({3, nc3, nc2, nc1}, opts);
+      auto expected_contra = sph.clone();
+      cs_sph_to_contra_(expected_contra, alpha, beta, face);
+      if (conserved) coord_vec_lower_(expected_contra, cosine);
+
+      auto from_sph = cs_velocity_transform_matrix(alpha_plane, beta_plane,
+                                                   face, false, metric_plane);
+      auto actual_contra = sph.clone();
+      cs_apply_velocity_transform_(actual_contra, from_sph);
+      EXPECT_TRUE(torch::allclose(actual_contra, expected_contra, 1.e-4, 1.e-5))
+          << "from spherical face=" << face << " conserved=" << conserved;
+    }
+  }
+}
+
 TEST_P(DeviceTest, contra_sph_matches_cartesian_composition) {
   auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
   auto block = MeshBlock(op);

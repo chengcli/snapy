@@ -273,6 +273,49 @@ TEST(forcing, relax_bottom_composition_preserves_state) {
   expect_only_bottom(du, block);
 }
 
+TEST(forcing, implicit_correction_reports_total_energy_delta) {
+  auto make_hydro_block = [](bool implicit) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+    options->hydro()->diffusion() = nullptr;
+
+    auto gravity = ConstGravityOptionsImpl::create();
+    gravity->grav1(-1.);
+    options->hydro()->grav() = gravity;
+
+    if (implicit) {
+      auto icorr = ImplicitOptionsImpl::create();
+      icorr->scheme(1);
+      options->hydro()->icorr() = icorr;
+    } else {
+      options->hydro()->icorr() = nullptr;
+    }
+    return std::make_shared<MeshBlockImpl>(options);
+  };
+
+  auto explicit_block = make_hydro_block(false);
+  auto implicit_block = make_hydro_block(true);
+  auto w = make_primitive(explicit_block);
+
+  auto run = [&](std::shared_ptr<MeshBlockImpl> const& block) {
+    auto u = block->phydro->peos->compute("W->U", {w});
+    Variables vars;
+    vars["hydro_w"] = torch::empty_like(w);
+    return block->phydro->forward(0.1, u, vars);
+  };
+
+  auto explicit_du = run(explicit_block);
+  auto implicit_du = run(implicit_block);
+  auto expected = implicit_du - explicit_du;
+  auto correction = implicit_block->phydro->picorr->correction();
+
+  EXPECT_TRUE(torch::allclose(correction, expected, 1.e-10, 1.e-10));
+  EXPECT_GT(implicit_block->phydro->peos->internal_energy_offset(correction)
+                .abs()
+                .max()
+                .item<double>(),
+            0.);
+}
+
 TEST(forcing, relax_bottom_composition_handles_multidimensional_ghost_zones) {
   auto block = make_block("test_forcing_3d.yaml");
   auto w = make_primitive(block);

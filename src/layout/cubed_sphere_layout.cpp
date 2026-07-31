@@ -49,6 +49,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <sstream>
 
 // fmt
 #include <fmt/format.h>
@@ -71,6 +72,35 @@ namespace {
 
 std::mutex g_cubed_sphere_comm_mutex;
 
+std::string exchange_buffer_key(SyncOptions const& opts,
+                                Variables const& vars) {
+  std::ostringstream key;
+  key << opts.dim() << ':' << opts.phyid() << ':' << opts.type() << ':'
+      << opts.cross_panel_only() << ':' << opts.skip_corner() << ':'
+      << opts.interpolate();
+  for (auto const& [name, _] : vars) {
+    key << ':' << name;
+  }
+  return key.str();
+}
+
+bool buffer_matches(torch::Tensor const& buffer, torch::Tensor const& source) {
+  return buffer.defined() && buffer.sizes() == source.sizes() &&
+         buffer.scalar_type() == source.scalar_type() &&
+         buffer.device() == source.device();
+}
+
+std::string velocity_transform_key(SyncOptions const& opts, int buffer_id,
+                                   bool to_spherical,
+                                   torch::Tensor const& velocity) {
+  std::ostringstream key;
+  key << opts.dim() << ':' << opts.type() << ':' << buffer_id << ':'
+      << to_spherical << ':' << velocity.scalar_type() << ':'
+      << velocity.device();
+  for (auto size : velocity.sizes()) key << ':' << size;
+  return key.str();
+}
+
 std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
                                            int peer_rank, int target_rank) {
   auto peer_iloc = layout.loc_of(peer_rank);
@@ -88,6 +118,38 @@ std::tuple<int, int, int> find_peer_offset(CubedSphereLayoutImpl const& layout,
 }
 
 }  // namespace
+
+torch::Tensor const& CubedSphereLayoutImpl::_velocity_transform(
+    SyncOptions const& opts, int buffer_id, bool to_spherical,
+    torch::Tensor alpha, torch::Tensor beta, torch::Tensor cosine,
+    torch::Tensor const& velocity) const {
+  auto key = velocity_transform_key(opts, buffer_id, to_spherical, velocity);
+  auto found = _velocity_transform_cache.find(key);
+  if (found != _velocity_transform_cache.end()) return found->second;
+
+  if (alpha.scalar_type() != velocity.scalar_type() ||
+      alpha.device() != velocity.device()) {
+    alpha = alpha.to(velocity.options());
+    beta = beta.to(velocity.options());
+  }
+  if (cosine.defined() && (cosine.scalar_type() != velocity.scalar_type() ||
+                           cosine.device() != velocity.device())) {
+    cosine = cosine.to(velocity.options());
+  }
+
+  // Cubed-sphere angular geometry and its metric are constant along x1.
+  // Cache one radial plane and broadcast it when applying the transform.
+  alpha = alpha.narrow(-1, 0, 1);
+  beta = beta.narrow(-1, 0, 1);
+  if (cosine.defined()) cosine = cosine.narrow(-1, 0, 1);
+
+  int face_id = std::get<2>(loc_of(options->rank()));
+  auto matrix = cs_velocity_transform_matrix(
+      alpha, beta, face_id, to_spherical,
+      opts.type() == kConserved ? cosine : torch::Tensor());
+  return _velocity_transform_cache.emplace(std::move(key), std::move(matrix))
+      .first->second;
+}
 
 /*!
  * ----------------------------
@@ -501,6 +563,11 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
 
+  auto& buffers = pmb->exchange_buffer_cache[exchange_buffer_key(opts, vars)];
+  buffers.send.resize(num_exchange_buffers());
+  buffers.recv.resize(num_exchange_buffers());
+  buffers.work.resize(num_exchange_buffers());
+
   // Serialize over all intra-panel neighbors first
   if (!opts.cross_panel_only()) {
     for (int dy = dy_min; dy <= dy_max; ++dy)
@@ -522,11 +589,12 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         // Copy data from mesh to send buffer
         int bid = get_buffer_id(offset);
 
-        pmb->send_bufs[bid].clear();
-        pmb->recv_bufs[bid].clear();
-        pmb->send_bufs[bid].reserve(vars.size());
-        pmb->recv_bufs[bid].reserve(vars.size());
+        auto& send_bufs = buffers.send[bid];
+        auto& recv_bufs = buffers.recv[bid];
+        send_bufs.resize(vars.size());
+        recv_bufs.resize(vars.size());
 
+        size_t ivar = 0;
         for (auto& [name, var] : vars) {
           // do partial send if name string contains ':'
           auto pos = name.find(":");
@@ -536,10 +604,21 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
                 (suffix == "-" && (dy > 0 || dx > 0)))
               continue;
           }
-          pmb->send_bufs[bid].push_back(var.index(sub).clone());
-          pmb->recv_bufs[bid].push_back(
-              torch::empty_like(pmb->send_bufs[bid].back()));
+
+          auto source = var.index(sub);
+          if (!buffer_matches(send_bufs[ivar], source)) {
+            send_bufs[ivar] = torch::empty_like(source);
+          }
+          if (!buffer_matches(recv_bufs[ivar], source)) {
+            recv_bufs[ivar] = torch::empty_like(source);
+          }
+          send_bufs[ivar].copy_(source);
+          ++ivar;
         }
+        send_bufs.resize(ivar);
+        recv_bufs.resize(ivar);
+        pmb->send_bufs[bid] = send_bufs;
+        pmb->recv_bufs[bid] = recv_bufs;
       }
   }
 
@@ -593,10 +672,12 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       // Copy data from mesh to send buffer
       int bid = get_buffer_id(offset);
 
-      pmb->send_bufs[bid].clear();
-      pmb->recv_bufs[bid].clear();
-      pmb->send_bufs[bid].reserve(vars.size());
-      pmb->recv_bufs[bid].reserve(vars.size());
+      auto& send_bufs = buffers.send[bid];
+      auto& recv_bufs = buffers.recv[bid];
+      auto& work_bufs = buffers.work[bid];
+      send_bufs.resize(vars.size());
+      recv_bufs.resize(vars.size());
+      work_bufs.resize(vars.size());
 
       int my_side = get_side(offset);
       int nb_side = CS_FACE_EDGES[std::get<2>(iloc)][my_side].nside;
@@ -608,6 +689,7 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       auto alpha = mesh[1].index(sub3);
       auto beta = mesh[0].index(sub3);
 
+      size_t ivar = 0;
       for (auto& [name, var] : vars) {
         // do partial send if name string contains ':'
         auto pos = name.find(":");
@@ -618,17 +700,35 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
             continue;
         }
 
-        auto var_send = var.index(sub).clone();
+        auto source = var.index(sub);
+        if (!buffer_matches(send_bufs[ivar], source)) {
+          send_bufs[ivar] = torch::empty_like(source);
+        }
+        if (!buffer_matches(recv_bufs[ivar], source)) {
+          recv_bufs[ivar] = torch::empty_like(source);
+        }
+        if (!buffer_matches(work_bufs[ivar], source)) {
+          work_bufs[ivar] = torch::empty_like(source);
+        }
+
+        send_bufs[ivar].copy_(source);
+        auto var_send = send_bufs[ivar];
+        auto scratch = work_bufs[ivar];
 
         switch (opts.type()) {
           case kConserved: {
             auto vel = var_send.narrow(0, IVX, 3);
-            coord_vec_raise_(vel, cosine_cell.index(sub3));
-            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/true, alpha,
+                                    beta, cosine_cell.index(sub3), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kPrimitive: {
             auto vel = var_send.narrow(0, IVX, 3);
-            cs_contra_to_sph_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/true, alpha,
+                                    beta, torch::Tensor(), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kScalar:
             break;
@@ -637,31 +737,40 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         // check reverse flag
         if (rev_flag) {
           if (dy != 0) {
-            var_send = var_send.flip(-2);
+            at::flip_out(scratch, var_send, {-2});
           } else if (dx != 0) {
-            var_send = var_send.flip(-3);
+            at::flip_out(scratch, var_send, {-3});
           }
+          std::swap(var_send, scratch);
         }
 
         // check flip flag
         if (flip_flag) {
           if (dy != 0) {
-            var_send = var_send.flip(-3);
+            at::flip_out(scratch, var_send, {-3});
           } else if (dx != 0) {
-            var_send = var_send.flip(-2);
+            at::flip_out(scratch, var_send, {-2});
           }
+          std::swap(var_send, scratch);
         }
 
         // check transpose flag
         if (trans_flag) {
           auto sizes = var_send.sizes();
-          var_send = var_send.transpose(-2, -3).reshape(sizes);
+          scratch.copy_(var_send.transpose(-2, -3).reshape(sizes));
+          std::swap(var_send, scratch);
         }
 
-        pmb->send_bufs[bid].push_back(var_send);
-        pmb->recv_bufs[bid].push_back(
-            torch::empty_like(pmb->send_bufs[bid].back()));
+        if (var_send.data_ptr() != send_bufs[ivar].data_ptr()) {
+          send_bufs[ivar].copy_(var_send);
+        }
+        ++ivar;
       }
+      send_bufs.resize(ivar);
+      recv_bufs.resize(ivar);
+      work_bufs.resize(ivar);
+      pmb->send_bufs[bid] = send_bufs;
+      pmb->recv_bufs[bid] = recv_bufs;
     }
 }
 
@@ -788,12 +897,17 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
         switch (opts.type()) {
           case kConserved: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
-            coord_vec_lower_(vel, cosine_cell.index(sub3));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/false, alpha,
+                                    beta, cosine_cell.index(sub3), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kPrimitive: {
             auto vel = var.index(sub).narrow(0, IVX, 3);
-            cs_sph_to_contra_(vel, alpha, beta, std::get<2>(iloc));
+            auto const& matrix =
+                _velocity_transform(opts, bid, /*to_spherical=*/false, alpha,
+                                    beta, torch::Tensor(), vel);
+            cs_apply_velocity_transform_(vel, matrix);
           } break;
           case kScalar:
             break;

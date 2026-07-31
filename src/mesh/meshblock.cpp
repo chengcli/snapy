@@ -65,6 +65,7 @@ void MeshBlockImpl::reset() {
   }
   send_bufs.resize(_playout->num_exchange_buffers());
   recv_bufs.resize(_playout->num_exchange_buffers());
+  exchange_buffer_cache.clear();
 
   int px = options->layout()->px();
   int py = options->layout()->py();
@@ -215,22 +216,15 @@ void MeshBlockImpl::reset() {
   _hydro_u0 = register_buffer(
       "u0",
       torch::zeros({phydro->peos->nvar(), nc3, nc2, nc1}, torch::kFloat64));
-  _hydro_u1 = register_buffer(
-      "u1",
-      torch::zeros({phydro->peos->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
   //// ------- (10) set up scalar buffer ------- ////
   _scalar_s0 = register_buffer(
       "s0", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
-  _scalar_s1 = register_buffer(
-      "s1", torch::zeros({pscalar->nvar(), nc3, nc2, nc1}, torch::kFloat64));
 
   if (options->verbose()) {
     SINFO(MeshBlock) << "setting up buffer with shapes:" << std::endl
                      << "* hydro_u0: " << _hydro_u0.sizes() << std::endl
-                     << "* hydro_u1: " << _hydro_u1.sizes() << std::endl
-                     << "* scalar_s0: " << _scalar_s0.sizes() << std::endl
-                     << "* scalar_s1: " << _scalar_s1.sizes() << std::endl;
+                     << "* scalar_s0: " << _scalar_s0.sizes() << std::endl;
   }
 }
 
@@ -586,11 +580,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (1) save initial state --------
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
-    _hydro_u1.copy_(hydro_u);
 
     if (pscalar->nvar() > 0) {
       _scalar_s0.copy_(scalar_s);
-      _scalar_s1.copy_(scalar_s);
     }
   }
 
@@ -672,7 +664,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // -------- (4) multi-stage averaging --------
-  hydro_u.set_(pintg->forward(stage, _hydro_u0, _hydro_u1, fut_hydro_du));
+  hydro_u.set_(pintg->forward(stage, _hydro_u0, hydro_u, fut_hydro_du));
   phydro->peos->apply_conserved_limiter_(hydro_u);
 
   if (options->verbose()) {
@@ -685,7 +677,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   if (pscalar->nvar() > 0) {
-    scalar_s.set_(pintg->forward(stage, _scalar_s0, _scalar_s1, fut_scalar_ds));
+    scalar_s.set_(pintg->forward(stage, _scalar_s0, scalar_s, fut_scalar_ds));
     set_scalar_primitive(vars, scalar_s, hydro_u);
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
@@ -776,12 +768,6 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
                        << std::endl;
       start = std::chrono::high_resolution_clock::now();
     }
-  }
-
-  // -------- (7) save final state for next stage --------
-  _hydro_u1.copy_(hydro_u);
-  if (pscalar->nvar() > 0) {
-    _scalar_s1.copy_(scalar_s);
   }
 }
 

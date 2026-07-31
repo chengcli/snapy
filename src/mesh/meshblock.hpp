@@ -1,5 +1,10 @@
 #pragma once
 
+// C/C++
+#include <map>
+#include <string>
+#include <vector>
+
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
@@ -75,6 +80,12 @@ using MeshBlockOptions = std::shared_ptr<MeshBlockOptionsImpl>;
 using Variables = std::map<std::string, torch::Tensor>;
 class OutputType;
 
+struct ExchangeBufferSet {
+  std::vector<std::vector<torch::Tensor>> send;
+  std::vector<std::vector<torch::Tensor>> recv;
+  std::vector<std::vector<torch::Tensor>> work;
+};
+
 struct PartOptions {
   //! if true, return the exterior part (with ghost zones);
   //! if false, return the interior part (without ghost zones)
@@ -105,6 +116,7 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
 
   //! Exchange buffers owned by the MeshBlock so Layout stays stateless.
   mutable std::vector<std::vector<torch::Tensor>> send_bufs, recv_bufs;
+  mutable std::map<std::string, ExchangeBufferSet> exchange_buffer_cache;
 
   //! submodules
   harp::Integrator pintg = nullptr;
@@ -217,8 +229,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   Layout _playout;
 
   //! stage registers
-  torch::Tensor _hydro_u0, _hydro_u1;
-  torch::Tensor _scalar_s0, _scalar_s1;
+  torch::Tensor _hydro_u0;
+  torch::Tensor _scalar_s0;
 };
 
 TORCH_MODULE(MeshBlock);

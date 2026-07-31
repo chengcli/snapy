@@ -111,9 +111,6 @@ void HydroImpl::reset() {
 
   _div = register_buffer("D",
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
-
-  _imp = register_buffer("M",
-                         torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
@@ -184,10 +181,11 @@ torch::Tensor HydroImpl::implicit_mass_correction() const {
   return picorr ? picorr->mass_correction() : torch::Tensor();
 }
 
-void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
-                                           torch::Tensor const& w, double dt,
-                                           Variables const& other) {
-  if (!picorr) return;
+torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
+                                                    torch::Tensor const& w,
+                                                    double dt,
+                                                    Variables const& other) {
+  if (!picorr) return torch::Tensor();
 
   // Implicit x1 solve has no cross-rank coupling, so nb1 > 1 would silently
   // solve each rank's own sub-column. Full column <=> both x1 faces physical.
@@ -205,7 +203,6 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
     wi = w;
   }
 
-  auto du0 = du.clone();
   du[IPR].sub_(peos->internal_energy_offset(du));
 
   torch::Tensor gamma;
@@ -215,11 +212,14 @@ void HydroImpl::_apply_implicit_correction(torch::Tensor& du,
   } else {
     gamma = peos->compute("W->A", {wi});
   }
-  picorr->forward(du, wi, gamma, dt);
+  auto correction = picorr->forward(du, wi, gamma, dt);
   du[IPR].add_(peos->internal_energy_offset(du));
+  // picorr measured its delta after removing the EOS reference energy.
+  // Diagnostics expose a conserved-state delta, so restore that reference
+  // contribution using the corrected density and species tendencies.
+  correction[IPR].add_(peos->internal_energy_offset(correction));
 
-  _imp.copy_(du);
-  _imp.sub_(du0);
+  return correction;
 }
 
 void HydroImpl::_revise_x1inner_lr(torch::Tensor const& wl,

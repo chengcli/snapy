@@ -107,8 +107,18 @@ endif()
 
 add_library(snapy::snap ALIAS ${namel}_${buildl})
 
-# CUDA source codes
-if (CUDAToolkit_FOUND)
+# CUDA support and source codes
+if (CUDA AND CUDAToolkit_FOUND)
+  target_include_directories(${namel}_${buildl}
+    SYSTEM PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
+
+  target_link_libraries(${namel}_${buildl}
+    PUBLIC
+    CUDA::cudart
+    ${TORCH_CUDA_LIBRARY}
+    ${C10_CUDA_LIBRARY}
+    )
+
   file(GLOB cu_src_files
       bc/*.cu
       eos/*.cu

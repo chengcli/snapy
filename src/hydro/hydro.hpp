@@ -145,8 +145,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   // call.
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   _hydro_ref_x1(torch::Tensor const& w) const;
-  void _apply_implicit_correction(torch::Tensor& du, torch::Tensor const& w,
-                                  double dt, Variables const& other);
+  torch::Tensor _apply_implicit_correction(torch::Tensor& du,
+                                           torch::Tensor const& w, double dt,
+                                           Variables const& other);
 
  private:
   //! Register all forcing modules
@@ -156,7 +157,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! selects the six-face vs log-mean cell-pressure reference
   mutable int x1_uniform_ = -1;
 
-  torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _imp;
+  torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div;
 };
 
 TORCH_MODULE(Hydro);

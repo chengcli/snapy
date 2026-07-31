@@ -1,5 +1,9 @@
 #pragma once
 
+// C/C++
+#include <map>
+#include <string>
+
 // snap
 #include "cubed_sphere_constants.h"
 #include "layout.hpp"
@@ -62,6 +66,15 @@ class CubedSphereLayoutImpl : public LayoutImpl {
   void _interpolate_to_local(MeshBlockImpl const* pmb,
                              std::tuple<int, int, int> offset,
                              torch::Tensor var) const;
+
+  torch::Tensor const& _velocity_transform(SyncOptions const& opts,
+                                           int buffer_id, bool to_spherical,
+                                           torch::Tensor alpha,
+                                           torch::Tensor beta,
+                                           torch::Tensor cosine,
+                                           torch::Tensor const& velocity) const;
+
+  mutable std::map<std::string, torch::Tensor> _velocity_transform_cache;
 
   //! \brief Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {

@@ -9,7 +9,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                                public EquationOfStateImpl {
  public:
   //! \cache
-  torch::Tensor ivol, temp, w1;
+  torch::Tensor ivol, temp;
 
   //! submodules
   kintera::ThermoY pthermo = nullptr;
@@ -123,8 +123,15 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
   torch::Tensor _isothermal_sound_speed(torch::Tensor ivol, torch::Tensor temp,
                                         torch::Tensor dens);
 
-  //! \brief Check if the primitive variables are cached.
-  bool _check_copy(torch::Tensor prim, torch::Tensor prim_cache) const;
+  //! \brief Check/update cached thermodynamics for a primitive tensor.
+  bool _cache_matches(torch::Tensor const& prim) const;
+  void _mark_cache(torch::Tensor const& prim);
+  void _ensure_cache(torch::Tensor const& prim);
+
+  // A shallow tensor reference plus its ATen mutation version replaces the
+  // former full-field cache copy and device reduction.
+  torch::Tensor cached_prim_;
+  int64_t cached_prim_version_ = -1;
 };
 TORCH_MODULE(MoistMixture);
 

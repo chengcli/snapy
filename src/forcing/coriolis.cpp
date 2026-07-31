@@ -127,6 +127,16 @@ void CoriolisXYZImpl::reset() {
     omega1 = omega[VEL1];
     omega2 = omega[VEL2];
     omega3 = omega[VEL3];
+
+    auto alpha_plane = alpha.narrow(-1, 0, 1);
+    auto beta_plane = beta.narrow(-1, 0, 1);
+    contra_to_spherical = register_buffer(
+        "contra_to_spherical",
+        cs_velocity_transform_matrix(alpha_plane, beta_plane, face_id, true));
+    spherical_to_covariant = register_buffer(
+        "spherical_to_covariant",
+        cs_velocity_transform_matrix(alpha_plane, beta_plane, face_id, false,
+                                     pcoord->cosine_cell_kj.narrow(-1, 0, 1)));
   } else {
     throw std::runtime_error("CoriolisXYZ: unsupported coordinate system");
   }
@@ -141,7 +151,7 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
   if (cubed_sphere) {
     auto force = w.narrow(0, IVX, 3).clone();
     force *= w[IDN].unsqueeze(0);
-    cs_contra_to_sph_(force, alpha, beta, face_id);
+    cs_apply_velocity_transform_(force, contra_to_spherical);
 
     auto o1 = omega1;
     auto o2 = omega2;
@@ -158,8 +168,7 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
     force[VEL2] = 2. * (o1 * m3 - o3 * m1);
     force[VEL3] = 2. * (o2 * m1 - o1 * m2);
 
-    cs_sph_to_contra_(force, alpha, beta, face_id);
-    coord_vec_lower_(force, phydro->pmb->pcoord->cosine_cell_kj);
+    cs_apply_velocity_transform_(force, spherical_to_covariant);
     if (traditional) {
       du.narrow(0, IVY, 2) += dt * force.narrow(0, VEL2, 2);
     } else {
