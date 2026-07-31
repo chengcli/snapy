@@ -146,17 +146,8 @@ void bind_mesh(py::module& m) {
                    return f(vars).cast<std::map<std::string, torch::Tensor>>();
                  };
            })
-      .def("set_user_forcing_func",
-           [&](snap::MeshBlockImpl& self, py::object func_obj) {
-             py::function f = py::cast<py::function>(func_obj);
-             self.user_forcing_callback =
-                 [f](std::map<std::string, torch::Tensor> const& vars,
-                     double dt, int stage) {
-                   py::gil_scoped_acquire gil;
-                   return f(vars, dt, stage)
-                       .cast<std::map<std::string, torch::Tensor>>();
-                 };
-           })
+      .def("set_user_stage_forcings",
+           &snap::MeshBlockImpl::set_user_stage_forcings, py::arg("filenames"))
       .def("max_time_step", &snap::MeshBlockImpl::max_time_step)
       .def("make_outputs", &snap::MeshBlockImpl::make_outputs, py::arg("vars"),
            py::arg("time"), py::arg("final_write") = false)
@@ -269,6 +260,8 @@ void bind_mesh(py::module& m) {
       .def("exchange_ghost_zones", &snap::MeshImpl::exchange_ghost_zones,
            py::arg("vars"), py::arg("type") = (int)snap::kConserved,
            py::call_guard<py::gil_scoped_release>())
+      .def("set_user_stage_forcings", &snap::MeshImpl::set_user_stage_forcings,
+           py::arg("filenames"))
       .def("make_outputs", &snap::MeshImpl::make_outputs, py::arg("vars"),
            py::arg("current_time"), py::arg("final_write") = false)
       .def("print_cycle_info", &snap::MeshImpl::print_cycle_info,

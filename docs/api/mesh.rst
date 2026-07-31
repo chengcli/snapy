@@ -102,15 +102,23 @@ MeshBlock
       :param func: User output function
       :type func: Callable
 
-   .. method:: set_user_forcing_func(func: Callable) -> None
+   .. method:: set_user_stage_forcings(filenames: Sequence[str]) -> None
 
-      Set user forcing callback function.
+      Load saved TorchScript forcing modules and apply them sequentially during
+      each integration stage.
 
-      The callback receives ``(vars, dt, stage)`` and may return additive
-      tendency terms keyed by ``"hydro_du"`` and/or ``"scalar_ds"``.
+      Each module must implement ``forward(variables: Dict[str, Tensor],
+      dt: float, stage: int) -> Dict[str, Tensor]`` and may return additive
+      tendencies keyed by ``"hydro_du"`` and/or ``"scalar_ds"``. The input
+      dictionary contains live variables and recursive named buffers from the
+      mesh block without copying tensor storage.
 
-      :param func: User forcing function
-      :type func: Callable
+      :param filenames: TorchScript ``.pt`` files in execution order
+      :type filenames: Sequence[str]
+
+      This method is available on both ``Mesh`` and ``MeshBlock``. Calling it
+      on ``Mesh`` loads each file once and shares the modules across all local
+      blocks. Their ``forward`` methods must not mutate shared module state.
 
    .. attribute:: options
 

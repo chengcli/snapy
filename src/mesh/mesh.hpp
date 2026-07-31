@@ -54,6 +54,7 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
   void forward(MeshVariables& vars, double dt, int stage);
   void exchange(MeshVariables& vars, SyncOptions const& opts);
   void exchange_ghost_zones(MeshVariables& vars, int type = kConserved);
+  void set_user_stage_forcings(std::vector<std::string> const& filenames);
   void make_outputs(MeshVariables const& vars, double current_time,
                     bool final_write = false);
   void print_cycle_info(MeshVariables const& vars, double time,
