@@ -240,6 +240,44 @@ int main(int argc, char** argv) {
   }
   mesh->exchange(prim_vars, opts);
 
+  struct BufferAddress {
+    int block;
+    int bid;
+    int tensor;
+    void* send;
+    void* recv;
+  };
+  std::vector<BufferAddress> buffer_addresses;
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    for (int bid = 0; bid < mesh->blocks[i]->send_bufs.size(); ++bid) {
+      for (int n = 0; n < mesh->blocks[i]->send_bufs[bid].size(); ++n) {
+        buffer_addresses.push_back(
+            {i, bid, n, mesh->blocks[i]->send_bufs[bid][n].data_ptr(),
+             mesh->blocks[i]->recv_bufs[bid][n].data_ptr()});
+      }
+    }
+  }
+
+  // A second exchange with the same signature must reuse the persistent
+  // neighbor buffers rather than allocate a fresh clone and receive tensor.
+  mesh->exchange(prim_vars, opts);
+  bool reused_exchange_buffers = !buffer_addresses.empty();
+  for (auto const& address : buffer_addresses) {
+    auto send = mesh->blocks[address.block]
+                    ->send_bufs[address.bid][address.tensor]
+                    .data_ptr();
+    auto recv = mesh->blocks[address.block]
+                    ->recv_bufs[address.bid][address.tensor]
+                    .data_ptr();
+    if (send != address.send || recv != address.recv) {
+      std::cerr << "exchange buffer was not reused on block " << address.block
+                << " bid=" << address.bid << " tensor=" << address.tensor
+                << " send " << address.send << " -> " << send << " recv "
+                << address.recv << " -> " << recv << std::endl;
+      reused_exchange_buffers = false;
+    }
+  }
+
   SyncOptions scalar_opts;
   scalar_opts.interpolate(true).type(kScalar);
   MeshVariables scalar_vars(mesh->blocks.size());
@@ -252,6 +290,7 @@ int main(int argc, char** argv) {
   }
 
   bool ok = true;
+  ok = ok && reused_exchange_buffers;
   bool saw_local_neighbor = false;
   bool saw_remote_neighbor = false;
   for (int i = 0; i < mesh->blocks.size(); ++i) {

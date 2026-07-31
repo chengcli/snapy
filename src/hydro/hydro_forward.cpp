@@ -224,7 +224,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   torch::Tensor wtmp2, wtmp3;
   SyncOptions sync_opts;
   sync_opts.cross_panel_only(true).interpolate(false).type(kPrimitive);
-  std::vector<CommWorkPtr> works;
+  std::vector<CommWorkPtr> works2, works3;
   Variables send_vars2, send_vars3;
 
   if (u.size(DIM2) > 1) {
@@ -254,16 +254,16 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool exchange_dim2 = u.size(DIM2) > 1;
     bool exchange_dim3 = u.size(DIM3) > 1;
     if (exchange_dim2) {
-      pmb->launch_exchange(sync_opts.dim(DIM2), works);
+      pmb->launch_exchange(sync_opts.dim(DIM2), works2);
     }
     if (exchange_dim3) {
-      pmb->launch_exchange(sync_opts.dim(DIM3), works);
+      pmb->launch_exchange(sync_opts.dim(DIM3), works3);
     }
     if (exchange_dim2) {
-      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works);
+      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works2);
     }
     if (exchange_dim3) {
-      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works);
+      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works3);
     }
   }
 

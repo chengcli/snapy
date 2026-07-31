@@ -65,6 +65,7 @@ void MeshBlockImpl::reset() {
   }
   send_bufs.resize(_playout->num_exchange_buffers());
   recv_bufs.resize(_playout->num_exchange_buffers());
+  exchange_buffer_cache.clear();
 
   int px = options->layout()->px();
   int py = options->layout()->py();

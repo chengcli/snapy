@@ -1,5 +1,6 @@
 // C/C++
 #include <c10/core/DeviceGuard.h>
+#include <configure.h>
 
 #include <algorithm>
 #include <condition_variable>
@@ -9,7 +10,14 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <thread>
+
+#ifdef USE_CUDA
+#include <ATen/cuda/CUDAEvent.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
+#endif
 
 // yaml
 #include <yaml-cpp/yaml.h>
@@ -38,6 +46,20 @@ class MeshImpl::BlockWorkerPool {
  public:
   BlockWorkerPool(size_t count, torch::Device device)
       : device_(std::move(device)), remaining_(count) {
+#ifdef USE_CUDA
+    if (device_.is_cuda()) {
+      c10::cuda::CUDAGuard device_guard(device_.index());
+      streams_.reserve(count);
+      done_events_.reserve(count);
+      for (size_t i = 0; i < count; ++i) {
+        streams_.push_back(c10::cuda::getStreamFromPool(
+            /*isHighPriority=*/false, device_.index()));
+        done_events_.push_back(std::make_unique<at::cuda::CUDAEvent>());
+      }
+      caller_ready_event_ = std::make_unique<at::cuda::CUDAEvent>();
+    }
+#endif
+
     workers_.reserve(count);
     for (size_t i = 0; i < count; ++i) {
       workers_.emplace_back([this, i]() { run(i); });
@@ -47,6 +69,14 @@ class MeshImpl::BlockWorkerPool {
   ~BlockWorkerPool() { stop(); }
 
   void submit(std::function<void(size_t)> func) {
+#ifdef USE_CUDA
+    std::optional<c10::cuda::CUDAStream> caller_stream;
+    if (device_.is_cuda()) {
+      caller_stream.emplace(c10::cuda::getCurrentCUDAStream(device_.index()));
+      caller_ready_event_->record(*caller_stream);
+    }
+#endif
+
     {
       std::lock_guard<std::mutex> lock(mutex_);
       TORCH_CHECK(!stopping_, "Mesh block worker pool is stopping");
@@ -59,6 +89,15 @@ class MeshImpl::BlockWorkerPool {
 
     std::unique_lock<std::mutex> lock(mutex_);
     done_cv_.wait(lock, [&]() { return remaining_ == 0; });
+
+#ifdef USE_CUDA
+    if (device_.is_cuda()) {
+      for (auto const& event : done_events_) {
+        event->block(*caller_stream);
+      }
+    }
+#endif
+
     if (error_ != nullptr) {
       auto error = error_;
       error_ = nullptr;
@@ -83,6 +122,19 @@ class MeshImpl::BlockWorkerPool {
  private:
   void run(size_t index) {
     c10::OptionalDeviceGuard device_guard(device_);
+
+#ifdef USE_CUDA
+    if (device_.is_cuda()) {
+      c10::cuda::CUDAStreamGuard stream_guard(streams_.at(index));
+      run_loop(index);
+      return;
+    }
+#endif
+
+    run_loop(index);
+  }
+
+  void run_loop(size_t index) {
     size_t seen_generation = 0;
     while (true) {
       std::function<void(size_t)> func;
@@ -95,6 +147,12 @@ class MeshImpl::BlockWorkerPool {
         func = func_;
       }
 
+#ifdef USE_CUDA
+      if (device_.is_cuda()) {
+        caller_ready_event_->block(streams_.at(index));
+      }
+#endif
+
       try {
         func(index);
       } catch (...) {
@@ -103,6 +161,12 @@ class MeshImpl::BlockWorkerPool {
           error_ = std::current_exception();
         }
       }
+
+#ifdef USE_CUDA
+      if (device_.is_cuda()) {
+        done_events_.at(index)->record(streams_.at(index));
+      }
+#endif
 
       {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -124,6 +188,12 @@ class MeshImpl::BlockWorkerPool {
   size_t generation_ = 0;
   size_t remaining_ = 0;
   bool stopping_ = false;
+
+#ifdef USE_CUDA
+  std::vector<c10::cuda::CUDAStream> streams_;
+  std::vector<std::unique_ptr<at::cuda::CUDAEvent>> done_events_;
+  std::unique_ptr<at::cuda::CUDAEvent> caller_ready_event_;
+#endif
 };
 
 MeshOptions MeshOptionsImpl::from_yaml(std::string input_file, bool verbose) {

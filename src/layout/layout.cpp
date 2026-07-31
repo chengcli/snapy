@@ -5,10 +5,18 @@
 #include <condition_variable>
 #include <exception>
 #include <map>
+#include <memory>
+#include <optional>
 #include <random>
+#include <sstream>
 
 // base
 #include <configure.h>
+
+#ifdef USE_CUDA
+#include <ATen/cuda/CUDAEvent.h>
+#include <c10/cuda/CUDAStream.h>
+#endif
 
 // snap
 #include <snap/mesh/meshblock.hpp>
@@ -49,13 +57,16 @@ struct LocalExchangeKey {
   bool skip_corner;
   bool interpolate;
   std::string layout_type;
+  std::string device;
 
   bool operator<(LocalExchangeKey const& other) const {
     return std::tie(process_rank, blocks_per_process, dim, phyid, type,
-                    cross_panel_only, skip_corner, interpolate, layout_type) <
+                    cross_panel_only, skip_corner, interpolate, layout_type,
+                    device) <
            std::tie(other.process_rank, other.blocks_per_process, other.dim,
                     other.phyid, other.type, other.cross_panel_only,
-                    other.skip_corner, other.interpolate, other.layout_type);
+                    other.skip_corner, other.interpolate, other.layout_type,
+                    other.device);
   }
 };
 
@@ -65,6 +76,10 @@ struct LocalExchangeState {
   int released = 0;
   bool ready = false;
   std::exception_ptr error;
+#ifdef USE_CUDA
+  std::vector<std::shared_ptr<at::cuda::CUDAEvent>> arrival_events;
+  std::shared_ptr<at::cuda::CUDAEvent> completion_event;
+#endif
 };
 
 struct RemoteExchangeOp {
@@ -126,7 +141,26 @@ LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
       opts.skip_corner(),
       opts.interpolate(),
       layout.options->type(),
+      layout.options->device(),
   };
+}
+
+std::string exchange_buffer_key(SyncOptions const& opts,
+                                Variables const& vars) {
+  std::ostringstream key;
+  key << opts.dim() << ':' << opts.phyid() << ':' << opts.type() << ':'
+      << opts.cross_panel_only() << ':' << opts.skip_corner() << ':'
+      << opts.interpolate();
+  for (auto const& [name, _] : vars) {
+    key << ':' << name;
+  }
+  return key.str();
+}
+
+bool buffer_matches(torch::Tensor const& buffer, torch::Tensor const& source) {
+  return buffer.defined() && buffer.sizes() == source.sizes() &&
+         buffer.scalar_type() == source.scalar_type() &&
+         buffer.device() == source.device();
 }
 
 }  // namespace
@@ -222,19 +256,60 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
                                          SyncOptions const& opts) {
   if (options->blocks_per_process() <= 1) return;
 
+#ifdef USE_CUDA
+  std::optional<c10::cuda::CUDAStream> current_stream;
+  if (options->device() == "cuda") {
+    current_stream.emplace(c10::cuda::getCurrentCUDAStream());
+  }
+#endif
+
   auto key = make_local_exchange_key(*this, opts);
   int expected = options->blocks_per_process();
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   auto& state = g_local_exchange_states[key];
   int generation = state.generation;
 
+#ifdef USE_CUDA
+  if (current_stream) {
+    if (state.arrival_events.size() != expected) {
+      state.arrival_events.resize(expected);
+    }
+    int local_block = options->local_block_index(options->rank());
+    auto& arrival_event = state.arrival_events.at(local_block);
+    if (!arrival_event) {
+      arrival_event = std::make_shared<at::cuda::CUDAEvent>();
+    }
+    arrival_event->record(*current_stream);
+    if (!state.completion_event) {
+      state.completion_event = std::make_shared<at::cuda::CUDAEvent>();
+    }
+  }
+#endif
+
   state.arrived += 1;
   if (state.arrived == expected) {
     auto layouts = local_layouts_for(*this);
     lock.unlock();
     std::exception_ptr error;
+#ifdef USE_CUDA
+    auto completion_event = state.completion_event;
+#endif
     try {
+#ifdef USE_CUDA
+      if (current_stream) {
+        for (auto const& event : state.arrival_events) {
+          TORCH_CHECK(event != nullptr,
+                      "missing CUDA arrival event for local exchange");
+          event->block(*current_stream);
+        }
+      }
+#endif
       _copy_local_exchange_buffers(layouts, opts);
+#ifdef USE_CUDA
+      if (current_stream && completion_event) {
+        completion_event->record(*current_stream);
+      }
+#endif
     } catch (...) {
       error = std::current_exception();
     }
@@ -247,6 +322,15 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     g_local_exchange_cv.wait(
         lock, [&]() { return state.ready && state.generation == generation; });
   }
+
+#ifdef USE_CUDA
+  if (state.error == nullptr && state.completion_event && current_stream) {
+    auto completion_event = state.completion_event;
+    lock.unlock();
+    completion_event->block(*current_stream);
+    lock.lock();
+  }
+#endif
 
   if (state.error != nullptr) {
     auto error = state.error;
@@ -373,6 +457,9 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
   int dy_max = opts.dy_max();
   int dx_min = opts.dx_min();
   int dx_max = opts.dx_max();
+  auto& cache = pmb->exchange_buffer_cache[exchange_buffer_key(opts, vars)];
+  cache.send.resize(num_exchange_buffers());
+  cache.recv.resize(num_exchange_buffers());
 
   for (int dz = dz_min; dz <= dz_max; ++dz)
     for (int dy = dy_min; dy <= dy_max; ++dy)
@@ -396,14 +483,25 @@ void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         // Copy data from mesh to send buffer
         int bid = get_buffer_id(offset);
         int count = 0;
-        pmb->send_bufs[bid].resize(vars.size());
-        pmb->recv_bufs[bid].resize(vars.size());
+        auto& cached_send = cache.send[bid];
+        auto& cached_recv = cache.recv[bid];
+        cached_send.resize(vars.size());
+        cached_recv.resize(vars.size());
         for (auto& [name, var] : vars) {
-          pmb->send_bufs[bid][count] = var.index(sub).clone();
-          pmb->recv_bufs[bid][count] =
-              torch::empty_like(pmb->send_bufs[bid][count]);
+          auto source = var.index(sub);
+          if (!buffer_matches(cached_send[count], source)) {
+            cached_send[count] = torch::empty(source.sizes(), source.options());
+          }
+          cached_send[count].copy_(source);
+
+          if (!buffer_matches(cached_recv[count], cached_send[count])) {
+            cached_recv[count] = torch::empty(cached_send[count].sizes(),
+                                              cached_send[count].options());
+          }
           count++;
         }
+        pmb->send_bufs[bid] = cached_send;
+        pmb->recv_bufs[bid] = cached_recv;
       }
 }
 

@@ -68,7 +68,7 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   Variables send_vars2, send_vars3;
   SyncOptions sync_opts;
   sync_opts.cross_panel_only(true).interpolate(false).type(kScalar);
-  std::vector<CommWorkPtr> works;
+  std::vector<CommWorkPtr> works2, works3;
 
   if (_flux2.defined()) {
     rtmp2 = precon->forward(r, DIM2);
@@ -92,15 +92,15 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
     bool exchange_dim2 = _flux2.defined();
     bool exchange_dim3 = _flux3.defined();
     if (exchange_dim2) {
-      pmb->launch_exchange(sync_opts.dim(DIM2), works);
+      pmb->launch_exchange(sync_opts.dim(DIM2), works2);
     }
     if (exchange_dim3) {
-      pmb->launch_exchange(sync_opts.dim(DIM3), works);
+      pmb->launch_exchange(sync_opts.dim(DIM3), works3);
     }
     if (exchange_dim2)
-      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works);
+      pmb->finalize_exchange(send_vars2, sync_opts.dim(DIM2), works2);
     if (exchange_dim3)
-      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works);
+      pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works3);
   }
 
   if (_flux2.defined()) {
