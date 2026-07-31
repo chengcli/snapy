@@ -214,6 +214,10 @@ torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
   }
   auto correction = picorr->forward(du, wi, gamma, dt);
   du[IPR].add_(peos->internal_energy_offset(du));
+  // picorr measured its delta after removing the EOS reference energy.
+  // Diagnostics expose a conserved-state delta, so restore that reference
+  // contribution using the corrected density and species tendencies.
+  correction[IPR].add_(peos->internal_energy_offset(correction));
 
   return correction;
 }

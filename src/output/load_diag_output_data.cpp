@@ -216,9 +216,8 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   }
 
   // implicit correction
-  if (ContainVariable("implicit")) {
-    auto du = pmb->phydro->picorr ? pmb->phydro->picorr->correction()
-                                  : torch::zeros_like(vars.at("hydro_u"));
+  if (ContainVariable("implicit") && pmb->phydro->picorr) {
+    auto du = pmb->phydro->picorr->correction();
 
     // density
     pod = new OutputData;
