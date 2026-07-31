@@ -26,7 +26,8 @@ void MoistMixtureImpl::reset() {
   // populate buffers
   ivol = register_buffer("ivol", torch::empty({0}, torch::kFloat64));
   temp = register_buffer("temp", torch::empty({0}, torch::kFloat64));
-  w1 = register_buffer("w1", torch::empty({0}, torch::kFloat64));
+  cached_prim_.reset();
+  cached_prim_version_ = -1;
 }
 
 double MoistMixtureImpl::species_weight(int n) const {
@@ -47,7 +48,7 @@ torch::Tensor MoistMixtureImpl::specific_heat_cv(torch::Tensor prim,
 }
 
 torch::Tensor MoistMixtureImpl::compute(
-    std::string ab, std::vector<torch::Tensor> const &args) {
+    std::string ab, std::vector<torch::Tensor> const& args) {
   if (ab == "W->U") {
     auto w = args[0];
     auto u = args.size() > 1 ? args[1] : torch::empty_like(w);
@@ -76,26 +77,12 @@ torch::Tensor MoistMixtureImpl::compute(
     return _temp2intEng(u, temp);
   } else if (ab == "W->A") {
     auto w = args[0];
-
-    if (!_check_copy(w, w1)) {
-      int ny = pthermo->options->vapor_ids().size() +
-               pthermo->options->cloud_ids().size() - 1;
-      ivol.set_(pthermo->compute("DY->V", {w[IDN], w.narrow(0, ICY, ny)}));
-      temp.set_(pthermo->compute("PV->T", {w[IPR], ivol}));
-    }
-
+    _ensure_cache(w);
     return _adiabatic_index(ivol, temp);
   } else if (ab == "WA->L") {
     auto w = args[0];
     auto gamma = args[1];
-
-    if (!_check_copy(w, w1)) {
-      int ny = pthermo->options->vapor_ids().size() +
-               pthermo->options->cloud_ids().size() - 1;
-      ivol.set_(pthermo->compute("DY->V", {w[IDN], w.narrow(0, ICY, ny)}));
-      temp.set_(pthermo->compute("PV->T", {w[IPR], ivol}));
-    }
-
+    _ensure_cache(w);
     auto ct = _isothermal_sound_speed(ivol, temp, w[IDN]);
     return gamma.sqrt() * ct;
   } else {
@@ -103,7 +90,7 @@ torch::Tensor MoistMixtureImpl::compute(
   }
 }
 
-void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
+void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor& cons) {
   auto pcoord = phydro->pmb->pcoord;
 
   apply_primitive_limiter_(prim);
@@ -134,7 +121,7 @@ void MoistMixtureImpl::_prim2cons(torch::Tensor prim, torch::Tensor &cons) {
   apply_conserved_limiter_(cons);
 }
 
-void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
+void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor& prim) {
   auto pcoord = phydro->pmb->pcoord;
   apply_conserved_limiter_(cons);
 
@@ -162,30 +149,25 @@ void MoistMixtureImpl::_cons2prim(torch::Tensor cons, torch::Tensor &prim) {
   ivol.set_(pthermo->compute("DY->V", {prim[IDN], prim.narrow(0, ICY, ny)}));
   temp.set_(pthermo->compute("VU->T", {ivol, ie}));
   prim[IPR] = pthermo->compute("VT->P", {ivol, temp});
-  w1.set_(prim.clone());
 
   apply_primitive_limiter_(prim);
+  if (options->limiter()) {
+    // Floors may have changed density, composition, or pressure. Defer the
+    // refresh until a cached quantity is actually requested.
+    cached_prim_.reset();
+    cached_prim_version_ = -1;
+  } else {
+    _mark_cache(prim);
+  }
 }
 
 torch::Tensor MoistMixtureImpl::_prim2intEng(torch::Tensor prim) {
-  if (!_check_copy(prim, w1)) {
-    int ny = pthermo->options->vapor_ids().size() +
-             pthermo->options->cloud_ids().size() - 1;
-    ivol.set_(pthermo->compute("DY->V", {prim[IDN], prim.narrow(0, ICY, ny)}));
-    temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
-  }
+  _ensure_cache(prim);
   return pthermo->compute("VT->U", {ivol, temp});
 }
 
 torch::Tensor MoistMixtureImpl::_prim2temp(torch::Tensor prim) {
-  if (!_check_copy(prim, w1)) {
-    int ny = pthermo->options->vapor_ids().size() +
-             pthermo->options->cloud_ids().size() - 1;
-    auto yfrac = prim.narrow(0, ICY, ny);
-    ivol.set_(pthermo->compute("DY->V", {prim[IDN], yfrac}));
-    temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
-  }
-
+  _ensure_cache(prim);
   return temp;
 }
 
@@ -197,10 +179,7 @@ torch::Tensor MoistMixtureImpl::_prim2speciesEng(torch::Tensor prim) {
 
   auto yfrac = prim.narrow(0, ICY, ny);
 
-  if (!_check_copy(prim, w1)) {
-    ivol.set_(pthermo->compute("DY->V", {prim[IDN], yfrac}));
-    temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
-  }
+  _ensure_cache(prim);
 
   auto Rgas = kintera::constants::Rgas * pthermo->inv_mu;
   auto ie = eval_intEng_R(temp, ivol, pthermo->options) * Rgas * ivol;
@@ -268,20 +247,24 @@ torch::Tensor MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor V,
   return ct;
 }
 
-bool MoistMixtureImpl::_check_copy(torch::Tensor prim,
-                                   torch::Tensor prim_cache) const {
-  if (prim.dim() != prim_cache.dim() || prim.sizes() != prim_cache.sizes()) {
-    prim_cache.resize_as_(prim);
-    prim_cache.copy_(prim);
-    return false;
-  }
+bool MoistMixtureImpl::_cache_matches(torch::Tensor const& prim) const {
+  return cached_prim_.defined() && cached_prim_.is_same(prim) &&
+         cached_prim_version_ == prim._version();
+}
 
-  if ((prim - prim_cache).abs().max().item<double>() < 1e-10) {
-    return true;
-  } else {
-    prim_cache.copy_(prim);
-    return false;
-  }
+void MoistMixtureImpl::_mark_cache(torch::Tensor const& prim) {
+  cached_prim_ = prim;
+  cached_prim_version_ = prim._version();
+}
+
+void MoistMixtureImpl::_ensure_cache(torch::Tensor const& prim) {
+  if (_cache_matches(prim)) return;
+
+  int ny = pthermo->options->vapor_ids().size() +
+           pthermo->options->cloud_ids().size() - 1;
+  ivol.set_(pthermo->compute("DY->V", {prim[IDN], prim.narrow(0, ICY, ny)}));
+  temp.set_(pthermo->compute("PV->T", {prim[IPR], ivol}));
+  _mark_cache(prim);
 }
 
 }  // namespace snap

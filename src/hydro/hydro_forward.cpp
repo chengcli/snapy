@@ -72,36 +72,34 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     torch::Tensor wtmp;
     if (wb_x1) {
       auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
-      auto w_work = w.clone();
-      w_work[IPR] -= pref;
-      w_work[IDN] -= dref;
+      auto pressure = w[IPR].clone();
+      auto density = w[IDN].clone();
 
-      // Even-parity ghost perturbations at the walls: p'(is-m) = p'(is+m-1),
-      // rho' likewise. The isentropic ghost fill is its own O(dz^2)
-      // hydrostatic model, so the perturbation it implies carries a wall
-      // offset the reconstruction would read as a kink; even parity is also
-      // the physically correct wall condition for p' and rho'.
+      w[IPR] -= pref;
+      w[IDN] -= dref;
+
+      // Even-parity ghost perturbations at the walls: p'(is-m) =
+      // p'(is+m-1), rho' likewise. Only apply this at physical x1 walls.
       int ng = pmb->pcoord->options->nghost();
       int is = pmb->pcoord->il();
       int iu = pmb->pcoord->iu();
-      // Only at PHYSICAL x1 walls. At an internal seam (nb1>1) the ghost
-      // perturbation must come from the neighbor (already halo-exchanged),
-      // not a mirror of this block's own interior.
       for (int c : {(int)IPR, (int)IDN}) {
-        if (phys_x1inner)
-          w_work[c]
-              .narrow(-1, is - ng, ng)
-              .copy_(w_work[c].narrow(-1, is, ng).flip(-1));
-        if (phys_x1outer)
-          w_work[c]
-              .narrow(-1, iu + 1, ng)
-              .copy_(w_work[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+        if (phys_x1inner) {
+          w[c].narrow(-1, is - ng, ng).copy_(w[c].narrow(-1, is, ng).flip(-1));
+        }
+
+        if (phys_x1outer) {
+          w[c].narrow(-1, iu + 1, ng)
+              .copy_(w[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+        }
       }
 
-      // floor=false: the reconstruction-stage EOS floors would clamp
-      // legitimately negative perturbations; positivity of the restored
-      // faces is enforced below instead.
-      wtmp = precon1->forward(w_work, DIM1, /*floor=*/false);
+      // floor=false: reconstruction-stage floors would clamp legitimately
+      // negative perturbations.
+      wtmp = precon1->forward(w, DIM1, /*floor=*/false);
+
+      w[IPR].copy_(pressure);
+      w[IDN].copy_(density);
       // Restore full face pressure/density; floor any nonlinear-WENO overshoot
       // that would go non-positive (the references are tiny near the top) back
       // to the reference. At rest the perturbation is ~0 so the floor never

@@ -106,7 +106,14 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
   if (options->scheme() == 0) {  // null operation
-    return torch::zeros_like(du);
+    if (_corr.sizes() != du.sizes() ||
+        _corr.scalar_type() != du.scalar_type() ||
+        _corr.device() != du.device()) {
+      _corr.set_(torch::zeros_like(du));
+    } else {
+      _corr.zero_();
+    }
+    return _corr;
   }
 
   TORCH_CHECK(phydro->options->grav(),

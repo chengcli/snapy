@@ -67,6 +67,17 @@ TEST_P(DeviceTest, moist_mixture) {
   auto cs = peos->compute("WA->L", {prim, gamma});
   std::cout << "cs min = " << cs.min() << std::endl;
   std::cout << "cs max = " << cs.max() << std::endl;
+
+  // Cache validation must follow tensor identity and ATen's mutation version,
+  // without retaining a full primitive-field copy. Mutating pressure must
+  // invalidate the cached temperature, and a distinct tensor with identical
+  // contents must still produce the same refreshed result.
+  auto temp_before = peos->compute("W->T", {prim}).clone();
+  prim[IPR].mul_(1.25);
+  auto temp_after = peos->compute("W->T", {prim});
+  auto temp_reference = peos->compute("W->T", {prim.clone()});
+  EXPECT_FALSE(torch::allclose(temp_before, temp_after, 1.E-6, 1.E-6));
+  EXPECT_TRUE(torch::allclose(temp_after, temp_reference, 1.E-6, 1.E-6));
 }
 
 TEST_P(DeviceTest, ideal_moist_internal_energy_offset) {
