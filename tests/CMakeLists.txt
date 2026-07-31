@@ -98,7 +98,6 @@ add_test(
 set_tests_properties(test_jit_user_forcing_python PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
   TIMEOUT 30
-  ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python"
   LABELS "python;forcing"
 )
 
