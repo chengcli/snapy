@@ -60,9 +60,9 @@ void flux_positivity_scale_(torch::Tensor const& theta,
 
   if (flux1.defined()) {
     int il = pcoord->il(), iu = pcoord->iu();
-    auto f = flux1.slice(DIM1, il, iu + 2);            // faces il..iu+1
-    auto th_lo = theta.slice(DIM1, il - 1, iu + 1);    // donor when f > 0
-    auto th_hi = theta.slice(DIM1, il, iu + 2);        // donor when f <= 0
+    auto f = flux1.slice(DIM1, il, iu + 2);          // faces il..iu+1
+    auto th_lo = theta.slice(DIM1, il - 1, iu + 1);  // donor when f > 0
+    auto th_hi = theta.slice(DIM1, il, iu + 2);      // donor when f <= 0
     f.mul_(torch::where(f > 0., th_lo, th_hi));
   }
 

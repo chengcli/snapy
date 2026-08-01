@@ -118,8 +118,8 @@ void DISPATCH_MACRO vic_backward_reduce(T* du, T* w, Eigen::Matrix<T, N, N>* a,
 template <typename T, int N>
 void DISPATCH_MACRO vic_species_column(T* du, T* w, T* mass_fix,
                                        Eigen::Matrix<T, N, 1>* delta, T* vol,
-                                       int nlayer, int dir, int ny,
-                                       int stride1, int stride2) {
+                                       int nlayer, int dir, int ny, int stride1,
+                                       int stride2) {
   // pass 1: per-cell mass increments and the column residual
   T R = 0, S = 0;
   for (int i = 0; i < nlayer; ++i) {

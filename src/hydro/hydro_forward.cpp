@@ -298,7 +298,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
   }
 
-  //// ------- (4.C) Tracer flux positivity limiter (flux_positivity.hpp) ---- ////
+  //// ------- (4.C) Tracer flux positivity limiter (flux_positivity.hpp) ----
+  ///////
   // Scale each face's species flux by the donor cell's theta so no cell can be
   // drained below zero by transport in this stage (covers advected species AND
   // the sedimentation flux added into _flux1 above). Runs after the x1 seam
