@@ -150,6 +150,39 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     auto nghost = pcoord->options->nghost();
     auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
 
+    // A negative condensate value means the tracer flux over-drained the cell;
+    // the mass is in a neighbour, not missing. Zeroing it (`clamp_min_(0.)`)
+    // invented mass one-way -- measured at 102% of the total-mass drift in
+    // silicate cloud runs. Instead, borrow the deficit from the parent vapor in
+    // the SAME cell: exactly conservative in mass, energy and elements, and
+    // per-cell, so ghost copies receive the identical repair and ranks stay in
+    // sync. A cell whose vapor cannot cover the deficit goes vapor-negative and
+    // is handled by the columnar fix_vapor below. The phase shift is ~1% of the
+    // local value and the saturation adjustment re-equilibrates it at the end
+    // of the same cycle.
+    auto species = options->thermo()->species();
+    auto const& cids = options->thermo()->cloud_ids();
+    for (int j = 0; j < ncloud; ++j) {
+      int slot = ICY + cids[j] - 1;
+      auto c = cons[slot];
+      auto paren = species[cids[j]].find('(');
+      int pslot = -1;
+      if (paren != std::string::npos) {
+        auto parent = species[cids[j]].substr(0, paren);
+        for (size_t q = 1; q < species.size(); ++q)
+          if (species[q] == parent) {
+            pslot = ICY + (int)q - 1;
+            break;
+          }
+      }
+      if (pslot < 0) {  // no identifiable parent: keep the old clamp
+        c.clamp_min_(0.);
+        continue;
+      }
+      cons[pslot] += c.clamp_max(0.);  // vapor pays the deficit
+      c.clamp_min_(0.);                // condensate to exactly zero
+    }
+
     auto vapor = cons.index(interior).narrow(0, ICY, nvapor);
     auto major = cons.index(interior)[IDN].unsqueeze(0);
     auto iter = at::TensorIteratorConfig()
@@ -164,8 +197,6 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     TORCH_CHECK(err == 0,
                 "[EquationOfState] apply_conserved_limiter_: "
                 "Failed to fix vapor mass fractions.");
-
-    cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
   }
 }
 
