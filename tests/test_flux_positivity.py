@@ -178,12 +178,13 @@ def main():
         )
     if not lim["scalar_drift"] < 1e-12:
         failures.append("limited arm scalar drifted: %g" % lim["scalar_drift"])
-    # base-arm conservation is checked only if it survived all cycles
-    if base["error"] is None:
-        if not base["vapor_drift"] < 1e-12:
-            failures.append("base arm species total drifted: %g" % base["vapor_drift"])
-        if not base["scalar_drift"] < 1e-12:
-            failures.append("base arm scalar drifted: %g" % base["scalar_drift"])
+    # base-arm species conservation is NOT asserted: once vapor goes negative,
+    # kintera's equilibrium solver clamps the negative concentration to zero
+    # ("Warning: Negative concentration ... Setting it to zero."), fabricating
+    # mass -- the very repair-instead-of-prevention pathology the limiter
+    # removes. The drift is reported above as a demonstration.
+    if base["error"] is None and not base["scalar_drift"] < 1e-12:
+        failures.append("base arm scalar drifted: %g" % base["scalar_drift"])
 
     if failures:
         for msg in failures:
