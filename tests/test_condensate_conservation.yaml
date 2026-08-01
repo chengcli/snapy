@@ -1,0 +1,39 @@
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: NH3
+    composition: {N: 1, H: 3}
+    cv_R: 3.5
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 3.5
+
+  - name: NH4SH
+    composition: {N: 1, H: 5, S: 1}
+    cv_R: 9.0
+
+reactions:
+  - equation: NH3 + H2S <=> NH4SH
+    type: nucleation
+    rate-constant: {formula: nh3_h2s_lewis}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 1, nx2: 1, nx3: 1, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
