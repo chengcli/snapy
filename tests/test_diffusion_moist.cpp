@@ -62,3 +62,28 @@ TEST_P(DeviceTest, moist_conduction_uses_local_mixture_specific_heat) {
     EXPECT_NEAR(du[IPR][0][0][4].item<double>(), 0.05 * expected_cv, 1.e-3);
   }
 }
+
+TEST_P(DeviceTest, conserved_limiter_uses_nucleation_parent_metadata) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+  options->hydro()->eos()->limiter() = true;
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  block->to(device, dtype);
+
+  auto coord = block->pcoord;
+  auto cons = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                            coord->options->nc2(), coord->options->nc1()},
+                           torch::device(device).dtype(dtype));
+  cons[IDN].fill_(1.);
+  cons[IPR].fill_(1.e8);
+  cons[ICY].fill_(0.3);
+  cons[ICY + 1].fill_(-0.1);
+  auto total_before = cons[IDN] + cons.narrow(0, ICY, 2).sum(0);
+
+  block->phydro->peos->apply_conserved_limiter_(cons);
+
+  auto total_after = cons[IDN] + cons.narrow(0, ICY, 2).sum(0);
+  EXPECT_TRUE(torch::allclose(total_after, total_before, 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(cons[ICY], torch::full_like(cons[ICY], 0.2),
+                              1.e-6, 1.e-6));
+  EXPECT_TRUE(torch::equal(cons[ICY + 1], torch::zeros_like(cons[ICY + 1])));
+}

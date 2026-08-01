@@ -84,6 +84,47 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
     : options(options_) {
   phydro = dynamic_cast<HydroImpl const*>(p);
   TORCH_CHECK(phydro, "[EquationOfState] Parent module is null.");
+  cache_cloud_parents_();
+}
+
+void EquationOfStateImpl::cache_cloud_parents_() {
+  if (!options->thermo()) return;
+
+  auto const species = options->thermo()->species();
+  auto const& vids = options->thermo()->vapor_ids();
+  auto const& cids = options->thermo()->cloud_ids();
+  auto const nucleation = options->thermo()->nucleation();
+  cloud_parent_cache_.resize(cids.size());
+  if (!nucleation) return;
+
+  for (size_t j = 0; j < cids.size(); ++j) {
+    double parent_mass = 0.;
+    for (auto const& reaction : nucleation->reactions()) {
+      if (!reaction.products().count(species[cids[j]])) continue;
+
+      for (auto const& [parent, coefficient] : reaction.reactants()) {
+        auto species_it = std::find(species.begin(), species.end(), parent);
+        if (species_it == species.end()) continue;
+        int species_id = std::distance(species.begin(), species_it);
+        auto vapor_it = std::find(vids.begin() + 1, vids.end(), species_id);
+        if (vapor_it == vids.end()) continue;
+
+        int vapor_index = std::distance(vids.begin(), vapor_it);
+        double mass = coefficient * kintera::species_weights[species_id];
+        cloud_parent_cache_[j].emplace_back(ICY + vapor_index - 1, mass);
+        parent_mass += mass;
+      }
+      break;
+    }
+
+    if (parent_mass <= 0.) {
+      cloud_parent_cache_[j].clear();
+      continue;
+    }
+    for (auto& parent : cloud_parent_cache_[j]) {
+      parent.second /= parent_mass;
+    }
+  }
 }
 
 torch::Tensor EquationOfStateImpl::internal_energy_offset(
@@ -150,6 +191,33 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     auto nghost = pcoord->options->nghost();
     auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
 
+    // A negative condensate value means the tracer flux over-drained the cell;
+    // the mass is in a neighbour, not missing. Zeroing it (`clamp_min_(0.)`)
+    // invented mass one-way -- measured at 102% of the total-mass drift in
+    // silicate cloud runs. Instead, borrow the deficit from the parent vapor in
+    // the SAME cell: exactly conservative in mass, energy and elements, and
+    // per-cell, so ghost copies receive the identical repair and ranks stay in
+    // sync. A cell whose vapor cannot cover the deficit goes vapor-negative and
+    // is handled by the columnar fix_vapor below. The phase shift is ~1% of the
+    // local value and the saturation adjustment re-equilibrates it at the end
+    // of the same cycle.
+    for (int j = 0; j < ncloud; ++j) {
+      int slot = ICY + nvapor + j;
+      auto c = cons[slot];
+      auto const& parents = cloud_parent_cache_[j];
+      if (parents.empty()) {
+        // Clouds not produced by nucleation have no parent-vapor metadata.
+        c.clamp_min_(0.);
+        continue;
+      }
+
+      auto deficit = c.clamp_max(0.);
+      for (auto const& [parent_slot, mass_fraction] : parents) {
+        cons[parent_slot] += deficit * mass_fraction;
+      }
+      c.clamp_min_(0.);  // condensate to exactly zero
+    }
+
     auto vapor = cons.index(interior).narrow(0, ICY, nvapor);
     auto major = cons.index(interior)[IDN].unsqueeze(0);
     auto iter = at::TensorIteratorConfig()
@@ -164,8 +232,6 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     TORCH_CHECK(err == 0,
                 "[EquationOfState] apply_conserved_limiter_: "
                 "Failed to fix vapor mass fractions.");
-
-    cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
   }
 }
 

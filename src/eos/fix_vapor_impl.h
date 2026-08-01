@@ -20,8 +20,13 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, int nx1) {
 
     // find next valid
     int i = is;
-    T sum_vapor = vapor[i];
-    T sum_major = major[i];
+    // Accumulators must start at zero: seeding with vapor[is]/major[is]
+    // double-counts cell `is` (the first pass of the loop below adds the same i
+    // again), making the redistribution a one-way vapour sink. With zero seeds
+    // the accumulation covers exactly the cells (i, is] that are rewritten, so
+    // mass is conserved exactly.
+    T sum_vapor = 0.;
+    T sum_major = 0.;
     while (sum_vapor <= 0. && i >= ie) {
       sum_vapor += vapor[i];
       sum_major += major[i];
