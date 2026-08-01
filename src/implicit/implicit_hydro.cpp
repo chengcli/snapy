@@ -173,18 +173,20 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
   auto grav1 = phydro->options->grav()->grav1();
 
+  int species_flux = phydro->options->implicit_species_flux() ? 1 : 0;
+
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0,
-                                      nvapor);
+                                      nvapor, species_flux);
   } else {
     // Match the full-VIC pipeline: assemble coefficients, run the column
     // solve + reductions, then apply the per-cell redistribution map.
     at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1, 0,
-                                         nvapor);
+                                         nvapor, species_flux);
   }
 
   /// (3) De-project from local orthonormal frame

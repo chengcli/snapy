@@ -38,7 +38,8 @@ struct HydroOptionsImpl {
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
        << "* disable_flux_x3 = " << disable_flux_x3() << "\n"
-       << "* positivity = " << positivity() << "\n";
+       << "* positivity = " << positivity() << "\n"
+       << "* implicit_species_flux = " << implicit_species_flux() << "\n";
   }
 
   //! verbose
@@ -51,6 +52,12 @@ struct HydroOptionsImpl {
   //! limit tracer fluxes so transport cannot drain any cell negative
   //! (flux_positivity.hpp); also adopted by the passive-scalar module
   ADD_ARG(bool, positivity) = false;
+
+  //! apply the implicit vertical mass correction to species (and passive
+  //! scalars) as a donor-upwinded column FLUX -- conservative and
+  //! compositionally active -- instead of the legacy pointwise pro-rata
+  //! update (vic_redistribute_impl.h, vic_species_column)
+  ADD_ARG(bool, implicit_species_flux) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;

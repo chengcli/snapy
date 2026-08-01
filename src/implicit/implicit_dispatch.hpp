@@ -9,7 +9,8 @@ namespace at::native {
 using vic_stage_fn = void (*)(at::TensorIterator& iter, double dt, double grav,
                               int dir);
 using vic_redistribute_fn = void (*)(at::TensorIterator& iter, double dt,
-                                     double grav, int dir, int nvapor);
+                                     double grav, int dir, int nvapor,
+                                     int species_flux);
 
 DECLARE_DISPATCH(vic_stage_fn, vic_assemble_partial);
 DECLARE_DISPATCH(vic_stage_fn, vic_assemble_full);

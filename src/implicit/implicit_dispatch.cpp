@@ -141,7 +141,8 @@ template void vic_solve_cpu<5>(at::TensorIterator&, double, double, int);
 
 template <int N>
 void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
-                          double /*grav*/, int dir, int nvapor) {
+                          double /*grav*/, int dir, int nvapor,
+                          int species_flux) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_cpu", [&] {
@@ -166,9 +167,16 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
             auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
+            if (species_flux) {
+              vic_species_column<scalar_t, N>(du, w, mass_fix, delta, vol,
+                                              nlayer, dir, ny, stride1,
+                                              stride2);
+            }
+
             for (int i = 0; i < nlayer; ++i) {
               vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
-                                    dir, ny, nvapor, stride1, stride2);
+                                    dir, ny, nvapor, stride1, stride2,
+                                    species_flux);
             }
           }
         },
@@ -177,9 +185,9 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
 }
 
 template void vic_redistribute_cpu<3>(at::TensorIterator&, double, double, int,
-                                      int);
+                                      int, int);
 template void vic_redistribute_cpu<5>(at::TensorIterator&, double, double, int,
-                                      int);
+                                      int, int);
 
 }  // namespace snap
 
