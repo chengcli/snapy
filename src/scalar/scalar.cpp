@@ -116,8 +116,8 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
 
   // Tracer flux positivity limiter: same scheme (and same rationale) as the
   // hydro species channels -- see flux_positivity.hpp and hydro_forward.cpp
-  // step (4.C). Adopts the hydro `positivity` flag.
-  if (pmb->phydro->options->positivity()) {
+  // step (4.C). It follows the existing EOS limiter setting.
+  if (pmb->phydro->options->eos()->limiter()) {
     auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
 
     Variables tvars;

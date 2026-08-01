@@ -7,14 +7,13 @@
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
-#include <ATen/cuda/CUDAContext.h>
 #include <ATen/native/ReduceOpsUtils.h>
-#include <c10/cuda/CUDAGuard.h>
-#include <c10/cuda/CUDAException.h>
 #include <c10/core/ScalarType.h>
+#include <c10/cuda/CUDAGuard.h>
 
 // snap
 #include <snap/utils/cuda_utils.h>
+
 #include <snap/utils/loops.cuh>
 
 #include "forward_sweep_impl.h"
@@ -24,44 +23,6 @@
 #include "vic_redistribute_impl.h"
 
 namespace snap {
-
-template <typename T, int N, typename OffsetCalculator>
-__global__ void vic_reduce_cuda_kernel(OffsetCalculator offset_calc,
-                                       std::array<char *, 10> data,
-                                       int64_t ncol, int nlayer, int ny,
-                                       int stride1, int stride2) {
-  constexpr int kThreads = 128;
-  __shared__ T sums[kThreads];
-
-  int reductions = 2;  // sum(A^2), B_dry (species reductions removed with #155's dead term)
-  int64_t task = blockIdx.x;
-  int64_t col = task / reductions;
-  if (col >= ncol) return;
-  int reduction = task % reductions;
-
-  auto offsets = offset_calc.get(col);
-  auto du = reinterpret_cast<T *>(data[0] + offsets[0]);
-  auto w = reinterpret_cast<T *>(data[2] + offsets[2]);
-  auto vol = reinterpret_cast<T *>(data[5] + offsets[5]);
-  auto c = reinterpret_cast<Eigen::Matrix<T, N, N> *>(data[8] + offsets[8]);
-  auto delta =
-      reinterpret_cast<Eigen::Matrix<T, N, 1> *>(data[9] + offsets[9]);
-
-  T sum = 0;
-  for (int i = threadIdx.x; i < nlayer; i += blockDim.x) {
-    sum += vic_reduction_term(du, w, delta, vol, i, reduction, ny, stride1,
-                              stride2);
-  }
-  sums[threadIdx.x] = sum;
-  __syncthreads();
-
-  for (int width = kThreads / 2; width > 0; width /= 2) {
-    if (threadIdx.x < width) sums[threadIdx.x] += sums[threadIdx.x + width];
-    __syncthreads();
-  }
-
-  if (threadIdx.x == 0) c[0].data()[reduction] = sums[0];
-}
 
 // Phase 1 of the partial VIC solve: assemble the block-tridiagonal coefficients
 // a, b, c. This is parallelized over EVERY cell (column x layer), not just per
@@ -144,8 +105,8 @@ void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
       auto b = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
       auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
 
-      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1,
-                             dt, grav, dir, ny, stride1, stride2, first_block,
+      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt,
+                             grav, dir, ny, stride1, stride2, first_block,
                              last_block, periodic);
     });
   });
@@ -169,33 +130,17 @@ void vic_solve_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
     using Vector = Eigen::Matrix<scalar_t, N, 1>;
 
     native::gpu_kernel<10>(
-        iter, [=] GPU_LAMBDA(char* const data[10], unsigned int strides[10]) {
-          auto du = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto a = reinterpret_cast<Matrix*>(data[6] + strides[6]);
-          auto b = reinterpret_cast<Matrix*>(data[7] + strides[7]);
-          auto c = reinterpret_cast<Matrix*>(data[8] + strides[8]);
-          auto delta = reinterpret_cast<Vector*>(data[9] + strides[9]);
+        iter, [=] GPU_LAMBDA(char *const data[10], unsigned int strides[10]) {
+          auto du = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
+          auto a = reinterpret_cast<Matrix *>(data[6] + strides[6]);
+          auto b = reinterpret_cast<Matrix *>(data[7] + strides[7]);
+          auto c = reinterpret_cast<Matrix *>(data[8] + strides[8]);
+          auto delta = reinterpret_cast<Vector *>(data[9] + strides[9]);
 
           ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny, stride1,
                        stride2, first_block, last_block);
           vic_backward_substitute(a, delta, 0, nlayer - 1);
         });
-
-    // c is dead after ForwardSweep. Reuse its column memory for the reduction
-    // scalars consumed by the redistribution map. Each block reduces one
-    // quantity for one column across all vertical layers.
-    int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<10>(iter);
-    std::array<char *, 10> data;
-    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
-
-    constexpr int threads = 128;
-    int64_t blocks = ncol * 2;
-    auto stream = at::cuda::getCurrentCUDAStream();
-    vic_reduce_cuda_kernel<scalar_t, N>
-        <<<blocks, threads, 0, stream>>>(offset_calc, data, ncol, nlayer, ny,
-                                        stride1, stride2);
-    C10_CUDA_KERNEL_LAUNCH_CHECK();
   });
 }
 
@@ -203,8 +148,8 @@ template void vic_solve_cuda<3>(at::TensorIterator &, double, double, int);
 template void vic_solve_cuda<5>(at::TensorIterator &, double, double, int);
 
 template <int N>
-void vic_redistribute_cuda(at::TensorIterator &iter, double dt, double grav,
-                           int dir, int nvapor, int species_flux) {
+void vic_redistribute_cuda(at::TensorIterator &iter, double /*dt*/,
+                           double /*grav*/, int dir) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_cuda", [&]() {
@@ -215,7 +160,6 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double dt, double grav,
 
     int ny = nhydro - ICY;
 
-    using Matrix = Eigen::Matrix<scalar_t, N, N>;
     using Vector = Eigen::Matrix<scalar_t, N, 1>;
 
     int64_t ncol = iter.numel();
@@ -223,23 +167,21 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double dt, double grav,
     std::array<char *, 10> data;
     for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
 
-    // Component B: the species column pass is serial per column (prefix sum
+    // Component B: the constituent column pass is serial per column (prefix sum
     // + sequential availability clamp); one thread per column, matching the
     // ForwardSweep pattern. Writes only mass_fix, so the cell-parallel
     // redistribution below stays race-free.
-    if (species_flux) {
-      at::native::launch_legacy_kernel<128, 1>(ncol, [=] __device__(int col) {
-        auto offsets = offset_calc.get(col);
-        auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
-        auto mass_fix = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
-        auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
-        auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
-        auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
+    at::native::launch_legacy_kernel<128, 1>(ncol, [=] __device__(int col) {
+      auto offsets = offset_calc.get(col);
+      auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
+      auto mass_fix = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
+      auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
+      auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
 
-        vic_species_column<scalar_t, N>(du, w, mass_fix, delta, vol, nlayer,
-                                        dir, ny, stride1, stride2);
-      });
-    }
+      vic_constituent_column<scalar_t, N>(du, w, mass_fix, delta, vol, nlayer,
+                                          dir, ny, stride1, stride2);
+    });
 
     int64_t total = ncol * (int64_t)nlayer;
     at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
@@ -248,21 +190,17 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double dt, double grav,
       auto offsets = offset_calc.get(col);
       auto du = reinterpret_cast<scalar_t *>(data[0] + offsets[0]);
       auto mass_fix = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
-      auto w = reinterpret_cast<scalar_t *>(data[2] + offsets[2]);
-      auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
-      auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
       auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
 
-      vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i, dir,
-                            ny, nvapor, stride1, stride2, species_flux);
+      vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1, stride2);
     });
   });
 }
 
 template void vic_redistribute_cuda<3>(at::TensorIterator &, double, double,
-                                       int, int, int);
+                                       int);
 template void vic_redistribute_cuda<5>(at::TensorIterator &, double, double,
-                                       int, int, int);
+                                       int);
 
 }  // namespace snap
 
@@ -274,7 +212,6 @@ REGISTER_CUDA_DISPATCH(vic_solve_partial, &snap::vic_solve_cuda<3>);
 REGISTER_CUDA_DISPATCH(vic_solve_full, &snap::vic_solve_cuda<5>);
 REGISTER_CUDA_DISPATCH(vic_redistribute_partial,
                        &snap::vic_redistribute_cuda<3>);
-REGISTER_CUDA_DISPATCH(vic_redistribute_full,
-                       &snap::vic_redistribute_cuda<5>);
+REGISTER_CUDA_DISPATCH(vic_redistribute_full, &snap::vic_redistribute_cuda<5>);
 
 }  // namespace at::native

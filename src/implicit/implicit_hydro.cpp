@@ -1,7 +1,6 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -132,14 +131,6 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   _du0.copy_(du);
   _mass_corr.zero_();
 
-  int nvapor = 0;
-  if (phydro->options->eos()->thermo()) {
-    nvapor = std::max<int>(
-        0,
-        static_cast<int>(phydro->options->eos()->thermo()->vapor_ids().size()) -
-            1);
-  }
-
   /// (1) Project to local orthonormal frame
   w[IVY] += w[IVZ] * cos_theta;
   w[IVZ] *= sin_theta;
@@ -173,20 +164,17 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
   auto grav1 = phydro->options->grav()->grav1();
 
-  int species_flux = phydro->options->implicit_species_flux() ? 1 : 0;
-
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
-    at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0,
-                                      nvapor, species_flux);
+    at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
   } else {
     // Match the full-VIC pipeline: assemble coefficients, run the column
     // solve + reductions, then apply the per-cell redistribution map.
     at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
-    at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1, 0,
-                                         nvapor, species_flux);
+    at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
+                                         0);
   }
 
   /// (3) De-project from local orthonormal frame

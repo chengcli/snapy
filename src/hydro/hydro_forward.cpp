@@ -310,7 +310,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // exact. Positivity of the full multi-stage update follows from the SSP
   // structure of the integrators (see flux_positivity.hpp).
   int ny = u.size(0) - ICY;
-  if (options->positivity() && ny > 0) {
+  if (options->eos()->limiter() && ny > 0) {
     auto uy = u.narrow(0, ICY, ny);
     auto f1 = _flux1.defined() ? _flux1.narrow(0, ICY, ny) : torch::Tensor();
     auto f2 = _flux2.defined() ? _flux2.narrow(0, ICY, ny) : torch::Tensor();

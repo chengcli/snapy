@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A/B test of the tracer flux positivity limiter (dynamics: positivity).
+"""A/B test of the tracer flux positivity limiter (EOS limiter).
 
 Setup: 2-D slab, periodic in x2, a smooth uniform wind (Mach ~0.05) carrying a
 sharp vapor top-hat, reconstructed with the unlimited cp5 polynomial. The
@@ -7,8 +7,8 @@ Gibbs undershoot just downwind of the hat edge makes the reconstructed face
 mixing ratio negative there, i.e. a spurious backward species flux that drains
 cells which hold NO vapor at all:
 
-  - base arm (positivity: false): vapor goes negative within a few cycles;
-  - limited arm (positivity: true): a face draining an empty donor gets
+  - base arm (limiter: false): vapor goes negative within a few cycles;
+  - limited arm (limiter: true): a face draining an empty donor gets
     theta_donor = 0, so min(vapor) stays >= 0 while the hydro flow (uniform
     rho, p, u) is untouched.
 
@@ -39,12 +39,12 @@ import torch
 import yaml
 
 
-def run_arm(yaml_file: str, positivity: bool, device: str):
+def run_arm(yaml_file: str, limiter: bool, device: str):
     from snapy import MeshBlock, MeshBlockOptions, kICY
 
     with open(yaml_file) as f:
         config = yaml.safe_load(f)
-    config["dynamics"]["positivity"] = positivity
+    config["dynamics"]["equation-of-state"]["limiter"] = limiter
     nghost = config["geometry"]["cells"]["nghost"]
     nx2 = config["geometry"]["cells"]["nx2"]
     x2min = config["geometry"]["bounds"]["x2min"]
@@ -149,8 +149,8 @@ def main():
     )
     args = parser.parse_args()
 
-    base = run_arm(args.yaml, positivity=False, device=args.device)
-    lim = run_arm(args.yaml, positivity=True, device=args.device)
+    base = run_arm(args.yaml, limiter=False, device=args.device)
+    lim = run_arm(args.yaml, limiter=True, device=args.device)
 
     for name, arm in (("base", base), ("limited", lim)):
         print(

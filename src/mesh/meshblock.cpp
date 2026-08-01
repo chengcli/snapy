@@ -650,27 +650,19 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     auto mass_corr = phydro->implicit_mass_correction();
     if (mass_corr.defined() && mass_corr.numel() > 0 &&
         vars.count("scalar_r")) {
-      if (phydro->options->implicit_species_flux()) {
-        // Conservative form: vic_species_column exported the implied face
-        // mass transfer M (mass/step through the face BELOW cell i, x1 only,
-        // zero in ghosts => both column ends closed). Move scalars by
-        // M * r_donor per face; the per-face product telescopes, so the
-        // column total of scalar_s is conserved exactly.
-        auto M = mass_corr[IVX];  // (nc3, nc2, nc1)
-        auto r = vars.at("scalar_r");
-        int nc1 = r.size(-1);
-        auto r_below = torch::zeros_like(r);
-        r_below.slice(-1, 1, nc1) = r.slice(-1, 0, nc1 - 1);
-        // transfer through the face below cell i, donor-upwinded
-        auto P = torch::where(M > 0., r_below, r) * M;
-        auto P_above = torch::zeros_like(P);
-        P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
-        fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
-      } else {
-        // Legacy pointwise pro-rata update (not conservative over the column
-        // when r varies with height).
-        fut_scalar_ds.add_(mass_corr[IDN].unsqueeze(0) * vars.at("scalar_r"));
-      }
+      // vic_constituent_column exported the implied face mass transfer M
+      // (mass/step through the face BELOW cell i, x1 only, zero in ghosts =>
+      // both column ends closed). Move scalars by M * r_donor per face; the
+      // per-face product telescopes, so the column total is conserved exactly.
+      auto M = mass_corr[IVX];  // (nc3, nc2, nc1)
+      auto r = vars.at("scalar_r");
+      int nc1 = r.size(-1);
+      auto r_below = torch::zeros_like(r);
+      r_below.slice(-1, 1, nc1) = r.slice(-1, 0, nc1 - 1);
+      auto P = torch::where(M > 0., r_below, r) * M;
+      auto P_above = torch::zeros_like(P);
+      P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
+      fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
     }
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();

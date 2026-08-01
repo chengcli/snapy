@@ -37,9 +37,7 @@ struct HydroOptionsImpl {
     os << "* verbose = " << verbose() << "\n"
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
-       << "* disable_flux_x3 = " << disable_flux_x3() << "\n"
-       << "* positivity = " << positivity() << "\n"
-       << "* implicit_species_flux = " << implicit_species_flux() << "\n";
+       << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
   }
 
   //! verbose
@@ -48,16 +46,6 @@ struct HydroOptionsImpl {
   ADD_ARG(bool, disable_flux_x1) = false;
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;
-
-  //! limit tracer fluxes so transport cannot drain any cell negative
-  //! (flux_positivity.hpp); also adopted by the passive-scalar module
-  ADD_ARG(bool, positivity) = false;
-
-  //! apply the implicit vertical mass correction to species (and passive
-  //! scalars) as a donor-upwinded column FLUX -- conservative and
-  //! compositionally active -- instead of the legacy pointwise pro-rata
-  //! update (vic_redistribute_impl.h, vic_species_column)
-  ADD_ARG(bool, implicit_species_flux) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
@@ -145,7 +133,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor implicit_mass_correction() const;
 
   //! cumulative count of (cell, species) entries with positivity theta < 1
-  //! (diagnostic; only accumulated when options->positivity() is on)
+  //! (diagnostic; accumulated when the EOS limiter is enabled)
   torch::Tensor positivity_hits() const { return _positivity_hits; }
 
  protected:

@@ -2,6 +2,9 @@
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
 
+// C/C++
+#include <vector>
+
 // torch
 #include <torch/torch.h>
 
@@ -9,6 +12,7 @@
 #include <kintera/thermo/thermo.hpp>
 
 // snapy
+#include <snap/eos/fix_vapor_impl.h>
 #include <snap/snap.h>
 
 #include <snap/eos/ideal_moist.hpp>
@@ -28,6 +32,21 @@ std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type) {
 }
 
 }  // namespace
+
+TEST(eos_limiter, accepts_zero_vapor_column) {
+  std::vector<double> vapor(4, 0.);
+  std::vector<double> major(4, 1.);
+
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  for (double value : vapor) EXPECT_DOUBLE_EQ(value, 0.);
+
+  vapor = {0.2, -0.1, 0., 0.};
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  EXPECT_DOUBLE_EQ(vapor[0], 0.05);
+  EXPECT_DOUBLE_EQ(vapor[1], 0.05);
+  EXPECT_DOUBLE_EQ(vapor[2], 0.);
+  EXPECT_DOUBLE_EQ(vapor[3], 0.);
+}
 
 TEST_P(DeviceTest, moist_mixture) {
   auto block = make_block("moist-mixture");
