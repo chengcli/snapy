@@ -2,6 +2,10 @@ reference-state:
   Tref: 300.
   Pref: 1.e5
 
+# The vapor/cloud pair only exists to register a species pair with the moist
+# EOS (kintera derives vapor/cloud ids from reactions). The test state is warm
+# and unsaturated everywhere (p_vapor ~ 0.5 p_sat), so the saturation
+# adjustment is a no-op and transport is the only active process.
 species:
   - name: dry
     composition: {O: 0.42, N: 1.56, Ar: 0.01}
@@ -10,6 +14,15 @@ species:
   - name: vapor
     composition: {H: 2, O: 1}
     cv_R: 3.5
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
 
 geometry:
   type: cartesian
