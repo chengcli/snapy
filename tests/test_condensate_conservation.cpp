@@ -21,6 +21,10 @@ TEST_P(DeviceTest, multi_vapor_condensate_debits_stoichiometric_mass) {
   auto block = std::make_shared<MeshBlockImpl>(options);
   block->to(device, dtype);
 
+  // The EOS must use the mapping cached during construction, not inspect the
+  // reaction metadata each time the limiter runs.
+  block->phydro->peos->options->thermo()->nucleation()->reactions().clear();
+
   auto coord = block->pcoord;
   auto cons = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                             coord->options->nc2(), coord->options->nc1()},

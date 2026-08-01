@@ -1,5 +1,9 @@
 #pragma once
 
+// C/C++
+#include <utility>
+#include <vector>
+
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
@@ -142,6 +146,12 @@ class EquationOfStateImpl {
 
   //! \brief Apply the primitive variable limiter in place.
   virtual void apply_primitive_limiter_(torch::Tensor const& prim);
+
+ private:
+  //! Parent vapor slots and normalized stoichiometric mass fractions by cloud.
+  std::vector<std::vector<std::pair<int, double>>> cloud_parent_cache_;
+
+  void cache_cloud_parents_();
 };
 
 using EquationOfState = std::shared_ptr<EquationOfStateImpl>;

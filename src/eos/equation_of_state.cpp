@@ -84,6 +84,47 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
     : options(options_) {
   phydro = dynamic_cast<HydroImpl const*>(p);
   TORCH_CHECK(phydro, "[EquationOfState] Parent module is null.");
+  cache_cloud_parents_();
+}
+
+void EquationOfStateImpl::cache_cloud_parents_() {
+  if (!options->thermo()) return;
+
+  auto const species = options->thermo()->species();
+  auto const& vids = options->thermo()->vapor_ids();
+  auto const& cids = options->thermo()->cloud_ids();
+  auto const nucleation = options->thermo()->nucleation();
+  cloud_parent_cache_.resize(cids.size());
+  if (!nucleation) return;
+
+  for (size_t j = 0; j < cids.size(); ++j) {
+    double parent_mass = 0.;
+    for (auto const& reaction : nucleation->reactions()) {
+      if (!reaction.products().count(species[cids[j]])) continue;
+
+      for (auto const& [parent, coefficient] : reaction.reactants()) {
+        auto species_it = std::find(species.begin(), species.end(), parent);
+        if (species_it == species.end()) continue;
+        int species_id = std::distance(species.begin(), species_it);
+        auto vapor_it = std::find(vids.begin() + 1, vids.end(), species_id);
+        if (vapor_it == vids.end()) continue;
+
+        int vapor_index = std::distance(vids.begin(), vapor_it);
+        double mass = coefficient * kintera::species_weights[species_id];
+        cloud_parent_cache_[j].emplace_back(ICY + vapor_index - 1, mass);
+        parent_mass += mass;
+      }
+      break;
+    }
+
+    if (parent_mass <= 0.) {
+      cloud_parent_cache_[j].clear();
+      continue;
+    }
+    for (auto& parent : cloud_parent_cache_[j]) {
+      parent.second /= parent_mass;
+    }
+  }
 }
 
 torch::Tensor EquationOfStateImpl::internal_energy_offset(
@@ -160,49 +201,19 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     // is handled by the columnar fix_vapor below. The phase shift is ~1% of the
     // local value and the saturation adjustment re-equilibrates it at the end
     // of the same cycle.
-    auto const species = options->thermo()->species();
-    auto const& vids = options->thermo()->vapor_ids();
-    auto const& cids = options->thermo()->cloud_ids();
-    auto const nucleation = options->thermo()->nucleation();
     for (int j = 0; j < ncloud; ++j) {
       int slot = ICY + nvapor + j;
       auto c = cons[slot];
-
-      // Derive the parent vapor(s) from the nucleation reaction instead of
-      // assuming a phase suffix in the species name. The weights are the
-      // reactants' stoichiometric masses, so a multi-vapor condensate debits
-      // each parent in the same proportions as the reaction.
-      std::vector<std::pair<int, double>> parents;
-      double parent_mass = 0.;
-      if (nucleation) {
-        for (auto const& reaction : nucleation->reactions()) {
-          if (!reaction.products().count(species[cids[j]])) continue;
-
-          for (auto const& [parent, coefficient] : reaction.reactants()) {
-            auto species_it = std::find(species.begin(), species.end(), parent);
-            if (species_it == species.end()) continue;
-            int species_id = std::distance(species.begin(), species_it);
-            auto vapor_it = std::find(vids.begin() + 1, vids.end(), species_id);
-            if (vapor_it == vids.end()) continue;
-
-            int vapor_index = std::distance(vids.begin(), vapor_it);
-            double mass = coefficient * kintera::species_weights[species_id];
-            parents.emplace_back(ICY + vapor_index - 1, mass);
-            parent_mass += mass;
-          }
-          break;
-        }
-      }
-
-      if (parents.empty() || parent_mass <= 0.) {
+      auto const& parents = cloud_parent_cache_[j];
+      if (parents.empty()) {
         // Clouds not produced by nucleation have no parent-vapor metadata.
         c.clamp_min_(0.);
         continue;
       }
 
       auto deficit = c.clamp_max(0.);
-      for (auto const& [parent_slot, mass] : parents) {
-        cons[parent_slot] += deficit * (mass / parent_mass);
+      for (auto const& [parent_slot, mass_fraction] : parents) {
+        cons[parent_slot] += deficit * mass_fraction;
       }
       c.clamp_min_(0.);  // condensate to exactly zero
     }
