@@ -46,6 +46,7 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
+    op->positivity() = dyn["positivity"].as<bool>(false);
   }
 
   // --------------- forcings --------------- //

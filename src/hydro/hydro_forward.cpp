@@ -7,6 +7,7 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
+#include "flux_positivity.hpp"
 #include "hydro.hpp"
 
 namespace snap {
@@ -294,6 +295,52 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         SINFO(Hydro) << "Flux-x3 time (s): " << elapsed.count() << "\n";
         start = std::chrono::high_resolution_clock::now();
       }
+    }
+  }
+
+  //// ------- (4.C) Tracer flux positivity limiter (flux_positivity.hpp) ---- ////
+  // Scale each face's species flux by the donor cell's theta so no cell can be
+  // drained below zero by transport in this stage (covers advected species AND
+  // the sedimentation flux added into _flux1 above). Runs after the x1 seam
+  // averaging, so seam-face fluxes are already single-valued; theta's ghost
+  // layer is then filled exactly like conserved-variable ghosts (exchange at
+  // internal seams, boundary functions at physical faces) so the donor factor
+  // of every shared face is identical on both ranks and conservation stays
+  // exact. Positivity of the full multi-stage update follows from the SSP
+  // structure of the integrators (see flux_positivity.hpp).
+  int ny = u.size(0) - ICY;
+  if (options->positivity() && ny > 0) {
+    auto uy = u.narrow(0, ICY, ny);
+    auto f1 = _flux1.defined() ? _flux1.narrow(0, ICY, ny) : torch::Tensor();
+    auto f2 = _flux2.defined() ? _flux2.narrow(0, ICY, ny) : torch::Tensor();
+    auto f3 = _flux3.defined() ? _flux3.narrow(0, ICY, ny) : torch::Tensor();
+
+    auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt);
+    // census before the ghost fill: ghosts are exactly 1 here, so this counts
+    // interior (cell, species) entries only, with no double count across ranks
+    _positivity_hits += (theta < 1.).sum();
+
+    Variables tvars;
+    tvars["hydro_theta"] = theta;
+    SyncOptions topts;
+    topts.interpolate(true).type(kScalar);
+    pmb->exchange(tvars, topts);
+
+    BoundaryFuncOptions bops;
+    bops.nghost(pmb->pcoord->options->nghost());
+    bops.type(kScalar);
+    for (int i = 0; i < pmb->options->bfuncs().size(); ++i) {
+      if (pmb->options->bfuncs()[i] == nullptr) continue;
+      pmb->options->bfuncs()[i](theta, 3 - i / 2, bops);
+    }
+
+    flux_positivity_scale_(theta, f1, f2, f3, pmb->pcoord);
+
+    if (options->verbose()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> elapsed = end - start;
+      SINFO(Hydro) << "Positivity time (s): " << elapsed.count() << "\n";
+      start = std::chrono::high_resolution_clock::now();
     }
   }
 

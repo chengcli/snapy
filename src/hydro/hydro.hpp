@@ -37,7 +37,8 @@ struct HydroOptionsImpl {
     os << "* verbose = " << verbose() << "\n"
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
-       << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
+       << "* disable_flux_x3 = " << disable_flux_x3() << "\n"
+       << "* positivity = " << positivity() << "\n";
   }
 
   //! verbose
@@ -46,6 +47,10 @@ struct HydroOptionsImpl {
   ADD_ARG(bool, disable_flux_x1) = false;
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;
+
+  //! limit tracer fluxes so transport cannot drain any cell negative
+  //! (flux_positivity.hpp); also adopted by the passive-scalar module
+  ADD_ARG(bool, positivity) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
@@ -132,6 +137,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor face_pressure1() const { return _face_pressure1; }
   torch::Tensor implicit_mass_correction() const;
 
+  //! cumulative count of (cell, species) entries with positivity theta < 1
+  //! (diagnostic; only accumulated when options->positivity() is on)
+  torch::Tensor positivity_hits() const { return _positivity_hits; }
+
  protected:
   void _revise_x1inner_ghost(torch::Tensor const& w);
   void _revise_x1outer_ghost(torch::Tensor const& w);
@@ -158,6 +167,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable int x1_uniform_ = -1;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div;
+  torch::Tensor _positivity_hits;
 };
 
 TORCH_MODULE(Hydro);
