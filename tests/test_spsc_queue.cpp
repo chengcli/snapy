@@ -3,10 +3,9 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <snap/utils/spsc_queue.hpp>
 #include <thread>
 #include <vector>
-
-#include <snap/utils/spsc_queue.hpp>
 
 using snap::SpscQueue;
 
@@ -32,9 +31,8 @@ TEST(SpscQueue, supports_move_only_payloads) {
   SpscQueue<std::unique_ptr<int>, 1> queue;
   queue.wait_push(std::make_unique<int>(42));
   std::unique_ptr<int> value;
-  queue.wait_consume([&](std::unique_ptr<int>& current) {
-    value = std::move(current);
-  });
+  queue.wait_consume(
+      [&](std::unique_ptr<int>& current) { value = std::move(current); });
   ASSERT_NE(value, nullptr);
   EXPECT_EQ(*value, 42);
 }

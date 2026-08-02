@@ -12,6 +12,7 @@
 
 // snap
 #include <snap/snap.h>
+
 #include <snap/utils/spsc_queue.hpp>
 
 #ifdef USE_CUDA

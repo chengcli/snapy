@@ -211,8 +211,7 @@ void LayoutImpl::connect_local_layouts(
           connection->source_offset = {dy, dx, dz};
 #ifdef USE_CUDA
           if (source->options->device() == "cuda") {
-            connection->ready_event =
-                std::make_shared<at::cuda::CUDAEvent>();
+            connection->ready_event = std::make_shared<at::cuda::CUDAEvent>();
             connection->consumed_event =
                 std::make_shared<at::cuda::CUDAEvent>();
           }
@@ -282,19 +281,19 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     bool made_progress = false;
     for (auto const& connection : _incoming_local) {
       auto const* message = connection->queue.front();
-      if (message == nullptr || message->generation > state.generation) continue;
+      if (message == nullptr || message->generation > state.generation)
+        continue;
       TORCH_CHECK(message->generation == state.generation,
                   "stale local ghost message for block ", options->rank(),
                   ": expected generation ", state.generation, " but received ",
                   message->generation);
 
-      bool consumed = connection->queue.try_consume(
-          [&](LocalGhostMessage& current) {
-            TORCH_CHECK(current.source_buffer_id ==
-                            connection->source_buffer_id &&
-                            current.target_buffer_id ==
-                                connection->target_buffer_id,
-                        "local ghost connection metadata mismatch");
+      bool consumed =
+          connection->queue.try_consume([&](LocalGhostMessage& current) {
+            TORCH_CHECK(
+                current.source_buffer_id == connection->source_buffer_id &&
+                    current.target_buffer_id == connection->target_buffer_id,
+                "local ghost connection metadata mismatch");
             if (current.active) {
               auto bit = std::uint32_t{1} << current.target_buffer_id;
               state.expected_mask |= bit;
@@ -303,18 +302,17 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
                 connection->ready_event->block(*current_stream);
               }
 #endif
-              auto& destination =
-                  pmb->recv_bufs.at(current.target_buffer_id);
+              auto& destination = pmb->recv_bufs.at(current.target_buffer_id);
               TORCH_CHECK(destination.size() == current.buffers.size(),
                           "local exchange tensor-count mismatch from rank ",
                           connection->source_rank, " to rank ",
                           connection->target_rank);
               for (std::size_t n = 0; n < current.buffers.size(); ++n) {
-                TORCH_CHECK(destination[n].numel() ==
-                                current.buffers[n].numel(),
-                            "local exchange size mismatch from rank ",
-                            connection->source_rank, " to rank ",
-                            connection->target_rank);
+                TORCH_CHECK(
+                    destination[n].numel() == current.buffers[n].numel(),
+                    "local exchange size mismatch from rank ",
+                    connection->source_rank, " to rank ",
+                    connection->target_rank);
                 destination[n].view({-1}).copy_(
                     current.buffers[n].reshape({-1}));
               }
