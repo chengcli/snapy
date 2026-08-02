@@ -25,7 +25,6 @@ double column_integral(std::vector<double> const& u,
 TEST(vic_redistribution, conserves_constituent_column_tendencies) {
   constexpr int nlayer = 4;
   constexpr int ny = 3;
-  constexpr int nvapor = 1;
   constexpr int nhydro = snap::ICY + ny;
   constexpr int stride1 = nlayer;
   constexpr int stride2 = 1;
@@ -41,8 +40,6 @@ TEST(vic_redistribution, conserves_constituent_column_tendencies) {
   std::vector<Eigen::Matrix<double, 3, 3>> a(nlayer);
   std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
   std::vector<double> mass_fix(nhydro * nlayer, 0.);
-  std::vector<double> scratch(2 + ny, 0.);
-
   for (int i = il; i <= iu; ++i) {
     double vapor_frac = 0.10 + 0.02 * i;
     double cloud_frac = 0.05 + 0.01 * i;
@@ -67,89 +64,72 @@ TEST(vic_redistribution, conserves_constituent_column_tendencies) {
   }
 
   auto original = du;
-  std::vector<double> implicit_total(nlayer, 0.);
-  double sum_a2 = 0.;
-  for (int i = il; i <= iu; ++i) {
-    implicit_total[i] = delta[i](0);
-    double a_i = rho[i] * vol[i];
-    sum_a2 += a_i * a_i;
-  }
-
-  snap::vic_backward_reduce<double, 3>(du.data(), w.data(), a.data(),
-                                       delta.data(), vol.data(), scratch.data(),
-                                       il, iu, 0, ny, stride1, stride2);
+  snap::vic_backward_substitute<double, 3>(a.data(), delta.data(), il, iu);
+  snap::vic_constituent_column<double, 3>(du.data(), w.data(), mass_fix.data(),
+                                          delta.data(), vol.data(), nlayer, 0,
+                                          ny, stride1, stride2);
   for (int i = il; i <= iu; ++i) {
     snap::vic_redistribute_cell<double, 3>(
-        du.data(), w.data(), mass_fix.data(), delta.data(), vol.data(),
-        scratch.data(), i, 0, ny, nvapor, stride1, stride2);
+        du.data(), mass_fix.data(), delta.data(), i, 0, ny, stride1, stride2);
   }
 
-  int vars[] = {snap::IDN, snap::ICY};
-  for (int var : vars) {
+  int constituent_vars[] = {snap::IDN, snap::ICY, snap::ICY + 1, snap::ICY + 2};
+  for (int var : constituent_vars) {
     EXPECT_NEAR(column_integral(du, vol, var, stride1, il, iu),
-                column_integral(original, vol, var, stride1, il, iu), 1.e-1);
+                column_integral(original, vol, var, stride1, il, iu), 1.e-12);
   }
 
-  for (int var : vars) {
-    double b_j = 0.;
-    for (int i = il; i <= iu; ++i) {
-      double fraction = 0.;
-      if (var == snap::IDN) {
-        fraction = 1. - w[snap::ICY * stride1 + i] -
-                   w[(snap::ICY + 1) * stride1 + i] -
-                   w[(snap::ICY + 2) * stride1 + i];
-      } else {
-        fraction = w[var * stride1 + i];
-      }
-
-      b_j += (original[snap::IDN * stride1 + i] +
-              original[snap::ICY * stride1 + i] +
-              original[(snap::ICY + 1) * stride1 + i] - implicit_total[i]) *
-             fraction * vol[i];
-    }
-
-    for (int i = il; i <= iu; ++i) {
-      double fraction = 0.;
-      if (var == snap::IDN) {
-        fraction =
-            1. - w[snap::ICY * stride1 + i] - w[(snap::ICY + 1) * stride1 + i];
-      } else {
-        fraction = w[var * stride1 + i];
-      }
-
-      double explicit_total = original[snap::IDN * stride1 + i] +
-                              original[snap::ICY * stride1 + i] +
-                              original[(snap::ICY + 1) * stride1 + i] +
-                              original[(snap::ICY + 2) * stride1 + i];
-      double a_i = rho[i] * vol[i];
-      double structural = rho[i] * a_i * b_j / sum_a2;
-      double expected = original[var * stride1 + i] +
-                        (implicit_total[i] - explicit_total) * fraction +
-                        structural;
-      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-1);
-    }
-  }
-
+  std::vector<double> expected_face_mass = {0., -0.4, 0., -0.15};
   for (int i = il; i <= iu; ++i) {
-    double explicit_total = original[snap::IDN * stride1 + i] +
-                            original[snap::ICY * stride1 + i] +
-                            original[(snap::ICY + 1) * stride1 + i] +
-                            original[(snap::ICY + 2) * stride1 + i];
-    EXPECT_NEAR(mass_fix[snap::IDN * stride1 + i],
-                implicit_total[i] - explicit_total, 1.e-12);
-
-    for (int var : {snap::ICY + 1, snap::ICY + 2}) {
-      double expected =
-          original[var * stride1 + i] +
-          (implicit_total[i] - explicit_total) * w[var * stride1 + i];
-      EXPECT_NEAR(du[var * stride1 + i], expected, 1.e-12);
-    }
-
-    double scalar_r = 0.3 + 0.01 * i;
-    double scalar_fix = mass_fix[snap::IDN * stride1 + i] * scalar_r;
-    EXPECT_NEAR(scalar_fix, (implicit_total[i] - explicit_total) * scalar_r,
+    EXPECT_NEAR(mass_fix[snap::IVX * stride1 + i], expected_face_mass[i],
                 1.e-12);
+
+    double constituent_total = du[snap::IDN * stride1 + i];
+    for (int n = 0; n < ny; ++n) {
+      constituent_total += du[(snap::ICY + n) * stride1 + i];
+      double final_mass = (rho[i] * w[(snap::ICY + n) * stride1 + i] +
+                           du[(snap::ICY + n) * stride1 + i]) *
+                          vol[i];
+      EXPECT_GE(final_mass, -1.e-12);
+    }
+    EXPECT_NEAR(constituent_total, delta[i](0), 1.e-12);
   }
+}
+
+TEST(vic_redistribution, dry_only_transport_is_conservative_and_clamped) {
+  constexpr int nlayer = 2;
+  constexpr int ny = 0;
+  constexpr int nhydro = snap::ICY;
+  constexpr int stride1 = nlayer;
+  constexpr int stride2 = 1;
+
+  std::vector<double> du(nhydro * nlayer, 0.);
+  std::vector<double> w(nhydro * nlayer, 0.);
+  std::vector<double> vol(nlayer, 1.);
+  std::vector<double> mass_fix(nhydro * nlayer, 0.);
+  std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
+
+  w[snap::IDN * stride1] = 1.;
+  w[snap::IDN * stride1 + 1] = 1.;
+  du[snap::IDN * stride1] = -0.75;
+  delta[0] << -2.75, 0., 0.;
+  delta[1] << 2., 0., 0.;
+
+  auto original = du;
+  snap::vic_constituent_column<double, 3>(du.data(), w.data(), mass_fix.data(),
+                                          delta.data(), vol.data(), nlayer, 0,
+                                          ny, stride1, stride2);
+  for (int i = 0; i < nlayer; ++i) {
+    snap::vic_redistribute_cell<double, 3>(
+        du.data(), mass_fix.data(), delta.data(), i, 0, ny, stride1, stride2);
+  }
+
+  EXPECT_NEAR(mass_fix[snap::IVX * stride1 + 1], 2., 1.e-12);
+  EXPECT_NEAR(mass_fix[snap::IDN * stride1], -0.25, 1.e-12);
+  EXPECT_NEAR(mass_fix[snap::IDN * stride1 + 1], 0.25, 1.e-12);
+  EXPECT_NEAR(column_integral(du, vol, snap::IDN, stride1, 0, 1),
+              column_integral(original, vol, snap::IDN, stride1, 0, 1), 1.e-12);
+  EXPECT_NEAR(w[snap::IDN * stride1] + du[snap::IDN * stride1], 0., 1.e-12);
 }
 
 TEST(implicit_options, parses_implicit_scheme_bits) {

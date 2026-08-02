@@ -13,7 +13,7 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, int nx1) {
   // scan from top to bottom
   while (is >= ie) {
     if (major[is] <= 0.) return 1;  // fail
-    if (vapor[is] > 0.) {
+    if (vapor[is] >= 0.) {
       is--;
       continue;
     }
@@ -27,13 +27,13 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, int nx1) {
     // mass is conserved exactly.
     T sum_vapor = 0.;
     T sum_major = 0.;
-    while (sum_vapor <= 0. && i >= ie) {
+    do {
       sum_vapor += vapor[i];
       sum_major += major[i];
       i--;
-    }
+    } while (sum_vapor < 0. && i >= ie);
 
-    if (i < ie && sum_vapor <= 0.) return 1;  // fail
+    if (i < ie && sum_vapor < 0.) return 1;  // fail
 
     // redistribute concentrations from is (inclusive) to i (exclusive)
     T yfrac = sum_vapor / sum_major;

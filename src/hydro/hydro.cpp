@@ -111,6 +111,9 @@ void HydroImpl::reset() {
 
   _div = register_buffer("D",
                          torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64));
+
+  _positivity_hits =
+      register_buffer("positivity_hits", torch::zeros({1}, torch::kInt64));
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {

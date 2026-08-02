@@ -119,8 +119,6 @@ void vic_solve_cpu(at::TensorIterator& iter, double dt, double grav, int dir) {
         [&](char** data, const int64_t* strides, int64_t n) {
           for (int64_t col = 0; col < n; ++col) {
             auto du = reinterpret_cast<scalar_t*>(data[0] + col * strides[0]);
-            auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
-            auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
             auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
@@ -128,8 +126,7 @@ void vic_solve_cpu(at::TensorIterator& iter, double dt, double grav, int dir) {
 
             ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
                          stride1, stride2, first_block, last_block);
-            vic_backward_reduce(du, w, a, delta, vol, c[0].data(), 0,
-                                nlayer - 1, dir, ny, stride1, stride2);
+            vic_backward_substitute(a, delta, 0, nlayer - 1);
           }
         },
         grain_size);
@@ -141,7 +138,7 @@ template void vic_solve_cpu<5>(at::TensorIterator&, double, double, int);
 
 template <int N>
 void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
-                          double /*grav*/, int dir, int nvapor) {
+                          double /*grav*/, int dir) {
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "vic_redistribute_cpu", [&] {
@@ -152,7 +149,6 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
 
     int ny = nhydro - ICY;
 
-    using Matrix = Eigen::Matrix<scalar_t, N, N>;
     using Vector = Eigen::Matrix<scalar_t, N, 1>;
 
     iter.for_each(
@@ -163,12 +159,14 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
                 reinterpret_cast<scalar_t*>(data[1] + col * strides[1]);
             auto w = reinterpret_cast<scalar_t*>(data[2] + col * strides[2]);
             auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
-            auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
             auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
+            vic_constituent_column<scalar_t, N>(
+                du, w, mass_fix, delta, vol, nlayer, dir, ny, stride1, stride2);
+
             for (int i = 0; i < nlayer; ++i) {
-              vic_redistribute_cell(du, w, mass_fix, delta, vol, c[0].data(), i,
-                                    dir, ny, nvapor, stride1, stride2);
+              vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1,
+                                    stride2);
             }
           }
         },
@@ -176,10 +174,8 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
   });
 }
 
-template void vic_redistribute_cpu<3>(at::TensorIterator&, double, double, int,
-                                      int);
-template void vic_redistribute_cpu<5>(at::TensorIterator&, double, double, int,
-                                      int);
+template void vic_redistribute_cpu<3>(at::TensorIterator&, double, double, int);
+template void vic_redistribute_cpu<5>(at::TensorIterator&, double, double, int);
 
 }  // namespace snap
 

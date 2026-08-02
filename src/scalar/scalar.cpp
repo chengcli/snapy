@@ -1,6 +1,7 @@
 // snap
 #include "scalar.hpp"
 
+#include <snap/hydro/flux_positivity.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -111,6 +112,29 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   if (_flux3.defined()) {
     _flux3.set_(priemann->forward(rtmp3[ILT], rtmp3[IRT], DIM3,
                                   pmb->phydro->flux3()[IDN]));
+  }
+
+  // Tracer flux positivity limiter: same scheme (and same rationale) as the
+  // hydro species channels -- see flux_positivity.hpp and hydro_forward.cpp
+  // step (4.C). It follows the existing EOS limiter setting.
+  if (pmb->phydro->options->eos()->limiter()) {
+    auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
+
+    Variables tvars;
+    tvars["scalar_theta"] = theta;
+    SyncOptions theta_opts;
+    theta_opts.interpolate(true).type(kScalar);
+    pmb->exchange(tvars, theta_opts);
+
+    BoundaryFuncOptions bops;
+    bops.nghost(pcoord->options->nghost());
+    bops.type(kScalar);
+    for (int i = 0; i < pmb->options->bfuncs().size(); ++i) {
+      if (pmb->options->bfuncs()[i] == nullptr) continue;
+      pmb->options->bfuncs()[i](theta, 3 - i / 2, bops);
+    }
+
+    flux_positivity_scale_(theta, _flux1, _flux2, _flux3, pcoord);
   }
 
   _div.set_(pcoord->divergence(_flux1, _flux2, _flux3));
