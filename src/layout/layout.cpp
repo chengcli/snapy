@@ -250,6 +250,14 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     bool active = dy >= opts.dy_min() && dy <= opts.dy_max() &&
                   dx >= opts.dx_min() && dx <= opts.dx_max() &&
                   dz >= opts.dz_min() && dz <= opts.dz_max();
+    // Slab/cubed serialization and remote exchange skip directions handled by
+    // a physical boundary function, so the local path must not publish them.
+    // Cubed-sphere overrides those paths and uses custom boundary functions at
+    // panel seams, which remain communication boundaries.
+    if (active && options->type() != "cubed-sphere" &&
+        pmb->options->is_physical_boundary(dy, dx, dz)) {
+      active = false;
+    }
     if (active && opts.skip_corner() &&
         std::abs(dy) + std::abs(dx) + std::abs(dz) > 1) {
       active = false;

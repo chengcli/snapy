@@ -53,3 +53,29 @@ for rank, (block, block_vars) in enumerate(zip(mesh.blocks, variables)):
         neighbor,
         ghost.unique(),
     )
+
+
+# A local logical neighbor can also be masked by a physical boundary function.
+# The sender must publish an inactive message instead of reading the buffer that
+# serialize() deliberately left unprepared for that direction.
+physical_options = snapy.MeshOptions.from_yaml(
+    str(Path(__file__).with_name("test_mesh_multi_block.yaml"))
+)
+physical_options.blocks_per_process(4)
+physical_options.set_local_horizontal_cells(4, 4)
+physical_options.block().set_bfunc(0, -1, 0, lambda var, dim, opts: None)
+physical_mesh = snapy.Mesh(physical_options)
+physical_variables = []
+for rank, block in enumerate(physical_mesh.blocks):
+    coord = block.options.coord()
+    shape = (
+        1,
+        coord.nx3() + 2 * coord.nghost(),
+        coord.nx2() + 2 * coord.nghost(),
+        coord.nx1(),
+    )
+    tensor = torch.full(shape, -1.0)
+    tensor[block.part((0, 0, 0), False)] = float(rank)
+    physical_variables.append({"field": tensor})
+
+physical_mesh.exchange(physical_variables, sync_options)

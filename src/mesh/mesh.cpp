@@ -506,6 +506,33 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
   SINFO() << "tlim=" << root->pintg->options->tlim()
           << " nlim=" << root->pintg->options->nlim() << std::endl;
 
+  // ---------- timing info ----------
+  double cpu_time = root->cpu_time_used();
+  int64_t local_cells = 0;
+  for (auto const& block : blocks) {
+    local_cells += block->cell_count();
+  }
+
+  std::vector<at::Tensor> cells = {
+      torch::tensor({local_cells}, torch::dtype(torch::kInt64))};
+  c10d::ReduceOptions opsum;
+  opsum.reduceOp = c10d::ReduceOp::SUM;
+  opsum.rootRank = root->options->layout()->process_root_rank();
+
+  auto layout = root->get_layout();
+  if (layout->has_process_group()) {
+    layout->comm->reduce(cells, opsum.reduceOp, opsum.rootRank);
+  }
+
+  int64_t cellcycles =
+      cells[0].item<int64_t>() * root->cycle * root->pintg->stages.size();
+  double zc_cpus = static_cast<double>(cellcycles) / cpu_time;
+
+  SINFO() << std::endl
+          << "million cells-per-cycle = " << cellcycles / 1e6 << std::endl;
+  SINFO() << "cpu time used (s) = " << cpu_time << std::endl;
+  SINFO() << "million cell-updates/second = " << zc_cpus / 1e6 << std::endl;
+
   for (auto& block : blocks) {
     block->send_bufs.clear();
     block->send_bufs.shrink_to_fit();
@@ -513,7 +540,6 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
     block->recv_bufs.shrink_to_fit();
   }
 
-  auto layout = root->get_layout();
   if (layout->has_process_group()) {
     layout->comm->barrier();
     if (layout->comm->owns_process_group()) {

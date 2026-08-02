@@ -956,6 +956,17 @@ void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
   }
 }
 
+double MeshBlockImpl::cpu_time_used() const {
+  clock_t tstop = clock();
+  return (tstop > _time_start ? static_cast<double>(tstop - _time_start)
+                              : 1.0) /
+         static_cast<double>(CLOCKS_PER_SEC);
+}
+
+int64_t MeshBlockImpl::cell_count() const {
+  return _hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3);
+}
+
 void MeshBlockImpl::finalize(Variables const &vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
@@ -980,14 +991,10 @@ void MeshBlockImpl::finalize(Variables const &vars, double time) {
           << " nlim=" << pintg->options->nlim() << std::endl;
 
   // ---------- timing info ----------
-  clock_t tstop = clock();
-  double cpu_time =
-      (tstop > _time_start ? static_cast<double>(tstop - _time_start) : 1.0) /
-      static_cast<double>(CLOCKS_PER_SEC);
+  double cpu_time = cpu_time_used();
 
   std::vector<at::Tensor> cells = {
-      torch::tensor({_hydro_u0.size(1) * _hydro_u0.size(2) * _hydro_u0.size(3)},
-                    torch::dtype(torch::kInt64))};
+      torch::tensor({cell_count()}, torch::dtype(torch::kInt64))};
 
   c10d::ReduceOptions opsum;
   opsum.reduceOp = c10d::ReduceOp::SUM;
