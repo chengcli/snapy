@@ -3,13 +3,11 @@
 #include <configure.h>
 
 #include <algorithm>
-#include <condition_variable>
 #include <exception>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <mutex>
 #include <optional>
 #include <thread>
 
@@ -26,6 +24,7 @@
 #include <snap/mesh/mesh.hpp>
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
+#include <snap/utils/spsc_queue.hpp>
 
 namespace snap {
 
@@ -45,7 +44,7 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
 class MeshImpl::BlockWorkerPool {
  public:
   BlockWorkerPool(size_t count, torch::Device device)
-      : device_(std::move(device)), remaining_(count) {
+      : device_(std::move(device)) {
 #ifdef USE_CUDA
     if (device_.is_cuda()) {
       c10::cuda::CUDAGuard device_guard(device_.index());
@@ -59,6 +58,13 @@ class MeshImpl::BlockWorkerPool {
       caller_ready_event_ = std::make_unique<at::cuda::CUDAEvent>();
     }
 #endif
+
+    job_queues_.reserve(count);
+    completion_queues_.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      job_queues_.push_back(std::make_unique<JobQueue>());
+      completion_queues_.push_back(std::make_unique<CompletionQueue>());
+    }
 
     workers_.reserve(count);
     for (size_t i = 0; i < count; ++i) {
@@ -77,18 +83,20 @@ class MeshImpl::BlockWorkerPool {
     }
 #endif
 
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      TORCH_CHECK(!stopping_, "Mesh block worker pool is stopping");
-      func_ = std::move(func);
-      error_ = nullptr;
-      remaining_ = workers_.size();
-      generation_ += 1;
+    TORCH_CHECK(!stopping_, "Mesh block worker pool is stopping");
+    auto job = std::make_shared<std::function<void(size_t)>>(std::move(func));
+    for (auto& queue : job_queues_) {
+      queue->wait_push(Job{job, false});
     }
-    cv_.notify_all();
 
-    std::unique_lock<std::mutex> lock(mutex_);
-    done_cv_.wait(lock, [&]() { return remaining_ == 0; });
+    std::exception_ptr error;
+    for (auto& queue : completion_queues_) {
+      queue->wait_consume([&](Completion& completion) {
+        if (error == nullptr && completion.error != nullptr) {
+          error = completion.error;
+        }
+      });
+    }
 
 #ifdef USE_CUDA
     if (device_.is_cuda()) {
@@ -98,20 +106,17 @@ class MeshImpl::BlockWorkerPool {
     }
 #endif
 
-    if (error_ != nullptr) {
-      auto error = error_;
-      error_ = nullptr;
+    if (error != nullptr) {
       std::rethrow_exception(error);
     }
   }
 
   void stop() {
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (stopping_) return;
-      stopping_ = true;
+    if (stopping_) return;
+    stopping_ = true;
+    for (auto& queue : job_queues_) {
+      queue->wait_push(Job{nullptr, true});
     }
-    cv_.notify_all();
     for (auto& worker : workers_) {
       if (worker.joinable()) {
         worker.join();
@@ -120,6 +125,18 @@ class MeshImpl::BlockWorkerPool {
   }
 
  private:
+  struct Job {
+    std::shared_ptr<std::function<void(size_t)>> func;
+    bool stop;
+  };
+
+  struct Completion {
+    std::exception_ptr error;
+  };
+
+  using JobQueue = SpscQueue<Job, 1>;
+  using CompletionQueue = SpscQueue<Completion, 1>;
+
   void run(size_t index) {
     c10::OptionalDeviceGuard device_guard(device_);
 
@@ -135,17 +152,11 @@ class MeshImpl::BlockWorkerPool {
   }
 
   void run_loop(size_t index) {
-    size_t seen_generation = 0;
     while (true) {
-      std::function<void(size_t)> func;
-      {
-        std::unique_lock<std::mutex> lock(mutex_);
-        cv_.wait(lock,
-                 [&]() { return stopping_ || generation_ != seen_generation; });
-        if (stopping_) return;
-        seen_generation = generation_;
-        func = func_;
-      }
+      Job job;
+      job_queues_.at(index)->wait_consume(
+          [&](Job& pending) { job = std::move(pending); });
+      if (job.stop) return;
 
 #ifdef USE_CUDA
       if (device_.is_cuda()) {
@@ -153,13 +164,11 @@ class MeshImpl::BlockWorkerPool {
       }
 #endif
 
+      std::exception_ptr error;
       try {
-        func(index);
+        (*job.func)(index);
       } catch (...) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (error_ == nullptr) {
-          error_ = std::current_exception();
-        }
+        error = std::current_exception();
       }
 
 #ifdef USE_CUDA
@@ -168,25 +177,14 @@ class MeshImpl::BlockWorkerPool {
       }
 #endif
 
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        remaining_ -= 1;
-        if (remaining_ == 0) {
-          done_cv_.notify_one();
-        }
-      }
+      completion_queues_.at(index)->wait_push(Completion{error});
     }
   }
 
   torch::Device device_;
   std::vector<std::thread> workers_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
-  std::condition_variable done_cv_;
-  std::function<void(size_t)> func_;
-  std::exception_ptr error_;
-  size_t generation_ = 0;
-  size_t remaining_ = 0;
+  std::vector<std::unique_ptr<JobQueue>> job_queues_;
+  std::vector<std::unique_ptr<CompletionQueue>> completion_queues_;
   bool stopping_ = false;
 
 #ifdef USE_CUDA
@@ -240,6 +238,13 @@ void MeshImpl::reset() {
         register_module("block" + std::to_string(i), MeshBlock(block_opts));
     blocks.push_back(block);
   }
+
+  std::vector<LayoutImpl*> local_layouts;
+  local_layouts.reserve(blocks.size());
+  for (auto const& block : blocks) {
+    local_layouts.push_back(block->get_layout().get());
+  }
+  LayoutImpl::connect_local_layouts(local_layouts);
 
   if (blocks.size() > 1) {
     workers_ = std::make_shared<BlockWorkerPool>(

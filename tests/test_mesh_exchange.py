@@ -36,14 +36,19 @@ for rank, block in enumerate(mesh.blocks):
 
 sync_options = snapy.SyncOptions()
 sync_options.interpolate(True).type(snapy.kScalar)
-mesh.exchange(variables, sync_options)
+for generation in range(16):
+    for rank, (block, block_vars) in enumerate(zip(mesh.blocks, variables)):
+        block_vars["field"][block.part((0, 0, 0), False)] = float(
+            rank + generation
+        )
+    mesh.exchange(variables, sync_options)
 
 for rank, (block, block_vars) in enumerate(zip(mesh.blocks, variables)):
     layout = block.get_layout()
     location = layout.loc_of(rank)
     neighbor = layout.neighbor_rank(location, (0, 1, 0))
     ghost = block_vars["field"][block.part((0, 1, 0), True)]
-    assert torch.all(ghost == float(neighbor)), (
+    assert torch.all(ghost == float(neighbor + generation)), (
         rank,
         neighbor,
         ghost.unique(),
