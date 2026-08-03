@@ -4,6 +4,7 @@
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
@@ -11,6 +12,12 @@
 
 // snap
 #include <snap/snap.h>
+
+#include <snap/utils/spsc_queue.hpp>
+
+#ifdef USE_CUDA
+#include <ATen/cuda/CUDAEvent.h>
+#endif
 
 #include "connectivity.hpp"
 #include "process_group.hpp"
@@ -154,6 +161,37 @@ struct SyncOptions {
 
 using Variables = std::map<std::string, torch::Tensor>;
 
+struct LocalGhostMessage {
+  std::uint64_t generation = 0;
+  int source_buffer_id = 0;
+  int target_buffer_id = 0;
+  bool active = false;
+  std::vector<torch::Tensor> buffers;
+};
+
+struct LocalGhostConnection {
+  int source_rank = -1;
+  int target_rank = -1;
+  int source_buffer_id = 0;
+  int target_buffer_id = 0;
+  std::tuple<int, int, int> source_offset{0, 0, 0};
+  SpscQueue<LocalGhostMessage, 1> queue;
+#ifdef USE_CUDA
+  std::shared_ptr<at::cuda::CUDAEvent> ready_event;
+  std::shared_ptr<at::cuda::CUDAEvent> consumed_event;
+#endif
+};
+
+struct LocalGhostState {
+  std::uint64_t generation = 0;
+  std::uint32_t expected_mask = 0;
+  std::uint32_t arrived_mask = 0;
+
+  bool ready() const noexcept {
+    return (arrived_mask & expected_mask) == expected_mask;
+  }
+};
+
 inline int make_comm_tag(int local_block_index,
                          std::tuple<int, int, int> offset, int phyid) {
   return phyid * 1024 + local_block_index * 32 + get_buffer_id(offset);
@@ -193,6 +231,10 @@ class LayoutImpl {
   }
 
   virtual ~LayoutImpl();
+
+  //! Wire fixed process-local directed ghost connections for one Mesh.
+  static void connect_local_layouts(
+      std::vector<LayoutImpl*> const& local_layouts);
 
   //! Owning MeshBlock that provides exchange buffer storage for this layout.
   MeshBlockImpl* owner() const { return _owner; }
@@ -258,13 +300,14 @@ class LayoutImpl {
   virtual std::tuple<int, int, int> _peer_exchange_offset(
       int peer_rank, int target_rank, SyncOptions const& opts,
       std::tuple<int, int, int> offset) const;
-  virtual void _copy_local_exchange_buffers(
-      std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const;
 
   std::vector<Coord2> _coords2;
   std::vector<Coord3> _coords3;
   std::vector<int> _rankof;
   MeshBlockImpl* _owner = nullptr;
+  std::vector<std::shared_ptr<LocalGhostConnection>> _incoming_local;
+  std::vector<std::shared_ptr<LocalGhostConnection>> _outgoing_local;
+  LocalGhostState _local_ghost_state;
 };
 using Layout = std::shared_ptr<LayoutImpl>;
 

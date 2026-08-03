@@ -30,6 +30,7 @@ namespace snap {
 
 struct OutputOptionsImpl;
 using OutputOptions = std::shared_ptr<OutputOptionsImpl>;
+class MeshImpl;
 
 //! \brief  container for parameters to initialize a MeshBlock
 /*!
@@ -224,6 +225,14 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   double _init_from_restart(Variables& vars, std::string fname);
 
  private:
+  friend class MeshImpl;
+
+  //! CPU time elapsed since initialization or restart.
+  double cpu_time_used() const;
+
+  //! Number of cells represented by this MeshBlock's stage register.
+  int64_t cell_count() const;
+
   //! clock and cycle at time start
   clock_t _time_start;
   int _cycle_start = 0;

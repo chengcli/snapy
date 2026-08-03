@@ -91,4 +91,18 @@ TEST(Mesh, multi_block_exchange) {
 
   EXPECT_TRUE(saw_local_neighbor);
   EXPECT_TRUE(saw_remote_neighbor);
+
+  mesh->set_cycle(3);
+  auto root_layout = mesh->blocks.front()->get_layout();
+  bool report_here = root_layout->options->process_rank() ==
+                     root_layout->options->process_root_rank();
+  if (report_here) testing::internal::CaptureStdout();
+  mesh->finalize(vars, 0.0);
+  if (report_here) {
+    auto output = testing::internal::GetCapturedStdout();
+    EXPECT_NE(output.find("Terminating abnormally"), std::string::npos);
+    EXPECT_NE(output.find("million cells-per-cycle = "), std::string::npos);
+    EXPECT_NE(output.find("cpu time used (s) = "), std::string::npos);
+    EXPECT_NE(output.find("million cell-updates/second = "), std::string::npos);
+  }
 }

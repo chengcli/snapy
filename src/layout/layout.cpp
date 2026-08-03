@@ -2,13 +2,13 @@
 #include <sys/utsname.h>
 #include <yaml-cpp/yaml.h>
 
-#include <condition_variable>
-#include <exception>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <sstream>
+#include <thread>
 
 // base
 #include <configure.h>
@@ -47,41 +47,6 @@ std::string default_backend() {
 #endif
 }
 
-struct LocalExchangeKey {
-  int process_rank;
-  int blocks_per_process;
-  int dim;
-  int phyid;
-  int type;
-  bool cross_panel_only;
-  bool skip_corner;
-  bool interpolate;
-  std::string layout_type;
-  std::string device;
-
-  bool operator<(LocalExchangeKey const& other) const {
-    return std::tie(process_rank, blocks_per_process, dim, phyid, type,
-                    cross_panel_only, skip_corner, interpolate, layout_type,
-                    device) <
-           std::tie(other.process_rank, other.blocks_per_process, other.dim,
-                    other.phyid, other.type, other.cross_panel_only,
-                    other.skip_corner, other.interpolate, other.layout_type,
-                    other.device);
-  }
-};
-
-struct LocalExchangeState {
-  int generation = 0;
-  int arrived = 0;
-  int released = 0;
-  bool ready = false;
-  std::exception_ptr error;
-#ifdef USE_CUDA
-  std::vector<std::shared_ptr<at::cuda::CUDAEvent>> arrival_events;
-  std::shared_ptr<at::cuda::CUDAEvent> completion_event;
-#endif
-};
-
 struct RemoteExchangeOp {
   LayoutImpl* layout;
   int remote_process;
@@ -94,55 +59,12 @@ struct RemoteExchangeOp {
   std::tuple<int, int, int> peer_offset;
 };
 
-std::mutex g_local_exchange_mutex;
-std::condition_variable g_local_exchange_cv;
-std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
-std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
 std::mutex g_process_comm_mutex;
 
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
   if (layout.num_exchange_buffers() < 27) return {0, 0};
   return {opts.dz_min(), opts.dz_max()};
-}
-
-std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
-  std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(),
-                                   nullptr);
-
-  for (auto const& [key, local_layout] : g_local_layouts) {
-    if (key.first == layout.options->process_rank()) {
-      TORCH_CHECK(
-          key.second >= 0 && key.second < layout.options->blocks_per_process(),
-          "invalid local block index ", key.second,
-          " for process-local layout registry");
-      layouts[key.second] = local_layout;
-    }
-  }
-
-  for (int i = 0; i < layouts.size(); ++i) {
-    TORCH_CHECK(layouts[i] != nullptr,
-                "missing process-local layout registration for process ",
-                layout.options->process_rank(), " local block ", i);
-  }
-
-  return layouts;
-}
-
-LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
-                                         SyncOptions const& opts) {
-  return LocalExchangeKey{
-      layout.options->process_rank(),
-      layout.options->blocks_per_process(),
-      opts.dim(),
-      opts.phyid(),
-      opts.type(),
-      opts.cross_panel_only(),
-      opts.skip_corner(),
-      opts.interpolate(),
-      layout.options->type(),
-      layout.options->device(),
-  };
 }
 
 std::string exchange_buffer_key(SyncOptions const& opts,
@@ -235,26 +157,78 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
 
-  if (p != nullptr) {
-    std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-    g_local_layouts[{options->process_rank(),
-                     options->local_block_index(options->rank())}] = pl.get();
-  }
-
   return pl;
 }
 
-LayoutImpl::~LayoutImpl() {
-  if (options == nullptr || owner() == nullptr) return;
+LayoutImpl::~LayoutImpl() = default;
 
-  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-  g_local_layouts.erase(
-      {options->process_rank(), options->local_block_index(options->rank())});
+void LayoutImpl::connect_local_layouts(
+    std::vector<LayoutImpl*> const& local_layouts) {
+  std::map<int, LayoutImpl*> by_rank;
+  for (auto* layout : local_layouts) {
+    TORCH_CHECK(layout != nullptr, "cannot connect a null local layout");
+    layout->_incoming_local.clear();
+    layout->_outgoing_local.clear();
+    layout->_local_ghost_state = {};
+    by_rank.emplace(layout->options->rank(), layout);
+  }
+
+  SyncOptions topology_opts;
+  for (auto* source : local_layouts) {
+    int rank = source->options->rank();
+    auto iloc = source->loc_of(rank);
+    int dz_min = source->num_exchange_buffers() < 27 ? 0 : -1;
+    int dz_max = source->num_exchange_buffers() < 27 ? 0 : 1;
+
+    for (int dz = dz_min; dz <= dz_max; ++dz) {
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+          if (dz == 0 && dy == 0 && dx == 0) continue;
+          auto offset = source->_remap_exchange_offset(iloc, dy, dx, dz);
+          int neighbor = source->neighbor_rank(iloc, offset);
+          if (neighbor < 0 || neighbor == rank) continue;
+          if (source->options->type() == "cubed-sphere" &&
+              std::abs(dy) + std::abs(dx) > 1 &&
+              std::get<2>(iloc) != std::get<2>(source->loc_of(neighbor))) {
+            continue;
+          }
+          if (source->options->owner_process_rank(neighbor) !=
+              source->options->process_rank()) {
+            continue;
+          }
+
+          auto target_it = by_rank.find(neighbor);
+          TORCH_CHECK(target_it != by_rank.end(),
+                      "missing local layout for block rank ", neighbor);
+          auto* target = target_it->second;
+          auto peer_offset = source->_peer_exchange_offset(
+              neighbor, rank, topology_opts, offset);
+          auto connection = std::make_shared<LocalGhostConnection>();
+          connection->source_rank = rank;
+          connection->target_rank = neighbor;
+          connection->source_buffer_id = get_buffer_id(offset);
+          connection->target_buffer_id = get_buffer_id(peer_offset);
+          connection->source_offset = {dy, dx, dz};
+#ifdef USE_CUDA
+          if (source->options->device() == "cuda") {
+            connection->ready_event = std::make_shared<at::cuda::CUDAEvent>();
+            connection->consumed_event =
+                std::make_shared<at::cuda::CUDAEvent>();
+          }
+#endif
+          source->_outgoing_local.push_back(connection);
+          target->_incoming_local.push_back(std::move(connection));
+        }
+      }
+    }
+  }
 }
 
 void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
                                          SyncOptions const& opts) {
   if (options->blocks_per_process() <= 1) return;
+  TORCH_CHECK(pmb != nullptr,
+              "local exchange requires an owning MeshBlock pointer");
 
 #ifdef USE_CUDA
   std::optional<c10::cuda::CUDAStream> current_stream;
@@ -263,101 +237,120 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
   }
 #endif
 
-  auto key = make_local_exchange_key(*this, opts);
-  int expected = options->blocks_per_process();
-  std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
-  auto& state = g_local_exchange_states[key];
-  int generation = state.generation;
+  auto& state = _local_ghost_state;
+  state.generation += 1;
+  state.expected_mask = 0;
+  state.arrived_mask = 0;
 
+  std::vector<std::pair<std::shared_ptr<LocalGhostConnection>, std::uint64_t>>
+      published;
+  published.reserve(_outgoing_local.size());
+  for (auto const& connection : _outgoing_local) {
+    auto [dy, dx, dz] = connection->source_offset;
+    bool active = dy >= opts.dy_min() && dy <= opts.dy_max() &&
+                  dx >= opts.dx_min() && dx <= opts.dx_max() &&
+                  dz >= opts.dz_min() && dz <= opts.dz_max();
+    // Slab/cubed serialization and remote exchange skip directions handled by
+    // a physical boundary function, so the local path must not publish them.
+    // Cubed-sphere overrides those paths and uses custom boundary functions at
+    // panel seams, which remain communication boundaries.
+    if (active && options->type() != "cubed-sphere" &&
+        pmb->options->is_physical_boundary(dy, dx, dz)) {
+      active = false;
+    }
+    if (active && opts.skip_corner() &&
+        std::abs(dy) + std::abs(dx) + std::abs(dz) > 1) {
+      active = false;
+    }
+    if (active && options->type() == "cubed-sphere" &&
+        opts.cross_panel_only()) {
+      active = std::get<2>(loc_of(connection->source_rank)) !=
+               std::get<2>(loc_of(connection->target_rank));
+    }
+    LocalGhostMessage message;
+    message.generation = state.generation;
+    message.source_buffer_id = connection->source_buffer_id;
+    message.target_buffer_id = connection->target_buffer_id;
+    message.active = active;
+    if (active) {
+      message.buffers = pmb->send_bufs.at(connection->source_buffer_id);
+    }
 #ifdef USE_CUDA
-  if (current_stream) {
-    if (state.arrival_events.size() != expected) {
-      state.arrival_events.resize(expected);
+    if (current_stream && connection->ready_event) {
+      connection->ready_event->record(*current_stream);
     }
-    int local_block = options->local_block_index(options->rank());
-    auto& arrival_event = state.arrival_events.at(local_block);
-    if (!arrival_event) {
-      arrival_event = std::make_shared<at::cuda::CUDAEvent>();
-    }
-    arrival_event->record(*current_stream);
-    if (!state.completion_event) {
-      state.completion_event = std::make_shared<at::cuda::CUDAEvent>();
-    }
+#endif
+    auto ticket = connection->queue.wait_push(std::move(message));
+    published.emplace_back(connection, ticket);
   }
-#endif
 
-  state.arrived += 1;
-  if (state.arrived == expected) {
-    auto layouts = local_layouts_for(*this);
-    lock.unlock();
-    std::exception_ptr error;
+  std::size_t processed = 0;
+  while (processed != _incoming_local.size()) {
+    bool made_progress = false;
+    for (auto const& connection : _incoming_local) {
+      auto const* message = connection->queue.front();
+      if (message == nullptr || message->generation > state.generation)
+        continue;
+      TORCH_CHECK(message->generation == state.generation,
+                  "stale local ghost message for block ", options->rank(),
+                  ": expected generation ", state.generation, " but received ",
+                  message->generation);
+
+      bool consumed =
+          connection->queue.try_consume([&](LocalGhostMessage& current) {
+            TORCH_CHECK(
+                current.source_buffer_id == connection->source_buffer_id &&
+                    current.target_buffer_id == connection->target_buffer_id,
+                "local ghost connection metadata mismatch");
+            if (current.active) {
+              auto bit = std::uint32_t{1} << current.target_buffer_id;
+              state.expected_mask |= bit;
 #ifdef USE_CUDA
-    auto completion_event = state.completion_event;
+              if (current_stream && connection->ready_event) {
+                connection->ready_event->block(*current_stream);
+              }
 #endif
-    try {
+              auto& destination = pmb->recv_bufs.at(current.target_buffer_id);
+              TORCH_CHECK(destination.size() == current.buffers.size(),
+                          "local exchange tensor-count mismatch from rank ",
+                          connection->source_rank, " to rank ",
+                          connection->target_rank);
+              for (std::size_t n = 0; n < current.buffers.size(); ++n) {
+                TORCH_CHECK(
+                    destination[n].numel() == current.buffers[n].numel(),
+                    "local exchange size mismatch from rank ",
+                    connection->source_rank, " to rank ",
+                    connection->target_rank);
+                destination[n].view({-1}).copy_(
+                    current.buffers[n].reshape({-1}));
+              }
+              state.arrived_mask |= bit;
+            }
 #ifdef USE_CUDA
-      if (current_stream) {
-        for (auto const& event : state.arrival_events) {
-          TORCH_CHECK(event != nullptr,
-                      "missing CUDA arrival event for local exchange");
-          event->block(*current_stream);
-        }
+            if (current_stream && connection->consumed_event) {
+              connection->consumed_event->record(*current_stream);
+            }
+#endif
+          });
+      if (consumed) {
+        processed += 1;
+        made_progress = true;
       }
-#endif
-      _copy_local_exchange_buffers(layouts, opts);
-#ifdef USE_CUDA
-      if (current_stream && completion_event) {
-        completion_event->record(*current_stream);
-      }
-#endif
-    } catch (...) {
-      error = std::current_exception();
     }
-    lock.lock();
-    state.error = error;
-    state.ready = true;
-    state.released = expected;
-    g_local_exchange_cv.notify_all();
-  } else {
-    g_local_exchange_cv.wait(
-        lock, [&]() { return state.ready && state.generation == generation; });
+    if (!made_progress) std::this_thread::yield();
   }
 
-#ifdef USE_CUDA
-  if (state.error == nullptr && state.completion_event && current_stream) {
-    auto completion_event = state.completion_event;
-    lock.unlock();
-    completion_event->block(*current_stream);
-    lock.lock();
-  }
-#endif
-
-  if (state.error != nullptr) {
-    auto error = state.error;
-    state.released -= 1;
-    if (state.released == 0) {
-      state.arrived = 0;
-      state.ready = false;
-      state.error = nullptr;
-      state.generation += 1;
-      g_local_exchange_cv.notify_all();
-    } else {
-      g_local_exchange_cv.wait(
-          lock, [&]() { return state.generation != generation; });
+  TORCH_CHECK(state.ready(),
+              "local ghost exchange did not receive every region");
+  for (auto const& [connection, ticket] : published) {
+    while (!connection->queue.consumed(ticket)) {
+      std::this_thread::yield();
     }
-    std::rethrow_exception(error);
-  }
-
-  state.released -= 1;
-  if (state.released == 0) {
-    state.arrived = 0;
-    state.ready = false;
-    state.error = nullptr;
-    state.generation += 1;
-    g_local_exchange_cv.notify_all();
-  } else {
-    g_local_exchange_cv.wait(lock,
-                             [&]() { return state.generation != generation; });
+#ifdef USE_CUDA
+    if (current_stream && connection->consumed_event) {
+      connection->consumed_event->block(*current_stream);
+    }
+#endif
   }
 }
 
@@ -390,56 +383,6 @@ std::tuple<int, int, int> LayoutImpl::_peer_exchange_offset(
   (void)opts;
   auto [dy, dx, dz] = offset;
   return {-dy, -dx, -dz};
-}
-
-void LayoutImpl::_copy_local_exchange_buffers(
-    std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts) const {
-  for (auto* layout : layouts) {
-    auto rank = layout->options->rank();
-    auto iloc = layout->loc_of(rank);
-    auto [dz_min, dz_max] = exchange_dz_bounds(*layout, opts);
-
-    for (int dz_ = dz_min; dz_ <= dz_max; ++dz_) {
-      for (int dy_ = opts.dy_min(); dy_ <= opts.dy_max(); ++dy_) {
-        for (int dx_ = opts.dx_min(); dx_ <= opts.dx_max(); ++dx_) {
-          if (dz_ == 0 && dy_ == 0 && dx_ == 0) continue;
-          if (opts.skip_corner() &&
-              std::abs(dz_) + std::abs(dy_) + std::abs(dx_) > 1)
-            continue;
-
-          auto offset = layout->_remap_exchange_offset(iloc, dy_, dx_, dz_);
-          int nb = layout->neighbor_rank(iloc, offset);
-          if (nb < 0 || nb == rank) continue;
-          if (layout->options->owner_process_rank(nb) !=
-              layout->options->process_rank()) {
-            continue;
-          }
-
-          int bid = get_buffer_id(offset);
-          auto peer = layouts.at(layout->options->local_block_index(nb));
-          auto peer_offset =
-              layout->_peer_exchange_offset(nb, rank, opts, offset);
-          int peer_bid = get_buffer_id(peer_offset);
-
-          auto& send_bufs = layout->owner()->send_bufs;
-          auto& peer_recv_bufs = peer->owner()->recv_bufs;
-          for (int n = 0; n < send_bufs[bid].size(); ++n) {
-            TORCH_CHECK(peer_recv_bufs[peer_bid][n].numel() ==
-                            send_bufs[bid][n].numel(),
-                        "local exchange size mismatch from rank ", rank,
-                        " to rank ", nb, " send_offset=(", std::get<0>(offset),
-                        ",", std::get<1>(offset), ",", std::get<2>(offset),
-                        ") recv_offset=(", std::get<0>(peer_offset), ",",
-                        std::get<1>(peer_offset), ",", std::get<2>(peer_offset),
-                        ") send_shape=", send_bufs[bid][n].sizes(),
-                        " recv_shape=", peer_recv_bufs[peer_bid][n].sizes());
-            peer_recv_bufs[peer_bid][n].view({-1}).copy_(
-                send_bufs[bid][n].reshape({-1}));
-          }
-        }
-      }
-    }
-  }
 }
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
