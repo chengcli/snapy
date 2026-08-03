@@ -30,6 +30,7 @@ setup_test(test_diffusion)
 setup_test(test_diffusion_moist)
 setup_test(test_condensate_conservation)
 setup_test(test_forcing)
+setup_test(test_spsc_queue)
 setup_parallel_test(test_exchange 2)
 
 if(UCX_FOUND)
