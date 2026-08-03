@@ -2,6 +2,7 @@
 #include <sys/utsname.h>
 #include <yaml-cpp/yaml.h>
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -85,7 +86,21 @@ bool buffer_matches(torch::Tensor const& buffer, torch::Tensor const& source) {
          buffer.device() == source.device();
 }
 
+std::atomic<bool> g_local_exchange_abort{false};
+
 }  // namespace
+
+void abort_local_exchange() noexcept {
+  g_local_exchange_abort.store(true, std::memory_order_release);
+}
+
+void clear_local_exchange_abort() noexcept {
+  g_local_exchange_abort.store(false, std::memory_order_release);
+}
+
+bool local_exchange_aborted() noexcept {
+  return g_local_exchange_abort.load(std::memory_order_acquire);
+}
 
 LayoutOptionsImpl::LayoutOptionsImpl() {
   backend(get_env("BACKEND", default_backend()));
@@ -280,7 +295,14 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
       connection->ready_event->record(*current_stream);
     }
 #endif
-    auto ticket = connection->queue.wait_push(std::move(message));
+    std::uint64_t ticket = 0;
+    while (!connection->queue.try_push(std::move(message), &ticket)) {
+      if (local_exchange_aborted()) {
+        throw LocalExchangeAbortError(
+            "local ghost exchange aborted: a peer block job failed");
+      }
+      std::this_thread::yield();
+    }
     published.emplace_back(connection, ticket);
   }
 
@@ -337,13 +359,23 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
         made_progress = true;
       }
     }
-    if (!made_progress) std::this_thread::yield();
+    if (!made_progress) {
+      if (local_exchange_aborted()) {
+        throw LocalExchangeAbortError(
+            "local ghost exchange aborted: a peer block job failed");
+      }
+      std::this_thread::yield();
+    }
   }
 
   TORCH_CHECK(state.ready(),
               "local ghost exchange did not receive every region");
   for (auto const& [connection, ticket] : published) {
     while (!connection->queue.consumed(ticket)) {
+      if (local_exchange_aborted()) {
+        throw LocalExchangeAbortError(
+            "local ghost exchange aborted: a peer block job failed");
+      }
       std::this_thread::yield();
     }
 #ifdef USE_CUDA

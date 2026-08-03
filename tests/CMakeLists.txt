@@ -84,6 +84,17 @@ set_tests_properties(test_mesh_exchange_python PROPERTIES
 )
 
 add_test(
+  NAME test_local_exchange_abort_python
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_local_exchange_abort.py
+)
+set_tests_properties(test_local_exchange_abort_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 60
+  LABELS "python;exchange"
+)
+
+add_test(
   NAME test_cubed_sphere_vertical_velocity_exchange_python
   COMMAND ${Python3_EXECUTABLE}
           ${CMAKE_CURRENT_SOURCE_DIR}/test_cubed_sphere_vertical_velocity_exchange.py

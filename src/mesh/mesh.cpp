@@ -84,6 +84,7 @@ class MeshImpl::BlockWorkerPool {
 #endif
 
     TORCH_CHECK(!stopping_, "Mesh block worker pool is stopping");
+    clear_local_exchange_abort();
     auto job = std::make_shared<std::function<void(size_t)>>(std::move(func));
     for (auto& queue : job_queues_) {
       queue->wait_push(Job{job, false});
@@ -167,8 +168,15 @@ class MeshImpl::BlockWorkerPool {
       std::exception_ptr error;
       try {
         (*job.func)(index);
+      } catch (LocalExchangeAbortError const&) {
+        // A peer block's job failed first; that worker's completion carries
+        // the root cause, so the abort itself is not an error to report.
       } catch (...) {
         error = std::current_exception();
+        // Release any peer spinning in the local ghost exchange; otherwise
+        // its job never finishes and submit() blocks draining the remaining
+        // completion queues instead of rethrowing this error.
+        abort_local_exchange();
       }
 
 #ifdef USE_CUDA

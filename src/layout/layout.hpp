@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <tuple>
 
@@ -168,6 +169,21 @@ struct LocalGhostMessage {
   bool active = false;
   std::vector<torch::Tensor> buffers;
 };
+
+//! Thrown inside the multi-block local ghost exchange when another block's
+//! job has already failed: that peer will never service its side of the
+//! queues, so continuing to wait would deadlock the worker pool. It carries
+//! no root cause -- the worker whose job failed first reports that.
+struct LocalExchangeAbortError : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+
+//! Signal every participant spinning in the local ghost exchange to abandon
+//! it. Set when any block job fails; cleared at the start of the next batch
+//! of block jobs.
+void abort_local_exchange() noexcept;
+void clear_local_exchange_abort() noexcept;
+bool local_exchange_aborted() noexcept;
 
 struct LocalGhostConnection {
   int source_rank = -1;
