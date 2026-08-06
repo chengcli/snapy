@@ -13,19 +13,21 @@ namespace snap {
 
 void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& anchor, torch::Tensor const& gam,
-                      torch::Tensor const& psf_lo, torch::Tensor const& psf_hi,
-                      torch::Tensor const& pref, torch::Tensor const& dsf,
-                      torch::Tensor const& dref, int is, int iu, double grav,
-                      bool uniform, bool phys_in, bool phys_out) {
+                      torch::Tensor const& kbot, torch::Tensor const& psf_lo,
+                      torch::Tensor const& psf_hi, torch::Tensor const& pref,
+                      torch::Tensor const& dsf, torch::Tensor const& dref,
+                      int is, int iu, double grav, bool uniform, bool phys_in,
+                      bool phys_out) {
   int ncolumns = w.size(1) * w.size(2);
   int nc1 = w.size(3);
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "hydro_ref_x1_cpu", [&] {
     auto anchor_ptr = anchor.defined() ? anchor.data_ptr<scalar_t>() : nullptr;
+    auto kbot_ptr = kbot.defined() ? kbot.data_ptr<scalar_t>() : nullptr;
     at::parallel_for(0, ncolumns, 0, [&](int64_t begin, int64_t end) {
       for (int64_t column = begin; column < end; ++column) {
         hydro_ref_x1_impl(
             w.data_ptr<scalar_t>(), dx1f.data_ptr<scalar_t>(), anchor_ptr,
-            gam.data_ptr<scalar_t>(), psf_lo.data_ptr<scalar_t>(),
+            gam.data_ptr<scalar_t>(), kbot_ptr, psf_lo.data_ptr<scalar_t>(),
             psf_hi.data_ptr<scalar_t>(), pref.data_ptr<scalar_t>(),
             dsf.data_ptr<scalar_t>(), dref.data_ptr<scalar_t>(),
             static_cast<int>(column), ncolumns, nc1, is, iu, scalar_t(grav),
@@ -37,10 +39,11 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
 
 void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& anchor_in, torch::Tensor const& gam,
-                      torch::Tensor const& psf_lo, torch::Tensor const& psf_hi,
-                      torch::Tensor const& pref, torch::Tensor const& dsf,
-                      torch::Tensor const& dref, int is, int iu, double grav,
-                      bool uniform, bool phys_in, bool phys_out) {
+                      torch::Tensor const& kbot_in, torch::Tensor const& psf_lo,
+                      torch::Tensor const& psf_hi, torch::Tensor const& pref,
+                      torch::Tensor const& dsf, torch::Tensor const& dref,
+                      int is, int iu, double grav, bool uniform, bool phys_in,
+                      bool phys_out) {
   int nc1 = w.size(-1);
   auto rho = w[IDN];
   auto dp = grav * rho * dx1f;
@@ -107,8 +110,9 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                             dp / torch::log(ratio)));
   }
 
-  auto kbot = w[IPR].select(-1, is).unsqueeze(-1) /
-              rho.select(-1, is).unsqueeze(-1).pow(gam);
+  auto kbot = kbot_in.defined() ? kbot_in
+                                : w[IPR].select(-1, is).unsqueeze(-1) /
+                                      rho.select(-1, is).unsqueeze(-1).pow(gam);
   dref.copy_((pref / kbot).pow(1.0 / gam));
   dsf.copy_((psf_lo / kbot).pow(1.0 / gam));
 }

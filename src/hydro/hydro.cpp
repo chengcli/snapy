@@ -295,16 +295,52 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // neighbor) => an empty anchor tells the backend to compute the local top
   // anchor.
   torch::Tensor anchor;
+  torch::Tensor
+      kbot;  // [nc3,nc2,1] single global isentrope K = P_bot/rho_bot^gam
+  torch::Tensor gam_global;
   int below = -1;
+  int above = -1;
+  bool x1_split = false;
   auto layout = pmb->get_layout();
   if (layout && layout->has_process_group() && !layout->options->periodic_z() &&
       layout->options->pz() >
           1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
                 // send/recv at nb1=1)
+    x1_split = true;
     auto iloc = layout->loc_of(layout->options->rank());
-    int above = layout->neighbor_rank(iloc, {0, 0, 1});  // toward x1-outer
-    below = layout->neighbor_rank(iloc, {0, 0, -1});     // toward x1-inner
+    above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
+    below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner
     constexpr int kWbRefTag = 0x7715;
+    constexpr int kWbKbotTag = 0x7716;
+
+    // Global (kbot, gamma) relay, bottom -> top. The density reference must be
+    // ONE isentrope for the whole column: with a block-local kbot, adjacent
+    // blocks decompose rho against different references and the two sides of
+    // every x1 seam reconstruct different face states, making the dynamics
+    // nb1-dependent. The block owning the physical bottom computes
+    // (kbot, gamma) exactly as the nb1=1 path would; every block above
+    // receives and forwards the same slabs.
+    if (below >= 0) {
+      std::vector<torch::Tensor> kbuf = {
+          torch::empty({w.size(1), w.size(2), 1}, w.options()),
+          torch::empty({w.size(1), w.size(2), 1}, w.options())};
+      layout->comm->recv(kbuf, below, kWbKbotTag)->wait();
+      kbot = kbuf[0];
+      gam_global = kbuf[1];
+    } else {
+      int is_loc = pcoord->il();
+      gam_global =
+          peos->compute("W->A", {w.narrow(-1, is_loc, 1)}).contiguous();
+      kbot = (w[IPR].narrow(-1, is_loc, 1) /
+              w[IDN].narrow(-1, is_loc, 1).pow(gam_global))
+                 .contiguous();
+    }
+    if (above >= 0) {
+      std::vector<torch::Tensor> sbuf = {kbot.contiguous(),
+                                         gam_global.contiguous()};
+      layout->comm->send(sbuf, above, kWbKbotTag)->wait();
+    }
+
     if (above >= 0) {
       std::vector<torch::Tensor> rbuf = {
           torch::empty({w.size(1), w.size(2), 1}, w.options())};
@@ -321,7 +357,9 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
             : 0;
   }
 
-  auto gam = peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
+  auto gam = x1_split
+                 ? gam_global
+                 : peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
   auto ref_options = w.options();
   auto ref_sizes = w.sizes().slice(1).vec();
   auto psf_lo = torch::empty(ref_sizes, ref_options);
@@ -333,14 +371,63 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
 
   auto dx1f = pcoord->dx1f.contiguous();
-  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, gam, psf_lo,
-                                psf_hi, pref, dsf, dref, is, iu, g,
+  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, gam, kbot,
+                                psf_lo, psf_hi, pref, dsf, dref, is, iu, g,
                                 x1_uniform_ == 1, phys_in, phys_out);
 
   if (below >= 0) {
     constexpr int kWbRefTag = 0x7715;
     std::vector<torch::Tensor> sbuf = {psf_lo.narrow(-1, is, 1).contiguous()};
     layout->comm->send(sbuf, below, kWbRefTag)->wait();
+  }
+
+  // Ghost-row reference exchange across x1 seams: overwrite this block's
+  // ghost rows of (pref, dref) with the NEIGHBOR'S interior rows for the same
+  // physical cells. The block-local ghost quadrature (w6e edge rows, and the
+  // [lo,hi] guard whose accept/fallback decision is stencil-dependent) does
+  // NOT reproduce the owner's interior values -- near a physical wall the
+  // mismatch reaches ~1e2 Pa (measured), which enters
+  // w' = w - ref as a spurious seam perturbation every step and makes the
+  // dynamics nb1-dependent. After this exchange the perturbation field seen
+  // by the reconstruction is identical on both sides of every seam, so the
+  // seam-face states agree and the single-valued seam flux average becomes a
+  // no-op. nb1=1: no seams, bit-unchanged.
+  if (x1_split && (below >= 0 || above >= 0)) {
+    constexpr int kWbGhostUpTag = 0x7717;
+    constexpr int kWbGhostDnTag = 0x7718;
+    int ng = is;  // il() == nghost
+    std::vector<CommWorkPtr> sends;
+    if (above >=
+        0) {  // my top interior rows are the above block's lower ghosts
+      std::vector<torch::Tensor> up = {
+          pref.narrow(-1, iu - ng + 1, ng).contiguous(),
+          dref.narrow(-1, iu - ng + 1, ng).contiguous()};
+      sends.push_back(layout->comm->send(up, above, kWbGhostUpTag));
+    }
+    if (below >=
+        0) {  // my bottom interior rows are the below block's upper ghosts
+      std::vector<torch::Tensor> dn = {pref.narrow(-1, is, ng).contiguous(),
+                                       dref.narrow(-1, is, ng).contiguous()};
+      sends.push_back(layout->comm->send(dn, below, kWbGhostDnTag));
+    }
+    if (below >= 0) {  // receive my lower ghost rows from below's top interior
+      std::vector<torch::Tensor> rb = {
+          torch::empty({w.size(1), w.size(2), ng}, w.options()),
+          torch::empty({w.size(1), w.size(2), ng}, w.options())};
+      layout->comm->recv(rb, below, kWbGhostUpTag)->wait();
+      pref.narrow(-1, 0, ng).copy_(rb[0]);
+      dref.narrow(-1, 0, ng).copy_(rb[1]);
+    }
+    if (above >=
+        0) {  // receive my upper ghost rows from above's bottom interior
+      std::vector<torch::Tensor> ra = {
+          torch::empty({w.size(1), w.size(2), ng}, w.options()),
+          torch::empty({w.size(1), w.size(2), ng}, w.options())};
+      layout->comm->recv(ra, above, kWbGhostDnTag)->wait();
+      pref.narrow(-1, iu + 1, ng).copy_(ra[0]);
+      dref.narrow(-1, iu + 1, ng).copy_(ra[1]);
+    }
+    for (auto& sw : sends) sw->wait();
   }
 
   return {psf_lo, pref, dsf, dref};
