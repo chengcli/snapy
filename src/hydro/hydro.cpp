@@ -321,12 +321,15 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     // (kbot, gamma) exactly as the nb1=1 path would; every block above
     // receives and forwards the same slabs.
     if (below >= 0) {
+      // ONE tensor per message: ProcessGroupGloo::send rejects a multi-tensor
+      // vector (ucx accepts it, which is why the ucx-only gate missed this).
+      // Pack (kbot, gam) along the last axis, exactly as the seam-flux exchange
+      // in hydro_forward.cpp packs its slab.
       std::vector<torch::Tensor> kbuf = {
-          torch::empty({w.size(1), w.size(2), 1}, w.options()),
-          torch::empty({w.size(1), w.size(2), 1}, w.options())};
+          torch::empty({w.size(1), w.size(2), 2}, w.options())};
       layout->comm->recv(kbuf, below, kWbKbotTag)->wait();
-      kbot = kbuf[0];
-      gam_global = kbuf[1];
+      kbot = kbuf[0].narrow(-1, 0, 1).contiguous();
+      gam_global = kbuf[0].narrow(-1, 1, 1).contiguous();
     } else {
       int is_loc = pcoord->il();
       gam_global =
@@ -336,8 +339,8 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
                  .contiguous();
     }
     if (above >= 0) {
-      std::vector<torch::Tensor> sbuf = {kbot.contiguous(),
-                                         gam_global.contiguous()};
+      std::vector<torch::Tensor> sbuf = {
+          torch::cat({kbot, gam_global}, -1).contiguous()};
       layout->comm->send(sbuf, above, kWbKbotTag)->wait();
     }
 
@@ -400,32 +403,33 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     if (above >=
         0) {  // my top interior rows are the above block's lower ghosts
       std::vector<torch::Tensor> up = {
-          pref.narrow(-1, iu - ng + 1, ng).contiguous(),
-          dref.narrow(-1, iu - ng + 1, ng).contiguous()};
+          torch::cat({pref.narrow(-1, iu - ng + 1, ng),
+                      dref.narrow(-1, iu - ng + 1, ng)},
+                     -1)
+              .contiguous()};
       sends.push_back(layout->comm->send(up, above, kWbGhostUpTag));
     }
     if (below >=
         0) {  // my bottom interior rows are the below block's upper ghosts
-      std::vector<torch::Tensor> dn = {pref.narrow(-1, is, ng).contiguous(),
-                                       dref.narrow(-1, is, ng).contiguous()};
+      std::vector<torch::Tensor> dn = {
+          torch::cat({pref.narrow(-1, is, ng), dref.narrow(-1, is, ng)}, -1)
+              .contiguous()};
       sends.push_back(layout->comm->send(dn, below, kWbGhostDnTag));
     }
     if (below >= 0) {  // receive my lower ghost rows from below's top interior
       std::vector<torch::Tensor> rb = {
-          torch::empty({w.size(1), w.size(2), ng}, w.options()),
-          torch::empty({w.size(1), w.size(2), ng}, w.options())};
+          torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
       layout->comm->recv(rb, below, kWbGhostUpTag)->wait();
-      pref.narrow(-1, 0, ng).copy_(rb[0]);
-      dref.narrow(-1, 0, ng).copy_(rb[1]);
+      pref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, 0, ng));
+      dref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, ng, ng));
     }
     if (above >=
         0) {  // receive my upper ghost rows from above's bottom interior
       std::vector<torch::Tensor> ra = {
-          torch::empty({w.size(1), w.size(2), ng}, w.options()),
-          torch::empty({w.size(1), w.size(2), ng}, w.options())};
+          torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
       layout->comm->recv(ra, above, kWbGhostDnTag)->wait();
-      pref.narrow(-1, iu + 1, ng).copy_(ra[0]);
-      dref.narrow(-1, iu + 1, ng).copy_(ra[1]);
+      pref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, 0, ng));
+      dref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, ng, ng));
     }
     for (auto& sw : sends) sw->wait();
   }
