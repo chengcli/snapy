@@ -19,10 +19,15 @@ RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(
   auto op = RelaxBotTempOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);
-  op->btemp() = node["btemp"].as<double>(300.0);
+
+  TORCH_CHECK(node["btemp"],
+              "RelaxBotTempOptions: btemp is required (no default).");
+  op->btemp() = node["btemp"].as<double>();
 
   TORCH_CHECK(op->tau() > 0.,
               "RelaxBotTempOptions: tau must be greater than zero.");
+  TORCH_CHECK(op->btemp() > 0.,
+              "RelaxBotTempOptions: btemp must be greater than zero.");
 
   return op;
 }
