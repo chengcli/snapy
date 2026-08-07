@@ -22,6 +22,11 @@ TopSpongeLyrOptions TopSpongeLyrOptionsImpl::from_yaml(
   op->tau() = node["tau"].as<double>(0.0);
   op->width() = node["width"].as<double>(0.0);
 
+  TORCH_CHECK(op->tau() > 0.,
+              "TopSpongeLyrOptions: tau must be greater than zero.");
+  TORCH_CHECK(op->width() > 0.,
+              "TopSpongeLyrOptions: width must be greater than zero.");
+
   return op;
 }
 

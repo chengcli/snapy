@@ -159,10 +159,22 @@ TEST(forcing_options, reject_invalid_values) {
       YAML::Load("relax-bot-comp: {tau: 1., species: [vapor], xfrac: [1.1]}")));
   EXPECT_ANY_THROW(RelaxBotTempOptionsImpl::from_yaml(
       YAML::Load("relax-bot-temp: {tau: 0., btemp: 300.}")));
+  EXPECT_ANY_THROW(RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 1.}")));
+  EXPECT_ANY_THROW(RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 1., btemp: -1.}")));
   EXPECT_ANY_THROW(RelaxBotVeloOptionsImpl::from_yaml(
       YAML::Load("relax-bot-velo: {tau: 0.}")));
   EXPECT_ANY_THROW(BodyHeatOptionsImpl::from_yaml(
       YAML::Load("body-heat: {pmin: 2., pmax: 1.}")));
+  EXPECT_ANY_THROW(TopSpongeLyrOptionsImpl::from_yaml(
+      YAML::Load("top-sponge-lyr: {width: 1.e3}")));
+  EXPECT_ANY_THROW(TopSpongeLyrOptionsImpl::from_yaml(
+      YAML::Load("top-sponge-lyr: {tau: 1.e4}")));
+  EXPECT_ANY_THROW(BotSpongeLyrOptionsImpl::from_yaml(
+      YAML::Load("bot-sponge-lyr: {width: 1.e3}")));
+  EXPECT_ANY_THROW(BotSpongeLyrOptionsImpl::from_yaml(
+      YAML::Load("bot-sponge-lyr: {tau: 1.e4}")));
 }
 
 TEST(forcing_options, reject_unknown_composition_species) {
