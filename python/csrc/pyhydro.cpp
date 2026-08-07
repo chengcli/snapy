@@ -33,6 +33,8 @@ void bind_hydro(py::module& m) {
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptionsImpl, grav)
       .ADD_OPTION(snap::CoriolisOptions, snap::HydroOptionsImpl, coriolis)
       .ADD_OPTION(snap::DiffusionOptions, snap::HydroOptionsImpl, diffusion)
+      .ADD_OPTION(snap::ScalarHyperdiffusionOptions, snap::HydroOptionsImpl,
+                  scalar_hyperdiffusion)
       .ADD_OPTION(snap::EquationOfStateOptions, snap::HydroOptionsImpl, eos)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon1)
       .ADD_OPTION(snap::ReconstructOptions, snap::HydroOptionsImpl, recon23)
