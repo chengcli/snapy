@@ -147,9 +147,9 @@ Inputs make_inputs(torch::ScalarType dtype, bool uniform, bool with_anchor) {
 void dispatch(Inputs const& in, RefOutput const& out, bool uniform,
               bool phys_in, bool phys_out) {
   at::native::call_hydro_ref_x1(in.w.device().type(), in.w, in.dx1f, in.anchor,
-                                in.gam, out.psf_lo, out.psf_hi, out.pref,
-                                out.dsf, out.dref, 2, 7, 1.0, uniform, phys_in,
-                                phys_out);
+                                in.gam, torch::Tensor(), out.psf_lo, out.psf_hi,
+                                out.pref, out.dsf, out.dref, 2, 7, 1.0, uniform,
+                                phys_in, phys_out);
 }
 
 void expect_close(RefOutput const& actual, RefOutput const& expected,
