@@ -30,6 +30,7 @@ setup_test(test_diffusion)
 setup_test(test_diffusion_moist)
 setup_test(test_condensate_conservation)
 setup_test(test_forcing)
+setup_test(test_spsc_queue)
 setup_parallel_test(test_exchange 2)
 
 if(UCX_FOUND)
@@ -79,6 +80,17 @@ add_test(
 )
 set_tests_properties(test_mesh_exchange_python PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  LABELS "python;exchange"
+)
+
+add_test(
+  NAME test_local_exchange_abort_python
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_local_exchange_abort.py
+)
+set_tests_properties(test_local_exchange_abort_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 60
   LABELS "python;exchange"
 )
 
