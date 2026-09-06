@@ -26,6 +26,11 @@ class CommWork {
 };
 using CommWorkPtr = std::shared_ptr<CommWork>;
 
+//! Upper bound on the number of tensors carried by one logical point-to-point
+//! message. Each is sent separately, with the caller's tag widened by this
+//! factor to keep the resulting sub-tags disjoint across messages.
+inline constexpr int kMaxPointToPointTensors = 16;
+
 class ProcessGroupContext {
  public:
   static std::shared_ptr<ProcessGroupContext> create(LayoutOptions const& opts);
@@ -51,6 +56,8 @@ class ProcessGroupContext {
 
  private:
   explicit ProcessGroupContext(LayoutOptions const& opts);
+  CommWorkPtr _point_to_point(std::vector<torch::Tensor>& tensors, int peer,
+                              int tag, bool sending) const;
   void _init();
   void _init_gloo();
   void _init_ucx();
