@@ -1,6 +1,7 @@
 // C/C++
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 // base
 #include <configure.h>
@@ -102,7 +103,8 @@ void seed_hydro_state(MeshBlock block, Variables& vars, torch::Device device) {
   vars["hydro_w"] = hydro_w;
 }
 
-void seed_scalar_state(MeshBlock block, Variables& vars, torch::Device device) {
+void seed_scalar_state(MeshBlock block, Variables& vars, torch::Device device,
+                       std::string const& name = "scalar_r", double base = 0.) {
   auto pcoord = block->pcoord;
   int nc1 = pcoord->options->nc1();
   int nc2 = pcoord->options->nc2();
@@ -116,19 +118,19 @@ void seed_scalar_state(MeshBlock block, Variables& vars, torch::Device device) {
 
   auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
   for (int n = 0; n < nscalar; ++n) {
-    scalar_r.index(interior)[n].fill_(0.01 * (n + 1) + rank + 1.0);
+    scalar_r.index(interior)[n].fill_(base + 0.01 * (n + 1) + rank + 1.0);
   }
 
   for (auto offset : kCardinalOffsets) {
     int side = offset_to_side(offset);
     auto part = block->part(offset, PartOptions().exterior(false));
     for (int n = 0; n < nscalar; ++n) {
-      scalar_r.index(part)[n].fill_(0.01 * (n + 1) + rank + 1.0 +
+      scalar_r.index(part)[n].fill_(base + 0.01 * (n + 1) + rank + 1.0 +
                                     side_payload(side));
     }
   }
 
-  vars["scalar_r"] = scalar_r;
+  vars[name] = scalar_r;
 }
 
 bool ghosts_match_expected(MeshBlock block, Variables const& vars,
@@ -178,11 +180,13 @@ bool ghosts_match_expected(MeshBlock block, Variables const& vars,
   return true;
 }
 
-bool scalar_ghosts_match_expected(MeshBlock block, Variables const& vars) {
+bool scalar_ghosts_match_expected(MeshBlock block, Variables const& vars,
+                                  std::string const& name = "scalar_r",
+                                  double base = 0.) {
   auto layout = block->get_layout();
   auto rank = layout->options->rank();
   auto iloc = layout->loc_of(rank);
-  auto const& scalar_r = vars.at("scalar_r");
+  auto const& scalar_r = vars.at(name);
 
   if (!torch::isfinite(scalar_r).all().item<bool>()) return false;
 
@@ -194,7 +198,7 @@ bool scalar_ghosts_match_expected(MeshBlock block, Variables const& vars) {
     auto ghost_scalar = scalar_r.index(ghost);
     int side = source_side(layout, iloc, offset, nb);
     for (int n = 0; n < ghost_scalar.size(0); ++n) {
-      double expected = 0.01 * (n + 1) + nb + 1.0 + side_payload(side);
+      double expected = base + 0.01 * (n + 1) + nb + 1.0 + side_payload(side);
       bool contains_expected =
           torch::isclose(ghost_scalar[n],
                          torch::full_like(ghost_scalar[n], expected))
@@ -203,7 +207,8 @@ bool scalar_ghosts_match_expected(MeshBlock block, Variables const& vars) {
       if (!contains_expected) {
         std::cerr << "scalar ghost mismatch on rank " << rank << " offset=("
                   << std::get<0>(offset) << "," << std::get<1>(offset)
-                  << ") scalar=" << n << " expected=" << expected << std::endl;
+                  << ") field=" << name << " scalar=" << n
+                  << " expected=" << expected << std::endl;
         return false;
       }
     }
@@ -289,6 +294,24 @@ int main(int argc, char** argv) {
     mesh->blocks.front()->get_layout()->comm->barrier();
   }
 
+  // Mesh::exchange_ghost_zones passes the whole Variables map straight to the
+  // block exchange, so it is routinely called with more than one tensor.
+  // serialize()/deserialize() have always looped over every entry, and the
+  // intra-process path copies buffer by buffer, but the remote path used to
+  // hand the whole buffer vector to a single point-to-point call -- which no
+  // c10d backend accepts.
+  constexpr double kSecondFieldBase = 1000.0;
+  MeshVariables multi_vars(mesh->blocks.size());
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    seed_scalar_state(mesh->blocks[i], multi_vars[i], device, "scalar_r", 0.);
+    seed_scalar_state(mesh->blocks[i], multi_vars[i], device, "scalar_r2",
+                      kSecondFieldBase);
+  }
+  mesh->exchange_ghost_zones(multi_vars, kScalar);
+  if (mesh->blocks.front()->get_layout()->has_process_group()) {
+    mesh->blocks.front()->get_layout()->comm->barrier();
+  }
+
   bool ok = true;
   ok = ok && reused_exchange_buffers;
   bool saw_local_neighbor = false;
@@ -297,6 +320,10 @@ int main(int argc, char** argv) {
     ok = ok && ghosts_match_expected(mesh->blocks[i], vars[i],
                                      saw_local_neighbor, saw_remote_neighbor);
     ok = ok && scalar_ghosts_match_expected(mesh->blocks[i], vars[i]);
+    ok = ok && scalar_ghosts_match_expected(mesh->blocks[i], multi_vars[i],
+                                            "scalar_r", 0.);
+    ok = ok && scalar_ghosts_match_expected(mesh->blocks[i], multi_vars[i],
+                                            "scalar_r2", kSecondFieldBase);
   }
 
   bool expect_local = parse_env_bool("EXPECT_LOCAL_NEIGHBOR", true);

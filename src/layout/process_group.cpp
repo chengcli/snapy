@@ -38,6 +38,28 @@ class C10dWork final : public CommWork {
   c10::intrusive_ptr<c10d::Work> work_;
 };
 
+//! One CommWork standing for the several point-to-point operations a
+//! multi-tensor send/recv is split into. It owns the single-element vectors
+//! handed to the backend so they outlive an unwaited (or coalesced) transfer.
+class SplitWork final : public CommWork {
+ public:
+  void add(std::vector<torch::Tensor> tensor,
+           c10::intrusive_ptr<c10d::Work> work) {
+    tensors_.push_back(std::move(tensor));
+    works_.push_back(std::move(work));
+  }
+
+  void wait() override {
+    for (auto& work : works_) {
+      if (work) work->wait();
+    }
+  }
+
+ private:
+  std::vector<std::vector<torch::Tensor>> tensors_;
+  std::vector<c10::intrusive_ptr<c10d::Work>> works_;
+};
+
 std::string process_group_key(LayoutOptions const& opts) {
   std::ostringstream os;
   os << opts->backend() << "|" << opts->master_addr() << "|"
@@ -147,28 +169,49 @@ bool ProcessGroupContext::initialized() const {
 
 CommWorkPtr ProcessGroupContext::send(std::vector<torch::Tensor>& tensors,
                                       int peer, int tag) const {
-  if (ucx_) {
-    check_ucx_tensor_support(tensors);
-    return std::make_shared<C10dWork>(ucx_->send(tensors, peer, tag));
-  }
-  for (auto const& tensor : tensors) {
-    TORCH_CHECK(tensor.device().is_cpu(),
-                "Gloo communication requires CPU tensors");
-  }
-  return std::make_shared<C10dWork>(pg->send(tensors, peer, tag));
+  return _point_to_point(tensors, peer, tag, /*sending=*/true);
 }
 
 CommWorkPtr ProcessGroupContext::recv(std::vector<torch::Tensor>& tensors,
                                       int peer, int tag) const {
+  return _point_to_point(tensors, peer, tag, /*sending=*/false);
+}
+
+CommWorkPtr ProcessGroupContext::_point_to_point(
+    std::vector<torch::Tensor>& tensors, int peer, int tag,
+    bool sending) const {
+  TORCH_CHECK(!tensors.empty(),
+              "[ProcessGroup] point-to-point called with no tensors");
+  TORCH_CHECK(tensors.size() <= kMaxPointToPointTensors,
+              "[ProcessGroup] point-to-point supports at most ",
+              kMaxPointToPointTensors, " tensors per message, got ",
+              tensors.size(), "; raise kMaxPointToPointTensors and rebuild");
+
   if (ucx_) {
     check_ucx_tensor_support(tensors);
-    return std::make_shared<C10dWork>(ucx_->recv(tensors, peer, tag));
+  } else {
+    for (auto const& tensor : tensors) {
+      TORCH_CHECK(tensor.device().is_cpu(),
+                  "Gloo communication requires CPU tensors");
+    }
   }
-  for (auto const& tensor : tensors) {
-    TORCH_CHECK(tensor.device().is_cpu(),
-                "Gloo communication requires CPU tensors");
+
+  // No c10d backend accepts more than one tensor per point-to-point call
+  // (Gloo: "takes a single tensor"; NCCL: "Expecting one tensor only but got
+  // multiple"), so issue one operation per tensor. The tag is widened by
+  // kMaxPointToPointTensors so that the sub-tags of distinct messages cannot
+  // overlap; both peers derive them the same way from the same base tag.
+  auto work = std::make_shared<SplitWork>();
+  for (size_t n = 0; n < tensors.size(); ++n) {
+    std::vector<torch::Tensor> one{tensors[n]};
+    int sub_tag = tag * kMaxPointToPointTensors + static_cast<int>(n);
+    auto issued = sending ? (ucx_ ? ucx_->send(one, peer, sub_tag)
+                                  : pg->send(one, peer, sub_tag))
+                          : (ucx_ ? ucx_->recv(one, peer, sub_tag)
+                                  : pg->recv(one, peer, sub_tag));
+    work->add(std::move(one), std::move(issued));
   }
-  return std::make_shared<C10dWork>(pg->recv(tensors, peer, tag));
+  return work;
 }
 
 void ProcessGroupContext::allreduce(std::vector<torch::Tensor>& tensors,
