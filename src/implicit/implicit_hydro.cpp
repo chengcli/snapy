@@ -182,6 +182,40 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   w[IVY] -= w[IVZ] * cos_theta;
   pcoord->flux2global1_(du);
 
+  // The implicit matrix linearizes gravity as cell-centred work,
+  // dt*grav1*du[IVX]. Replace that contribution with work derived from the
+  // same face mass transfer exported by the VIC redistribution.  MASS[IVX]
+  // is the mass moved through the face below each cell during this stage;
+  // the closed top face lives in the first outer ghost cell and remains zero.
+  // Using the actually redistributed dry/species increments also keeps the
+  // energy update consistent if constituent availability limiting is active.
+  if (grav1 != 0.) {
+    int is = pcoord->il();
+    int ie = pcoord->iu() + 1;
+    int ny = du.size(0) - ICY;
+
+    auto mass_du = _mass_corr[IDN].slice(-1, is, ie).clone();
+    if (ny > 0) {
+      mass_du +=
+          _mass_corr.narrow(0, ICY, ny).sum(0).slice(-1, is, ie);
+    }
+
+    auto face_mass = _mass_corr[IVX];
+    auto phi_face = -grav1 * pcoord->x1f;
+    auto phi_cell = -grav1 * pcoord->x1v;
+    auto volume = pcoord->cell_volume();
+    auto potential_flux_div =
+        (phi_face.slice(0, is + 1, ie + 1) *
+             face_mass.slice(-1, is + 1, ie + 1) -
+         phi_face.slice(0, is, ie) * face_mass.slice(-1, is, ie)) /
+        volume.slice(-1, is, ie);
+    auto face_gravity_work =
+        -potential_flux_div - phi_cell.slice(0, is, ie) * mass_du;
+    auto matrix_gravity_work = dt * grav1 * du[IVX].slice(-1, is, ie);
+    du[IPR].slice(-1, is, ie) +=
+        face_gravity_work - matrix_gravity_work;
+  }
+
   _corr.copy_(du);
   _corr.sub_(_du0);
 

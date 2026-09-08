@@ -37,6 +37,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   // hydrostatic pressure correction
   torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
+  int ny = u.size(0) - ICY;
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -309,7 +310,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // of every shared face is identical on both ranks and conservation stays
   // exact. Positivity of the full multi-stage update follows from the SSP
   // structure of the integrators (see flux_positivity.hpp).
-  int ny = u.size(0) - ICY;
   if (options->eos()->limiter() && ny > 0) {
     auto uy = u.narrow(0, ICY, ny);
     auto f1 = _flux1.defined() ? _flux1.narrow(0, ICY, ny) : torch::Tensor();
@@ -362,6 +362,58 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   auto temp = peos->compute("W->T", {w});
   for (auto& f : forcings) f.forward(du, w, temp, dt);
 
+  // Preserve the original cell-centred gravity work through the implicit
+  // solve: the VIC matrix assumes that energy-momentum coupling is present in
+  // its input.  After VIC has completed, replace that work with the value from
+  // the same finite-volume face mass flux as continuity.  Use only the x1
+  // divergence here: horizontal mass transport does not cross geopotential
+  // surfaces.  _flux1 is read after positivity limiting and sedimentation, so
+  // it contains every contribution to vertical mass transport.
+  torch::Tensor gravity_energy_correction;
+  if (options->grav() && options->grav()->grav1() != 0. &&
+      _flux1.defined() && !options->disable_flux_x1()) {
+    auto grav1 = options->grav()->grav1();
+    auto non_hydrostatic = options->grav()->non_hydrostatic();
+    auto vertical_mass_flux1 = _flux1[IDN].clone();
+    if (ny > 0) {
+      vertical_mass_flux1 += _flux1.narrow(0, ICY, ny).sum(0);
+    }
+
+    int is = pmb->pcoord->il();
+    int ie = pmb->pcoord->iu() + 1;
+    auto area1 = pmb->pcoord->face_area1();
+    auto volume = pmb->pcoord->cell_volume();
+    auto phi_face = -grav1 * pmb->pcoord->x1f;
+    auto phi_cell = -grav1 * pmb->pcoord->x1v;
+    auto potential_flux1 =
+        vertical_mass_flux1 *
+        phi_face.narrow(0, 0, vertical_mass_flux1.size(-1));
+    auto vertical_mass_div =
+        (area1.slice(-1, is + 1, ie + 1) *
+             vertical_mass_flux1.slice(-1, is + 1, ie + 1) -
+         area1.slice(-1, is, ie) *
+             vertical_mass_flux1.slice(-1, is, ie)) /
+        volume.slice(-1, is, ie);
+    auto potential_flux_div =
+        (area1.slice(-1, is + 1, ie + 1) *
+             potential_flux1.slice(-1, is + 1, ie + 1) -
+         area1.slice(-1, is, ie) * potential_flux1.slice(-1, is, ie)) /
+        volume.slice(-1, is, ie);
+
+    auto face_gravity_work =
+        dt * (phi_cell.slice(0, is, ie) * vertical_mass_div -
+              potential_flux_div);
+    auto original_gravity_work =
+        dt * w[IDN].slice(-1, is, ie) * w[IVX].slice(-1, is, ie) * grav1 *
+        non_hydrostatic;
+    if (non_hydrostatic < 1.) {
+      original_gravity_work +=
+          dt * w[IVX].slice(-1, is, ie) * rho_grav.slice(-1, is, ie) *
+          (1. - non_hydrostatic);
+    }
+    gravity_energy_correction = face_gravity_work - original_gravity_work;
+  }
+
   // apply hydrostatic correction
   if (options->grav() && (options->grav()->non_hydrostatic() < 1.)) {
     du[IVX] += dt * rho_grav * (1. - options->grav()->non_hydrostatic());
@@ -386,6 +438,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       SINFO(Hydro) << "Implicit time (s): " << elapsed.count() << "\n";
       start = std::chrono::high_resolution_clock::now();
     }
+  }
+
+  if (gravity_energy_correction.defined()) {
+    int is = pmb->pcoord->il();
+    int ie = pmb->pcoord->iu() + 1;
+    du[IPR].slice(-1, is, ie) += gravity_energy_correction;
   }
 
   return du;
