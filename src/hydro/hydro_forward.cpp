@@ -370,8 +370,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // surfaces.  _flux1 is read after positivity limiting and sedimentation, so
   // it contains every contribution to vertical mass transport.
   torch::Tensor gravity_energy_correction;
-  if (options->grav() && options->grav()->grav1() != 0. &&
-      _flux1.defined() && !options->disable_flux_x1()) {
+  if (options->grav() && options->grav()->grav1() != 0. && _flux1.defined() &&
+      !options->disable_flux_x1()) {
     auto grav1 = options->grav()->grav1();
     auto non_hydrostatic = options->grav()->non_hydrostatic();
     auto vertical_mass_flux1 = _flux1[IDN].clone();
@@ -385,14 +385,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto volume = pmb->pcoord->cell_volume();
     auto phi_face = -grav1 * pmb->pcoord->x1f;
     auto phi_cell = -grav1 * pmb->pcoord->x1v;
-    auto potential_flux1 =
-        vertical_mass_flux1 *
-        phi_face.narrow(0, 0, vertical_mass_flux1.size(-1));
+    auto potential_flux1 = vertical_mass_flux1 *
+                           phi_face.narrow(0, 0, vertical_mass_flux1.size(-1));
     auto vertical_mass_div =
         (area1.slice(-1, is + 1, ie + 1) *
              vertical_mass_flux1.slice(-1, is + 1, ie + 1) -
-         area1.slice(-1, is, ie) *
-             vertical_mass_flux1.slice(-1, is, ie)) /
+         area1.slice(-1, is, ie) * vertical_mass_flux1.slice(-1, is, ie)) /
         volume.slice(-1, is, ie);
     auto potential_flux_div =
         (area1.slice(-1, is + 1, ie + 1) *
@@ -401,15 +399,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         volume.slice(-1, is, ie);
 
     auto face_gravity_work =
-        dt * (phi_cell.slice(0, is, ie) * vertical_mass_div -
-              potential_flux_div);
-    auto original_gravity_work =
-        dt * w[IDN].slice(-1, is, ie) * w[IVX].slice(-1, is, ie) * grav1 *
-        non_hydrostatic;
+        dt *
+        (phi_cell.slice(0, is, ie) * vertical_mass_div - potential_flux_div);
+    auto original_gravity_work = dt * w[IDN].slice(-1, is, ie) *
+                                 w[IVX].slice(-1, is, ie) * grav1 *
+                                 non_hydrostatic;
     if (non_hydrostatic < 1.) {
-      original_gravity_work +=
-          dt * w[IVX].slice(-1, is, ie) * rho_grav.slice(-1, is, ie) *
-          (1. - non_hydrostatic);
+      original_gravity_work += dt * w[IVX].slice(-1, is, ie) *
+                               rho_grav.slice(-1, is, ie) *
+                               (1. - non_hydrostatic);
     }
     gravity_energy_correction = face_gravity_work - original_gravity_work;
   }

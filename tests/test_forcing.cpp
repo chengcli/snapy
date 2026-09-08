@@ -368,8 +368,7 @@ TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
   auto mechanical_flux = block->phydro->flux1()[IPR] +
                          phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
   auto integrated_du =
-      (mechanical_du.slice(-1, is, ie) *
-       coord->cell_volume().slice(-1, is, ie))
+      (mechanical_du.slice(-1, is, ie) * coord->cell_volume().slice(-1, is, ie))
           .sum();
   auto boundary_flux =
       (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
@@ -413,17 +412,17 @@ TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
   auto phi_cell = -gravity->grav1() * coord->x1v;
   auto phi_face = -gravity->grav1() * coord->x1f;
   auto total_energy_du = du[IPR] + phi_cell * mass_du;
-  auto total_energy_flux = block->phydro->flux1()[IPR] +
-                           phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
+  auto total_energy_flux =
+      block->phydro->flux1()[IPR] +
+      phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
   auto volume = coord->cell_volume();
   auto area = coord->face_area1();
 
   auto integrated_du =
       (total_energy_du.slice(-1, is, ie) * volume.slice(-1, is, ie)).sum();
-  auto boundary_flux =
-      (area.select(-1, ie) * total_energy_flux.select(-1, ie) -
-       area.select(-1, is) * total_energy_flux.select(-1, is))
-          .sum();
+  auto boundary_flux = (area.select(-1, ie) * total_energy_flux.select(-1, ie) -
+                        area.select(-1, is) * total_energy_flux.select(-1, is))
+                           .sum();
   EXPECT_NEAR(integrated_du.item<double>(),
               (-dt * boundary_flux).item<double>(), 1.e-9);
 }
@@ -474,8 +473,7 @@ TEST(forcing, vertical_gravity_work_includes_sedimentation_mass_flux) {
   auto mechanical_flux = block->phydro->flux1()[IPR] +
                          phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
   auto integrated_du =
-      (mechanical_du.slice(-1, is, ie) *
-       coord->cell_volume().slice(-1, is, ie))
+      (mechanical_du.slice(-1, is, ie) * coord->cell_volume().slice(-1, is, ie))
           .sum();
   auto boundary_flux =
       (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
@@ -530,12 +528,10 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
   auto flux2 = block->phydro->flux2()[IPR] + phi_cell * mass_flux2;
   auto flux3 = block->phydro->flux3()[IPR] + phi_cell * mass_flux3;
   auto expected =
-      -dt * coord
-                ->divergence(flux1.unsqueeze(0), flux2.unsqueeze(0),
-                             flux3.unsqueeze(0))[0];
+      -dt * coord->divergence(flux1.unsqueeze(0), flux2.unsqueeze(0),
+                              flux3.unsqueeze(0))[0];
   auto actual = du[IPR] + phi_cell * total_mass_du;
-  auto interior =
-      block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
 
   EXPECT_TRUE(torch::allclose(actual.index(interior), expected.index(interior),
                               1.e-10, 1.e-8));

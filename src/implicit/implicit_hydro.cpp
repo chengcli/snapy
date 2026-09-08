@@ -196,8 +196,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 
     auto mass_du = _mass_corr[IDN].slice(-1, is, ie).clone();
     if (ny > 0) {
-      mass_du +=
-          _mass_corr.narrow(0, ICY, ny).sum(0).slice(-1, is, ie);
+      mass_du += _mass_corr.narrow(0, ICY, ny).sum(0).slice(-1, is, ie);
     }
 
     auto face_mass = _mass_corr[IVX];
@@ -212,8 +211,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     auto face_gravity_work =
         -potential_flux_div - phi_cell.slice(0, is, ie) * mass_du;
     auto matrix_gravity_work = dt * grav1 * du[IVX].slice(-1, is, ie);
-    du[IPR].slice(-1, is, ie) +=
-        face_gravity_work - matrix_gravity_work;
+    du[IPR].slice(-1, is, ie) += face_gravity_work - matrix_gravity_work;
   }
 
   _corr.copy_(du);
