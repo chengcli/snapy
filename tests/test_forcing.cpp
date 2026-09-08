@@ -328,6 +328,219 @@ TEST(forcing, implicit_correction_reports_total_energy_delta) {
             0.);
 }
 
+TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_gravity_energy.yaml");
+
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+  auto icorr = ImplicitOptionsImpl::create();
+  icorr->scheme(1);
+  options->hydro()->icorr() = icorr;
+
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto coord = block->pcoord;
+  auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                         coord->options->nc2(), coord->options->nc1()},
+                        torch::kFloat64);
+  w[IDN] = 1. + 0.05 * coord->x1v;
+  w[IVX].zero_();
+  w[IPR].fill_(1.e5);
+
+  Variables vars;
+  vars["hydro_w"] = w;
+  block->initialize(vars);
+  double dt = 0.1;
+  auto du = block->phydro->forward(dt, vars.at("hydro_u"), vars);
+
+  int is = coord->il();
+  int ie = coord->iu() + 1;
+  int ny = du.size(0) - ICY;
+  auto mass_du = du[IDN].clone();
+  auto mass_flux = block->phydro->flux1()[IDN].clone();
+  if (ny > 0) {
+    mass_du += du.narrow(0, ICY, ny).sum(0);
+    mass_flux += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+  }
+  auto phi_cell = -gravity->grav1() * coord->x1v;
+  auto phi_face = -gravity->grav1() * coord->x1f;
+  auto mechanical_du = du[IPR] + phi_cell * mass_du;
+  auto mechanical_flux = block->phydro->flux1()[IPR] +
+                         phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
+  auto integrated_du =
+      (mechanical_du.slice(-1, is, ie) *
+       coord->cell_volume().slice(-1, is, ie))
+          .sum();
+  auto boundary_flux =
+      (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
+       coord->face_area1().select(-1, is) * mechanical_flux.select(-1, is))
+          .sum();
+  EXPECT_NEAR(integrated_du.item<double>(),
+              (-dt * boundary_flux).item<double>(), 1.e-9);
+}
+
+TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+  options->hydro()->diffusion() = nullptr;
+  options->hydro()->icorr() = nullptr;
+
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto coord = block->pcoord;
+  auto w = make_primitive(block);
+  w[IDN] = 1. + 0.05 * coord->x1v;
+  w[IVX] = 0.3 + 0.07 * coord->x1v.square();
+
+  auto u = block->phydro->peos->compute("W->U", {w});
+  Variables vars;
+  vars["hydro_w"] = torch::empty_like(w);
+  double dt = 0.1;
+  auto du = block->phydro->forward(dt, u, vars);
+
+  int is = coord->il();
+  int ie = coord->iu() + 1;
+  int ny = du.size(0) - ICY;
+  auto mass_du = du[IDN].clone();
+  auto mass_flux = block->phydro->flux1()[IDN].clone();
+  if (ny > 0) {
+    mass_du += du.narrow(0, ICY, ny).sum(0);
+    mass_flux += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+  }
+
+  auto phi_cell = -gravity->grav1() * coord->x1v;
+  auto phi_face = -gravity->grav1() * coord->x1f;
+  auto total_energy_du = du[IPR] + phi_cell * mass_du;
+  auto total_energy_flux = block->phydro->flux1()[IPR] +
+                           phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
+  auto volume = coord->cell_volume();
+  auto area = coord->face_area1();
+
+  auto integrated_du =
+      (total_energy_du.slice(-1, is, ie) * volume.slice(-1, is, ie)).sum();
+  auto boundary_flux =
+      (area.select(-1, ie) * total_energy_flux.select(-1, ie) -
+       area.select(-1, is) * total_energy_flux.select(-1, is))
+          .sum();
+  EXPECT_NEAR(integrated_du.item<double>(),
+              (-dt * boundary_flux).item<double>(), 1.e-9);
+}
+
+TEST(forcing, vertical_gravity_work_includes_sedimentation_mass_flux) {
+  auto options =
+      MeshBlockOptionsImpl::from_yaml("test_gravity_sedimentation.yaml");
+  options->hydro()->icorr() = nullptr;
+
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto coord = block->pcoord;
+  auto w = make_primitive(block);
+  w[IDN].fill_(1.);
+  w.narrow(0, IVX, 3).zero_();
+  w[IPR].fill_(1.e5);
+  w[ICY].fill_(0.05);
+  w[ICY + 1].fill_(0.02);
+
+  auto u = block->phydro->peos->compute("W->U", {w});
+  Variables vars;
+  vars["hydro_w"] = torch::empty_like(w);
+  double dt = 0.1;
+  auto du = block->phydro->forward(dt, u, vars);
+
+  ASSERT_TRUE(block->phydro->psed);
+  int is = coord->il();
+  int ie = coord->iu() + 1;
+  auto sedimentation_velocity = block->phydro->psed->vsed[0];
+  EXPECT_TRUE(torch::allclose(
+      sedimentation_velocity.slice(-1, is + 1, ie),
+      torch::full_like(sedimentation_velocity.slice(-1, is + 1, ie), -2.)));
+
+  int ny = du.size(0) - ICY;
+  auto mass_du = du[IDN].clone();
+  auto mass_flux = block->phydro->flux1()[IDN].clone();
+  if (ny > 0) {
+    mass_du += du.narrow(0, ICY, ny).sum(0);
+    mass_flux += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+  }
+
+  auto phi_cell = -gravity->grav1() * coord->x1v;
+  auto phi_face = -gravity->grav1() * coord->x1f;
+  auto mechanical_du = du[IPR] + phi_cell * mass_du;
+  auto mechanical_flux = block->phydro->flux1()[IPR] +
+                         phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
+  auto integrated_du =
+      (mechanical_du.slice(-1, is, ie) *
+       coord->cell_volume().slice(-1, is, ie))
+          .sum();
+  auto boundary_flux =
+      (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
+       coord->face_area1().select(-1, is) * mechanical_flux.select(-1, is))
+          .sum();
+
+  EXPECT_NEAR(integrated_du.item<double>(),
+              (-dt * boundary_flux).item<double>(), 1.e-9);
+}
+
+TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+  options->hydro()->diffusion() = nullptr;
+  options->hydro()->icorr() = nullptr;
+
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto coord = block->pcoord;
+  auto w = make_primitive(block);
+  auto x1 = coord->x1v.view({1, 1, -1});
+  auto x2 = coord->x2v.view({1, -1, 1});
+  w[IDN] = 1. + 0.04 * x1 + 0.08 * x2;
+  w[IVX] = 0.2 + 0.03 * x1;
+  w[IVY] = -0.4 + 0.15 * x2;
+  w[IPR] = 1.e5 + 20. * x1 + 40. * x2;
+
+  auto u = block->phydro->peos->compute("W->U", {w});
+  Variables vars;
+  vars["hydro_w"] = torch::empty_like(w);
+  double dt = 0.1;
+  auto du = block->phydro->forward(dt, u, vars);
+
+  int ny = du.size(0) - ICY;
+  auto total_mass_du = du[IDN].clone();
+  auto mass_flux1 = block->phydro->flux1()[IDN].clone();
+  auto mass_flux2 = block->phydro->flux2()[IDN].clone();
+  auto mass_flux3 = block->phydro->flux3()[IDN].clone();
+  if (ny > 0) {
+    total_mass_du += du.narrow(0, ICY, ny).sum(0);
+    mass_flux1 += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+    mass_flux2 += block->phydro->flux2().narrow(0, ICY, ny).sum(0);
+    mass_flux3 += block->phydro->flux3().narrow(0, ICY, ny).sum(0);
+  }
+
+  auto phi_cell = -gravity->grav1() * coord->x1v;
+  auto phi_face = -gravity->grav1() * coord->x1f;
+  auto flux1 = block->phydro->flux1()[IPR] +
+               phi_face.narrow(0, 0, mass_flux1.size(-1)) * mass_flux1;
+  auto flux2 = block->phydro->flux2()[IPR] + phi_cell * mass_flux2;
+  auto flux3 = block->phydro->flux3()[IPR] + phi_cell * mass_flux3;
+  auto expected =
+      -dt * coord
+                ->divergence(flux1.unsqueeze(0), flux2.unsqueeze(0),
+                             flux3.unsqueeze(0))[0];
+  auto actual = du[IPR] + phi_cell * total_mass_du;
+  auto interior =
+      block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+
+  EXPECT_TRUE(torch::allclose(actual.index(interior), expected.index(interior),
+                              1.e-10, 1.e-8));
+}
+
 TEST(forcing, relax_bottom_composition_handles_multidimensional_ghost_zones) {
   auto block = make_block("test_forcing_3d.yaml");
   auto w = make_primitive(block);
