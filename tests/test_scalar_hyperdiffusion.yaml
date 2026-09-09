@@ -1,0 +1,57 @@
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 3.5
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: gnomonic-equiangle
+  bounds:
+    x1min: 7.0e7
+    x1max: 7.0000001e7
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+  cells: {nx1: 1, nx2: 8, nx3: 8, nghost: 2}
+
+distribute:
+  layout: cubed-sphere
+  nb2: 1
+  nb3: 1
+
+dynamics:
+  disable-flux-x2: true
+  disable-flux-x3: true
+  equation-of-state:
+    type: ideal-moist
+
+forcing:
+  scalar-hyperdiffusion:
+    damping-time: 10.
+    fields: [vel1, vapor, cloud]
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom

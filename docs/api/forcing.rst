@@ -77,3 +77,20 @@ DiffusionOptions
       The conductive energy flux is
       ``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local
       equation-of-state mixture specific heat at constant volume.
+
+ScalarHyperdiffusionOptions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: ScalarHyperdiffusionOptions
+
+   Fourth-order horizontal scalar diffusion configuration for a cubed sphere.
+
+   .. method:: damping_time() -> float
+               damping_time(value: float) -> ScalarHyperdiffusionOptions
+
+      Get or set the grid-scale e-folding time.
+
+   .. method:: fields() -> list[str]
+               fields(value: list[str]) -> ScalarHyperdiffusionOptions
+
+      Get or set the selected ``vel1`` and vapor/cloud species names.

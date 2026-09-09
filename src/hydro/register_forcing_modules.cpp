@@ -28,6 +28,13 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
     forcing_names.push_back("diffusion");
   }
 
+  if (options->scalar_hyperdiffusion()) {
+    pscalar_hyperdiffusion =
+        ScalarHyperdiffusion(options->scalar_hyperdiffusion(), this);
+    forcings.push_back(torch::nn::AnyModule(pscalar_hyperdiffusion));
+    forcing_names.push_back("scalar-hyperdiffusion");
+  }
+
   if (options->fricHeat()) {
     forcings.push_back(
         torch::nn::AnyModule(FricHeat(options->fricHeat(), this)));

@@ -66,6 +66,11 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   op->diffusion() = DiffusionOptionsImpl::from_yaml(forcing);
   if (op->diffusion()) op->diffusion()->report(SINFO(HydroOptions));
 
+  op->scalar_hyperdiffusion() =
+      ScalarHyperdiffusionOptionsImpl::from_yaml(forcing);
+  if (op->scalar_hyperdiffusion())
+    op->scalar_hyperdiffusion()->report(SINFO(HydroOptions));
+
   op->fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
   if (op->fricHeat()) op->fricHeat()->report(SINFO(HydroOptions));
 
@@ -111,6 +116,8 @@ HydroOptions HydroOptionsImpl::clone() const {
   if (grav()) op->grav() = grav()->clone();
   if (coriolis()) op->coriolis() = coriolis()->clone();
   if (diffusion()) op->diffusion() = diffusion()->clone();
+  if (scalar_hyperdiffusion())
+    op->scalar_hyperdiffusion() = scalar_hyperdiffusion()->clone();
   if (fricHeat()) op->fricHeat() = fricHeat()->clone();
   if (bodyHeat()) op->bodyHeat() = bodyHeat()->clone();
   if (topCool()) op->topCool() = topCool()->clone();

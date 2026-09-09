@@ -140,6 +140,44 @@ coefficients are not supported. Heat conduction uses the energy flux
 specific heat supplied by the equation of state. An EOS without a positive
 reference specific heat at constant volume cannot enable heat conduction.
 
+Cubed-Sphere Scalar Hyperdiffusion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Apply fourth-order horizontal diffusion to vertical velocity and selected
+moisture fields on a cubed sphere:
+
+.. code-block:: yaml
+
+    forcing:
+      scalar-hyperdiffusion:
+        damping-time: 3600.0
+        fields: [vel1, H2O, H2O(l), H2O(l,p)]
+
+``vel1`` selects vertical velocity. All other entries must exactly match a
+configured non-dry vapor or cloud species name; precipitating species are
+selected by their cloud species name. Diffusion is horizontal in ``x2`` and
+``x3`` only.
+
+The strength is set by ``damping-time`` rather than a coefficient with units
+of length to the fourth power per time. At each radial level, snapy derives
+the coefficient so that the metric-aware discrete grid-scale reference mode
+has the requested e-folding time.
+
+For a scalar :math:`\phi`, the second-order intermediate operator is
+
+.. math::
+
+   \mathcal{L}_\rho(\phi) =
+   \rho^{-1}\nabla_h\mathbin{\cdot}(\rho\nabla_h\phi).
+
+The fourth-order tendency is obtained from
+:math:`-K_4\mathcal{L}_\rho(\mathcal{L}_\rho\phi)`. The intermediate
+Laplacian is exchanged across block and panel ghost zones before the second
+application. Species partial densities are updated conservatively. For
+``vel1``, radial momentum and total energy receive consistent conservative
+fluxes. The explicit stability limit is included in the hydro time-step
+estimate.
+
 Implicit Correction
 -------------------
 
