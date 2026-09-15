@@ -21,6 +21,7 @@ T DISPATCH_MACRO SoundSpeed(T* prim, T gm1) {
 template <typename T>
 void DISPATCH_MACRO CopyPrimitives(T* wl, T* wr, T* prim, int i, int stride1,
                                    int stride2, int ny) {
+  (void)ny;
   wl[IDN] = prim[(i - 1) * stride2];
   wr[IDN] = prim[i * stride2];
 
@@ -29,11 +30,8 @@ void DISPATCH_MACRO CopyPrimitives(T* wl, T* wr, T* prim, int i, int stride1,
     wr[n] = prim[n * stride1 + i * stride2];
   }
 
-  for (int n = 0; n < ny; ++n) {
-    wl[IDN] +=
-        prim[(i - 1) * stride2] * prim[(ICY + n) * stride1 + (i - 1) * stride2];
-    wr[IDN] += prim[i * stride2] * prim[(ICY + n) * stride1 + i * stride2];
-  }
+  // EOS primitive IDN is total mixture density. The species entries are mass
+  // fractions of that total and must not be added to the density again.
 }
 
 template <typename T>

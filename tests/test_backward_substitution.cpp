@@ -6,6 +6,7 @@
 #include <vector>
 
 // snap
+#include <snap/implicit/flux_decomposition_impl.h>
 #include <snap/implicit/vic_redistribute_impl.h>
 
 #include <snap/implicit/implicit_hydro.hpp>
@@ -21,6 +22,48 @@ double column_integral(std::vector<double> const& u,
 }
 
 }  // namespace
+
+TEST(vic_flux_decomposition, species_relabeling_preserves_mixture_density) {
+  constexpr int ncell = 2;
+  constexpr int stride1 = ncell;
+  constexpr int stride2 = 1;
+  constexpr int interface = 1;
+
+  std::vector<double> one_species((snap::ICY + 1) * ncell, 0.);
+  std::vector<double> two_species((snap::ICY + 2) * ncell, 0.);
+
+  for (int i = 0; i < ncell; ++i) {
+    double density = 2. + i;
+    double velocity = 10. + i;
+    double pressure = 1.e5 + 100. * i;
+
+    one_species[snap::IDN * stride1 + i] = density;
+    two_species[snap::IDN * stride1 + i] = density;
+    for (int n = snap::IVX; n <= snap::IVZ; ++n) {
+      one_species[n * stride1 + i] = velocity + n;
+      two_species[n * stride1 + i] = velocity + n;
+    }
+    one_species[snap::IPR * stride1 + i] = pressure;
+    two_species[snap::IPR * stride1 + i] = pressure;
+
+    one_species[snap::ICY * stride1 + i] = 0.4;
+    two_species[snap::ICY * stride1 + i] = 0.1;
+    two_species[(snap::ICY + 1) * stride1 + i] = 0.3;
+  }
+
+  double one_left[5], one_right[5], two_left[5], two_right[5];
+  snap::CopyPrimitives(one_left, one_right, one_species.data(), interface,
+                       stride1, stride2, 1);
+  snap::CopyPrimitives(two_left, two_right, two_species.data(), interface,
+                       stride1, stride2, 2);
+
+  for (int n = snap::IDN; n <= snap::IPR; ++n) {
+    EXPECT_DOUBLE_EQ(one_left[n], two_left[n]);
+    EXPECT_DOUBLE_EQ(one_right[n], two_right[n]);
+  }
+  EXPECT_DOUBLE_EQ(one_left[snap::IDN], 2.);
+  EXPECT_DOUBLE_EQ(one_right[snap::IDN], 3.);
+}
 
 TEST(vic_redistribution, conserves_constituent_column_tendencies) {
   constexpr int nlayer = 4;
