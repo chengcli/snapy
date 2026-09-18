@@ -22,13 +22,12 @@ active = u[:, 3:-3, 3:-3, 3:-3].clone()
 reference = variables["boundary_reference_w"].clone()
 
 try:
-    block.apply_hydro_bc(u)
+    block.apply_boundaries({}, u)
 except RuntimeError as exc:
     assert "missing initial boundary reference" in str(exc)
 else:
     raise AssertionError("A manual characteristic fill needs its saved reference")
 
-block.apply_hydro_bc(u, snapy.kConserved, variables)
 block.apply_boundaries(variables, u)
 block.apply_boundaries(variables, u, variables["scalar_s"])
 assert torch.equal(active, u[:, 3:-3, 3:-3, 3:-3])

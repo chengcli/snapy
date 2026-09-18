@@ -220,18 +220,7 @@ void bind_mesh(py::module& m) {
                                   tracers.value_or(torch::Tensor()), primitive);
           },
           py::arg("vars"), py::arg("hydro"), py::arg("tracers") = py::none(),
-          py::arg("primitive") = false)
-      .def(
-          "apply_hydro_bc",
-          [](snap::MeshBlockImpl& self, torch::Tensor var, int type,
-             snap::Variables vars) {
-            if (type != snap::kPrimitive && type != snap::kConserved) {
-              throw std::runtime_error("Invalid type for apply_hydro_bc.");
-            }
-            self.apply_boundaries(vars, var, {}, type == snap::kPrimitive);
-          },
-          py::arg("var"), py::arg("type") = (int)snap::kConserved,
-          py::arg("vars") = snap::Variables{});
+          py::arg("primitive") = false);
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))

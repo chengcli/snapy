@@ -74,11 +74,11 @@ primitives and convert only the resulting physical ghosts back to conserved
 variables. Faces are filled in x1, x2, x3 order; internal process faces and
 collapsed dimensions are skipped.
 
-For manual Python boundary fills, pass the initialized variables map to
-``block.apply_hydro_bc(hydro, type, vars)``. With transported tracers use
-``block.apply_boundaries(vars, hydro, tracers, primitive=False)`` so hydro and
-tracer perturbations are limited together. Nonradiating cases can continue to
-use ``apply_hydro_bc`` without a variables map.
+For manual Python boundary fills, use
+``block.apply_boundaries(vars, hydro, tracers=None, primitive=False)`` with the
+initialized variables map. Pass transported tracers so hydro and tracer
+perturbations are limited together. Set ``primitive=True`` when supplying hydro
+primitives and tracer mixing ratios instead of conserved variables.
 
 The acoustic regression uses a Gaussian pulse of density amplitude ``1e-4``
 on 128 cells with HLLC and RK3. The recorded reflected characteristic amplitude
