@@ -5,6 +5,7 @@
 enable_testing()
 
 setup_test(test_eos)
+setup_test(test_radiating_boundary)
 setup_test(test_plm)
 setup_test(test_weno)
 setup_test(test_reconstruct)
@@ -71,6 +72,16 @@ endif()
 set_tests_properties(test_exchange.release PROPERTIES
   ENVIRONMENT
     "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
+)
+
+add_test(
+  NAME test_radiating_boundary_python
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_radiating_boundary_python.py
+)
+set_tests_properties(test_radiating_boundary_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  LABELS "python;boundary"
 )
 
 add_test(

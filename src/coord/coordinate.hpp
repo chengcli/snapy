@@ -201,6 +201,11 @@ class CoordinateImpl {
   virtual void interp_ghost(torch::Tensor var,
                             std::tuple<int, int, int> const&) const {}
 
+  //! Cell-centered contravariant velocity <-> boundary orthonormal frame.
+  //! Axis is 1, 2, or 3; the normal component retains its coordinate slot.
+  void boundary_velocity_(torch::Tensor const& prim, int axis,
+                          bool inverse = false) const;
+
   //! project contravariant velocity to a local orthogonal frame at face 1
   virtual void prim2local1_(torch::Tensor const& prim) const {}
 

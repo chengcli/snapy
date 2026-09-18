@@ -13,6 +13,9 @@
 #include <snap/add_arg.h>
 
 namespace snap {
+class EquationOfStateImpl;
+class CoordinateImpl;
+
 enum BoundaryFace {
   kUnknown = -1,
   kInnerX1 = 0,
@@ -24,11 +27,16 @@ enum BoundaryFace {
 };
 
 struct BoundaryFuncOptions {
-  void report(std::ostream &os) const {
+  void report(std::ostream& os) const {
     os << "-- boundary func options --\n";
     os << "* type: " << type() << "\n"
        << "* nghost: " << nghost() << "\n";
   }
+
+  // Non-owning EOS/coordinate context and independent initial backgrounds.
+  EquationOfStateImpl* eos = nullptr;
+  CoordinateImpl const* coord = nullptr;
+  torch::Tensor reference, tracer_reference, tracers;
 
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, nghost) = 1;
