@@ -110,6 +110,14 @@ TEST_P(DeviceTest, radiating_background_and_coordinate_roundtrip) {
   for (int axis = 1; axis <= 3; ++axis) {
     auto round = ref.clone();
     b->pcoord->boundary_velocity_(round, axis);
+    auto c = b->pcoord->cosine_cell_kj;
+    auto metric_norm =
+        ref.narrow(0, IVX, 3).square().sum(0) + 2. * c * ref[IVY] * ref[IVZ];
+    EXPECT_TRUE(torch::allclose(round.narrow(0, IVX, 3).square().sum(0),
+                                metric_norm, 1.e-5, 1.e-6));
+    auto normal =
+        axis == 1 ? ref[IVX] : (1. - c.square()).sqrt() * ref[IVX + axis - 1];
+    EXPECT_TRUE(torch::allclose(round[IVX + axis - 1], normal, 1.e-5, 1.e-6));
     b->pcoord->boundary_velocity_(round, axis, true);
     EXPECT_TRUE(torch::allclose(round, ref, 1.e-5, 1.e-6));
     for (bool outer : {false, true}) {
@@ -119,6 +127,132 @@ TEST_P(DeviceTest, radiating_background_and_coordinate_roundtrip) {
       EXPECT_TRUE(torch::allclose(w, ref, 1.e-5, 1.e-6));
     }
   }
+}
+
+TEST_P(DeviceTest, spatial_sound_speed_slices_on_unequal_axes) {
+  for (auto eos : {"ideal-gas", "ideal-moist", "moist-mixture"}) {
+    auto opts = MeshBlockOptionsImpl::from_yaml(
+        eos == std::string("ideal-gas") ? "test_radiating_boundary.yaml"
+                                        : "test_radiating_moist.yaml");
+    opts->hydro()->eos()->type(eos);
+    opts->coord()->nx1(7).global_nx1(7).nx2(8).global_nx2(8).nx3(9).global_nx3(
+        9);
+    auto b = MeshBlock(opts);
+    b->to(device, dtype);
+    auto ref = background(b);
+    ref[IPR].mul_(1. +
+                  0.01 * torch::arange(13, ref.options()).view({1, 1, 13}) +
+                  0.02 * torch::arange(14, ref.options()).view({1, 14, 1}) +
+                  0.03 * torch::arange(15, ref.options()).view({15, 1, 1}));
+    auto eos_module = b->phydro->peos;
+    auto c =
+        eos_module->compute("WA->L", {ref, eos_module->compute("W->A", {ref})});
+    ASSERT_EQ(c.sizes(), ref[IDN].sizes());
+    for (int axis = 1; axis <= 3; ++axis)
+      for (bool outer : {false, true}) {
+        int dim = 4 - axis, vn = IVX + axis - 1;
+        int src = outer ? ref.size(dim) - 4 : 3,
+            dst = outer ? ref.size(dim) - 3 : 0;
+        double sign = outer ? 1. : -1.;
+        ref[vn].copy_(sign * (0.3 * c - 2.));
+        auto w = ref.clone();
+        w[vn].copy_(sign * 0.3 * c);
+        auto before = w.clone();
+        get_bc_func().at(outer ? "outflow_outer" : "outflow_inner")(
+            w, dim, context(b, ref));
+        auto delta = w.narrow(dim, dst, 3) - ref.narrow(dim, dst, 3);
+        auto ci = c.narrow(dim - 1, src, 1);
+        double tol = dtype == torch::kFloat32 ? 0.05 : 1.e-8;
+        EXPECT_LT((delta[IPR] - ci).abs().max().item<double>(), tol);
+        EXPECT_LT((delta[vn] - sign).abs().max().item<double>(), tol);
+        EXPECT_TRUE(torch::equal(w.narrow(dim, 3, w.size(dim) - 6),
+                                 before.narrow(dim, 3, w.size(dim) - 6)));
+      }
+  }
+}
+
+TEST(radiating, mixed_faces_preserve_representation_and_order) {
+  auto b = block_for("ideal-gas", 8, false, 1);
+  // A nonorthogonal metric makes conserved reflection distinct from
+  // reflecting primitive velocities, in addition to custom type checks.
+  b->pcoord->cosine_cell_kj.fill_(0.4);
+  auto ref = background(b);
+  auto tracer_ref = torch::full({1, 14, 14, 14}, 0.2, ref.options());
+  Variables vars{{"boundary_reference_w", ref},
+                 {"boundary_reference_r", tracer_ref}};
+  for (bool primitive : {false, true})
+    for (bool radiating_first : {false, true}) {
+      int calls = 0;
+      auto custom = [&](torch::Tensor const& var, int dim,
+                        BoundaryFuncOptions op) {
+        EXPECT_EQ(op.type(), calls % 2 == 0
+                                 ? (primitive ? kPrimitive : kConserved)
+                                 : kScalar);
+        EXPECT_FALSE(op.tracers.defined());
+        ++calls;
+        var.narrow(dim, var.size(dim) - 3, 3).add_(0.25);
+      };
+      b->options->bfuncs() = {
+          get_bc_func().at(radiating_first ? "outflow_inner"
+                                           : "reflecting_inner"),
+          custom,
+          get_bc_func().at("reflecting_inner"),
+          get_bc_func().at("outflow_outer"),
+          get_bc_func().at("outflow_inner"),
+          get_bc_func().at("solid_outer")};
+      auto w = ref.clone();
+      w[IVX].fill_(2.);
+      w[IVY].fill_(3.);
+      w[IVZ].fill_(4.);
+      auto u = primitive ? w : b->phydro->peos->compute("W->U", {w});
+      auto r = tracer_ref.clone().add_(0.1);
+      auto tracers = primitive ? r : r * w[IDN];
+      auto expected = u.clone(), expected_tracers = tracers.clone();
+      auto active = u.narrow(1, 3, 8).narrow(2, 3, 8).narrow(3, 3, 8).clone();
+
+      // Independent face-by-face reference: only outflow callbacks receive
+      // primitives, and each face is committed before the next callback.
+      for (int f = 0; f < 6; ++f) {
+        auto const& fn = b->options->bfuncs()[f];
+        int dim = 3 - f / 2, start = f % 2 ? u.size(dim) - 3 : 0;
+        auto op = context(b, ref);
+        if (is_outflow(fn)) {
+          auto face_w =
+              primitive ? expected
+                        : b->phydro->peos->compute("U->W", {expected.clone()});
+          auto face_r =
+              primitive ? expected_tracers : expected_tracers / face_w[IDN];
+          op.tracers = face_r;
+          op.tracer_reference = tracer_ref;
+          fn(face_w, dim, op);
+          if (!primitive) {
+            auto face_u = b->phydro->peos->compute("W->U", {face_w});
+            expected.narrow(dim, start, 3).copy_(face_u.narrow(dim, start, 3));
+            expected_tracers.narrow(dim, start, 3)
+                .copy_((face_r * face_w[IDN]).narrow(dim, start, 3));
+          }
+        } else {
+          op.type(primitive ? kPrimitive : kConserved);
+          fn(expected, dim, op);
+          op.type(kScalar);
+          fn(expected_tracers, dim, op);
+        }
+      }
+      EXPECT_EQ(calls, 2);
+      calls = 0;
+      b->apply_boundaries(vars, u, tracers, primitive);
+      EXPECT_EQ(calls, 2);
+      EXPECT_TRUE(torch::allclose(u, expected, 1.e-12, 1.e-9));
+      EXPECT_TRUE(torch::allclose(tracers, expected_tracers, 1.e-12, 1.e-12));
+      EXPECT_TRUE(torch::equal(
+          active, u.narrow(1, 3, 8).narrow(2, 3, 8).narrow(3, 3, 8)));
+      // The nonradiating solid face must keep literal conserved values where
+      // subsequent faces do not overlap it.
+      EXPECT_TRUE(torch::equal(
+          u.narrow(1, 11, 3).narrow(2, 3, 8).narrow(3, 3, 8),
+          torch::ones_like(
+              u.narrow(1, 11, 3).narrow(2, 3, 8).narrow(3, 3, 8))));
+    }
 }
 
 TEST(radiating, admissibility_and_errors) {

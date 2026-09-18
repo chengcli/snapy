@@ -75,6 +75,16 @@ set_tests_properties(test_exchange.release PROPERTIES
 )
 
 add_test(
+  NAME test_radiating_boundary_python
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_radiating_boundary_python.py
+)
+set_tests_properties(test_radiating_boundary_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  LABELS "python;boundary"
+)
+
+add_test(
   NAME test_mesh_exchange_python
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mesh_exchange.py
 )

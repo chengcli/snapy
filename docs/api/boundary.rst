@@ -69,9 +69,10 @@ The references are restored on the state device and dtype.
 
 The C++ callback signature is unchanged, but ``BoundaryFuncOptions`` now carries
 EOS, coordinate, and reference tensors. Rebuild compiled custom callbacks.
-When a block has characteristic outflow, hydro boundary passes operate on
-primitives and convert only the resulting physical ghosts back to conserved
-variables. Faces are filled in x1, x2, x3 order; internal process faces and
+Characteristic outflow faces operate on primitives and convert only their
+ghosts back to conserved variables. Other face callbacks receive the requested
+representation. Consecutive radiating faces share a conversion; their ghosts
+are committed before the next nonradiating callback. Faces are filled in x1, x2, x3 order; internal process faces and
 collapsed dimensions are skipped.
 
 For manual Python boundary fills, use

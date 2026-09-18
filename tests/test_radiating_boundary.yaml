@@ -6,6 +6,11 @@ species:
   - name: H2O
     composition: {H: 2, O: 1}
     cv_R: 3.
+  # Keep the same species catalog as test_radiating_moist.yaml: Kintera
+  # initializes its process-wide catalog from the first loaded configuration.
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.
 dynamics:
   equation-of-state: {type: ideal-moist, limiter: false}
   reconstruct:

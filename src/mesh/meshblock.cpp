@@ -1096,44 +1096,64 @@ void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
   op.eos = phydro->peos.get();
   op.coord = pcoord.get();
   bool radiating = has_radiating_boundary();
-  auto w = hydro;
-  auto r = tracers;
+  bool has_tracers = tracers.defined() && tracers.size(0) > 0;
   if (radiating) {
     TORCH_CHECK(vars.count("boundary_reference_w"),
                 "outflow: missing initial boundary reference");
     op.reference = vars.at("boundary_reference_w");
-    if (!primitive) w = phydro->peos->compute("U->W", {hydro.clone()});
-    if (tracers.defined() && tracers.size(0)) {
-      r = primitive ? tracers : tracers / w[IDN];
-      op.tracers = r;
+    if (has_tracers) {
       TORCH_CHECK(vars.count("boundary_reference_r"),
                   "outflow: missing initial tracer reference");
       op.tracer_reference = vars.at("boundary_reference_r");
     }
   }
+
+  torch::Tensor w, r;
+  std::vector<int> pending_faces;
+  // Consecutive radiating faces share one primitive conversion. Commit their
+  // ghosts before another callback so it sees the selected representation and
+  // the results of preceding faces, including corners.
+  auto flush = [&]() {
+    if (pending_faces.empty()) return;
+    auto u = phydro->peos->compute("W->U", {w});
+    auto s = has_tracers ? r * w[IDN] : torch::Tensor();
+    for (int f : pending_faces) {
+      int dim = 3 - f / 2, ng = op.nghost();
+      int start = f % 2 ? hydro.size(dim) - ng : 0;
+      hydro.narrow(dim, start, ng).copy_(u.narrow(dim, start, ng));
+      if (has_tracers)
+        tracers.narrow(dim, start, ng).copy_(s.narrow(dim, start, ng));
+    }
+    pending_faces.clear();
+  };
+
   for (int f = 0; f < options->bfuncs().size(); ++f) {
     auto const &fn = options->bfuncs()[f];
     int dim = 3 - f / 2;
     if (!fn || hydro.size(dim) == 1) continue;
-    op.type(primitive || radiating ? kPrimitive : kConserved);
-    fn(w, dim, op);
-    if (r.defined() && r.size(0) && !(radiating && is_outflow(fn))) {
-      op.type(kScalar);
-      fn(r, dim, op);
+    if (radiating && is_outflow(fn)) {
+      if (primitive) {
+        w = hydro;
+        r = tracers;
+      } else if (pending_faces.empty()) {
+        w = phydro->peos->compute("U->W", {hydro.clone()});
+        r = has_tracers ? tracers / w[IDN] : torch::Tensor();
+      }
+      op.type(kPrimitive);
+      op.tracers = has_tracers ? r : torch::Tensor();
+      fn(w, dim, op);
+      if (!primitive) pending_faces.push_back(f);
+    } else {
+      flush();
+      op.tracers = torch::Tensor();
+      op.type(primitive ? kPrimitive : kConserved);
+      fn(hydro, dim, op);
+      if (has_tracers) {
+        op.type(kScalar);
+        fn(tracers, dim, op);
+      }
     }
   }
-  if (radiating && !primitive) {
-    auto u = phydro->peos->compute("W->U", {w});
-    auto s = r.defined() && r.size(0) ? r * w[IDN] : torch::Tensor();
-    // Do not round-trip active cells or internal process ghosts.
-    for (int f = 0; f < options->bfuncs().size(); ++f) {
-      int dim = 3 - f / 2, ng = op.nghost();
-      if (!options->bfuncs()[f] || hydro.size(dim) == 1) continue;
-      int start = f % 2 ? hydro.size(dim) - ng : 0;
-      hydro.narrow(dim, start, ng).copy_(u.narrow(dim, start, ng));
-      if (s.defined())
-        tracers.narrow(dim, start, ng).copy_(s.narrow(dim, start, ng));
-    }
-  }
+  flush();
 }
 }  // namespace snap

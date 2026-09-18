@@ -145,6 +145,7 @@ void radiating(torch::Tensor const& var, int dim, BoundaryFuncOptions op,
     TORCH_CHECK(
         torch::isfinite(c).all().item<bool>() && (c > 0).all().item<bool>(),
         "outflow: invalid EOS sound speed");
+    // EOS sound speed has spatial axes only, unlike the 4D hydro tensor.
     return c.narrow(dim - 1, src, 1);
   };
   auto c0 = sound(b), c = sound(w);
