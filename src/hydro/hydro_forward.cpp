@@ -86,11 +86,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       int is = pmb->pcoord->il();
       int iu = pmb->pcoord->iu();
       for (int c : {(int)IPR, (int)IDN}) {
-        if (phys_x1inner) {
+        if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0])) {
           w[c].narrow(-1, is - ng, ng).copy_(w[c].narrow(-1, is, ng).flip(-1));
         }
 
-        if (phys_x1outer) {
+        if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1])) {
           w[c].narrow(-1, iu + 1, ng)
               .copy_(w[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
         }

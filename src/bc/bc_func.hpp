@@ -29,3 +29,7 @@ struct BCRegistrar {
   void name(torch::Tensor const&, int, snap::BoundaryFuncOptions); \
   static BCRegistrar bc_##name(#name, name);                       \
   void name(torch::Tensor const& var, int dim, snap::BoundaryFuncOptions op)
+
+// Face classification also works for programmatically selected built-in
+// callbacks.
+bool is_outflow(bcfunc_t const& func);

@@ -389,9 +389,6 @@ double MeshBlockImpl::initialize(Variables &vars, char const *restart_file) {
 }
 
 void MeshBlockImpl::initialize_local(Variables &vars) {
-  BoundaryFuncOptions bops;
-  bops.nghost(options->coord()->nghost());
-
   torch::Tensor hydro_w, scalar_r, solid;
 
   //// ------------ (2) Check hydro primitive ------------ ////
@@ -409,41 +406,19 @@ void MeshBlockImpl::initialize_local(Variables &vars) {
               phydro->peos->nvar(), ", ", nc3, ", ", nc2, ", ", nc1,
               "] but got ", hydro_w.sizes());
 
-  //// -------- (3) Apply hydro primitive boundary condition -------- ////
-  if (options->verbose()) {
-    SINFO(MeshBlock) << "applying hydro primitive boundary conditions."
-                     << std::endl;
-  }
-
-  bops.type(kPrimitive);
-  for (int i = 0; i < options->bfuncs().size(); ++i) {
-    if (options->bfuncs()[i] == nullptr) continue;
-    options->bfuncs()[i](vars.at("hydro_w"), 3 - i / 2, bops);
-  }
-
-  //// ----------- (4) Check scalar primitive ---------- ////
   if (pscalar->nvar() > 0) {
-    TORCH_CHECK(vars.count("scalar_r"),
-                "initialize: scalar_r is required for scalar model.");
+    TORCH_CHECK(vars.count("scalar_r"), "initialize: scalar_r is required");
     scalar_r = vars.at("scalar_r");
     TORCH_CHECK(scalar_r.sizes() ==
                     std::vector<int64_t>({pscalar->nvar(), nc3, nc2, nc1}),
-                "initialize: scalar_r has incorrect shape.", " Expected [",
-                pscalar->nvar(), ", ", nc3, ", ", nc2, ", ", nc1, "] but got ",
-                scalar_r.sizes());
-
-    //// ------- (5) Apply scalar primitive boundary condition -------- ////
-    if (options->verbose()) {
-      SINFO(MeshBlock) << "applying scalar primitive boundary conditions."
-                       << std::endl;
-    }
-
-    bops.type(kScalar);
-    for (int i = 0; i < options->bfuncs().size(); ++i) {
-      if (options->bfuncs()[i] == nullptr) continue;
-      options->bfuncs()[i](vars.at("scalar_r"), 3 - i / 2, bops);
-    }
+                "initialize: scalar_r has incorrect shape");
   }
+  // Capture before any physical face fill, independently of mutable inputs.
+  if (has_radiating_boundary()) {
+    vars["boundary_reference_w"] = hydro_w.clone();
+    if (scalar_r.defined()) vars["boundary_reference_r"] = scalar_r.clone();
+  }
+  apply_boundaries(vars, hydro_w, scalar_r, true);
 }
 
 void MeshBlockImpl::initialize_under_mesh(Variables &vars) {
@@ -474,8 +449,6 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
   int64_t nc3 = options->coord()->nc3();
   int64_t nc2 = options->coord()->nc2();
   int64_t nc1 = options->coord()->nc1();
-  BoundaryFuncOptions bops;
-  bops.nghost(options->coord()->nghost());
 
   //// ------ (7) Computer hydro and scalar conserved -------- ////
   if (options->verbose()) {
@@ -511,31 +484,9 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
     vars["fill_solid_hydro_u"] = vars.at("hydro_u");
   }
 
-  //// -------- (9) Apply hydro conservd boundary condition -------- ////
-  if (options->verbose()) {
-    SINFO(MeshBlock) << "applying hydro conserved boundary conditions."
-                     << std::endl;
-  }
-
-  bops.type(kConserved);
-  for (int i = 0; i < options->bfuncs().size(); ++i) {
-    if (options->bfuncs()[i] == nullptr) continue;
-    options->bfuncs()[i](vars.at("hydro_u"), 3 - i / 2, bops);
-  }
-
-  //// ------- (10) Apply scalar conserved boundary condition -------- ////
-  if (pscalar->nvar() > 0) {
-    if (options->verbose()) {
-      SINFO(MeshBlock) << "applying scalar conserved boundary conditions."
-                       << std::endl;
-    }
-
-    bops.type(kScalar);
-    for (int i = 0; i < options->bfuncs().size(); ++i) {
-      if (options->bfuncs()[i] == nullptr) continue;
-      options->bfuncs()[i](vars.at("scalar_s"), 3 - i / 2, bops);
-    }
-  }
+  apply_boundaries(
+      vars, vars.at("hydro_u"),
+      vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor());
 
   //// ---------------- (11) Start timing ----------------- ////
   _time_start = clock();
@@ -754,8 +705,6 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // -------- (5) update ghost zones --------
-  BoundaryFuncOptions bops;
-  bops.nghost(options->coord()->nghost());
 
   if (vars.count("solid")) {
     pib->fill_cons_solid_(hydro_u, vars.at("solid"),
@@ -770,37 +719,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   }
 
-  // (5.A) apply hydro boundary
-  bops.type(kConserved);
-  for (int i = 0; i < options->bfuncs().size(); ++i) {
-    if (options->bfuncs()[i] == nullptr) continue;
-    options->bfuncs()[i](hydro_u, 3 - i / 2, bops);
-  }
-  if (options->verbose()) {
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    SINFO(MeshBlock) << "stage " << stage
-                     << " hydro boundary condition time (s): "
-                     << elapsed.count() << std::endl;
-    start = std::chrono::high_resolution_clock::now();
-  }
-
-  // (5.B) apply scalar boundary
-  if (pscalar->nvar() > 0) {
-    bops.type(kScalar);
-    for (int i = 0; i < options->bfuncs().size(); ++i) {
-      if (options->bfuncs()[i] == nullptr) continue;
-      options->bfuncs()[i](scalar_s, 3 - i / 2, bops);
-    }
-    if (options->verbose()) {
-      auto end = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> elapsed = end - start;
-      SINFO(MeshBlock) << "stage " << stage
-                       << " scalar boundary condition time (s): "
-                       << elapsed.count() << std::endl;
-      start = std::chrono::high_resolution_clock::now();
-    }
-  }
+  apply_boundaries(vars, hydro_u, scalar_s);
 
   // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
@@ -1130,6 +1049,22 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
     vars[name] = tensor.to(torch::Device(options->device_str()));
   }
 
+  if (has_radiating_boundary()) {
+    TORCH_CHECK(
+        data.count("boundary_reference_w") &&
+            (pscalar->nvar() == 0 || data.count("boundary_reference_r")),
+        "Characteristic outflow restart is missing boundary reference "
+        "tensors. Initialize afresh or select extrapolation.");
+    for (auto key : {"boundary_reference_w", "boundary_reference_r"}) {
+      if (vars.count(key))
+        vars[key] = vars.at(key).to(vars.at("hydro_u").options());
+    }
+    // Validate without changing the serialized numerical state.
+    apply_boundaries(
+        vars, vars.at("hydro_u").clone(),
+        vars.count("scalar_s") ? vars.at("scalar_s").clone() : torch::Tensor());
+  }
+
   // remove timing data
   vars.erase("last_time");
   vars.erase("last_cycle");
@@ -1143,4 +1078,62 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   return current_time;
 }
 
+bool MeshBlockImpl::has_radiating_boundary() const {
+  if (phydro->peos->options->type() == "shallow-water") return false;
+  for (int f = 0; f < options->bfuncs().size(); ++f) {
+    int nc = f / 2 == 0   ? pcoord->options->nc1()
+             : f / 2 == 1 ? pcoord->options->nc2()
+                          : pcoord->options->nc3();
+    if (nc > 1 && is_outflow(options->bfuncs()[f])) return true;
+  }
+  return false;
+}
+
+void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
+                                     torch::Tensor tracers, bool primitive) {
+  BoundaryFuncOptions op;
+  op.nghost(pcoord->options->nghost());
+  op.eos = phydro->peos.get();
+  op.coord = pcoord.get();
+  bool radiating = has_radiating_boundary();
+  auto w = hydro;
+  auto r = tracers;
+  if (radiating) {
+    TORCH_CHECK(vars.count("boundary_reference_w"),
+                "outflow: missing initial boundary reference");
+    op.reference = vars.at("boundary_reference_w");
+    if (!primitive) w = phydro->peos->compute("U->W", {hydro.clone()});
+    if (tracers.defined() && tracers.size(0)) {
+      r = primitive ? tracers : tracers / w[IDN];
+      op.tracers = r;
+      TORCH_CHECK(vars.count("boundary_reference_r"),
+                  "outflow: missing initial tracer reference");
+      op.tracer_reference = vars.at("boundary_reference_r");
+    }
+  }
+  for (int f = 0; f < options->bfuncs().size(); ++f) {
+    auto const &fn = options->bfuncs()[f];
+    int dim = 3 - f / 2;
+    if (!fn || hydro.size(dim) == 1) continue;
+    op.type(primitive || radiating ? kPrimitive : kConserved);
+    fn(w, dim, op);
+    if (r.defined() && r.size(0) && !(radiating && is_outflow(fn))) {
+      op.type(kScalar);
+      fn(r, dim, op);
+    }
+  }
+  if (radiating && !primitive) {
+    auto u = phydro->peos->compute("W->U", {w});
+    auto s = r.defined() && r.size(0) ? r * w[IDN] : torch::Tensor();
+    // Do not round-trip active cells or internal process ghosts.
+    for (int f = 0; f < options->bfuncs().size(); ++f) {
+      int dim = 3 - f / 2, ng = op.nghost();
+      if (!options->bfuncs()[f] || hydro.size(dim) == 1) continue;
+      int start = f % 2 ? hydro.size(dim) - ng : 0;
+      hydro.narrow(dim, start, ng).copy_(u.narrow(dim, start, ng));
+      if (s.defined())
+        tracers.narrow(dim, start, ng).copy_(s.narrow(dim, start, ng));
+    }
+  }
+}
 }  // namespace snap

@@ -451,4 +451,29 @@ Coordinate CoordinateImpl::create(CoordinateOptions const& opts,
     TORCH_CHECK(false, "Unknown coordinate type: ", opts->type());
   }
 }
+void CoordinateImpl::boundary_velocity_(torch::Tensor const& w, int axis,
+                                        bool inverse) const {
+  TORCH_CHECK(axis >= 1 && axis <= 3, "Invalid boundary axis");
+  auto c = cosine_cell_kj;
+  auto s = (1. - c.square()).sqrt();
+  // The only nonorthogonal metric is g23. Velocities in orthogonal
+  // spherical/cylindrical coordinates already use physical components.
+  if (axis == 2) {
+    if (inverse) {
+      w[IVY].div_(s);
+      w[IVZ].sub_(c * w[IVY]);
+    } else {
+      w[IVZ].add_(c * w[IVY]);
+      w[IVY].mul_(s);
+    }
+  } else {
+    if (inverse) {
+      w[IVZ].div_(s);
+      w[IVY].sub_(c * w[IVZ]);
+    } else {
+      w[IVY].add_(c * w[IVZ]);
+      w[IVZ].mul_(s);
+    }
+  }
+}
 }  // namespace snap

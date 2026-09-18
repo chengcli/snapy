@@ -5,6 +5,7 @@
 enable_testing()
 
 setup_test(test_eos)
+setup_test(test_radiating_boundary)
 setup_test(test_plm)
 setup_test(test_weno)
 setup_test(test_reconstruct)

@@ -26,6 +26,8 @@ dynamics:
   riemann-solver:
     type: hllc
 
+# outflow radiates perturbations about the initial Sod states. Use
+# extrapolation to reproduce the former nearest-cell copy boundaries.
 boundary-condition:
   internal:
     solid-density: 1.e3

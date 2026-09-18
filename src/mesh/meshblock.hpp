@@ -152,6 +152,9 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   double initialize(Variables& vars, char const* restart_file = nullptr);
   void initialize_local(Variables& vars);
+  bool has_radiating_boundary() const;
+  void apply_boundaries(Variables& vars, torch::Tensor hydro,
+                        torch::Tensor tracers = {}, bool primitive = false);
 
   //! Mesh-owned initialization path that preserves multi-block exchange order.
   void initialize_under_mesh(Variables& vars);

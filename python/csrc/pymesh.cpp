@@ -212,20 +212,26 @@ void bind_mesh(py::module& m) {
       .def("get_outputs",
            [](snap::MeshBlockImpl& self) { return self.output_types; })
       .def(
+          "apply_boundaries",
+          [](snap::MeshBlockImpl& self, snap::Variables vars,
+             torch::Tensor hydro, std::optional<torch::Tensor> tracers,
+             bool primitive) {
+            self.apply_boundaries(vars, hydro,
+                                  tracers.value_or(torch::Tensor()), primitive);
+          },
+          py::arg("vars"), py::arg("hydro"), py::arg("tracers") = py::none(),
+          py::arg("primitive") = false)
+      .def(
           "apply_hydro_bc",
-          [](snap::MeshBlockImpl& self, torch::Tensor var, int type) {
-            snap::BoundaryFuncOptions bops;
-            bops.nghost(self.options->coord()->nghost());
+          [](snap::MeshBlockImpl& self, torch::Tensor var, int type,
+             snap::Variables vars) {
             if (type != snap::kPrimitive && type != snap::kConserved) {
               throw std::runtime_error("Invalid type for apply_hydro_bc.");
             }
-            bops.type(type);
-            for (size_t i = 0; i < self.options->bfuncs().size(); ++i) {
-              if (self.options->bfuncs()[i] == nullptr) continue;
-              self.options->bfuncs()[i](var, 3 - i / 2, bops);
-            }
+            self.apply_boundaries(vars, var, {}, type == snap::kPrimitive);
           },
-          py::arg("var"), py::arg("type") = (int)snap::kConserved);
+          py::arg("var"), py::arg("type") = (int)snap::kConserved,
+          py::arg("vars") = snap::Variables{});
 
   ADD_SNAP_MODULE(Mesh, MeshOptions)
       .def(py::init<snap::MeshOptions>(), py::arg("options"))
