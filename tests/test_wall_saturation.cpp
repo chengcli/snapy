@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
+#include <torch/torch.h>
 
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <snap/mesh/meshblock.hpp>
-#include <torch/torch.h>
 
 using namespace snap;
 
@@ -12,8 +12,7 @@ class WallSaturation : public testing::TestWithParam<torch::DeviceType> {};
 
 TEST_P(WallSaturation, phase_change_preserves_energy_and_water) {
   auto device = torch::Device(GetParam());
-  if (device.is_cuda() && !torch::cuda::is_available())
-    GTEST_SKIP();
+  if (device.is_cuda() && !torch::cuda::is_available()) GTEST_SKIP();
   torch::set_num_threads(1);
   for (bool condense : {true, false}) {
     SCOPED_TRACE(condense ? "condensation" : "evaporation");
@@ -32,8 +31,7 @@ TEST_P(WallSaturation, phase_change_preserves_energy_and_water) {
       w[IPR].fill_(1.e5);
       w[IDN].fill_(1.e5 / (rgas * temp));
       auto z = b->pcoord->x1v;
-      if (upper)
-        z = 64. - z;
+      if (upper) z = 64. - z;
       if (condense) {
         w[ICY].copy_((q0 * (1. + 2. * torch::exp(-z / 6.))).view({1, 1, -1}));
       } else {
@@ -84,6 +82,6 @@ INSTANTIATE_TEST_SUITE_P(
                     torch::kCUDA
 #endif
                     ),
-    [](const testing::TestParamInfo<torch::DeviceType> &info) {
+    [](const testing::TestParamInfo<torch::DeviceType>& info) {
       return torch::Device(info.param).str();
     });
