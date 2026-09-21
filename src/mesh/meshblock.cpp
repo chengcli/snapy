@@ -719,8 +719,6 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   }
 
-  apply_boundaries(vars, hydro_u, scalar_s);
-
   // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
       phydro->options->eos()->thermo()->reactions().size() > 0) {
@@ -752,6 +750,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       start = std::chrono::high_resolution_clock::now();
     }
   }
+
+  // Physical ghosts must include the final-stage species adjustment.
+  apply_boundaries(vars, hydro_u, scalar_s);
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
