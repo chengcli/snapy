@@ -31,6 +31,7 @@ setup_test(test_diffusion)
 setup_test(test_diffusion_moist)
 setup_test(test_condensate_conservation)
 setup_test(test_wall_saturation)
+setup_test(test_wall_saturation_grav)
 setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 
