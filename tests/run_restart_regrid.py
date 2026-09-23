@@ -133,6 +133,12 @@ def main() -> int:
             np.abs(u[n][sl] / rho - frac).max() < 1e-12)
     check("primitive pressure falls like density",
           np.abs(w[4][sl] / (rho * CV_T * 0.4) - 1.0).max() < 2.0e-3)
+    # P/rho is proportional to T/mu, so a constant one means the extension
+    # above the old lid is isothermal rather than slowly drifting.
+    t_like = w[4][sl] / rho
+    check("extension stays isothermal",
+          np.abs(t_like / t_like[0] - 1.0).max() < 1.0e-9,
+          f"max drift {np.abs(t_like / t_like[0] - 1.0).max():.2e}")
 
     # A widening domain needs the periodic x2 resample, and refuses without it.
     wide_cfg = config(760.0e3, 180)

@@ -19,7 +19,7 @@ What is mapped, and how:
                  nearly straight in z, so this is accurate inside the old domain
                  and, continued above it along a fitted slope, is an isothermal
                  constant-mu extension.
-  pressure       the same, in the primitive arrays.
+  pressure       carried as P/rho, so the extension stays isothermal.
   velocity       linear in height, held at the edge value outside.
   specific       linear in height, held at the edge value outside. Constant
   energy         specific internal energy at fixed composition is isothermal,
@@ -206,12 +206,16 @@ def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: 
 
     for v in range(1, src.shape[0]):
         role = roles[v]
-        if conserved and role in (VEL, EOP, FRAC):
-            # Momentum, total energy and tracer densities are all rho times a
-            # per-unit-mass quantity; that quantity is what stays smooth.
+        # Momentum, total energy and tracer densities are all rho times a
+        # per-unit-mass quantity, and that quantity is what stays smooth.
+        # Pressure is the same case: carrying P/rho rather than P keeps the
+        # extension isothermal, where extrapolating log(P) and log(rho) along
+        # separately fitted slopes lets their small mismatch drift the
+        # temperature (194 K instead of 255 K over 160 km, on one test).
+        if role == EOP or (conserved and role in (VEL, FRAC)):
             out[v] = map_x1(src[v] / rho, z_old, z_new, False, nfit) * rho_new
         else:
-            out[v] = map_x1(src[v], z_old, z_new, role == EOP, nfit)
+            out[v] = map_x1(src[v], z_old, z_new, False, nfit)
 
     if new.nc2 != old.nc2:
         out = resample_x2_periodic(out, new.nc2, new.nghost)
