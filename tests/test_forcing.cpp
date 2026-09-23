@@ -531,8 +531,16 @@ TEST(forcing, implicit_correction_reports_total_energy_delta) {
             0.);
 }
 
-TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
+// One hydro forward with the VIC on: {column energy residual
+// sum V*(dE + phi*dmass) + dt*boundary flux, energy tendency, dry clamp fired}.
+std::tuple<double, torch::Tensor, bool> implicit_gravity_energy(
+    double pres, double top_rho, double dt, double x1shift = 0.) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_gravity_energy.yaml");
+  auto oc = options->coord();
+  oc->global_x1min(oc->global_x1min() + x1shift);
+  oc->global_x1max(oc->global_x1max() + x1shift);
+  oc->x1min(oc->x1min() + x1shift);
+  oc->x1max(oc->x1max() + x1shift);
 
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
@@ -546,14 +554,14 @@ TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                          coord->options->nc2(), coord->options->nc1()},
                         torch::kFloat64);
-  w[IDN] = 1. + 0.05 * coord->x1v;
+  w[IDN] = 1. + 0.05 * (coord->x1v - x1shift);
+  if (top_rho > 0.) w[IDN].select(-1, coord->iu()).fill_(top_rho);
   w[IVX].zero_();
-  w[IPR].fill_(1.e5);
+  w[IPR].fill_(pres);
 
   Variables vars;
   vars["hydro_w"] = w;
   block->initialize(vars);
-  double dt = 0.1;
   auto du = block->phydro->forward(dt, vars.at("hydro_u"), vars);
 
   int is = coord->il();
@@ -577,8 +585,25 @@ TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
       (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
        coord->face_area1().select(-1, is) * mechanical_flux.select(-1, is))
           .sum();
-  EXPECT_NEAR(integrated_du.item<double>(),
-              (-dt * boundary_flux).item<double>(), 1.e-9);
+  return {(integrated_du + dt * boundary_flux).item<double>(),
+          du[IPR].slice(-1, is, ie).clone(),
+          block->phydro->picorr->dry_clamp_step().item<double>() > 0.};
+}
+
+TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
+  auto [residual, energy, clamped] = implicit_gravity_energy(1.e5, 0., 0.1);
+  EXPECT_FALSE(clamped);
+  EXPECT_NEAR(residual, 0., 1.e-9);
+}
+
+// A clamp breaks drho*V == M(i) - M(i+1); the work must not pick up the
+// absolute potential, so a constant shift of x1 leaves every cell unchanged.
+TEST(forcing, implicit_gravity_work_ignores_the_potential_origin_under_clamp) {
+  auto [r0, e0, clamped0] = implicit_gravity_energy(10., 1.e-3, 1.);
+  auto [r1, e1, clamped1] = implicit_gravity_energy(10., 1.e-3, 1., 1.e3);
+  ASSERT_TRUE(clamped0 && clamped1);
+  EXPECT_LT((e1 - e0).abs().max().item<double>(),
+            1.e-9 * e0.abs().max().item<double>());
 }
 
 // Below the temperature floor the RK average must report a limiter patch; at
