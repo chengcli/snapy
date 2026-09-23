@@ -113,6 +113,12 @@ MeshBlock
       dictionary contains live variables and recursive named buffers from the
       mesh block without copying tensor storage.
 
+      Tracers are carried per unit DRY air, so dry air a forcing creates or
+      removes takes the cell's own tracer ratio with it automatically -- a
+      forcing that writes the density row must NOT also hand-correct
+      ``"scalar_ds"`` for it, or the tracer moves twice. Return ``"scalar_ds"``
+      only for a tracer source that arrives without dry air.
+
       :param filenames: TorchScript ``.pt`` files in execution order
       :type filenames: Sequence[str]
 

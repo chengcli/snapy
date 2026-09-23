@@ -237,6 +237,13 @@ modules run sequentially in list order during every integration stage.
 Because a mesh shares the modules across its local blocks, ``forward`` must not
 mutate module state.
 
+The example above writes the dry-air row. Tracers are carried
+per unit dry air, so dry air a forcing creates or removes takes the cell's own
+tracer ratio with it automatically; a forcing that writes ``hydro_du[kIDN]``
+must not also hand-correct ``scalar_ds`` for that air, or the tracers move
+twice. Return ``scalar_ds`` on its own for a tracer source that arrives without
+dry air. See ``set_user_stage_forcings`` in the API reference.
+
 GPU Acceleration
 ----------------
 
