@@ -570,18 +570,20 @@ TEST(UserForcing, scripted_stage_forcings_add_tendencies_in_list_order) {
       torch::ones({1, nc3, nc2, nc1}, torch::dtype(torch::kFloat64));
   vars["scalar_r"] = vars["scalar_s"] / vars["hydro_u"][IDN].unsqueeze(0);
 
+  // first: a tracer source that arrives without dry air (scalar_ds only).
+  // second: dry air, whose tracers the block now carries at the cell's own r.
   auto first =
-      save_stage_forcing("snapy_stage_forcing_first", 0.25, false, true);
+      save_stage_forcing("snapy_stage_forcing_first", 0.0, false, true);
   auto second = save_stage_forcing("snapy_stage_forcing_second", 0.5);
   block->set_user_stage_forcings({first.string(), second.string()});
 
   block->advance_local(vars, 0.0, 0);
 
   auto hydro_u = vars.at("hydro_u");
-  EXPECT_TRUE(torch::allclose(
-      hydro_u[IDN], torch::full_like(hydro_u[IDN], 1.75), 1.e-12, 1.e-12));
+  EXPECT_TRUE(torch::allclose(hydro_u[IDN], torch::full_like(hydro_u[IDN], 1.5),
+                              1.e-12, 1.e-12));
   EXPECT_TRUE(torch::allclose(vars["scalar_s"],
-                              torch::full_like(vars["scalar_s"], 1.25), 1.e-12,
+                              torch::full_like(vars["scalar_s"], 1.75), 1.e-12,
                               1.e-12));
   std::filesystem::remove(first);
   std::filesystem::remove(second);

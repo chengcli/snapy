@@ -664,6 +664,11 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   };
 
+  // a stage forcing's dry air carries the cell's own r, like a native forcing's
+  auto user_dry_before = (!user_stage_forcings.empty() && pscalar->nvar() > 0 &&
+                          vars.count("scalar_r"))
+                             ? fut_hydro_du[IDN].clone()
+                             : torch::Tensor();
   if (!user_stage_forcings.empty()) {
     auto inputs = stage_forcing_variables(*this, vars);
     for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
@@ -673,6 +678,10 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   }
 
+  if (user_dry_before.defined()) {
+    fut_scalar_ds.add_(vars.at("scalar_r") *
+                       (fut_hydro_du[IDN] - user_dry_before));
+  }
   if (!user_stage_forcings.empty()) {
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
