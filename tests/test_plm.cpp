@@ -1,6 +1,9 @@
 // C/C++
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 // external
 #include <gtest/gtest.h>
@@ -163,6 +166,32 @@ TEST_P(DeviceTest, interp_plm_torch3) {
 
       EXPECT_NEAR(result2l, resultl[0][1].item<double>(), 2.E-6);
       EXPECT_NEAR(result2r, resultr[0][1].item<double>(), 2.E-6);
+    }
+  }
+}
+
+// Round-off-sized slopes: the old FLT_MIN-guarded denominator divided 0/0.
+TEST_P(DeviceTest, interp_plm_round_off_slopes_stay_finite) {
+  PLMInterp interp;
+  interp->to(device, dtype);
+
+  std::vector<std::array<double, 3>> stencils = {
+      {std::numeric_limits<float>::min(), 0., 0.}};
+  if (dtype == torch::kFloat64) {
+    stencils.push_back({-1.97568603841971563e-23, -1.97568603841971622e-23,
+                        -1.97568603841971681e-23});
+    stencils.push_back({3.81738396164642948e-24, 3.81738396164642948e-24,
+                        3.81738396164641773e-24});
+  }
+  for (auto const &s : stencils) {
+    auto phi = torch::tensor({s[0], s[1], s[2]}, torch::kFloat64)
+                   .to(torch::device(device).dtype(dtype));
+    auto [resultl, resultr] = interp->forward(phi, 0);
+    ASSERT_TRUE(torch::isfinite(resultl).all().item<bool>());
+    ASSERT_TRUE(torch::isfinite(resultr).all().item<bool>());
+    if (dtype == torch::kFloat64) {
+      EXPECT_EQ(interp_plm(s[0], s[1], s[2]), resultl.item<double>());
+      EXPECT_EQ(interp_plm(s[2], s[1], s[0]), resultr.item<double>());
     }
   }
 }
