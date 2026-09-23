@@ -1,0 +1,31 @@
+# Companion to test_diffusion.yaml with x2 resolved and walled, so the wall-face
+# coefficient is exercised with the face axis in the middle of the tensor.
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 6., x2min: 0., x2max: 6., x3min: 0., x3max: 1.}
+  cells: {nx1: 6, nx2: 6, nx3: 1, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+
+forcing:
+  diffusion:
+    nu_iso: 0.5
+    kappa_iso: 0.25
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting

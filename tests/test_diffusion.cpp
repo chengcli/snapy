@@ -27,6 +27,15 @@ std::shared_ptr<MeshBlockImpl> make_block() {
       MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml"));
 }
 
+void make_x1_periodic(MeshBlockOptions const& options) {
+  options->bfuncs()[BoundaryFace::kInnerX1] =
+      get_bc_func().at("periodic_inner");
+  options->bfuncs()[BoundaryFace::kOuterX1] =
+      get_bc_func().at("periodic_outer");
+  options->bcnames()[BoundaryFace::kInnerX1] = "periodic_inner";
+  options->bcnames()[BoundaryFace::kOuterX1] = "periodic_outer";
+}
+
 std::shared_ptr<MeshBlockImpl> make_periodic_block(int nx1) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
   options->coord()->global_nx1() = nx1;
@@ -34,6 +43,7 @@ std::shared_ptr<MeshBlockImpl> make_periodic_block(int nx1) {
   options->coord()->global_x1max() = 2. * M_PI;
   options->coord()->x1max() = 2. * M_PI;
   options->hydro()->diffusion()->kappa_iso() = 0.;
+  make_x1_periodic(options);
   return std::make_shared<MeshBlockImpl>(options);
 }
 
@@ -53,6 +63,38 @@ void fill_periodic_x1(torch::Tensor const& var, int nghost) {
   options.type(kPrimitive).nghost(nghost);
   get_bc_func().at("periodic_inner")(var, 3, options);
   get_bc_func().at("periodic_outer")(var, 3, options);
+}
+
+void fill_reflecting_x1(torch::Tensor const& var, int nghost) {
+  BoundaryFuncOptions options;
+  options.type(kPrimitive).nghost(nghost);
+  get_bc_func().at("reflecting_inner")(var, 3, options);
+  get_bc_func().at("reflecting_outer")(var, 3, options);
+}
+
+//! Density linear in x1 with slope kRhoSlope, then reflected so that the x1
+//! ghosts hold the MIRROR of the first active cell instead of the value the
+//! linear profile has there -- exactly what `reflecting` installs in a
+//! stratified atmosphere. Temperature is linear over ALL cells, ghosts
+//! included, so dT/dn is the same at every face and the conductive flux is
+//! proportional to the face density alone.
+constexpr double kRho0 = 1.0, kRhoSlope = 0.2, kTemp0 = 300.0,
+                 kTempSlope = 10.0;
+
+torch::Tensor make_linear_state(std::shared_ptr<MeshBlockImpl> const& block,
+                                torch::Device device, torch::Dtype dtype,
+                                torch::Tensor* temp) {
+  auto coord = block->pcoord;
+  auto w = torch::zeros(
+      {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      torch::device(device).dtype(dtype));
+  auto x = coord->x1v.to(device, dtype).view({1, 1, -1});
+  *temp = kTemp0 + kTempSlope * x;
+  w[IDN] = kRho0 + kRhoSlope * x;
+  fill_reflecting_x1(w, coord->options->nghost());
+  auto Rd = 8.31446261815324 / block->phydro->peos->options->weight();
+  w[IPR] = w[IDN] * Rd * (*temp);
+  return w;
 }
 
 }  // namespace
@@ -162,6 +204,185 @@ TEST_P(DeviceTest, viscous_sine_mode_matches_analytic_decay) {
   auto expected = torch::sin(x) * std::exp(-nu * time);
   EXPECT_TRUE(torch::allclose(w[IVY].index(interior), expected.index(interior),
                               3.e-4, 3.e-4));
+}
+
+// On a linear density profile the two-cell average is exact on
+// every INTERIOR face, so a uniform dT/dn gives the same tendency in every
+// interior cell -- unless the wall face reads the ghost, which the reflecting
+// fill has put off the profile. Reading the ghost halves the tendency in the
+// two wall cells while leaving the interior right.
+TEST_P(DeviceTest, wall_face_coefficient_reads_no_ghost) {
+  auto block = make_block();
+  block->to(device, dtype);
+  torch::Tensor temp;
+  auto w = make_linear_state(block, device, dtype, &temp);
+  auto du = torch::zeros_like(w);
+
+  block->phydro->pdiffusion->forward(du, w, temp, 0.1);
+
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto got = du[IPR].index(interior);
+  auto cv_ref = block->phydro->peos->species_cv_ref();
+  auto expected = 0.1 * block->phydro->pdiffusion->options->kappa_iso() *
+                  cv_ref * kTempSlope * kRhoSlope;
+  EXPECT_TRUE(
+      torch::allclose(got, torch::full_like(got, expected), 1.e-5, 1.e-5))
+      << "du[IPR] over the interior: " << got;
+}
+
+// x1 ONLY, deliberately. The same construction along x2 must therefore give the
+// two-cell-average answer, not the extrapolated one: at a lateral `reflecting`
+// face the mirror may be a genuine symmetry, where the average is the better
+// estimate. This pins the decision rather than leaving it to inspection.
+TEST_P(DeviceTest, x2_wall_is_not_one_sided) {
+  auto block = std::make_shared<MeshBlockImpl>(
+      MeshBlockOptionsImpl::from_yaml("test_diffusion_2d.yaml"));
+  block->to(device, dtype);
+  auto coord = block->pcoord;
+  auto w = torch::zeros(
+      {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      torch::device(device).dtype(dtype));
+  auto y = coord->x2v.to(device, dtype).view({1, -1, 1});
+  auto temp = (kTemp0 + kTempSlope * y).expand_as(w[IDN]).contiguous();
+  w[IDN] = kRho0 + kRhoSlope * y;
+  {
+    BoundaryFuncOptions bops;
+    bops.type(kPrimitive).nghost(coord->options->nghost());
+    get_bc_func().at("reflecting_inner")(w, 2, bops);
+    get_bc_func().at("reflecting_outer")(w, 2, bops);
+  }
+  auto Rd = 8.31446261815324 / block->phydro->peos->options->weight();
+  w[IPR] = w[IDN] * Rd * temp;
+
+  auto du = torch::zeros_like(w);
+  block->phydro->pdiffusion->forward(du, w, temp, 0.1);
+
+  int ng = coord->options->nghost();
+  auto cv_ref = block->phydro->peos->species_cv_ref();
+  auto full = 0.1 * block->phydro->pdiffusion->options->kappa_iso() * cv_ref *
+              kTempSlope * kRhoSlope;
+  // mirrored ghost, two-cell average => the wall row sits half a slope short
+  EXPECT_NEAR(du[IPR][0][ng][ng].item<double>(), 0.5 * full, 1.e-4 * full);
+}
+
+// The same state under a periodic x1: the ghost is then the true wrapped
+// neighbour, so the two-cell average is correct and the wall extrapolation
+// must NOT fire. The deliberately off-profile ghost makes the two answers
+// differ, so this discriminates.
+TEST_P(DeviceTest, periodic_x1_face_is_not_extrapolated) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  make_x1_periodic(options);
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  block->to(device, dtype);
+  torch::Tensor temp;
+  auto w = make_linear_state(block, device, dtype, &temp);
+  auto du = torch::zeros_like(w);
+
+  block->phydro->pdiffusion->forward(du, w, temp, 0.1);
+
+  int nghost = block->pcoord->options->nghost();
+  auto cv_ref = block->phydro->peos->species_cv_ref();
+  auto full = 0.1 * block->phydro->pdiffusion->options->kappa_iso() * cv_ref *
+              kTempSlope * kRhoSlope;
+  // mirrored ghost => the wrap face average sits half a slope short
+  EXPECT_NEAR(du[IPR][0][0][nghost].item<double>(), 0.5 * full, 1.e-4 * full);
+}
+
+// Only reflecting fills the ghost with a physical state sitting at the wrong
+// place, which is the one case the wall branch may extrapolate past. Everything
+// else -- including a caller-supplied function whose name was never recorded --
+// must keep the two-cell average.
+TEST(diffusion_options, only_reflecting_counts_as_a_wall) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  EXPECT_TRUE(options->is_wall_boundary(0, 0, -1));
+  EXPECT_TRUE(options->is_wall_boundary(0, 0, 1));
+
+  for (std::string name : {"periodic", "outflow", "custom"}) {
+    options->bfuncs()[BoundaryFace::kInnerX1] =
+        get_bc_func().at(name + "_inner");
+    options->bcnames()[BoundaryFace::kInnerX1] = name + "_inner";
+    EXPECT_FALSE(options->is_wall_boundary(0, 0, -1)) << name;
+    EXPECT_TRUE(options->is_physical_boundary(0, 0, -1)) << name;
+  }
+
+  // `solid` writes a bare 1 into every variable, so its GRADIENT is nonsense
+  // too and a coefficient fix would not rescue the face
+  options->bfuncs()[BoundaryFace::kInnerX1] = get_bc_func().at("solid_inner");
+  options->bcnames()[BoundaryFace::kInnerX1] = "solid_inner";
+  EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
+
+  // an unnamed function, e.g. one installed from Python, is not a wall
+  options->bcnames()[BoundaryFace::kInnerX1] = "";
+  EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
+
+  // a name that merely BEGINS with the whitelisted one is not it either
+  options->bfuncs()[BoundaryFace::kInnerX1] =
+      get_bc_func().at("reflecting_inner");
+  options->bcnames()[BoundaryFace::kInnerX1] = "reflecting_sponge_inner";
+  EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
+
+  // and neither is anything once the two records disagree in length
+  options->bcnames().clear();
+  EXPECT_FALSE(options->is_wall_boundary(0, 0, 1));
+}
+
+// The property the wall branch asserts is that the coefficient
+// reads no ghost, so the wall flux must not depend on the ghost DENSITY at all.
+// Two states differing ONLY in that ghost must give the same tendency.
+//
+// This is the only gate here that reaches the VISCOUS wall coefficient, which
+// is the branch that is live in production: at a reflecting wall the mirror
+// makes dT/dn vanish, so the conductive coefficient multiplies zero and a
+// conduction-only gate can be satisfied by code that still reads the ghost for
+// the momentum flux. The normal velocity is mirrored ODD here, so the wall
+// carries a real stress and rho_face genuinely matters.
+TEST_P(DeviceTest, wall_flux_does_not_depend_on_the_ghost_density) {
+  auto arm = [&](bool ghost_on_profile) {
+    auto block = make_block();
+    block->to(device, dtype);
+    auto coord = block->pcoord;
+    int ng = coord->options->nghost();
+    int nc1 = coord->options->nc1();
+    auto w =
+        torch::zeros({5, coord->options->nc3(), coord->options->nc2(), nc1},
+                     torch::device(device).dtype(dtype));
+    auto x = coord->x1v.to(device, dtype).view({1, 1, -1});
+    auto profile = kRho0 + kRhoSlope * x;
+    auto temp = kTemp0 + kTempSlope * x;
+
+    w[IDN] = profile;
+    w[IVX] = 1.0;               // reflected ODD below: a live wall stress
+    fill_reflecting_x1(w, ng);  // rho ghost becomes the mirror
+    if (ghost_on_profile) {     // ... or the linear continuation instead
+      w[IDN].narrow(-1, 0, ng).copy_(profile.narrow(-1, 0, ng));
+      w[IDN].narrow(-1, nc1 - ng, ng).copy_(profile.narrow(-1, nc1 - ng, ng));
+    }
+    // pressure from the PROFILE in both arms, so the ghost density is the only
+    // difference between them
+    auto Rd = 8.31446261815324 / block->phydro->peos->options->weight();
+    w[IPR] = profile * Rd * temp;
+
+    auto du = torch::zeros_like(w);
+    block->phydro->pdiffusion->forward(du, w, temp, 0.1);
+    return du;
+  };
+
+  auto mirrored = arm(false);
+  auto continued = arm(true);
+  auto block = make_block();
+  int ng = block->pcoord->options->nghost();
+  // The quantity under test must be NONZERO, or this gate degenerates exactly
+  // the way the conduction-only gates did: equality of two arms is satisfied
+  // trivially by anything that makes the wall flux vanish.
+  EXPECT_GT(std::abs(mirrored[IVX][0][0][ng].item<double>()), 1.e-6)
+      << "the wall viscous tendency is zero, so this gate proves nothing";
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  for (int n = 0; n < 5; ++n) {
+    auto a = mirrored[n].index(interior);
+    auto b = continued[n].index(interior);
+    EXPECT_TRUE(torch::allclose(a, b, 1.e-10, 1.e-10))
+        << "du[" << n << "] moved with the ghost density: " << a - b;
+  }
 }
 
 TEST_P(DeviceTest, timestep_uses_largest_diffusivity) {
