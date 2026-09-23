@@ -33,7 +33,24 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, int nx1) {
       i--;
     } while (sum_vapor < 0. && i >= ie);
 
-    if (i < ie && sum_vapor < 0.) return 1;  // fail
+    if (i < ie && sum_vapor < 0.) {
+      // below is exhausted: take the shortfall from above, untouched on failure
+      T deficit = -sum_vapor;
+      T above = 0.;
+      for (int j = is + 1; j < nx1; ++j) {
+        if (major[j] <= 0.) return 1;
+        above += vapor[j];
+      }
+      if (above < deficit) return 1;
+
+      for (int j = is; j >= ie; --j) vapor[j] = 0.;
+      for (int j = is + 1; j < nx1 && deficit > 0.; ++j) {
+        T take = vapor[j] < deficit ? vapor[j] : deficit;
+        vapor[j] -= take;
+        deficit -= take;
+      }
+      return 0;
+    }
 
     // redistribute concentrations from is (inclusive) to i (exclusive)
     T yfrac = sum_vapor / sum_major;
