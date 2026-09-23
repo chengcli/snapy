@@ -109,6 +109,10 @@ class OutputType {
   int file_number = 0;
   double next_time = 0.0;
 
+  //! stable identity of this output block (file type, dt, variables), stored in
+  //! restart files
+  int64_t schedule_key() const;
+
   // constructors
   OutputType() : options(OutputOptionsImpl::create()) {}
 

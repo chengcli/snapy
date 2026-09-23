@@ -11,6 +11,14 @@
 #include "output_utils.hpp"
 
 namespace snap {
+int64_t OutputType::schedule_key() const {
+  std::string id = options->file_type() + "|" + std::to_string(options->dt());
+  for (auto const &v : options->variables()) id += "|" + v;
+  uint64_t h = 14695981039346656037ull;
+  for (unsigned char c : id) h = (h ^ c) * 1099511628211ull;
+  return static_cast<int64_t>(h);
+}
+
 namespace {
 std::string first_output_name(std::string const &name) {
   auto end = name.find_first_of(";,");
