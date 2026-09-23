@@ -122,7 +122,7 @@ torch::Tensor InternalBoundaryImpl::rectify_solid(
   op.type(kScalar);
 
   auto solid_inner = get_bc_func()["solid_inner"];
-  auto solid_outer = get_bc_func()["solid_inner"];
+  auto solid_outer = get_bc_func()["solid_outer"];
 
   solid_inner(solid, DIM1, op);
   solid_outer(solid, DIM1, op);
