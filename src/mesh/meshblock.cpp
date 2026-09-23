@@ -582,6 +582,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (1) save initial state --------
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
+    if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
+    _limiter_patched = torch::zeros({}, hydro_u.options().dtype(torch::kBool));
 
     if (pscalar->nvar() > 0) {
       _scalar_s0.copy_(scalar_s);
@@ -699,7 +701,18 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, hydro_u, fut_hydro_du));
-  phydro->peos->apply_conserved_limiter_(hydro_u);
+  if (phydro->options->eos()->limiter()) {
+    auto interior = part({0, 0, 0}, PartOptions().exterior(false));
+    auto dens_energy = [&] {  // density only where the EOS has no energy row
+      auto u = hydro_u.index(interior);
+      return u.size(0) > IPR ? torch::stack({u[IDN], u[IPR]}) : u[IDN].clone();
+    };
+    auto before = dens_energy();
+    phydro->peos->apply_conserved_limiter_(hydro_u);
+    _limiter_patched.logical_or_(dens_energy().ne(before).any());
+  } else {
+    phydro->peos->apply_conserved_limiter_(hydro_u);
+  }
 
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
@@ -1031,13 +1044,22 @@ bool MeshBlockImpl::floor_hit(Variables const &vars) {
   return hit;
 }
 
-int MeshBlockImpl::apply_redo(Variables &vars, bool redo) {
-  if (redo) {
+bool MeshBlockImpl::vic_dry_clamp_hit() const {
+  return phydro->picorr && phydro->picorr->dry_clamp_step().item<double>() > 0.;
+}
+
+bool MeshBlockImpl::limiter_patch_hit() const {
+  return _limiter_patched.defined() && _limiter_patched.item<bool>();
+}
+
+int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
+  if (causes) {
     SINFO(MeshBlock)
-        << "Density/pressure at or within 0.1% of the floor. Redoing the step "
-           "with "
-           "smaller dt."
-        << std::endl;
+        << "Density/pressure at or within 0.1% of the floor, the VIC dry-gas "
+           "clamp emptied a cell, or the limiter patched one. Redoing the "
+           "step with smaller dt (causes:"
+        << (causes & 1 ? " floor" : "") << (causes & 2 ? " clamp" : "")
+        << (causes & 4 ? " limiter" : "") << ")." << std::endl;
     pintg->current_redo += 1;
     if (pintg->current_redo > pintg->options->max_redo()) {
       SINFO(MeshBlock)
@@ -1065,14 +1087,17 @@ int MeshBlockImpl::apply_redo(Variables &vars, bool redo) {
 }
 
 int MeshBlockImpl::check_redo(Variables &vars) {
-  // dt is global, so the decision must be: MAX over every rank
+  // dt is global, so the decision must be: MAX over every rank, per cause
   auto flag =
-      torch::tensor({floor_hit(vars) ? 1. : 0.}, torch::dtype(torch::kFloat64));
+      torch::tensor({floor_hit(vars) ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,
+                     limiter_patch_hit() ? 1. : 0.},
+                    torch::dtype(torch::kFloat64));
   std::vector<at::Tensor> flag_reduce = {flag};
   if (_playout->has_process_group()) {
     _playout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
   }
-  return apply_redo(vars, flag_reduce[0].item<double>() > 0.);
+  auto f = flag_reduce[0].accessor<double, 1>();
+  return apply_redo(vars, (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2);
 }
 
 double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {

@@ -581,6 +581,32 @@ TEST(forcing, implicit_gravity_work_uses_redistributed_mass) {
               (-dt * boundary_flux).item<double>(), 1.e-9);
 }
 
+// Below the temperature floor the RK average must report a limiter patch; at
+// 350 K it must not.
+TEST(forcing, limiter_patch_is_reported_below_the_temperature_floor) {
+  for (double pres : {1.e5, 1.e3}) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_gravity_energy.yaml");
+    options->hydro()->eos()->limiter(true);
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    auto coord = block->pcoord;
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.);
+    w[IPR].fill_(pres);
+
+    Variables vars;
+    vars["hydro_w"] = w;
+    block->initialize(vars);
+    vars["hydro_u"][IPR].fill_(pres /
+                               0.4);  // at rest, gamma = 1.4: 3.5 K / 350 K
+    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+      block->forward(vars, 1.e-3, stage);
+    }
+    EXPECT_EQ(block->limiter_patch_hit(), pres < 1.e4) << "pres=" << pres;
+  }
+}
+
 TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
   options->hydro()->diffusion() = nullptr;

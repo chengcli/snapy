@@ -454,22 +454,25 @@ int MeshImpl::check_redo(MeshVariables& vars) {
     return -1;
   }
 
-  // one decision per process: a floor in any block rolls back every block
-  bool hit = false;
+  // one decision per process: a hit in any block rolls back every block
+  auto flag = torch::zeros({3}, torch::dtype(torch::kFloat64));
+  auto h = flag.accessor<double, 1>();
   for (int i = 0; i < blocks.size(); ++i) {
-    hit = blocks[i]->floor_hit(vars[i]) || hit;
+    if (blocks[i]->floor_hit(vars[i])) h[0] = 1.;
+    if (blocks[i]->vic_dry_clamp_hit()) h[1] = 1.;
+    if (blocks[i]->limiter_patch_hit()) h[2] = 1.;
   }
-  auto flag = torch::tensor({hit ? 1. : 0.}, torch::dtype(torch::kFloat64));
   std::vector<at::Tensor> flag_reduce = {flag};
   auto layout = blocks.front()->get_layout();
   if (layout->has_process_group()) {
     layout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
   }
-  bool redo = flag_reduce[0].item<double>() > 0.;
+  auto f = flag_reduce[0].accessor<double, 1>();
+  int causes = (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2;
 
   int out = 0;
   for (int i = 0; i < blocks.size(); ++i) {
-    int err = blocks[i]->apply_redo(vars[i], redo);
+    int err = blocks[i]->apply_redo(vars[i], causes);
     if (err < 0) return -1;
     out = std::max(out, err);
   }

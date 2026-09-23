@@ -108,6 +108,8 @@ void ImplicitHydroImpl::reset() {
   _mass_corr = register_buffer("mass_corr", torch::empty({0}, torch::kFloat64));
   _clamp_residual =
       register_buffer("clamp_residual", torch::zeros({1}, torch::kFloat64));
+  _dry_clamp_step =
+      register_buffer("dry_clamp_step", torch::zeros({1}, torch::kFloat64));
 }
 
 void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
@@ -233,6 +235,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     _clamp_residual.copy_(torch::maximum(
         _clamp_residual, ((lhs - rhs).abs() / scale).max().detach()));
   }
+  _dry_clamp_step.copy_(
+      torch::maximum(_dry_clamp_step, _mass_corr[IPR].max().detach()));
 
   /// (3) De-project from local orthonormal frame
   w[IVZ] /= sin_theta;

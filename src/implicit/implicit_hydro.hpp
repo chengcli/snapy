@@ -85,10 +85,15 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   //! running max relative break of the VIC telescoping identity (clamp meter)
   torch::Tensor clamp_residual() const { return _clamp_residual; }
 
+  //! 1 if the dry-gas clamp emptied a cell since the last reset, else 0
+  torch::Tensor dry_clamp_step() const { return _dry_clamp_step; }
+  void reset_dry_clamp_step() { _dry_clamp_step.zero_(); }
+
  private:
   void ensure_workspace(torch::Tensor const& w);
 
-  torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual;
+  torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual,
+      _dry_clamp_step;
 };
 TORCH_MODULE(ImplicitHydro);
 

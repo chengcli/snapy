@@ -170,9 +170,46 @@ TEST(vic_redistribution, dry_only_transport_is_conservative_and_clamped) {
   EXPECT_NEAR(mass_fix[snap::IVX * stride1 + 1], 2., 1.e-12);
   EXPECT_NEAR(mass_fix[snap::IDN * stride1], -0.25, 1.e-12);
   EXPECT_NEAR(mass_fix[snap::IDN * stride1 + 1], 0.25, 1.e-12);
+  EXPECT_EQ(mass_fix[snap::IPR * stride1], 1.);
+  EXPECT_EQ(mass_fix[snap::IPR * stride1 + 1], 0.);
   EXPECT_NEAR(column_integral(du, vol, snap::IDN, stride1, 0, 1),
               column_integral(original, vol, snap::IDN, stride1, 0, 1), 1.e-12);
   EXPECT_NEAR(w[snap::IDN * stride1] + du[snap::IDN * stride1], 0., 1.e-12);
+}
+
+// The pass-3a clamp acts on the DRY transfer, the marks were gated on the sign
+// of the TOTAL-mass transfer; a donor mass fraction above one splits the two.
+TEST(vic_redistribution,
+     a_negative_dry_fraction_still_marks_the_clamped_donor) {
+  constexpr int nlayer = 2;
+  constexpr int ny = 1;
+  constexpr int nhydro = snap::ICY + ny;
+  constexpr int stride1 = nlayer;
+  constexpr int stride2 = 1;
+
+  std::vector<double> du(nhydro * nlayer, 0.);
+  std::vector<double> w(nhydro * nlayer, 0.);
+  std::vector<double> vol(nlayer, 1.);
+  std::vector<double> mass_fix(nhydro * nlayer, 0.);
+  std::vector<Eigen::Matrix<double, 3, 1>> delta(nlayer);
+
+  w[snap::IDN * stride1 + 0] = 1.;
+  w[snap::IDN * stride1 + 1] = 1.;
+  w[snap::ICY * stride1 + 0] = 1.5;  // donor dry fraction = -0.5
+  w[snap::ICY * stride1 + 1] = 0.9;  // dry availability above it = 0.1
+  delta[0] << -2., 0., 0.;
+  delta[1] << 2., 0., 0.;
+
+  snap::vic_constituent_column<double, 3>(du.data(), w.data(), mass_fix.data(),
+                                          delta.data(), vol.data(), nlayer, 0,
+                                          ny, stride1, stride2);
+
+  // the fixture must REACH the branch: face transfer up, dry transfer down
+  ASSERT_NEAR(mass_fix[snap::IVX * stride1 + 1], 2., 1.e-12);
+  // bound by the upper cell's availability, not by Mf * dryfrac = -1
+  EXPECT_NEAR(mass_fix[snap::IVY * stride1 + 1], -0.1, 1.e-12);
+  EXPECT_EQ(mass_fix[snap::IPR * stride1 + 1], 1.);
+  EXPECT_EQ(mass_fix[snap::IPR * stride1 + 0], 0.);
 }
 
 TEST(implicit_options, parses_implicit_scheme_bits) {
