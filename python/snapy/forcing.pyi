@@ -118,3 +118,11 @@ class DiffusionOptions:
     def kappa_iso(self, value: float) -> "DiffusionOptions":
         """Set thermal diffusivity in units of length squared per time."""
         ...
+
+    @overload
+    def dynamic(self) -> bool:
+        """Read nu_iso as a dynamic viscosity mu and kappa_iso as a conductivity k."""
+        ...
+
+    @overload
+    def dynamic(self, value: bool) -> "DiffusionOptions": ...

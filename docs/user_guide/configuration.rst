@@ -130,15 +130,25 @@ Add constant isotropic viscosity and heat conduction on a Cartesian mesh:
 
     forcing:
       diffusion:
-        nu_iso: 0.0         # Kinematic viscosity
-        kappa_iso: 0.0      # Thermal diffusivity (length^2 / time)
+        nu_iso: 0.0         # Kinematic viscosity, or dynamic viscosity mu if dynamic
+        kappa_iso: 0.0      # Thermal diffusivity (length^2 / time), or conductivity k if dynamic
+        dynamic: false      # Read the two above as DYNAMIC coefficients
 
 Diffusion is integrated explicitly and contributes a parabolic time-step
 limit. Curved coordinates, anisotropic coefficients, and spatially varying
-coefficients are not supported. Heat conduction uses the energy flux
-``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local mixture
-specific heat supplied by the equation of state. An EOS without a positive
-reference specific heat at constant volume cannot enable heat conduction.
+coefficients are not supported.
+
+With ``dynamic: false`` (the default) the coefficients are kinematic: the
+viscous flux carries the face-averaged density and heat conduction uses the
+energy flux ``-rho * cv * kappa_iso * grad(T)``, where ``cv`` is the local
+mixture specific heat supplied by the equation of state. An EOS without a
+positive reference specific heat at constant volume cannot enable heat
+conduction.
+
+With ``dynamic: true`` the same two numbers are read as the dynamic viscosity
+``mu`` and the conductivity ``k``: the fluxes are ``-mu * stress`` and
+``-k * grad(T)`` with no face density, and the time-step bound uses
+``mu / rho_min`` and ``k / (rho_min * cv)``.
 
 Implicit Correction
 -------------------

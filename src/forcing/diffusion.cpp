@@ -172,6 +172,7 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   auto op = DiffusionOptionsImpl::create();
   op->nu_iso() = node["nu_iso"].as<double>(0.);
   op->kappa_iso() = node["kappa_iso"].as<double>(0.);
+  op->dynamic() = node["dynamic"].as<bool>(false);
   TORCH_CHECK(op->nu_iso() >= 0.,
               "DiffusionOptions: nu_iso must be non-negative.");
   TORCH_CHECK(op->kappa_iso() >= 0.,
@@ -229,7 +230,7 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
       }
     }
   }
-  if (options->kappa_iso() > 0.) {
+  if (options->kappa_iso() > 0. && !options->dynamic()) {
     rho_cv = w[IDN] * phydro->peos->specific_heat_cv(w, temp);
   }
 
@@ -254,8 +255,12 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     bool wall_lower = idir == 0 && pmb->options->is_wall_boundary(0, 0, -1);
     bool wall_upper = idir == 0 && pmb->options->is_wall_boundary(0, 0, 1);
 
-    auto rho_face = face_coefficient(w[IDN], coord, idir, face_start, face_end,
-                                     wall_lower, wall_upper);
+    // rho at the face; the dynamic form carries no face density
+    torch::Tensor rho_face;
+    if (!options->dynamic()) {
+      rho_face = face_coefficient(w[IDN], coord, idir, face_start, face_end,
+                                  wall_lower, wall_upper);
+    }
 
     if (options->nu_iso() > 0.) {
       auto div_face = face_average(div_vel, idir, face_start, face_end);
@@ -275,7 +280,9 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
                                                shear_start, shear_end));
         }
 
-        auto momentum_flux = -options->nu_iso() * rho_face * stress;
+        auto momentum_flux = options->dynamic()
+                                 ? -options->nu_iso() * stress
+                                 : -options->nu_iso() * rho_face * stress;
         flux[IVX + ivar].index(face_index).copy_(momentum_flux);
         flux[IPR].index(face_index) +=
             face_average(w[IVX + ivar], idir, face_start, face_end) *
@@ -284,13 +291,19 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     }
 
     if (options->kappa_iso() > 0.) {
-      // W->T is in kelvin, so convert thermal diffusivity to conductivity
-      // using the local mixture volumetric heat capacity.
-      flux[IPR].index(face_index) -=
-          options->kappa_iso() *
-          face_coefficient(rho_cv, coord, idir, face_start, face_end,
-                           wall_lower, wall_upper) *
+      auto dtdn =
           face_normal_derivative(temp, coord, idir, face_start, face_end);
+      if (options->dynamic()) {
+        flux[IPR].index(face_index) -= options->kappa_iso() * dtdn;
+      } else {
+        // W->T is in kelvin, so convert thermal diffusivity to conductivity
+        // using the local mixture volumetric heat capacity.
+        flux[IPR].index(face_index) -=
+            options->kappa_iso() *
+            face_coefficient(rho_cv, coord, idir, face_start, face_end,
+                             wall_lower, wall_upper) *
+            dtdn;
+      }
     }
     fluxes[idir] = flux;
   }
@@ -319,7 +332,15 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
   }
 
   if (ndim == 0) return std::numeric_limits<double>::max();
-  auto coeff = std::max(options->nu_iso(), options->kappa_iso());
+  double coeff;
+  if (options->dynamic()) {
+    auto rho_min = w[IDN].index(interior).min().item<double>();
+    double cv = phydro->peos->species_cv_ref();
+    coeff = std::max(options->nu_iso() / rho_min,
+                     cv > 0. ? options->kappa_iso() / (rho_min * cv) : 0.);
+  } else {
+    coeff = std::max(options->nu_iso(), options->kappa_iso());
+  }
   if (coeff == 0.) return std::numeric_limits<double>::max();
   return dx_min * dx_min / (2. * ndim * coeff);
 }

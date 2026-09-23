@@ -163,11 +163,14 @@ struct DiffusionOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- diffusion options --\n";
     os << "* nu_iso = " << nu_iso() << "\n"
-       << "* kappa_iso = " << kappa_iso() << "\n";
+       << "* kappa_iso = " << kappa_iso() << "\n"
+       << "* dynamic = " << (dynamic() ? "true" : "false") << "\n";
   }
 
   ADD_ARG(double, nu_iso) = 0.;
   ADD_ARG(double, kappa_iso) = 0.;
+  //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
+  ADD_ARG(bool, dynamic) = false;
 };
 using DiffusionOptions = std::shared_ptr<DiffusionOptionsImpl>;
 
