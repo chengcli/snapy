@@ -20,8 +20,27 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
                                                bool /*verbose*/) {
   auto config = YAML::LoadFile(filename);
   if (!config["integration"]) return nullptr;
-  if (!config["integration"]["implicit-scheme"]) return nullptr;
-  return from_yaml(config["integration"]["implicit-scheme"]);
+  auto intg = config["integration"];
+  auto op =
+      intg["implicit-scheme"] ? from_yaml(intg["implicit-scheme"]) : nullptr;
+  if (!op) {
+    TORCH_CHECK(!intg["implicit-advection-cfl"] && !intg["shear-cfl"],
+                "integration/implicit-advection-cfl and shear-cfl bound an "
+                "implicit direction: set implicit-scheme or remove them");
+    return nullptr;
+  }
+  {
+    op->advection_cfl(
+        config["integration"]["implicit-advection-cfl"].as<double>(1.0));
+    TORCH_CHECK(op->advection_cfl() > 0.,
+                "integration/implicit-advection-cfl must be > 0, got ",
+                op->advection_cfl(), " (use a large value to relax the bound)");
+    op->shear_cfl(config["integration"]["shear-cfl"].as<double>(0.0));
+    TORCH_CHECK(op->shear_cfl() >= 0.,
+                "integration/shear-cfl must be >= 0, got ", op->shear_cfl(),
+                " (0 switches the bound off)");
+  }
+  return op;
 }
 
 ImplicitOptions ImplicitOptionsImpl::from_yaml(const YAML::Node& node) {
