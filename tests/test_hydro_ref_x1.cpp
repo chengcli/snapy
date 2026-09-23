@@ -31,10 +31,8 @@ RefOutput allocate_output(torch::Tensor const& w) {
 }
 
 RefOutput tensor_reference(torch::Tensor const& w, torch::Tensor const& dx1f,
-                           torch::Tensor const& anchor_in,
-                           torch::Tensor const& gam, int is, int iu,
-                           double grav, bool uniform, bool phys_in,
-                           bool phys_out) {
+                           torch::Tensor const& anchor_in, int iu, double grav,
+                           bool uniform, bool phys_in, bool phys_out) {
   int nc1 = w.size(-1);
   auto rho = w[snap::IDN];
   auto dp = grav * rho * dx1f;
@@ -110,10 +108,19 @@ RefOutput tensor_reference(torch::Tensor const& w, torch::Tensor const& dx1f,
                                 dp / torch::log(ratio)));
   }
 
-  auto kbot = w[snap::IPR].select(-1, is).unsqueeze(-1) /
-              rho.select(-1, is).unsqueeze(-1).pow(gam);
-  out.dref.copy_((out.pref / kbot).pow(1.0 / gam));
-  out.dsf.copy_((out.psf_lo / kbot).pow(1.0 / gam));
+  auto rop = rho / w[snap::IPR];
+  auto lo_edge = rop.narrow(-1, 0, 1);
+  auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
+  auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);
+  auto rs = (pad.narrow(-1, 0, nc1) + 4. * pad.narrow(-1, 1, nc1) +
+             6. * pad.narrow(-1, 2, nc1) + 4. * pad.narrow(-1, 3, nc1) +
+             pad.narrow(-1, 4, nc1)) /
+            16.;
+  auto rf = rs.clone();
+  rf.narrow(-1, 1, nc1 - 1)
+      .copy_(0.5 * (rs.narrow(-1, 0, nc1 - 1) + rs.narrow(-1, 1, nc1 - 1)));
+  out.dref.copy_(out.pref * rs);
+  out.dsf.copy_(out.psf_lo * rf);
   return out;
 }
 
@@ -121,7 +128,6 @@ struct Inputs {
   torch::Tensor w;
   torch::Tensor dx1f;
   torch::Tensor anchor;
-  torch::Tensor gam;
 };
 
 Inputs make_inputs(torch::ScalarType dtype, bool uniform, bool with_anchor) {
@@ -136,20 +142,18 @@ Inputs make_inputs(torch::ScalarType dtype, bool uniform, bool with_anchor) {
   w[snap::IPR].copy_(100.0 - 0.15 * x + 0.03 * column);
   auto dx1f = uniform ? torch::full({nc1}, 0.1, options)
                       : torch::linspace(0.08, 0.13, nc1, options);
-  auto gam = torch::full({nc3, nc2, 1}, 1.4, options);
   torch::Tensor anchor;
   if (with_anchor) {
     anchor = (95.0 + 0.02 * column).contiguous();
   }
-  return {w, dx1f, anchor, gam};
+  return {w, dx1f, anchor};
 }
 
 void dispatch(Inputs const& in, RefOutput const& out, bool uniform,
               bool phys_in, bool phys_out) {
   at::native::call_hydro_ref_x1(in.w.device().type(), in.w, in.dx1f, in.anchor,
-                                in.gam, torch::Tensor(), out.psf_lo, out.psf_hi,
-                                out.pref, out.dsf, out.dref, 2, 7, 1.0, uniform,
-                                phys_in, phys_out);
+                                out.psf_lo, out.psf_hi, out.pref, out.dsf,
+                                out.dref, 7, 1.0, uniform, phys_in, phys_out);
 }
 
 void expect_close(RefOutput const& actual, RefOutput const& expected,
@@ -167,8 +171,8 @@ TEST(HydroRefX1Dispatch, cpu_matches_tensor_reference) {
       for (bool with_anchor : {false, true}) {
         auto in = make_inputs(dtype, uniform, with_anchor);
         bool physical = !with_anchor;
-        auto expected = tensor_reference(in.w, in.dx1f, in.anchor, in.gam, 2, 7,
-                                         1.0, uniform, physical, physical);
+        auto expected = tensor_reference(in.w, in.dx1f, in.anchor, 7, 1.0,
+                                         uniform, physical, physical);
         auto actual = allocate_output(in.w);
         dispatch(in, actual, uniform, physical, physical);
         double tolerance = dtype == torch::kFloat32 ? 2.e-5 : 2.e-12;
@@ -189,8 +193,7 @@ TEST(HydroRefX1Dispatch, cuda_matches_cpu) {
     dispatch(cpu_in, expected, uniform, false, false);
 
     Inputs gpu_in = {cpu_in.w.to(torch::kCUDA), cpu_in.dx1f.to(torch::kCUDA),
-                     cpu_in.anchor.to(torch::kCUDA),
-                     cpu_in.gam.to(torch::kCUDA)};
+                     cpu_in.anchor.to(torch::kCUDA)};
     auto actual = allocate_output(gpu_in.w);
     dispatch(gpu_in, actual, uniform, false, false);
     expect_close({actual.psf_lo.cpu(), actual.psf_hi.cpu(), actual.pref.cpu(),

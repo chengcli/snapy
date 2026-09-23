@@ -20,10 +20,11 @@ inline DISPATCH_MACRO T hydro_ref_x1_face(T const* psf_lo, T const* psf_hi,
 }
 
 template <typename T>
-inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(
-    T const* w, T const* dx1f, T const* anchor, T const* gam, T const* kbot_in,
-    T* psf_lo, T* psf_hi, int column, int ncolumns, int nc1, int is, int iu,
-    T grav, T* kbot, T* inv_gamma) {
+inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
+                                                  T const* anchor, T* psf_lo,
+                                                  T* psf_hi, int column,
+                                                  int ncolumns, int nc1, int iu,
+                                                  T grav) {
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
   T top_anchor;
@@ -56,30 +57,30 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(
     psf_hi[flat + i] = hi > min_positive ? hi : min_positive;
     face = hi;
   }
+}
 
-  T gamma = gam[column];
-  // kbot_in (relayed from the block owning the PHYSICAL bottom, hydro.cpp)
-  // makes the density reference a SINGLE global isentrope across an x1 (nb1>1)
-  // decomposition. The block-local fallback is the nb1=1 path, bit-unchanged.
-  // A per-block kbot made adjacent blocks decompose rho against different
-  // isentropes, so the two sides of every x1 seam reconstructed different
-  // face states -- one of the two defects behind the decomposition-dependent
-  // convective vigor.
-  if (kbot_in) {
-    *kbot = kbot_in[column];
-  } else {
-    T rho_bot = w[IDN * ncells + flat + is];
-    T pres_bot = w[IPR * ncells + flat + is];
-    *kbot = pres_bot / pow(rho_bot, gamma);
+//! rho/p smoothed by a clamped 5-point binomial along x1: the reference must
+//! track the column profile at LARGE scales only. An unsmoothed local rho/p
+//! makes rho' degenerate with the pressure perturbation, so entropy/buoyancy
+//! anomalies bypass the high-order reconstruction; a bottom-anchored
+//! isentrope reference errs by orders of magnitude on a stratified column.
+template <typename T>
+inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
+                                                int flat, int nc1, int i) {
+  T v[5];
+  for (int m = -2; m <= 2; ++m) {
+    int j = i + m;
+    j = j < 0 ? 0 : (j >= nc1 ? nc1 - 1 : j);
+    v[m + 2] = w[IDN * ncells + flat + j] / w[IPR * ncells + flat + j];
   }
-  *inv_gamma = T(1) / gamma;
+  return (v[0] + T(4) * v[1] + T(6) * v[2] + T(4) * v[3] + v[4]) / T(16);
 }
 
 template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     T const* w, T const* dx1f, T const* psf_lo, T const* psf_hi, T* pref,
     T* dsf, T* dref, int column, int i, int ncolumns, int nc1, T grav,
-    bool uniform, bool phys_in, bool phys_out, T kbot, T inv_gamma) {
+    bool uniform, bool phys_in, bool phys_out) {
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
   T lo = psf_lo[flat + i];
@@ -135,24 +136,24 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   }
 
   pref[flat + i] = cell_pref;
-  dref[flat + i] = pow(cell_pref / kbot, inv_gamma);
-  dsf[flat + i] = pow(lo / kbot, inv_gamma);
+  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i);
+  T rf = i > 0 ? T(0.5) *
+                     (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1) + rs)
+               : rs;
+  dref[flat + i] = cell_pref * rs;
+  dsf[flat + i] = lo * rf;
 }
 
 template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_impl(
-    T const* w, T const* dx1f, T const* anchor, T const* gam, T const* kbot_in,
-    T* psf_lo, T* psf_hi, T* pref, T* dsf, T* dref, int column, int ncolumns,
-    int nc1, int is, int iu, T grav, bool uniform, bool phys_in,
-    bool phys_out) {
-  T kbot;
-  T inv_gamma;
-  hydro_ref_x1_scan_impl(w, dx1f, anchor, gam, kbot_in, psf_lo, psf_hi, column,
-                         ncolumns, nc1, is, iu, grav, &kbot, &inv_gamma);
+    T const* w, T const* dx1f, T const* anchor, T* psf_lo, T* psf_hi, T* pref,
+    T* dsf, T* dref, int column, int ncolumns, int nc1, int iu, T grav,
+    bool uniform, bool phys_in, bool phys_out) {
+  hydro_ref_x1_scan_impl(w, dx1f, anchor, psf_lo, psf_hi, column, ncolumns, nc1,
+                         iu, grav);
   for (int i = 0; i < nc1; ++i) {
     hydro_ref_x1_cell_impl(w, dx1f, psf_lo, psf_hi, pref, dsf, dref, column, i,
-                           ncolumns, nc1, grav, uniform, phys_in, phys_out,
-                           kbot, inv_gamma);
+                           ncolumns, nc1, grav, uniform, phys_in, phys_out);
   }
 }
 
