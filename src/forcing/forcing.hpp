@@ -393,11 +393,16 @@ struct RelaxBotTempOptionsImpl {
   void report(std::ostream& os) const {
     os << "-- relax bottom temperature options --\n";
     os << "* tau = " << tau() << "\n"
-       << "* btemp = " << btemp() << "\n";
+       << "* btemp = " << btemp() << "\n"
+       << "* at-face = " << (at_face() ? "true" : "false") << "\n";
   }
 
   ADD_ARG(double, tau) = 0.0;
   ADD_ARG(double, btemp) = 300.0;
+
+  //! relax the extrapolated bottom-FACE temperature instead of the first
+  //! cell-centre temperature
+  ADD_ARG(bool, at_face) = false;
 };
 using RelaxBotTempOptions = std::shared_ptr<RelaxBotTempOptionsImpl>;
 
