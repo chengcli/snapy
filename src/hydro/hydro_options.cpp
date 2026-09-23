@@ -69,6 +69,26 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   auto forcing = config["forcing"];
   if (!forcing) return op;
 
+  // Same rationale as the dynamics sweep above.
+  for (auto const& item : forcing) {
+    auto key = item.first.as<std::string>();
+    TORCH_CHECK(key != "fric-heat",
+                "HydroOptions: 'forcing/fric-heat' has been removed. The x1 "
+                "face gravity work already carries the sedimentation channel "
+                "of the mass flux, so this key would apply the "
+                "precipitation potential-energy release twice. Delete it.");
+    TORCH_CHECK(
+        key == "const-gravity" || key == "coriolis" || key == "diffusion" ||
+            key == "body-heat" || key == "top-cool" || key == "bot-heat" ||
+            key == "relax-bot-comp" || key == "relax-bot-temp" ||
+            key == "relax-bot-velo" || key == "top-sponge-lyr" ||
+            key == "bot-sponge-lyr" || key == "plume-forcing",
+        "HydroOptions: unknown key 'forcing/", key,
+        "'. Valid keys: const-gravity, coriolis, diffusion, body-heat, "
+        "top-cool, bot-heat, relax-bot-comp, relax-bot-temp, relax-bot-velo, "
+        "top-sponge-lyr, bot-sponge-lyr, plume-forcing.");
+  }
+
   op->grav() = ConstGravityOptionsImpl::from_yaml(forcing);
   if (op->grav()) {
     if (op->disable_flux_x1()) op->grav()->grav1(0.);
@@ -82,9 +102,6 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
 
   op->diffusion() = DiffusionOptionsImpl::from_yaml(forcing);
   if (op->diffusion()) op->diffusion()->report(SINFO(HydroOptions));
-
-  op->fricHeat() = FricHeatOptionsImpl::from_yaml(forcing);
-  if (op->fricHeat()) op->fricHeat()->report(SINFO(HydroOptions));
 
   op->bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
   if (op->bodyHeat()) op->bodyHeat()->report(SINFO(HydroOptions));
@@ -128,7 +145,6 @@ HydroOptions HydroOptionsImpl::clone() const {
   if (grav()) op->grav() = grav()->clone();
   if (coriolis()) op->coriolis() = coriolis()->clone();
   if (diffusion()) op->diffusion() = diffusion()->clone();
-  if (fricHeat()) op->fricHeat() = fricHeat()->clone();
   if (bodyHeat()) op->bodyHeat() = bodyHeat()->clone();
   if (topCool()) op->topCool() = topCool()->clone();
   if (botHeat()) op->botHeat() = botHeat()->clone();

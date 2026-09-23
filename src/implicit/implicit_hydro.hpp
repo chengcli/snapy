@@ -78,10 +78,13 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor correction() const { return _corr; }
   torch::Tensor mass_correction() const { return _mass_corr; }
 
+  //! running max relative break of the VIC telescoping identity (clamp meter)
+  torch::Tensor clamp_residual() const { return _clamp_residual; }
+
  private:
   void ensure_workspace(torch::Tensor const& w);
 
-  torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr;
+  torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual;
 };
 TORCH_MODULE(ImplicitHydro);
 

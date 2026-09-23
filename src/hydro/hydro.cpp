@@ -114,6 +114,12 @@ void HydroImpl::reset() {
 
   _positivity_hits =
       register_buffer("positivity_hits", torch::zeros({1}, torch::kInt64));
+  _positivity_severe =
+      register_buffer("positivity_severe", torch::zeros({1}, torch::kInt64));
+  _positivity_min =
+      register_buffer("positivity_min", torch::ones({1}, torch::kFloat64));
+  _lim_cut = register_buffer("lim_cut", torch::zeros({1}, torch::kFloat64));
+  _lim_flux = register_buffer("lim_flux", torch::zeros({1}, torch::kFloat64));
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {

@@ -57,6 +57,9 @@ SedHydroImpl::SedHydroImpl(SedHydroOptions const& options_,
 
 void SedHydroImpl::reset() {
   TORCH_CHECK(phydro, "[SedHydro] Parent Hydro is null");
+  TORCH_CHECK(
+      phydro->options->grav(),
+      "[SedHydro] sedimentation reads grav1; set forcing/const-gravity");
 
   psedvel = SedVelImpl::create(options->sedvel(), this);
 
