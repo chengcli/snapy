@@ -52,6 +52,7 @@ Documentation = "https://snapy.readthedocs.io"
 [project.scripts]
 pd-combine = "snapy.api.pd_combine:main"
 pd-inspect = "snapy.api.pd_inspect:main"
+pd-regrid = "snapy.api.pd_regrid:main"
 
 
 [tool.setuptools]
