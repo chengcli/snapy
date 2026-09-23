@@ -1,0 +1,49 @@
+# Six cubed-sphere panels in one process: the tracer positivity limiter must conserve across a
+# PANEL SEAM (the slab test cannot cross one). Dry ideal gas, no gravity, solid-body wind set by
+# the test; nx1 > 1 is required (one radial cell leaves the radial geometric source unbalanced).
+reference-state: {Tref: 300., Pref: 1.e5}
+species:
+  - name: dry
+    composition: {H: 1.64813, He: 0.17591}
+    cv_R: 2.5
+geometry:
+  type: gnomonic-equiangle
+  bounds: {x1min: 6.0e6, x1max: 8.0e6, x2min_pi: -0.25, x2max_pi: 0.25, x3min_pi: -0.25, x3max_pi: 0.25}
+  cells: {nx1: 4, nx2: 12, nx3: 12, nghost: 3}
+distribute:
+  layout: cubed-sphere
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 6
+  verbose: false
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    density-floor: 1.e-20
+    pressure-floor: 1.e-20
+    limiter: true
+  reconstruct:
+    vertical:   {type: weno5, scale: true, shock: true}
+    horizontal: {type: plm,   scale: true, shock: false}
+  riemann-solver: {type: hllc}
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom
+integration:
+  type: rk3
+  cfl: 0.5
+  implicit-scheme: 0
+  nlim: 40
+  tlim: 1.e12
+  ncycle_out: 0
+scalar:
+  nvar: 2
+  names: [hat, complement]
+  reconstruct: {type: weno5, scale: true, shock: true}
+  riemann-solver: {type: upwind}
+  upper-bound: 1.0

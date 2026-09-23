@@ -18,6 +18,7 @@ species:
   - name: NH4SH
     composition: {N: 1, H: 5, S: 1}
     cv_R: 9.0
+    u0_R: -1.2e4
 
 reactions:
   - equation: NH3 + H2S <=> NH4SH

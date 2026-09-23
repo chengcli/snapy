@@ -454,13 +454,26 @@ int MeshImpl::check_redo(MeshVariables& vars) {
     return -1;
   }
 
-  int redo = 0;
+  // one decision per process: a floor in any block rolls back every block
+  bool hit = false;
   for (int i = 0; i < blocks.size(); ++i) {
-    int err = blocks[i]->check_redo(vars[i]);
-    if (err < 0) return -1;
-    redo = std::max(redo, err);
+    hit = blocks[i]->floor_hit(vars[i]) || hit;
   }
-  return redo;
+  auto flag = torch::tensor({hit ? 1. : 0.}, torch::dtype(torch::kFloat64));
+  std::vector<at::Tensor> flag_reduce = {flag};
+  auto layout = blocks.front()->get_layout();
+  if (layout->has_process_group()) {
+    layout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
+  }
+  bool redo = flag_reduce[0].item<double>() > 0.;
+
+  int out = 0;
+  for (int i = 0; i < blocks.size(); ++i) {
+    int err = blocks[i]->apply_redo(vars[i], redo);
+    if (err < 0) return -1;
+    out = std::max(out, err);
+  }
+  return out;
 }
 
 void MeshImpl::set_cycle(int cycle) {
