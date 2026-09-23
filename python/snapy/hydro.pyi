@@ -163,6 +163,15 @@ class HydroOptions:
         """Set implicit correction options."""
         ...
 
+    @overload
+    def wb_wall_clamp(self) -> bool:
+        """Clamp the well-balanced x1 reference stencils to interior cells at a
+        physical wall. Default True; `dynamics: {wb-wall-clamp: false}` opts out."""
+        ...
+
+    @overload
+    def wb_wall_clamp(self, value: bool) -> "HydroOptions": ...
+
 class Hydro:
     """
     Hydrodynamics implementation.

@@ -6,6 +6,9 @@
 // external
 #include <gtest/gtest.h>
 
+// torch
+#include <torch/torch.h>
+
 // snap
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -125,5 +128,91 @@ TEST(hydro_options, reject_unsupported_implicit_scheme) {
               std::string::npos)
         << e.what();
   }
+  std::remove(f.c_str());
+}
+
+// No card in the tree sets wb-wall-clamp, so the shipped default IS the
+// production path. test_hydro_ref_x1.cpp calls the dispatch directly and says
+// nothing about which value a run gets; this pins the default and the key.
+TEST(hydro_options, wb_wall_clamp_ships_enabled) {
+  auto write = [](std::string const &fname, std::string const &extra) {
+    std::ofstream f(fname);
+    f << "dynamics:\n"
+         "  equation-of-state:\n"
+         "    type: ideal-gas\n"
+      << extra;
+  };
+  std::string f = "test_wb_wall_clamp.yaml";
+
+  write(f, "");
+  EXPECT_TRUE(snap::HydroOptionsImpl::from_yaml(f)->wb_wall_clamp())
+      << "wb-wall-clamp no longer ships enabled";
+
+  // ...and the key is still read, so a card can still turn it off
+  write(f, "  wb-wall-clamp: false\n");
+  EXPECT_FALSE(snap::HydroOptionsImpl::from_yaml(f)->wb_wall_clamp());
+
+  std::remove(f.c_str());
+}
+
+// The wb-wall-clamp option has exactly one wire into the solver, in
+// HydroImpl::_hydro_ref_x1. Every other test drives call_hydro_ref_x1 with a
+// literal bool, so replacing that wire with `false` leaves all of them green.
+// This one runs both settings through a block and requires them to differ.
+TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
+  std::string f = "test_wb_wall_clamp_wire.yaml";
+  {
+    std::ofstream o(f);
+    o << "reference-state:\n"
+         "  Tref: 300.\n"
+         "  Pref: 1.e5\n"
+         "species:\n"
+         "  - name: dry\n"
+         "    composition: {O: 0.42, N: 1.56, Ar: 0.01}\n"
+         "    cv_R: 2.5\n"
+         "geometry:\n"
+         "  type: cartesian\n"
+         "  bounds: {x1min: 0., x1max: 16., x2min: 0., x2max: 1., x3min: 0., "
+         "x3max: 1.}\n"
+         "  cells: {nx1: 16, nx2: 1, nx3: 1, nghost: 3}\n"
+         "dynamics:\n"
+         "  equation-of-state:\n"
+         "    type: ideal-gas\n"
+         "  reconstruct:\n"
+         "    vertical: {type: weno5, scale: false, shock: false}\n"
+         "    horizontal: {type: weno5, scale: false, shock: false}\n"
+         "forcing:\n"
+         "  const-gravity:\n"
+         "    grav1: -1.\n"
+         "boundary-condition:\n"
+         "  external:\n"
+         "    x1-inner: reflecting\n"
+         "    x1-outer: reflecting\n";
+  }
+
+  auto run = [&f](bool clamp) {
+    auto options = snap::MeshBlockOptionsImpl::from_yaml(f);
+    options->hydro()->wb_wall_clamp() = clamp;
+    auto block = std::make_shared<snap::MeshBlockImpl>(options);
+    auto coord = block->pcoord;
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    // A stratification the wall rows can disagree about: on a uniform column
+    // the two references coincide whatever the clamp does.
+    w[snap::IDN] = 1. + 0.05 * coord->x1v;
+    w[snap::IPR].fill_(1.e5);
+    snap::Variables vars;
+    vars["hydro_w"] = w;
+    block->initialize(vars);
+    return block->phydro->forward(1.e-3, vars.at("hydro_u"), vars);
+  };
+
+  auto clamped = run(true);
+  auto unclamped = run(false);
+  EXPECT_FALSE(torch::allclose(clamped, unclamped, 1.e-13, 1.e-13))
+      << "wb-wall-clamp changed nothing: the option no longer reaches "
+         "HydroImpl::_hydro_ref_x1";
+
   std::remove(f.c_str());
 }

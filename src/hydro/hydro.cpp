@@ -371,9 +371,9 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
 
   auto dx1f = pcoord->dx1f.contiguous();
-  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, psf_lo,
-                                psf_hi, pref, dsf, dref, iu, g,
-                                x1_uniform_ == 1, phys_in, phys_out);
+  at::native::call_hydro_ref_x1(
+      w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
+      g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
 
   if (below >= 0) {
     constexpr int kWbRefTag = 0x7715;

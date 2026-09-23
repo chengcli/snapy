@@ -16,7 +16,7 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& psf_hi, torch::Tensor const& pref,
                       torch::Tensor const& dsf, torch::Tensor const& dref,
                       int iu, double grav, bool uniform, bool phys_in,
-                      bool phys_out) {
+                      bool phys_out, bool wall_clamp) {
   int ncolumns = w.size(1) * w.size(2);
   int nc1 = w.size(3);
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "hydro_ref_x1_cpu", [&] {
@@ -28,7 +28,7 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
             psf_lo.data_ptr<scalar_t>(), psf_hi.data_ptr<scalar_t>(),
             pref.data_ptr<scalar_t>(), dsf.data_ptr<scalar_t>(),
             dref.data_ptr<scalar_t>(), static_cast<int>(column), ncolumns, nc1,
-            iu, scalar_t(grav), uniform, phys_in, phys_out);
+            iu, scalar_t(grav), uniform, phys_in, phys_out, wall_clamp);
       }
     });
   });
@@ -39,8 +39,10 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& psf_lo, torch::Tensor const& psf_hi,
                       torch::Tensor const& pref, torch::Tensor const& dsf,
                       torch::Tensor const& dref, int iu, double grav,
-                      bool uniform, bool phys_in, bool phys_out) {
+                      bool uniform, bool phys_in, bool phys_out,
+                      bool wall_clamp) {
   int nc1 = w.size(-1);
+  int il = nc1 - 1 - iu;
   auto rho = w[IDN];
   auto dp = grav * rho * dx1f;
   auto cum = torch::cumsum(dp, -1);
@@ -77,6 +79,36 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
         {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
          -11. / 1440.},
     };
+    // At a PHYSICAL wall the stencil never crosses it
+    if (wall_clamp && phys_in) {
+      for (int j : {il, il + 1}) {
+        int sigma = j - il;
+        auto val = w6e[sigma][0] * faces.select(-1, il);
+        for (int m = 1; m < 6; ++m)
+          val += w6e[sigma][m] * faces.select(-1, il + m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(
+            torch::where((val >= flo) & (val <= fhi), val,
+                         0.5 * (psf_lo.select(-1, j) + psf_hi.select(-1, j))));
+      }
+    }
+    if (wall_clamp && phys_out) {
+      int s0 = iu + 1 - 5;
+      for (int j : {iu - 1, iu}) {
+        int row = 4 - (j - s0);
+        auto val = w6e[row][5] * faces.select(-1, s0);
+        for (int m = 1; m < 6; ++m)
+          val += w6e[row][5 - m] * faces.select(-1, s0 + m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(
+            torch::where((val >= flo) & (val <= fhi), val,
+                         0.5 * (psf_lo.select(-1, j) + psf_hi.select(-1, j))));
+      }
+    }
     if (!phys_in) {
       for (int j : {0, 1}) {
         auto val = w6e[j][0] * faces.select(-1, 0);
@@ -106,7 +138,14 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                             dp / torch::log(ratio)));
   }
 
-  auto rop = rho / w[IPR];
+  auto rop = (rho / w[IPR]).clone();
+  if (wall_clamp && phys_in) {  // clamp the smoothing to interior cells
+    rop.narrow(-1, 0, il).copy_(rop.narrow(-1, il, 1).expand({-1, -1, il}));
+  }
+  if (wall_clamp && phys_out) {
+    rop.narrow(-1, iu + 1, nc1 - 1 - iu)
+        .copy_(rop.narrow(-1, iu, 1).expand({-1, -1, nc1 - 1 - iu}));
+  }
   auto lo_edge = rop.narrow(-1, 0, 1);
   auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
   auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);

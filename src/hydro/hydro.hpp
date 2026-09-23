@@ -47,6 +47,9 @@ struct HydroOptionsImpl {
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;
 
+  //! Keep the well-balanced x1 reference's stencils off the wall ghosts
+  ADD_ARG(bool, wb_wall_clamp) = true;
+
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
   ADD_ARG(CoriolisOptions, coriolis) = nullptr;

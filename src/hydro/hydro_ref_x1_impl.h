@@ -66,11 +66,12 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
 //! isentrope reference errs by orders of magnitude on a stratified column.
 template <typename T>
 inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
-                                                int flat, int nc1, int i) {
+                                                int flat, int nc1, int i,
+                                                int jlo, int jhi) {
   T v[5];
   for (int m = -2; m <= 2; ++m) {
     int j = i + m;
-    j = j < 0 ? 0 : (j >= nc1 ? nc1 - 1 : j);
+    j = j < jlo ? jlo : (j > jhi ? jhi : j);
     v[m + 2] = w[IDN * ncells + flat + j] / w[IPR * ncells + flat + j];
   }
   return (v[0] + T(4) * v[1] + T(6) * v[2] + T(4) * v[3] + v[4]) / T(16);
@@ -79,10 +80,14 @@ inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
 template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     T const* w, T const* dx1f, T const* psf_lo, T const* psf_hi, T* pref,
-    T* dsf, T* dref, int column, int i, int ncolumns, int nc1, T grav,
-    bool uniform, bool phys_in, bool phys_out) {
+    T* dsf, T* dref, int column, int i, int ncolumns, int nc1, int iu, T grav,
+    bool uniform, bool phys_in, bool phys_out, bool wall_clamp) {
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
+  int il = nc1 - 1 - iu;
+  // the six-face stencil never crosses a physical wall
+  bool clamp_in = wall_clamp && phys_in && i >= il && i < il + 2;
+  bool clamp_out = wall_clamp && phys_out && i > iu - 2 && i <= iu;
   T lo = psf_lo[flat + i];
   T hi = psf_hi[flat + i];
   T cell_pref = T(0.5) * (lo + hi);
@@ -90,7 +95,7 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   if (uniform) {
     constexpr double w6[6] = {11. / 1440., -31. / 480., 401. / 720.,
                               401. / 720., -31. / 480., 11. / 1440.};
-    if (i >= 2 && i < nc1 - 2) {
+    if (i >= 2 && i < nc1 - 2 && !clamp_in && !clamp_out) {
       T six = T(0);
       for (int m = 0; m < 6; ++m) {
         six +=
@@ -107,6 +112,29 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
         {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
          -11. / 1440.},
     };
+    if (clamp_in) {
+      int sigma = i - il;
+      T val = T(0);
+      for (int m = 0; m < 6; ++m) {
+        val += T(w6e[sigma][m]) *
+               hydro_ref_x1_face(psf_lo, psf_hi, flat, il + m, nc1);
+      }
+      T lower = lo < hi ? lo : hi;
+      T upper = lo > hi ? lo : hi;
+      if (val >= lower && val <= upper) cell_pref = val;
+    }
+    if (clamp_out) {
+      int s = iu + 1 - 5;
+      int row = 4 - (i - s);
+      T val = T(0);
+      for (int m = 0; m < 6; ++m) {
+        val += T(w6e[row][5 - m]) *
+               hydro_ref_x1_face(psf_lo, psf_hi, flat, s + m, nc1);
+      }
+      T lower = lo < hi ? lo : hi;
+      T upper = lo > hi ? lo : hi;
+      if (val >= lower && val <= upper) cell_pref = val;
+    }
     if (!phys_in && i < 2) {
       T val = T(0);
       for (int m = 0; m < 6; ++m) {
@@ -136,9 +164,12 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   }
 
   pref[flat + i] = cell_pref;
-  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i);
-  T rf = i > 0 ? T(0.5) *
-                     (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1) + rs)
+  int jlo = (wall_clamp && phys_in) ? il : 0;
+  int jhi = (wall_clamp && phys_out) ? iu : nc1 - 1;
+  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi);
+  T rf = i > 0 ? T(0.5) * (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1,
+                                                   jlo, jhi) +
+                           rs)
                : rs;
   dref[flat + i] = cell_pref * rs;
   dsf[flat + i] = lo * rf;
@@ -148,12 +179,13 @@ template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_impl(
     T const* w, T const* dx1f, T const* anchor, T* psf_lo, T* psf_hi, T* pref,
     T* dsf, T* dref, int column, int ncolumns, int nc1, int iu, T grav,
-    bool uniform, bool phys_in, bool phys_out) {
+    bool uniform, bool phys_in, bool phys_out, bool wall_clamp) {
   hydro_ref_x1_scan_impl(w, dx1f, anchor, psf_lo, psf_hi, column, ncolumns, nc1,
                          iu, grav);
   for (int i = 0; i < nc1; ++i) {
     hydro_ref_x1_cell_impl(w, dx1f, psf_lo, psf_hi, pref, dsf, dref, column, i,
-                           ncolumns, nc1, grav, uniform, phys_in, phys_out);
+                           ncolumns, nc1, iu, grav, uniform, phys_in, phys_out,
+                           wall_clamp);
   }
 }
 
