@@ -79,8 +79,16 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
         {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
          -11. / 1440.},
     };
-    // At a PHYSICAL wall the stencil never crosses it
-    if (wall_clamp && phys_in) {
+    // At a PHYSICAL wall the stencil never crosses it.
+    // A one-sided row spans six faces and so overruns the owned range at the
+    // OPPOSITE end on a block under five cells -- a seam face, and readable,
+    // unless that end is a wall as well. See hydro_ref_x1_impl.h.
+    bool thin = (iu - il + 1) < 5;
+    bool fits =
+        iu >= 4;  // the rows must fit the array; see hydro_ref_x1_impl.h
+    bool clamp_in = wall_clamp && phys_in && fits && !(thin && phys_out);
+    bool clamp_out = wall_clamp && phys_out && fits && !(thin && phys_in);
+    if (clamp_in) {
       for (int j : {il, il + 1}) {
         int sigma = j - il;
         auto val = w6e[sigma][0] * faces.select(-1, il);
@@ -94,7 +102,17 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                          0.5 * (psf_lo.select(-1, j) + psf_hi.select(-1, j))));
       }
     }
-    if (wall_clamp && phys_out) {
+    if (wall_clamp && phys_in && !clamp_in) {  // no row fits: 2-point mean
+      for (int j : {il, il + 1})
+        pref.select(-1, j).copy_(0.5 *
+                                 (psf_lo.select(-1, j) + psf_hi.select(-1, j)));
+    }
+    if (wall_clamp && phys_out && !clamp_out) {
+      for (int j : {iu - 1, iu})
+        pref.select(-1, j).copy_(0.5 *
+                                 (psf_lo.select(-1, j) + psf_hi.select(-1, j)));
+    }
+    if (clamp_out) {
       int s0 = iu + 1 - 5;
       for (int j : {iu - 1, iu}) {
         int row = 4 - (j - s0);

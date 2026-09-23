@@ -86,8 +86,23 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   int flat = column * nc1;
   int il = nc1 - 1 - iu;
   // the six-face stencil never crosses a physical wall
-  bool clamp_in = wall_clamp && phys_in && i >= il && i < il + 2;
-  bool clamp_out = wall_clamp && phys_out && i > iu - 2 && i <= iu;
+  // A one-sided row spans SIX faces, so on a block with fewer than five x1
+  // cells it reaches one face past the owned range -- at the OPPOSITE end from
+  // the wall it is protecting. That is a seam face, i.e. the neighbour's own
+  // data, and reading it is right; it is only unreadable when that end is a
+  // physical wall too, which means the whole column is under five cells.
+  bool thin = (iu - il + 1) < 5;
+  // and the row has to FIT THE ARRAY. The inner row reads faces il..il+5, the
+  // outer iu-4..iu+1, and with nc1 == il + iu + 1 both fit exactly when
+  // iu >= 4. Below that the outer row's start goes negative -- and
+  // hydro_ref_x1_face saturates above nc1 but has no lower guard, so it would
+  // read before this column. nx1 >= 5 always satisfies it; a block thin enough
+  // to fail it has fewer cells than it has ghosts.
+  bool fits = iu >= 4;
+  bool wall_in = wall_clamp && phys_in && i >= il && i < il + 2;
+  bool wall_out = wall_clamp && phys_out && i > iu - 2 && i <= iu;
+  bool clamp_in = wall_in && fits && !(thin && phys_out);
+  bool clamp_out = wall_out && fits && !(thin && phys_in);
   T lo = psf_lo[flat + i];
   T hi = psf_hi[flat + i];
   T cell_pref = T(0.5) * (lo + hi);
@@ -95,7 +110,7 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   if (uniform) {
     constexpr double w6[6] = {11. / 1440., -31. / 480., 401. / 720.,
                               401. / 720., -31. / 480., 11. / 1440.};
-    if (i >= 2 && i < nc1 - 2 && !clamp_in && !clamp_out) {
+    if (i >= 2 && i < nc1 - 2 && !wall_in && !wall_out) {
       T six = T(0);
       for (int m = 0; m < 6; ++m) {
         six +=

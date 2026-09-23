@@ -214,3 +214,7 @@ class Hydro:
     def max_time_step(self, *args) -> float:
         """Calculate maximum stable time step."""
         ...
+
+def balance_column(w: torch.Tensor, dx1f: torch.Tensor, grav: float,
+                   wall_clamp: bool = True, rtol: float = 1.e-10,
+                   max_iter: int = 120) -> Tuple[torch.Tensor, float, int]: ...
