@@ -73,9 +73,16 @@ def build_restart(grid, path: Path) -> None:
   w[4] = rho * CV_T * 0.4     # a pressure that falls like density
   w[5] = 0.2
   w[6] = 0.05
+  # Snapy aliases fill_solid_* onto the hydro arrays when nothing is solid, and
+  # the torch readers deduplicate by storage, so an aliased name can hide the
+  # one it shares storage with. Reproduce that here rather than only in a run.
+  hydro_u = torch.from_numpy(u)
+  hydro_w = torch.from_numpy(w)
   tensors = {
-      "hydro_u": torch.from_numpy(u),
-      "hydro_w": torch.from_numpy(w),
+      "hydro_u": hydro_u,
+      "hydro_w": hydro_w,
+      "fill_solid_hydro_u": hydro_u,
+      "fill_solid_hydro_w": hydro_w,
       "last_time": torch.tensor([1234.5], dtype=torch.float64),
       "last_cycle": torch.tensor([678], dtype=torch.int64),
       "file_number": torch.tensor([2, 3], dtype=torch.int64),
@@ -112,6 +119,9 @@ def main() -> int:
 
     check("shape", tuple(out["hydro_u"].shape) == (NVAR, new.nc3, new.nc2, new.nc1),
           str(tuple(out["hydro_u"].shape)))
+    check("aliased names all survive the read",
+          {"hydro_u", "hydro_w", "fill_solid_hydro_u", "fill_solid_hydro_w"} <= set(out),
+          ", ".join(sorted(out)))
     check("clock carried over",
           out["last_time"].item() == 1234.5 and out["last_cycle"].item() == 678)
 

@@ -289,9 +289,17 @@ def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: 
 
 def read_part(src) -> dict:
     mod = torch.jit.load(src, map_location="cpu")
-    tensors = {}
-    for name, value in list(mod.named_parameters(recurse=True)) + list(mod.named_buffers(recurse=True)):
-        tensors[name] = value
+    # named_parameters and named_buffers deduplicate by storage, keeping only
+    # the alphabetically first name. Snapy aliases fill_solid_hydro_u onto
+    # hydro_u when no immersed boundary is present, so the default view drops
+    # hydro_u -- the one variable a restart cannot do without -- without a
+    # word. state_dict keeps both names; remove_duplicate=False is the belt to
+    # its braces.
+    tensors = dict(mod.state_dict())
+    for name, value in list(
+        mod.named_parameters(recurse=True, remove_duplicate=False)
+    ) + list(mod.named_buffers(recurse=True, remove_duplicate=False)):
+        tensors.setdefault(name, value)
     return tensors
 
 
@@ -396,6 +404,13 @@ def main() -> int:
 
     blocks = read_restart(args.restart)
     print(f"read {len(blocks)} block(s) from {args.restart}")
+    for name, tensors in blocks:
+        missing = [k for k in ("hydro_u", "last_time", "last_cycle") if k not in tensors]
+        if missing:
+            raise SystemExit(
+                f"{name or args.restart} is missing {', '.join(missing)}; refusing to "
+                "write a restart Snapy cannot load"
+            )
     if len(blocks) > 1:
         print("note: several blocks. x1 is regridded per block; x2 and x3 must "
               "be unchanged, since the configuration describes the whole mesh "
