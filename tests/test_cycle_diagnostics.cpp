@@ -1,15 +1,19 @@
 // C/C++
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <string>
 
 // external
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 
 // snap
 #include <snap/snap.h>
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/implicit/implicit_hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -224,4 +228,117 @@ TEST(cycle_info, logged_pe_is_the_column_geopotential) {
 
   auto mixed = logged_state(2.0, 0.25, 0.25, 0., 0., 0., 0.);
   EXPECT_NEAR(mixed.pe, dry.pe, 1.e-9 * std::abs(dry.pe));
+}
+
+namespace {
+//! kCard edited in place and written out: same species, so the table agrees
+std::shared_ptr<MeshBlockImpl> block_from(YAML::Node card,
+                                          std::string const& name,
+                                          Variables* vars) {
+  {
+    std::ofstream(name) << card;
+  }
+  auto block =
+      std::make_shared<MeshBlockImpl>(MeshBlockOptionsImpl::from_yaml(name));
+  std::remove(name.c_str());
+
+  auto coord = block->pcoord;
+  auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                         coord->options->nc2(), coord->options->nc1()},
+                        torch::kFloat64);
+  w[IDN].fill_(1.);
+  w[IPR].fill_(1.e5);
+  w[ICY].fill_(0.01);
+  w[ICY + 1].fill_(0.02);
+  (*vars)["hydro_w"] = w;
+  block->initialize(*vars);
+  block->pintg->options->ncycle_out(1);
+  return block;
+}
+}  // namespace
+
+// A resting column of six unit cells, cloud settling at const-vsed = -2, one
+// step of dt = 1: each face carries rho*y*vsed of the cell above it, so every
+// cell but the sealed bottom one drains twice what it holds and theta =
+// dx / (dt |vsed|) = 0.5; the bottom cell and the vapour keep theta = 1. The
+// limiter then halves each of the five interior x1 faces. grav1 is -1e-12, not
+// 0 (sedimentation is a null op at 0, and const-vsed does not read grav1), so
+// the Riemann flux of the column is ~1e-15 of the settling flux.
+TEST(cycle_info, positivity_meters_read_their_hand_computed_values) {
+  auto card = YAML::LoadFile(kCard);
+  card["forcing"]["const-gravity"]["grav1"] = -1.e-12;
+  card["dynamics"]["equation-of-state"]["limiter"] = true;
+  card["sedimentation"] =
+      YAML::Load("{radius: {}, density: {}, const-vsed: {cloud: -2.}}");
+  Variables vars;
+  auto block = block_from(card, "test_cycle_diagnostics_meters.yaml", &vars);
+  auto hydro = block->phydro;
+
+  int il = block->pcoord->il();
+  double rho_cloud = vars.at("hydro_u")[ICY + 1][0][0][il].item<double>();
+  ASSERT_GT(rho_cloud, 0.);
+  hydro->forward(1., vars.at("hydro_u"), vars);
+
+  EXPECT_NEAR(hydro->positivity_min()[0].item<double>(), 0.5, 1.e-9);
+  EXPECT_EQ(hydro->positivity_severe()[0].item<int64_t>(), 5);
+  double flux = hydro->lim_flux()[0].item<double>();
+  EXPECT_NEAR(flux, 5 * 2. * rho_cloud, 1.e-9 * flux);
+  EXPECT_NEAR(hydro->lim_cut()[0].item<double>() / flux, 0.5, 1.e-9);
+
+  testing::internal::CaptureStdout();
+  block->print_cycle_info(vars, 0., 1.);
+  std::string out = testing::internal::GetCapturedStdout();
+  bool found = false;
+  EXPECT_NEAR(read_token(out, " limcut=", &found), 0.5, 1.e-5) << out;
+  EXPECT_TRUE(found) << out;
+  EXPECT_NEAR(read_token(out, " thetamin=", &found), 0.5, 1.e-5) << out;
+  EXPECT_TRUE(found) << out;
+  EXPECT_EQ(read_token(out, " thetasevere=", &found), 5.) << out;
+  EXPECT_TRUE(found) << out;
+}
+
+// Two cells, so one interior face carries the whole transfer M. Unclamped, a
+// cell's constituents change by exactly M(i) - M(i+1) and the meter reads 0.
+// With every constituent's availability driven negative in both cells, that
+// face moves dry gas only (a fraction 1 - sum(y) of M), so each cell misses
+// M * sum(y) against a scale of |M|: the meter reads sum(y) = 0.03, whatever M
+// is.
+TEST(cycle_info, vicclamp_reads_the_clamped_fraction) {
+  auto card = YAML::LoadFile(kCard);
+  card["geometry"]["bounds"]["x1max"] = 2.;
+  card["geometry"]["cells"]["nx1"] = 2;
+  card["integration"] = YAML::Load("{type: rk3, cfl: 0.9, implicit-scheme: 1}");
+  Variables vars;
+  auto block = block_from(card, "test_cycle_diagnostics_vic.yaml", &vars);
+  auto picorr = block->phydro->picorr;
+  ASSERT_TRUE(picorr);
+
+  auto w = vars.at("hydro_w").clone();
+  auto gamma = block->phydro->peos->compute("W->A", {w});
+  int il = block->pcoord->il();
+  auto solve = [&](bool starve) {
+    auto du = torch::zeros_like(w);
+    // an energy tendency in the lower cell only, so that M is not zero
+    du[IPR].select(-1, il).fill_(1.e3);
+    if (starve) {
+      for (int n = ICY; n <= ICY + 1; ++n) du[n] = -2. * w[IDN] * w[n];
+    }
+    picorr->forward(du, w.clone(), gamma, 1.);
+    return picorr->mass_correction()[IVX][0][0][il + 1].item<double>();
+  };
+
+  double m_free = solve(false);
+  ASSERT_NE(m_free, 0.);
+  EXPECT_LT(picorr->clamp_residual()[0].item<double>(), 1.e-12);
+
+  double m_starved = solve(true);
+  ASSERT_NE(m_starved, 0.);
+  EXPECT_NEAR(picorr->clamp_residual()[0].item<double>(), 0.03, 1.e-12);
+
+  testing::internal::CaptureStdout();
+  block->print_cycle_info(vars, 0., 1.);
+  std::string out = testing::internal::GetCapturedStdout();
+  bool found = false;
+  EXPECT_NEAR(read_token(out, " vicclamp=", &found), 0.03, 1.e-6) << out;
+  EXPECT_TRUE(found) << out;
 }
