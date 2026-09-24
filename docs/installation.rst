@@ -64,6 +64,23 @@ Build Steps
     cmake -B build -DCMAKE_BUILD_TYPE=Release -DNETCDF=ON
     cmake --build build --parallel 3
 
+.. note::
+
+   Configuring with tests enabled (the default) prints a warning that
+   ``SNAPY_TEST_PYTHONPATH`` is unset. It is addressed to developers running
+   ``ctest``: without it the ``*_python`` tests import whatever ``snapy`` is
+   installed rather than the tree being built. It is safe to ignore for an
+   ordinary install; pass ``-DBUILD_TESTS=OFF`` if you do not want the tests at
+   all.
+
+.. note::
+
+   The Kintera, Harp and Disort locations are resolved from the Python
+   environment on the first configure of a build directory and kept after that.
+   After switching Python environments, or reinstalling one of these packages
+   somewhere else, configure a fresh build directory (or pass
+   ``--fresh``, CMake >= 3.24) instead of reconfiguring the old one.
+
 5. Install the Python package::
 
     pip install .

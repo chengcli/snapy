@@ -87,9 +87,6 @@ set(KINTERA_DATA_DIR
     "${kintera_data_dir}"
     CACHE PATH "Path to the installed Kintera data directory.")
 
-# Step 4: unset the internal temp variable
-unset(_KINTERA_HEADER_DIR CACHE)
-
 find_library(
   KINTERA_LIBRARY kintera_release
   HINTS ${kintera_lib_dir}

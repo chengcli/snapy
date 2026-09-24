@@ -21,6 +21,7 @@ setup_test(test_cubed)
 setup_test(test_cubed_sphere)
 setup_test(test_coordinate)
 setup_test(test_hydrostatic)
+setup_test(test_hydro_options)
 setup_test(test_hydro_ref_x1)
 setup_test(test_output_dir)
 setup_test(test_netcdf_utils)
@@ -84,34 +85,43 @@ set_tests_properties(test_radiating_boundary_python PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
   LABELS "python;boundary"
 )
+set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS test_radiating_boundary_python)
 
-add_test(
-  NAME test_mesh_exchange_python
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mesh_exchange.py
-)
-set_tests_properties(test_mesh_exchange_python PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  LABELS "python;exchange"
-)
+# Every python ctest that imports snapy goes through this, so it is enrolled for
+# SNAPY_TEST_PYTHONPATH below; the raw add_test ones drive a built binary and import none.
+function(snapy_add_python_test name)
+  cmake_parse_arguments(ARG "" "TIMEOUT" "LABELS;ARGS" ${ARGN})
+  add_test(
+    NAME ${name}_python
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py ${ARG_ARGS}
+  )
+  set_tests_properties(${name}_python PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    LABELS "${ARG_LABELS}"
+  )
+  if(ARG_TIMEOUT)
+    set_tests_properties(${name}_python PROPERTIES TIMEOUT ${ARG_TIMEOUT})
+  endif()
+  set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS ${name}_python)
+endfunction()
 
-add_test(
-  NAME test_cubed_sphere_vertical_velocity_exchange_python
-  COMMAND ${Python3_EXECUTABLE}
-          ${CMAKE_CURRENT_SOURCE_DIR}/test_cubed_sphere_vertical_velocity_exchange.py
-)
-set_tests_properties(test_cubed_sphere_vertical_velocity_exchange_python PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  LABELS "python;exchange;cubed-sphere;diagnostic"
-)
+snapy_add_python_test(test_mesh_exchange LABELS "python;exchange")
+snapy_add_python_test(test_cubed_sphere_vertical_velocity_exchange
+                      LABELS "python;exchange;cubed-sphere;diagnostic")
+snapy_add_python_test(test_jit_user_forcing TIMEOUT 30 LABELS "python;forcing")
 
-add_test(
-  NAME test_jit_user_forcing_python
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_jit_user_forcing.py
-)
-set_tests_properties(test_jit_user_forcing_python PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  TIMEOUT 30
-  LABELS "python;forcing"
+# Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the
+# caller's and must survive behind SNAPY_TEST_PYTHONPATH (only checkable with CMake >= 3.22).
+set(_marker "${CMAKE_CURRENT_BINARY_DIR}/caller_pythonpath_marker")
+if(SNAPY_TEST_PYTHONPATH AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+  set(_import_path_args "${SNAPY_TEST_PYTHONPATH}" "${_marker}")
+elseif(SNAPY_TEST_PYTHONPATH)
+  set(_import_path_args "${SNAPY_TEST_PYTHONPATH}")
+endif()
+snapy_add_python_test(test_python_import_path LABELS "python" ARGS ${_import_path_args})
+set_tests_properties(test_python_import_path_python PROPERTIES
+  ENVIRONMENT "PYTHONPATH=${_marker}"
+  SKIP_RETURN_CODE 125
 )
 
 file(GLOB inputs *.yaml *.py)
@@ -126,6 +136,36 @@ if (DEFINED KINTERA_DATA_DIR AND EXISTS "${KINTERA_DATA_DIR}/nasa9.dat")
   execute_process(
     COMMAND ln -sf ${KINTERA_DATA_DIR}/nasa9.dat
             ${CMAKE_BINARY_DIR}/tests/nasa9.dat)
+endif()
+
+# ---- Python ctests: say which snapy they test -------------------------------------------
+# `COMMAND ${Python3_EXECUTABLE} <test>.py` imports `snapy` through sys.path, so with nothing
+# set these exercise whatever snapy is installed, not the tree they were configured from --
+# a false red when the branch is fine and the install is stale, and a false green when the
+# branch is broken and the install is fine. cmake builds only the C++ libraries here (the
+# importable package comes from `pip install`), so there is nothing in the build tree to point
+# at by default; give the directory that holds this build's installed snapy:
+#     cmake -B build -DSNAPY_TEST_PYTHONPATH=/path/to/site-packages
+set(SNAPY_TEST_PYTHONPATH "" CACHE PATH
+    "PYTHONPATH for the *_python ctests; empty means they test the installed snapy")
+get_property(SNAPY_PYTHON_TESTS GLOBAL PROPERTY SNAPY_PYTHON_TESTS)
+if(SNAPY_TEST_PYTHONPATH)
+  # Prepend, do not replace: the caller's PYTHONPATH may be what selects the kintera/pyharp
+  # this tree was configured against, and a test's own ENVIRONMENT must survive.
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+    set_tests_properties(${SNAPY_PYTHON_TESTS} PROPERTIES ENVIRONMENT_MODIFICATION
+                         "PYTHONPATH=path_list_prepend:${SNAPY_TEST_PYTHONPATH}")
+  else()
+    foreach(test IN LISTS SNAPY_PYTHON_TESTS)
+      set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT
+                   "PYTHONPATH=${SNAPY_TEST_PYTHONPATH}:$ENV{PYTHONPATH}")
+    endforeach()
+  endif()
+  message(STATUS "python ctests import snapy from ${SNAPY_TEST_PYTHONPATH}")
+else()
+  message(WARNING
+    "SNAPY_TEST_PYTHONPATH is unset: the *_python ctests will import the installed snapy, "
+    "not this tree. Their verdicts do not constrain this branch.")
 endif()
 
 # ============= #
