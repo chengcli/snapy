@@ -415,6 +415,13 @@ def main() -> int:
         print("note: several blocks. x1 is regridded per block; x2 and x3 must "
               "be unchanged, since the configuration describes the whole mesh "
               "and not one block's share of it.")
+        if args.x2_mode == "stretch":
+            raise SystemExit(
+                "--x2-mode stretch cannot be used on a decomposed restart: the "
+                "resample treats x2 as periodic, but one block holds a slice of "
+                "x2 and its two ends are interior seams, not the same point. "
+                "Regrid x1 only, or recombine to a single block first."
+            )
 
     for _, tensors in blocks:
         for key in sorted(tensors):
