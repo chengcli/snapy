@@ -77,3 +77,5 @@ script-files = ["api/pd-run", "api/slurm.sbatch"]
 
 [tool.setuptools_scm]
 fallback_version = "0.0.0"
+# version tags only: the default pattern would also match non-version tags in this repo
+git_describe_command = "git describe --dirty --tags --long --match v*"
