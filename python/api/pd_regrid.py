@@ -24,7 +24,10 @@ What is mapped, and how:
   specific       linear in height, held at the edge value outside. Constant
   energy         specific internal energy at fixed composition is isothermal,
                  which is what the density extension assumes.
-  mass fractions linear in height, held at the edge value outside.
+  mass fractions linear in height, held at the edge value outside, except for
+                 condensates, which start empty above the old top: holding
+                 H2O(l) at its old top value filled 150 km of new column with
+                 cloud that was never there.
 
 Conserved variables are rebuilt as rho times the per-unit-mass quantity, so the
 new state is consistent by construction rather than interpolated component by
@@ -65,6 +68,24 @@ PRIMITIVE_KEYS = ("hydro_w", "fill_solid_hydro_w")
 
 # Per-variable mapping rules.
 RHO, VEL, EOP, FRAC = "rho", "vel", "eop", "frac"
+
+
+def condensate_slots(cfg: dict, nvar: int, scheme: str) -> list:
+    """Variable slots holding a condensate, by Snapy's species naming.
+
+    Snapy writes condensed phases with a parenthesised suffix, `H2O(l)` and
+    `H2O(l,p)`, so the config names them without the tool needing a list.
+    """
+    species = [str(s.get("name", "")) for s in cfg.get("species", [])]
+    if len(species) < 2:
+        return []
+    nmass = nvar - 5
+    first = 5 if scheme == "default" else 1
+    slots = []
+    for k, name in enumerate(species[1:1 + nmass]):
+        if "(" in name:
+            slots.append(first + k)
+    return slots
 
 
 def variable_roles(nvar: int, scheme: str) -> list:
@@ -186,8 +207,13 @@ def resample_x2_periodic(arr: np.ndarray, nc2_new: int, ng: int) -> np.ndarray:
 
 
 def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: bool,
-                 skip: int, nfit: int) -> np.ndarray:
-    """Map one (nvar, nc3, nc2, nc1) array onto the new grid."""
+                 skip: int, nfit: int, zero_above: list = ()) -> np.ndarray:
+    """Map one (nvar, nc3, nc2, nc1) array onto the new grid.
+
+    `zero_above` names variable slots that must not be carried into the
+    extension: holding a condensate's mass fraction at the old top value fills
+    the whole new column with cloud that was never there.
+    """
     ng = old.nghost
     nsrc = old.nx1 - skip
     if nsrc < 2:
@@ -216,6 +242,14 @@ def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: 
             out[v] = map_x1(src[v] / rho, z_old, z_new, False, nfit) * rho_new
         else:
             out[v] = map_x1(src[v], z_old, z_new, False, nfit)
+
+    # Condensate is a local product of the state it was lifted from, not a
+    # background the extension can inherit. Above the old top it starts empty
+    # and the microphysics makes its own.
+    if zero_above:
+        above = z_new > z_old[-1]
+        for v in zero_above:
+            out[v][..., above] = 0.0
 
     if new.nc2 != old.nc2:
         out = resample_x2_periodic(out, new.nc2, new.nghost)
@@ -297,13 +331,18 @@ def main() -> int:
         "--edge-fit", type=int, default=12,
         help="source cells the extension slope is fitted over (default 12)",
     )
+    parser.add_argument(
+        "--keep-condensate", action="store_true",
+        help="carry condensate into the extension instead of starting it empty",
+    )
     parser.add_argument("--reset-time", action="store_true", help="resume at t = 0, cycle 0")
     args = parser.parse_args()
 
     with open(args.old_config) as f:
         old = Grid(yaml.safe_load(f))
     with open(args.new_config) as f:
-        new = Grid(yaml.safe_load(f))
+        new_cfg = yaml.safe_load(f)
+    new = Grid(new_cfg)
     print(f"old grid: {old.describe()}")
     print(f"new grid: {new.describe()}")
 
@@ -337,7 +376,10 @@ def main() -> int:
                 )
             conserved = key in CONSERVED_KEYS
             roles = variable_roles(arr.shape[0], args.index_scheme)
-            out = regrid_state(arr, old, new, roles, conserved, args.edge_skip, args.edge_fit)
+            zero = [] if args.keep_condensate else condensate_slots(
+                new_cfg, arr.shape[0], args.index_scheme)
+            out = regrid_state(arr, old, new, roles, conserved,
+                               args.edge_skip, args.edge_fit, zero)
             tensors[key] = torch.from_numpy(out).to(tensor.dtype)
             print(f"  {key}: {tuple(arr.shape)} -> {tuple(out.shape)} "
                   f"({'conserved' if conserved else 'primitive'})")

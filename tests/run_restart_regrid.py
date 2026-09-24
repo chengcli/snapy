@@ -41,6 +41,8 @@ NX2 = 8
 
 def config(x1max: float, nx1: int) -> dict:
   return {
+      # Slot 5 is a vapour, slot 6 a condensate by Snapy's parenthesised name.
+      "species": [{"name": "dry"}, {"name": "H2O"}, {"name": "H2O(l)"}],
       "geometry": {
           "bounds": {"x1min": 0.0, "x1max": x1max,
                      "x2min": 0.0, "x2max": 1.0e5},
@@ -128,9 +130,16 @@ def main() -> int:
     check("velocity preserved", np.abs(u[1][sl] / rho - 3.0).max() < 1e-9)
     check("specific energy preserved",
           np.abs(u[4][sl] / rho - CV_T).max() / CV_T < 1e-9)
-    for n, frac in ((5, 0.2), (6, 0.05)):
-      check(f"mass fraction {n} preserved",
-            np.abs(u[n][sl] / rho - frac).max() < 1e-12)
+    check("vapour mass fraction preserved",
+          np.abs(u[5][sl] / rho - 0.2).max() < 1e-12)
+    # The condensate is carried inside the old domain and dropped above it.
+    zsrc = pd_regrid.Grid(old_cfg).x1v()[NGHOST:NGHOST + old.nx1 - 2][-1]
+    inside, above = z <= zsrc, z > zsrc
+    check("condensate kept inside the old domain",
+          np.abs(u[6][sl][inside] / rho[inside] - 0.05).max() < 1e-12)
+    check("condensate not carried into the extension",
+          np.abs(u[6][sl][above]).max() == 0.0,
+          f"{int(above.sum())} extension levels")
     check("primitive pressure falls like density",
           np.abs(w[4][sl] / (rho * CV_T * 0.4) - 1.0).max() < 2.0e-3)
     # P/rho is proportional to T/mu, so a constant one means the extension
