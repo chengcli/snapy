@@ -593,3 +593,71 @@ TEST(forcing, boundary_fluxes_scale_with_timestep) {
 
   EXPECT_TRUE(torch::allclose(du2, 2. * du1));
 }
+
+namespace {
+// the same data behind a non-contiguous view: SedHydro routes it to the
+// tensor fallback instead of the fused kernel
+torch::Tensor strided_copy(torch::Tensor const& w) {
+  auto padded = torch::zeros({w.size(0), w.size(1), w.size(2), w.size(3) + 1},
+                             w.options());
+  return padded.narrow(-1, 0, w.size(3)).copy_(w);
+}
+
+std::shared_ptr<MeshBlockImpl> make_sedimenting_block(std::string const& yaml,
+                                                      double grav1) {
+  auto options = MeshBlockOptionsImpl::from_yaml(yaml);
+  options->hydro()->icorr() = nullptr;
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(grav1);
+  options->hydro()->grav() = gravity;
+  return std::make_shared<MeshBlockImpl>(options);
+}
+}  // namespace
+
+// three copies of one Stokes formula: the fused kernel must agree with the
+// tensor fallback (which carries the reference mean free path)
+TEST(forcing, fused_sedimentation_matches_tensor_path) {
+  auto block = make_sedimenting_block("test_stokes_sedimentation.yaml", -10.);
+  auto psed = block->phydro->psed;
+  ASSERT_TRUE(psed);
+  auto w = make_primitive(block);
+  w.narrow(0, IVX, 3).zero_();
+  w[ICY].fill_(0.05);
+  w[ICY + 1].fill_(0.02);
+
+  psed->forward(w);
+  auto fused = psed->vsed.clone();
+  auto strided = strided_copy(w);
+  ASSERT_FALSE(strided.is_contiguous());
+  psed->forward(strided);
+  auto tensor = psed->vsed.clone();
+
+  int il = block->pcoord->il(), iu = block->pcoord->iu();
+  EXPECT_LT(fused[0].slice(-1, il + 1, iu + 1).max().item<double>(), 0.);
+  EXPECT_TRUE(torch::allclose(fused, tensor, 1.e-10, 0.));
+}
+
+// a block edge that is not a physical wall (an x1 seam) must not seal the
+// settling flux; the physical top still does
+TEST(forcing, sedimentation_is_sealed_only_at_physical_walls) {
+  auto options =
+      MeshBlockOptionsImpl::from_yaml("test_gravity_sedimentation.yaml");
+  options->hydro()->icorr() = nullptr;
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+  options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto w = make_primitive(block);
+  w.narrow(0, IVX, 3).zero_();
+  w[ICY].fill_(0.05);
+  w[ICY + 1].fill_(0.02);
+  int il = block->pcoord->il(), iu = block->pcoord->iu();
+
+  for (auto wr : {w, strided_copy(w)}) {
+    block->phydro->psed->forward(wr);
+    auto vsed = block->phydro->psed->vsed[0];
+    EXPECT_DOUBLE_EQ(vsed.select(-1, il).item<double>(), -2.);
+    EXPECT_DOUBLE_EQ(vsed.select(-1, iu + 1).item<double>(), 0.);
+  }
+}

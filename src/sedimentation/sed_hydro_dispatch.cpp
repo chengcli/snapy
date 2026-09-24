@@ -76,7 +76,7 @@ void check_sedimentation_args(torch::Tensor w, torch::Tensor flux,
                   w.scalar_type() == cv_ratio_m1.scalar_type() &&
                   w.scalar_type() == u0.scalar_type(),
               "sedimentation_flux_dispatch requires matching floating dtypes");
-  TORCH_CHECK(il >= 0 && il <= iu && iu < w.size(3),
+  TORCH_CHECK(il >= -1 && il <= iu && iu <= w.size(3),
               "sedimentation_flux_dispatch received invalid active x1 bounds");
   TORCH_CHECK(nvapor >= 0 && nvapor <= ny,
               "sedimentation_flux_dispatch received invalid nvapor/ny");
@@ -177,14 +177,15 @@ void sedimentation_flux_mps(torch::Tensor w, torch::Tensor flux,
              torch::sqrt(temp) *
              torch::pow(KBoltz / gas_epsilon_lj * temp, 0.16) /
              (M_PI * gas_diameter * gas_diameter * 1.22);
-  auto lambda = (eta * std::sqrt(M_PI * KBoltz * KBoltz)) /
+  auto lambda = eta * torch::sqrt(M_PI * KBoltz * temp) /
                 (w[IPR] * std::sqrt(2.0 * gas_mass));
   auto kn = lambda / radius.view(vec);
   vsed.copy_(1.0 + kn * (1.256 + 0.4 * torch::exp(-1.1 / kn)));
   vsed *= 2.0 * radius.view(vec) * radius.view(vec) * grav *
           (density.view(vec) - w[IDN]);
   vsed /= 9.0 * eta;
-  vsed += const_vsed.view(vec);
+  auto cvsed = const_vsed.view(vec);
+  vsed.copy_(torch::where(cvsed != 0., cvsed, vsed));
   vsed.clamp_(-upper_limit, upper_limit);
   vsed.slice(-1, iu + 1, vsed.size(-1)).fill_(0.);
   vsed.slice(-1, 0, il + 1).fill_(0.);
