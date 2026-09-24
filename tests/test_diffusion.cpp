@@ -407,3 +407,49 @@ TEST_P(DeviceTest, timestep_rejects_a_non_finite_diffusivity) {
   block->phydro->pdiffusion->options->nu_iso(NAN);
   EXPECT_ANY_THROW(block->phydro->max_time_step(w));
 }
+
+// dynamic: true reads nu_iso as mu and kappa_iso as k: on rho = 1 + x/10 the
+// tendencies are dt*mu*d2(vy)/dx2 and dt*k*d2T/dx2 in every cell, with no rho
+// (or rho*cv) at the faces or the centres; kinematic gives dt*nu*(rho v')'
+TEST(diffusion, dynamic_coefficients_carry_no_density) {
+  auto block = make_block();
+  auto w = make_primitive(block, torch::kCPU, torch::kFloat64);
+  auto x = block->pcoord->x1v.to(torch::kFloat64).view({1, 1, -1});
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto Rd = 8.31446261815324 / block->phydro->peos->options->weight();
+  auto peos = block->phydro->peos;
+  auto opts = block->phydro->pdiffusion->options;
+  w[IDN] = 1. + 0.1 * x;
+  auto run = [&](bool dynamic, bool heat, torch::Tensor* cv = nullptr) {
+    opts->dynamic(dynamic);
+    auto v = w.clone();
+    auto temp = (300. + (heat ? x.square() : 0. * x)).expand_as(v[IDN]);
+    v[IPR] = v[IDN] * Rd * temp;
+    if (!heat) v[IVY] = x.square();
+    auto du = torch::zeros_like(v);
+    block->phydro->pdiffusion->forward(du, v, temp, 0.1);
+    if (cv) *cv = peos->specific_heat_cv(v, temp).index(interior);
+    return du[heat ? IPR : IVY].index(interior);
+  };
+  auto xi = x.expand_as(w[IDN]).index(interior);
+  torch::Tensor cv;
+  auto kin_heat = run(false, true, &cv);
+  EXPECT_TRUE(
+      torch::allclose(run(false, false), 0.05 * (2. + 0.4 * xi), 1.e-12, 0.));
+  EXPECT_TRUE(
+      torch::allclose(kin_heat, 0.025 * cv * (2. + 0.4 * xi), 1.e-12, 0.));
+  auto shear = run(true, false), heat = run(true, true);
+  EXPECT_TRUE(torch::allclose(shear, torch::full_like(shear, 0.5 * 2. * 0.1),
+                              1.e-12, 0.))
+      << "dynamic viscous tendency " << shear;
+  EXPECT_TRUE(torch::allclose(heat, torch::full_like(heat, 0.25 * 2. * 0.1),
+                              1.e-12, 0.))
+      << "dynamic conductive tendency " << heat;
+  // max_time_step bounds by mu/rho_min and k/(rho_min*cv_ref); dx = 1, one dim
+  double rho_min = 1.05,
+         coeff =
+             std::max(0.5 / rho_min, 0.25 / (rho_min * peos->species_cv_ref()));
+  opts->dynamic(true);
+  EXPECT_NEAR(block->phydro->pdiffusion->max_time_step(w), 1. / (2. * coeff),
+              1.e-12);
+}
