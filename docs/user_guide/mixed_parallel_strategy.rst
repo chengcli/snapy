@@ -112,6 +112,16 @@ two coordinate systems:
 * process coordinates: which process owns a region of the global partition
 * local-block coordinates: which block inside that process owns a local shard
 
+.. note::
+
+   One restriction applies to the x1 axis. The x1 reference relay and the x1
+   seam exchange address block ranks as process ranks, which are equal only at
+   one block per process. A run that both splits x1 across processes
+   (``nb1 > 1``) and owns more than one block per process is therefore refused
+   at setup with "the x1 reference relay addresses block ranks as process
+   ranks: one block per process only". Split x1 across processes, or use
+   multiple blocks per process on x2/x3, but not both at once.
+
 This leads to two useful rank mappings:
 
 * ``process_rank``: rank in the distributed process group

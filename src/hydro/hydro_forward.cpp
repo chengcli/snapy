@@ -168,6 +168,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // No exchange, no behavior change at nb1 = 1.
     if (!options->disable_flux_x1() && playout &&
         playout->has_process_group() && playout->options->pz() > 1) {
+      TORCH_CHECK(playout->options->blocks_per_process() == 1,
+                  "[Hydro] the x1 seam exchange addresses block ranks as "
+                  "process ranks: one block per process only");
       auto iloc = playout->loc_of(playout->options->rank());
       int above = playout->neighbor_rank(iloc, {0, 0, 1});
       int below = playout->neighbor_rank(iloc, {0, 0, -1});
