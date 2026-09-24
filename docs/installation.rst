@@ -64,6 +64,15 @@ Build Steps
     cmake -B build -DCMAKE_BUILD_TYPE=Release -DNETCDF=ON
     cmake --build build --parallel 3
 
+.. note::
+
+   Configuring with tests enabled (the default) prints a warning that
+   ``SNAPY_TEST_PYTHONPATH`` is unset. It is addressed to developers running
+   ``ctest``: without it the ``*_python`` tests import whatever ``snapy`` is
+   installed rather than the tree being built. It is safe to ignore for an
+   ordinary install; pass ``-DBUILD_TESTS=OFF`` if you do not want the tests at
+   all.
+
 5. Install the Python package::
 
     pip install .
