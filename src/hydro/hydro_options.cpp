@@ -42,6 +42,23 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   auto config = YAML::LoadFile(filename);
   auto dyn = config["dynamics"];
   if (dyn) {
+    // Every key here is read by a presence check, so an unknown key -- a
+    // typo, or an option that no longer exists -- would be silently ignored
+    // and the run would proceed as if it had been applied. Reject it instead.
+    // Only the TOP level is checked: the equation-of-state sub-block is
+    // co-owned (other libraries read their own keys from it), so its interior
+    // must not be policed here.
+    for (auto const& item : dyn) {
+      auto key = item.first.as<std::string>();
+      TORCH_CHECK(key == "equation-of-state" || key == "reconstruct" ||
+                      key == "riemann-solver" || key == "verbose" ||
+                      key == "disable-flux-x1" || key == "disable-flux-x2" ||
+                      key == "disable-flux-x3",
+                  "HydroOptions: unknown key 'dynamics/", key,
+                  "'. Valid keys: equation-of-state, reconstruct, "
+                  "riemann-solver, verbose, disable-flux-x1, disable-flux-x2, "
+                  "disable-flux-x3.");
+    }
     op->verbose() = dyn["verbose"].as<bool>(verbose);
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
