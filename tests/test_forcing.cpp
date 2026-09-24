@@ -238,6 +238,46 @@ TEST(forcing, relax_bottom_temperature) {
   EXPECT_TRUE(torch::allclose(du, expected));
 }
 
+// at-face: true relaxes T_face = 1.5*T0 - 0.5*T1 with the gain divided by 1.5;
+// the default leaves the old cell-centre tendency bit-identical
+TEST(forcing, relax_bottom_temperature_at_face) {
+  auto block = make_block();
+  auto w = make_primitive(block);
+  // quadratic, so no linear-exact face estimate but 1.5*T0 - 0.5*T1 matches
+  auto x = block->pcoord->x1v.view({1, 1, -1});
+  w[IPR] = 1.e5 - 1.e3 * x - 1.e2 * x * x;
+  auto temp = block->phydro->peos->compute("W->T", {w});
+  int ng = block->pcoord->options->nghost();
+  auto T0 = temp.narrow(-1, ng, 1), T1 = temp.narrow(-1, ng + 1, 1);
+  ASSERT_GT((T0 - T1).min().item<double>(), 0.) << "need a stratified column";
+  for (auto v : {w, temp}) {  // the ghosts must not be read
+    v.narrow(-1, 0, ng).fill_(NAN);
+    v.narrow(-1, v.size(-1) - ng, ng).fill_(NAN);
+  }
+  auto bot = bottom3(block);
+  auto rho = w[IDN].index(bot);
+  auto cv = block->phydro->peos->specific_heat_cv(w, temp).index(bot);
+
+  auto off = torch::zeros_like(w), on = torch::zeros_like(w);
+  RelaxBotTemp(RelaxBotTempOptionsImpl::from_yaml(
+                   YAML::Load("relax-bot-temp: {tau: 2., btemp: 350.}")),
+               block->phydro.get())
+      ->forward(off, w, temp, 0.5);
+  RelaxBotTemp(RelaxBotTempOptionsImpl::from_yaml(YAML::Load(
+                   "relax-bot-temp: {tau: 2., btemp: 350., at-face: true}")),
+               block->phydro.get())
+      ->forward(on, w, temp, 0.5);
+
+  auto expected = torch::zeros_like(w);
+  expected[IPR].index_put_(bot, 0.5 / 2. * rho * cv * (350. - T0));
+  EXPECT_TRUE(torch::equal(off, expected));
+  expected[IPR].index_put_(
+      bot, 1. / 1.5 * 0.5 / 2. * rho * cv * (350. - (1.5 * T0 - 0.5 * T1)));
+  EXPECT_TRUE(torch::allclose(on, expected, 1.e-13, 0.))
+      << "at-face tendency " << on[IPR].index(bot) << " expected "
+      << expected[IPR].index(bot);
+}
+
 TEST(forcing, relax_bottom_velocity) {
   auto block = make_block();
   auto w = make_primitive(block);
