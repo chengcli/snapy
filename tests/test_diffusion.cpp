@@ -288,11 +288,11 @@ TEST_P(DeviceTest, periodic_x1_face_is_not_extrapolated) {
   EXPECT_NEAR(du[IPR][0][0][nghost].item<double>(), 0.5 * full, 1.e-4 * full);
 }
 
-// Only reflecting fills the ghost with a physical state sitting at the wrong
-// place, which is the one case the wall branch may extrapolate past. Everything
-// else -- including a caller-supplied function whose name was never recorded --
-// must keep the two-cell average.
-TEST(diffusion_options, only_reflecting_counts_as_a_wall) {
+// reflecting puts a physical state at the wrong place and fixed_temperature
+// engineers a state that is none; the wall branch may extrapolate past both.
+// Everything else -- including a caller-supplied function whose name was never
+// recorded -- must keep the two-cell average.
+TEST(diffusion_options, wall_names_are_an_exact_whitelist) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
   EXPECT_TRUE(options->is_wall_boundary(0, 0, -1));
   EXPECT_TRUE(options->is_wall_boundary(0, 0, 1));
@@ -320,6 +320,10 @@ TEST(diffusion_options, only_reflecting_counts_as_a_wall) {
       get_bc_func().at("reflecting_inner");
   options->bcnames()[BoundaryFace::kInnerX1] = "reflecting_sponge_inner";
   EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
+
+  // an engineered fixed-temperature wall is a wall
+  options->bcnames()[BoundaryFace::kInnerX1] = "fixed_temperature_inner";
+  EXPECT_TRUE(options->is_wall_boundary(0, 0, -1));
 
   // and neither is anything once the two records disagree in length
   options->bcnames().clear();
@@ -393,4 +397,13 @@ TEST_P(DeviceTest, timestep_uses_largest_diffusivity) {
 
   w[IPR] = 1.e-6;
   EXPECT_NEAR(block->phydro->max_time_step(w), 1., 1.e-6);
+}
+
+// std::min(dt, NaN) returns dt: a NaN diffusivity used to drop the bound
+TEST_P(DeviceTest, timestep_rejects_a_non_finite_diffusivity) {
+  auto block = make_block();
+  block->to(device, dtype);
+  auto w = make_primitive(block, device, dtype);
+  block->phydro->pdiffusion->options->nu_iso(NAN);
+  EXPECT_ANY_THROW(block->phydro->max_time_step(w));
 }

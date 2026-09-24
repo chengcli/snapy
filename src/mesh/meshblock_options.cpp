@@ -204,14 +204,27 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   return op;
 }
 
+namespace {
+// First match wins, in x3/x2/x1 order. is_physical_boundary always did;
+// is_wall_boundary used an assignment chain, i.e. the opposite precedence, for
+// a multi-axis direction -- which only diffusion calls, and only with
+// (0,0,+-1).
+int face_of(int dy, int dx, int dz) {
+  if (dy == -1) return BoundaryFace::kInnerX3;
+  if (dy == 1) return BoundaryFace::kOuterX3;
+  if (dx == -1) return BoundaryFace::kInnerX2;
+  if (dx == 1) return BoundaryFace::kOuterX2;
+  if (dz == -1) return BoundaryFace::kInnerX1;
+  if (dz == 1) return BoundaryFace::kOuterX1;
+  return BoundaryFace::kUnknown;
+}
+}  // namespace
+
 bool MeshBlockOptionsImpl::is_physical_boundary(int dy, int dx, int dz) const {
-  if (dy == -1) return bfuncs()[BoundaryFace::kInnerX3] != nullptr;
-  if (dy == 1) return bfuncs()[BoundaryFace::kOuterX3] != nullptr;
-  if (dx == -1) return bfuncs()[BoundaryFace::kInnerX2] != nullptr;
-  if (dx == 1) return bfuncs()[BoundaryFace::kOuterX2] != nullptr;
-  if (dz == -1) return bfuncs()[BoundaryFace::kInnerX1] != nullptr;
-  if (dz == 1) return bfuncs()[BoundaryFace::kOuterX1] != nullptr;
-  return false;
+  // bfuncs() can be shorter than the face index: set_bfuncs (and options.bfuncs
+  // from python) takes a vector of any length, after construction.
+  auto i = static_cast<size_t>(face_of(dy, dx, dz));
+  return i < bfuncs().size() && bfuncs()[i] != nullptr;
 }
 
 MeshBlockOptionsImpl &MeshBlockOptionsImpl::set_bfuncs(
@@ -222,16 +235,7 @@ MeshBlockOptionsImpl &MeshBlockOptionsImpl::set_bfuncs(
 }
 
 bool MeshBlockOptionsImpl::is_wall_boundary(int dy, int dx, int dz) const {
-  int face = BoundaryFace::kUnknown;
-  if (dy == -1) face = BoundaryFace::kInnerX3;
-  if (dy == 1) face = BoundaryFace::kOuterX3;
-  if (dx == -1) face = BoundaryFace::kInnerX2;
-  if (dx == 1) face = BoundaryFace::kOuterX2;
-  if (dz == -1) face = BoundaryFace::kInnerX1;
-  if (dz == 1) face = BoundaryFace::kOuterX1;
-  if (face == BoundaryFace::kUnknown) return false;
-
-  auto i = static_cast<size_t>(face);
+  auto i = static_cast<size_t>(face_of(dy, dx, dz));
   if (i >= bfuncs().size() || bfuncs()[i] == nullptr) return false;
 
   // A boundary function with no recorded name cannot be classified. That is
@@ -247,16 +251,18 @@ bool MeshBlockOptionsImpl::is_wall_boundary(int dy, int dx, int dz) const {
     return false;
   }
 
-  // A whitelist, deliberately. `reflecting` is the only boundary function whose
-  // ghost the operator may extrapolate past: it mirrors the interior, so the
-  // ghost is a physical state sitting at the wrong place. Everything else keeps
+  // A whitelist, deliberately. `reflecting` mirrors the interior, so its ghost
+  // is a physical state sitting at the wrong place; `fixed_temperature`
+  // engineers its ghost, so it is no state at all. The
+  // operator may extrapolate past both. Everything else keeps
   // the two-cell average -- periodic's ghost is a true neighbour, outflow's
   // zero-gradient ghost IS that condition's statement about the face, custom is
   // written by user code this cannot interpret, and `solid` writes a bare 1
   // into every variable, which makes the GRADIENT nonsense too; fixing the
   // coefficient alone would not rescue that face.
   auto const &name = bcnames()[i];
-  return name == "reflecting_inner" || name == "reflecting_outer";
+  return name == "reflecting_inner" || name == "reflecting_outer" ||
+         name == "fixed_temperature_inner" || name == "fixed_temperature_outer";
 }
 
 std::string MeshBlockOptionsImpl::device_str() const {
