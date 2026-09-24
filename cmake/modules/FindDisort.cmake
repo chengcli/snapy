@@ -72,9 +72,6 @@ set(DISORT_INCLUDE_DIR
     "${DISORT_INCLUDE_DIR}"
     CACHE FILEPATH "Path to a file.")
 
-# Step 4: unset the internal temp variable
-unset(_DISORT_HEADER_DIR CACHE)
-
 find_library(
   DISORT_LIBRARY disort_release
   HINTS ${disort_lib_dir}

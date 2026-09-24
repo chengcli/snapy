@@ -70,9 +70,6 @@ set(HARP_INCLUDE_DIR
     "${HARP_INCLUDE_DIR}"
     CACHE FILEPATH "Path to a file.")
 
-# Step 4: unset the internal temp variable
-unset(_HARP_HEADER_DIR CACHE)
-
 find_library(
   HARP_LIBRARY harp_release
   HINTS ${harp_lib_dir}
