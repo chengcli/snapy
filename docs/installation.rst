@@ -73,6 +73,14 @@ Build Steps
    ordinary install; pass ``-DBUILD_TESTS=OFF`` if you do not want the tests at
    all.
 
+.. note::
+
+   The Kintera, Harp and Disort locations are resolved from the Python
+   environment on the first configure of a build directory and kept after that.
+   After switching Python environments, or reinstalling one of these packages
+   somewhere else, configure a fresh build directory (or pass
+   ``--fresh``, CMake >= 3.24) instead of reconfiguring the old one.
+
 5. Install the Python package::
 
     pip install .
