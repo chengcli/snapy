@@ -206,8 +206,37 @@ def resample_x2_periodic(arr: np.ndarray, nc2_new: int, ng: int) -> np.ndarray:
     return out
 
 
+def fill_x1_ghosts(out: np.ndarray, ng: int, roles: list, inner: str, outer: str) -> None:
+    """Rebuild the x1 ghost zones the way the boundary condition defines them.
+
+    Snapy does not refill ghosts when it loads a restart, so the first
+    reconstruction uses whatever the file holds. A reflecting wall stores the
+    mirror of the interior with the wall-normal velocity negated; leaving the
+    smooth extrapolation there instead put the bottom ghost 12% too dense with
+    the velocity pointing the wrong way, which reads as inflow through a solid
+    wall and threw a six-fold kinetic energy spike into the first day.
+
+    Anything other than a reflecting wall keeps the extrapolation, which is the
+    reasonable neutral choice for outflow and for a periodic seam that the
+    exchange will overwrite anyway.
+    """
+    try:
+        v1 = roles.index(VEL)
+    except ValueError:
+        v1 = None
+    if inner == "reflecting":
+        out[..., :ng] = out[..., ng:2 * ng][..., ::-1]
+        if v1 is not None:
+            out[v1][..., :ng] *= -1.0
+    if outer == "reflecting":
+        out[..., -ng:] = out[..., -2 * ng:-ng][..., ::-1]
+        if v1 is not None:
+            out[v1][..., -ng:] *= -1.0
+
+
 def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: bool,
-                 skip: int, nfit: int, zero_above: list = ()) -> np.ndarray:
+                 skip: int, nfit: int, zero_above: list = (),
+                 bc: tuple = ("", "")) -> np.ndarray:
     """Map one (nvar, nc3, nc2, nc1) array onto the new grid.
 
     `zero_above` names variable slots that must not be carried into the
@@ -250,6 +279,8 @@ def regrid_state(arr: np.ndarray, old: Grid, new: Grid, roles: list, conserved: 
         above = z_new > z_old[-1]
         for v in zero_above:
             out[v][..., above] = 0.0
+
+    fill_x1_ghosts(out, new.nghost, roles, bc[0], bc[1])
 
     if new.nc2 != old.nc2:
         out = resample_x2_periodic(out, new.nc2, new.nghost)
@@ -359,8 +390,16 @@ def main() -> int:
         print(f"note: the new lid is lower ({new.x1max:.6g} < {old.x1max:.6g}); "
               "the column above it is discarded")
 
+    ext = (new_cfg.get("boundary-condition") or {}).get("external") or {}
+    bc = (str(ext.get("x1-inner", "")), str(ext.get("x1-outer", "")))
+    print(f"x1 boundaries: inner {bc[0] or 'unset'}, outer {bc[1] or 'unset'}")
+
     blocks = read_restart(args.restart)
     print(f"read {len(blocks)} block(s) from {args.restart}")
+    if len(blocks) > 1:
+        print("note: several blocks. x1 is regridded per block; x2 and x3 must "
+              "be unchanged, since the configuration describes the whole mesh "
+              "and not one block's share of it.")
 
     for _, tensors in blocks:
         for key in sorted(tensors):
@@ -368,7 +407,9 @@ def main() -> int:
                 continue
             tensor = tensors[key]
             arr = tensor.to(torch.float64).cpu().numpy()
-            if arr.shape[1:] != (old.nc3, old.nc2, old.nc1):
+            if arr.shape[-1] != old.nc1 or (
+                len(blocks) == 1 and arr.shape[1:] != (old.nc3, old.nc2, old.nc1)
+            ):
                 raise SystemExit(
                     f"{key} has shape {tuple(arr.shape)}, which does not match the old "
                     f"configuration ({old.nc3}, {old.nc2}, {old.nc1}); --old-config is "
@@ -379,7 +420,7 @@ def main() -> int:
             zero = [] if args.keep_condensate else condensate_slots(
                 new_cfg, arr.shape[0], args.index_scheme)
             out = regrid_state(arr, old, new, roles, conserved,
-                               args.edge_skip, args.edge_fit, zero)
+                               args.edge_skip, args.edge_fit, zero, bc)
             tensors[key] = torch.from_numpy(out).to(tensor.dtype)
             print(f"  {key}: {tuple(arr.shape)} -> {tuple(out.shape)} "
                   f"({'conserved' if conserved else 'primitive'})")

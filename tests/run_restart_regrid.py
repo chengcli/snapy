@@ -43,6 +43,8 @@ def config(x1max: float, nx1: int) -> dict:
   return {
       # Slot 5 is a vapour, slot 6 a condensate by Snapy's parenthesised name.
       "species": [{"name": "dry"}, {"name": "H2O"}, {"name": "H2O(l)"}],
+      "boundary-condition": {"external": {"x1-inner": "reflecting",
+                                          "x1-outer": "reflecting"}},
       "geometry": {
           "bounds": {"x1min": 0.0, "x1max": x1max,
                      "x2min": 0.0, "x2max": 1.0e5},
@@ -162,6 +164,21 @@ def main() -> int:
     check("stretched shape",
           tuple(wide["hydro_u"].shape) == (NVAR, 1, NX2 + 4 + 2 * NGHOST, new.nc1),
           str(tuple(wide["hydro_u"].shape)))
+
+    # A reflecting wall stores the mirror of the interior, with the
+    # wall-normal velocity negated. Snapy does not refill these on restart, so
+    # the file itself has to be right.
+    ug = out["hydro_u"].numpy()
+    for name, gh, act in (
+        ("bottom", ug[:, 0, NGHOST, NGHOST - 1::-1], ug[:, 0, NGHOST, NGHOST:2 * NGHOST]),
+        ("top", ug[:, 0, NGHOST, -NGHOST:], ug[:, 0, NGHOST, -NGHOST - 1:-2 * NGHOST - 1:-1]),
+    ):
+      check(f"{name} x1 ghosts mirror the interior",
+            np.abs(gh[0] - act[0]).max() < 1e-12,
+            f"density {gh[0]} vs {act[0]}")
+      check(f"{name} x1 ghosts negate the wall-normal velocity",
+            np.abs(gh[1] + act[1]).max() < 1e-12,
+            f"momentum {gh[1]} vs {act[1]}")
 
   print("test_restart_regrid passed")
   return 0
