@@ -11,8 +11,8 @@
 
 // Unknown keys under `dynamics:` must be rejected, not silently ignored: a
 // typo'd or removed option would otherwise run as if applied, with nothing in
-// the log. `positivity` is a real example -- a documented key that no code
-// reads.
+// the log. `positivity` stands in for such a key: the parser does not accept
+// it, and the error must name it.
 TEST(hydro_options, reject_unknown_dynamics_keys) {
   auto write = [](std::string const &fname, std::string const &extra) {
     std::ofstream f(fname);
@@ -34,7 +34,13 @@ TEST(hydro_options, reject_unknown_dynamics_keys) {
   EXPECT_NO_THROW(snap::HydroOptionsImpl::from_yaml(good));
 
   write(bad, "  positivity: true\n");
-  EXPECT_ANY_THROW(snap::HydroOptionsImpl::from_yaml(bad));
+  try {
+    snap::HydroOptionsImpl::from_yaml(bad);
+    FAIL() << "Expected unknown key 'dynamics/positivity' to throw";
+  } catch (std::exception const &exc) {
+    auto msg = std::string(exc.what());
+    EXPECT_NE(msg.find("dynamics/positivity"), std::string::npos) << msg;
+  }
 
   std::remove(good.c_str());
   std::remove(bad.c_str());
