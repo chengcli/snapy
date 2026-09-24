@@ -45,7 +45,7 @@ torch::Tensor LmarsSolverImpl::forward(torch::Tensor wl, torch::Tensor wr,
   elr[IRT] = peos->compute("W->I", {wr}) / wr[IDN];
 
   if (peos->options->type() == "aneos") {
-    clr = peos->compute("W->L", {wr});
+    clr[IRT] = peos->compute("W->L", {wr});
     glr[IRT] = peos->compute("WL->A", {wr, clr[IRT]});
   } else {
     glr[IRT] = peos->compute("W->A", {wr});
