@@ -191,44 +191,6 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
 };
 TORCH_MODULE(Diffusion);
 
-//////// (4) Frictional Heating ////////
-
-struct FricHeatOptionsImpl {
-  static std::shared_ptr<FricHeatOptionsImpl> create() {
-    return std::make_shared<FricHeatOptionsImpl>();
-  }
-  static std::shared_ptr<FricHeatOptionsImpl> from_yaml(
-      YAML::Node const& forcing);
-
-  FricHeatOptionsImpl() = default;
-  std::shared_ptr<FricHeatOptionsImpl> clone() const {
-    return std::make_shared<FricHeatOptionsImpl>(*this);
-  }
-  void report(std::ostream& os) const {
-    os << "-- frictional heating options --\n";
-  }
-};
-using FricHeatOptions = std::shared_ptr<FricHeatOptionsImpl>;
-
-class FricHeatImpl : public torch::nn::Cloneable<FricHeatImpl> {
- public:
-  //! options with which this `FricHeat` was constructed
-  FricHeatOptions options;
-
-  //! non-owning reference to parent
-  HydroImpl const* phydro = nullptr;
-
-  // Constructor to initialize the layers
-  FricHeatImpl() : options(FricHeatOptionsImpl::create()) {}
-  explicit FricHeatImpl(FricHeatOptions const& options_,
-                        torch::nn::Module* p = nullptr);
-  void reset() override;
-
-  torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
-                        double dt);
-};
-TORCH_MODULE(FricHeat);
-
 //////// (5) Body Heating ////////
 
 struct BodyHeatOptionsImpl {

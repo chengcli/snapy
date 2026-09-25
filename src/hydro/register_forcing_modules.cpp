@@ -28,12 +28,6 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
     forcing_names.push_back("diffusion");
   }
 
-  if (options->fricHeat()) {
-    forcings.push_back(
-        torch::nn::AnyModule(FricHeat(options->fricHeat(), this)));
-    forcing_names.push_back("fric-heat");
-  }
-
   if (options->bodyHeat()) {
     forcings.push_back(
         torch::nn::AnyModule(BodyHeat(options->bodyHeat(), this)));

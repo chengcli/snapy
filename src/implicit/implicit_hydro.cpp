@@ -69,6 +69,8 @@ void ImplicitHydroImpl::reset() {
   _du0 = register_buffer("du0", torch::empty({0}, torch::kFloat64));
   _corr = register_buffer("corr", torch::empty({0}, torch::kFloat64));
   _mass_corr = register_buffer("mass_corr", torch::empty({0}, torch::kFloat64));
+  _clamp_residual =
+      register_buffer("clamp_residual", torch::zeros({1}, torch::kFloat64));
 }
 
 void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
@@ -175,6 +177,24 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
                                          0);
+  }
+
+  // only the availability clamp breaks sum_ch MASS*VOL == M(i) - M(i+1)
+  {
+    int is = pcoord->il();
+    int ie = pcoord->iu() + 1;
+    int nyc = du.size(0) - ICY;
+    auto cell = _mass_corr[IDN].clone();
+    for (int n = 0; n < nyc; ++n) cell += _mass_corr[ICY + n];
+    auto M = _mass_corr[IVX];
+    auto Ml = M.slice(-1, is, ie);
+    auto Mu = M.slice(-1, is + 1, ie + 1);
+    auto lhs = (cell * pcoord->cell_volume()).slice(-1, is, ie);
+    auto rhs = Ml - Mu;
+    // per cell: a column max would hide a binding in a low-flux layer
+    auto scale = torch::maximum(Ml.abs(), Mu.abs()).clamp_min(1.e-300);
+    _clamp_residual.copy_(torch::maximum(
+        _clamp_residual, ((lhs - rhs).abs() / scale).max().detach()));
   }
 
   /// (3) De-project from local orthonormal frame

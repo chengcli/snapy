@@ -51,7 +51,6 @@ struct HydroOptionsImpl {
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
   ADD_ARG(CoriolisOptions, coriolis) = nullptr;
   ADD_ARG(DiffusionOptions, diffusion) = nullptr;
-  ADD_ARG(FricHeatOptions, fricHeat) = nullptr;
   ADD_ARG(BodyHeatOptions, bodyHeat) = nullptr;
   ADD_ARG(BotHeatOptions, botHeat) = nullptr;
   ADD_ARG(TopCoolOptions, topCool) = nullptr;
@@ -135,6 +134,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! cumulative count of (cell, species) entries with positivity theta < 1
   //! (diagnostic; accumulated when the EOS limiter is enabled)
   torch::Tensor positivity_hits() const { return _positivity_hits; }
+  //! how HARD the limiter bites, not just how often
+  torch::Tensor positivity_severe() const { return _positivity_severe; }
+  torch::Tensor positivity_min() const { return _positivity_min; }
+  //! x1 face flux the limiter removes, and the total offered (lifetime sums)
+  torch::Tensor lim_cut() const { return _lim_cut; }
+  torch::Tensor lim_flux() const { return _lim_flux; }
 
  protected:
   void _revise_x1inner_ghost(torch::Tensor const& w);
@@ -162,7 +167,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable int x1_uniform_ = -1;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div;
-  torch::Tensor _positivity_hits;
+  torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
+  torch::Tensor _lim_cut, _lim_flux;
 };
 
 TORCH_MODULE(Hydro);

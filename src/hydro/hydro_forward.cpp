@@ -150,8 +150,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       }
     }
 
-    // add sedimentation flux
-    if (psed) psed->forward(w, _flux1);
+    // sedimentation flux; skipped when x1 flux is off (_flux1 not rewritten)
+    if (psed && !options->disable_flux_x1()) psed->forward(w, _flux1);
 
     // Make internal x1 seam fluxes single-valued. The two ranks sharing an
     // internal x1 face each compute the face flux from their own
@@ -320,6 +320,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // census before the ghost fill: ghosts are exactly 1 here, so this counts
     // interior (cell, species) entries only, with no double count across ranks
     _positivity_hits += (theta < 1.).sum();
+    auto cells = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+    auto ti = theta.index(cells).to(torch::kFloat64);
+    _positivity_severe += (ti < 0.9).sum();
+    _positivity_min.copy_(torch::minimum(_positivity_min, ti.min()));
 
     Variables tvars;
     tvars["hydro_theta"] = theta;
@@ -335,7 +339,17 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       pmb->options->bfuncs()[i](theta, 3 - i / 2, bops);
     }
 
+    // theta's depth is not its consequence: measure the flux it removes
+    auto f1_pre = f1.defined() ? f1.abs() : torch::Tensor();
+
     flux_positivity_scale_(theta, f1, f2, f3, pmb->pcoord);
+
+    if (f1_pre.defined()) {
+      // non-negative while every bfunc keeps the ghost theta in [0,1]
+      auto cut = f1_pre - f1.abs();
+      _lim_flux += f1_pre.index(cells).sum().to(torch::kFloat64);
+      _lim_cut += cut.index(cells).sum().to(torch::kFloat64);
+    }
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
