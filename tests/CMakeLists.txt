@@ -123,6 +123,9 @@ snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydr
 snapy_add_python_test(test_shear_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo")
 snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
+snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
+snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere")
 
 # Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the
 # caller's and must survive behind SNAPY_TEST_PYTHONPATH (only checkable with CMake >= 3.22).

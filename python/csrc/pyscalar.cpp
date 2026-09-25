@@ -31,6 +31,7 @@ void bind_scalar(py::module& m) {
       .ADD_OPTION(bool, snap::ScalarOptionsImpl, verbose)
       .ADD_OPTION(int, snap::ScalarOptionsImpl, nvar)
       .ADD_OPTION(std::vector<std::string>, snap::ScalarOptionsImpl, names)
+      .ADD_OPTION(double, snap::ScalarOptionsImpl, upper_bound)
       .ADD_OPTION(snap::ReconstructOptions, snap::ScalarOptionsImpl, recon)
       .ADD_OPTION(snap::RiemannSolverOptions, snap::ScalarOptionsImpl, riemann);
 

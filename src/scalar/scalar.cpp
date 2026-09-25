@@ -20,6 +20,17 @@ void ScalarImpl::reset() {
   TORCH_CHECK(options->riemann()->type() == "upwind",
               "[Scalar] Passive scalars currently require the upwind solver");
 
+  // Zero is rejected rather than read as "off": it would pin every tracer to
+  // zero and freeze transport, and it is far likelier to have meant "off".
+  TORCH_CHECK(options->upper_bound() != 0.,
+              "[Scalar] upper-bound = 0 pins the tracer to zero and freezes "
+              "transport; use a negative value to disable the bound");
+  TORCH_CHECK(
+      options->upper_bound() <= 0. || pmb->phydro->options->eos()->limiter(),
+      "[Scalar] upper-bound needs the eos limiter: it bounds r from "
+      "above by the positivity of the complement, and enforcing one "
+      "side alone leaves the other unbounded");
+
   pcoord = pmb->pcoord;
   precon = ReconstructImpl::create(options->recon(), this);
   priemann = RiemannSolverImpl::create(options->riemann(), this);
@@ -46,6 +57,8 @@ void ScalarImpl::reset() {
                     : torch::Tensor());
   _div = register_buffer(
       "D", torch::zeros({nvar(), nc3, nc2, nc1}, torch::kFloat64));
+  _positivity_hits =
+      register_buffer("positivity_hits", torch::zeros({1}, torch::kInt64));
 }
 
 torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
@@ -74,8 +87,14 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   if (_flux2.defined()) {
     rtmp2 = precon->forward(r, DIM2);
     if (playout->options->type() == "cubed-sphere") {
-      send_vars2["scalar_rlr"] =
-          rtmp2.view({2 * nvar(), rtmp2.size(2), rtmp2.size(3), rtmp2.size(4)});
+      // Ship the two reconstructed states under DIRECTION-SUFFIXED keys, as the
+      // hydro does (hydro_forward.cpp). The ':' suffix selects the directional
+      // partial send/recv in CubedSphereLayoutImpl::serialize/deserialize,
+      // whose mirrored skip rules resolve the L/R roles across a panel edge;
+      // one un-suffixed key took no directional branch and swapped them at a
+      // flip_flag seam, making the upwind solver pick the downwind state.
+      send_vars2["scalar_wl:+"] = rtmp2[ILT];
+      send_vars2["scalar_wr:-"] = rtmp2[IRT];
       pmb->begin_exchange(send_vars2, sync_opts.dim(DIM2));
     }
   }
@@ -83,8 +102,9 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   if (_flux3.defined()) {
     rtmp3 = precon->forward(r, DIM3);
     if (playout->options->type() == "cubed-sphere") {
-      send_vars3["scalar_rlr"] =
-          rtmp3.view({2 * nvar(), rtmp3.size(2), rtmp3.size(3), rtmp3.size(4)});
+      // See the DIM2 comment above.
+      send_vars3["scalar_wl:+"] = rtmp3[ILT];
+      send_vars3["scalar_wr:-"] = rtmp3[IRT];
       pmb->begin_exchange(send_vars3, sync_opts.dim(DIM3));
     }
   }
@@ -117,13 +137,11 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   // Tracer flux positivity limiter: same scheme (and same rationale) as the
   // hydro species channels -- see flux_positivity.hpp and hydro_forward.cpp
   // step (4.C). It follows the existing EOS limiter setting.
-  if (pmb->phydro->options->eos()->limiter()) {
-    auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
-
+  auto sync_theta = [&](torch::Tensor theta) {
     Variables tvars;
     tvars["scalar_theta"] = theta;
     SyncOptions theta_opts;
-    theta_opts.interpolate(true).type(kScalar);
+    theta_opts.interpolate(false).type(kScalar);  // see hydro_forward.cpp 4.C
     pmb->exchange(tvars, theta_opts);
 
     BoundaryFuncOptions bops;
@@ -133,8 +151,52 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
       if (pmb->options->bfuncs()[i] == nullptr) continue;
       pmb->options->bfuncs()[i](theta, 3 - i / 2, bops);
     }
+    return theta;
+  };
 
-    flux_positivity_scale_(theta, _flux1, _flux2, _flux3, pcoord);
+  auto cells = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  if (pmb->phydro->options->eos()->limiter()) {
+    auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
+    _positivity_hits += (theta.index(cells) < 1.).sum();
+    flux_positivity_scale_(sync_theta(theta), _flux1, _flux2, _flux3, pcoord);
+  }
+
+  // r <= b is positivity of the complement b*rho - s, whose flux is b*F_mass -
+  // F_s, so the same limiter applies to it -- a SECOND theta, not the one
+  // above. Scaling the complement blends F_s toward b*F_mass, the donor-cell
+  // flux of a tracer at the bound; scaling F_s toward zero would bound it too
+  // but stop a plateau advecting.
+  //
+  // ⚠ This weakens the lower bound above from unconditional to conditional on
+  // the mass Courant number staying below 1: past that, theta can leave a cell
+  // exporting tracer it does not have. The premise also assumes rho moves by
+  // -dt*div(F_mass) alone, which the implicit vertical correction and any
+  // forcing writing du[IDN] both break.
+  if (options->upper_bound() > 0.) {
+    auto b = options->upper_bound();
+    auto mf = [&](int dim) {
+      return (dim == DIM1   ? pmb->phydro->flux1()
+              : dim == DIM2 ? pmb->phydro->flux2()
+                            : pmb->phydro->flux3())[IDN]
+          .unsqueeze(0);
+    };
+    torch::Tensor g1, g2, g3, h1, h2, h3;
+    if (_flux1.defined()) h1 = (g1 = b * mf(DIM1) - _flux1).clone();
+    if (_flux2.defined()) h2 = (g2 = b * mf(DIM2) - _flux2).clone();
+    if (_flux3.defined()) h3 = (g3 = b * mf(DIM3) - _flux3).clone();
+
+    auto theta = flux_positivity_theta(b * rho - u, g1, g2, g3, pcoord, dt);
+    _positivity_hits += (theta.index(cells) < 1.).sum();
+    flux_positivity_scale_(sync_theta(theta), g1, g2, g3, pcoord);
+
+    // Add the CHANGE, never recompute F_s = b*F_mass - g. The two are equal in
+    // algebra only: recomputing carries an error absolute in b*F_mass, so it
+    // perturbs EVERY face even where theta is 1, and in float32 it annihilates
+    // the flux of a species whose ratio is near the epsilon of b. This form is
+    // bitwise identity where nothing was limited.
+    if (_flux1.defined()) _flux1.add_(h1 - g1);
+    if (_flux2.defined()) _flux2.add_(h2 - g2);
+    if (_flux3.defined()) _flux3.add_(h3 - g3);
   }
 
   _div.set_(pcoord->divergence(_flux1, _flux2, _flux3));

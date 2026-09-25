@@ -19,6 +19,7 @@ ScalarOptions ScalarOptionsImpl::from_yaml(std::string const& filename,
 
   op->verbose() = node["verbose"].as<bool>(verbose);
   op->nvar() = node["nvar"].as<int>(0);
+  op->upper_bound() = node["upper-bound"].as<double>(-1.);
   if (node["names"]) {
     op->names() = node["names"].as<std::vector<std::string>>();
     op->nvar() = op->names().size();
