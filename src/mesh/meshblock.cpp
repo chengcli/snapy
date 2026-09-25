@@ -1019,7 +1019,8 @@ bool MeshBlockImpl::floor_hit(Variables const &vars) {
 int MeshBlockImpl::apply_redo(Variables &vars, bool redo) {
   if (redo) {
     SINFO(MeshBlock)
-        << "Density/pressure at or below the floor. Redoing the step with "
+        << "Density/pressure at or within 0.1% of the floor. Redoing the step "
+           "with "
            "smaller dt."
         << std::endl;
     pintg->current_redo += 1;

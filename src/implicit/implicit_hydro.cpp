@@ -1,6 +1,7 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -30,12 +31,27 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
     return nullptr;
   }
   {
-    op->advection_cfl(
-        config["integration"]["implicit-advection-cfl"].as<double>(1.0));
+    auto read_finite = [&](char const* key, double fallback) {
+      if (!intg[key]) return fallback;
+      auto const value = intg[key];
+      TORCH_CHECK(value.IsScalar(), "integration/", key,
+                  " must be a finite number.");
+      double parsed = 0.;
+      try {
+        parsed = value.as<double>();
+      } catch (YAML::Exception const&) {
+        TORCH_CHECK(false, "integration/", key,
+                    " must be a finite number, got '", value.Scalar(), "'.");
+      }
+      TORCH_CHECK(std::isfinite(parsed), "integration/", key,
+                  " must be a finite number, got ", parsed, ".");
+      return parsed;
+    };
+    op->advection_cfl(read_finite("implicit-advection-cfl", 1.0));
     TORCH_CHECK(op->advection_cfl() > 0.,
                 "integration/implicit-advection-cfl must be > 0, got ",
                 op->advection_cfl(), " (use a large value to relax the bound)");
-    op->shear_cfl(config["integration"]["shear-cfl"].as<double>(0.0));
+    op->shear_cfl(read_finite("shear-cfl", 0.0));
     TORCH_CHECK(op->shear_cfl() >= 0.,
                 "integration/shear-cfl must be >= 0, got ", op->shear_cfl(),
                 " (0 switches the bound off)");
