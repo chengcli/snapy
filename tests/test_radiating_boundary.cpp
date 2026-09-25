@@ -291,12 +291,10 @@ TEST(radiating, conserved_tracers_ride_dry_density) {
   for (auto eos : {"ideal-moist", "moist-mixture"}) {
     SCOPED_TRACE(eos);
     auto b = block_for(eos, 8, false, 1);
-    b->options->bfuncs() = {get_bc_func().at("outflow_inner"),
-                            get_bc_func().at("outflow_outer"),
-                            get_bc_func().at("outflow_inner"),
-                            get_bc_func().at("outflow_outer"),
-                            get_bc_func().at("outflow_inner"),
-                            get_bc_func().at("outflow_outer")};
+    b->options->bfuncs() = {
+        get_bc_func().at("outflow_inner"), get_bc_func().at("outflow_outer"),
+        get_bc_func().at("outflow_inner"), get_bc_func().at("outflow_outer"),
+        get_bc_func().at("outflow_inner"), get_bc_func().at("outflow_outer")};
     auto ref = background(b);
     auto tracer_ref = torch::full({1, 14, 14, 14}, 0.2, ref.options());
     Variables vars{{"boundary_reference_w", ref},
