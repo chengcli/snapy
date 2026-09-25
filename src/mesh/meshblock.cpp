@@ -459,7 +459,8 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
 
   vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
   if (pscalar->nvar() > 0) {
-    vars["scalar_s"] = hydro_w[IDN] * scalar_r;
+    // Seed with the conserved (dry) density, as set_scalar_primitive divides.
+    vars["scalar_s"] = vars.at("hydro_u")[IDN] * scalar_r;
   }
 
   //// ------------- (8) Fill solid boundaries -------------- ////
@@ -1153,7 +1154,9 @@ void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
   auto flush = [&]() {
     if (pending_faces.empty()) return;
     auto u = phydro->peos->compute("W->U", {w});
-    auto s = has_tracers ? r * w[IDN] : torch::Tensor();
+    // Tracer densities ride the conserved (dry) density, as in
+    // set_scalar_primitive, not the total density w[IDN].
+    auto s = has_tracers ? r * u[IDN] : torch::Tensor();
     for (int f : pending_faces) {
       int dim = 3 - f / 2, ng = op.nghost();
       int start = f % 2 ? hydro.size(dim) - ng : 0;
@@ -1174,7 +1177,7 @@ void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
         r = tracers;
       } else if (pending_faces.empty()) {
         w = phydro->peos->compute("U->W", {hydro.clone()});
-        r = has_tracers ? tracers / w[IDN] : torch::Tensor();
+        r = has_tracers ? tracers / hydro[IDN] : torch::Tensor();
       }
       op.type(kPrimitive);
       op.tracers = has_tracers ? r : torch::Tensor();

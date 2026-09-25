@@ -1,10 +1,12 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <iomanip>
 #include <kintera/utils/serialize.hpp>
 #include <limits>
 #include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <sstream>
 
 #include "device_testing.hpp"
 
@@ -206,7 +208,7 @@ TEST(radiating, mixed_faces_preserve_representation_and_order) {
       w[IVZ].fill_(4.);
       auto u = primitive ? w : b->phydro->peos->compute("W->U", {w});
       auto r = tracer_ref.clone().add_(0.1);
-      auto tracers = primitive ? r : r * w[IDN];
+      auto tracers = primitive ? r : r * u[IDN];
       auto expected = u.clone(), expected_tracers = tracers.clone();
       auto active = u.narrow(1, 3, 8).narrow(2, 3, 8).narrow(3, 3, 8).clone();
 
@@ -221,7 +223,7 @@ TEST(radiating, mixed_faces_preserve_representation_and_order) {
               primitive ? expected
                         : b->phydro->peos->compute("U->W", {expected.clone()});
           auto face_r =
-              primitive ? expected_tracers : expected_tracers / face_w[IDN];
+              primitive ? expected_tracers : expected_tracers / expected[IDN];
           op.tracers = face_r;
           op.tracer_reference = tracer_ref;
           fn(face_w, dim, op);
@@ -229,7 +231,7 @@ TEST(radiating, mixed_faces_preserve_representation_and_order) {
             auto face_u = b->phydro->peos->compute("W->U", {face_w});
             expected.narrow(dim, start, 3).copy_(face_u.narrow(dim, start, 3));
             expected_tracers.narrow(dim, start, 3)
-                .copy_((face_r * face_w[IDN]).narrow(dim, start, 3));
+                .copy_((face_r * face_u[IDN]).narrow(dim, start, 3));
           }
         } else {
           op.type(primitive ? kPrimitive : kConserved);
@@ -280,6 +282,84 @@ TEST(radiating, admissibility_and_errors) {
   scalar.type(kScalar).nghost(3);
   get_bc_func().at("outflow_inner")(aux, 3, scalar);
   EXPECT_TRUE(torch::equal(aux.narrow(3, 0, 3), expected.expand({1, 1, 1, 3})));
+}
+
+TEST(radiating, conserved_tracers_ride_dry_density) {
+  // With vapor present u[IDN] (dry) differs from w[IDN] (total). Conserved
+  // tracers must use u[IDN], as set_scalar_primitive does, so the conserved
+  // path reproduces the primitive path.
+  for (auto eos : {"ideal-moist", "moist-mixture"}) {
+    SCOPED_TRACE(eos);
+    auto b = block_for(eos, 8, false, 1);
+    b->options->bfuncs() = {get_bc_func().at("outflow_inner"),
+                            get_bc_func().at("outflow_outer"),
+                            get_bc_func().at("outflow_inner"),
+                            get_bc_func().at("outflow_outer"),
+                            get_bc_func().at("outflow_inner"),
+                            get_bc_func().at("outflow_outer")};
+    auto ref = background(b);
+    auto tracer_ref = torch::full({1, 14, 14, 14}, 0.2, ref.options());
+    Variables vars{{"boundary_reference_w", ref},
+                   {"boundary_reference_r", tracer_ref}};
+    auto w = ref.clone();
+    w[IVX].fill_(2.);
+    auto r = tracer_ref.clone().add_(0.1);
+
+    auto u = b->phydro->peos->compute("W->U", {w});
+    ASSERT_FALSE(torch::allclose(u[IDN], w[IDN]));
+    auto s = r * u[IDN];
+    b->apply_boundaries(vars, u, s, false);
+    b->apply_boundaries(vars, w, r, true);
+
+    auto expected = b->phydro->peos->compute("W->U", {w});
+    EXPECT_TRUE(torch::allclose(u, expected, 1.e-12, 1.e-9));
+    double e_tr = (s / u[IDN] - r).abs().max().item<double>();
+    std::ostringstream val;
+    val << std::scientific << std::setprecision(3) << e_tr;
+    RecordProperty(eos, val.str());
+    EXPECT_TRUE(torch::allclose(s / u[IDN], r, 1.e-12, 1.e-12))
+        << "max |s/u[IDN] - r| = " << e_tr;
+  }
+}
+
+TEST(radiating, moist_tracers_are_per_dry_air) {
+  // The stepper reads scalar_r = scalar_s / u[IDN], with u[IDN] the dry
+  // density (1 - q) * w[IDN]. Initial seeding and the conserved radiating
+  // path must keep that ratio: interior after initialize, an inflow face
+  // (ghost takes the reference) and an outflow face (ghost takes the
+  // interior perturbation).
+  for (auto eos : {"ideal-moist", "moist-mixture"})
+    for (double q : {0.001, 0.01, 0.05}) {
+      SCOPED_TRACE(std::string(eos) + " q=" + std::to_string(q));
+      auto b = block_for(eos, 8, true, 1);
+      auto w = background(b);
+      w[ICY].fill_(q);
+      w[IVX].fill_(10.);  // x1-inner inflow, x1-outer outflow
+      auto r = torch::full({1, 1, 1, 14}, 0.5, w.options());
+      Variables vars{{"hydro_w", w}, {"scalar_r", r.clone()}};
+      b->initialize(vars);
+      auto u = vars.at("hydro_u"), s = vars.at("scalar_s");
+      ASSERT_FALSE(torch::allclose(u[IDN], w[IDN]));
+
+      // Lower the tracer reference so the two faces select different values.
+      vars.at("boundary_reference_r").fill_(0.3);
+      b->apply_boundaries(vars, u, s);
+      auto ratio = s / u[IDN];
+      auto err = [](torch::Tensor t, double v) {
+        return (t - v).abs().max().item<double>();
+      };
+      double e_init = err(ratio.narrow(3, 3, 8), 0.5);
+      double e_in = err(ratio.narrow(3, 0, 3), 0.3);
+      double e_out = err(ratio.narrow(3, 11, 3), 0.5);
+      std::ostringstream key, val;
+      key << eos << "_q" << q;
+      val << std::scientific << std::setprecision(3) << "init=" << e_init
+          << " inflow=" << e_in << " outflow=" << e_out;
+      RecordProperty(key.str(), val.str());
+      EXPECT_LT(e_init, 1.e-12);
+      EXPECT_LT(e_in, 1.e-12);
+      EXPECT_LT(e_out, 1.e-12);
+    }
 }
 
 TEST(radiating, reference_copies_and_active_conserved_unchanged) {
