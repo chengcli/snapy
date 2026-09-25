@@ -740,6 +740,76 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
                               1.e-10, 1.e-8));
 }
 
+TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
+  // publish rk_stage as advance_local does; #202's tests call forward directly
+  std::vector<double> stage_momentum;
+  for (int stage = 0; stage < 3; ++stage) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_gravity_energy.yaml");
+
+    auto gravity = ConstGravityOptionsImpl::create();
+    gravity->grav1(-1.);
+    options->hydro()->grav() = gravity;
+    auto icorr = ImplicitOptionsImpl::create();
+    icorr->scheme(1);
+    options->hydro()->icorr() = icorr;
+
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    auto coord = block->pcoord;
+
+    ASSERT_EQ(block->pintg->stages.size(), 3u)
+        << "stage weighting is guarded on a 3-stage integrator";
+
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN] = 1. + 0.05 * coord->x1v;
+    w[IVX].zero_();
+    w[IPR].fill_(1.e5);
+
+    Variables vars;
+    vars["hydro_w"] = w;
+    block->initialize(vars);
+
+    // What advance_local publishes before calling phydro->forward.
+    block->phydro->rk_stage = stage;
+
+    double dt = 0.1;
+    auto du = block->phydro->forward(dt, vars.at("hydro_u"), vars);
+    stage_momentum.push_back(du[IVX].abs().sum().item<double>());
+
+    int is = coord->il();
+    int ie = coord->iu() + 1;
+    int ny = du.size(0) - ICY;
+    auto mass_du = du[IDN].clone();
+    auto mass_flux = block->phydro->flux1()[IDN].clone();
+    if (ny > 0) {
+      mass_du += du.narrow(0, ICY, ny).sum(0);
+      mass_flux += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+    }
+    auto phi_cell = -gravity->grav1() * coord->x1v;
+    auto phi_face = -gravity->grav1() * coord->x1f;
+    auto mechanical_du = du[IPR] + phi_cell * mass_du;
+    auto mechanical_flux =
+        block->phydro->flux1()[IPR] +
+        phi_face.narrow(0, 0, mass_flux.size(-1)) * mass_flux;
+    auto integrated_du = (mechanical_du.slice(-1, is, ie) *
+                          coord->cell_volume().slice(-1, is, ie))
+                             .sum();
+    auto boundary_flux =
+        (coord->face_area1().select(-1, ie) * mechanical_flux.select(-1, ie) -
+         coord->face_area1().select(-1, is) * mechanical_flux.select(-1, is))
+            .sum();
+
+    EXPECT_NEAR(integrated_du.item<double>(),
+                (-dt * boundary_flux).item<double>(), 1.e-9)
+        << "total-energy conservation broken at rk3 stage " << stage;
+  }
+
+  // stage 1 weights dt by 1/4; these coincide if the weighting stops arriving.
+  EXPECT_GT(std::abs(stage_momentum[0] - stage_momentum[1]), 1.e-6)
+      << "the stage weighting is not reaching the implicit correction";
+}
+
 TEST(forcing, relax_bottom_composition_handles_multidimensional_ghost_zones) {
   auto block = make_block("test_forcing_3d.yaml");
   auto w = make_primitive(block);
