@@ -171,13 +171,35 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
               "use 'nu_iso' and 'kappa_iso'.");
 
   auto op = DiffusionOptionsImpl::create();
-  op->nu_iso() = node["nu_iso"].as<double>(0.);
-  op->kappa_iso() = node["kappa_iso"].as<double>(0.);
-  op->dynamic() = node["dynamic"].as<bool>(false);
-  TORCH_CHECK(op->nu_iso() >= 0.,
-              "DiffusionOptions: nu_iso must be non-negative.");
-  TORCH_CHECK(op->kappa_iso() >= 0.,
-              "DiffusionOptions: kappa_iso must be non-negative.");
+  auto take_non_negative = [&](char const* key) {
+    if (!node[key]) return 0.;
+    auto const value = node[key];
+    TORCH_CHECK(value.IsScalar(), "DiffusionOptions: ", key,
+                " must be a finite number >= 0.");
+    double parsed = 0.;
+    try {
+      parsed = value.as<double>();
+    } catch (YAML::Exception const&) {
+      TORCH_CHECK(false, "DiffusionOptions: ", key,
+                  " must be a finite number >= 0, got '", value.Scalar(), "'.");
+    }
+    TORCH_CHECK(std::isfinite(parsed) && parsed >= 0.,
+                "DiffusionOptions: ", key,
+                " must be a finite number >= 0, got ", parsed, ".");
+    return parsed;
+  };
+  op->nu_iso() = take_non_negative("nu_iso");
+  op->kappa_iso() = take_non_negative("kappa_iso");
+  if (node["dynamic"]) {
+    auto const flag = node["dynamic"];
+    TORCH_CHECK(flag.IsScalar(),
+                "DiffusionOptions: dynamic must be true or false.");
+    auto const text = flag.Scalar();
+    TORCH_CHECK(text == "true" || text == "false",
+                "DiffusionOptions: dynamic must be true or false, got '", text,
+                "'.");
+    op->dynamic() = text == "true";
+  }
   return op;
 }
 
@@ -348,7 +370,11 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
   }
   if (coeff == 0.) return std::numeric_limits<double>::max();
   TORCH_CHECK(std::isfinite(coeff), "[Diffusion] diffusivity is not finite");
-  return dx_min * dx_min / (2. * ndim * coeff);
+  double dt = dx_min * dx_min / (2. * ndim * coeff);
+  TORCH_CHECK(std::isfinite(dt) && dt > 0.,
+              "[Diffusion] time-step bound must be positive and finite, got ",
+              dt);
+  return dt;
 }
 
 }  // namespace snap

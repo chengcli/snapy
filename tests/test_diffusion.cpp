@@ -113,6 +113,51 @@ TEST(diffusion_options, parse_and_reject_legacy_keys) {
       DiffusionOptionsImpl::from_yaml(YAML::Load("diffusion: {nu_iso: -1.0}")));
 }
 
+TEST(diffusion_options, dynamic_rejects_non_bool) {
+  for (char const* bad : {"1", "maybe", "yes", "on", "~", "[]"}) {
+    auto yaml = std::string("diffusion: {dynamic: ") + bad + "}";
+    EXPECT_THROW(DiffusionOptionsImpl::from_yaml(YAML::Load(yaml)), c10::Error)
+        << bad;
+  }
+  auto off = DiffusionOptionsImpl::from_yaml(
+      YAML::Load("diffusion: {dynamic: false}"));
+  EXPECT_FALSE(off->dynamic());
+  auto bare = DiffusionOptionsImpl::from_yaml(YAML::Load("diffusion: {}"));
+  EXPECT_FALSE(bare->dynamic());
+  EXPECT_DOUBLE_EQ(bare->nu_iso(), 0.);
+  EXPECT_DOUBLE_EQ(bare->kappa_iso(), 0.);
+  auto on =
+      DiffusionOptionsImpl::from_yaml(YAML::Load("diffusion: {dynamic: true}"));
+  EXPECT_TRUE(on->dynamic());
+}
+
+TEST(diffusion_options, coefficients_reject_negative_or_non_numeric) {
+  for (char const* key : {"nu_iso", "kappa_iso"}) {
+    for (char const* bad : {"banana", "maybe", "~", "[]", "-1"}) {
+      auto yaml = std::string("diffusion: {") + key + ": " + bad + "}";
+      EXPECT_THROW(DiffusionOptionsImpl::from_yaml(YAML::Load(yaml)),
+                   c10::Error)
+          << key << " " << bad;
+    }
+    auto yaml = std::string("diffusion: {") + key + ": 0.5}";
+    auto options = DiffusionOptionsImpl::from_yaml(YAML::Load(yaml));
+    ASSERT_TRUE(options);
+    if (std::string(key) == "nu_iso") {
+      EXPECT_DOUBLE_EQ(options->nu_iso(), 0.5);
+    } else {
+      EXPECT_DOUBLE_EQ(options->kappa_iso(), 0.5);
+    }
+    auto zero_yaml = std::string("diffusion: {") + key + ": 0}";
+    auto zero = DiffusionOptionsImpl::from_yaml(YAML::Load(zero_yaml));
+    ASSERT_TRUE(zero);
+    if (std::string(key) == "nu_iso") {
+      EXPECT_DOUBLE_EQ(zero->nu_iso(), 0.);
+    } else {
+      EXPECT_DOUBLE_EQ(zero->kappa_iso(), 0.);
+    }
+  }
+}
+
 TEST(diffusion_options, reject_enabled_curved_coordinates) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
   options->coord()->type() = "spherical-polar";
@@ -398,6 +443,14 @@ TEST_P(DeviceTest, timestep_uses_largest_diffusivity) {
 
   w[IPR] = 1.e-6;
   EXPECT_NEAR(block->phydro->max_time_step(w), 1., 1.e-6);
+}
+
+TEST(diffusion, timestep_rejects_a_non_positive_bound) {
+  auto block = make_block();
+  auto w = make_primitive(block, torch::kCPU, torch::kFloat64);
+  w[IDN].fill_(-1.);
+  block->phydro->pdiffusion->options->dynamic(true);
+  EXPECT_THROW(block->phydro->pdiffusion->max_time_step(w), c10::Error);
 }
 
 // std::min(dt, NaN) returns dt: a NaN diffusivity used to drop the bound
