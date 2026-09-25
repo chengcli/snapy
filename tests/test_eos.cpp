@@ -15,6 +15,7 @@
 #include <snap/eos/fix_vapor_impl.h>
 #include <snap/snap.h>
 
+#include <cmath>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -46,6 +47,68 @@ TEST(eos_limiter, accepts_zero_vapor_column) {
   EXPECT_DOUBLE_EQ(vapor[1], 0.05);
   EXPECT_DOUBLE_EQ(vapor[2], 0.);
   EXPECT_DOUBLE_EQ(vapor[3], 0.);
+}
+
+namespace {
+
+double column_sum(std::vector<double> const& v) {
+  double s = 0.;
+  for (double x : v) s += x;
+  return s;
+}
+
+}  // namespace
+
+// A bottom-cell deficit has nothing below it; the measured column
+TEST(eos_limiter, repairs_bottom_cell_from_above) {
+  std::vector<double> major = {1.00, 0.85, 0.72, 0.61};
+  std::vector<double> vapor = {-1.7e-21, 4.4e-11, 1.0e-11, 1.0e-11};
+  double before = column_sum(vapor);
+
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  for (double value : vapor) EXPECT_GE(value, 0.);
+  EXPECT_NEAR(column_sum(vapor), before, 1.e-14 * std::abs(before));
+
+  // the repaired cell is zeroed, not left holding what it just borrowed
+  EXPECT_DOUBLE_EQ(vapor[0], 0.);
+  // Bounded transfer, asserted on the TRANSFER: the deficit is 1.7e-21 against
+  // a vapor[1] of 4.4e-11, so any tolerance that survives round-off on the
+  // latter also passes a supplier that gave nothing. The subtraction is exact
+  // (Sterbenz), leaving only the one rounding in `vapor[1] -= take`.
+  EXPECT_NEAR(4.4e-11 - vapor[1], 1.7e-21, 1.e-25);
+  EXPECT_DOUBLE_EQ(vapor[2], 1.0e-11);
+  EXPECT_DOUBLE_EQ(vapor[3], 1.0e-11);
+}
+
+// a column in net deficit is unrepairable: report it, leave it untouched
+TEST(eos_limiter, rejects_column_in_net_deficit_without_writing) {
+  std::vector<double> major(4, 1.);
+  std::vector<double> vapor = {-0.3, 0.1, 0.1, 0.};
+  std::vector<double> const expected = vapor;
+
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 1);
+  EXPECT_EQ(vapor, expected);
+}
+
+// nothing to borrow from in either direction
+TEST(eos_limiter, rejects_single_cell_column) {
+  std::vector<double> major = {1.};
+  std::vector<double> vapor = {-1.e-30};
+
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), 1), 1);
+}
+
+// a deficit the cells below can cover is still flattened as before
+TEST(eos_limiter, downward_branch_is_unchanged) {
+  std::vector<double> major = {1.00, 0.85, 0.72, 0.61};
+  std::vector<double> vapor = {0.2, -0.1, 0., 0.};
+  double before = column_sum(vapor);
+
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  double const yfrac = 0.1 / 1.85;
+  EXPECT_DOUBLE_EQ(vapor[0], yfrac * 1.00);
+  EXPECT_DOUBLE_EQ(vapor[1], yfrac * 0.85);
+  EXPECT_NEAR(column_sum(vapor), before, 1.e-14 * std::abs(before));
 }
 
 TEST_P(DeviceTest, moist_mixture) {

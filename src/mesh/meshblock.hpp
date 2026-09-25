@@ -217,6 +217,12 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   int check_redo(Variables& vars);
 
+  //! true if a fresh primitive of `hydro_u` sits at or below a floor
+  bool floor_hit(Variables const& vars);
+
+  //! roll back (redo) or accept (!redo) the step; the decision is the caller's
+  int apply_redo(Variables& vars, bool redo);
+
  protected:
   //! initialize from restart file
   /*!

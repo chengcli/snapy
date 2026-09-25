@@ -2,10 +2,6 @@ reference-state:
   Tref: 300.
   Pref: 1.e5
 
-# The vapor/cloud pair only exists to register a species pair with the moist
-# EOS (kintera derives vapor/cloud ids from reactions). The test state is warm
-# and unsaturated everywhere (p_vapor ~ 0.5 p_sat), so the saturation
-# adjustment is a no-op and transport is the only active process.
 species:
   - name: dry
     composition: {O: 0.42, N: 1.56, Ar: 0.01}
@@ -27,8 +23,8 @@ reactions:
 
 geometry:
   type: cartesian
-  bounds: {x1min: 0., x1max: 4., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
-  cells: {nx1: 4, nx2: 256, nx3: 1, nghost: 3}
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 4, nx2: 4, nx3: 1, nghost: 3}
 
 distribute:
   layout: slab
@@ -41,11 +37,11 @@ dynamics:
     type: ideal-moist
     density-floor:  1.e-10
     pressure-floor: 1.e-10
-    limiter: false
+    limiter: true
 
   reconstruct:
-    vertical: {type: cp5, scale: false, shock: false}
-    horizontal: {type: cp5, scale: false, shock: false}
+    vertical: {type: plm, scale: false, shock: false}
+    horizontal: {type: plm, scale: false, shock: false}
 
   riemann-solver:
     type: lmars
@@ -63,11 +59,6 @@ integration:
   type: rk3
   cfl: 0.9
   implicit-scheme: 0
-  nlim: 2
+  nlim: 1
   tlim: 1.e9
   ncycle_out: 0
-
-scalar:
-  nvar: 1
-  names: [tracer]
-  reconstruct: {type: cp5, scale: false, shock: false}

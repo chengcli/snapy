@@ -1000,36 +1000,27 @@ void MeshBlockImpl::finalize(Variables const &vars, double time) {
   }
 }
 
-int MeshBlockImpl::check_redo(Variables &vars) {
-  // check if density or pressure is negative
+bool MeshBlockImpl::floor_hit(Variables const &vars) {
   auto hydro_u = vars.at("hydro_u");
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
-  auto redo_rho = hydro_u.index(interior)[IDN].min().item<double>() <= 0.;
-  // Positivity must be tested on the PHYSICAL pressure, not the conserved
-  // energy hydro_u[IPR] (in the conserved vector IPR is total energy). For an
-  // EOS whose internal energy is referenced to a nonzero temperature (h2diss
-  // NASA-9, ref 300 K) that energy is legitimately negative wherever T < T_ref,
-  // so the old check fired a fatal (dt-halving-proof) redo on a valid cold
-  // layer. Screen cheaply on the conserved energy (for a 0
-  // K-referenced EOS E <= 0  =>  P <= 0 -- one direction only, but it is the
-  // direction we need: the screen never misses a genuine negative pressure) and
-  // confirm with a cons2prim pressure check only when it trips.
-  // Behavior-identical to the old check on any run that never trips the screen
-  // (all current ideal-gas/moist production). NOTE: under eos.limiter=true
-  // cons2prim floors P to pressure_floor(>0), so this pressure-redo is a no-op
-  // there and pathological states are absorbed by the limiter floor instead; a
-  // valid cold state has physical P>0 far above the floor, so the C5 fix still
-  // holds.
-  bool redo_pres = false;
-  if (hydro_u.size(0) > IPR &&
-      hydro_u.index(interior)[IPR].min().item<double>() <= 0.) {
-    auto w = phydro->peos->forward(hydro_u);
-    redo_pres = w.index(interior)[IPR].min().item<double>() <= 0.;
+  TORCH_CHECK(vars.count("hydro_w"),
+              "MeshBlock::check_redo needs hydro_w to restore the primitives");
+  // hydro_w is one stage stale: test the primitives as they stand
+  auto w = phydro->peos->forward(hydro_u.clone()).index(interior);
+  auto const &eos = phydro->peos->options;
+  // negated so a NaN, which fails every comparison, counts as a hit
+  bool hit = !(w[IDN].min().item<double>() > 1.001 * eos->density_floor());
+  if (w.size(0) > IPR) {  // shallow water carries no pressure row
+    hit = hit || !(w[IPR].min().item<double>() > 1.001 * eos->pressure_floor());
   }
+  return hit;
+}
 
-  if (redo_rho || redo_pres) {
+int MeshBlockImpl::apply_redo(Variables &vars, bool redo) {
+  if (redo) {
     SINFO(MeshBlock)
-        << "Negative density/pressure detected. Redoing the step with "
+        << "Density/pressure at or within 0.1% of the floor. Redoing the step "
+           "with "
            "smaller dt."
         << std::endl;
     pintg->current_redo += 1;
@@ -1042,8 +1033,10 @@ int MeshBlockImpl::check_redo(Variables &vars) {
 
     // reset variables
     vars["hydro_u"].copy_(_hydro_u0);
+    phydro->peos->forward(vars["hydro_u"], vars["hydro_w"]);
     if (vars.count("scalar_s")) {
       vars["scalar_s"].copy_(_scalar_s0);
+      set_scalar_primitive(vars, vars["scalar_s"], vars["hydro_u"]);
     }
 
     // reset cycle
@@ -1054,6 +1047,17 @@ int MeshBlockImpl::check_redo(Variables &vars) {
   // good to go
   pintg->current_redo = 0;
   return 0;
+}
+
+int MeshBlockImpl::check_redo(Variables &vars) {
+  // dt is global, so the decision must be: MAX over every rank
+  auto flag =
+      torch::tensor({floor_hit(vars) ? 1. : 0.}, torch::dtype(torch::kFloat64));
+  std::vector<at::Tensor> flag_reduce = {flag};
+  if (_playout->has_process_group()) {
+    _playout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
+  }
+  return apply_redo(vars, flag_reduce[0].item<double>() > 0.);
 }
 
 double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {

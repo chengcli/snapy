@@ -51,21 +51,24 @@ void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, double gammad) {
 
 int call_fix_vapor_cuda(at::TensorIterator& iter) {
   at::cuda::CUDAGuard device_guard(iter.device());
-  int all_err = 0;
+
+  // count failures on the device (a host int captured by value never reported)
+  auto nerr = at::zeros({1}, at::TensorOptions().dtype(at::kInt).device(iter.device()));
+  int* nerr_ptr = nerr.data_ptr<int>();
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cuda", [&] {
     auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
 
     native::gpu_kernel<2>(
-        iter, [=] GPU_LAMBDA(char* const data[2], unsigned int strides[2]) {
+        iter, [=] __device__(char* const data[2], unsigned int strides[2]) {
           auto vapor = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto major = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
           int err = fix_vapor_impl(vapor, major, nx1);
-          //atomicAdd(&all_err, err);
+          if (err) atomicAdd(nerr_ptr, err);
         });
   });
 
-  return all_err;
+  return nerr.item<int>();
 }
 
 }  // namespace snap

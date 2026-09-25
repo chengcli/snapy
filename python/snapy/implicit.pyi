@@ -54,6 +54,25 @@ class ImplicitOptions:
         """Set the scheme type."""
         ...
 
+    @overload
+    def advection_cfl(self) -> float:
+        """CFL bound on |v| in an implicit direction (default 1.0). Requires an
+        implicit direction; setting it without one is a hard error."""
+        ...
+
+    @overload
+    def advection_cfl(self, value: float) -> "ImplicitOptions": ...
+
+    @overload
+    def shear_cfl(self) -> float:
+        """Bound dt at every x1 face whose horizontal wind jumps by at least the
+        face sound speed. 0 (the default) turns it off; requires an implicit
+        direction."""
+        ...
+
+    @overload
+    def shear_cfl(self, value: float) -> "ImplicitOptions": ...
+
 class ImplicitHydro:
     """
     Implicit hydrodynamics solver.
