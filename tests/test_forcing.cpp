@@ -240,6 +240,26 @@ TEST(forcing, relax_bottom_temperature) {
   EXPECT_TRUE(torch::allclose(du, expected));
 }
 
+TEST(forcing, relax_bottom_temperature_at_face_rejects_non_bool) {
+  for (char const* bad : {"1", "maybe", "yes", "on", "~", "[]"}) {
+    auto yaml =
+        std::string("relax-bot-temp: {tau: 2., btemp: 350., at-face: ") + bad +
+        "}";
+    EXPECT_THROW(RelaxBotTempOptionsImpl::from_yaml(YAML::Load(yaml)),
+                 c10::Error)
+        << bad;
+  }
+  auto off = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350., at-face: false}"));
+  EXPECT_FALSE(off->at_face());
+  auto bare = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350.}"));
+  EXPECT_FALSE(bare->at_face());
+  auto on = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350., at-face: true}"));
+  EXPECT_TRUE(on->at_face());
+}
+
 // A bottom inversion (T0 < T1) is a legal state and the extrapolation is
 // well-defined there: at-face must relax it by value, not abort. Placed before
 // the stratified case so that it is the first at-face call in the process.

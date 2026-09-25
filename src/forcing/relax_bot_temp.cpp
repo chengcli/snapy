@@ -23,7 +23,16 @@ RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(
   TORCH_CHECK(node["btemp"],
               "RelaxBotTempOptions: btemp is required (no default).");
   op->btemp() = node["btemp"].as<double>();
-  op->at_face() = node["at-face"].as<bool>(false);
+  if (node["at-face"]) {
+    auto const face = node["at-face"];
+    TORCH_CHECK(face.IsScalar(),
+                "RelaxBotTempOptions: at-face must be true or false.");
+    auto const text = face.Scalar();
+    TORCH_CHECK(text == "true" || text == "false",
+                "RelaxBotTempOptions: at-face must be true or false, got '",
+                text, "'.");
+    op->at_face() = text == "true";
+  }
 
   TORCH_CHECK(op->tau() > 0.,
               "RelaxBotTempOptions: tau must be greater than zero.");
