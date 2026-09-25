@@ -128,7 +128,7 @@ def mesh_arm(device, yaml_file):
         face_id = int(block.get_layout().loc_of(ib)[2])
         lon, lat = snapy.coord.cs_ab_to_lonlat(snapy.coord.get_cs_face_name(face_id), alpha, beta)
         w = dict(block.named_buffers())["hydro.D"].clone().zero_()
-        vel = torch.zeros((3,) + tuple(alpha.shape), dtype=torch.float64)
+        vel = torch.zeros((3,) + tuple(alpha.shape), dtype=torch.float64, device=alpha.device)
         vel[2] = 10.0 * torch.cos(lat)
         snapy.coord.cs_sph_to_contra_(vel, alpha, beta, face_id)
         w[kIDN] = 1.0
