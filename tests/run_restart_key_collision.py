@@ -72,7 +72,7 @@ def main() -> int:
   run(launch + [str(case_yaml)], case_dir, env)
 
   restart_file = sorted(case_dir.glob("*.restart"))[-1]
-  resume_t, _, saved = restart_schedule(restart_file)
+  resume_t, saved_next, saved = restart_schedule(restart_file)
   if len(saved) != 3:
     raise AssertionError(f"restart stores {len(saved)} output slots, expected 3")
   # a base leg too short makes "the numbering continued" vacuously true
@@ -86,6 +86,27 @@ def main() -> int:
   shutil.copy2(resumed, case_yaml)  # basename comes from the card's stem, so reuse the name
   run(launch + [str(case_yaml), "--restart", str(restart_file.resolve())], case_dir, env)
   after = frames(case_dir)
+
+  # Each colliding stream must keep its own saved schedule. Also reject a newly numbered
+  # out2 frame at the resume instant: that means it was treated as a new output block.
+  final_t, final_next, _ = restart_schedule(sorted(case_dir.glob("*.restart"))[-1])
+  cadence_errors = []
+  for stream in ("out1", "out2"):
+    fid = int(stream[3:])
+    expected_next = saved_next[fid]
+    while expected_next <= final_t:
+      expected_next += edited["dt"]
+    if abs(final_next[fid] - expected_next) > 1e-9:
+      cadence_errors.append(
+          f"{stream} next_time {final_next[fid]} (expected {expected_next} from its saved cadence)")
+  out2_resumed = sorted(t for (stream, number), t in after.items()
+                        if stream == "out2" and number >= saved[2])
+  if out2_resumed and out2_resumed[0] <= resume_t + 1e-6:
+    cadence_errors.append(
+        f"out2 wrote an extra frame at resume time {out2_resumed[0]} (resume {resume_t})")
+  if cadence_errors:
+    raise AssertionError("streams did not keep their own restart cadence:\n  "
+                         + "\n  ".join(cadence_errors))
 
   # 1. no frame the base leg completed may be rewritten. Number saved[fid] is excluded: it
   #    is the base leg's final write, whose number the next scheduled write legitimately reuses.
