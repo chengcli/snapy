@@ -273,21 +273,25 @@ torch::Tensor IdealMoistImpl::_temp2intEng(torch::Tensor cons,
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
 
-  // internal energy offset
-  auto ie = cons[IDN] * u0[0];
-
-  std::vector<int64_t> vec(cons.dim(), 1);
-  vec[0] = -1;
-  ie += (cons.narrow(0, ICY, ny) * u0.narrow(0, 1, ny).view(vec)).sum(0);
-
   auto mud = kintera::species_weights[0];
   auto Rd = kintera::constants::Rgas / mud;
   auto cvd = kintera::species_cref_R[0] * Rd;
   auto cvy = (cv_ratio_m1 + 1.) * cvd;
 
-  ie += (cons.narrow(0, ICY, ny) * cvy.view(vec)).sum(0);
-  ie *= temp;
-  return ie;
+  std::vector<int64_t> vec(cons.dim(), 1);
+  vec[0] = -1;
+
+  // Heat capacity per unit volume. The DRY channel carries cvd and dominates
+  // a mostly-dry column, so leaving it out is not a small error.
+  auto rho_cv =
+      cons[IDN] * cvd + (cons.narrow(0, ICY, ny) * cvy.view(vec)).sum(0);
+
+  // u0 is an energy per unit mass, not a heat capacity: the offset is ADDED to
+  // the thermal energy, never scaled by temperature. This is the same offset
+  // _prim2intEng adds and _cons2prim subtracts, so "UT->I" at a state's own
+  // temperature now reproduces "W->I" at that state, which is the identity the
+  // temperature-floor clamp in EquationOfStateImpl relies on.
+  return internal_energy_offset(cons) + rho_cv * temp;
 }
 
 torch::Tensor IdealMoistImpl::f_eps(torch::Tensor const& yfrac) const {

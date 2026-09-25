@@ -1,5 +1,6 @@
 // C/C++
 #include <array>
+#include <cmath>
 
 // external
 #include <gtest/gtest.h>
@@ -60,8 +61,9 @@ void expect_only_bottom(torch::Tensor const& du,
 }
 
 std::shared_ptr<MeshBlockImpl> make_cubed_sphere_block(
-    int face, std::string const& eos_type) {
-  auto options = MeshBlockOptionsImpl::from_yaml("test_exchange.yaml");
+    int face, std::string const& eos_type,
+    std::string const& filename = "test_exchange.yaml") {
+  auto options = MeshBlockOptionsImpl::from_yaml(filename);
   options->layout()->rank(face);
   options->layout()->world_size(6);
   options->layout()->blocks_per_process(6);
@@ -236,6 +238,207 @@ TEST(forcing, relax_bottom_temperature) {
   expected[IPR].index_put_(
       bot, 0.25 * w[IDN].index(bot) * cv.index(bot) * (350. - temp.index(bot)));
   EXPECT_TRUE(torch::allclose(du, expected));
+}
+
+TEST(forcing, relax_bottom_temperature_at_face_rejects_non_bool) {
+  for (char const* bad : {"1", "maybe", "yes", "on", "~", "[]"}) {
+    auto yaml =
+        std::string("relax-bot-temp: {tau: 2., btemp: 350., at-face: ") + bad +
+        "}";
+    EXPECT_THROW(RelaxBotTempOptionsImpl::from_yaml(YAML::Load(yaml)),
+                 c10::Error)
+        << bad;
+  }
+  auto off = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350., at-face: false}"));
+  EXPECT_FALSE(off->at_face());
+  auto bare = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350.}"));
+  EXPECT_FALSE(bare->at_face());
+  auto on = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 350., at-face: true}"));
+  EXPECT_TRUE(on->at_face());
+}
+
+// A bottom inversion (T0 < T1) is a legal state and the extrapolation is
+// well-defined there: at-face must relax it by value, not abort. Placed before
+// the stratified case so that it is the first at-face call in the process.
+TEST(forcing, relax_bottom_temperature_at_face_under_an_inversion) {
+  auto block = make_block();
+  auto w = make_primitive(block);
+  auto x = block->pcoord->x1v.view({1, 1, -1});
+  w[IPR] = 1.e5 + 1.e3 * x + 1.e2 * x * x;
+  auto temp = block->phydro->peos->compute("W->T", {w});
+  int ng = block->pcoord->options->nghost();
+  auto T0 = temp.narrow(-1, ng, 1), T1 = temp.narrow(-1, ng + 1, 1);
+  ASSERT_LT((T0 - T1).max().item<double>(), 0.) << "need an inversion";
+  auto bot = bottom3(block);
+  auto rho = w[IDN].index(bot);
+  auto cv = block->phydro->peos->specific_heat_cv(w, temp).index(bot);
+
+  auto on = torch::zeros_like(w);
+  RelaxBotTemp(RelaxBotTempOptionsImpl::from_yaml(YAML::Load(
+                   "relax-bot-temp: {tau: 2., btemp: 350., at-face: true}")),
+               block->phydro.get())
+      ->forward(on, w, temp, 0.5);
+
+  auto expected = torch::zeros_like(w);
+  expected[IPR].index_put_(
+      bot, 1. / 1.5 * 0.5 / 2. * rho * cv * (350. - (1.5 * T0 - 0.5 * T1)));
+  EXPECT_TRUE(torch::allclose(on, expected, 1.e-13, 0.))
+      << "at-face tendency " << on[IPR].index(bot) << " expected "
+      << expected[IPR].index(bot);
+}
+
+// at-face: true relaxes T_face = 1.5*T0 - 0.5*T1 with the gain divided by 1.5;
+// the default leaves the old cell-centre tendency bit-identical
+TEST(forcing, relax_bottom_temperature_at_face) {
+  auto block = make_block();
+  auto w = make_primitive(block);
+  // quadratic, so no linear-exact face estimate but 1.5*T0 - 0.5*T1 matches
+  auto x = block->pcoord->x1v.view({1, 1, -1});
+  w[IPR] = 1.e5 - 1.e3 * x - 1.e2 * x * x;
+  auto temp = block->phydro->peos->compute("W->T", {w});
+  int ng = block->pcoord->options->nghost();
+  auto T0 = temp.narrow(-1, ng, 1), T1 = temp.narrow(-1, ng + 1, 1);
+  ASSERT_GT((T0 - T1).min().item<double>(), 0.) << "need a stratified column";
+  for (auto v : {w, temp}) {  // the ghosts must not be read
+    v.narrow(-1, 0, ng).fill_(NAN);
+    v.narrow(-1, v.size(-1) - ng, ng).fill_(NAN);
+  }
+  auto bot = bottom3(block);
+  auto rho = w[IDN].index(bot);
+  auto cv = block->phydro->peos->specific_heat_cv(w, temp).index(bot);
+
+  auto off = torch::zeros_like(w), on = torch::zeros_like(w);
+  RelaxBotTemp(RelaxBotTempOptionsImpl::from_yaml(
+                   YAML::Load("relax-bot-temp: {tau: 2., btemp: 350.}")),
+               block->phydro.get())
+      ->forward(off, w, temp, 0.5);
+  RelaxBotTemp(RelaxBotTempOptionsImpl::from_yaml(YAML::Load(
+                   "relax-bot-temp: {tau: 2., btemp: 350., at-face: true}")),
+               block->phydro.get())
+      ->forward(on, w, temp, 0.5);
+
+  auto expected = torch::zeros_like(w);
+  expected[IPR].index_put_(bot, 0.5 / 2. * rho * cv * (350. - T0));
+  EXPECT_TRUE(torch::equal(off, expected));
+  expected[IPR].index_put_(
+      bot, 1. / 1.5 * 0.5 / 2. * rho * cv * (350. - (1.5 * T0 - 0.5 * T1)));
+  EXPECT_TRUE(torch::allclose(on, expected, 1.e-13, 0.))
+      << "at-face tendency " << on[IPR].index(bot) << " expected "
+      << expected[IPR].index(bot);
+}
+
+// The sponge/drag modules build their force from CONTRAVARIANT
+// primitive velocities but add it to `du`, which holds COVARIANT momenta. The
+// force must therefore be antiparallel to the LOWERED momentum, not to the raw
+// velocity. The two coincide wherever cos_theta == 0 -- a panel centre -- which
+// is exactly where one would look, and exactly why this went unnoticed.
+//
+// Design notes, each paid for:
+//
+//  * The fixture is `test_forcing_cubed_sphere.yaml`, NOT `test_exchange.yaml`.
+//    The latter has nx1 == 1, which suppresses the x1 boundary functions
+//    entirely, so `is_physical_boundary(0, 0, +-1)` is false and every module
+//    below early-returns with `du` identically zero. The first draft of this
+//    test used it and passed its covariance check on `0 == 0`.
+//
+//  * The assertions are over the WHOLE FIELD, not at a single argmax cell. An
+//    argmax over `cosine_cell_kj.expand_as(...)` selects x1 index 0 because the
+//    tensor is stride-0 along x1 -- a cell where `relax-bot-velo` applies no
+//    force at all. A field-wide statement cannot be defeated that way, and
+//    `EXPECT_GT(dumax, 0.)` makes vacuity impossible rather than merely
+//    detectable.
+//
+//  * |v2| != |v3| is LOAD-BEARING. The pre-fix cross product is
+//    cos_theta * (v3^2 - v2^2); with |v2| == |v3| it vanishes identically and
+//    the test would pass against the broken code. Do not "tidy" the fills.
+namespace {
+
+// Assert that `du`'s horizontal part is antiparallel to the covariant momentum
+// of `w`, and that the pre-fix (contravariant) answer would have differed.
+void expect_drag_is_covariant(std::shared_ptr<MeshBlockImpl> const& block,
+                              torch::Tensor const& w, torch::Tensor const& du,
+                              std::string const& what) {
+  auto coord = block->pcoord;
+  auto mom = torch::zeros(
+      {3, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      torch::kFloat64);
+  mom.copy_(w.narrow(0, IVX, 3));
+  coord_vec_lower_(mom, coord->cosine_cell_kj);
+
+  double dumax = du.narrow(0, IVX, 3).abs().max().item<double>();
+  EXPECT_GT(dumax, 0.) << what << ": no force applied -- the test is vacuous";
+
+  auto d2 = du[IVY], d3 = du[IVZ];
+  auto cross = d2 * mom[VEL3] - d3 * mom[VEL2];
+  // Scale on the LARGER of the two products: scaling on one alone collapses
+  // the tolerance to zero if that product happens to vanish.
+  auto scale = torch::maximum((d2 * mom[VEL3]).abs(), (d3 * mom[VEL2]).abs())
+                   .max()
+                   .item<double>();
+  EXPECT_LE(cross.abs().max().item<double>(), 1.e-12 * scale)
+      << what << ": drag is not antiparallel to the covariant momentum";
+
+  // and the contravariant direction is genuinely different somewhere, so a
+  // regression cannot pass this test by coincidence
+  auto alt = d2 * w[IVZ] - d3 * w[IVY];
+  EXPECT_GT(alt.abs().max().item<double>(), 1.e-10)
+      << what
+      << ": contravariant and covariant directions coincide -- this "
+         "fixture cannot discriminate the fix from the bug";
+}
+
+}  // namespace
+
+TEST(forcing, cubed_sphere_sponge_drag_is_covariant) {
+  for (int face = 0; face < 6; ++face) {
+    auto block = make_cubed_sphere_block(face, "ideal-gas",
+                                         "test_forcing_cubed_sphere.yaml");
+    auto coord = block->pcoord;
+    ASSERT_TRUE(block->options->is_physical_boundary(0, 0, 1))
+        << "face " << face << ": fixture has no outer-x1 boundary";
+    ASSERT_TRUE(block->options->is_physical_boundary(0, 0, -1))
+        << "face " << face << ": fixture has no inner-x1 boundary";
+    ASSERT_GT(coord->cosine_cell_kj.abs().max().item<double>(), 0.)
+        << "face " << face << ": grid is orthogonal, nothing to test";
+
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.7);
+    w[IVX].fill_(0.5);
+    w[IVY].fill_(-2.1);  // |v2| != |v3| is load-bearing -- see the note above
+    w[IVZ].fill_(0.8);
+    if (w.size(0) > IPR) w[IPR].fill_(1.e5);
+    auto temp = block->phydro->peos->compute("W->T", {w});
+
+    std::string at = "face " + std::to_string(face);
+    {
+      auto du = torch::zeros_like(w);
+      auto op = TopSpongeLyrOptionsImpl::from_yaml(
+          YAML::Load("top-sponge-lyr: {tau: 100.0, width: 1.0e30}"));
+      TopSpongeLyr(op, block->phydro.get())->forward(du, w, temp, 1.);
+      expect_drag_is_covariant(block, w, du, at + " top-sponge-lyr");
+    }
+    {
+      auto du = torch::zeros_like(w);
+      auto op = BotSpongeLyrOptionsImpl::from_yaml(
+          YAML::Load("bot-sponge-lyr: {tau: 100.0, width: 1.0e30}"));
+      BotSpongeLyr(op, block->phydro.get())->forward(du, w, temp, 1.);
+      expect_drag_is_covariant(block, w, du, at + " bot-sponge-lyr");
+    }
+    {
+      // zero reference wind, so the relaxation is a pure drag and the same
+      // antiparallel statement applies
+      auto du = torch::zeros_like(w);
+      auto op = RelaxBotVeloOptionsImpl::from_yaml(
+          YAML::Load("relax-bot-velo: {tau: 100., bvx: 0., bvy: 0., bvz: 0.}"));
+      RelaxBotVelo(op, block->phydro.get())->forward(du, w, temp, 1.);
+      expect_drag_is_covariant(block, w, du, at + " relax-bot-velo");
+    }
+  }
 }
 
 TEST(forcing, relax_bottom_velocity) {

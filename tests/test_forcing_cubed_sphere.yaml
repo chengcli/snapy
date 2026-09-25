@@ -1,0 +1,53 @@
+# Cubed-sphere fixture for the FORCING tests.
+#
+# Deliberately NOT test_exchange.yaml, which the first draft of the covariant
+# sponge test used: that file sets `nx1: 1`, so `nc1() == 1`, so the
+# `if (op->coord()->nc1() > 1)` guard in meshblock_options.cpp never installs
+# an x1 boundary function, so `is_physical_boundary(0, 0, +-1)` is FALSE, so
+# every forcing module that guards on it returns immediately and `du` stays
+# identically zero. The test then passed its covariance assertion on `0 == 0`.
+#
+# Anything testing a top/bottom forcing module therefore needs nx1 > 1 AND
+# external x1 boundary conditions. Both are load-bearing; do not "simplify".
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+
+scalar:
+  nvar: 2
+  names: [tr0, tr1]
+
+distribute:
+  layout: cubed-sphere
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+geometry:
+  type: gnomonic-equiangle
+  cells: {nx1: 4, nx2: 6, nx3: 6, nghost: 2}
+  bounds:
+    x1min: 0.9e8
+    x1max: 1.025e8
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom

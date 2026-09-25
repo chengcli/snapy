@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -58,9 +59,16 @@ torch::Tensor BotSpongeLyrImpl::forward(torch::Tensor du, torch::Tensor w,
   eta.clamp_(0., 1.0);
   auto scale = torch::sin(M_PI / 2. * eta).pow(2).unsqueeze(0).unsqueeze(0);
 
-  du[IVX] -= w[IDN] * w[IVX] / options->tau() * scale * dt;
-  du[IVY] -= w[IDN] * w[IVY] / options->tau() * scale * dt;
-  du[IVZ] -= w[IDN] * w[IVZ] / options->tau() * scale * dt;
+  // The force is built from CONTRAVARIANT primitive velocities, but `du` holds
+  // COVARIANT momenta, so it must be lowered before it is added -- otherwise
+  // the drag is not antiparallel to v and slowly ROTATES the horizontal wind
+  // instead of braking it. Same conversion as the Coriolis force (#168).
+  // `cosine_cell_kj` is zero on an orthogonal grid, so the lowering is the
+  // identity there; operand order is preserved so that case stays
+  // bit-identical.
+  auto force = w[IDN] * w.narrow(0, IVX, 3) / options->tau() * scale * dt;
+  coord_vec_lower_(force, pcoord->cosine_cell_kj);
+  du.narrow(0, IVX, 3) -= force;
 
   return du;
 }

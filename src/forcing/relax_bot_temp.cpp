@@ -23,6 +23,16 @@ RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(
   TORCH_CHECK(node["btemp"],
               "RelaxBotTempOptions: btemp is required (no default).");
   op->btemp() = node["btemp"].as<double>();
+  if (node["at-face"]) {
+    auto const face = node["at-face"];
+    TORCH_CHECK(face.IsScalar(),
+                "RelaxBotTempOptions: at-face must be true or false.");
+    auto const text = face.Scalar();
+    TORCH_CHECK(text == "true" || text == "false",
+                "RelaxBotTempOptions: at-face must be true or false, got '",
+                text, "'.");
+    op->at_face() = text == "true";
+  }
 
   TORCH_CHECK(op->tau() > 0.,
               "RelaxBotTempOptions: tau must be greater than zero.");
@@ -55,8 +65,39 @@ torch::Tensor RelaxBotTempImpl::forward(torch::Tensor du, torch::Tensor w,
   auto rho = w[IDN].index(bottom);
   auto temp_bot = temp.index(bottom);
   auto cv = phydro->peos->specific_heat_cv(w, temp).index(bottom);
+
+  // A bottom temperature is usually prescribed at a pressure level, and in a
+  // finite-volume grid that level is the domain's lower FACE. Relaxing the
+  // first interior cell CENTRE, half a cell above it, leaves the face itself
+  // off the prescribed value and over-forces a stratified column, whose
+  // centre deficit exceeds its face deficit. With `at-face: true`, relax the
+  // extrapolated face temperature
+  //   T_face = 1.5*T0 - 0.5*T1
+  // instead of T0. Only cell 0 is nudged and d(T_face)/d(T0) = 1.5, so the
+  // gain is divided by 1.5, keeping the damping coefficient on T0 unchanged.
+  // A relaxation is kept rather than a Dirichlet ghost condition: the wall is
+  // rigid and no-flux, and pinning T there would imply a conductive flux the
+  // equations do not carry.
+  auto target = temp_bot;
+  double gain = 1.0;
+  if (options->at_face()) {
+    auto bottom2 = phydro->pmb->part(
+        {0, 0, -1}, PartOptions().exterior(false).depth(2).ndim(3));
+    auto t2 = temp.index(bottom2);
+    // PartOptions::depth is capped at nghost even when exterior(false)
+    // selects INTERIOR cells, so nghost = 1 would silently hand back a
+    // width-1 slice. Shape query only -- no device sync.
+    TORCH_CHECK(t2.size(-1) >= 2,
+                "[RelaxBotTemp] at-face needs two interior cells at the "
+                "lower boundary; got ",
+                t2.size(-1), ". Set nghost >= 2.");
+    auto T0 = t2.narrow(-1, 0, 1);
+    auto T1 = t2.narrow(-1, 1, 1);
+    target = 1.5 * T0 - 0.5 * T1;
+    gain = 1.0 / 1.5;
+  }
   du[IPR].index(bottom) +=
-      dt / options->tau() * rho * cv * (options->btemp() - temp_bot);
+      gain * dt / options->tau() * rho * cv * (options->btemp() - target);
   return du;
 }
 
