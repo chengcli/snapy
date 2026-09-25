@@ -16,7 +16,9 @@
 #include <cstdio>
 #include <filesystem>
 #include <future>
+#include <limits>
 #include <memory>
+#include <sstream>
 #include <vector>
 
 // torch
@@ -356,6 +358,19 @@ TEST(OutputSlice, yaml_coordinate_presence_activates_slice_and_rejects_sum) {
       std::invalid_argument);
 }
 
+TEST(OutputPrecision, yaml_double_precision_defaults_off_and_is_reported) {
+  auto off = OutputOptionsImpl::from_yaml(YAML::Load("{type: netcdf}"));
+  EXPECT_FALSE(off->double_precision());
+  auto on = OutputOptionsImpl::from_yaml(
+      YAML::Load("{type: netcdf, double_precision: true}"));
+  EXPECT_TRUE(on->double_precision());
+
+  std::stringstream ss;
+  on->report(ss);
+  EXPECT_NE(ss.str().find("* double_precision = 1"), std::string::npos)
+      << ss.str();
+}
+
 #ifdef NETCDFOUTPUT
 TEST(OutputSlice, netcdf_writes_selected_coordinate_and_collapsed_dimension) {
   auto block = make_3d_block();
@@ -395,12 +410,147 @@ TEST(OutputSlice, netcdf_writes_selected_coordinate_and_collapsed_dimension) {
 
   int varid;
   ASSERT_EQ(nc_inq_varid(ncid, "x1", &varid), NC_NOERR);
+  nc_type type;
+  ASSERT_EQ(nc_inq_vartype(ncid, varid, &type), NC_NOERR);
+  EXPECT_EQ(type, NC_FLOAT) << "double_precision is off by default";
   float coordinate;
   ASSERT_EQ(nc_get_var_float(ncid, varid, &coordinate), NC_NOERR);
   EXPECT_FLOAT_EQ(coordinate, 2.5F);
   EXPECT_EQ(nc_close(ncid), NC_NOERR);
   std::remove(file.c_str());
   std::remove(dir.c_str());
+}
+
+TEST(OutputPrecision, netcdf_float_output_keeps_nonfinite) {
+  auto block = make_3d_block();
+  auto dir = std::filesystem::temp_directory_path() /
+             ("snapy_float_" +
+              std::to_string(reinterpret_cast<std::uintptr_t>(block.get())));
+  block->options->output_dir(dir.string());
+  block->options->basename("flt");
+
+  auto opts = OutputOptionsImpl::create();
+  opts->file_type("netcdf");
+  opts->variables({"d"});
+  opts->combine(false);
+  NetcdfOutput output(opts);
+
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  int nvar = block->phydro->peos->nvar();
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({nvar, nc3, nc2, nc1}, torch::kFloat64);
+  vars["hydro_u"] = torch::zeros_like(vars["hydro_w"]);
+  auto idn = vars["hydro_w"][IDN];
+  idn.fill_(1.0 / 3.0);
+  // Ghosts are not written. Centre of the horizontal plane, every k.
+  int ic = nc1 / 2;
+  int jc = nc2 / 2;
+  for (int k = 0; k < nc3; ++k) {
+    idn[k][jc][ic] = std::numeric_limits<double>::infinity();
+    idn[k][jc][ic - 1] = std::numeric_limits<double>::quiet_NaN();
+  }
+
+  output.write_output_file(block.get(), vars, 0.0, false);
+  auto file = dir / "flt.block0.out0.00000.nc";
+  int ncid, varid;
+  ASSERT_EQ(nc_open(file.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
+  ASSERT_EQ(nc_inq_varid(ncid, "rho", &varid), NC_NOERR);
+  nc_type type;
+  ASSERT_EQ(nc_inq_vartype(ncid, varid, &type), NC_NOERR);
+  EXPECT_EQ(type, NC_FLOAT);
+  int ndims;
+  ASSERT_EQ(nc_inq_varndims(ncid, varid, &ndims), NC_NOERR);
+  std::vector<int> dimids(ndims);
+  ASSERT_EQ(nc_inq_vardimid(ncid, varid, dimids.data()), NC_NOERR);
+  size_t nval = 1;
+  for (int d = 0; d < ndims; ++d) {
+    size_t len = 0;
+    ASSERT_EQ(nc_inq_dimlen(ncid, dimids[d], &len), NC_NOERR);
+    nval *= len;
+  }
+  std::vector<float> got(nval);
+  ASSERT_EQ(nc_get_var_float(ncid, varid, got.data()), NC_NOERR);
+  // rho(time, x1, x3, x2) is the interior only: 6 x 3 x 4. Ghost width is 2.
+  // Planted +inf at tensor (k, j=nc2/2, i=nc1/2) and NaN at i-1, every k.
+  // Written x3 is k-2 for k=2,3,4. x1 of +inf is 3, of NaN is 2. x2 is 2.
+  ASSERT_EQ(nval, 72u);
+  float third = static_cast<float>(1.0 / 3.0);
+  auto at = [](int x1, int x3, int x2) { return (x1 * 3 + x3) * 4 + x2; };
+  for (int x3 = 0; x3 < 3; ++x3) {
+    EXPECT_TRUE(std::isinf(got[at(3, x3, 2)]) && got[at(3, x3, 2)] > 0.f);
+    EXPECT_TRUE(std::isnan(got[at(2, x3, 2)]));
+  }
+  int nspecial = 0;
+  for (float v : got) {
+    if (std::isinf(v) || std::isnan(v))
+      ++nspecial;
+    else
+      EXPECT_EQ(v, third);
+  }
+  EXPECT_EQ(nspecial, 6);
+  EXPECT_EQ(nc_close(ncid), NC_NOERR);
+  std::remove(file.c_str());
+  std::remove(dir.c_str());
+}
+
+// double_precision: true writes NC_DOUBLE, and what reads back is the
+// in-memory field bit for bit: steps of 1/3, which a float cannot hold
+TEST(OutputPrecision, netcdf_double_precision_reads_back_exactly) {
+  auto block = make_3d_block();
+  auto dir = std::filesystem::temp_directory_path() /
+             ("snapy_double_" +
+              std::to_string(reinterpret_cast<std::uintptr_t>(block.get())));
+  block->options->output_dir(dir.string());
+  block->options->basename("double");
+
+  NetcdfOutput output(OutputOptionsImpl::from_yaml(
+      YAML::Load("{type: netcdf, variables: [d], double_precision: true, "
+                 "combine: false}")));
+
+  int nc1 = block->pcoord->options->nc1();
+  int nc2 = block->pcoord->options->nc2();
+  int nc3 = block->pcoord->options->nc3();
+  int ng = block->pcoord->options->nghost();
+  Variables vars;
+  vars["hydro_w"] = torch::zeros({block->phydro->peos->nvar(), nc3, nc2, nc1},
+                                 torch::kFloat64);
+  vars["hydro_u"] = torch::zeros_like(vars["hydro_w"]);
+  vars["hydro_w"][IDN].copy_(
+      1. +
+      torch::arange(nc1 * nc2 * nc3, torch::kFloat64).reshape({nc3, nc2, nc1}) /
+          3.);
+  output.write_output_file(block.get(), vars, 1. / 3., false);
+
+  int ncid, varid;
+  nc_type type;
+  auto file = dir / "double.block0.out0.00000.nc";
+  ASSERT_EQ(nc_open(file.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
+  ASSERT_EQ(nc_inq_varid(ncid, "rho", &varid), NC_NOERR);
+  ASSERT_EQ(nc_inq_vartype(ncid, varid, &type), NC_NOERR);
+  EXPECT_EQ(type, NC_DOUBLE);
+  // the writer stores (x1, x3, x2), x1 slowest
+  auto in = vars["hydro_w"][IDN]
+                .slice(0, ng, nc3 - ng)
+                .slice(1, ng, nc2 - ng)
+                .slice(2, ng, nc1 - ng)
+                .permute({2, 0, 1})
+                .contiguous();
+  auto out = torch::empty_like(in);
+  ASSERT_EQ(nc_get_var_double(ncid, varid, out.data_ptr<double>()), NC_NOERR);
+  EXPECT_TRUE(torch::equal(out, in))
+      << "max |out - in| = " << (out - in).abs().max();
+  double time;
+  ASSERT_EQ(nc_inq_varid(ncid, "time", &varid), NC_NOERR);
+  ASSERT_EQ(nc_get_var_double(ncid, varid, &time), NC_NOERR);
+  EXPECT_EQ(time, 1. / 3.);
+  EXPECT_EQ(nc_close(ncid), NC_NOERR);
+  // remove() the known file and directory rather than remove_all(): a
+  // libtorch.so that exports its own std::filesystem::remove_all can take
+  // precedence at link time, and that copy crashes on a non-empty directory.
+  std::filesystem::remove(file);
+  std::filesystem::remove(dir);
 }
 #endif
 
