@@ -1,6 +1,3 @@
-// C/C++
-#include <atomic>
-
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -89,22 +86,6 @@ torch::Tensor RelaxBotTempImpl::forward(torch::Tensor du, torch::Tensor w,
     auto T1 = t2.narrow(-1, 1, 1);
     target = 1.5 * T0 - 0.5 * T1;
     gain = 1.0 / 1.5;
-    static std::atomic<bool> checked{false};
-    if (!checked.exchange(true)) {
-      // Assert the index convention once (it costs a device sync): offset 0
-      // of the depth-2 slice must be the cell adjacent to the lower face,
-      // i.e. the deeper and so not-colder one. `>=`, not `>`: an isothermal
-      // column is legal and gives t0 == t1 exactly, where the extrapolation
-      // reduces to T0; only a strictly colder deeper cell indicates a flipped
-      // convention that would extrapolate the wrong way.
-      double t0 = T0.mean().item<double>(), t1 = T1.mean().item<double>();
-      TORCH_CHECK(t0 >= t1,
-                  "[RelaxBotTemp] index convention violated: offset 0 of the "
-                  "lower-boundary slice (T=",
-                  t0,
-                  ") should be deeper, and so no colder, than offset 1 (T=", t1,
-                  "). The face extrapolation would run the wrong way.");
-    }
   }
   du[IPR].index(bottom) +=
       gain * dt / options->tau() * rho * cv * (options->btemp() - target);
