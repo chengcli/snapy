@@ -144,7 +144,7 @@ MeshBlockOptions
       :return: MeshBlockOptions loaded from file
       :rtype: MeshBlockOptions
 
-   .. method:: set_bfunc(dx3: int, dx2: int, dx1: int, func: Callable = None) -> None
+   .. method:: set_bfunc(dx3: int, dx2: int, dx1: int, func: Callable, name: str = "") -> None
 
       Set boundary function for a specific face.
 
@@ -154,8 +154,15 @@ MeshBlockOptions
       :type dx2: int
       :param dx1: Direction in x1 (-1, 0, or 1)
       :type dx1: int
-      :param func: Boundary function or None
-      :type func: Callable, optional
+      :param func: Boundary function, or ``None`` to clear the face
+      :type func: Callable
+      :param name: Name of the function being installed. Only a face named
+                   ``"reflecting_inner"`` or ``"reflecting_outer"`` counts as a
+                   physical x1 wall, and only a physical x1 wall gets the
+                   one-sided wall-face diffusion coefficient; the default
+                   ``""`` declares nothing. Using ``bfuncs()`` as a bulk setter
+                   clears every name.
+      :type name: str, optional
 
    .. method:: hydro() -> HydroOptions
                hydro(value: HydroOptions) -> MeshBlockOptions

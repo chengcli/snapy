@@ -97,6 +97,8 @@ ImplicitHydroImpl::ImplicitHydroImpl(ImplicitOptions const& options_,
 
 void ImplicitHydroImpl::reset() {
   TORCH_CHECK(phydro, "[ImplicitHydro] Parent Hydro is null");
+  TORCH_CHECK(options, "[ImplicitHydro] options is null");
+  options->type();  // throws on an unsupported scheme
   _a = register_buffer("a", torch::empty({0}, torch::kFloat64));
   _b = register_buffer("b", torch::empty({0}, torch::kFloat64));
   _c = register_buffer("c", torch::empty({0}, torch::kFloat64));

@@ -56,8 +56,7 @@ inline DISPATCH_MACRO void sedimentation_flux_impl(
   T eta = (T(5) / T(16)) * sqrt(pi * kboltz) * sqrt(gas_mass) * sqrt(temp) *
           pow(kboltz / gas_epsilon_lj * temp, T(0.16)) /
           (pi * gas_diameter * gas_diameter * T(1.22));
-  T lambda =
-      (eta * sqrt(pi * kboltz * kboltz)) / (pres * sqrt(T(2) * gas_mass));
+  T lambda = (eta * sqrt(pi * kboltz * temp)) / (pres * sqrt(T(2) * gas_mass));
 
   for (int p = 0; p < nparticle; ++p) {
     int hydro_id = static_cast<int>(hydro_ids[p]);

@@ -16,7 +16,7 @@ namespace snap {
 namespace {
 
 torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
-                                        torch::Tensor flux) {
+                                        torch::Tensor flux, int il, int iu) {
   auto pcoord = sed.phydro->pmb->pcoord;
   auto peos = sed.phydro->peos;
   auto vel = wr.narrow(0, IVX, 3).clone();
@@ -26,11 +26,9 @@ torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
   sed.vsed.set_(sed.psedvel->forward(wr[IDN], wr[IPR], temp));
 
   // seal top boundary
-  int iu = pcoord->iu();
   sed.vsed.slice(-1, iu + 1, sed.vsed.size(-1)).fill_(0.);
 
   // seal bottom
-  int il = pcoord->il();
   sed.vsed.slice(-1, 0, il + 1).fill_(0.);
 
   // 5 is number of hydro variables
@@ -79,12 +77,18 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
     return flux;
   }
 
+  auto pmb = phydro->pmb;
+  int il =
+      pmb->options->is_physical_boundary(0, 0, -1) ? pmb->pcoord->il() : -1;
+  int iu = pmb->options->is_physical_boundary(0, 0, 1)
+               ? pmb->pcoord->iu()
+               : static_cast<int>(wr.size(3));
+
   auto ideal_moist = dynamic_cast<IdealMoistImpl const*>(phydro->peos.get());
   if (ideal_moist == nullptr || !wr.is_contiguous() || !flux.is_contiguous()) {
-    return sedimentation_flux_tensor(*this, wr, flux);
+    return sedimentation_flux_tensor(*this, wr, flux, il, iu);
   }
 
-  auto pcoord = phydro->pmb->pcoord;
   int ny = ideal_moist->pthermo->options->vapor_ids().size() +
            ideal_moist->pthermo->options->cloud_ids().size() - 1;
   int nvapor = ideal_moist->pthermo->options->vapor_ids().size() - 1;
@@ -94,7 +98,7 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   double mud = kintera::species_weights[0];
   double gas_constant_dry = kintera::constants::Rgas / mud;
   double cv_dry = kintera::species_cref_R[0] * gas_constant_dry;
-  auto cosine_cell_kj = pcoord->cosine_cell_kj.to(wr.options());
+  auto cosine_cell_kj = pmb->pcoord->cosine_cell_kj.to(wr.options());
   while (cosine_cell_kj.dim() > 2) {
     TORCH_CHECK(cosine_cell_kj.size(-1) == 1,
                 "SedHydro kernel expects singleton trailing coordinate "
@@ -117,8 +121,8 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
       hydro_ids.to(wr.device(), torch::kLong).contiguous(),
       ideal_moist->inv_mu_ratio_m1.to(wr.options()).contiguous(),
       ideal_moist->cv_ratio_m1.to(wr.options()).contiguous(),
-      ideal_moist->u0.to(wr.options()).contiguous(), pcoord->il(), pcoord->iu(),
-      ny, nvapor, phydro->options->grav()->grav1(), gas_constant_dry, cv_dry,
+      ideal_moist->u0.to(wr.options()).contiguous(), il, iu, ny, nvapor,
+      phydro->options->grav()->grav1(), gas_constant_dry, cv_dry,
       psedvel->options->a_diameter(), psedvel->options->a_epsilon_LJ(),
       psedvel->options->a_mass(), psedvel->options->upper_limit());
 

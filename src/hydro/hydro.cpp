@@ -339,6 +339,9 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
           1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
                 // send/recv at nb1=1)
     x1_split = true;
+    TORCH_CHECK(layout->options->blocks_per_process() == 1,
+                "[Hydro] the x1 reference relay addresses block ranks as "
+                "process ranks: one block per process only");
     auto iloc = layout->loc_of(layout->options->rank());
     above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
     below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner

@@ -35,7 +35,7 @@ void bind_mesh(py::module& m) {
       .def(
           "set_bfunc",
           [&](snap::MeshBlockOptions& self, int dx3, int dx2, int dx1,
-              py::object func_obj) {
+              py::object func_obj, std::string name) {
             bcfunc_t func;
             if (func_obj.is_none()) {
               func = nullptr;
@@ -67,21 +67,34 @@ void bind_mesh(py::module& m) {
                   "functions.");
             }
 
+            int face = -1;
             if (dx3 == 0 && dx2 == 0 && dx1 == -1) {
-              self->bfuncs()[0] = func;
+              face = 0;
             } else if (dx3 == 0 && dx2 == 0 && dx1 == 1) {
-              self->bfuncs()[1] = func;
+              face = 1;
             } else if (dx3 == 0 && dx2 == -1 && dx1 == 0) {
-              self->bfuncs()[2] = func;
+              face = 2;
             } else if (dx3 == 0 && dx2 == 1 && dx1 == 0) {
-              self->bfuncs()[3] = func;
+              face = 3;
             } else if (dx3 == -1 && dx2 == 0 && dx1 == 0) {
-              self->bfuncs()[4] = func;
+              face = 4;
             } else if (dx3 == 1 && dx2 == 0 && dx1 == 0) {
-              self->bfuncs()[5] = func;
+              face = 5;
+            }
+            if (face < 0) return;
+
+            self->bfuncs()[face] = func;
+            // The name must not outlive the function it described: a stale
+            // name would let is_wall_boundary classify a caller-supplied
+            // function it has never seen. Pass `name` to declare what was
+            // installed; "reflecting_inner"/"reflecting_outer" opt an x1 face
+            // back into the one-sided wall coefficient.
+            if (static_cast<size_t>(face) < self->bcnames().size()) {
+              self->bcnames()[face] = name;
             }
           },
-          py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"))
+          py::arg("dx3"), py::arg("dx2"), py::arg("dx1"), py::arg("func"),
+          py::arg("name") = "")
       .ADD_OPTION(bool, snap::MeshBlockOptionsImpl, verbose)
       .ADD_OPTION(std::string, snap::MeshBlockOptionsImpl, basename)
       .ADD_OPTION(std::string, snap::MeshBlockOptionsImpl, output_dir)
@@ -92,7 +105,12 @@ void bind_mesh(py::module& m) {
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptionsImpl, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptionsImpl, scalar)
       .ADD_OPTION(snap::InternalBoundaryOptions, snap::MeshBlockOptionsImpl, ib)
-      .ADD_OPTION(std::vector<bcfunc_t>, snap::MeshBlockOptionsImpl, bfuncs)
+      .def("bfuncs", (std::vector<bcfunc_t> const& (
+                         snap::MeshBlockOptionsImpl::*)() const) &
+                         snap::MeshBlockOptionsImpl::bfuncs)
+      // NOT ADD_OPTION: the bulk setter must invalidate bcnames, or a caller
+      // can install unknown functions and keep the parsed wall names.
+      .def("bfuncs", &snap::MeshBlockOptionsImpl::set_bfuncs)
       .ADD_OPTION(snap::LayoutOptions, snap::MeshBlockOptionsImpl, layout);
 
   pyMeshOptions.def(py::init<>())

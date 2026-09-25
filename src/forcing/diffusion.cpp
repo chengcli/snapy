@@ -1,6 +1,7 @@
 // C/C++
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 
 // yaml
@@ -102,6 +103,57 @@ torch::Tensor face_average(torch::Tensor value, int idir, Region start,
                 region_slice(value, lower, lower_end));
 }
 
+//! Linear extrapolation of `value` onto a physical wall face from the two
+//! nearest ACTIVE cells. Weights come from the actual cell widths, so a
+//! stretched mesh is handled correctly. Falls back to the nearest active cell
+//! if the extrapolation is non-positive; that value also reads no ghost.
+torch::Tensor extrapolate_to_wall(torch::Tensor value, Coordinate const& coord,
+                                  int idir, Region start, Region end,
+                                  bool upper) {
+  auto dim = kSpatialDims[idir] - 1;
+  auto near = start;
+  auto near_end = end;
+  auto next = start;
+  auto next_end = end;
+  near[dim] = upper ? end[dim] - 2 : start[dim];
+  next[dim] = upper ? end[dim] - 3 : start[dim] + 1;
+  near_end[dim] = near[dim] + 1;
+  next_end[dim] = next[dim] + 1;
+
+  auto width = cell_width(coord, idir);
+  auto wnear = spacing_slice(width, idir, near, near_end);
+  auto wnext = spacing_slice(width, idir, next, next_end);
+  auto t = wnear / (wnear + wnext);
+
+  auto vnear = region_slice(value, near, near_end);
+  auto vnext = region_slice(value, next, next_end);
+  auto wall = (1. + t) * vnear - t * vnext;
+  return torch::where(wall > 0., wall, vnear);
+}
+
+//! Face-centred diffusion coefficient. Interior faces take the two-cell
+//! average; a physical wall face is extrapolated from active cells instead,
+//! because the ghost there is filled by a boundary condition to serve a
+//! different operator and is not the physical state at the wall.
+torch::Tensor face_coefficient(torch::Tensor value, Coordinate const& coord,
+                               int idir, Region start, Region end,
+                               bool wall_lower, bool wall_upper) {
+  auto out = face_average(value, idir, start, end);
+  auto dim = kSpatialDims[idir] - 1;
+  auto nface = end[dim] - start[dim];
+  if (nface < 3) return out;  // fewer than two active cells to extrapolate from
+
+  if (wall_lower) {
+    out.narrow(dim, 0, 1).copy_(
+        extrapolate_to_wall(value, coord, idir, start, end, false));
+  }
+  if (wall_upper) {
+    out.narrow(dim, nface - 1, 1)
+        .copy_(extrapolate_to_wall(value, coord, idir, start, end, true));
+  }
+  return out;
+}
+
 bool active(Coordinate const& coord, int idir) {
   if (idir == 0) return coord->options->nc1() > 1;
   if (idir == 1) return coord->options->nc2() > 1;
@@ -119,12 +171,35 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
               "use 'nu_iso' and 'kappa_iso'.");
 
   auto op = DiffusionOptionsImpl::create();
-  op->nu_iso() = node["nu_iso"].as<double>(0.);
-  op->kappa_iso() = node["kappa_iso"].as<double>(0.);
-  TORCH_CHECK(op->nu_iso() >= 0.,
-              "DiffusionOptions: nu_iso must be non-negative.");
-  TORCH_CHECK(op->kappa_iso() >= 0.,
-              "DiffusionOptions: kappa_iso must be non-negative.");
+  auto take_non_negative = [&](char const* key) {
+    if (!node[key]) return 0.;
+    auto const value = node[key];
+    TORCH_CHECK(value.IsScalar(), "DiffusionOptions: ", key,
+                " must be a finite number >= 0.");
+    double parsed = 0.;
+    try {
+      parsed = value.as<double>();
+    } catch (YAML::Exception const&) {
+      TORCH_CHECK(false, "DiffusionOptions: ", key,
+                  " must be a finite number >= 0, got '", value.Scalar(), "'.");
+    }
+    TORCH_CHECK(std::isfinite(parsed) && parsed >= 0.,
+                "DiffusionOptions: ", key,
+                " must be a finite number >= 0, got ", parsed, ".");
+    return parsed;
+  };
+  op->nu_iso() = take_non_negative("nu_iso");
+  op->kappa_iso() = take_non_negative("kappa_iso");
+  if (node["dynamic"]) {
+    auto const flag = node["dynamic"];
+    TORCH_CHECK(flag.IsScalar(),
+                "DiffusionOptions: dynamic must be true or false.");
+    auto const text = flag.Scalar();
+    TORCH_CHECK(text == "true" || text == "false",
+                "DiffusionOptions: dynamic must be true or false, got '", text,
+                "'.");
+    op->dynamic() = text == "true";
+  }
   return op;
 }
 
@@ -178,7 +253,7 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
       }
     }
   }
-  if (options->kappa_iso() > 0.) {
+  if (options->kappa_iso() > 0. && !options->dynamic()) {
     rho_cv = w[IDN] * phydro->peos->specific_heat_cv(w, temp);
   }
 
@@ -194,7 +269,21 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     ++face_end[dim];
     auto face_index = region_index(face_start, face_end);
     auto flux = torch::zeros_like(w);
-    auto rho_face = face_average(w[IDN], idir, face_start, face_end);
+
+    // x1 only: the vertical is where a reflecting wall cuts a monotone,
+    // gravity-stratified profile. A lateral reflecting face may be a true
+    // symmetry plane, where the two-cell average is the better estimate, and
+    // reflecting is the default for every unspecified face, so extending this
+    // to x2/x3 would opt configurations in silently.
+    bool wall_lower = idir == 0 && pmb->options->is_wall_boundary(0, 0, -1);
+    bool wall_upper = idir == 0 && pmb->options->is_wall_boundary(0, 0, 1);
+
+    // rho at the face; the dynamic form carries no face density
+    torch::Tensor rho_face;
+    if (!options->dynamic()) {
+      rho_face = face_coefficient(w[IDN], coord, idir, face_start, face_end,
+                                  wall_lower, wall_upper);
+    }
 
     if (options->nu_iso() > 0.) {
       auto div_face = face_average(div_vel, idir, face_start, face_end);
@@ -214,7 +303,9 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
                                                shear_start, shear_end));
         }
 
-        auto momentum_flux = -options->nu_iso() * rho_face * stress;
+        auto momentum_flux = options->dynamic()
+                                 ? -options->nu_iso() * stress
+                                 : -options->nu_iso() * rho_face * stress;
         flux[IVX + ivar].index(face_index).copy_(momentum_flux);
         flux[IPR].index(face_index) +=
             face_average(w[IVX + ivar], idir, face_start, face_end) *
@@ -223,12 +314,19 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     }
 
     if (options->kappa_iso() > 0.) {
-      // W->T is in kelvin, so convert thermal diffusivity to conductivity
-      // using the local mixture volumetric heat capacity.
-      flux[IPR].index(face_index) -=
-          options->kappa_iso() *
-          face_average(rho_cv, idir, face_start, face_end) *
+      auto dtdn =
           face_normal_derivative(temp, coord, idir, face_start, face_end);
+      if (options->dynamic()) {
+        flux[IPR].index(face_index) -= options->kappa_iso() * dtdn;
+      } else {
+        // W->T is in kelvin, so convert thermal diffusivity to conductivity
+        // using the local mixture volumetric heat capacity.
+        flux[IPR].index(face_index) -=
+            options->kappa_iso() *
+            face_coefficient(rho_cv, coord, idir, face_start, face_end,
+                             wall_lower, wall_upper) *
+            dtdn;
+      }
     }
     fluxes[idir] = flux;
   }
@@ -257,9 +355,26 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
   }
 
   if (ndim == 0) return std::numeric_limits<double>::max();
-  auto coeff = std::max(options->nu_iso(), options->kappa_iso());
+  // each on its own: std::max(finite, NaN) returns the finite one
+  TORCH_CHECK(
+      std::isfinite(options->nu_iso()) && std::isfinite(options->kappa_iso()),
+      "[Diffusion] diffusivity is not finite");
+  double coeff;
+  if (options->dynamic()) {
+    auto rho_min = w[IDN].index(interior).min().item<double>();
+    double cv = phydro->peos->species_cv_ref();
+    coeff = std::max(options->nu_iso() / rho_min,
+                     cv > 0. ? options->kappa_iso() / (rho_min * cv) : 0.);
+  } else {
+    coeff = std::max(options->nu_iso(), options->kappa_iso());
+  }
   if (coeff == 0.) return std::numeric_limits<double>::max();
-  return dx_min * dx_min / (2. * ndim * coeff);
+  TORCH_CHECK(std::isfinite(coeff), "[Diffusion] diffusivity is not finite");
+  double dt = dx_min * dx_min / (2. * ndim * coeff);
+  TORCH_CHECK(std::isfinite(dt) && dt > 0.,
+              "[Diffusion] time-step bound must be positive and finite, got ",
+              dt);
+  return dt;
 }
 
 }  // namespace snap
