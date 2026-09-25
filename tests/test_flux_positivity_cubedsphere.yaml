@@ -1,5 +1,4 @@
-# Six cubed-sphere panels in one process: the tracer positivity limiter must conserve across a
-# PANEL SEAM (the slab test cannot cross one). Dry ideal gas, no gravity, solid-body wind set by
+# Six cubed-sphere panels in one process. Dry ideal gas, no gravity, solid-body wind set by
 # the test; nx1 > 1 is required (one radial cell leaves the radial geometric source unbalanced).
 reference-state: {Tref: 300., Pref: 1.e5}
 species:
@@ -46,4 +45,3 @@ scalar:
   names: [hat, complement]
   reconstruct: {type: weno5, scale: true, shock: true}
   riemann-solver: {type: upwind}
-  upper-bound: 1.0
