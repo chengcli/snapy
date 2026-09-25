@@ -131,6 +131,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor face_pressure1() const { return _face_pressure1; }
   torch::Tensor implicit_mass_correction() const;
 
+  //! dry-density increment the forcings added this stage (du[IDN])
+  torch::Tensor forcing_dry_increment() const { return _forcing_dry; }
+
   //! cumulative count of (cell, species) entries with positivity theta < 1
   //! (diagnostic; accumulated when the EOS limiter is enabled)
   torch::Tensor positivity_hits() const { return _positivity_hits; }
@@ -166,7 +169,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! selects the six-face vs log-mean cell-pressure reference
   mutable int x1_uniform_ = -1;
 
-  torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div;
+  torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
   torch::Tensor _lim_cut, _lim_flux;
 };

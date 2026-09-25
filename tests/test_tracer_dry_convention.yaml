@@ -1,0 +1,77 @@
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+# Warm, unsaturated moist column carrying one passive tracer. Tracers are per DRY air
+# (scalar_s = hydro_u[IDN] * r), so a tracer that starts uniform must stay uniform
+# under every operator that moves or converts dry air.
+species:
+  - name: dry
+    composition: {H: 1.6667, He: 0.16667}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 3.2e4, x2min: 0., x2max: 4.e3, x3min: 0., x3max: 1.e3}
+  cells: {nx1: 32, nx2: 4, nx3: 1, nghost: 3}
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    limiter: false
+
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+
+  riemann-solver:
+    type: lmars
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.9
+  implicit-scheme: 1
+  nlim: 10
+  tlim: 1.e9
+  ncycle_out: 0
+
+forcing:
+  const-gravity:
+    grav1: -10.
+
+scalar:
+  nvar: 1
+  names: [tracer]
+  reconstruct: {type: weno5, scale: false, shock: false}

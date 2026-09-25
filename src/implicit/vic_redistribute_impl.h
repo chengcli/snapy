@@ -57,7 +57,8 @@ void DISPATCH_MACRO vic_backward_substitute(Eigen::Matrix<T, N, N>* a,
 // cell-parallel:
 //   MASS(IDN, i)      : dry-gas increment [density/step]
 //   MASS(IVX+dir, i)  : M through the face BELOW cell i  [mass/step]
-//                       (consumed by the passive-scalar update in meshblock)
+//   MASS(IVX+(dir+1)%3, i) : the (clamped) DRY-gas transfer through that face
+//                       [mass/step], consumed by the passive-scalar update
 //   MASS(ICY+n, i)    : the species increment [density/step] that
 //                       vic_redistribute_cell applies
 //   MASS(IPR, i)      : temporary phi storage, cleared before returning
@@ -108,6 +109,7 @@ void DISPATCH_MACRO vic_constituent_column(T* du, T* w, T* mass_fix,
 
     MASS(IDN, i) -= q / VOL(i);
     MASS(IDN, i + 1) += q / VOL(i + 1);
+    MASS(IVX + (dir + 1) % 3, i + 1) = q;
     avail = avail_up + q;
     dryfrac = dryfrac_up;
   }
