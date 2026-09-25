@@ -58,7 +58,7 @@ inline T interp_plm(T phim1, T phi, T phip1) {
   auto dwl = phi - phim1;
   auto dwr = phip1 - phi;
   auto dw2 = dwl * dwr;
-  auto dwm = dw2 < 0. ? 0. : 2. * dw2 / (dwl + dwr);
+  auto dwm = dw2 > 0. ? 2. * dw2 / (dwl + dwr) : 0.;
   return phi - 0.5 * dwm;
 }
 

@@ -14,6 +14,7 @@ setup_test(test_backward_substitution)
 setup_test(test_scalar)
 setup_test(test_internal_boundary)
 setup_test(test_rectify)
+setup_test(test_flip_zero_count)
 setup_test(test_pull_2d)
 setup_test(test_pull_3d)
 setup_test(test_slab)
@@ -231,6 +232,66 @@ if (NOT APPLE)
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
       SKIP_RETURN_CODE 125
       TIMEOUT 600
+      LABELS "restart;examples"
+    )
+
+    add_test(
+      NAME test_restart_new_output
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_new_output.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
+
+    set_tests_properties(test_restart_new_output PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 600
+      SKIP_RETURN_CODE 125
+      LABELS "restart;examples"
+    )
+
+    add_test(
+      NAME test_restart_insert_output
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_insert_output.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
+
+    set_tests_properties(test_restart_insert_output PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 600
+      SKIP_RETURN_CODE 125
+      LABELS "restart;examples"
+    )
+
+    add_test(
+      NAME test_restart_key_collision
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_key_collision.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
+
+    set_tests_properties(test_restart_key_collision PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 600
+      SKIP_RETURN_CODE 125
+      LABELS "restart;examples"
+    )
+
+    add_test(
+      NAME test_restart_inplace_reorder
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_inplace_reorder.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
+
+    set_tests_properties(test_restart_inplace_reorder PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 600
+      SKIP_RETURN_CODE 125
       LABELS "restart;examples"
     )
 endif()

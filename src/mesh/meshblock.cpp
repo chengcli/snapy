@@ -1,10 +1,12 @@
 // C/C++
+#include <cmath>
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <vector>
 
 // snap
 #include <snap/input/read_restart_file.hpp>
@@ -1020,23 +1022,56 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   // Resume from the saved cycle so nlim-based runs do not take an extra step.
   cycle = data.at("last_cycle").item<int64_t>();
 
-  // user may add outputs after restart
-  int current_output_size =
-      std::min((int)output_types.size(), (int)data.at("file_number").size(0));
-  for (int n = 0; n < current_output_size; ++n) {
-    output_types[n]->file_number = data.at("file_number")[n].item<int64_t>();
-    output_types[n]->next_time = data.at("next_time")[n].item<double>();
-  }
-
   // start timing
   _time_start = clock();
   _cycle_start = cycle;
 
   auto current_time = data.at("last_time").item<double>();
 
-  // set the next_time of new outputs to the current time
-  for (int n = current_output_size; n < output_types.size(); ++n) {
-    output_types[n]->next_time = current_time;
+  // schedules restored by key; an edited block keeps its position, as before
+  int nsaved = data.at("file_number").size(0);
+  std::vector<bool> claimed(nsaved, false);
+  std::vector<int> match(output_types.size(), -1);
+  if (data.count("output_key")) {
+    // a block still matching its own saved slot keeps it; nothing can steal it
+    for (int n = 0; n < nsaved && n < (int)output_types.size(); ++n) {
+      if (data.at("output_key")[n].item<int64_t>() ==
+          output_types[n]->schedule_key()) {
+        match[n] = n;
+        claimed[n] = true;
+      }
+    }
+    for (int n = 0; n < output_types.size(); ++n) {
+      if (match[n] >= 0) continue;
+      auto key = output_types[n]->schedule_key();
+      for (int k = 0; k < nsaved; ++k) {
+        if (!claimed[k] && data.at("output_key")[k].item<int64_t>() == key) {
+          match[n] = k;
+          claimed[k] = true;
+          break;
+        }
+      }
+    }
+  }
+  for (int n = 0; n < output_types.size(); ++n) {
+    if (match[n] < 0 && n < nsaved && !claimed[n]) {
+      match[n] = n;
+      claimed[n] = true;
+    }
+  }
+  for (int n = 0; n < output_types.size(); ++n) {
+    // the file name is out<n>, so the counter follows the POSITION, not the key
+    if (n < nsaved) {
+      output_types[n]->file_number = data.at("file_number")[n].item<int64_t>();
+    }
+    int m = match[n];
+    if (m >= 0) {
+      output_types[n]->next_time = data.at("next_time")[m].item<double>();
+    } else {  // new output joins the restored grid
+      auto dt = output_types[n]->options->dt();
+      output_types[n]->next_time =
+          dt > 0.0 ? current_time - std::fmod(current_time, dt) : current_time;
+    }
   }
 
   bool rebuild_scalar_r =
@@ -1071,6 +1106,7 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   vars.erase("last_cycle");
   vars.erase("file_number");
   vars.erase("next_time");
+  vars.erase("output_key");
 
   if (rebuild_scalar_r) {
     set_scalar_primitive(vars, vars.at("scalar_s"), vars.at("hydro_u"));

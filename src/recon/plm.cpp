@@ -1,6 +1,3 @@
-// C/C++
-#include <limits>
-
 // base
 #include <configure.h>
 
@@ -21,13 +18,12 @@ std::pair<torch::Tensor, torch::Tensor> PLMInterpImpl::forward(
 
   auto size = w.size(dim);
   auto dw = w.narrow(dim, 1, size - 1) - w.narrow(dim, 0, size - 1);
-  auto dw2 = dw.narrow(dim, 0, size - 2) * dw.narrow(dim, 1, size - 2);
-  auto dwm = 2. * dw2 /
-             (dw.narrow(dim, 0, size - 2) + dw.narrow(dim, 1, size - 2) +
-              std::numeric_limits<float>::min());
-  dwm *= (dw2 >= 0).to(torch::kInt);
-  // auto dw2i = (dw2 <= 0).to(torch::kInt);
-  // dwm = dw2i * torch::zeros_like(dwm) + (1 - dw2i) * dwm;
+  auto dwl = dw.narrow(dim, 0, size - 2);
+  auto dwr = dw.narrow(dim, 1, size - 2);
+  auto dw2 = dwl * dwr;
+  // dw2 > 0 keeps dwl + dwr away from zero; an epsilon cannot (0/0 at 1e-38)
+  auto dwm =
+      torch::where(dw2 > 0, 2. * dw2 / (dwl + dwr), torch::zeros_like(dw2));
 
   wlv.copy_(w.narrow(dim, 1, size - 2) - 0.5 * dwm);
   wrv.copy_(w.narrow(dim, 1, size - 2) + 0.5 * dwm);

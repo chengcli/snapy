@@ -1,3 +1,6 @@
+// C/C++
+#include <atomic>
+
 // torch
 #include <ATen/Dispatch.h>
 #include <ATen/TensorIterator.h>
@@ -12,7 +15,7 @@
 namespace snap {
 
 int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir) {
-  int num_flips = 0;
+  std::atomic<int> num_flips{0};
   int grain_size = iter.numel() / at::get_num_threads();
 
   AT_DISPATCH_INTEGRAL_TYPES(iter.dtype(), "flip_zero_cpu", [&] {
@@ -33,10 +36,12 @@ int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir) {
               auto usedFlip =
                   reinterpret_cast<scalar_t*>(data[4] + i * strides[4]);
 
-              num_flips += compute_min_flips<scalar_t>(
-                  solid, len, /*minRun0=*/3, /*minRun1=*/2,
-                  /*allowBothFlips=*/0, dir, stride, dp, fromLen, fromBit,
-                  usedFlip);
+              num_flips.fetch_add(
+                  compute_min_flips<scalar_t>(solid, len, /*minRun0=*/3,
+                                              /*minRun1=*/2,
+                                              /*allowBothFlips=*/0, dir, stride,
+                                              dp, fromLen, fromBit, usedFlip),
+                  std::memory_order_relaxed);
 
               reconstruct_solution<scalar_t>(solid, len, /*minRun0=*/3,
                                              /*minRun1=*/2,
@@ -48,7 +53,7 @@ int flip_zero_cpu(at::TensorIterator& iter, int dim, int dir) {
     }
   });
 
-  return num_flips;
+  return num_flips.load(std::memory_order_relaxed);
 }
 
 }  // namespace snap

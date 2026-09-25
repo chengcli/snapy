@@ -86,7 +86,7 @@ int test1(int argc, char *argv[]) {
   return 0;
 }
 
-void test2() {
+int test2() {
   int flips = 0;
   auto solid = torch::zeros({8, 8, 8}, torch::kInt32);
   if (torch::cuda::is_available()) solid = solid.to(torch::kCUDA);
@@ -102,6 +102,21 @@ void test2() {
   auto out = pib->rectify_solid(solid, flips);
   std::cout << "out = " << out << std::endl;
   std::cout << "flips = " << flips << std::endl;
+
+  // every ghost slab is solid, the outer ones included (nghost = 1 without a
+  // MeshBlock; only 0 -> 1 flips are allowed, so the DP cannot undo it)
+  int nghost = 1;
+  for (int dim = 0; dim < 3; ++dim) {
+    auto lo = out.narrow(dim, 0, nghost);
+    auto hi = out.narrow(dim, out.size(dim) - nghost, nghost);
+    if (!lo.eq(1).all().item<bool>() || !hi.eq(1).all().item<bool>()) {
+      std::cerr << "ghost slab along dim " << dim << " is not solid: inner "
+                << lo.eq(1).all().item<bool>() << " outer "
+                << hi.eq(1).all().item<bool>() << std::endl;
+      return 1;
+    }
+  }
+  return 0;
 }
 
-int main(int argc, char *argv[]) { test2(); }
+int main(int argc, char *argv[]) { return test2(); }
