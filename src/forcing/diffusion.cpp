@@ -333,6 +333,10 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
   }
 
   if (ndim == 0) return std::numeric_limits<double>::max();
+  // each on its own: std::max(finite, NaN) returns the finite one
+  TORCH_CHECK(
+      std::isfinite(options->nu_iso()) && std::isfinite(options->kappa_iso()),
+      "[Diffusion] diffusivity is not finite");
   double coeff;
   if (options->dynamic()) {
     auto rho_min = w[IDN].index(interior).min().item<double>();

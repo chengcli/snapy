@@ -1,5 +1,6 @@
 // C/C++
 #include <cmath>
+#include <string>
 
 // external
 #include <gtest/gtest.h>
@@ -406,6 +407,30 @@ TEST_P(DeviceTest, timestep_rejects_a_non_finite_diffusivity) {
   auto w = make_primitive(block, device, dtype);
   block->phydro->pdiffusion->options->nu_iso(NAN);
   EXPECT_ANY_THROW(block->phydro->max_time_step(w));
+}
+
+// std::max(finite nu, NaN kappa) returns nu, and a zero nu returned early: a
+// NaN conductivity passed, in both modes. Each coefficient is checked alone.
+TEST_P(DeviceTest, timestep_rejects_each_non_finite_coefficient) {
+  struct Case {
+    double nu, kappa;
+    bool dynamic;
+  };
+  for (auto c :
+       {Case{0.5, NAN, false}, Case{0.5, NAN, true}, Case{0., NAN, false},
+        Case{0., NAN, true}, Case{NAN, 0.25, true}}) {
+    SCOPED_TRACE("nu=" + std::to_string(c.nu) +
+                 " kappa=" + std::to_string(c.kappa) +
+                 " dynamic=" + std::to_string(c.dynamic));
+    auto block = make_block();
+    block->to(device, dtype);
+    auto w = make_primitive(block, device, dtype);
+    auto opts = block->phydro->pdiffusion->options;
+    opts->dynamic(c.dynamic);
+    opts->nu_iso(c.nu);
+    opts->kappa_iso(c.kappa);
+    EXPECT_ANY_THROW(block->phydro->max_time_step(w));
+  }
 }
 
 // dynamic: true reads nu_iso as mu and kappa_iso as k: on rho = 1 + x/10 the
