@@ -275,7 +275,6 @@ dynamics:
     type: ideal-moist
     density-floor: 1.e-10
     pressure-floor: 1.e-10
-    tracer-floor: 1.e-10
     limiter: false
 
   reconstruct:

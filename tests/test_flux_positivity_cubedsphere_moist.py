@@ -27,7 +27,7 @@ from pathlib import Path
 import torch
 import yaml
 
-DRIFT_TOL = 1e-12
+DRIFT_TOL = 1e-13
 SPECIES_MIN = -1e-15
 QMAX = 0.02  # species mass fraction inside the hat
 

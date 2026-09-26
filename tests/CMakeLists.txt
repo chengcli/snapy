@@ -76,9 +76,20 @@ if(UCX_FOUND)
     )
   endif()
 endif()
-#setup_test(test_read_topo)
-#setup_cuda_test(test_thomas_solver)
-#setup_test(test_aneos)
+# Built so they keep compiling against the current API, but DISABLED: each needs
+# something the repo does not provide (see issue #224).
+setup_test(test_read_topo)  # topography .pt file; no assertions
+setup_test(test_aneos)      # real ANEOSThermoImpl (only a weak stub here) and example.aneos
+set_tests_properties(test_read_topo.${buildl} test_aneos.${buildl} PROPERTIES DISABLED TRUE)
+
+# Not registered, because they no longer compile or have nothing to run against:
+#   test_thomas_solver.cu         TridiagSolverOptions, alloc_eigen5, forward_sweep_cuda are gone
+#   test_transform.cpp            athena/, exo3/ headers
+#   test_cs_velocity_rotation.cpp application/, athena/, exo3/ headers
+#   test_implicit.cpp             globals.h, fvm/, namespace canoe
+#   test_hydro.cpp                namespace canoe, flux_divergence
+#   test_crater.py                canoe module, h5py and a local 256^3 HDF5 dump
+#   test_robert.py                checker for two netCDF files passed on argv; no robert case
 
 set_tests_properties(test_exchange.release PROPERTIES
   ENVIRONMENT
@@ -123,6 +134,7 @@ snapy_add_python_test(test_fix_vapor_reports_failure_cuda TIMEOUT 60 LABELS "pyt
 set_tests_properties(test_fix_vapor_reports_failure_cuda_python PROPERTIES SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
+snapy_add_python_test(test_implicit_options_type TIMEOUT 60 LABELS "python;implicit")
 snapy_add_python_test(test_shear_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo")
 snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
@@ -134,6 +146,19 @@ snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
+
+# DISABLED: snapy.exchange.init_dist still calls the removed SlabLayout(px, py, ...)
+# constructor (see issue #224).
+add_test(
+  NAME test_exchange_python
+  COMMAND torchrun --nproc-per-node=4 ${CMAKE_CURRENT_SOURCE_DIR}/test_exchange.py
+)
+set_tests_properties(test_exchange_python PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  LABELS "python;exchange"
+  DISABLED TRUE
+)
+set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS test_exchange_python)
 
 # Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the
 # caller's and must survive behind SNAPY_TEST_PYTHONPATH (only checkable with CMake >= 3.22).
@@ -320,7 +345,7 @@ if (NOT APPLE)
     )
 endif()
 
-if (DEFINED FULL_TESTS)
+if (FULL_TESTS)
   setup_parallel_test(test_mesh_multi_block 2)
 
   add_test(

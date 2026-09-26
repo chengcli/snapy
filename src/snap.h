@@ -47,6 +47,12 @@ enum {
 
 #endif  // index scheme
 
+// Species start right after the hydro variables; the `size - ICY` species
+// counts rely on it, so the legacy NMASS > 0 layout is refused here.
+static_assert(ICY == IPR + 1,
+              "species rows must start right after the 5 hydro rows; NMASS>0 is "
+              "not supported");
+
 //! \brief Variable type enumeration
 //!
 //! Defines different types of variables used in the simulation.

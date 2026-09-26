@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_TESTS "Build tests" ON)
+option(FULL_TESTS "Also register the long multi-process tests" OFF)
 option(BUILD_EXAMPLES "Build examples" OFF)
 option(CUDA "Enable CUDA support" OFF)
 option(NETCDF "Build with netcdf support" ON)
@@ -120,10 +121,18 @@ if (CUDAToolkit_FOUND)
     endif()
 
     if(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.0")
-      list(APPEND _cuda_arch_list 90 120)
+      list(APPEND _cuda_arch_list 90)
+    endif()
+
+    # nvcc supports sm_120 from 12.8
+    if(CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.8")
+      list(APPEND _cuda_arch_list 120)
     endif()
   elseif(DEFINED TORCH_CUDA_VERSION AND TORCH_CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
-    list(APPEND _cuda_arch_list 90 120)
+    list(APPEND _cuda_arch_list 90)
+    if(TORCH_CUDA_VERSION VERSION_GREATER_EQUAL "12.8")
+      list(APPEND _cuda_arch_list 120)
+    endif()
   endif()
 
   set(CMAKE_CUDA_ARCHITECTURES ${_cuda_arch_list})
