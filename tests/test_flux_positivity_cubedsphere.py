@@ -8,7 +8,7 @@ a jump: a ghost theta that is not the neighbour's edge-cell value leaks mass the
 1e-3 per 300 cycles with an interpolated fill). Both arms must conserve every tracer to
 round-off; the limited arm must fire (hits > 0) and keep the hat in [0, 1].
 
-  python test_flux_positivity_cubedsphere.py [--yaml PATH]
+  python test_flux_positivity_cubedsphere.py [--device cuda] [--yaml PATH]
 """
 import argparse
 import math
@@ -20,10 +20,10 @@ from pathlib import Path
 import torch
 import yaml
 
-DRIFT_TOL = 1e-12
+DRIFT_TOL = 1e-13
 
 
-def run_arm(yaml_file: str, limiter: bool):
+def run_arm(yaml_file: str, limiter: bool, device: str):
     import snapy
     from snapy import Mesh, MeshOptions, kIDN, kIV1, kIV2, kIV3, kIPR
 
@@ -46,6 +46,8 @@ def run_arm(yaml_file: str, limiter: bool):
     finally:
         os.unlink(tmp)
     blocks = list(mesh.blocks)
+    for block in blocks:
+        block.to(torch.device(device))
 
     lon0, half, band = math.radians(15.0), math.radians(30.0), math.radians(30.0)
     mesh_vars = []
@@ -57,7 +59,7 @@ def run_arm(yaml_file: str, limiter: bool):
         bufs = dict(block.named_buffers())
         w = bufs["hydro.D"].clone().zero_()
         r = bufs["scalar.D"].clone().zero_()
-        vel = torch.zeros((3,) + tuple(alpha.shape), dtype=torch.float64)
+        vel = torch.zeros((3,) + tuple(alpha.shape), dtype=torch.float64, device=alpha.device)
         vel[2] = 10.0 * torch.cos(lat)  # (v_r, v_theta, v_phi) -> contravariant, in place
         snapy.coord.cs_sph_to_contra_(vel, alpha, beta, face_id)
         w[kIDN] = 1.0
@@ -70,6 +72,7 @@ def run_arm(yaml_file: str, limiter: bool):
         r[0] = hat
         r[1] = 1.0 - hat
         mesh_vars.append({"hydro_w": w, "scalar_r": r})
+    assert str(mesh_vars[0]["hydro_w"].device).startswith(device)
     mesh_vars, t = mesh.initialize(mesh_vars)
 
     def totals():
@@ -79,7 +82,7 @@ def run_arm(yaml_file: str, limiter: bool):
             sl = block.part((0, 0, 0), False)[1:]
             vol = block.module("coord").cell_volume()[sl]
             s = mesh_vars[ib]["scalar_s"][(slice(None),) + tuple(sl)]
-            tot += (s * vol).sum(dim=(1, 2, 3))
+            tot += (s * vol).sum(dim=(1, 2, 3)).cpu()
             rr = s[0] / mesh_vars[ib]["hydro_w"][kIDN][sl]
             rmax, rmin = max(rmax, float(rr.max())), min(rmin, float(rr.min()))
         return tot, rmax, rmin
@@ -100,14 +103,15 @@ def run_arm(yaml_file: str, limiter: bool):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     ap.add_argument(
         "--yaml",
         default=str(Path(__file__).resolve().parent / "test_flux_positivity_cubedsphere.yaml"),
     )
     args = ap.parse_args()
 
-    base = run_arm(args.yaml, limiter=False)
-    lim = run_arm(args.yaml, limiter=True)
+    base = run_arm(args.yaml, limiter=False, device=args.device)
+    lim = run_arm(args.yaml, limiter=True, device=args.device)
     for name, arm in (("base", base), ("limited", lim)):
         print("%-8s drift=%.3e max=%.12f min=%+.3e hits=%d"
               % (name, arm["drift"], arm["max"], arm["min"], arm["hits"]))
