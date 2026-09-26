@@ -38,6 +38,7 @@ setup_test(test_diffusion)
 setup_test(test_diffusion_moist)
 setup_test(test_condensate_conservation)
 setup_test(test_wall_saturation)
+setup_test(test_cloud_parent_slots)
 setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
@@ -131,6 +132,7 @@ snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
+snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
 
 # Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the

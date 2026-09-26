@@ -93,7 +93,6 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
 void EquationOfStateImpl::cache_cloud_parents_() {
   if (!options->thermo()) return;
 
-  auto const species = options->thermo()->species();
   auto const& vids = options->thermo()->vapor_ids();
   auto const& cids = options->thermo()->cloud_ids();
   auto const nucleation = options->thermo()->nucleation();
@@ -103,12 +102,15 @@ void EquationOfStateImpl::cache_cloud_parents_() {
   for (size_t j = 0; j < cids.size(); ++j) {
     double parent_mass = 0.;
     for (auto const& reaction : nucleation->reactions()) {
-      if (!reaction.products().count(species[cids[j]])) continue;
+      // cids/vids index the GLOBAL registry, not species()'s compact gather
+      if (!reaction.products().count(kintera::species_names[cids[j]])) continue;
 
       for (auto const& [parent, coefficient] : reaction.reactants()) {
-        auto species_it = std::find(species.begin(), species.end(), parent);
-        if (species_it == species.end()) continue;
-        int species_id = std::distance(species.begin(), species_it);
+        auto species_it = std::find(kintera::species_names.begin(),
+                                    kintera::species_names.end(), parent);
+        if (species_it == kintera::species_names.end()) continue;
+        int species_id =
+            std::distance(kintera::species_names.begin(), species_it);
         auto vapor_it = std::find(vids.begin() + 1, vids.end(), species_id);
         if (vapor_it == vids.end()) continue;
 

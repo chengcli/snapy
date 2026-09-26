@@ -1,0 +1,54 @@
+# Fixture for test_cloud_parent_slots.cpp. H2O and H2O(l) are DECLARED and used
+# by no reaction below -- examples/uranus.yaml's shape. kintera then keeps four
+# species in thermo()->species() while the global registry holds six, so the
+# compact slot space and the global indices carried by cloud_ids()/vapor_ids()
+# stop coinciding.
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: H2O
+    composition: {H: 2, O: 1}
+    cv_R: 3.5
+
+  - name: H2O(l)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+  - name: NH3
+    composition: {N: 1, H: 3}
+    cv_R: 3.5
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 3.5
+
+  - name: NH4SH
+    composition: {N: 1, H: 5, S: 1}
+    cv_R: 9.0
+    u0_R: -1.2e4
+
+reactions:
+  - equation: NH3 + H2S <=> NH4SH
+    type: nucleation
+    rate-constant: {formula: nh3_h2s_lewis}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 1, nx2: 1, nx3: 1, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
