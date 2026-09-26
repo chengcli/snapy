@@ -80,7 +80,6 @@ dynamics:
     type: ideal-moist
     density-floor: 1.e-16
     pressure-floor: 1.e-16
-    tracer-floor: 1.e-20
     limiter: true
     max-iter: 20
     ftol: 1.e-6

@@ -1,4 +1,6 @@
 // C/C++
+#include <algorithm>
+#include <array>
 #include <string>
 
 // yaml
@@ -45,19 +47,25 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     // Every key here is read by a presence check, so an unknown key -- a
     // typo, or an option that no longer exists -- would be silently ignored
     // and the run would proceed as if it had been applied. Reject it instead.
-    // Only the TOP level is checked: the equation-of-state sub-block is
-    // co-owned (other libraries read their own keys from it), so its interior
-    // must not be policed here.
+    // Only the TOP level is checked here: the equation-of-state sub-block is
+    // co-owned (kintera reads its own keys from it), so it is checked against
+    // both libraries' keys in EquationOfStateOptionsImpl::from_yaml.
+    static std::array<char const*, 8> const dynamics_keys = {
+        "equation-of-state", "reconstruct",     "riemann-solver",
+        "verbose",           "disable-flux-x1", "disable-flux-x2",
+        "disable-flux-x3",   "wb-wall-clamp"};
     for (auto const& item : dyn) {
       auto key = item.first.as<std::string>();
-      TORCH_CHECK(key == "equation-of-state" || key == "reconstruct" ||
-                      key == "riemann-solver" || key == "verbose" ||
-                      key == "disable-flux-x1" || key == "disable-flux-x2" ||
-                      key == "disable-flux-x3" || key == "wb-wall-clamp",
+      auto joined = [] {  // the message lists the checked keys
+        std::string s;
+        for (auto const* k : dynamics_keys)
+          s += (s.empty() ? "" : ", ") + std::string(k);
+        return s;
+      };
+      TORCH_CHECK(std::find(dynamics_keys.begin(), dynamics_keys.end(), key) !=
+                      dynamics_keys.end(),
                   "HydroOptions: unknown key 'dynamics/", key,
-                  "'. Valid keys: equation-of-state, reconstruct, "
-                  "riemann-solver, verbose, disable-flux-x1, disable-flux-x2, "
-                  "disable-flux-x3, wb-wall-clamp.");
+                  "'. Valid keys: ", joined(), ".");
     }
     op->verbose() = dyn["verbose"].as<bool>(verbose);
     op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
