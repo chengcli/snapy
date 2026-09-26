@@ -438,7 +438,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     // cp3/cp5/weno5 faces: the face average exceeds m = rho*v by
     // dx^2/12 (m'' + rho'v'); remove the m'' part as div H,
-    // H = dx/12 (m_i - m_{i-1}), H = 0 at x1 walls (rho'v' is no divergence)
+    // H = dx/12 (m_i - m_{i-1}), zeroed at every physical x1 boundary
+    // (walls, outflow and periodic alike); rho'v' is no divergence
     auto type1 = precon1->pinterp1->options->type();
     if (type1 == "cp3" || type1 == "cp5" || type1 == "weno5") {
       int n = ie - is;

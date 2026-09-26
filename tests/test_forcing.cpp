@@ -791,13 +791,16 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
                               1.e-10, 1.e-8));
 }
 
-// rho*v is quadratic in x1, so at cp3 faces the booked work is the face form
-// minus dt*g*dx^2/12*(rho v)'' off the walls (2e-5 here; round-off ~1e-11),
-// and the column still telescopes; weno3 and dc faces book no correction.
+// rho*v is quadratic in x1, so at cp3, cp5 and weno5 faces the booked work is
+// the face form minus dt*g*dx^2/12*(rho v)'' off the walls (2e-5 here;
+// round-off ~2e-12), and the column still telescopes; weno3 and dc faces book
+// no correction. The 5-point stencils run with 3 ghost cells.
 static void vertical_gravity_work_removes_the_curvature_excess(
     torch::Device device) {
-  for (std::string type : {"cp3", "weno3", "dc"}) {
+  for (std::string type : {"cp3", "weno3", "dc", "cp5", "weno5"}) {
+    bool five_point = type == "cp5" || type == "weno5";
     auto options = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+    if (five_point) options->coord()->nghost(3);
     options->hydro()->diffusion() = nullptr;
     options->hydro()->icorr() = nullptr;
     options->hydro()->recon1()->interp()->type(type);
@@ -809,6 +812,7 @@ static void vertical_gravity_work_removes_the_curvature_excess(
     auto block = std::make_shared<MeshBlockImpl>(options);
     block->to(device, torch::kFloat64);
     auto coord = block->pcoord;
+    ASSERT_EQ(coord->options->nghost(), five_point ? 3 : 2) << type;
     auto w = make_primitive(block).to(device);
     auto x1 = coord->x1v.view({1, 1, -1});
     auto x2 = coord->x2v.view({1, -1, 1});
@@ -851,8 +855,9 @@ static void vertical_gravity_work_removes_the_curvature_excess(
 
     int nx1 = excess.size(-1);
     double dx = 1.;  // x1 in [0, 6] on 6 cells
-    double expected =
-        type != "cp3" ? 0. : dt * dx * dx / 12. * 2. * 0.04 * 0.03;
+    double expected = type == "cp3" || five_point
+                          ? dt * dx * dx / 12. * 2. * 0.04 * 0.03
+                          : 0.;
     auto off_wall = excess.narrow(-1, 1, nx1 - 2);
     EXPECT_TRUE(torch::allclose(off_wall, torch::full_like(off_wall, expected),
                                 0., 1.e-9))
