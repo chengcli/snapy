@@ -343,6 +343,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // neighbour's edge cell, and an interpolated ghost is not its factor.
     Variables tvars;
     tvars["hydro_theta"] = theta;
+    // the energy each species carries, raw-copied with theta for the same
+    // reason: a seam face must see the donor's own value on both sides
+    auto hspec = peos->species_enthalpy(w);
+    if (hspec.defined()) tvars["hydro_hspec"] = hspec;
     SyncOptions topts;
     topts.interpolate(false).type(kScalar);
     pmb->exchange(tvars, topts);
@@ -358,6 +362,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // theta's depth is not its consequence: measure the flux it removes
     auto f1_pre = f1.defined() ? f1.abs() : torch::Tensor();
 
+    // the withheld species mass keeps its energy and momentum in the donor
+    if (hspec.defined()) {
+      flux_positivity_carry_(theta, hspec, u.narrow(0, IVX, 3) / w[IDN], _flux1,
+                             _flux2, _flux3, pmb->pcoord);
+    }
     flux_positivity_scale_(theta, f1, f2, f3, pmb->pcoord);
 
     if (f1_pre.defined()) {
