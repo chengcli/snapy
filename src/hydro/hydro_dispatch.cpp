@@ -12,39 +12,37 @@
 namespace snap {
 
 void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
-                      torch::Tensor const& anchor, torch::Tensor const& gam,
-                      torch::Tensor const& kbot, torch::Tensor const& psf_lo,
+                      torch::Tensor const& anchor, torch::Tensor const& psf_lo,
                       torch::Tensor const& psf_hi, torch::Tensor const& pref,
                       torch::Tensor const& dsf, torch::Tensor const& dref,
-                      int is, int iu, double grav, bool uniform, bool phys_in,
-                      bool phys_out) {
+                      int iu, double grav, bool uniform, bool phys_in,
+                      bool phys_out, bool wall_clamp) {
   int ncolumns = w.size(1) * w.size(2);
   int nc1 = w.size(3);
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "hydro_ref_x1_cpu", [&] {
     auto anchor_ptr = anchor.defined() ? anchor.data_ptr<scalar_t>() : nullptr;
-    auto kbot_ptr = kbot.defined() ? kbot.data_ptr<scalar_t>() : nullptr;
     at::parallel_for(0, ncolumns, 0, [&](int64_t begin, int64_t end) {
       for (int64_t column = begin; column < end; ++column) {
         hydro_ref_x1_impl(
             w.data_ptr<scalar_t>(), dx1f.data_ptr<scalar_t>(), anchor_ptr,
-            gam.data_ptr<scalar_t>(), kbot_ptr, psf_lo.data_ptr<scalar_t>(),
-            psf_hi.data_ptr<scalar_t>(), pref.data_ptr<scalar_t>(),
-            dsf.data_ptr<scalar_t>(), dref.data_ptr<scalar_t>(),
-            static_cast<int>(column), ncolumns, nc1, is, iu, scalar_t(grav),
-            uniform, phys_in, phys_out);
+            psf_lo.data_ptr<scalar_t>(), psf_hi.data_ptr<scalar_t>(),
+            pref.data_ptr<scalar_t>(), dsf.data_ptr<scalar_t>(),
+            dref.data_ptr<scalar_t>(), static_cast<int>(column), ncolumns, nc1,
+            iu, scalar_t(grav), uniform, phys_in, phys_out, wall_clamp);
       }
     });
   });
 }
 
 void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
-                      torch::Tensor const& anchor_in, torch::Tensor const& gam,
-                      torch::Tensor const& kbot_in, torch::Tensor const& psf_lo,
-                      torch::Tensor const& psf_hi, torch::Tensor const& pref,
-                      torch::Tensor const& dsf, torch::Tensor const& dref,
-                      int is, int iu, double grav, bool uniform, bool phys_in,
-                      bool phys_out) {
+                      torch::Tensor const& anchor_in,
+                      torch::Tensor const& psf_lo, torch::Tensor const& psf_hi,
+                      torch::Tensor const& pref, torch::Tensor const& dsf,
+                      torch::Tensor const& dref, int iu, double grav,
+                      bool uniform, bool phys_in, bool phys_out,
+                      bool wall_clamp) {
   int nc1 = w.size(-1);
+  int il = nc1 - 1 - iu;
   auto rho = w[IDN];
   auto dp = grav * rho * dx1f;
   auto cum = torch::cumsum(dp, -1);
@@ -81,6 +79,54 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
         {-3. / 160., 637. / 1440., 511. / 720., -43. / 240., 77. / 1440.,
          -11. / 1440.},
     };
+    // At a PHYSICAL wall the stencil never crosses it.
+    // A one-sided row spans six faces and so overruns the owned range at the
+    // OPPOSITE end on a block under five cells -- a seam face, and readable,
+    // unless that end is a wall as well. See hydro_ref_x1_impl.h.
+    bool thin = (iu - il + 1) < 5;
+    bool fits =
+        iu >= 4;  // the rows must fit the array; see hydro_ref_x1_impl.h
+    bool clamp_in = wall_clamp && phys_in && fits && !(thin && phys_out);
+    bool clamp_out = wall_clamp && phys_out && fits && !(thin && phys_in);
+    if (clamp_in) {
+      for (int j : {il, il + 1}) {
+        int sigma = j - il;
+        auto val = w6e[sigma][0] * faces.select(-1, il);
+        for (int m = 1; m < 6; ++m)
+          val += w6e[sigma][m] * faces.select(-1, il + m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(
+            torch::where((val >= flo) & (val <= fhi), val,
+                         0.5 * (psf_lo.select(-1, j) + psf_hi.select(-1, j))));
+      }
+    }
+    if (wall_clamp && phys_in && !clamp_in) {  // no row fits: 2-point mean
+      for (int j : {il, il + 1})
+        pref.select(-1, j).copy_(0.5 *
+                                 (psf_lo.select(-1, j) + psf_hi.select(-1, j)));
+    }
+    if (wall_clamp && phys_out && !clamp_out) {
+      for (int j : {iu - 1, iu})
+        pref.select(-1, j).copy_(0.5 *
+                                 (psf_lo.select(-1, j) + psf_hi.select(-1, j)));
+    }
+    if (clamp_out) {
+      int s0 = iu + 1 - 5;
+      for (int j : {iu - 1, iu}) {
+        int row = 4 - (j - s0);
+        auto val = w6e[row][5] * faces.select(-1, s0);
+        for (int m = 1; m < 6; ++m)
+          val += w6e[row][5 - m] * faces.select(-1, s0 + m);
+        auto flo = torch::minimum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto fhi = torch::maximum(psf_lo.select(-1, j), psf_hi.select(-1, j));
+        auto cur = pref.select(-1, j);
+        cur.copy_(
+            torch::where((val >= flo) & (val <= fhi), val,
+                         0.5 * (psf_lo.select(-1, j) + psf_hi.select(-1, j))));
+      }
+    }
     if (!phys_in) {
       for (int j : {0, 1}) {
         auto val = w6e[j][0] * faces.select(-1, 0);
@@ -110,11 +156,26 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                             dp / torch::log(ratio)));
   }
 
-  auto kbot = kbot_in.defined() ? kbot_in
-                                : w[IPR].select(-1, is).unsqueeze(-1) /
-                                      rho.select(-1, is).unsqueeze(-1).pow(gam);
-  dref.copy_((pref / kbot).pow(1.0 / gam));
-  dsf.copy_((psf_lo / kbot).pow(1.0 / gam));
+  auto rop = (rho / w[IPR]).clone();
+  if (wall_clamp && phys_in) {  // clamp the smoothing to interior cells
+    rop.narrow(-1, 0, il).copy_(rop.narrow(-1, il, 1).expand({-1, -1, il}));
+  }
+  if (wall_clamp && phys_out) {
+    rop.narrow(-1, iu + 1, nc1 - 1 - iu)
+        .copy_(rop.narrow(-1, iu, 1).expand({-1, -1, nc1 - 1 - iu}));
+  }
+  auto lo_edge = rop.narrow(-1, 0, 1);
+  auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
+  auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);
+  auto rs = (pad.narrow(-1, 0, nc1) + 4. * pad.narrow(-1, 1, nc1) +
+             6. * pad.narrow(-1, 2, nc1) + 4. * pad.narrow(-1, 3, nc1) +
+             pad.narrow(-1, 4, nc1)) /
+            16.;
+  auto rf = rs.clone();
+  rf.narrow(-1, 1, nc1 - 1)
+      .copy_(0.5 * (rs.narrow(-1, 0, nc1 - 1) + rs.narrow(-1, 1, nc1 - 1)));
+  dref.copy_(pref * rs);
+  dsf.copy_(psf_lo * rf);
 }
 
 }  // namespace snap

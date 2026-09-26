@@ -327,9 +327,6 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // neighbor) => an empty anchor tells the backend to compute the local top
   // anchor.
   torch::Tensor anchor;
-  torch::Tensor
-      kbot;  // [nc3,nc2,1] single global isentrope K = P_bot/rho_bot^gam
-  torch::Tensor gam_global;
   int below = -1;
   int above = -1;
   bool x1_split = false;
@@ -346,38 +343,6 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
     below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner
     constexpr int kWbRefTag = 0x7715;
-    constexpr int kWbKbotTag = 0x7716;
-
-    // Global (kbot, gamma) relay, bottom -> top. The density reference must be
-    // ONE isentrope for the whole column: with a block-local kbot, adjacent
-    // blocks decompose rho against different references and the two sides of
-    // every x1 seam reconstruct different face states, making the dynamics
-    // nb1-dependent. The block owning the physical bottom computes
-    // (kbot, gamma) exactly as the nb1=1 path would; every block above
-    // receives and forwards the same slabs.
-    if (below >= 0) {
-      // ONE tensor per message: ProcessGroupGloo::send rejects a multi-tensor
-      // vector (ucx accepts it, which is why the ucx-only gate missed this).
-      // Pack (kbot, gam) along the last axis, exactly as the seam-flux exchange
-      // in hydro_forward.cpp packs its slab.
-      std::vector<torch::Tensor> kbuf = {
-          torch::empty({w.size(1), w.size(2), 2}, w.options())};
-      layout->comm->recv(kbuf, below, kWbKbotTag)->wait();
-      kbot = kbuf[0].narrow(-1, 0, 1).contiguous();
-      gam_global = kbuf[0].narrow(-1, 1, 1).contiguous();
-    } else {
-      int is_loc = pcoord->il();
-      gam_global =
-          peos->compute("W->A", {w.narrow(-1, is_loc, 1)}).contiguous();
-      kbot = (w[IPR].narrow(-1, is_loc, 1) /
-              w[IDN].narrow(-1, is_loc, 1).pow(gam_global))
-                 .contiguous();
-    }
-    if (above >= 0) {
-      std::vector<torch::Tensor> sbuf = {
-          torch::cat({kbot, gam_global}, -1).contiguous()};
-      layout->comm->send(sbuf, above, kWbKbotTag)->wait();
-    }
 
     if (above >= 0) {
       std::vector<torch::Tensor> rbuf = {
@@ -395,9 +360,6 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
             : 0;
   }
 
-  auto gam = x1_split
-                 ? gam_global
-                 : peos->compute("W->A", {w.narrow(-1, is, 1)}).contiguous();
   auto ref_options = w.options();
   auto ref_sizes = w.sizes().slice(1).vec();
   auto psf_lo = torch::empty(ref_sizes, ref_options);
@@ -409,9 +371,9 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
 
   auto dx1f = pcoord->dx1f.contiguous();
-  at::native::call_hydro_ref_x1(w.device().type(), w, dx1f, anchor, gam, kbot,
-                                psf_lo, psf_hi, pref, dsf, dref, is, iu, g,
-                                x1_uniform_ == 1, phys_in, phys_out);
+  at::native::call_hydro_ref_x1(
+      w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
+      g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
 
   if (below >= 0) {
     constexpr int kWbRefTag = 0x7715;

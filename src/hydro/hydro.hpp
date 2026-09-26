@@ -47,6 +47,9 @@ struct HydroOptionsImpl {
   ADD_ARG(bool, disable_flux_x2) = false;
   ADD_ARG(bool, disable_flux_x3) = false;
 
+  //! Keep the well-balanced x1 reference's stencils off the wall ghosts
+  ADD_ARG(bool, wb_wall_clamp) = true;
+
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;
   ADD_ARG(CoriolisOptions, coriolis) = nullptr;
@@ -143,6 +146,15 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! x1 face flux the limiter removes, and the total offered (lifetime sums)
   torch::Tensor lim_cut() const { return _lim_cut; }
   torch::Tensor lim_flux() const { return _lim_flux; }
+
+  //! RK stage currently being advanced, published by
+  //! MeshBlockImpl::advance_local. The vertical implicit correction needs
+  //! it because that solve is nonlinear in dt (see hydro_forward.cpp).
+  //! -1 means "not set". Reaching the correction in that state means running
+  //! the FULL-dt operator -- the one this fix replaces -- so it warns; it does
+  //! not abort, because tests/test_forcing.cpp drives HydroImpl::forward
+  //! directly, outside the stage loop, and must keep working.
+  int rk_stage = -1;
 
  protected:
   void _revise_x1inner_ghost(torch::Tensor const& w);

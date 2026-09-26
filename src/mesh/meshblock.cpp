@@ -570,6 +570,10 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
 
+  // Publish the stage: the vertical implicit correction is nonlinear in dt and
+  // must weight dt INSIDE the solve, so it needs to know which stage it is in.
+  phydro->rk_stage = stage;
+
   auto hydro_u = vars.at("hydro_u");
   auto scalar_s =
       vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();

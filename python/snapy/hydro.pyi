@@ -163,6 +163,15 @@ class HydroOptions:
         """Set implicit correction options."""
         ...
 
+    @overload
+    def wb_wall_clamp(self) -> bool:
+        """Clamp the well-balanced x1 reference stencils to interior cells at a
+        physical wall. Default True; `dynamics: {wb-wall-clamp: false}` opts out."""
+        ...
+
+    @overload
+    def wb_wall_clamp(self, value: bool) -> "HydroOptions": ...
+
 class Hydro:
     """
     Hydrodynamics implementation.
@@ -205,3 +214,7 @@ class Hydro:
     def max_time_step(self, *args) -> float:
         """Calculate maximum stable time step."""
         ...
+
+def balance_column(w: torch.Tensor, dx1f: torch.Tensor, grav: float,
+                   wall_clamp: bool = True, rtol: float = 1.e-10,
+                   max_iter: int = 120) -> Tuple[torch.Tensor, float, int]: ...
