@@ -8,8 +8,9 @@
 #include <torch/torch.h>
 
 // snap
-#include <snap/mesh/mesh.hpp>
 #include <snap/snap.h>
+
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
@@ -21,7 +22,8 @@ namespace {
 // block at nb2 = 2 and at nb2 = 4. nb2 = 1 has no subdivided panel seam.
 std::string write_card(int nb) {
   int blocks = 6 * nb * nb;
-  std::string path = "test_cubed_sphere_exchange_" + std::to_string(nb) + ".yaml";
+  std::string path =
+      "test_cubed_sphere_exchange_" + std::to_string(nb) + ".yaml";
   std::ofstream o(path);
   o << "reference-state: {Tref: 0., Pref: 1.e5}\n"
        "species:\n"
@@ -33,8 +35,7 @@ std::string write_card(int nb) {
        "distribute:\n"
        "  layout: cubed-sphere\n"
        "  nb2: "
-    << nb << "\n  nb3: " << nb
-    << "\n  blocks_per_process: " << blocks
+    << nb << "\n  nb3: " << nb << "\n  blocks_per_process: " << blocks
     << "\n  verbose: false\n"
        "geometry:\n"
        "  type: gnomonic-equiangle\n"
@@ -59,7 +60,7 @@ struct PanelFields {
   torch::Tensor density;  // (6, 8, 8) interior hydro_u[IDN] after one stage
 };
 
-PanelFields run(int nb) {
+PanelFields run(int nb, torch::Device device = torch::kCPU) {
   auto block_opts = MeshBlockOptionsImpl::from_yaml(write_card(nb));
   auto mesh_opts = MeshOptionsImpl::create();
   mesh_opts->block(block_opts);
@@ -69,11 +70,13 @@ PanelFields run(int nb) {
 
   for (size_t i = 0; i < mesh->blocks.size(); ++i) {
     auto block = mesh->blocks[i];
+    if (device.is_cuda()) block->to(device);
     auto coord = block->pcoord;
     int nvar = block->phydro->peos->nvar();
-    auto w = torch::zeros({nvar, coord->options->nc3(), coord->options->nc2(),
-                           coord->options->nc1()},
-                          torch::kFloat64);
+    auto w = torch::zeros(
+        {nvar, coord->options->nc3(), coord->options->nc2(),
+         coord->options->nc1()},
+        torch::TensorOptions().dtype(torch::kFloat64).device(device));
     w[IDN] = 1. + 0.2 * coord->x2v.unsqueeze(0).unsqueeze(-1) +
              0.05 * coord->x3v.unsqueeze(1).unsqueeze(-1);
     w[IPR].fill_(1.e5);
@@ -96,20 +99,26 @@ PanelFields run(int nb) {
     int nx3 = coord->options->nx3();
     int ix2 = coord->options->ix2();
     int ix3 = coord->options->ix3();
-    auto [rx, ry, face] = block->get_layout()->loc_of(
-        block->options->layout()->rank());
+    auto [rx, ry, face] =
+        block->get_layout()->loc_of(block->options->layout()->rank());
     (void)rx;
     (void)ry;
     auto faces = coord->x2f.narrow(0, ng, nx2 + 1);
-    out.x2f[face].narrow(0, ix2, nx2 + 1).copy_(faces);
-    out.dx2f[face].narrow(0, ix2, nx2).copy_(coord->dx2f.narrow(0, ng, nx2));
+    out.x2f[face].narrow(0, ix2, nx2 + 1).copy_(faces.cpu());
+    out.dx2f[face]
+        .narrow(0, ix2, nx2)
+        .copy_(coord->dx2f.narrow(0, ng, nx2).cpu());
 
     // hydro_u keeps a single x1 cell (nc1 == nx1); there is no x1 ghost pad.
-    auto rho = vars[i].at("hydro_u")[IDN]
+    auto rho = vars[i]
+                   .at("hydro_u")[IDN]
                    .slice(0, ng, ng + nx3)
                    .slice(1, ng, ng + nx2)
                    .select(2, 0);
-    out.density[face].slice(0, ix3, ix3 + nx3).slice(1, ix2, ix2 + nx2).copy_(rho);
+    out.density[face]
+        .slice(0, ix3, ix3 + nx3)
+        .slice(1, ix2, ix2 + nx2)
+        .copy_(rho.cpu());
   }
   return out;
 }
@@ -130,7 +139,29 @@ TEST(CubedSphere, subdivided_panel_exchange_matches_one_block) {
       PanelFields got = run(nb);
       EXPECT_TRUE(torch::equal(got.x2f, ref.x2f)) << "x2f nb2=" << nb;
       EXPECT_TRUE(torch::equal(got.dx2f, ref.dx2f)) << "dx2f nb2=" << nb;
-      EXPECT_TRUE(torch::equal(got.density, ref.density)) << "hydro_u nb2=" << nb;
+      EXPECT_TRUE(torch::equal(got.density, ref.density))
+          << "hydro_u nb2=" << nb;
+    } catch (std::exception const &e) {
+      ADD_FAILURE() << "nb2=" << nb << " " << e.what();
+    }
+  }
+}
+
+TEST(CubedSphere, subdivided_panel_exchange_matches_one_block_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  PanelFields ref;
+  try {
+    ref = run(1, torch::kCUDA);
+  } catch (std::exception const &e) {
+    FAIL() << "nb2=1 " << e.what();
+  }
+  for (int nb : {2, 4}) {
+    try {
+      PanelFields got = run(nb, torch::kCUDA);
+      EXPECT_TRUE(torch::equal(got.x2f, ref.x2f)) << "x2f nb2=" << nb;
+      EXPECT_TRUE(torch::equal(got.dx2f, ref.dx2f)) << "dx2f nb2=" << nb;
+      EXPECT_TRUE(torch::equal(got.density, ref.density))
+          << "hydro_u nb2=" << nb;
     } catch (std::exception const &e) {
       ADD_FAILURE() << "nb2=" << nb << " " << e.what();
     }
