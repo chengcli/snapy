@@ -791,6 +791,86 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
                               1.e-10, 1.e-8));
 }
 
+// rho*v is quadratic in x1, so at cp3 faces the booked work is the face form
+// minus dt*g*dx^2/12*(rho v)'' off the walls (2e-5 here; round-off ~1e-11),
+// and the column still telescopes; weno3 and dc faces book no correction.
+static void vertical_gravity_work_removes_the_curvature_excess(
+    torch::Device device) {
+  for (std::string type : {"cp3", "weno3", "dc"}) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+    options->hydro()->diffusion() = nullptr;
+    options->hydro()->icorr() = nullptr;
+    options->hydro()->recon1()->interp()->type(type);
+
+    auto gravity = ConstGravityOptionsImpl::create();
+    gravity->grav1(-1.);
+    options->hydro()->grav() = gravity;
+
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    block->to(device, torch::kFloat64);
+    auto coord = block->pcoord;
+    auto w = make_primitive(block).to(device);
+    auto x1 = coord->x1v.view({1, 1, -1});
+    auto x2 = coord->x2v.view({1, -1, 1});
+    w[IDN] = 1. + 0.04 * x1 + 0.08 * x2;
+    w[IVX] = 0.2 + 0.03 * x1;
+    w[IVY] = -0.4 + 0.15 * x2;
+    w[IPR] = 1.e5 + 20. * x1 + 40. * x2;
+
+    auto u = block->phydro->peos->compute("W->U", {w});
+    Variables vars;
+    vars["hydro_w"] = torch::empty_like(w);
+    double dt = 0.1;
+    auto du = block->phydro->forward(dt, u, vars);
+
+    int ny = du.size(0) - ICY;
+    auto total_mass_du = du[IDN].clone();
+    auto mass_flux1 = block->phydro->flux1()[IDN].clone();
+    auto mass_flux2 = block->phydro->flux2()[IDN].clone();
+    auto mass_flux3 = block->phydro->flux3()[IDN].clone();
+    if (ny > 0) {
+      total_mass_du += du.narrow(0, ICY, ny).sum(0);
+      mass_flux1 += block->phydro->flux1().narrow(0, ICY, ny).sum(0);
+      mass_flux2 += block->phydro->flux2().narrow(0, ICY, ny).sum(0);
+      mass_flux3 += block->phydro->flux3().narrow(0, ICY, ny).sum(0);
+    }
+
+    auto phi_cell = -gravity->grav1() * coord->x1v;
+    auto phi_face = -gravity->grav1() * coord->x1f;
+    auto flux1 = block->phydro->flux1()[IPR] +
+                 phi_face.narrow(0, 0, mass_flux1.size(-1)) * mass_flux1;
+    auto flux2 = block->phydro->flux2()[IPR] + phi_cell * mass_flux2;
+    auto flux3 = block->phydro->flux3()[IPR] + phi_cell * mass_flux3;
+    auto face_form =
+        -dt * coord->divergence(flux1.unsqueeze(0), flux2.unsqueeze(0),
+                                flux3.unsqueeze(0))[0];
+    auto actual = du[IPR] + phi_cell * total_mass_du;
+    auto interior =
+        block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+    auto excess = (actual - face_form).index(interior);
+
+    int nx1 = excess.size(-1);
+    double dx = 1.;  // x1 in [0, 6] on 6 cells
+    double expected =
+        type != "cp3" ? 0. : dt * dx * dx / 12. * 2. * 0.04 * 0.03;
+    auto off_wall = excess.narrow(-1, 1, nx1 - 2);
+    EXPECT_TRUE(torch::allclose(off_wall, torch::full_like(off_wall, expected),
+                                0., 1.e-9))
+        << type << ": " << off_wall;
+    EXPECT_LT(excess.sum(-1).abs().max().item<double>(), 1.e-9) << type;
+  }
+}
+
+TEST(forcing, vertical_gravity_work_removes_the_curvature_excess) {
+  vertical_gravity_work_removes_the_curvature_excess(torch::kCPU);
+}
+
+TEST(forcing, vertical_gravity_work_removes_the_curvature_excess_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  vertical_gravity_work_removes_the_curvature_excess(
+      torch::Device(torch::kCUDA, 0));
+}
+
 static void implicit_gravity_work_holds_under_rk3_stage_weighting(
     torch::Device device) {
   // publish rk_stage as advance_local does; #202's tests call forward directly
