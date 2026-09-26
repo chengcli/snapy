@@ -137,8 +137,18 @@ void bind_mesh(py::module& m) {
             }
             auto coord = block->coord();
             auto layout = block->layout();
-            // the globals written below must not leave the bounds unresolved
-            coord->resolve_global_grid();
+            // the global counts written below need global bounds: adopt the
+            // block's own where none are declared. No resolve here: after an
+            // earlier call the local counts are per block but the bounds are
+            // the whole domain, which only repartition makes consistent.
+            if (coord->global_nx2() == 0) {
+              coord->global_x2min(coord->x2min());
+              coord->global_x2max(coord->x2max());
+            }
+            if (coord->global_nx3() == 0) {
+              coord->global_x3min(coord->x3min());
+              coord->global_x3max(coord->x3max());
+            }
             coord->nx2(nx2);
             coord->nx3(nx3);
             coord->global_nx2(nx2 * layout->px());
