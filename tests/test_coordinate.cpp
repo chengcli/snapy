@@ -1001,6 +1001,48 @@ TEST(CoordinateProgrammatic, a_block_outside_its_declared_grid_is_refused) {
       << msg;
 }
 
+// (N) inside the global interval is not enough. block_faces_ slices by the
+// rounded start and the local nx, so a block of [0, 0.3] with nx 2 on a
+// [0, 1] grid of 10 cells used to be accepted and its interior faces ended
+// at 0.2, not 0.3.
+TEST(CoordinateProgrammatic,
+     a_declared_block_must_span_exactly_nx_global_faces) {
+  auto grid = [](double lo, double hi, int nx) {
+    auto op = CoordinateOptionsImpl::create();
+    op->global_x1min(0.).global_x1max(1.).global_nx1(1);
+    op->global_x2min(0.).global_x2max(1.).global_nx2(10);
+    op->global_x3min(0.).global_x3max(1.).global_nx3(1);
+    op->x1min(0.).x1max(1.).nx1(1);
+    op->x2min(lo).x2max(hi).nx2(nx);
+    op->x3min(0.).x3max(1.).nx3(1);
+    op->nghost(2);
+    return op;
+  };
+
+  auto bad = grid(0., 0.3, 2);
+  auto msg = build_error(bad);
+  EXPECT_NE(msg.find("not exactly 2 cells of the declared global x2 grid"),
+            std::string::npos)
+      << msg;
+
+  auto off = grid(0., 0.25, 2);  // inside [0, 1], on no face
+  msg = build_error(off);
+  EXPECT_NE(msg.find("not exactly 2 cells of the declared global x2 grid"),
+            std::string::npos)
+      << msg;
+
+  auto none = grid(0., 0.2, 0);
+  msg = build_error(none);
+  EXPECT_NE(msg.find("need nx2 > 0"), std::string::npos) << msg;
+
+  double dx = 1. / 10.;
+  auto good = grid(0., 2. * dx, 2);
+  EXPECT_EQ(build_error(good), "");
+  Cartesian blk(good);
+  EXPECT_EQ(good->ix2(), 0);
+  EXPECT_NEAR(blk->x2f[2 + 2].item<double>(), 2. * dx, 1.e-15);
+}
+
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
 

@@ -1,5 +1,6 @@
 // C/C++
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <vector>
 
@@ -191,9 +192,28 @@ void CoordinateOptionsImpl::_resolve_axis(char const* ax, double lo, double hi,
   // a few ULP: `repartition` reaches the last upper bound by accumulation
   double tol = 16 * std::numeric_limits<double>::epsilon() *
                std::max({std::abs(glo), std::abs(ghi), std::abs(ghi - glo)});
+  TORCH_CHECK(nx > 0 && hi > lo, "[CoordinateOptions] block ", ax,
+              " is not a slice of the declared global grid: need n", ax,
+              " > 0 and ", ax, "max > ", ax, "min, got n", ax, " = ", nx, ", ",
+              ax, "min = ", lo, ", ", ax, "max = ", hi);
   TORCH_CHECK(lo >= glo - tol && hi <= ghi + tol, "[CoordinateOptions] block ",
               ax, " = [", lo, ", ", hi, "] lies outside the declared global ",
               ax, " grid [", glo, ", ", ghi, "]");
+
+  // block_faces_ slices by the rounded start and the local nx. A span that
+  // merely lies inside the global interval can still name a different set of
+  // cells than [lo, hi]: [0, 0.3] with nx 2 on a 10-cell [0, 1] grid is
+  // accepted by the check above and then cut back to [0, 0.2].
+  double dx = (ghi - glo) / static_cast<double>(gnx);
+  int i0 = _offset(lo - glo, dx);
+  int i1 = _offset(hi - glo, dx);
+  bool on_lo = std::abs(lo - (glo + static_cast<double>(i0) * dx)) <= tol;
+  bool on_hi = std::abs(hi - (glo + static_cast<double>(i1) * dx)) <= tol;
+  TORCH_CHECK(i0 >= 0 && i1 <= gnx && i1 - i0 == nx && on_lo && on_hi,
+              "[CoordinateOptions] block ", ax, " = [", lo, ", ", hi,
+              "] with n", ax, " = ", nx, " is not exactly ", nx,
+              " cells of the declared global ", ax, " grid [", glo, ", ", ghi,
+              "] (n = ", gnx, ")");
 }
 
 void CoordinateOptionsImpl::resolve_global_grid() {
@@ -206,10 +226,25 @@ void CoordinateOptionsImpl::resolve_global_grid() {
 }
 
 void CoordinateOptionsImpl::repartition(LayoutOptions const& layout) {
-  // values are dead; the resolve below reads them -- without it 14 cards abort
-  if (global_nx1() > 0) x1min(global_x1min()), x1max(global_x1max());
-  if (global_nx2() > 0) x2min(global_x2min()), x2max(global_x2max());
-  if (global_nx3() > 0) x3min(global_x3min()), x3max(global_x3max());
+  // The local bounds and counts are dead here. resolve reads them, and
+  // without that call 14 cards abort. Present the whole declared grid,
+  // including its count: the resolve rejects a stale local nx that does
+  // not cover that grid. The rank's own slice is written just below.
+  if (global_nx1() > 0) {
+    x1min(global_x1min());
+    x1max(global_x1max());
+    nx1(global_nx1());
+  }
+  if (global_nx2() > 0) {
+    x2min(global_x2min());
+    x2max(global_x2max());
+    nx2(global_nx2());
+  }
+  if (global_nx3() > 0) {
+    x3min(global_x3min());
+    x3max(global_x3max());
+    nx3(global_nx3());
+  }
 
   resolve_global_grid();
 
