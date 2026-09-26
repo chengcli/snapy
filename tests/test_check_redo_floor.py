@@ -97,8 +97,8 @@ def nan_arm(device, yaml_file):
     return None
 
 
-def mesh_arm(device, yaml_file):
-    """Six cubed-sphere panels in one process, solid-body wind, floor planted in block 3 only."""
+def mesh_arm(device, yaml_file, nan=False):
+    """Six cubed-sphere panels in one process, solid-body wind, floor (or a NaN velocity) planted in block 3 only."""
     import snapy
     from snapy import Mesh, MeshOptions, kIDN, kIPR, kIV1, kIV2, kIV3
 
@@ -153,13 +153,17 @@ def mesh_arm(device, yaml_file):
 
     ub = mesh_vars[3]["hydro_u"]
     k, j, i = ub.size(1) // 2, ub.size(2) // 2, ub.size(3) // 2
-    ub[kIDN, k, j, i] = density_floor
+    if nan:  # zeroed by the limiter in floor_hit's conversion: only its NaN mark rejects the step
+        ub[kIV1, k, j, i] = float("nan")
+    else:
+        ub[kIDN, k, j, i] = density_floor
     err = mesh.check_redo(mesh_vars)
     if err != 1:
-        return "floor in one block of six not rejected (err=%d)" % err
+        what = "a NaN velocity" if nan else "a floor"
+        return "%s in one block of six not rejected (err=%d)" % (what, err)
     for ib, (mv, u) in enumerate(zip(mesh_vars, u0)):
         if not torch.equal(mv["hydro_u"], u):
-            return "block %d not restored after a floor in block 3" % ib
+            return "block %d not restored after a repair in block 3" % ib
     dt1 = mesh.max_time_step(mesh_vars)
     if abs(dt1 - 0.5 * dt0) > 1.0e-12 * dt0:
         return "time step after the redo is %g, expected half of %g" % (dt1, dt0)
@@ -180,7 +184,8 @@ def main():
 
     failures = []
     for name, arm, yf in (("block", block_arm, args.yaml), ("nan", nan_arm, args.yaml),
-                          ("mesh", mesh_arm, args.mesh_yaml)):
+                          ("mesh", mesh_arm, args.mesh_yaml),
+                          ("meshnan", lambda d, y: mesh_arm(d, y, nan=True), args.mesh_yaml)):
         msg = arm(args.device, yf)
         print("%-6s %s" % (name, "PASS" if msg is None else "FAIL: " + msg))
         if msg is not None:

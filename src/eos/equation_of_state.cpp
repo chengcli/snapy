@@ -164,7 +164,17 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
   auto pcoord = pmb->pcoord;
 
   if (!options->limiter()) return;  // no limiter
-  cons.masked_fill_(torch::isnan(cons), 0.);
+  // every call marks a repaired interior, so MeshBlock::check_redo redoes it
+  auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
+  bool mark = limiter_marks_.defined();
+  auto nan = torch::isnan(cons);
+  if (mark) limiter_marks_[1].logical_or_(nan.index(interior).any());
+  cons.masked_fill_(nan, 0.);
+  auto dens_energy = [&] {  // density only where the EOS has no energy row
+    auto u = cons.index(interior);
+    return nvar() > IPR ? torch::stack({u[IDN], u[IPR]}) : u[IDN].clone();
+  };
+  auto before = mark ? dens_energy() : torch::Tensor();
   cons[IDN].clamp_min_(options->density_floor());
 
   // for (int i = ICY; i < ICY + nvapor; ++i)
@@ -191,10 +201,10 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     auto min_ie = compute("UT->I", {cons, min_temp});
     cons[IPR].clamp_min_(ke + min_ie);
   }
+  if (mark) limiter_marks_[0].logical_or_(dens_energy().ne(before).any());
 
   if (options->thermo() && ny > 0) {
     auto nghost = pcoord->options->nghost();
-    auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
 
     // A negative condensate value means the tracer flux over-drained the cell;
     // the mass is in a neighbour, not missing. Zeroing it (`clamp_min_(0.)`)
@@ -242,7 +252,12 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
 
 void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   if (!options->limiter()) return;  // no limiter
-  prim.masked_fill_(torch::isnan(prim), 0.);
+  auto nan = torch::isnan(prim);
+  if (limiter_marks_.defined()) {  // floors on a prim are floor_hit's to judge
+    auto interior = phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
+    limiter_marks_[1].logical_or_(nan.index(interior).any());
+  }
+  prim.masked_fill_(nan, 0.);
   prim[IDN].clamp_min_(options->density_floor());
 
   if (options->thermo()) {
@@ -252,6 +267,10 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   }
 
   prim[IPR].clamp_min_(options->pressure_floor());
+}
+
+void EquationOfStateImpl::reset_limiter_marks(torch::Tensor const& like) {
+  limiter_marks_ = torch::zeros({2}, like.options().dtype(torch::kBool));
 }
 
 EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,

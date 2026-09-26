@@ -1,6 +1,8 @@
 // C/C++
 #include <array>
 #include <cmath>
+#include <limits>
+#include <tuple>
 
 // external
 #include <gtest/gtest.h>
@@ -629,6 +631,119 @@ TEST(forcing, limiter_patch_is_reported_below_the_temperature_floor) {
       block->forward(vars, 1.e-3, stage);
     }
     EXPECT_EQ(block->limiter_patch_hit(), pres < 1.e4) << "pres=" << pres;
+  }
+}
+
+namespace {
+struct LimiterStep {
+  int redo;         // check_redo after the planted step
+  std::string log;  // what that check_redo printed
+  int retry;        // check_redo after one more, unplanted step
+};
+
+// One step of a limiter-on block at rest (350 K) with `value` written into
+// row `row` of one interior cell of hydro_u just before stage `at` (row < 0:
+// nothing planted), or, with `prim`, into a W->U call's primitive input.
+LimiterStep limiter_step(std::string const& yaml, int row, double value, int at,
+                         bool prim = false,
+                         torch::Device device = torch::kCPU) {
+  auto options = MeshBlockOptionsImpl::from_yaml(yaml);
+  options->hydro()->eos()->limiter(true);
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  block->to(device);
+  auto coord = block->pcoord;
+  auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                         coord->options->nc2(), coord->options->nc1()},
+                        torch::dtype(torch::kFloat64).device(device));
+  w[IDN].fill_(1.);
+  w[IPR].fill_(1.e5);
+  if (w.size(0) > ICY) w[ICY].fill_(0.01);  // unsaturated vapor at 350 K
+
+  Variables vars;
+  vars["hydro_w"] = w;
+  block->initialize(vars);
+  EXPECT_GT(block->pintg->stages.size(), at);
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
+  auto step = [&](bool plant) {
+    for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+      if (plant && row >= 0 && stage == at) {
+        auto u = prim ? vars["hydro_w"].clone() : vars["hydro_u"];
+        u.index(interior)[row].select(-1, 1).fill_(value);
+        if (prim) block->phydro->peos->compute("W->U", {u});
+      }
+      block->forward(vars, 1.e-3, stage);
+    }
+    testing::internal::CaptureStdout();
+    int redo = block->check_redo(vars);
+    return std::make_pair(redo, testing::internal::GetCapturedStdout());
+  };
+  auto [redo, log] = step(true);
+  return {redo, log, step(false).first};
+}
+
+double const kNaN = std::numeric_limits<double>::quiet_NaN();
+}  // namespace
+
+// A NaN the limiter zeroes in a momentum row leaves density and energy intact.
+// Planted before stage 0 it models a state inherited from between steps: the
+// restore repairs it in place, so the retry is clean.
+TEST(forcing, limiter_nan_in_a_velocity_row_redoes_the_step) {
+  auto r = limiter_step("test_gravity_energy.yaml", IVX, kNaN, 0);
+  EXPECT_EQ(r.redo, 1) << r.log;
+  EXPECT_NE(r.log.find("(causes: nan)"), std::string::npos) << r.log;
+  EXPECT_EQ(r.retry, 0);
+}
+
+// Planted at stage 1, the NaN is seen only by the stage-entry limiter.
+TEST(forcing, limiter_nan_in_a_vapor_row_redoes_the_step) {
+  auto r = limiter_step("test_diffusion_moist.yaml", ICY, kNaN, 1);
+  EXPECT_EQ(r.redo, 1) << r.log;
+  EXPECT_NE(r.log.find("(causes: nan)"), std::string::npos) << r.log;
+}
+
+// 3.5 K at stage 1 entry is floored there; the RK average with the 350 K
+// stage-0 state is far above the floor, so only the stage-entry call sees it.
+TEST(forcing, limiter_patch_at_stage_entry_redoes_the_step) {
+  auto r = limiter_step("test_gravity_energy.yaml", IPR, 1.e3 / 0.4, 1);
+  EXPECT_EQ(r.redo, 1) << r.log;
+  EXPECT_NE(r.log.find("(causes: limiter)"), std::string::npos) << r.log;
+}
+
+// A NaN primitive handed to W->U is zeroed by the primitive limiter alone.
+TEST(forcing, limiter_nan_in_a_primitive_redoes_the_step) {
+  auto r = limiter_step("test_gravity_energy.yaml", IVX, kNaN, 1, true);
+  EXPECT_EQ(r.redo, 1) << r.log;
+  EXPECT_NE(r.log.find("(causes: nan)"), std::string::npos) << r.log;
+}
+
+// moist first: the species table is process-global and the first yaml sets it
+TEST(forcing, limiter_clean_step_is_not_redone) {
+  for (auto yaml : {"test_diffusion_moist.yaml", "test_gravity_energy.yaml"}) {
+    auto r = limiter_step(yaml, -1, 0., 0);
+    EXPECT_EQ(r.redo, 0) << yaml << "\n" << r.log;
+    EXPECT_EQ(r.log.find("Redoing"), std::string::npos) << yaml << "\n"
+                                                        << r.log;
+    EXPECT_EQ(r.retry, 0) << yaml;
+  }
+}
+
+// The marks are device tensors: the same cases on a GPU.
+TEST(forcing, limiter_marks_on_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "no CUDA device";
+  torch::Device cuda(torch::kCUDA);
+  auto moist = "test_diffusion_moist.yaml";
+  auto dry = "test_gravity_energy.yaml";
+  EXPECT_EQ(limiter_step(moist, -1, 0., 0, false, cuda).redo, 0);
+  EXPECT_EQ(limiter_step(dry, -1, 0., 0, false, cuda).redo, 0);
+  for (auto [yaml, row, value, at, prim, cause] :
+       {std::tuple{moist, int(ICY), kNaN, 1, false, "(causes: nan)"},
+        std::tuple{dry, int(IVX), kNaN, 0, false, "(causes: nan)"},
+        std::tuple{dry, int(IPR), 1.e3 / 0.4, 1, false, "(causes: limiter)"},
+        std::tuple{dry, int(IVX), kNaN, 1, true, "(causes: nan)"}}) {
+    auto r = limiter_step(yaml, row, value, at, prim, cuda);
+    EXPECT_EQ(r.redo, 1) << yaml << " row " << row << "\n" << r.log;
+    EXPECT_NE(r.log.find(cause), std::string::npos) << r.log;
+    EXPECT_EQ(r.retry, 0) << yaml << " row " << row;
   }
 }
 

@@ -120,6 +120,11 @@ class EquationOfStateImpl {
   //! constituent densities.
   virtual torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const;
 
+  //! \brief Energy per unit mass each species carries through a face: its
+  //! internal and kinetic energy plus its partial pressure over its density.
+  //! \return (ny, nc3, nc2, nc1); undefined when the EOS has no such split.
+  virtual torch::Tensor species_enthalpy(torch::Tensor prim) { return {}; }
+
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
    * These five abbreviations should be supported:
@@ -147,7 +152,20 @@ class EquationOfStateImpl {
   //! \brief Apply the primitive variable limiter in place.
   virtual void apply_primitive_limiter_(torch::Tensor const& prim);
 
+  //! \brief Zero the step's limiter marks on the device of \p like.
+  void reset_limiter_marks(torch::Tensor const& like);
+
+  //! [0]: a limiter call floored an interior density or energy; [1]: it found
+  //! an interior NaN. Undefined (nothing marked) before the first reset.
+  //! A side channel: the limiter calls set the marks as a side effect; the
+  //! MeshBlock resets them at stage 0 and after a redo decision, and reads them
+  //! in check_redo (MeshBlock and Mesh).
+  torch::Tensor const& limiter_marks() const { return limiter_marks_; }
+
  private:
+  // not a buffer: stage forcings get named_buffers()
+  torch::Tensor limiter_marks_;
+
   //! Parent vapor slots and normalized stoichiometric mass fractions by cloud.
   std::vector<std::vector<std::pair<int, double>>> cloud_parent_cache_;
 
