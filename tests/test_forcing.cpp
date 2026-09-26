@@ -740,7 +740,8 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
                               1.e-10, 1.e-8));
 }
 
-TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
+static void implicit_gravity_work_holds_under_rk3_stage_weighting(
+    torch::Device device) {
   // publish rk_stage as advance_local does; #202's tests call forward directly
   std::vector<double> stage_momentum;
   for (int stage = 0; stage < 3; ++stage) {
@@ -754,6 +755,7 @@ TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
     options->hydro()->icorr() = icorr;
 
     auto block = std::make_shared<MeshBlockImpl>(options);
+    block->to(device, torch::kFloat64);
     auto coord = block->pcoord;
 
     ASSERT_EQ(block->pintg->stages.size(), 3u)
@@ -761,7 +763,7 @@ TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
 
     auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                            coord->options->nc2(), coord->options->nc1()},
-                          torch::kFloat64);
+                          torch::dtype(torch::kFloat64).device(device));
     w[IDN] = 1. + 0.05 * coord->x1v;
     w[IVX].zero_();
     w[IPR].fill_(1.e5);
@@ -775,6 +777,7 @@ TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
 
     double dt = 0.1;
     auto du = block->phydro->forward(dt, vars.at("hydro_u"), vars);
+    ASSERT_EQ(du.device(), device);
     stage_momentum.push_back(du[IVX].abs().sum().item<double>());
 
     int is = coord->il();
@@ -808,6 +811,46 @@ TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
   // stage 1 weights dt by 1/4; these coincide if the weighting stops arriving.
   EXPECT_GT(std::abs(stage_momentum[0] - stage_momentum[1]), 1.e-6)
       << "the stage weighting is not reaching the implicit correction";
+}
+
+TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting) {
+  implicit_gravity_work_holds_under_rk3_stage_weighting(torch::kCPU);
+}
+
+TEST(forcing, implicit_gravity_work_holds_under_rk3_stage_weighting_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  implicit_gravity_work_holds_under_rk3_stage_weighting(
+      torch::Device(torch::kCUDA, 0));
+}
+
+TEST(forcing, rk3_stage_is_published_by_block_step) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_gravity_energy.yaml");
+  options->intg()->type("rk3");
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  options->hydro()->grav() = gravity;
+  auto icorr = ImplicitOptionsImpl::create();
+  icorr->scheme(1);
+  options->hydro()->icorr() = icorr;
+
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto coord = block->pcoord;
+  auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                         coord->options->nc2(), coord->options->nc1()},
+                        torch::kFloat64);
+  w[IDN] = 1. + 0.05 * coord->x1v;
+  w[IPR].fill_(1.e5);
+  Variables vars;
+  vars["hydro_w"] = w;
+  block->initialize(vars);
+
+  ASSERT_EQ(block->pintg->stages.size(), 3u);
+  for (int stage = 0; stage < 3; ++stage) {
+    block->phydro->rk_stage = -1;
+    block->advance_local(vars, 0.1, stage);
+    EXPECT_EQ(block->phydro->rk_stage, stage);
+    EXPECT_TRUE(torch::isfinite(vars.at("hydro_u")).all().item<bool>());
+  }
 }
 
 TEST(forcing, relax_bottom_composition_handles_multidimensional_ghost_zones) {

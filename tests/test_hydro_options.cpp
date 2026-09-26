@@ -159,7 +159,7 @@ TEST(hydro_options, wb_wall_clamp_ships_enabled) {
 // HydroImpl::_hydro_ref_x1. Every other test drives call_hydro_ref_x1 with a
 // literal bool, so replacing that wire with `false` leaves all of them green.
 // This one runs both settings through a block and requires them to differ.
-TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
+static void wb_wall_clamp_reaches_the_x1_reference(torch::Device device) {
   std::string f = "test_wb_wall_clamp_wire.yaml";
   {
     std::ofstream o(f);
@@ -190,14 +190,15 @@ TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
          "    x1-outer: reflecting\n";
   }
 
-  auto run = [&f](bool clamp) {
+  auto run = [&f, device](bool clamp) {
     auto options = snap::MeshBlockOptionsImpl::from_yaml(f);
     options->hydro()->wb_wall_clamp() = clamp;
     auto block = std::make_shared<snap::MeshBlockImpl>(options);
+    block->to(device, torch::kFloat64);
     auto coord = block->pcoord;
     auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                            coord->options->nc2(), coord->options->nc1()},
-                          torch::kFloat64);
+                          torch::dtype(torch::kFloat64).device(device));
     // A stratification the wall rows can disagree about: on a uniform column
     // the two references coincide whatever the clamp does.
     w[snap::IDN] = 1. + 0.05 * coord->x1v;
@@ -210,9 +211,20 @@ TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
 
   auto clamped = run(true);
   auto unclamped = run(false);
+  ASSERT_EQ(clamped.device(), device);
+  ASSERT_EQ(unclamped.device(), device);
   EXPECT_FALSE(torch::allclose(clamped, unclamped, 1.e-13, 1.e-13))
       << "wb-wall-clamp changed nothing: the option no longer reaches "
          "HydroImpl::_hydro_ref_x1";
 
   std::remove(f.c_str());
+}
+
+TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
+  wb_wall_clamp_reaches_the_x1_reference(torch::kCPU);
+}
+
+TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  wb_wall_clamp_reaches_the_x1_reference(torch::Device(torch::kCUDA, 0));
 }

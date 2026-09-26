@@ -183,19 +183,19 @@ TEST(BalanceColumn, without_the_clamp_the_two_references_disagree) {
 }
 
 TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
+  constexpr double rtol = 1.e-10;
   for (bool uniform : {true, false}) {
     auto c = marched_column(64, 3.0e5, uniform);
     double before = residual(c, uniform);
     EXPECT_GT(before, 1.e-4)
         << "the fixture is not the defect: uniform=" << uniform;
 
-    auto [wb, err, sweeps] = snap::balance_column(c.w, c.dx1f, kGrav);
+    auto [wb, err, sweeps] =
+        snap::balance_column(c.w, c.dx1f, kGrav, /*wall_clamp=*/true, rtol);
     Column balanced{wb, c.dx1f};
-    // `err < rtol` is the function's own break condition, so asserting it here
-    // could not fail. What CAN fail, and is what the header promises, is that
-    // the number it returns describes the state it returned -- recompute it
-    // independently and require the two to agree.
-    EXPECT_DOUBLE_EQ(residual(balanced, uniform), err) << "uniform=" << uniform;
+    double actual = residual(balanced, uniform);
+    EXPECT_LT(actual, rtol) << "uniform=" << uniform;
+    EXPECT_DOUBLE_EQ(actual, err) << "uniform=" << uniform;
     EXPECT_GT(sweeps, 0);
   }
 }
