@@ -50,6 +50,78 @@ TEST(hydro_options, reject_unknown_dynamics_keys) {
   std::remove(bad.c_str());
 }
 
+// The equation-of-state block was never checked: `tracer-floor` (read by
+// nothing), a typo or a wrong-case key all loaded silently and ran as if
+// applied. Each must now be refused, and the error must name it.
+TEST(hydro_options, reject_unknown_equation_of_state_keys) {
+  std::string f = "test_eos_options_unknown.yaml";
+  auto refused_naming = [&f](std::string const &key) {
+    {
+      std::ofstream o(f);
+      o << "dynamics:\n"
+           "  equation-of-state:\n"
+           "    type: ideal-gas\n"
+           "    "
+        << key << ": 1.e-10\n";
+    }
+    try {
+      snap::HydroOptionsImpl::from_yaml(f);
+      return false;
+    } catch (std::exception const &e) {
+      return std::string(e.what()).find("dynamics/equation-of-state/" + key) !=
+             std::string::npos;
+    }
+  };
+  EXPECT_TRUE(refused_naming("tracer-floor")) << "tracer-floor accepted";
+  EXPECT_TRUE(refused_naming("limter")) << "typo accepted";
+  EXPECT_TRUE(refused_naming("Limiter")) << "wrong-case key accepted";
+  std::remove(f.c_str());
+}
+
+// Every key snapy and kintera read from the block loads, and reaches its
+// option: a whitelist missing a key that is read would refuse valid cards.
+TEST(hydro_options, every_equation_of_state_key_is_accepted_and_read) {
+  std::string f = "test_eos_options_all.yaml";
+  {
+    std::ofstream o(f);
+    o << "reference-state: {Tref: 300., Pref: 1.e5}\n"
+         "species:\n"
+         "  - name: dry\n"
+         "    composition: {O: 0.42, N: 1.56, Ar: 0.01}\n"
+         "    cv_R: 2.5\n"
+         "dynamics:\n"
+         "  equation-of-state:\n"
+         "    type: ideal-gas\n"
+         "    gammad: 1.3\n"
+         "    weight: 2.e-3\n"
+         "    density-floor: 1.e-9\n"
+         "    pressure-floor: 1.e-8\n"
+         "    temperature-floor: 15.\n"
+         "    limiter: true\n"
+         "    eos-file: unused.txt\n"
+         "    verbose: true\n"
+         "    max-iter: 30\n"
+         "    ftol: 1.e-8\n"
+         "    uv-solver: kkt\n";
+  }
+  snap::HydroOptions op;
+  ASSERT_NO_THROW(op = snap::HydroOptionsImpl::from_yaml(f));
+  auto eos = op->eos();
+  EXPECT_EQ(eos->type(), "ideal-gas");
+  EXPECT_EQ(eos->gammad(), 1.3);
+  EXPECT_EQ(eos->weight(), 2.e-3);
+  EXPECT_EQ(eos->density_floor(), 1.e-9);
+  EXPECT_EQ(eos->pressure_floor(), 1.e-8);
+  EXPECT_EQ(eos->temperature_floor(), 15.);
+  EXPECT_TRUE(eos->limiter());
+  EXPECT_EQ(eos->eos_file(), "unused.txt");
+  EXPECT_TRUE(eos->verbose());
+  ASSERT_TRUE(eos->thermo());
+  EXPECT_EQ(eos->thermo()->max_iter(), 30);
+  EXPECT_EQ(eos->thermo()->ftol(), 1.e-8);
+  std::remove(f.c_str());
+}
+
 // a silently ignored fric-heat key would change a card's physics unlogged
 TEST(hydro_options, reject_removed_and_unknown_forcing_keys) {
   auto write = [](std::string const &fname, std::string const &forcing) {
