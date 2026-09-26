@@ -1,6 +1,7 @@
 #pragma once
 
 // C/C++
+#include <array>
 #include <map>
 #include <string>
 #include <vector>
@@ -237,10 +238,14 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! true if the VIC dry-gas clamp emptied a cell during this step
   bool vic_dry_clamp_hit() const;
 
-  //! true if the conserved limiter changed an interior density or energy
+  //! true if a limiter call this step changed an interior density or energy
   bool limiter_patch_hit() const;
 
-  //! roll back (causes != 0: 1 floor, 2 clamp, 4 limiter) or accept the step
+  //! {patched, nan}: a limiter call this step changed an interior density or
+  //! energy / found an interior NaN; one device-to-host read for both
+  std::array<bool, 2> limiter_hits() const;
+
+  //! roll back (causes != 0: 1 floor, 2 clamp, 4 limiter, 8 nan) or accept it
   int apply_redo(Variables& vars, int causes);
 
  protected:
@@ -263,8 +268,6 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! stage registers
   torch::Tensor _hydro_u0;
   torch::Tensor _scalar_s0;
-  // not a buffer: stage forcings get named_buffers(), and stage 0 reassigns it
-  torch::Tensor _limiter_patched;
 };
 
 TORCH_MODULE(MeshBlock);

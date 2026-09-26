@@ -152,7 +152,20 @@ class EquationOfStateImpl {
   //! \brief Apply the primitive variable limiter in place.
   virtual void apply_primitive_limiter_(torch::Tensor const& prim);
 
+  //! \brief Zero the step's limiter marks on the device of \p like.
+  void reset_limiter_marks(torch::Tensor const& like);
+
+  //! [0]: a limiter call floored an interior density or energy; [1]: it found
+  //! an interior NaN. Undefined (nothing marked) before the first reset.
+  //! A side channel: the limiter calls set the marks as a side effect; the
+  //! MeshBlock resets them at stage 0 and after a redo decision, and reads them
+  //! in check_redo (MeshBlock and Mesh).
+  torch::Tensor const& limiter_marks() const { return limiter_marks_; }
+
  private:
+  // not a buffer: stage forcings get named_buffers()
+  torch::Tensor limiter_marks_;
+
   //! Parent vapor slots and normalized stoichiometric mass fractions by cloud.
   std::vector<std::vector<std::pair<int, double>>> cloud_parent_cache_;
 
