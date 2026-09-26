@@ -49,7 +49,8 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   auto peos = pmb->phydro->peos;
   auto pcoord = pmb->pcoord;
 
-  auto modules = pmb->named_modules();
+  // pmb may be the raw-new super-resolution block: it has no shared_ptr owner
+  auto modules = pmb->named_modules(std::string(), /*include_self=*/false);
   if (ContainVariable("thermo") && pmb->phydro->options->eos()->thermo() &&
       modules.contains("hydro.eos.thermo")) {
     auto const& w = vars.at("hydro_w");

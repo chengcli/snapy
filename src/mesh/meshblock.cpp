@@ -62,6 +62,10 @@ static Variables stage_forcing_result(c10::IValue const &result, size_t index) {
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const &options_)
     : options(options_) {
+  // Output-slice validation below reads the global grid directly, long before
+  // pcoord exists.
+  options->coord()->resolve_global_grid();
+
   int nc1 = options->coord()->nc1();
   int nc2 = options->coord()->nc2();
   int nc3 = options->coord()->nc3();
@@ -545,6 +549,27 @@ void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
 }
 
 void MeshBlockImpl::exchange(Variables &vars, SyncOptions const &opts) const {
+  // A subdivided cubed-sphere panel packs its cross-panel strip EXTENDED into
+  // its own tangential halo (cs_interp_margin), and that halo is only written
+  // by deserialize(). So the intra-panel round must COMPLETE before the
+  // cross-panel round packs, which one round cannot do. Corners are synthesized
+  // from the edge strips, so they come after both.
+  auto const &lo = *options->layout();
+  if (opts.interpolate() && !opts.intra_panel_only() &&
+      !opts.cross_panel_only() && lo.type() == "cubed-sphere" &&
+      (lo.px() > 1 || lo.py() > 1)) {
+    SyncOptions intra = opts, cross = opts;
+    _exchange_once(vars, intra.intra_panel_only(true).interpolate(false));
+    _exchange_once(vars, cross.cross_panel_only(true));
+    if (opts.skip_corner()) _playout->fill_corners(this, vars);
+    return;
+  }
+
+  _exchange_once(vars, opts);
+}
+
+void MeshBlockImpl::_exchange_once(Variables &vars,
+                                   SyncOptions const &opts) const {
   std::vector<CommWorkPtr> works;
   begin_exchange(vars, opts);
   launch_exchange(opts, works);

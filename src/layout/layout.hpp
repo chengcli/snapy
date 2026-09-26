@@ -144,6 +144,9 @@ struct SyncOptions {
   int dy_min() const { return dim() == DIM2 || dim() == DIM1 ? 0 : -1; }
   int dy_max() const { return dim() == DIM2 || dim() == DIM1 ? 0 : 1; }
 
+  //! phase 1 of the two-phase cubed-sphere ghost sync; mirror of
+  //! `cross_panel_only`
+  ADD_ARG(bool, intra_panel_only) = false;
   ADD_ARG(bool, cross_panel_only) = false;
   ADD_ARG(bool, skip_corner) = true;
   ADD_ARG(bool, interpolate) = false;

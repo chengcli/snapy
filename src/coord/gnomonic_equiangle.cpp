@@ -22,14 +22,15 @@ void GnomonicEquiangleImpl::reset() {
   TORCH_CHECK(op->nx2() == op->nx3(),
               "GnomonicEquiangleImpl::reset(): nx2 must equal nx3");
 
-  TORCH_CHECK(op->interp_order() == 2 || op->interp_order() == 4,
-              "Only 2nd or 4th order ghost interpolation is supported");
+  TORCH_CHECK(op->interp_order() == 2,
+              "Only 2nd order ghost interpolation is supported");
   TORCH_CHECK(
       op->interp_order() <= 2 * op->nghost(),
       "Ghost zone size must be at least half of the interpolation order");
 
   // dimension 1
-  auto dx = (op->x1max() - op->x1min()) / op->nx1();
+  // Global cell width, not this block's own; see dx1() in coordinate.hpp.
+  auto dx = op->dx1();
 
   dx1f = register_buffer("dx1f", torch::ones(op->nc1(), torch::kFloat64) * dx);
   x1v = register_buffer("x1v", 0.5 * (x1f.slice(0, 0, op->nc1()) +
@@ -37,14 +38,14 @@ void GnomonicEquiangleImpl::reset() {
   dx1v = register_buffer("dx1v", torch::ones(op->nc1(), torch::kFloat64) * dx);
 
   // dimension 2
-  dx = (op->x2max() - op->x2min()) / op->nx2();
+  dx = op->dx2();
   dx2f = register_buffer("dx2f", torch::ones(op->nc2(), torch::kFloat64) * dx);
   x2v = register_buffer("x2v", 0.5 * (x2f.slice(0, 0, op->nc2()) +
                                       x2f.slice(0, 1, op->nc2() + 1)));
   dx2v = register_buffer("dx2v", torch::ones(op->nc2(), torch::kFloat64) * dx);
 
   // dimension 3
-  dx = (op->x3max() - op->x3min()) / op->nx3();
+  dx = op->dx3();
   dx3f = register_buffer("dx3f", torch::ones(op->nc3(), torch::kFloat64) * dx);
   x3v = register_buffer("x3v", 0.5 * (x3f.slice(0, 0, op->nc3()) +
                                       x3f.slice(0, 1, op->nc3() + 1)));
@@ -155,14 +156,29 @@ void GnomonicEquiangleImpl::reset() {
   offset_x = op->nx2() * rx;
   offset_y = op->nx3() * ry;
 
-  // register local ghost cell usrc
+  // register local ghost cell usrc.
+  // The strip these indices address is widened by cs_interp_margin() on each
+  // side (see CubedSphereLayout::{serialize,deserialize} and interp_ghost
+  // below), so rebase by that -- NOT by interp_order/2, which only ever covered
+  // a seam at beta = 0.
+  int margin = cs_interp_margin(op->nghost());
+  // interp_order > 2 reaches u0-1, one cell beyond what the exchange
+  // carries, at every px -- so px == 1 is not an escape.
+  TORCH_CHECK(options->interp_order() <= 2,
+              "GnomonicEquiangle: interp_order > 2 needs more tangential "
+              "margin than the cross-panel exchange carries; use "
+              "interp_order: 2.");
+
+  // Keep the GLOBAL source coordinate and carry the block's shift as an
+  // INTEGER: folding `margin - offset` into the double makes the stored value
+  // depend on the decomposition, since `offset` differs per block.
   usrc_BT =
       register_buffer("usrc_BT", usrc.narrow(-1, offset_x, op->nx2()).clone());
-  usrc_BT += options->interp_order() / 2 - offset_x;
+  usrc_shift_BT = margin - offset_x;
 
   usrc_LR = register_buffer(
-      "usrc_LR", usrc.narrow(-1, offset_y, op->nx3()).transpose(0, 1));
-  usrc_LR += options->interp_order() / 2 - offset_y;
+      "usrc_LR", usrc.narrow(-1, offset_y, op->nx3()).transpose(0, 1).clone());
+  usrc_shift_LR = margin - offset_y;
 }
 
 torch::Tensor GnomonicEquiangleImpl::center_width2() const {
@@ -197,17 +213,18 @@ void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   auto [dy, dx, dz] = offset;
   auto sub = pmb->part(offset, PartOptions().exterior(true).ndim(var.dim()));
-  auto order = options->interp_order() / 2;
+  // must match the widening done by CubedSphereLayout::{serialize,deserialize}
+  auto margin = cs_interp_margin(options->nghost());
 
   if (dy != 0 && dx == 0) {
     auto sub1 = pmb->part(
-        offset, PartOptions().exterior(true).extend_x2(order).ndim(var.dim()));
+        offset, PartOptions().exterior(true).extend_x2(margin).ndim(var.dim()));
     var.index(sub) = _interp_ghost_BT(var.index(sub1), dy > 0);
   }
 
   if (dx != 0 && dy == 0) {
     auto sub1 = pmb->part(
-        offset, PartOptions().exterior(true).extend_x3(order).ndim(var.dim()));
+        offset, PartOptions().exterior(true).extend_x3(margin).ndim(var.dim()));
     var.index(sub) = _interp_ghost_LR(var.index(sub1), dx > 0);
   }
 }
@@ -432,9 +449,12 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_LR(torch::Tensor buf,
     vec.insert(vec.begin(), 1);
   }
 
-  auto u0 = usrc_t.floor().to(torch::kInt64).view(vec);
+  // weight from the GLOBAL coordinate; block shift applied to the integer index
+  // only
+  auto u0f = usrc_t.floor();
+  auto x = (usrc_t - u0f).view(vec);
+  auto u0 = u0f.to(torch::kInt64).view(vec) + usrc_shift_LR;
   auto u1 = u0 + 1;
-  auto x = usrc_t.view(vec) - u0;
 
   // set the correct output dimensions
   vec.back() = buf.size(-1);
@@ -470,9 +490,12 @@ torch::Tensor GnomonicEquiangleImpl::_interp_ghost_BT(torch::Tensor buf,
     vec.insert(vec.begin(), 1);
   }
 
-  auto u0 = usrc_t.floor().to(torch::kInt64).view(vec);
+  // weight from the GLOBAL coordinate; block shift applied to the integer index
+  // only
+  auto u0f = usrc_t.floor();
+  auto x = (usrc_t - u0f).view(vec);
+  auto u0 = u0f.to(torch::kInt64).view(vec) + usrc_shift_BT;
   auto u1 = u0 + 1;
-  auto x = usrc_t.view(vec) - u0;
 
   // set the correct output dimensions
   vec.back() = buf.size(-1);

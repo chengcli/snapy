@@ -22,18 +22,18 @@ MeshBlock
       :param options: Mesh block configuration options
       :type options: MeshBlockOptions, optional
 
-   .. method:: forward(dt: float, stage: int, vars: dict) -> dict
+   .. method:: forward(vars: dict, dt: float, stage: int) -> None
 
-      Forward integration step.
+      Advance one integration stage. The tensors in ``vars`` are updated in
+      place and nothing is returned.
 
+      :param vars: Dictionary of variable tensors, as returned by
+                   :py:meth:`initialize`
+      :type vars: dict[str, torch.Tensor]
       :param dt: Time step size
       :type dt: float
-      :param stage: Integration stage
+      :param stage: Integration stage, ``0 <= stage < len(block.intg.stages)``
       :type stage: int
-      :param vars: Dictionary of variable tensors
-      :type vars: dict[str, torch.Tensor]
-      :return: Updated variables dictionary
-      :rtype: dict[str, torch.Tensor]
 
    .. method:: initialize(vars: dict) -> tuple
 
