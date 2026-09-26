@@ -1,5 +1,6 @@
 // C/C++
 #include <algorithm>
+#include <array>
 
 // yaml
 #include <yaml-cpp/yaml.h>
@@ -35,6 +36,34 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   if (!config["dynamics"]["equation-of-state"]) return op;
 
   auto node = config["dynamics"]["equation-of-state"];
+
+  // This block is shared with kintera, which reads its own keys from it and
+  // leaves the block to the host, so only here can an unknown key -- a typo,
+  // or an option nothing reads -- be refused instead of silently ignored.
+  // A key kintera adds later is refused until it is listed here.
+  static std::array<char const*, 3> const kintera_keys = {"max-iter", "ftol",
+                                                          "uv-solver"};
+  static std::array<char const*, 9> const snapy_keys = {
+      "type",          "gammad",         "weight",
+      "density-floor", "pressure-floor", "temperature-floor",
+      "limiter",       "eos-file",       "verbose"};
+  for (auto const& item : node) {
+    auto key = item.first.as<std::string>();
+    auto listed = [&key](auto const& keys) {
+      return std::find(keys.begin(), keys.end(), key) != keys.end();
+    };
+    auto joined = [](auto const& keys) {  // the message lists the checked keys
+      std::string s;
+      for (auto const* k : keys) s += (s.empty() ? "" : ", ") + std::string(k);
+      return s;
+    };
+    TORCH_CHECK(listed(snapy_keys) || listed(kintera_keys),
+                "EquationOfStateOptions: unknown key "
+                "'dynamics/equation-of-state/",
+                key, "'. Valid keys: ", joined(snapy_keys),
+                "; read by kintera: ", joined(kintera_keys), ".");
+  }
+
   op->verbose() = node["verbose"].as<bool>(verbose);
 
   op->type() = node["type"].as<std::string>("moist-mixture");
