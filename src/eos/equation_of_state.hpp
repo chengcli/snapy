@@ -120,6 +120,11 @@ class EquationOfStateImpl {
   //! constituent densities.
   virtual torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const;
 
+  //! \brief Energy per unit mass each species carries through a face: its
+  //! internal and kinetic energy plus its partial pressure over its density.
+  //! \return (ny, nc3, nc2, nc1); undefined when the EOS has no such split.
+  virtual torch::Tensor species_enthalpy(torch::Tensor prim) { return {}; }
+
   //! \brief Computes hydrodynamic variables from the given abbreviation
   /*!
    * These five abbreviations should be supported:

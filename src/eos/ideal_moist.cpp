@@ -257,6 +257,28 @@ torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
   return ie + ke * rhos;
 }
 
+torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
+  auto pcoord = phydro->pmb->pcoord;
+  int nvapor = pthermo->options->vapor_ids().size() - 1;
+  int ny = nvapor + pthermo->options->cloud_ids().size();
+
+  auto Rd = kintera::constants::Rgas / options->weight();
+  auto cvd = pthermo->options->cref_R()[0] * Rd;
+
+  // the per-species split of the flux enthalpy rho*(W->I/rho + KE + p/rho):
+  // u0 + cv T + KE, plus R T for a vapour (a cloud has no pressure share)
+  auto c = (cv_ratio_m1 + 1.) * cvd;
+  c.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
+
+  auto vel = prim.narrow(0, IVX, 3).clone();
+  coord_vec_lower_(vel, pcoord->cosine_cell_kj);
+  auto ke = 0.5 * (prim.narrow(0, IVX, 3) * vel).sum(0);
+
+  std::vector<int64_t> vec(prim.dim(), 1);
+  vec[0] = ny;
+  return u0.narrow(0, 1, ny).view(vec) + c.view(vec) * _prim2temp(prim) + ke;
+}
+
 torch::Tensor IdealMoistImpl::_cons2ke(torch::Tensor cons) {
   auto pcoord = phydro->pmb->pcoord;
   int ny = pthermo->options->vapor_ids().size() +
