@@ -95,9 +95,10 @@ torch::Tensor SedHydroImpl::forward(torch::Tensor wr,
   vsed.set_(torch::empty(
       {hydro_ids.size(0), wr.size(1), wr.size(2), wr.size(3)}, wr.options()));
 
-  double mud = kintera::species_weights[0];
+  // the EOS's own dry gas, not kintera's process-global tables
+  double mud = ideal_moist->options->weight();
   double gas_constant_dry = kintera::constants::Rgas / mud;
-  double cv_dry = kintera::species_cref_R[0] * gas_constant_dry;
+  double cv_dry = ideal_moist->pthermo->options->cref_R()[0] * gas_constant_dry;
   auto cosine_cell_kj = pmb->pcoord->cosine_cell_kj.to(wr.options());
   while (cosine_cell_kj.dim() > 2) {
     TORCH_CHECK(cosine_cell_kj.size(-1) == 1,

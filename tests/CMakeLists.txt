@@ -131,6 +131,7 @@ snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
+snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
 
 # Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the
