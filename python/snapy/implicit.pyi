@@ -19,7 +19,7 @@ class ImplicitOptions:
         ...
 
     @staticmethod
-    def from_yaml(filename: str, verbose: bool = False) -> "ImplicitOptions":
+    def from_yaml(filename: str, verbose: bool = False) -> Optional["ImplicitOptions"]:
         """
         Load ImplicitOptions from a YAML file.
 
@@ -28,7 +28,8 @@ class ImplicitOptions:
             verbose: Enable verbose output
 
         Returns:
-            ImplicitOptions loaded from file
+            ImplicitOptions loaded from file, or None when the file sets no
+            implicit scheme
         """
         ...
 

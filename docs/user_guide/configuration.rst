@@ -153,16 +153,17 @@ With ``dynamic: true`` the same two numbers are read as the dynamic viscosity
 Implicit Correction
 -------------------
 
-For stiff problems, enable implicit correction:
+To treat the vertical (x1) direction implicitly, which removes its acoustic
+time-step bound, set an implicit scheme under ``integration``:
 
 .. code-block:: yaml
 
-    hydro:
-      implicit:
-        enabled: true
-        max_iter: 100
-        tolerance: 1e-6
-        method: newton      # Newton-Raphson method
+    integration:
+      implicit-scheme: 1          # 0 none, 1 vic-partial, 9 vic-full
+      implicit-advection-cfl: 1.0 # optional, > 0: advective bound in x1
+      shear-cfl: 0.0              # optional, >= 0; 0 switches it off
+
+See :class:`~snapy.ImplicitOptions` for what each key does.
 
 Output Configuration
 --------------------
