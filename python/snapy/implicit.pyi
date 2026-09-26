@@ -34,14 +34,8 @@ class ImplicitOptions:
 
     def __repr__(self) -> str: ...
 
-    @overload
     def type(self) -> str:
-        """Get the implicit solver type."""
-        ...
-
-    @overload
-    def type(self, value: str) -> "ImplicitOptions":
-        """Set the implicit solver type."""
+        """Get the implicit solver type (read-only)."""
         ...
 
     @overload
