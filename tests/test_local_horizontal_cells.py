@@ -36,4 +36,45 @@ for name, nx, lo, hi in AXES:
     assert abs(float(xf[NG]) - lo) <= 1.0e-12 * abs(dx), (name, "lower")
     assert abs(float(xf[NG + nx]) - hi) <= 1.0e-12 * abs(dx), (name, "upper")
 
+# Multi-block options built in code: a later call must rewrite what an
+# earlier one wrote, not check the half-set state it left (whole-domain
+# local bounds with per-block counts, made consistent only by repartition).
+PX, PY = 2, 3
+mcoord = snapy.CoordinateOptions()
+mcoord.nghost(NG)
+mcoord.nx1(AXES[0][1])
+for name, _, lo, hi in AXES:
+    getattr(mcoord, name + "min")(lo)
+    getattr(mcoord, name + "max")(hi)
+
+layout = snapy.LayoutOptions()
+layout.px(PX)
+layout.py(PY)
+mblock = snapy.MeshBlockOptions()
+mblock.coord(mcoord)
+mblock.layout(layout)
+
+moptions = snapy.MeshOptions()
+moptions.block(mblock)
+moptions.set_local_horizontal_cells(2 * AXES[1][1], 1)
+moptions.set_local_horizontal_cells(AXES[1][1], AXES[2][1])
+assert (mcoord.nx2(), mcoord.nx3()) == (AXES[1][1], AXES[2][1])
+
+# stand in for repartition: take the last block's slice. Its faces fit the
+# global grid only if the global counts are nx2 * PX and nx3 * PY.
+for name, nb in (("x2", PX), ("x3", PY)):
+    lo, hi = [a[2:] for a in AXES if a[0] == name][0]
+    getattr(mcoord, name + "min")(lo + (nb - 1) * (hi - lo) / nb)
+    getattr(mcoord, name + "max")(hi)
+
+cart = snapy.Cartesian(mcoord)
+for (name, nx, lo, hi), nb in zip(AXES, (1, PX, PY)):
+    xf = cart.buffer(name + "f")
+    dx = (hi - lo) / (nx * nb)
+    first = hi - nx * dx
+    assert xf.shape[0] == nx + 2 * NG + 1, (name, tuple(xf.shape))
+    assert abs(float(xf[NG]) - first) <= 1.0e-12 * abs(hi - lo), (name, "lower")
+    assert abs(float(xf[NG + nx]) - hi) <= 1.0e-12 * abs(hi - lo), (name, "upper")
+    assert abs(float(xf[NG + 1] - xf[NG]) - dx) <= 1.0e-12 * abs(dx), (name, "dx")
+
 print("test_local_horizontal_cells: OK")
