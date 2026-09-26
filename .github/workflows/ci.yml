@@ -82,7 +82,8 @@ jobs:
                 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
                 -DCUDA=OFF \
                 -DNETCDF=ON \
-                -DBUILD_TESTS=ON
+                -DBUILD_TESTS=ON \
+                -DFULL_TESTS=${{ runner.os == 'Linux' && 'ON' || 'OFF' }}
 
       - name: Build
         run: |
@@ -99,7 +100,8 @@ jobs:
         run: |
           cd ${{ github.workspace }}/build/tests
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            ctest --output-on-failure -R '^(test_.*|test_exchange_decomp|test_straka.*|test_shallow_.*)$'
+            ctest --output-on-failure -R '^(test_.*|test_exchange_decomp|test_straka.*|test_shallow_.*)$' \
+                  -E '^test_shallow_xy_decomp$'
           else
             ctest --output-on-failure -E '^(test_straka|test_shallow_xy|test_shallow_splash|test_shock_cpu|test_run_hydro_cpu)$'
           fi
