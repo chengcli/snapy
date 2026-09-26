@@ -137,6 +137,8 @@ void bind_mesh(py::module& m) {
             }
             auto coord = block->coord();
             auto layout = block->layout();
+            // the globals written below must not leave the bounds unresolved
+            coord->resolve_global_grid();
             coord->nx2(nx2);
             coord->nx3(nx3);
             coord->global_nx2(nx2 * layout->px());

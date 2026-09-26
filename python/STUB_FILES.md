@@ -48,19 +48,18 @@ By separating the pybind11 implementation (`python/csrc/*.cpp`) from the API doc
 The stub files are automatically included when you install the package. Your IDE will automatically use them for autocomplete and type checking:
 
 ```python
-from snapy import MeshBlockOptions, MeshBlock, HydroOptions
+from snapy import MeshBlockOptions, MeshBlock
 import torch
 
 # IDE will show autocomplete and parameter hints
-hydro_opts = HydroOptions()
-mesh_opts = MeshBlockOptions().hydro(hydro_opts)
-block = MeshBlock(mesh_opts)
+block = MeshBlock(MeshBlockOptions.from_yaml("example.yaml"))
 
 # Type checkers will verify correct types
-vars = {"cons": torch.zeros(5, 10, 10, 10)}
+vars = {"hydro_w": torch.zeros(5, 10, 10, 10, dtype=torch.float64)}
+vars, time = block.initialize(vars)
 dt = 0.01
 stage = 1
-result = block.forward(dt, stage, vars)  # result is Dict[str, torch.Tensor]
+block.forward(vars, dt, stage)  # advances `vars` in place; returns None
 ```
 
 ### For Type Checking
@@ -200,30 +199,43 @@ Approximate Riemann solvers: upwind, Roe, LMARS, and shallow water Roe.
 import snapy
 import torch
 
-# Set up coordinate system
+# A card supplies every sub-option a block needs (eos, reconstruction, riemann, boundary
+# conditions, layout, integrator); none of them has a usable default.
+block = snapy.MeshBlock(snapy.MeshBlockOptions.from_yaml("example.yaml"))
+
+# Fill the primitive state; initialize() derives the conserved state from it
+w = dict(block.named_buffers())["hydro.D"].clone().zero_()
+w[snapy.kIDN] = 1.0
+w[snapy.kIPR] = 1.0e5
+vars, time = block.initialize({"hydro_w": w})
+
+# Time integration. forward() advances `vars` IN PLACE and returns nothing.
+dt = block.max_time_step(vars)
+for stage in range(len(block.intg.stages)):
+    block.forward(vars, dt, stage)
+```
+
+### Building a coordinate directly
+
+A `Coordinate` can be built from `CoordinateOptions` alone, without a card. The block's own
+bounds then define the grid, so a single-block domain needs no global-grid declaration.
+Adopting them WRITES them back into the options object, which is shared, not copied: the
+first coordinate or block built from a given `CoordinateOptions` pins its global grid, and a
+later one built from the same object with different bounds is refused as lying outside it.
+Build each block from its own `CoordinateOptions`, or declare `global_nx*` and the global
+bounds up front:
+
+```python
+import snapy
+
 coord_opts = snapy.CoordinateOptions()
 coord_opts.x1min(-1.0).x1max(1.0).nx1(100)
 coord_opts.x2min(-1.0).x2max(1.0).nx2(100)
 coord_opts.x3min(-1.0).x3max(1.0).nx3(1)
 coord_opts.nghost(2)
 
-# Set up hydrodynamics
-hydro_opts = snapy.HydroOptions()
-hydro_opts.coord(coord_opts)
-
-# Set up mesh block
-mesh_opts = snapy.MeshBlockOptions()
-mesh_opts.hydro(hydro_opts)
-
-# Create mesh block
-block = snapy.MeshBlock(mesh_opts)
-
-# Initialize
-block.initialize()
-
-# Time integration
-dt = block.max_time_step(vars)
-vars = block.forward(dt, stage=0, vars=vars)
+coord = snapy.Cartesian(coord_opts)
+assert coord.buffer("x1f")[coord_opts.nghost()].item() == -1.0
 ```
 
 ### Type Checking
@@ -233,10 +245,12 @@ from typing import Dict
 import torch
 import snapy
 
-def simulate(block: snapy.MeshBlock, vars: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Type-checked simulation function."""
+def simulate(block: snapy.MeshBlock, vars: Dict[str, torch.Tensor]) -> float:
+    """Type-checked simulation function. forward() mutates `vars` and returns None."""
     dt = block.max_time_step(vars)
-    return block.forward(dt, 0, vars)
+    for stage in range(len(block.intg.stages)):
+        block.forward(vars, dt, stage)
+    return dt
 ```
 
 Run type checking:

@@ -1,0 +1,9 @@
+geometry:
+  type: cartesian
+  bounds:
+    x1min: 100.
+    x1max: 400.
+    x2min: -5.
+    x2max: 5.
+    x3min: 0.
+    x3max: 2.

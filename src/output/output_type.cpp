@@ -111,8 +111,15 @@ MeshBlockImpl *OutputType::LoadOutputData(MeshBlockImpl *pmb_in,
   if (options->super_resolution()) {
     auto op = std::make_shared<MeshBlockOptionsImpl>(*(pmb_in->options));
     op->coord() = pmb_in->options->coord()->clone();
-    if (op->coord()->nx2() > 1) op->coord()->nx2() *= 2;
-    if (op->coord()->nx3() > 1) op->coord()->nx3() *= 2;
+    // halving the spacing doubles ixN, so the refined slice still fits
+    if (op->coord()->nx2() > 1) {
+      op->coord()->nx2() *= 2;
+      op->coord()->global_nx2() *= 2;
+    }
+    if (op->coord()->nx3() > 1) {
+      op->coord()->nx3() *= 2;
+      op->coord()->global_nx3() *= 2;
+    }
 
     pmb = new MeshBlockImpl(op);
     // shall be deleted by caller of LoadOutputData

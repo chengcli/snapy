@@ -62,6 +62,10 @@ static Variables stage_forcing_result(c10::IValue const &result, size_t index) {
 
 MeshBlockImpl::MeshBlockImpl(MeshBlockOptions const &options_)
     : options(options_) {
+  // Output-slice validation below reads the global grid directly, long before
+  // pcoord exists.
+  options->coord()->resolve_global_grid();
+
   int nc1 = options->coord()->nc1();
   int nc2 = options->coord()->nc2();
   int nc3 = options->coord()->nc3();

@@ -1,4 +1,6 @@
 // C/C++
+#include <algorithm>
+#include <limits>
 #include <vector>
 
 // yaml
@@ -104,7 +106,15 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   op->global_x2max() = x2max;
   op->global_x3max() = x3max;
 
-  if (!node["cells"]) return op;
+  // `bounds:` without `cells:` IS a declared grid: ONE cell per axis spanning
+  // it. The block must be given those bounds too, or ixN() offsets it out of
+  // its own one-cell face array.
+  if (!node["cells"]) {
+    op->x1min() = x1min, op->x1max() = x1max, op->global_nx1() = 1;
+    op->x2min() = x2min, op->x2max() = x2max, op->global_nx2() = 1;
+    op->x3min() = x3min, op->x3max() = x3max, op->global_nx3() = 1;
+    return op;
+  }
 
   op->global_nx1() = node["cells"]["nx1"].as<int>(1);
   op->global_nx2() = node["cells"]["nx2"].as<int>(1);
@@ -165,7 +175,44 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   return op;
 }
 
+void CoordinateOptionsImpl::_resolve_axis(char const* ax, double lo, double hi,
+                                          int nx, double& glo, double& ghi,
+                                          int& gnx) {
+  if (gnx == 0) {
+    // A block built from block-local options alone IS the whole domain.
+    TORCH_CHECK(nx > 0 && hi > lo, "[CoordinateOptions] cannot adopt this ",
+                "block as the global ", ax, " grid: need n", ax, " > 0 and ",
+                ax, "max > ", ax, "min, got n", ax, " = ", nx, ", ", ax,
+                "min = ", lo, ", ", ax, "max = ", hi);
+    glo = lo, ghi = hi, gnx = nx;
+    return;
+  }
+
+  // a few ULP: `repartition` reaches the last upper bound by accumulation
+  double tol = 16 * std::numeric_limits<double>::epsilon() *
+               std::max({std::abs(glo), std::abs(ghi), std::abs(ghi - glo)});
+  TORCH_CHECK(lo >= glo - tol && hi <= ghi + tol, "[CoordinateOptions] block ",
+              ax, " = [", lo, ", ", hi, "] lies outside the declared global ",
+              ax, " grid [", glo, ", ", ghi, "]");
+}
+
+void CoordinateOptionsImpl::resolve_global_grid() {
+  _resolve_axis("x1", x1min(), x1max(), nx1(), global_x1min(), global_x1max(),
+                global_nx1());
+  _resolve_axis("x2", x2min(), x2max(), nx2(), global_x2min(), global_x2max(),
+                global_nx2());
+  _resolve_axis("x3", x3min(), x3max(), nx3(), global_x3min(), global_x3max(),
+                global_nx3());
+}
+
 void CoordinateOptionsImpl::repartition(LayoutOptions const& layout) {
+  // values are dead; the resolve below reads them -- without it 14 cards abort
+  if (global_nx1() > 0) x1min(global_x1min()), x1max(global_x1max());
+  if (global_nx2() > 0) x2min(global_x2min()), x2max(global_x2max());
+  if (global_nx3() > 0) x3min(global_x3min()), x3max(global_x3max());
+
+  resolve_global_grid();
+
   auto playout =
       LayoutImpl::create(std::make_shared<LayoutOptionsImpl>(*layout));
   int rank = layout->rank();
@@ -197,21 +244,41 @@ CoordinateImpl::CoordinateImpl(const CoordinateOptions& options_,
   pmb = dynamic_cast<MeshBlockImpl const*>(p);
 
   auto const& op = options;
+  op->resolve_global_grid();
 
-  auto dx = (op->x1max() - op->x1min()) / op->nx1();
-  auto x1min = op->nx1() > 1 ? op->x1min() - op->nghost() * dx : op->x1min();
-  auto x1max = op->nx1() > 1 ? op->x1max() + op->nghost() * dx : op->x1max();
-  x1f = torch::linspace(x1min, x1max, op->nc1() + 1, torch::kFloat64);
+  // Slice ONE global face array per axis rather than building a per-block one.
+  // Building the faces from the block's own [xmin, xmax] makes the SAME global
+  // face come out of different arithmetic in different decompositions, and even
+  // out of two different blocks that share it: at C64 nb2=4, 15 of 71 x2 faces
+  // were internally inconsistent and 26 differed from the nb2=2 grid, each by
+  // exactly 1 ULP. Every metric term is a function of these coordinates, and
+  // the geometric source coefficients amplify that ULP by ~7 orders. Sliced
+  // from a global array, a face has one value whoever owns it.
+  x1f = block_faces_(op->global_x1min(), op->global_x1max(), op->global_nx1(),
+                     op->nx1(), op->ix1(), op->nghost());
+  x2f = block_faces_(op->global_x2min(), op->global_x2max(), op->global_nx2(),
+                     op->nx2(), op->ix2(), op->nghost());
+  x3f = block_faces_(op->global_x3min(), op->global_x3max(), op->global_nx3(),
+                     op->nx3(), op->ix3(), op->nghost());
+}
 
-  dx = (op->x2max() - op->x2min()) / op->nx2();
-  auto x2min = op->nx2() > 1 ? op->x2min() - op->nghost() * dx : op->x2min();
-  auto x2max = op->nx2() > 1 ? op->x2max() + op->nghost() * dx : op->x2max();
-  x2f = torch::linspace(x2min, x2max, op->nc2() + 1, torch::kFloat64);
+torch::Tensor CoordinateImpl::block_faces_(double gmin, double gmax, int gnx,
+                                           int nx, int ix, int nghost) {
+  auto dx = (gmax - gmin) / gnx;
 
-  dx = (op->x3max() - op->x3min()) / op->nx3();
-  auto x3min = op->nx3() > 1 ? op->x3min() - op->nghost() * dx : op->x3min();
-  auto x3max = op->nx3() > 1 ? op->x3max() + op->nghost() * dx : op->x3max();
-  x3f = torch::linspace(x3min, x3max, op->nc3() + 1, torch::kFloat64);
+  if (nx <= 1) {  // degenerate axis: one cell, no ghost layers
+    // sliced from the global grid like every other axis: gmin + gnx*dx need
+    // not round to gmax
+    return torch::linspace(gmin, gmax, gnx + 1, torch::kFloat64)
+        .narrow(0, ix, 2)
+        .clone();
+  }
+
+  // Global face g (g = -nghost .. gnx + nghost) sits at array index g + nghost;
+  // this block's first face is global face ix - nghost.
+  auto all = torch::linspace(gmin - nghost * dx, gmax + nghost * dx,
+                             gnx + 2 * nghost + 1, torch::kFloat64);
+  return all.narrow(0, ix, nx + 2 * nghost + 1).clone();
 }
 
 void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
