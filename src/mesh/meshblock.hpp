@@ -253,6 +253,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   double _init_from_restart(Variables& vars, std::string fname);
 
  private:
+  //! one communication round; `exchange` splits a subdivided cubed-sphere
+  //! sync into two of these
+  void _exchange_once(Variables& vars, SyncOptions const& opts) const;
+
   //! clock and cycle at time start
   clock_t _time_start;
   int _cycle_start = 0;

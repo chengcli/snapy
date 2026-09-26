@@ -63,6 +63,7 @@ void bind_layout(py::module& m) {
       .def("dx_max", &snap::SyncOptions::dx_max)
       .def("dy_min", &snap::SyncOptions::dy_min)
       .def("dy_max", &snap::SyncOptions::dy_max)
+      .ADD_OPTION(bool, snap::SyncOptions, intra_panel_only)
       .ADD_OPTION(bool, snap::SyncOptions, cross_panel_only)
       .ADD_OPTION(bool, snap::SyncOptions, skip_corner)
       .ADD_OPTION(bool, snap::SyncOptions, interpolate)

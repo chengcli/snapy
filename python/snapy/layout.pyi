@@ -264,6 +264,11 @@ class SyncOptions:
     @overload
     def phyid(self, value: int) -> "SyncOptions": ...
 
+    @overload
+    def intra_panel_only(self) -> bool: ...
+    @overload
+    def intra_panel_only(self, value: bool) -> "SyncOptions": ...
+
 
 class Layout:
     """
