@@ -80,6 +80,7 @@ TEST(hydro_options, reject_unknown_equation_of_state_keys) {
 
 // Every key snapy and kintera read from the block loads, and reaches its
 // option: a whitelist missing a key that is read would refuse valid cards.
+// uv-solver is set to a non-default value so the check sees it arrive.
 TEST(hydro_options, every_equation_of_state_key_is_accepted_and_read) {
   std::string f = "test_eos_options_all.yaml";
   {
@@ -119,6 +120,34 @@ TEST(hydro_options, every_equation_of_state_key_is_accepted_and_read) {
   ASSERT_TRUE(eos->thermo());
   EXPECT_EQ(eos->thermo()->max_iter(), 30);
   EXPECT_EQ(eos->thermo()->ftol(), 1.e-8);
+  EXPECT_EQ(eos->thermo()->uv_solver(), "kkt");
+  std::remove(f.c_str());
+}
+
+// snapy lets uv-solver through to kintera, which alone checks its value: a
+// kintera older than 2.5.0 ignores the key, so a bad value would load.
+TEST(hydro_options, invalid_uv_solver_is_refused_by_kintera) {
+  std::string f = "test_eos_options_uv_solver.yaml";
+  {
+    std::ofstream o(f);
+    o << "reference-state: {Tref: 300., Pref: 1.e5}\n"
+         "species:\n"
+         "  - name: dry\n"
+         "    composition: {O: 0.42, N: 1.56, Ar: 0.01}\n"
+         "    cv_R: 2.5\n"
+         "dynamics:\n"
+         "  equation-of-state:\n"
+         "    type: ideal-gas\n"
+         "    uv-solver: bogus\n";
+  }
+  try {
+    snap::HydroOptionsImpl::from_yaml(f);
+    ADD_FAILURE() << "uv-solver: bogus accepted";
+  } catch (std::exception const &e) {
+    EXPECT_NE(std::string(e.what()).find("Invalid UV solver"),
+              std::string::npos)
+        << e.what();
+  }
   std::remove(f.c_str());
 }
 
