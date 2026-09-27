@@ -90,3 +90,46 @@ TEST_P(DeviceTest, parentless_cloud_negative_column_is_clamped) {
   EXPECT_NEAR(after, before + deficit, tol)
       << "the clamp added " << (after - before) / deficit << " of the deficit";
 }
+
+// The boundary of that exception: a column whose total is exactly zero is
+// repaired, not clamped, whether the negative cell sits below or above the
+// positive one (2^-13 is exact in float32, so the total is exactly zero).
+TEST_P(DeviceTest, parentless_cloud_zero_column_is_repaired) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_parentless_cloud.yaml");
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  block->to(device, dtype);
+  ASSERT_EQ(block->phydro->peos->nvar(), ICY + 3);  // vapor, cloud, rain
+
+  auto coord = block->pcoord;
+  int il = coord->il(), iu = coord->iu();
+  double deficit = 1. / 8192.;
+  for (int below : {1, 0}) {  // negative cell below / above the positive one
+    auto cons = torch::zeros({block->phydro->peos->nvar(),
+                              coord->options->nc3(), coord->options->nc2(),
+                              coord->options->nc1()},
+                             torch::device(device).dtype(dtype));
+    cons[IDN].fill_(1.);
+    cons[IPR].fill_(1.e8);
+    cons[ICY].fill_(0.01);       // vapor
+    cons[ICY + 1].fill_(0.001);  // cloud
+    cons[ICY + 2].select(-1, il + 3).fill_(below ? -deficit : deficit);
+    cons[ICY + 2].select(-1, il + 4).fill_(below ? deficit : -deficit);
+    auto column_mass = [&] {
+      auto c = cons.slice(-1, il, iu + 1).to(torch::kFloat64);
+      return (c[IDN] + c.narrow(0, ICY, 3).sum(0)).sum().item<double>();
+    };
+    double before = column_mass();
+    auto dry = cons[IDN].clone();
+
+    block->phydro->peos->apply_conserved_limiter_(cons);
+
+    double after = column_mass();
+    double tol = (dtype == torch::kFloat64 ? 1.e-12 : 1.e-6) * before;
+    EXPECT_GE(cons[ICY + 2].min().item<double>(), 0.) << "below = " << below;
+    EXPECT_TRUE(torch::equal(cons[IDN], dry))
+        << "dry air was debited, below = " << below;
+    EXPECT_NEAR(after, before, tol)
+        << "the clamp added " << (after - before) / deficit
+        << " of the deficit, below = " << below;
+  }
+}
