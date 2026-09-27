@@ -247,7 +247,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     num_vars_++;
 
     // vapor + cloud
-    auto ny = peos->nvar() - 5;
+    auto ny = peos->nvar() - ICY;
     if (ny > 0) {
       pod = new OutputData;
       pod->type = "VECTORS";
@@ -264,7 +264,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
   if (ContainVariable("path")) {
     auto const& u = vars.at("hydro_u");
     auto area = pcoord->face_area1();
-    auto ny = peos->nvar() - 5;
+    auto ny = peos->nvar() - ICY;
     int il = pcoord->il();
     int iu = pcoord->iu();
 
@@ -324,7 +324,7 @@ void OutputType::loadDiagOutputData(MeshBlockImpl* pmb, Variables const& vars) {
     AppendOutputDataNode(pod);
     num_vars_++;
 
-    auto ny = peos->nvar() - 5;
+    auto ny = peos->nvar() - ICY;
     if (ny > 0) {
       pod = new OutputData;
       pod->type = "VECTORS";

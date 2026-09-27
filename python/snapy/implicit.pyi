@@ -19,7 +19,7 @@ class ImplicitOptions:
         ...
 
     @staticmethod
-    def from_yaml(filename: str, verbose: bool = False) -> "ImplicitOptions":
+    def from_yaml(filename: str, verbose: bool = False) -> Optional["ImplicitOptions"]:
         """
         Load ImplicitOptions from a YAML file.
 
@@ -28,20 +28,15 @@ class ImplicitOptions:
             verbose: Enable verbose output
 
         Returns:
-            ImplicitOptions loaded from file
+            ImplicitOptions loaded from file, or None when the file sets no
+            implicit scheme
         """
         ...
 
     def __repr__(self) -> str: ...
 
-    @overload
     def type(self) -> str:
-        """Get the implicit solver type."""
-        ...
-
-    @overload
-    def type(self, value: str) -> "ImplicitOptions":
-        """Set the implicit solver type."""
+        """Get the implicit solver type (read-only)."""
         ...
 
     @overload
