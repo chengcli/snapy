@@ -228,10 +228,13 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     // A cloud with no parent vapor (e.g. precipitation made by coagulation)
     // takes its deficit from the same species in the column, as fix_vapor does
     // for vapor; the parented clouds are non-negative by now and pass through.
-    // The repair is per meshblock: a column whose total within the meshblock
-    // is not positive at working precision is left unrepaired, and the clamp
-    // then adds mass equal to its remaining deficit, as the old per-cell clamp
-    // did. This exception is accepted and tested (test_parentless_cloud).
+    // The repair is per meshblock and scans each column from the top. It gives
+    // up only when the deficit summed down from a negative cell to the bottom
+    // exceeds the repaired sum above it, both at working precision, i.e. when
+    // the rounded column total is strictly negative; a zero total is repaired.
+    // The clamp then adds mass equal to the remaining deficit, as the old
+    // per-cell clamp did. This exception is accepted and tested
+    // (test_parentless_cloud).
     if (parentless) {
       auto cloud = cons.index(interior).narrow(0, ICY + nvapor, ncloud);
       auto major = cons.index(interior)[IDN].unsqueeze(0);
