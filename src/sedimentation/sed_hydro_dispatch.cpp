@@ -187,8 +187,7 @@ void sedimentation_flux_mps(torch::Tensor w, torch::Tensor flux,
   auto cvsed = const_vsed.view(vec);
   vsed.copy_(torch::where(cvsed != 0., cvsed, vsed));
   vsed.clamp_(-upper_limit, upper_limit);
-  vsed.slice(-1, iu + 1, vsed.size(-1)).fill_(0.);
-  vsed.slice(-1, 0, il + 1).fill_(0.);
+  auto vcell = vsed.clone();
 
   auto vel = w.narrow(0, IVX, 3).clone();
   coord_vec_lower_(vel, cosine_cell_kj);
@@ -196,16 +195,20 @@ void sedimentation_flux_mps(torch::Tensor w, torch::Tensor flux,
 
   auto species_ids = hydro_ids - ICY;
   auto rhos = w[IDN] * w.index_select(0, hydro_ids);
-  auto rhos_vsed = rhos * vsed;
+  auto rhos_vsed = rhos * vcell;
   auto species_energy =
       rhos * (u0.index_select(0, species_ids + 1).view(vec) +
               (cv_ratio_m1.index_select(0, species_ids).view(vec) + 1.) *
                   cv_dry * temp +
               ke);
 
-  flux.index_add_(0, hydro_ids, rhos_vsed);
-  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
-  flux[IPR] += (vsed * species_energy).sum(0);
+  // each particle is carried from its upwind cell; walls are sealed
+  vsed.copy_(sedimentation_upwind(vcell, vcell, il, iu));
+  flux.index_add_(0, hydro_ids, sedimentation_upwind(rhos_vsed, vcell, il, iu));
+  flux.narrow(0, IVX, 3) +=
+      sedimentation_upwind(vel.unsqueeze(1) * rhos_vsed, vcell, il, iu).sum(1);
+  flux[IPR] +=
+      sedimentation_upwind(vcell * species_energy, vcell, il, iu).sum(0);
 }
 
 }  // namespace snap
