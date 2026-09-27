@@ -63,6 +63,9 @@ class MeshImpl : public torch::nn::Cloneable<MeshImpl> {
   void set_cycle(int cycle);
   void finalize(MeshVariables const& vars, double time);
 
+  //! CUDA streams of the block worker pool (0 without a CUDA pool).
+  size_t num_worker_streams() const;
+
  private:
   class BlockWorkerPool;
 

@@ -68,6 +68,15 @@ class MeshImpl::BlockWorkerPool {
 
   ~BlockWorkerPool() { stop(); }
 
+  //! CUDA streams in the pool: one per block on a CUDA device, else 0.
+  size_t num_streams() const {
+#ifdef USE_CUDA
+    return streams_.size();
+#else
+    return 0;
+#endif
+  }
+
   void submit(std::function<void(size_t)> func) {
 #ifdef USE_CUDA
     std::optional<c10::cuda::CUDAStream> caller_stream;
@@ -245,6 +254,10 @@ void MeshImpl::reset() {
     workers_ = std::make_shared<BlockWorkerPool>(
         blocks.size(), torch::Device(blocks.front()->options->device_str()));
   }
+}
+
+size_t MeshImpl::num_worker_streams() const {
+  return workers_ ? workers_->num_streams() : 0;
 }
 
 void MeshImpl::run_block_jobs(std::function<void(size_t)> func) {

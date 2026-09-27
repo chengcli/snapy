@@ -62,14 +62,33 @@ struct PanelFields {
 
 PanelFields run(int nb, torch::Device device = torch::kCPU) {
   auto block_opts = MeshBlockOptionsImpl::from_yaml(write_card(nb));
+  // A card cannot name the device (the layout reads $DEVICE), so set it here:
+  // the Mesh constructor picks the block worker pool's device from it.
+  if (device.is_cuda()) {
+    block_opts->layout()->device("cuda");
+    block_opts->layout()->device_id(device.index());
+  }
   auto mesh_opts = MeshOptionsImpl::create();
   mesh_opts->block(block_opts);
   mesh_opts->blocks_per_process(6 * nb * nb);
   auto mesh = Mesh(mesh_opts);
   MeshVariables vars(mesh->blocks.size());
+  if (device.is_cuda()) {
+    // The pool exists only for more than one block and reads the first
+    // block's device_str(); each layout reads its own for the exchange.
+    EXPECT_GT(mesh->blocks.size(), 1u);
+    for (auto const &block : mesh->blocks) {
+      EXPECT_EQ(block->options->device_str(), device.str());
+    }
+    // the pool itself is CUDA: one stream per block
+    EXPECT_EQ(mesh->num_worker_streams(), mesh->blocks.size());
+  } else {
+    EXPECT_EQ(mesh->num_worker_streams(), 0u);
+  }
 
   for (size_t i = 0; i < mesh->blocks.size(); ++i) {
     auto block = mesh->blocks[i];
+    // The constructor still builds the block's tensors on the CPU.
     if (device.is_cuda()) block->to(device);
     auto coord = block->pcoord;
     int nvar = block->phydro->peos->nvar();
@@ -151,13 +170,13 @@ TEST(CubedSphere, subdivided_panel_exchange_matches_one_block_cuda) {
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   PanelFields ref;
   try {
-    ref = run(1, torch::kCUDA);
+    ref = run(1, torch::Device(torch::kCUDA, 0));
   } catch (std::exception const &e) {
     FAIL() << "nb2=1 " << e.what();
   }
   for (int nb : {2, 4}) {
     try {
-      PanelFields got = run(nb, torch::kCUDA);
+      PanelFields got = run(nb, torch::Device(torch::kCUDA, 0));
       EXPECT_TRUE(torch::equal(got.x2f, ref.x2f)) << "x2f nb2=" << nb;
       EXPECT_TRUE(torch::equal(got.dx2f, ref.dx2f)) << "dx2f nb2=" << nb;
       EXPECT_TRUE(torch::equal(got.density, ref.density))
