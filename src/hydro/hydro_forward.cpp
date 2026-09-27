@@ -38,6 +38,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // hydrostatic pressure correction
   torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
   int ny = u.size(0) - ICY;
+  // the settling part of the x1 species flux, for the positivity carry
+  torch::Tensor fsed1;
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -163,7 +165,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
 
     // sedimentation flux; skipped when x1 flux is off (_flux1 not rewritten)
-    if (psed && !options->disable_flux_x1()) psed->forward(w, _flux1);
+    if (psed && !options->disable_flux_x1()) {
+      bool carry = options->eos()->limiter() && ny > 0;
+      auto fadv = carry ? _flux1.narrow(0, ICY, ny).clone() : torch::Tensor();
+      psed->forward(w, _flux1);
+      if (carry) fsed1 = _flux1.narrow(0, ICY, ny) - fadv;
+    }
 
     // Make internal x1 seam fluxes single-valued. The two ranks sharing an
     // internal x1 face each compute the face flux from their own
@@ -365,7 +372,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // the withheld species mass keeps its energy and momentum in the donor
     if (hspec.defined()) {
       flux_positivity_carry_(theta, hspec, u.narrow(0, IVX, 3) / w[IDN], _flux1,
-                             _flux2, _flux3, pmb->pcoord);
+                             _flux2, _flux3, pmb->pcoord, fsed1);
     }
     flux_positivity_scale_(theta, f1, f2, f3, pmb->pcoord);
 
