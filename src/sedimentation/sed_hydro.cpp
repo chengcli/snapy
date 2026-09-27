@@ -15,6 +15,12 @@
 namespace snap {
 namespace {
 
+//! x at the cell below each x1 face (cell i-1 at face i; face 0 keeps cell 0)
+torch::Tensor cell_below(torch::Tensor x) {
+  int n = x.size(-1);
+  return torch::cat({x.narrow(-1, 0, 1), x.narrow(-1, 0, n - 1)}, -1);
+}
+
 torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
                                         torch::Tensor flux, int il, int iu) {
   auto pcoord = sed.phydro->pmb->pcoord;
@@ -35,10 +41,17 @@ torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
   auto en = peos->compute("W->E", {wr}).index_select(0, sed.hydro_ids - 5);
 
   auto rhos = wr[IDN] * wr.index_select(0, sed.hydro_ids);
+
+  // donor-cell upwind: face i carries cell i, or cell i-1 for a rising species
+  auto rising = sed.vsed > 0.;
+  rhos = torch::where(rising, cell_below(rhos), rhos);
+  en = torch::where(rising, cell_below(en), en);
   auto rhos_vsed = rhos * sed.vsed;
 
   flux.index_add_(0, sed.hydro_ids, rhos_vsed);
-  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
+  flux.narrow(0, IVX, 3) +=
+      vel * (rhos_vsed * rising.logical_not()).sum(0, /*keepdim=*/true) +
+      cell_below(vel) * (rhos_vsed * rising).sum(0, /*keepdim=*/true);
   flux[IPR] += (sed.vsed * en).sum(0);
 
   return flux;

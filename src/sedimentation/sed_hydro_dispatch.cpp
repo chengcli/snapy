@@ -82,6 +82,12 @@ void check_sedimentation_args(torch::Tensor w, torch::Tensor flux,
               "sedimentation_flux_dispatch received invalid nvapor/ny");
 }
 
+//! x at the cell below each x1 face (cell i-1 at face i; face 0 keeps cell 0)
+torch::Tensor sedimentation_cell_below(torch::Tensor x) {
+  int n = x.size(-1);
+  return torch::cat({x.narrow(-1, 0, 1), x.narrow(-1, 0, n - 1)}, -1);
+}
+
 torch::Tensor sedimentation_feps_tensor(torch::Tensor w, int ny, int nvapor,
                                         torch::Tensor inv_mu_ratio_m1) {
   auto sizes = w.sizes().vec();
@@ -196,15 +202,24 @@ void sedimentation_flux_mps(torch::Tensor w, torch::Tensor flux,
 
   auto species_ids = hydro_ids - ICY;
   auto rhos = w[IDN] * w.index_select(0, hydro_ids);
-  auto rhos_vsed = rhos * vsed;
   auto species_energy =
       rhos * (u0.index_select(0, species_ids + 1).view(vec) +
               (cv_ratio_m1.index_select(0, species_ids).view(vec) + 1.) *
                   cv_dry * temp +
               ke);
 
+  // donor-cell upwind: face i carries cell i, or cell i-1 for a rising species
+  auto rising = vsed > 0.;
+  rhos = torch::where(rising, sedimentation_cell_below(rhos), rhos);
+  species_energy = torch::where(
+      rising, sedimentation_cell_below(species_energy), species_energy);
+  auto rhos_vsed = rhos * vsed;
+
   flux.index_add_(0, hydro_ids, rhos_vsed);
-  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
+  flux.narrow(0, IVX, 3) +=
+      vel * (rhos_vsed * rising.logical_not()).sum(0, /*keepdim=*/true) +
+      sedimentation_cell_below(vel) *
+          (rhos_vsed * rising).sum(0, /*keepdim=*/true);
   flux[IPR] += (vsed * species_energy).sum(0);
 }
 

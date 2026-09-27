@@ -26,6 +26,30 @@ inline DISPATCH_MACRO T sedimentation_feps(T const* w, int flat, int stride_var,
   return feps;
 }
 
+//! The state a face carries from one cell: density, temperature, the
+//! contravariant velocity, its covariant x2/x3 and the kinetic energy.
+template <typename T>
+inline DISPATCH_MACRO void sedimentation_cell_state(
+    T const* w, int flat, int ncells, T cth, int ny, int nvapor,
+    T const* inv_mu_ratio_m1, T gas_constant_dry, T* rho, T* temp, T* v1, T* v2,
+    T* v3, T* ke) {
+  *rho = w[IDN * ncells + flat];
+  T pres = w[IPR * ncells + flat];
+  T feps = sedimentation_feps(w, flat, ncells, ny, nvapor, inv_mu_ratio_m1);
+  *temp = pres / (*rho * gas_constant_dry * feps);
+
+  *v1 = w[IVX * ncells + flat];
+  *v2 = w[IVY * ncells + flat];
+  *v3 = w[IVZ * ncells + flat];
+  coord_vec_lower_impl(v2, v3, cth);
+  *ke = T(0.5) * (w[IVX * ncells + flat] * *v1 + w[IVY * ncells + flat] * *v2 +
+                  w[IVZ * ncells + flat] * *v3);
+}
+
+//! Adds the sedimentation flux at face i (the lower face of cell i). The face
+//! velocity is evaluated from cell i; the flux is donor-cell upwind: a
+//! settling species (vsed <= 0) leaves cell i, a rising one (vsed > 0) leaves
+//! cell i-1.
 template <typename T>
 inline DISPATCH_MACRO void sedimentation_flux_impl(
     T const* w, T* flux, T* vsed_out, T const* cosine_cell_kj, T const* radius,
@@ -40,18 +64,19 @@ inline DISPATCH_MACRO void sedimentation_flux_impl(
   int k = flat / (nc1 * nc2);
   T sedimenting = (i <= il || i > iu) ? T(0) : T(1);
 
-  T rho = w[IDN * ncells + flat];
-  T pres = w[IPR * ncells + flat];
-  T feps = sedimentation_feps(w, flat, ncells, ny, nvapor, inv_mu_ratio_m1);
-  T temp = pres / (rho * gas_constant_dry * feps);
-
-  T v1 = w[IVX * ncells + flat];
-  T v2 = w[IVY * ncells + flat];
-  T v3 = w[IVZ * ncells + flat];
   T cth = cosine_cell_kj[k * nc2 + j];
-  coord_vec_lower_impl(&v2, &v3, cth);
-  T ke = T(0.5) * (w[IVX * ncells + flat] * v1 + w[IVY * ncells + flat] * v2 +
-                   w[IVZ * ncells + flat] * v3);
+  T rho, temp, v1, v2, v3, ke;
+  sedimentation_cell_state(w, flat, ncells, cth, ny, nvapor, inv_mu_ratio_m1,
+                           gas_constant_dry, &rho, &temp, &v1, &v2, &v3, &ke);
+  T pres = w[IPR * ncells + flat];
+
+  // the cell below the face; face 0 has none (it is never sedimenting at a
+  // physical wall, and a ghost face otherwise)
+  int below = i > 0 ? flat - 1 : flat;
+  T rho_b, temp_b, v1_b, v2_b, v3_b, ke_b;
+  sedimentation_cell_state(w, below, ncells, cth, ny, nvapor, inv_mu_ratio_m1,
+                           gas_constant_dry, &rho_b, &temp_b, &v1_b, &v2_b,
+                           &v3_b, &ke_b);
 
   T eta = (T(5) / T(16)) * sqrt(pi * kboltz) * sqrt(gas_mass) * sqrt(temp) *
           pow(kboltz / gas_epsilon_lj * temp, T(0.16)) /
@@ -78,16 +103,22 @@ inline DISPATCH_MACRO void sedimentation_flux_impl(
     vsed *= sedimenting;
     vsed_out[p * ncells + flat] = vsed;
 
-    T y = w[hydro_id * ncells + flat];
-    T rhos_vsed = rho * y * vsed;
-    T species_energy = rho * y *
-                       (u0[1 + species_id] +
-                        (T(1) + cv_ratio_m1[species_id]) * cv_dry * temp + ke);
+    bool rising = vsed > T(0);
+    int donor = rising ? below : flat;
+    T rho_d = rising ? rho_b : rho;
+    T temp_d = rising ? temp_b : temp;
+    T ke_d = rising ? ke_b : ke;
+    T y = w[hydro_id * ncells + donor];
+    T rhos_vsed = rho_d * y * vsed;
+    T species_energy =
+        rho_d * y *
+        (u0[1 + species_id] +
+         (T(1) + cv_ratio_m1[species_id]) * cv_dry * temp_d + ke_d);
 
     flux[hydro_id * ncells + flat] += rhos_vsed;
-    flux[IVX * ncells + flat] += v1 * rhos_vsed;
-    flux[IVY * ncells + flat] += v2 * rhos_vsed;
-    flux[IVZ * ncells + flat] += v3 * rhos_vsed;
+    flux[IVX * ncells + flat] += (rising ? v1_b : v1) * rhos_vsed;
+    flux[IVY * ncells + flat] += (rising ? v2_b : v2) * rhos_vsed;
+    flux[IVZ * ncells + flat] += (rising ? v3_b : v3) * rhos_vsed;
     flux[IPR * ncells + flat] += vsed * species_energy;
   }
 }
