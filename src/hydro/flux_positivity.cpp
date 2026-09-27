@@ -93,14 +93,11 @@ void flux_positivity_scale_(torch::Tensor const& theta,
   }
 }
 
-void flux_positivity_carry_(torch::Tensor const& theta,
-                            torch::Tensor const& hspec,
-                            torch::Tensor const& vel,
-                            torch::Tensor const& flux1,
-                            torch::Tensor const& flux2,
-                            torch::Tensor const& flux3,
-                            Coordinate const& pcoord,
-                            torch::Tensor const& fsed1) {
+void flux_positivity_carry_(
+    torch::Tensor const& theta, torch::Tensor const& hspec,
+    torch::Tensor const& vel, torch::Tensor const& flux1,
+    torch::Tensor const& flux2, torch::Tensor const& flux3,
+    Coordinate const& pcoord, torch::Tensor const& fsed1) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   int ny = theta.size(0);
 

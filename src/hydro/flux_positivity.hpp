@@ -71,13 +71,10 @@ void flux_positivity_scale_(torch::Tensor const& theta,
 //! \param flux1/2/3  full hydro fluxes; undefined tensors are skipped
 //! \param fsed1  settling part of flux1's species flux, (ny, nc3, nc2, nc1);
 //!               undefined: the whole flux is one part
-void flux_positivity_carry_(torch::Tensor const& theta,
-                            torch::Tensor const& hspec,
-                            torch::Tensor const& vel,
-                            torch::Tensor const& flux1,
-                            torch::Tensor const& flux2,
-                            torch::Tensor const& flux3,
-                            Coordinate const& pcoord,
-                            torch::Tensor const& fsed1 = torch::Tensor());
+void flux_positivity_carry_(
+    torch::Tensor const& theta, torch::Tensor const& hspec,
+    torch::Tensor const& vel, torch::Tensor const& flux1,
+    torch::Tensor const& flux2, torch::Tensor const& flux3,
+    Coordinate const& pcoord, torch::Tensor const& fsed1 = torch::Tensor());
 
 }  // namespace snap
