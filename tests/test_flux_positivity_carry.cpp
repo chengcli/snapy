@@ -244,3 +244,101 @@ TEST(flux_positivity, withheld_mass_keeps_its_donors_energy_and_momentum_cuda) {
   withheld_mass_keeps_its_donors_energy_and_momentum(
       torch::Device(torch::kCUDA, 0));
 }
+
+// The mixed case: an updraft (about 3 m/s) carries the cloud up while it
+// settles at 1 m/s, so the cloud's net flux at each interior face is upward
+// although its settling part leaves the cell ABOVE the face. The settling part
+// is the difference of two unlimited arms, with and without sedimentation.
+// Withholding a share of the face flux withholds that share of each part, and
+// each part carries its own donor's energy and momentum.
+void withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
+    torch::Device device) {
+  auto shape = [](torch::Tensor& w, int il) {
+    double rho[6] = {1.00, 1.15, 0.90, 1.05, 0.85, 1.20};
+    double vx[6] = {3.0, 3.4, 2.6, 3.2, 2.8, 3.1};
+    double vy[6] = {3.0, 3.5, 2.5, 4.0, 2.0, 3.2};
+    double vz[6] = {0.0, 0.5, -0.5, 1.0, -1.0, 0.3};
+    for (int c = 0; c < 6; ++c) {
+      w[IDN].select(-1, il + c).fill_(rho[c]);
+      w[IVX].select(-1, il + c).fill_(vx[c]);
+      w[IVY].select(-1, il + c).fill_(vy[c]);
+      w[IVZ].select(-1, il + c).fill_(vz[c]);
+    }
+  };
+  auto keep = [](YAML::Node&) {};
+  auto settle = [](YAML::Node& card) {
+    card["sedimentation"] =
+        YAML::Load("{radius: {}, density: {}, const-vsed: {cloud: -1.}}");
+  };
+  auto bare = forward_once(false, keep, 0., 0., 0., shape, device);
+  auto off = forward_once(false, settle, 0., 0., 0., shape, device);
+  auto on = forward_once(true, settle, 0., 0., 0., shape, device);
+  ASSERT_TRUE(torch::equal(off.vars.at("hydro_u"), bare.vars.at("hydro_u")));
+
+  auto peos = off.block->phydro->peos;
+  int il = off.block->pcoord->il(), iu = off.block->pcoord->iu();
+  auto cpu = [](torch::Tensor const& t) { return t.cpu(); };
+  auto w = cpu(off.vars.at("hydro_w"));
+  auto u = cpu(off.vars.at("hydro_u"));
+  auto temp = cpu(peos->compute("W->T", {off.vars.at("hydro_w")}));
+  auto e = cpu(peos->compute("W->E", {off.vars.at("hydro_w")})) /
+           (w[IDN] * w.narrow(0, ICY, 2));
+  auto Fb = cpu(bare.block->phydro->flux1());
+  auto F0 = cpu(off.block->phydro->flux1());
+  auto F1 = cpu(on.block->phydro->flux1());
+  auto at = [](torch::Tensor const& t, int c, int i) {
+    return t[c][0][0][i].item<double>();
+  };
+
+  int mixed = 0;
+  for (int i = il + 1; i <= iu; ++i) {
+    double dE = 0., dM[3] = {0., 0., 0.};
+    for (int n = 0; n < 2; ++n) {
+      double f0 = at(F0, ICY + n, i);
+      if (f0 == 0.) continue;
+      double share = (f0 - at(F1, ICY + n, i)) / f0;
+      double sed = f0 - at(Fb, ICY + n, i);
+      double part[2] = {f0 - sed, sed};
+      // advected mass comes from upwind of the flow, settling mass from
+      // upwind of vsed; a vapour also carries its partial pressure p_n / rho_n
+      int donor[2] = {part[0] > 0. ? i - 1 : i, part[1] > 0. ? i - 1 : i};
+      for (int p = 0; p < 2; ++p) {
+        double dm = share * part[p];
+        int d = donor[p];
+        double h = at(e, n, d);
+        if (n == 0) {
+          h += kintera::constants::Rgas / peos->species_weight(1) *
+               at(temp.unsqueeze(0), 0, d);
+        }
+        dE += dm * h;
+        for (int k = 0; k < 3; ++k) {
+          dM[k] += dm * at(u, IVX + k, d) / at(w, IDN, d);
+        }
+      }
+      if (n == 1 && f0 > 0. && sed < 0. && share > 0.1) ++mixed;
+    }
+    double e0 = at(F0, IPR, i), e1 = at(F1, IPR, i);
+    double tol = 1.e-12 * std::max(std::abs(e0), std::abs(dE));
+    EXPECT_NEAR(e0 - e1, dE, tol) << "energy flux, face " << i;
+    for (int k = 0; k < 3; ++k) {
+      double m0 = at(F0, IVX + k, i), m1 = at(F1, IVX + k, i);
+      tol = 1.e-12 * std::max(std::abs(m0), std::abs(dM[k]));
+      EXPECT_NEAR(m0 - m1, dM[k], tol)
+          << "momentum flux " << k << ", face " << i;
+    }
+  }
+  EXPECT_GT(mixed, 0) << "no limited face with an upward net cloud flux and "
+                         "a settling part";
+}
+
+TEST(flux_positivity,
+     withheld_mixed_flux_keeps_each_parts_energy_and_momentum) {
+  withheld_mixed_flux_keeps_each_parts_energy_and_momentum(torch::kCPU);
+}
+
+TEST(flux_positivity,
+     withheld_mixed_flux_keeps_each_parts_energy_and_momentum_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
+      torch::Device(torch::kCUDA, 0));
+}
