@@ -104,10 +104,10 @@ TEST_P(DeviceTest, parentless_cloud_zero_column_is_repaired) {
   int il = coord->il(), iu = coord->iu();
   double deficit = 1. / 8192.;
   for (int below : {1, 0}) {  // negative cell below / above the positive one
-    auto cons = torch::zeros({block->phydro->peos->nvar(),
-                              coord->options->nc3(), coord->options->nc2(),
-                              coord->options->nc1()},
-                             torch::device(device).dtype(dtype));
+    auto cons =
+        torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                      coord->options->nc2(), coord->options->nc1()},
+                     torch::device(device).dtype(dtype));
     cons[IDN].fill_(1.);
     cons[IPR].fill_(1.e8);
     cons[ICY].fill_(0.01);       // vapor
