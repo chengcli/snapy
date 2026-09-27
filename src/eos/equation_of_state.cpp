@@ -206,13 +206,15 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     // is handled by the columnar fix_vapor below. The phase shift is ~1% of the
     // local value and the saturation adjustment re-equilibrates it at the end
     // of the same cycle.
+    bool parentless = false;
     for (int j = 0; j < ncloud; ++j) {
       int slot = ICY + nvapor + j;
       auto c = cons[slot];
       auto const& parents = cloud_parent_cache_[j];
       if (parents.empty()) {
-        // Clouds not produced by nucleation have no parent-vapor metadata.
-        c.clamp_min_(0.);
+        // Clouds not produced by nucleation have no parent-vapor metadata;
+        // they are repaired along the column below.
+        parentless = true;
         continue;
       }
 
@@ -221,6 +223,25 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
         cons[parent_slot] += deficit * mass_fraction;
       }
       c.clamp_min_(0.);  // condensate to exactly zero
+    }
+
+    // A cloud with no parent vapor (e.g. precipitation made by coagulation)
+    // takes its deficit from the same species in the column, as fix_vapor does
+    // for vapor; the parented clouds are non-negative by now and pass through.
+    // Only a column whose own total is negative (the fix fails and leaves it)
+    // falls back to the clamp.
+    if (parentless) {
+      auto cloud = cons.index(interior).narrow(0, ICY + nvapor, ncloud);
+      auto major = cons.index(interior)[IDN].unsqueeze(0);
+      auto iter = at::TensorIteratorConfig()
+                      .resize_outputs(false)
+                      .declare_static_shape(cloud.sizes(),
+                                            /*squash_dim=*/cloud.dim() - 1)
+                      .add_output(cloud)
+                      .add_owned_input(major.expand_as(cloud))
+                      .build();
+      at::native::call_fix_vapor(cons.device().type(), iter);
+      cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
     }
 
     auto vapor = cons.index(interior).narrow(0, ICY, nvapor);
