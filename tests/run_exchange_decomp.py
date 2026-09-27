@@ -12,16 +12,17 @@ def run(cmd, cwd: Path, env=None) -> None:
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
 
 
-def prepare_case(case_dir: Path, yaml_src: Path) -> None:
+def prepare_case(case_dir: Path, sources) -> None:
     if case_dir.exists():
         shutil.rmtree(case_dir)
     case_dir.mkdir(parents=True)
 
-    target = case_dir / "test_exchange.yaml"
-    try:
-        target.symlink_to(yaml_src)
-    except OSError:
-        shutil.copy2(yaml_src, target)
+    for src in sources:
+        target = case_dir / src.name
+        try:
+            target.symlink_to(src)
+        except OSError:
+            shutil.copy2(src, target)
 
 
 def main() -> int:
@@ -43,6 +44,12 @@ def main() -> int:
     yaml_src = Path(os.path.abspath("test_exchange.yaml"))
     if not yaml_src.exists():
         raise FileNotFoundError(f"missing input file {yaml_src}")
+    # kintera looks for nasa9.dat in the working directory (and its build-time
+    # data path, which a wheel does not have), so the case dirs need it too
+    sources = [yaml_src]
+    nasa9 = Path(os.path.abspath("nasa9.dat"))
+    if nasa9.exists():
+        sources.append(nasa9)
 
     cases = (
         ("mesh6", 1, 6, True, False),
@@ -52,7 +59,7 @@ def main() -> int:
 
     for name, ranks, blocks_per_process, expect_local, expect_remote in cases:
         case_dir = tests_dir / f"test_exchange_{name}"
-        prepare_case(case_dir, yaml_src)
+        prepare_case(case_dir, sources)
 
         env = os.environ.copy()
         env["BACKEND"] = "gloo"
