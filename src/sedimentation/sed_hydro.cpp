@@ -23,23 +23,21 @@ torch::Tensor sedimentation_flux_tensor(SedHydroImpl& sed, torch::Tensor wr,
   coord_vec_lower_(vel, pcoord->cosine_cell_kj);
 
   auto temp = peos->compute("W->T", {wr});
-  sed.vsed.set_(sed.psedvel->forward(wr[IDN], wr[IPR], temp));
-
-  // seal top boundary
-  sed.vsed.slice(-1, iu + 1, sed.vsed.size(-1)).fill_(0.);
-
-  // seal bottom
-  sed.vsed.slice(-1, 0, il + 1).fill_(0.);
+  auto vsed = sed.psedvel->forward(wr[IDN], wr[IPR], temp);
 
   // 5 is number of hydro variables
   auto en = peos->compute("W->E", {wr}).index_select(0, sed.hydro_ids - 5);
 
   auto rhos = wr[IDN] * wr.index_select(0, sed.hydro_ids);
-  auto rhos_vsed = rhos * sed.vsed;
+  auto rhos_vsed = rhos * vsed;
 
-  flux.index_add_(0, sed.hydro_ids, rhos_vsed);
-  flux.narrow(0, IVX, 3) += vel * rhos_vsed.sum(0, /*keepdim=*/true);
-  flux[IPR] += (sed.vsed * en).sum(0);
+  // each particle is carried from its upwind cell; walls are sealed
+  sed.vsed.set_(sedimentation_upwind(vsed, vsed, il, iu));
+  flux.index_add_(0, sed.hydro_ids,
+                  sedimentation_upwind(rhos_vsed, vsed, il, iu));
+  flux.narrow(0, IVX, 3) +=
+      sedimentation_upwind(vel.unsqueeze(1) * rhos_vsed, vsed, il, iu).sum(1);
+  flux[IPR] += sedimentation_upwind(vsed * en, vsed, il, iu).sum(0);
 
   return flux;
 }
