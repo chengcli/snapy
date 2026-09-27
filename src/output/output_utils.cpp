@@ -264,7 +264,9 @@ std::string MetadataTable::GetLongName(std::string name) const {
 MetadataTable* MetadataTable::myptr_ = nullptr;
 
 std::string get_hydro_names(MeshBlockImpl* pmb, std::string prepend) {
-  auto m = pmb->named_modules()["hydro.eos.thermo"];
+  // the refined super-resolution block is raw-new: it has no shared_ptr owner
+  auto m = pmb->named_modules(std::string(),
+                              /*include_self=*/false)["hydro.eos.thermo"];
   if (!m) return "";
 
   auto thermo = std::dynamic_pointer_cast<kintera::ThermoYImpl>(m);

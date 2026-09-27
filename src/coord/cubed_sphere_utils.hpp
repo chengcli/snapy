@@ -92,6 +92,21 @@ Vec3 cs_ab_to_xyz(char const *face, double alpha, double beta);
  *             is the source coordinate along the edge line for target
  *             ghost cell
  */
+//! Tangential margin, in cells, that a cross-panel ghost strip must carry on
+//! EACH side.
+//!
+//! `cs_build_ghost_usrc` maps a ghost centre in layer g at along-edge angle
+//! beta onto the source panel at beta - (g - 1/2) * d * sin(2*beta) (d = cell
+//! angular width), i.e. the interpolation source slides ALONG the edge by (g -
+//! 1/2) * sin(2*beta) CELLS -- resolution independent, at most nghost - 1/2,
+//! always directed toward the panel-edge midpoint. A panel split into px > 1
+//! blocks therefore has interior seams where a block's own slice of `usrc` runs
+//! off the end, which is why nb2 = nb3 >= 3 used to die in
+//! MeshBlock::initialize with "index -1/N is out of bounds ... size nx + 2".
+//! ceil(nghost - 1/2) == nghost, and nghost is also the most a block can supply
+//! out of its own halo, so the margin IS nghost.
+inline int cs_interp_margin(int nghost) { return nghost; }
+
 void cs_build_ghost_usrc(double *usrc, int N, int nghost, int face_t = 0,
                          int side_t = 0);
 

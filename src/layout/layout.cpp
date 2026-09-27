@@ -53,6 +53,7 @@ struct LocalExchangeKey {
   int dim;
   int phyid;
   int type;
+  bool intra_panel_only;
   bool cross_panel_only;
   bool skip_corner;
   bool interpolate;
@@ -61,12 +62,12 @@ struct LocalExchangeKey {
 
   bool operator<(LocalExchangeKey const& other) const {
     return std::tie(process_rank, blocks_per_process, dim, phyid, type,
-                    cross_panel_only, skip_corner, interpolate, layout_type,
-                    device) <
+                    intra_panel_only, cross_panel_only, skip_corner,
+                    interpolate, layout_type, device) <
            std::tie(other.process_rank, other.blocks_per_process, other.dim,
-                    other.phyid, other.type, other.cross_panel_only,
-                    other.skip_corner, other.interpolate, other.layout_type,
-                    other.device);
+                    other.phyid, other.type, other.intra_panel_only,
+                    other.cross_panel_only, other.skip_corner,
+                    other.interpolate, other.layout_type, other.device);
   }
 };
 
@@ -137,6 +138,7 @@ LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
       opts.dim(),
       opts.phyid(),
       opts.type(),
+      opts.intra_panel_only(),
       opts.cross_panel_only(),
       opts.skip_corner(),
       opts.interpolate(),
@@ -149,8 +151,8 @@ std::string exchange_buffer_key(SyncOptions const& opts,
                                 Variables const& vars) {
   std::ostringstream key;
   key << opts.dim() << ':' << opts.phyid() << ':' << opts.type() << ':'
-      << opts.cross_panel_only() << ':' << opts.skip_corner() << ':'
-      << opts.interpolate();
+      << opts.intra_panel_only() << ':' << opts.cross_panel_only() << ':'
+      << opts.skip_corner() << ':' << opts.interpolate();
   for (auto const& [name, _] : vars) {
     key << ':' << name;
   }
@@ -410,6 +412,14 @@ void LayoutImpl::_copy_local_exchange_buffers(
           auto offset = layout->_remap_exchange_offset(iloc, dy_, dx_, dz_);
           int nb = layout->neighbor_rank(iloc, offset);
           if (nb < 0 || nb == rank) continue;
+
+          // this phase's peers only (cubed sphere; inert elsewhere)
+          if (opts.cross_panel_only() || opts.intra_panel_only()) {
+            bool same_panel =
+                std::get<2>(iloc) == std::get<2>(layout->loc_of(nb));
+            if (opts.cross_panel_only() && same_panel) continue;
+            if (opts.intra_panel_only() && !same_panel) continue;
+          }
           if (layout->options->owner_process_rank(nb) !=
               layout->options->process_rank()) {
             continue;
@@ -721,8 +731,10 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   // Deserialize received data into ghost zones
   deserialize(pmb, vars, opts);
 
-  // Fill corners
-  if (opts.skip_corner() && !opts.cross_panel_only()) {
+  // Corners are synthesized from the edge strips, so neither half of a split
+  // sync may do it; `exchange` calls fill_corners once, after both.
+  if (opts.skip_corner() && !opts.cross_panel_only() &&
+      !opts.intra_panel_only()) {
     fill_corners(pmb, vars);
   }
 

@@ -76,8 +76,8 @@ std::string exchange_buffer_key(SyncOptions const& opts,
                                 Variables const& vars) {
   std::ostringstream key;
   key << opts.dim() << ':' << opts.phyid() << ':' << opts.type() << ':'
-      << opts.cross_panel_only() << ':' << opts.skip_corner() << ':'
-      << opts.interpolate();
+      << opts.intra_panel_only() << ':' << opts.cross_panel_only() << ':'
+      << opts.skip_corner() << ':' << opts.interpolate();
   for (auto const& [name, _] : vars) {
     key << ':' << name;
   }
@@ -622,6 +622,13 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       }
   }
 
+  // Phase 1 of the two-phase ghost sync stops here. The cross-panel strip
+  // must NOT be packed yet: it is EXTENDED into this block's own tangential
+  // halo (cs_interp_margin), and that halo is only refreshed by the
+  // deserialize() of this very phase -- packing it now would ship
+  // one-sync-stale margin cells, which is exactly the defect this split fixes.
+  if (opts.intra_panel_only()) return;
+
   // get mesh
   torch::Tensor x2_coord, x3_coord, cosine_cell;
   int nc1 = pcoord->options->nc1();
@@ -664,6 +671,17 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
         part_opts.depth(1).exterior(dx > 0);
       } else if (opts.dim() == SyncOptions::DIM3) {
         part_opts.depth(1).exterior(dy > 0);
+      }
+
+      // interpolating receiver: widen by cs_interp_margin (halo is fresh only
+      // because phase 1 completed -- see the early return above)
+      if (opts.interpolate()) {
+        int margin = cs_interp_margin(pmb->options->coord()->nghost());
+        if (dy != 0 && dx == 0) {
+          part_opts.extend_x2(margin);
+        } else if (dx != 0 && dy == 0) {
+          part_opts.extend_x3(margin);
+        }
       }
 
       auto sub = pmb->part(offset, part_opts);
@@ -826,6 +844,9 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
       }
   }
 
+  // Phase 1 of the two-phase ghost sync: intra-panel halo only.
+  if (opts.intra_panel_only()) return;
+
   // get mesh
   torch::Tensor x2_coord, x3_coord, cosine_cell;
   int nc1 = pcoord->options->nc1();
@@ -873,6 +894,27 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
       auto sub = pmb->part(offset, part_opts);
       auto sub3 = pmb->part(offset, part_opts.ndim(3));
 
+      // Wide landing zone for the raw copy, mirroring serialize()'s wider send
+      // strip. The velocity transform below deliberately stays on the NARROW
+      // `sub`: the extra cells are only interpolation SOURCE for interp_ghost,
+      // never ghost values in their own right, and interp_ghost runs while the
+      // whole strip is still in the neighbour's frame.
+      auto part_opts_w = PartOptions().exterior(true);
+      if (opts.dim() == SyncOptions::DIM2) {
+        part_opts_w.depth(1).exterior(dx > 0);
+      } else if (opts.dim() == SyncOptions::DIM3) {
+        part_opts_w.depth(1).exterior(dy > 0);
+      }
+      if (opts.interpolate()) {
+        int margin = cs_interp_margin(pmb->options->coord()->nghost());
+        if (dy != 0 && dx == 0) {
+          part_opts_w.extend_x2(margin);
+        } else if (dx != 0 && dy == 0) {
+          part_opts_w.extend_x3(margin);
+        }
+      }
+      auto sub_w = pmb->part(offset, part_opts_w);
+
       auto alpha = mesh[1].index(sub3);
       auto beta = mesh[0].index(sub3);
 
@@ -889,7 +931,7 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
             continue;
         }
 
-        var.index_put_(sub, pmb->recv_bufs[bid][count++]);
+        var.index_put_(sub_w, pmb->recv_bufs[bid][count++]);
         if (opts.interpolate()) {
           pcoord->interp_ghost(var, offset);
         }
@@ -961,6 +1003,17 @@ void CubedSphereLayoutImpl::exchange_remote(MeshBlockImpl const* pmb,
       std::tuple<int, int, int> offset(dy, dx, 0);
       int nb = neighbor_rank(iloc, offset);
       if (nb < 0) continue;  // no neighbor
+
+      // Only this phase's peers; both peers of a pair agree because "same
+      // panel" is symmetric. Required, not just tidy: serialize() leaves the
+      // other class's send buffers untouched, so without this the intra-panel
+      // phase would ship cross-panel buffers that do not exist yet on the first
+      // call. It also stops a cross-panel-only sync from sending the stale
+      // intra-panel buffers of an earlier sync, which the receiver has always
+      // discarded.
+      bool same_panel = std::get<2>(iloc) == std::get<2>(loc_of(nb));
+      if (opts.cross_panel_only() && same_panel) continue;
+      if (opts.intra_panel_only() && !same_panel) continue;
 
       int r = get_buffer_id(offset);
       int remote_process = options->owner_process_rank(nb);

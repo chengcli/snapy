@@ -18,8 +18,13 @@ class GnomonicEquiangleImpl
   // metric data
   torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
 
-  // local ghost cell usrc
+  // local ghost cell usrc -- GLOBAL source coordinates, NOT rebased onto this
+  // block. The block offset is applied to the integer index instead; see
+  // _interp_ghost_BT.
   torch::Tensor usrc_LR, usrc_BT;
+
+  //! this block's index shift for usrc, in whole cells (margin - offset)
+  int usrc_shift_BT = 0, usrc_shift_LR = 0;
 
   GnomonicEquiangleImpl() = default;
   explicit GnomonicEquiangleImpl(const CoordinateOptions& options_,

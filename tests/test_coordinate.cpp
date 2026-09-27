@@ -19,6 +19,7 @@
 #include <snap/coord/spherical_utils.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/output/output_type.hpp>
 
 // tests
 #include "device_testing.hpp"
@@ -715,6 +716,331 @@ TEST_P(DeviceTest,
       torch::allclose(div_no_face_lo[IVX], div_no_face_hi[IVX], 1.e-6, 1.e-6));
   EXPECT_TRUE(
       torch::allclose(div_face_lo[IVX], div_face_hi[IVX], 1.e-6, 1.e-6));
+}
+
+//! ---- a coordinate built from block-local options alone -------------------
+//! A block constructed programmatically carries no global grid. The yaml path
+//! never reaches this; nothing in tests/ covered it.
+//! Assertions are per-face VALUES and per-element SPACINGS, not shapes: an
+//! implementation that repairs the face count while leaving dxN() dividing by
+//! an unresolved global count is wrong by (nxN)x on every width, area and
+//! volume, and a shape-only gate passes it.
+//! Eleven of the twelve tests below gate the sentinel rather than the
+//! global-grid design; only (J) fails a revert to block-local face
+//! arithmetic.
+
+namespace {
+// distinct span AND distinct count per axis, so an axis mix-up cannot pass
+CoordinateOptions a3_opts() {
+  auto op = CoordinateOptionsImpl::create();
+  op->nx1(3).x1min(-2.).x1max(4.);
+  op->nx2(4).x2min(10.).x2max(30.);
+  op->nx3(6).x3min(-1.).x3max(2.);
+  op->nghost(3);
+  return op;
+}
+void expect_axis(torch::Tensor xf, double lo, double hi, int nx, int ng) {
+  double dx = (hi - lo) / nx;
+  ASSERT_EQ(xf.size(0), nx + 2 * ng + 1);
+  EXPECT_DOUBLE_EQ(xf[ng].item<double>(), lo);
+  EXPECT_DOUBLE_EQ(xf[ng + nx].item<double>(), hi);
+  EXPECT_DOUBLE_EQ(xf[0].item<double>(), lo - ng * dx);
+  EXPECT_DOUBLE_EQ(xf[nx + 2 * ng].item<double>(), hi + ng * dx);
+  auto d = xf.narrow(0, 1, xf.size(0) - 1) - xf.narrow(0, 0, xf.size(0) - 1);
+  EXPECT_TRUE(torch::isfinite(d).all().item<bool>());
+  EXPECT_LT((d - dx).abs().max().item<double>(), 1.e-15 * std::abs(dx));
+}
+}  // namespace
+
+// (A) faces carry the caller's bounds on every axis
+TEST(CoordinateProgrammatic, faces_span_the_callers_bounds_on_every_axis) {
+  Cartesian coord(a3_opts());
+  expect_axis(coord->x1f, -2., 4., 3, 3);
+  expect_axis(coord->x2f, 10., 30., 4, 3);
+  expect_axis(coord->x3f, -1., 2., 6, 3);
+}
+
+// (B) the SPACING buffers -- what kills a shape-only-correct fix
+TEST(CoordinateProgrammatic, spacings_are_finite_and_match_the_callers_grid) {
+  Cartesian coord(a3_opts());
+  struct {
+    torch::Tensor f, v;
+    double dx;
+  } ax[] = {{coord->dx1f, coord->dx1v, 6. / 3.},
+            {coord->dx2f, coord->dx2v, 20. / 4.},
+            {coord->dx3f, coord->dx3v, 3. / 6.}};
+  for (auto const& a : ax) {
+    ASSERT_TRUE(torch::isfinite(a.f).all().item<bool>());  // +inf mode
+    ASSERT_TRUE(torch::isfinite(a.v).all().item<bool>());
+    EXPECT_LT((a.f - a.dx).abs().max().item<double>(), 1.e-15 * a.dx);
+    EXPECT_LT((a.v - a.dx).abs().max().item<double>(), 1.e-15 * a.dx);
+  }
+}
+
+// (C) the metric built on those spacings
+TEST(CoordinateProgrammatic, cell_volume_is_the_product_of_the_callers_widths) {
+  Cartesian coord(a3_opts());
+  double want = (6. / 3.) * (20. / 4.) * (3. / 6.);
+  auto vol = coord->cell_volume();
+  ASSERT_TRUE(torch::isfinite(vol).all().item<bool>());
+  EXPECT_LT((vol - want).abs().max().item<double>(), 1.e-14 * want);
+}
+
+// (D) the MIXED shape a real call site uses (test_exchange.py: nx1 == 1 beside
+// live x2/x3)
+TEST(CoordinateProgrammatic, a_degenerate_axis_beside_live_ones) {
+  auto op = CoordinateOptionsImpl::create();
+  op->nx1(1).x1min(5.).x1max(10.);
+  op->nx2(4).x2min(0.).x2max(2.);
+  op->nx3(6).x3min(0.).x3max(3.);
+  op->nghost(3);
+  Cartesian coord(op);
+
+  ASSERT_EQ(coord->x1f.size(0), 2);
+  EXPECT_DOUBLE_EQ(coord->x1f[0].item<double>(), 5.);
+  EXPECT_DOUBLE_EQ(coord->x1f[1].item<double>(), 10.);
+  expect_axis(coord->x2f, 0., 2., 4, 3);
+  expect_axis(coord->x3f, 0., 3., 6, 3);
+  EXPECT_TRUE(torch::isfinite(coord->dx1f).all().item<bool>());
+  EXPECT_LT((coord->dx1f - 5.).abs().max().item<double>(), 1.e-14);
+}
+
+// (E) resolving must not corrupt the caller's options, and must be idempotent
+TEST(CoordinateProgrammatic, two_coordinates_from_one_options_object_agree) {
+  auto op = a3_opts();
+  Cartesian first(op);
+  Cartesian second(op);
+  EXPECT_TRUE(torch::equal(first->x1f, second->x1f));
+  EXPECT_TRUE(torch::equal(first->x2f, second->x2f));
+  EXPECT_TRUE(torch::equal(first->x3f, second->x3f));
+}
+
+// the SILENT variant: ix resolves to 0, so the block quietly gets the global
+// default [0, 1] back instead of the caller's [0, 10]. No abort, wrong grid.
+TEST(CoordinateProgrammatic,
+     a_degenerate_axis_is_not_silently_the_global_default) {
+  auto op = CoordinateOptionsImpl::create();
+  op->nx1(1).x1min(0.).x1max(10.);
+  op->nx2(1).nx3(1).nghost(3);
+  Cartesian coord(op);
+
+  ASSERT_EQ(coord->x1f.size(0), 2);
+  EXPECT_DOUBLE_EQ(coord->x1f[0].item<double>(), 0.);
+  EXPECT_DOUBLE_EQ(coord->x1f[1].item<double>(), 10.);
+}
+
+// (F) the yaml path must STAND DOWN: globals stay as the card declared them.
+// This gates the SENTINEL, not the design: it reads the options only, so a
+// revert to block-local face arithmetic would leave it green. The one test
+// here that such a revert fails is (J), below.
+TEST(CoordinateProgrammatic, the_yaml_path_keeps_its_declared_global_grid) {
+  auto block =
+      MeshBlock(MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml"));
+  auto op = block->pcoord->options;
+  EXPECT_GT(op->global_nx1(), 0);
+  EXPECT_GT(op->global_nx2(), 0);
+  EXPECT_GT(op->global_nx3(), 0);
+  EXPECT_EQ(op->global_nx1(), op->nx1());
+  EXPECT_EQ(op->global_nx2(), op->nx2());
+  EXPECT_EQ(op->global_nx3(), op->nx3());
+}
+
+// (I) a card that declares `bounds:` but no `cells:` must keep its declared
+// domain
+TEST(CoordinateProgrammatic, a_bounds_only_card_keeps_its_declared_domain) {
+  auto op =
+      CoordinateOptionsImpl::from_yaml("test_coordinate_bounds_only.yaml");
+  Cartesian coord(op);
+
+  EXPECT_DOUBLE_EQ(op->global_x1min(), 100.);
+  EXPECT_DOUBLE_EQ(op->global_x1max(), 400.);
+  EXPECT_DOUBLE_EQ(op->global_x2min(), -5.);
+  EXPECT_DOUBLE_EQ(op->global_x2max(), 5.);
+  EXPECT_DOUBLE_EQ(op->global_x3min(), 0.);
+  EXPECT_DOUBLE_EQ(op->global_x3max(), 2.);
+
+  ASSERT_EQ(coord->x1f.size(0), 2);
+  EXPECT_DOUBLE_EQ(coord->x1f[0].item<double>(), 100.);
+  EXPECT_DOUBLE_EQ(coord->x1f[1].item<double>(), 400.);
+  EXPECT_DOUBLE_EQ(coord->dx1f.abs().max().item<double>(), 300.);
+}
+
+namespace {
+// x2 in [0, 1] with 6 cells: dx = 1/6 is NOT exactly representable, which is
+// the whole point -- on a grid of exact binary values every arithmetic path
+// agrees by luck and the test below would pass even for the block-local
+// construction it exists to forbid.
+CoordinateOptions declared_six_cells_in_x2() {
+  auto op = CoordinateOptionsImpl::create();
+  op->global_x1min(0.).global_x1max(1.).global_nx1(1);
+  op->global_x2min(0.).global_x2max(1.).global_nx2(6);
+  op->global_x3min(0.).global_x3max(1.).global_nx3(1);
+  op->nghost(2);
+  return op;
+}
+LayoutOptions split_x2(int nb2, int rank) {
+  auto lo = LayoutOptionsImpl::create();
+  lo->px(nb2).world_size(nb2).rank(rank);
+  return lo;
+}
+}  // namespace
+
+// (J) THE invariant the global grid exists for: decomposing the domain must not
+// move a single face by a single bit, in any decomposition. Every other test in
+// this file is single-block, so without this one a revert to block-local
+// arithmetic stays green.
+TEST(CoordinateDecomposition, blocks_match_the_undecomposed_grid_bitwise) {
+  auto whole = declared_six_cells_in_x2();
+  whole->x1min(0.).x1max(1.).nx1(1);
+  whole->x2min(0.).x2max(1.).nx2(6);
+  whole->x3min(0.).x3max(1.).nx3(1);
+  Cartesian ref(whole);
+
+  int ng = 2;
+  for (int nb2 : {2, 3}) {
+    int seen = 0;
+    for (int rank = 0; rank < nb2; ++rank) {
+      auto op = declared_six_cells_in_x2();
+      op->repartition(split_x2(nb2, rank));
+      Cartesian blk(op);
+
+      ASSERT_EQ(op->nx2(), 6 / nb2) << "nb2=" << nb2 << " rank=" << rank;
+      ASSERT_EQ(op->ix2(), rank * (6 / nb2))
+          << "nb2=" << nb2 << " rank=" << rank;
+      seen += op->nx2();
+
+      auto got = blk->x2f.narrow(0, ng, op->nx2() + 1);
+      auto want = ref->x2f.narrow(0, ng + op->ix2(), op->nx2() + 1);
+      EXPECT_TRUE(
+          torch::equal(got, want))  // BITWISE. allclose would not see 1 ULP.
+          << "nb2=" << nb2 << " rank=" << rank << "\n  got  " << got
+          << "\n  want " << want;
+    }
+    EXPECT_EQ(seen, 6) << "nb2=" << nb2;
+  }
+}
+
+// (K) an output slice must be checked against the domain the CALLER declared.
+// The output loop in MeshBlockImpl's ctor reads the globals directly, long
+// before pcoord resolves them, and the dangerous direction is not the rejection
+// -- it is the silent ACCEPTANCE.
+TEST(CoordinateProgrammatic,
+     an_output_slice_is_validated_against_the_callers_domain) {
+  auto mk = [](double slice) {
+    // the same card the rest of this binary uses: kintera's species tables are
+    // process-global and the first card wins, so a moist card here would not
+    // find its own `vapor`.
+    auto op = MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml");
+    op->hydro()->eos()->type() = "ideal-gas";
+    op->hydro()->riemann()->type() = "lmars";
+    auto co = CoordinateOptionsImpl::create();
+    co->nx1(4).x1min(10.).x1max(30.).nghost(2);
+    op->coord(co);
+    auto out = OutputOptionsImpl::create();
+    out->file_type("restart");
+    out->x1_slice(slice);
+    op->outputs(std::vector<OutputOptions>{out});
+    return op;
+  };
+  EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(mk(20.)));  // inside [10, 30)
+  EXPECT_ANY_THROW(std::make_shared<MeshBlockImpl>(mk(0.5)));  // outside it
+}
+
+namespace {
+// the text of the abort, or "" when the coordinate built
+std::string build_error(CoordinateOptions const& op) {
+  try {
+    Cartesian coord(op);
+  } catch (std::exception const& exc) {
+    return std::string(exc.what());
+  }
+  return "";
+}
+CoordinateOptions one_live_axis() {
+  auto op = CoordinateOptionsImpl::create();
+  op->nx1(1).x1min(0.).x1max(1.);
+  op->nx2(4).x2min(0.).x2max(2.);
+  op->nx3(1).x3min(0.).x3max(1.);
+  op->nghost(2);
+  return op;
+}
+}  // namespace
+
+// (L) a block that cannot be a grid must be refused where the grid is formed.
+// Without the fix nx2 <= 0 aborts inside dx2() blaming the resolve, and a zero
+// span builds silently with zero cell spacing, so the message is asserted too.
+TEST(CoordinateProgrammatic,
+     a_block_that_cannot_be_the_global_grid_is_refused) {
+  EXPECT_EQ(build_error(one_live_axis()), "");  // the control still builds
+
+  auto refused = [](CoordinateOptions const& op) {
+    auto msg = build_error(op);
+    EXPECT_NE(msg.find("cannot adopt this block as the global x2 grid"),
+              std::string::npos)
+        << msg;
+  };
+  auto no_cells = one_live_axis();
+  no_cells->nx2(0);
+  refused(no_cells);
+  auto flat = one_live_axis();
+  flat->x2max(0.);  // zero span
+  refused(flat);
+}
+
+// (M) one options object, two blocks: the second inherits the first's grid, so
+// it must be checked against it instead of silently building on it.
+TEST(CoordinateProgrammatic, a_block_outside_its_declared_grid_is_refused) {
+  auto op = one_live_axis();
+  op->nx2(6).x2min(0.).x2max(1.);
+  Cartesian first(op);  // adopts [0, 1] / 6 as the global x2 grid
+
+  op->nx2(3).x2min(2.).x2max(3.);  // a different block entirely
+  auto msg = build_error(op);
+  EXPECT_NE(msg.find("lies outside the declared global x2 grid"),
+            std::string::npos)
+      << msg;
+}
+
+// (N) inside the global interval is not enough. block_faces_ slices by the
+// rounded start and the local nx, so a block of [0, 0.3] with nx 2 on a
+// [0, 1] grid of 10 cells used to be accepted and its interior faces ended
+// at 0.2, not 0.3.
+TEST(CoordinateProgrammatic,
+     a_declared_block_must_span_exactly_nx_global_faces) {
+  auto grid = [](double lo, double hi, int nx) {
+    auto op = CoordinateOptionsImpl::create();
+    op->global_x1min(0.).global_x1max(1.).global_nx1(1);
+    op->global_x2min(0.).global_x2max(1.).global_nx2(10);
+    op->global_x3min(0.).global_x3max(1.).global_nx3(1);
+    op->x1min(0.).x1max(1.).nx1(1);
+    op->x2min(lo).x2max(hi).nx2(nx);
+    op->x3min(0.).x3max(1.).nx3(1);
+    op->nghost(2);
+    return op;
+  };
+
+  auto bad = grid(0., 0.3, 2);
+  auto msg = build_error(bad);
+  EXPECT_NE(msg.find("not exactly 2 cells of the declared global x2 grid"),
+            std::string::npos)
+      << msg;
+
+  auto off = grid(0., 0.25, 2);  // inside [0, 1], on no face
+  msg = build_error(off);
+  EXPECT_NE(msg.find("not exactly 2 cells of the declared global x2 grid"),
+            std::string::npos)
+      << msg;
+
+  auto none = grid(0., 0.2, 0);
+  msg = build_error(none);
+  EXPECT_NE(msg.find("need nx2 > 0"), std::string::npos) << msg;
+
+  double dx = 1. / 10.;
+  auto good = grid(0., 2. * dx, 2);
+  EXPECT_EQ(build_error(good), "");
+  Cartesian blk(good);
+  EXPECT_EQ(good->ix2(), 0);
+  EXPECT_NEAR(blk->x2f[2 + 2].item<double>(), 2. * dx, 1.e-15);
 }
 
 int main(int argc, char** argv) {

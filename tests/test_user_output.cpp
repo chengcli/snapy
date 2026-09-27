@@ -976,6 +976,71 @@ TEST(OutputStatistics, scalar_statistics_are_time_weighted_and_reset) {
   EXPECT_DOUBLE_EQ(output.output_value("r_tracer_a_std"), 0.0);
 }
 
+// Super resolution doubles the block's horizontal cell counts, and the faces
+// are sliced out of the GLOBAL array, so the global counts must move with them.
+TEST(SuperResolution, refined_block_keeps_the_domain_and_halves_the_spacing) {
+  auto block = make_block("ideal-gas");
+  auto const& co = block->pcoord->options;
+  int ng = co->nghost();
+  int nx2 = co->nx2();
+  int nx3 = co->nx3();
+  ASSERT_GT(nx2, 1);
+  ASSERT_GT(nx3, 1);
+
+  auto x1f_in = block->pcoord->x1f.clone();
+  auto x2f_in = block->pcoord->x2f.clone();
+
+  int nvar = block->phydro->peos->nvar();
+  Variables vars;
+  vars["hydro_w"] =
+      torch::ones({nvar, co->nc3(), co->nc2(), co->nc1()}, torch::kFloat64);
+  vars["hydro_u"] = vars["hydro_w"].clone();
+
+  auto opts = OutputOptionsImpl::create();
+  opts->super_resolution(true);
+  TestOutputType output(opts);
+
+  MeshBlockImpl* fine = nullptr;
+  ASSERT_NO_THROW(fine = output.LoadOutputData(block.get(), vars));
+  ASSERT_NE(fine, nullptr);
+  ASSERT_NE(fine, block.get());
+
+  ASSERT_EQ(fine->pcoord->x2f.size(0), 2 * nx2 + 2 * ng + 1);
+  ASSERT_EQ(fine->pcoord->x3f.size(0), 2 * nx3 + 2 * ng + 1);
+
+  // same domain at half the cell width, not merely a slice that fits
+  auto const& x2f = fine->pcoord->x2f;
+  double dx2 = (x2f_in[ng + 1] - x2f_in[ng]).item<double>();
+  EXPECT_DOUBLE_EQ(x2f[ng].item<double>(), x2f_in[ng].item<double>());
+  EXPECT_DOUBLE_EQ(x2f[ng + 2 * nx2].item<double>(),
+                   x2f_in[ng + nx2].item<double>());
+  EXPECT_NEAR((x2f[ng + 1] - x2f[ng]).item<double>(), 0.5 * dx2,
+              1.e-14 * std::abs(dx2));
+
+  // x1 is not refined, so it must come out bit for bit unchanged
+  EXPECT_TRUE(torch::equal(fine->pcoord->x1f, x1f_in));
+
+  output.ClearOutputData();
+  delete fine;
+
+  // moist arm: with species the HYDRO loader runs first and asks the same
+  // raw-new block for its module list, which the ideal-gas arm never reaches
+  auto moist = make_3d_block();
+  auto const& mco = moist->pcoord->options;
+  int mnvar = moist->phydro->peos->nvar();
+  ASSERT_GT(mnvar, 5);
+  Variables mvars;
+  mvars["hydro_w"] =
+      torch::ones({mnvar, mco->nc3(), mco->nc2(), mco->nc1()}, torch::kFloat64);
+  mvars["hydro_u"] = mvars["hydro_w"].clone();
+
+  MeshBlockImpl* mfine = nullptr;
+  ASSERT_NO_THROW(mfine = output.LoadOutputData(moist.get(), mvars));
+  ASSERT_NE(mfine, moist.get());
+  output.ClearOutputData();
+  delete mfine;
+}
+
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
