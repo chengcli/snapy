@@ -117,12 +117,12 @@ inline DISPATCH_MACRO void sedimentation_flux_impl(
                            gas_diameter, gas_epsilon_lj, gas_mass, upper_limit,
                            pi, kboltz);
   if (i > 0) {
-    sedimentation_donor_impl(
-        w, flux, vsed_out, cosine_cell_kj, radius, density, const_vsed,
-        hydro_ids, inv_mu_ratio_m1, cv_ratio_m1, u0, nparticle, ny, nvapor, nc3,
-        nc2, nc1, flat - 1, flat, /*rising=*/true, grav, gas_constant_dry,
-        cv_dry, gas_diameter, gas_epsilon_lj, gas_mass, upper_limit, pi,
-        kboltz);
+    sedimentation_donor_impl(w, flux, vsed_out, cosine_cell_kj, radius, density,
+                             const_vsed, hydro_ids, inv_mu_ratio_m1,
+                             cv_ratio_m1, u0, nparticle, ny, nvapor, nc3, nc2,
+                             nc1, flat - 1, flat, /*rising=*/true, grav,
+                             gas_constant_dry, cv_dry, gas_diameter,
+                             gas_epsilon_lj, gas_mass, upper_limit, pi, kboltz);
   }
 }
 
