@@ -8,6 +8,9 @@
 // torch
 #include <ATen/TensorIterator.h>
 
+// kintera
+#include <kintera/species.hpp>
+
 // snap
 #include <snap/snap.h>
 
@@ -122,29 +125,42 @@ EquationOfStateImpl::EquationOfStateImpl(EquationOfStateOptions const& options_,
 void EquationOfStateImpl::cache_cloud_parents_() {
   if (!options->thermo()) return;
 
-  auto const& vids = options->thermo()->vapor_ids();
-  auto const& cids = options->thermo()->cloud_ids();
-  auto const nucleation = options->thermo()->nucleation();
-  cloud_parent_cache_.resize(cids.size());
+  auto const& thermo = options->thermo();
+  int const nvapor = thermo->vapor_ids().size();
+  int const ncloud = thermo->cloud_ids().size();
+  cloud_parent_cache_.assign(ncloud, {});
+
+  auto const nucleation = thermo->nucleation();
   if (!nucleation) return;
 
-  for (size_t j = 0; j < cids.size(); ++j) {
+  // names()/mu() are this thermo's own copy of the species table, in
+  // species() order (vapors, then clouds), taken when its card was parsed.
+  // kintera's global table (species_names, species_weights) refills when a
+  // later card declares other species (kintera #121), so vapor_ids/cloud_ids
+  // must not be resolved through it here (issue #234). A thermo not built
+  // from a card has no copy yet; populate_thermo takes one from the table as
+  // it is now, as kintera does when its own modules are built.
+  kintera::populate_thermo(thermo);
+  auto const& names = thermo->names();
+  auto const& mu = thermo->mu();
+  TORCH_CHECK(names.size() == nvapor + ncloud && mu.size() == names.size(),
+              "[EquationOfState] thermo carries ", names.size(),
+              " species names and ", mu.size(), " molar masses for ",
+              nvapor + ncloud, " species.");
+
+  for (int j = 0; j < ncloud; ++j) {
     double parent_mass = 0.;
     for (auto const& reaction : nucleation->reactions()) {
-      // cids/vids index the GLOBAL registry, not species()'s compact gather
-      if (!reaction.products().count(kintera::species_names[cids[j]])) continue;
+      if (!reaction.products().count(names[nvapor + j])) continue;
 
       for (auto const& [parent, coefficient] : reaction.reactants()) {
-        auto species_it = std::find(kintera::species_names.begin(),
-                                    kintera::species_names.end(), parent);
-        if (species_it == kintera::species_names.end()) continue;
-        int species_id =
-            std::distance(kintera::species_names.begin(), species_it);
-        auto vapor_it = std::find(vids.begin() + 1, vids.end(), species_id);
-        if (vapor_it == vids.end()) continue;
+        // vapor slot 0 is the dry gas and is never a parent
+        auto vapor_it =
+            std::find(names.begin() + 1, names.begin() + nvapor, parent);
+        if (vapor_it == names.begin() + nvapor) continue;
 
-        int vapor_index = std::distance(vids.begin(), vapor_it);
-        double mass = coefficient * kintera::species_weights[species_id];
+        int vapor_index = std::distance(names.begin(), vapor_it);
+        double mass = coefficient * mu[vapor_index];
         cloud_parent_cache_[j].emplace_back(ICY + vapor_index - 1, mass);
         parent_mass += mass;
       }
