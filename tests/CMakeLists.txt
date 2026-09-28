@@ -26,6 +26,7 @@ setup_test(test_coordinate)
 setup_test(test_hydrostatic)
 setup_test(test_hydro_options)
 setup_test(test_cycle_diagnostics)
+setup_test(test_flux_positivity_carry)
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
@@ -46,6 +47,23 @@ setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
 setup_parallel_test(test_check_redo_parallel 2)
+setup_parallel_test(test_sedimentation_cubed_seam 2)
+# The same two ranks on Gloo, which Linux CI (UCX by default) would not reach:
+# the limiter exchanges more than one variable, and a Gloo send takes one
+# tensor. With UCX built, the Gloo result must equal the UCX one bit for bit.
+set(seam_compare "")
+if(UCX_FOUND)
+  set(seam_compare --compare-ucx)
+endif()
+add_test(NAME test_sedimentation_cubed_seam_gloo
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/run_seam_backends.py
+                 --exe $<TARGET_FILE:test_sedimentation_cubed_seam.${buildl}>
+                 ${seam_compare})
+set_tests_properties(test_sedimentation_cubed_seam_gloo PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  SKIP_RETURN_CODE 125
+  LABELS "exchange")
 
 if(UCX_FOUND)
   add_test(

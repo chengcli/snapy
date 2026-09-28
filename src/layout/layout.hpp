@@ -152,15 +152,30 @@ struct SyncOptions {
   ADD_ARG(bool, interpolate) = false;
   ADD_ARG(int, type) = kConserved;
   ADD_ARG(int, dim) = 0;
+  //! 0 <= phyid < 64 (make_comm_tag)
   ADD_ARG(int, phyid) = 0;
 };
 
 using Variables = std::map<std::string, torch::Tensor>;
 
+//! exchange_each_var adds n * 65536 for variable n, so the tag must stay in
+//! [0, 65536) for the tags of different variables to stay distinct.
 inline int make_comm_tag(int local_block_index,
                          std::tuple<int, int, int> offset, int phyid) {
-  return phyid * 1024 + local_block_index * 32 + get_buffer_id(offset);
+  int tag = phyid * 1024 + local_block_index * 32 + get_buffer_id(offset);
+  TORCH_CHECK(phyid >= 0 && tag >= 0 && tag < 65536, "comm tag ", tag,
+              " (phyid ", phyid, ", local block ", local_block_index,
+              ") is outside [0, 65536)");
+  return tag;
 }
+
+//! Send, and post the receive of, each exchanged variable as its own message:
+//! Gloo takes one tensor per send. Variable n adds n * 65536 to the tag.
+void exchange_each_var(ProcessGroupContext const& comm,
+                       std::vector<torch::Tensor>& sends,
+                       std::vector<torch::Tensor>& recvs, int peer,
+                       int send_tag, int recv_tag,
+                       std::vector<CommWorkPtr>& works);
 
 class MeshBlockImpl;
 

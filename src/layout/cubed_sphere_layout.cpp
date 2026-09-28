@@ -1041,16 +1041,9 @@ void CubedSphereLayoutImpl::exchange_remote(MeshBlockImpl const* pmb,
 
   std::lock_guard<std::mutex> lock(g_cubed_sphere_comm_mutex);
   for (auto const& op : remote_ops) {
-    auto send_work = comm->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                                op.send_tag);
-    if (send_work) {
-      works.push_back(send_work);
-    }
-    auto recv_work = comm->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                                op.recv_tag);
-    if (recv_work) {
-      works.push_back(recv_work);
-    }
+    exchange_each_var(*comm, pmb->send_bufs[op.buffer_id],
+                      pmb->recv_bufs[op.buffer_id], op.remote_process,
+                      op.send_tag, op.recv_tag, works);
   }
 }
 

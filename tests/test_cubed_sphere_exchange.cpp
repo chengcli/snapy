@@ -10,6 +10,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/layout/layout.hpp>
 #include <snap/mesh/mesh.hpp>
 
 using namespace snap;
@@ -143,6 +144,15 @@ PanelFields run(int nb, torch::Device device = torch::kCPU) {
 }
 
 }  // namespace
+
+// Variable n of a remote exchange adds n * 65536 to the tag, so phyid 64 would
+// reuse phyid 0's tag for the second variable.
+TEST(CommTag, rejects_tags_that_collide_with_the_variable_offset) {
+  std::tuple<int, int, int> offset{0, 1, 0};
+  EXPECT_EQ(make_comm_tag(3, offset, 63), 63 * 1024 + 3 * 32 + 1);
+  EXPECT_THROW(make_comm_tag(0, offset, 64), c10::Error);
+  EXPECT_THROW(make_comm_tag(0, offset, -1), c10::Error);
+}
 
 // Decomposition invariance of the gnomonic faces, one metric (dx2f), and the
 // conserved density after one RK stage.

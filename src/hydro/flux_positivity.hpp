@@ -57,4 +57,24 @@ void flux_positivity_scale_(torch::Tensor const& theta,
                             torch::Tensor const& flux3,
                             Coordinate const& pcoord);
 
+//! \brief Withhold, in place, the energy and momentum the species mass carries
+//! that flux_positivity_scale_ is about to withhold (call it first).
+//!
+//! Per face and species, dm = (1 - theta_donor) * F_species; the energy flux
+//! loses dm * hspec(donor) and the momentum flux dm * vel(donor). When fsed1
+//! is given, the x1 species flux is split into its advected part F - fsed1
+//! and its settling part fsed1: each loses the same share (1 - theta_donor,
+//! donor of the net F) and carries hspec and vel of its own donor, picked by
+//! the sign of that part.
+//! \param hspec  energy per unit species mass, (ny, nc3, nc2, nc1)
+//! \param vel    momentum per unit mass, (3, nc3, nc2, nc1)
+//! \param flux1/2/3  full hydro fluxes; undefined tensors are skipped
+//! \param fsed1  settling part of flux1's species flux, (ny, nc3, nc2, nc1);
+//!               undefined: the whole flux is one part
+void flux_positivity_carry_(
+    torch::Tensor const& theta, torch::Tensor const& hspec,
+    torch::Tensor const& vel, torch::Tensor const& flux1,
+    torch::Tensor const& flux2, torch::Tensor const& flux3,
+    Coordinate const& pcoord, torch::Tensor const& fsed1 = torch::Tensor());
+
 }  // namespace snap
