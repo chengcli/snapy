@@ -59,11 +59,12 @@ int call_fix_vapor_cuda(at::TensorIterator& iter) {
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cuda", [&] {
     auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
 
-    native::gpu_kernel<2>(
-        iter, [=] __device__(char* const data[2], unsigned int strides[2]) {
+    native::gpu_kernel<3>(
+        iter, [=] __device__(char* const data[3], unsigned int strides[3]) {
           auto vapor = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
           auto major = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          int err = fix_vapor_impl(vapor, major, nx1);
+          auto vol = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+          int err = fix_vapor_impl(vapor, major, vol, nx1);
           if (err) atomicAdd(nerr_ptr, err);
         });
   });
