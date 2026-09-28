@@ -5,9 +5,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-
-#include <snap/mesh/mesh.hpp>
 #include <snap/forcing/forcing.hpp>
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
@@ -22,13 +21,18 @@ double global_sum(Layout const& layout, double local) {
 
 double condensate_mass(MeshBlock const& block, Variables const& vars) {
   auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
-  auto species = vars.at("hydro_u").narrow(0, ICY,
-                                            vars.at("hydro_u").size(0) - ICY);
-  return (species * block->pcoord->cell_volume()).index(interior).sum().item<double>();
+  auto species =
+      vars.at("hydro_u").narrow(0, ICY, vars.at("hydro_u").size(0) - ICY);
+  return (species * block->pcoord->cell_volume())
+      .index(interior)
+      .sum()
+      .item<double>();
 }
 
-double max_component_difference(torch::Tensor const& difference, int component) {
-  if (component >= difference.size(0)) return std::numeric_limits<double>::quiet_NaN();
+double max_component_difference(torch::Tensor const& difference,
+                                int component) {
+  if (component >= difference.size(0))
+    return std::numeric_limits<double>::quiet_NaN();
   return difference[component].amax().item<double>();
 }
 
@@ -47,7 +51,8 @@ int main() {
   auto layout = block->get_layout();
 
   bool ok = layout->has_process_group() && layout->options->type() == "cubed" &&
-            layout->options->pz() == 2 && layout->options->blocks_per_process() == 1;
+            layout->options->pz() == 2 &&
+            layout->options->blocks_per_process() == 1;
   int rank = layout->options->process_rank();
   auto coord = block->pcoord;
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
@@ -111,38 +116,41 @@ int main() {
   double mass_after = global_sum(layout, condensate_mass(block, vars[0]));
   bool conserved = std::abs(mass_after - mass_before) <= 1.e-12 * mass_before;
   double limiter_hits = global_sum(
-      layout, static_cast<double>(block->phydro->positivity_hits().item<int64_t>()));
+      layout,
+      static_cast<double>(block->phydro->positivity_hits().item<int64_t>()));
   bool limiter_active = limiter_hits > 0;
-  ok = ok && identical_flux && conserved && limiter_active && mixed_carry_correct;
+  ok = ok && identical_flux && conserved && limiter_active &&
+       mixed_carry_correct;
 
   if (rank == 0) {
-    std::cout << std::setprecision(17)
-              << "sedimentation cubed seam: ranks="
-              << layout->options->process_world_size() << " pz="
-              << layout->options->pz() << " limiter_hits=" << limiter_hits
-              << " identical_flux=" << identical_flux
-              << " seam_max_difference_mass=" << seam_component_difference[0]
-              << " seam_max_difference_momentum1=" << seam_component_difference[1]
-              << " seam_max_difference_momentum2=" << seam_component_difference[2]
-              << " seam_max_difference_momentum3=" << seam_component_difference[3]
-              << " seam_max_difference_energy=" << seam_component_difference[4]
-              << " mixed_carry_correct=" << mixed_carry_correct
-              << " seam_flux_mass=" << seam_flux_mass
-              << " seam_flux_momentum1=" << seam_flux_momentum1
-              << " seam_flux_momentum2=" << seam_flux_momentum2
-              << " seam_flux_momentum3=" << seam_flux_momentum3
-              << " seam_flux_energy=" << seam_flux_energy
-              << " condensate_mass_before=" << mass_before
-              << " condensate_mass_after=" << mass_after << std::endl;
+    std::cout
+        << std::setprecision(17) << "sedimentation cubed seam: ranks="
+        << layout->options->process_world_size()
+        << " pz=" << layout->options->pz() << " limiter_hits=" << limiter_hits
+        << " identical_flux=" << identical_flux
+        << " seam_max_difference_mass=" << seam_component_difference[0]
+        << " seam_max_difference_momentum1=" << seam_component_difference[1]
+        << " seam_max_difference_momentum2=" << seam_component_difference[2]
+        << " seam_max_difference_momentum3=" << seam_component_difference[3]
+        << " seam_max_difference_energy=" << seam_component_difference[4]
+        << " mixed_carry_correct=" << mixed_carry_correct
+        << " seam_flux_mass=" << seam_flux_mass
+        << " seam_flux_momentum1=" << seam_flux_momentum1
+        << " seam_flux_momentum2=" << seam_flux_momentum2
+        << " seam_flux_momentum3=" << seam_flux_momentum3
+        << " seam_flux_energy=" << seam_flux_energy
+        << " condensate_mass_before=" << mass_before
+        << " condensate_mass_after=" << mass_after << std::endl;
   }
 
   if (!ok) {
-    std::cerr << std::setprecision(17) << "rank=" << rank << " cubed="
-              << layout->options->type()
+    std::cerr << std::setprecision(17) << "rank=" << rank
+              << " cubed=" << layout->options->type()
               << " pz=" << layout->options->pz()
               << " limiter_hits=" << limiter_hits
-              << " identical_flux=" << identical_flux << " mass_before=" << mass_before
-              << " mass_after=" << mass_after << std::endl;
+              << " identical_flux=" << identical_flux
+              << " mass_before=" << mass_before << " mass_after=" << mass_after
+              << std::endl;
   }
   return ok ? 0 : 1;
 }
