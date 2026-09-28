@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include <snap/eos/equation_of_state.hpp>
+#include <snap/input/check_keys.hpp>
 
 #include "sedimentation.hpp"
 
@@ -44,6 +45,9 @@ SedHydroOptions SedHydroOptionsImpl::from_yaml(std::string const& filename) {
 }
 
 SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
+  check_keys(node, "sedimentation",
+             {"radius", "density", "const-vsed", "a-diameter", "a-epsilon-LJ",
+              "a-mass", "upper-limit"});
   auto op = SedVelOptionsImpl::create();
 
   // get all sedimentation particles

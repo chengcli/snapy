@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/input/check_keys.hpp>
+
 #include "forcing.hpp"
 
 namespace snap {
@@ -11,6 +13,7 @@ PlumeForcingOptions PlumeForcingOptionsImpl::from_yaml(
   if (!forcing["plume-forcing"]) return nullptr;
 
   auto node = forcing["plume-forcing"];
+  check_keys(node, "forcing/plume-forcing", {"entrainment", "N2"});
   auto op = PlumeForcingOptionsImpl::create();
 
   op->entrainment() = node["entrainment"].as<double>(0.1);

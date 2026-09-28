@@ -6,6 +6,7 @@
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -16,6 +17,7 @@ TopCoolOptions TopCoolOptionsImpl::from_yaml(YAML::Node const& forcing) {
   if (!forcing["top-cool"]) return nullptr;
 
   auto node = forcing["top-cool"];
+  check_keys(node, "forcing/top-cool", {"flux", "depth"});
   auto op = TopCoolOptionsImpl::create();
 
   op->flux() = node["flux"].as<double>(0.0);

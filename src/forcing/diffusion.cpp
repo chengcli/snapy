@@ -12,6 +12,7 @@
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -169,6 +170,7 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   TORCH_CHECK(!node["K"] && !node["type"],
               "DiffusionOptions: legacy 'K' and 'type' keys are unsupported; "
               "use 'nu_iso' and 'kappa_iso'.");
+  check_keys(node, "forcing/diffusion", {"nu_iso", "kappa_iso", "dynamic"});
 
   auto op = DiffusionOptionsImpl::create();
   auto take_non_negative = [&](char const* key) {

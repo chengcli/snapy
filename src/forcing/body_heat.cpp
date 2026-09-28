@@ -5,6 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -15,6 +16,7 @@ BodyHeatOptions BodyHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
   if (!forcing["body-heat"]) return nullptr;
 
   auto node = forcing["body-heat"];
+  check_keys(node, "forcing/body-heat", {"dTdt", "pmin", "pmax"});
   auto op = BodyHeatOptionsImpl::create();
 
   op->dTdt() = node["dTdt"].as<double>(0.0);

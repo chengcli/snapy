@@ -86,6 +86,8 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
   // --------- external boundary ---------- //
   if (!config["boundary-condition"]) return op;
+  check_keys(config["boundary-condition"], "boundary-condition",
+             {"external", "internal"});
   if (!config["boundary-condition"]["external"]) return op;
 
   auto external_bc = config["boundary-condition"]["external"];

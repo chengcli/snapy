@@ -6,6 +6,7 @@
 
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -16,6 +17,7 @@ BotHeatOptions BotHeatOptionsImpl::from_yaml(YAML::Node const& forcing) {
   if (!forcing["bot-heat"]) return nullptr;
 
   auto node = forcing["bot-heat"];
+  check_keys(node, "forcing/bot-heat", {"flux", "depth"});
   auto op = BotHeatOptionsImpl::create();
 
   op->flux() = node["flux"].as<double>(0.0);

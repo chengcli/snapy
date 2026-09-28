@@ -8,6 +8,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -19,6 +20,8 @@ CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const &forcing) {
   if (!forcing["coriolis"]) return nullptr;
 
   auto node = forcing["coriolis"];
+  check_keys(node, "forcing/coriolis",
+             {"type", "omega1", "omega2", "omega3", "traditional"});
   auto op = CoriolisOptionsImpl::create();
 
   op->type() = node["type"].as<std::string>("xyz");

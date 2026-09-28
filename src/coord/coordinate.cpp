@@ -67,11 +67,15 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   auto node = config["geometry"];
   if (!node) return op;  // return default options
 
+  check_keys(node, "geometry", {"type", "bounds", "cells"});
   op->type(node["type"].as<std::string>("cartesian"));
 
   double x1min = 0, x2min = 0, x3min = 0, x1max = 1, x2max = 1, x3max = 1;
 
   if (node["bounds"]) {
+    check_keys(node["bounds"], "geometry/bounds",
+               {"x1min", "x1max", "x2min", "x2max", "x3min", "x3max",
+                "x2min_pi", "x2max_pi", "x3min_pi", "x3max_pi"});
     x1min = node["bounds"]["x1min"].as<double>(0.0);
 
     if (node["bounds"]["x2min_pi"]) {
