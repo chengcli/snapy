@@ -2,6 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/input/check_keys.hpp>
 #include <snap/output/output_type.hpp>
 #include <snap/utils/log.hpp>
 
@@ -88,6 +89,9 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   if (!config["boundary-condition"]["external"]) return op;
 
   auto external_bc = config["boundary-condition"]["external"];
+  check_keys(
+      external_bc, "boundary-condition/external",
+      {"x1-inner", "x1-outer", "x2-inner", "x2-outer", "x3-inner", "x3-outer"});
 
   if (op->coord()->nc1() > 1) {
     // x1-inner

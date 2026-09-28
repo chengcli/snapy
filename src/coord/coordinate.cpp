@@ -10,6 +10,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/input/check_keys.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -117,6 +118,8 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
     return op;
   }
 
+  check_keys(node["cells"], "geometry/cells",
+             {"nx1", "nx2", "nx3", "nghost", "interp_order"});
   op->global_nx1() = node["cells"]["nx1"].as<int>(1);
   op->global_nx2() = node["cells"]["nx2"].as<int>(1);
   op->global_nx3() = node["cells"]["nx3"].as<int>(1);
