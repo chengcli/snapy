@@ -105,3 +105,11 @@ jobs:
           else
             ctest --output-on-failure -E '^(test_straka|test_shallow_xy|test_shallow_splash|test_shock_cpu|test_run_hydro_cpu)$'
           fi
+
+      # Linux runs the multi-process tests on UCX (its default); run them on
+      # Gloo too, which macOS uses, so a Gloo-only failure shows on both.
+      - name: Run multi-process tests on Gloo
+        if: runner.os == 'Linux'
+        run: |
+          cd ${{ github.workspace }}/build/tests
+          BACKEND=gloo ctest --output-on-failure -L '^parallel$'

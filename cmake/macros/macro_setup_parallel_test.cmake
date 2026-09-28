@@ -31,4 +31,5 @@ macro(setup_parallel_test namel cores)
                    --no-python
                    --nproc-per-node=${cores}
                    $<TARGET_FILE:${namel}.${buildl}>)
+  set_tests_properties(${namel}.${buildl} PROPERTIES LABELS "parallel")
 endmacro()
