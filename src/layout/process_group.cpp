@@ -155,6 +155,11 @@ CommWorkPtr ProcessGroupContext::send(std::vector<torch::Tensor>& tensors,
     TORCH_CHECK(tensor.device().is_cpu(),
                 "Gloo communication requires CPU tensors");
   }
+  TORCH_CHECK(tensors.size() == 1,
+              "ProcessGroupContext::send: backend=gloo sends one tensor "
+              "per message, got ",
+              tensors.size(),
+              "; split the payload into one message per tensor (#240)");
   return std::make_shared<C10dWork>(pg->send(tensors, peer, tag));
 }
 
@@ -168,6 +173,11 @@ CommWorkPtr ProcessGroupContext::recv(std::vector<torch::Tensor>& tensors,
     TORCH_CHECK(tensor.device().is_cpu(),
                 "Gloo communication requires CPU tensors");
   }
+  TORCH_CHECK(tensors.size() == 1,
+              "ProcessGroupContext::recv: backend=gloo sends one tensor "
+              "per message, got ",
+              tensors.size(),
+              "; split the payload into one message per tensor (#240)");
   return std::make_shared<C10dWork>(pg->recv(tensors, peer, tag));
 }
 
