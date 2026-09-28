@@ -46,6 +46,7 @@ setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
 setup_parallel_test(test_check_redo_parallel 2)
+setup_parallel_test(test_sedimentation_cubed_seam 2)
 
 if(UCX_FOUND)
   add_test(
