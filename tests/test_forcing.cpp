@@ -739,7 +739,10 @@ TEST(forcing, limiter_marks_on_cuda) {
        {std::tuple{moist, int(ICY), kNaN, 1, false, "(causes: nan)"},
         std::tuple{dry, int(IVX), kNaN, 0, false, "(causes: nan)"},
         std::tuple{dry, int(IPR), 1.e3 / 0.4, 1, false, "(causes: limiter)"},
-        std::tuple{dry, int(IVX), kNaN, 1, true, "(causes: nan)"}}) {
+        std::tuple{dry, int(IVX), kNaN, 1, true, "(causes: nan)"},
+        std::tuple{moist, int(ICY), -1.e-4, 1, false, "(causes: limiter)"},
+        std::tuple{moist, int(ICY) + 1, -1.e-4, 1, false, "(causes: limiter)"},
+        std::tuple{moist, int(ICY), -1.e-4, 1, true, "(causes: limiter)"}}) {
     auto r = limiter_step(yaml, row, value, at, prim, cuda);
     EXPECT_EQ(r.redo, 1) << yaml << " row " << row << "\n" << r.log;
     EXPECT_NE(r.log.find(cause), std::string::npos) << r.log;
