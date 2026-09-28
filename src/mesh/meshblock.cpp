@@ -1072,15 +1072,24 @@ std::array<bool, 2> MeshBlockImpl::limiter_hits() const {
   return {a[0], a[1]};
 }
 
+int64_t MeshBlockImpl::saturation_failures() {
+  auto modules = named_modules();
+  auto m = modules.find("hydro.eos.thermo");
+  auto pthermo =
+      m ? std::dynamic_pointer_cast<kintera::ThermoYImpl>(*m) : nullptr;
+  return pthermo ? pthermo->take_saturation_adjustment_failures() : 0;
+}
+
 int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   if (causes) {
     SINFO(MeshBlock)
         << "Density/pressure at or within 0.1% of the floor, the VIC dry-gas "
-           "clamp emptied a cell, or the limiter patched one or found a NaN. "
+           "clamp emptied a cell, the limiter patched one or found a NaN, or "
+           "the saturation adjustment left a cell unadjusted. "
            "Redoing the step with smaller dt (causes:"
         << (causes & 1 ? " floor" : "") << (causes & 2 ? " clamp" : "")
-        << (causes & 4 ? " limiter" : "") << (causes & 8 ? " nan" : "") << ")."
-        << std::endl;
+        << (causes & 4 ? " limiter" : "") << (causes & 8 ? " nan" : "")
+        << (causes & 16 ? " saturation" : "") << ")." << std::endl;
     pintg->current_redo += 1;
     if (pintg->current_redo > pintg->options->max_redo()) {
       SINFO(MeshBlock)
@@ -1114,16 +1123,19 @@ int MeshBlockImpl::check_redo(Variables &vars) {
   // floor_hit first: its fresh cons2prim marks an end state the limiter repairs
   bool floor = floor_hit(vars);
   auto hits = limiter_hits();
-  auto flag = torch::tensor({floor ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,
-                             hits[0] ? 1. : 0., hits[1] ? 1. : 0.},
-                            torch::dtype(torch::kFloat64));
+  // drained on every call; read after limiter_hits' sync, so no wait
+  bool sat = saturation_failures() > 0;
+  auto flag =
+      torch::tensor({floor ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,
+                     hits[0] ? 1. : 0., hits[1] ? 1. : 0., sat ? 1. : 0.},
+                    torch::dtype(torch::kFloat64));
   std::vector<at::Tensor> flag_reduce = {flag};
   if (_playout->has_process_group()) {
     _playout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
   }
   auto f = flag_reduce[0].accessor<double, 1>();
   return apply_redo(vars, (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2 |
-                              (f[3] > 0.) << 3);
+                              (f[3] > 0.) << 3 | (f[4] > 0.) << 4);
 }
 
 double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {

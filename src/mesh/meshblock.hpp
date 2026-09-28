@@ -245,7 +245,12 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! energy / found an interior NaN; one device-to-host read for both
   std::array<bool, 2> limiter_hits() const;
 
-  //! roll back (causes != 0: 1 floor, 2 clamp, 4 limiter, 8 nan) or accept it
+  //! drains kintera's count of cells whose saturation adjustment failed since
+  //! the last call; 0 without a ThermoY
+  int64_t saturation_failures();
+
+  //! roll back (causes != 0: 1 floor, 2 clamp, 4 limiter, 8 nan,
+  //! 16 saturation) or accept it
   int apply_redo(Variables& vars, int causes);
 
  protected:
