@@ -89,7 +89,8 @@ int call_fix_vapor_cpu(at::TensorIterator& iter) {
           for (int i = 0; i < n; i++) {
             auto vapor = reinterpret_cast<scalar_t*>(data[0] + i * strides[0]);
             auto major = reinterpret_cast<scalar_t*>(data[1] + i * strides[1]);
-            int err = fix_vapor_impl(vapor, major, nx1);
+            auto vol = reinterpret_cast<scalar_t*>(data[2] + i * strides[2]);
+            int err = fix_vapor_impl(vapor, major, vol, nx1);
             if (err) all_err.fetch_add(err, std::memory_order_relaxed);
           }
         },

@@ -32,17 +32,22 @@ std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type) {
   return std::make_shared<MeshBlockImpl>(options);
 }
 
+// uniform cell volumes for the fix_vapor_impl columns below
+std::vector<double> const vol(4, 1.);
+
 }  // namespace
 
 TEST(eos_limiter, accepts_zero_vapor_column) {
   std::vector<double> vapor(4, 0.);
   std::vector<double> major(4, 1.);
 
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  EXPECT_EQ(
+      fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
   for (double value : vapor) EXPECT_DOUBLE_EQ(value, 0.);
 
   vapor = {0.2, -0.1, 0., 0.};
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  EXPECT_EQ(
+      fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
   EXPECT_DOUBLE_EQ(vapor[0], 0.05);
   EXPECT_DOUBLE_EQ(vapor[1], 0.05);
   EXPECT_DOUBLE_EQ(vapor[2], 0.);
@@ -65,7 +70,8 @@ TEST(eos_limiter, repairs_bottom_cell_from_above) {
   std::vector<double> vapor = {-1.7e-21, 4.4e-11, 1.0e-11, 1.0e-11};
   double before = column_sum(vapor);
 
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  EXPECT_EQ(
+      fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
   for (double value : vapor) EXPECT_GE(value, 0.);
   EXPECT_NEAR(column_sum(vapor), before, 1.e-14 * std::abs(before));
 
@@ -86,7 +92,8 @@ TEST(eos_limiter, rejects_column_in_net_deficit_without_writing) {
   std::vector<double> vapor = {-0.3, 0.1, 0.1, 0.};
   std::vector<double> const expected = vapor;
 
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 1);
+  EXPECT_EQ(
+      fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 1);
   EXPECT_EQ(vapor, expected);
 }
 
@@ -95,7 +102,7 @@ TEST(eos_limiter, rejects_single_cell_column) {
   std::vector<double> major = {1.};
   std::vector<double> vapor = {-1.e-30};
 
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), 1), 1);
+  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vol.data(), 1), 1);
 }
 
 // a deficit the cells below can cover is still flattened as before
@@ -104,7 +111,8 @@ TEST(eos_limiter, downward_branch_is_unchanged) {
   std::vector<double> vapor = {0.2, -0.1, 0., 0.};
   double before = column_sum(vapor);
 
-  EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vapor.size()), 0);
+  EXPECT_EQ(
+      fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
   double const yfrac = 0.1 / 1.85;
   EXPECT_DOUBLE_EQ(vapor[0], yfrac * 1.00);
   EXPECT_DOUBLE_EQ(vapor[1], yfrac * 0.85);

@@ -1,0 +1,57 @@
+# Fixture for tests/test_fix_vapor_volume.cpp -- one card for the whole binary
+# (kintera's species table is process-global and the first card wins). The
+# species are test_parentless_cloud's: `rain` has no nucleation parent, so a
+# negative rain is repaired along the column like a negative vapor. The x1 cell
+# volume of this spherical-polar column grows 6.5x from bottom to top; the test
+# flips the type to cartesian for its uniform control.
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+  - name: rain
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+  - equation: cloud => rain
+    type: coagulation
+    rate-constant: {A: 0.1, b: 0, Ea_R: 0.}
+
+  - equation: rain => vapor
+    type: evaporation
+    rate-constant: {formula: h2o_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.e-4}
+
+geometry:
+  type: spherical-polar
+  bounds: {x1min: 1., x1max: 3., x2min_pi: 0.25, x2max_pi: 0.75, x3min_pi: -0.5, x3max_pi: 0.5}
+  cells: {nx1: 8, nx2: 1, nx3: 1, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    limiter: true
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting

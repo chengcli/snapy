@@ -350,10 +350,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // neighbour's edge cell, and an interpolated ghost is not its factor.
     Variables tvars;
     tvars["hydro_theta"] = theta;
-    // the energy each species carries, raw-copied with theta for the same
-    // reason: a seam face must see the donor's own value on both sides
+    // the energy each species carries, from w, ghosts included: exchanging it
+    // with theta changed no bit, so it is not exchanged (#238)
     auto hspec = peos->species_enthalpy(w);
-    if (hspec.defined()) tvars["hydro_hspec"] = hspec;
     SyncOptions topts;
     topts.interpolate(false).type(kScalar);
     pmb->exchange(tvars, topts);

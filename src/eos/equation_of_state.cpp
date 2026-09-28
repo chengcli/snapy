@@ -282,6 +282,9 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
       c.clamp_min_(0.);  // condensate to exactly zero
     }
 
+    // cell volumes, so a column repair conserves mass, not density (#241)
+    auto vol = pcoord->cell_volume().unsqueeze(0).contiguous().index(interior);
+
     // A cloud with no parent vapor (e.g. precipitation made by coagulation)
     // takes its deficit from the same species in the column, as fix_vapor does
     // for vapor; the parented clouds are non-negative by now and pass through.
@@ -301,6 +304,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
                                             /*squash_dim=*/cloud.dim() - 1)
                       .add_output(cloud)
                       .add_owned_input(major.expand_as(cloud))
+                      .add_owned_input(vol.expand_as(cloud))
                       .build();
       at::native::call_fix_vapor(cons.device().type(), iter);
       cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
@@ -314,6 +318,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
                                           /*squash_dim=*/vapor.dim() - 1)
                     .add_output(vapor)
                     .add_owned_input(major.expand_as(vapor))
+                    .add_owned_input(vol.expand_as(vapor))
                     .build();
 
     int err = at::native::call_fix_vapor(cons.device().type(), iter);
