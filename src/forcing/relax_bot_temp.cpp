@@ -5,6 +5,7 @@
 #include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -16,6 +17,7 @@ RelaxBotTempOptions RelaxBotTempOptionsImpl::from_yaml(
   if (!forcing["relax-bot-temp"]) return nullptr;
 
   auto node = forcing["relax-bot-temp"];
+  check_keys(node, "forcing/relax-bot-temp", {"tau", "btemp", "at-face"});
   auto op = RelaxBotTempOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

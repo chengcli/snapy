@@ -27,6 +27,7 @@ setup_test(test_hydrostatic)
 setup_test(test_hydro_options)
 setup_test(test_cycle_diagnostics)
 setup_test(test_flux_positivity_carry)
+setup_test(test_yaml_keys)
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
@@ -47,6 +48,9 @@ setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
 setup_parallel_test(test_check_redo_parallel 2)
+if(APPLE)  # Gloo is the Mac backend; Linux runs UCX
+  setup_parallel_test(test_gloo_one_tensor 2)
+endif()
 setup_parallel_test(test_sedimentation_cubed_seam 2)
 # The same two ranks on Gloo, which Linux CI (UCX by default) would not reach:
 # the limiter exchanges more than one variable, and a Gloo send takes one
@@ -162,8 +166,19 @@ snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+snapy_add_python_test(test_flux_positivity_cubedsphere_cuda TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere;cuda")
+set_tests_properties(test_flux_positivity_cubedsphere_cuda_python PROPERTIES
+                     SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+snapy_add_python_test(test_flux_positivity_cubedsphere_moist_cuda TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere;cuda")
+set_tests_properties(test_flux_positivity_cubedsphere_moist_cuda_python PROPERTIES
+                     SKIP_RETURN_CODE 125)
+snapy_add_python_test(test_vic_moist_device TIMEOUT 120
+                      LABELS "python;implicit;cuda")
+set_tests_properties(test_vic_moist_device_python PROPERTIES SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")

@@ -342,3 +342,33 @@ TEST(flux_positivity,
   withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
       torch::Device(torch::kCUDA, 0));
 }
+
+// A KNOWN GAP, pinned (#236): moist-mixture has no species_enthalpy, so the
+// carry is skipped and its withheld species mass keeps no energy or momentum.
+// The advected column above limits five faces; the energy and momentum fluxes
+// must still equal the unlimited arm's. When this fails, #236 is fixed:
+// replace the body's checks with expect_carried(off, on).
+TEST(flux_positivity, moist_mixture_withholds_no_energy_or_momentum_yet) {
+  auto edit = [](YAML::Node& card) {
+    card["dynamics"]["equation-of-state"]["type"] = "moist-mixture";
+  };
+  auto off = forward_once(false, edit, 2., 3.);
+  auto on = forward_once(true, edit, 2., 3.);
+  auto F0 = off.block->phydro->flux1();
+  auto F1 = on.block->phydro->flux1();
+  auto pcoord = off.block->pcoord;
+  int j = pcoord->jl(), limited = 0;
+  for (int i = pcoord->il(); i <= pcoord->iu() + 1; ++i) {
+    double f0 = F0[ICY][0][j][i].item<double>();
+    if (std::abs(f0 - F1[ICY][0][j][i].item<double>()) > 0.1 * std::abs(f0)) {
+      ++limited;
+    }
+    for (int c : {(int)IPR, (int)IVX, (int)IVY, (int)IVZ}) {
+      EXPECT_EQ(F0[c][0][j][i].item<double>(), F1[c][0][j][i].item<double>())
+          << "row " << c << ", face " << i
+          << ": moist-mixture now withholds carried energy or momentum; "
+             "#236 is fixed, check it with expect_carried(off, on)";
+    }
+  }
+  EXPECT_GT(limited, 0) << "the limiter never withheld a species flux";
+}

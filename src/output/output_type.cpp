@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 // snap
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/refine.hpp>
 
@@ -39,6 +40,11 @@ int data_dimension_for_axis(std::string const &grid, int physical_dim) {
 
 OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   auto options = OutputOptionsImpl::create();
+  check_keys(node, "outputs/" + std::to_string(fid),
+             {"dt", "output_sumx1", "output_sumx2", "output_sumx3",
+              "include_ghost_zones", "cartesian_vector", "double_precision",
+              "x1_slice", "x2_slice", "x3_slice", "type", "data_format",
+              "variables", "combine", "verbose", "super-resolution"});
 
   options->fid() = fid;
   options->dt() = node["dt"].as<double>(0.);

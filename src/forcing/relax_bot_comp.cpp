@@ -10,6 +10,7 @@
 #include <snap/snap.h>
 
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -21,6 +22,7 @@ RelaxBotCompOptions RelaxBotCompOptionsImpl::from_yaml(
   if (!forcing["relax-bot-comp"]) return nullptr;
 
   auto node = forcing["relax-bot-comp"];
+  check_keys(node, "forcing/relax-bot-comp", {"tau", "species", "xfrac"});
   auto op = RelaxBotCompOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

@@ -7,6 +7,7 @@
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -18,6 +19,7 @@ RelaxBotVeloOptions RelaxBotVeloOptionsImpl::from_yaml(
   if (!forcing["relax-bot-velo"]) return nullptr;
 
   auto node = forcing["relax-bot-velo"];
+  check_keys(node, "forcing/relax-bot-velo", {"tau", "bvx", "bvy", "bvz"});
   auto op = RelaxBotVeloOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

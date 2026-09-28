@@ -2,6 +2,8 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
+#include <snap/input/check_keys.hpp>
+
 #include "scalar.hpp"
 
 namespace snap {
@@ -17,6 +19,9 @@ ScalarOptions ScalarOptionsImpl::from_yaml(std::string const& filename,
     return op;
   }
 
+  check_keys(node, "scalar",
+             {"verbose", "nvar", "upper-bound", "names", "reconstruct",
+              "riemann-solver"});
   op->verbose() = node["verbose"].as<bool>(verbose);
   op->nvar() = node["nvar"].as<int>(0);
   op->upper_bound() = node["upper-bound"].as<double>(-1.);
@@ -28,6 +33,7 @@ ScalarOptions ScalarOptionsImpl::from_yaml(std::string const& filename,
   if (node["reconstruct"]) {
     op->recon() = ReconstructOptionsImpl::create();
     auto recon = node["reconstruct"];
+    check_keys(recon, "scalar/reconstruct", {"shock", "type", "scale"});
     op->recon()->shock() = recon["shock"].as<bool>(false);
     op->recon()->interp()->type() = recon["type"].as<std::string>("dc");
     op->recon()->interp()->scale() = recon["scale"].as<bool>(false);
@@ -39,6 +45,8 @@ ScalarOptions ScalarOptionsImpl::from_yaml(std::string const& filename,
   // op->kinetics() = kintera::KineticsOptionsImpl::from_yaml(filename);
 
   if (node["riemann-solver"]) {
+    check_keys(node["riemann-solver"], "scalar/riemann-solver",
+               {"type", "dir"});
     op->riemann() = RiemannSolverOptionsImpl::from_yaml(node["riemann-solver"]);
   } else {
     op->riemann() = RiemannSolverOptionsImpl::create();

@@ -6,6 +6,7 @@
 
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 
 #include "reconstruct.hpp"
 
@@ -24,8 +25,11 @@ ReconstructOptions ReconstructOptionsImpl::from_yaml(
     const YAML::Node& node, std::string const& section) {
   auto op = ReconstructOptionsImpl::create();
 
+  check_keys(node, "dynamics/reconstruct", {"vertical", "horizontal"});
   if (!node[section]) return op;
 
+  check_keys(node[section], "dynamics/reconstruct/" + section,
+             {"shock", "type", "scale"});
   op->shock() = node[section]["shock"].as<bool>(false);
   op->interp() = InterpOptionsImpl::create();
   op->interp()->type() = node[section]["type"].as<std::string>("dc");

@@ -10,6 +10,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "implicit_dispatch.hpp"
@@ -22,6 +23,11 @@ ImplicitOptions ImplicitOptionsImpl::from_yaml(const std::string& filename,
   auto config = YAML::LoadFile(filename);
   if (!config["integration"]) return nullptr;
   auto intg = config["integration"];
+  // pyharp's integrator reads this block too, so its keys are listed by name
+  check_keys(intg, "integration",
+             {"implicit-scheme", "implicit-advection-cfl", "shear-cfl"},
+             "pyharp",
+             {"type", "cfl", "tlim", "nlim", "ncycle_out", "verbose"});
   auto op =
       intg["implicit-scheme"] ? from_yaml(intg["implicit-scheme"]) : nullptr;
   if (!op) {

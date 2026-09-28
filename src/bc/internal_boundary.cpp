@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "internal_boundary.hpp"
@@ -23,6 +24,8 @@ InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
 
 InternalBoundaryOptions InternalBoundaryOptionsImpl::from_yaml(
     const YAML::Node &node) {
+  check_keys(node, "boundary-condition/internal",
+             {"max-iter", "solid-density", "solid-pressure"});
   auto op = InternalBoundaryOptionsImpl::create();
 
   op->max_iter() = node["max-iter"].as<int>(5);

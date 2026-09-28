@@ -7,6 +7,7 @@
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -18,6 +19,7 @@ TopSpongeLyrOptions TopSpongeLyrOptionsImpl::from_yaml(
   if (!forcing["top-sponge-lyr"]) return nullptr;
 
   auto node = forcing["top-sponge-lyr"];
+  check_keys(node, "forcing/top-sponge-lyr", {"tau", "width"});
   auto op = TopSpongeLyrOptionsImpl::create();
 
   op->tau() = node["tau"].as<double>(0.0);

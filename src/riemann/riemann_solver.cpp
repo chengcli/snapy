@@ -3,6 +3,7 @@
 
 // snap
 #include <snap/hydro/hydro.hpp>
+#include <snap/input/check_keys.hpp>
 
 #include "riemann_solver.hpp"
 
@@ -14,6 +15,8 @@ RiemannSolverOptions RiemannSolverOptionsImpl::from_yaml(
   auto config = YAML::LoadFile(filename);
   if (!config[section]) return op;
   if (!config[section]["riemann-solver"]) return op;
+  check_keys(config["dynamics"]["riemann-solver"], "dynamics/riemann-solver",
+             {"type", "dir"});
   return from_yaml(config["dynamics"]["riemann-solver"]);
 }
 

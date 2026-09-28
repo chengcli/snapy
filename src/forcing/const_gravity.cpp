@@ -4,6 +4,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/input/check_keys.hpp>
+
 #include "forcing.hpp"
 
 namespace snap {
@@ -12,6 +14,8 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
   if (!forcing["const-gravity"]) return nullptr;
 
   auto node = forcing["const-gravity"];
+  check_keys(node, "forcing/const-gravity",
+             {"grav1", "grav2", "grav3", "non-hydrostatic"});
   auto op = ConstGravityOptionsImpl::create();
 
   op->grav1() = node["grav1"].as<double>(0.);

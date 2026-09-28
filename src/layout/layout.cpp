@@ -19,6 +19,7 @@
 #endif
 
 // snap
+#include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
@@ -207,6 +208,9 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   if (!config["distribute"]) return op;
 
   auto node = config["distribute"];
+  check_keys(node, "distribute",
+             {"layout", "nb1", "nb2", "nb3", "verbose", "blocks_per_process",
+              "backend"});  // dead since #181; BACKEND env
 
   op->type() = node["layout"].as<std::string>("slab");
   op->py(node["nb3"].as<int>(1));
