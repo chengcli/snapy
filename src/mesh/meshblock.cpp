@@ -726,7 +726,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, hydro_u, fut_hydro_du));
-  phydro->peos->apply_conserved_limiter_(hydro_u);
+  phydro->peos->apply_conserved_limiter_(hydro_u, /*whole_column=*/true);
 
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
@@ -768,7 +768,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
       phydro->options->eos()->thermo()->reactions().size() > 0) {
-    phydro->peos->apply_conserved_limiter_(hydro_u);
+    phydro->peos->apply_conserved_limiter_(hydro_u, /*whole_column=*/true);
 
     int ny = hydro_u.size(0) - ICY;  // number of species
 

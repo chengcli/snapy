@@ -102,6 +102,15 @@ std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
 std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
 std::mutex g_process_comm_mutex;
 
+//! same-process pieces of one x1 column, posted by its blocks (gather_x1)
+struct ColumnBoard {
+  int posted = 0;
+  int taken = 0;
+  bool full = false;
+  std::map<int, torch::Tensor> pieces;
+};
+std::map<std::tuple<int, int, int>, ColumnBoard> g_column_boards;
+
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
   if (layout.num_exchange_buffers() < 27) return {0, 0};
@@ -754,6 +763,78 @@ void LayoutImpl::finalize(MeshBlockImpl const* pmb, Variables& vars,
   // Completed point-to-point work is sufficient; a global barrier would
   // serialize otherwise independent exchanges.
   works.clear();
+}
+
+torch::Tensor LayoutImpl::gather_x1(torch::Tensor const& piece) {
+  int pz = options->pz();
+  if (pz <= 1) return piece;
+  auto [rx, ry, rz] = loc_of(options->rank());
+  int proc = options->process_rank();
+  int bpp = std::max(1, options->blocks_per_process());
+  int me = options->local_block_index(options->rank());
+  std::vector<torch::Tensor> pieces(pz);
+  pieces[rz] = piece.contiguous();
+#ifdef USE_CUDA
+  // the other blocks read this piece on their own streams
+  if (piece.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
+#endif
+
+  // a remote piece is one contiguous tensor per message (Gloo)
+  std::vector<int> local;
+  std::vector<std::vector<torch::Tensor>> bufs;
+  bufs.reserve(2 * pz);
+  std::vector<CommWorkPtr> works;
+  for (int k = 0; k < pz; ++k) {
+    int nb = rank_of({rx, ry, k});
+    int owner = options->owner_process_rank(nb);
+    if (owner == proc) {
+      local.push_back(k);
+      continue;
+    }
+    TORCH_CHECK(has_process_group(),
+                "[Layout:gather_x1] a remote column piece requires an "
+                "initialized process group");
+    int peer = options->local_block_index(nb);
+    pieces[k] = torch::empty_like(pieces[rz]);  // blocks split x1 evenly
+    std::lock_guard<std::mutex> lock(g_process_comm_mutex);
+    bufs.push_back({pieces[rz]});  // tag: sender, receiver; above exchange tags
+    auto send = comm->send(bufs.back(), owner, (1 << 24) + me * bpp + peer);
+    if (send) works.push_back(send);
+    bufs.push_back({pieces[k]});
+    auto recv = comm->recv(bufs.back(), owner, (1 << 24) + peer * bpp + me);
+    if (recv) works.push_back(recv);
+  }
+
+  int nlocal = local.size();
+  if (nlocal > 1) {
+    std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+    auto& board = g_column_boards[{proc, rx, ry}];
+    g_local_exchange_cv.wait(lock, [&]() { return !board.full; });
+    board.pieces[rz] = pieces[rz];
+    if (++board.posted == nlocal) {
+      board.full = true;
+      g_local_exchange_cv.notify_all();
+    } else {
+      g_local_exchange_cv.wait(lock, [&]() { return board.full; });
+    }
+    for (int k : local) pieces[k] = board.pieces.at(k);
+  }
+  for (auto& work : works) work->wait();
+
+  auto column = torch::cat(pieces, -1);
+#ifdef USE_CUDA
+  // done reading the other blocks' pieces before the board lets them go
+  if (column.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
+#endif
+  if (nlocal > 1) {
+    std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+    auto& board = g_column_boards[{proc, rx, ry}];
+    if (++board.taken == nlocal) {
+      board = ColumnBoard();
+      g_local_exchange_cv.notify_all();
+    }
+  }
+  return column;
 }
 
 void LayoutImpl::_init_process_group() {

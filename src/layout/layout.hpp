@@ -265,6 +265,10 @@ class LayoutImpl {
   void finalize(MeshBlockImpl const* pmb, Variables& vars,
                 SyncOptions const& opts, std::vector<CommWorkPtr>& works);
 
+  //! This block's x1 column: every block of the column passes its piece
+  //! together; returns the pieces joined along x1 (last dim), bottom first.
+  torch::Tensor gather_x1(torch::Tensor const& piece);
+
  protected:
   void _init_process_group();
 
