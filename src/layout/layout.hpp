@@ -162,6 +162,14 @@ inline int make_comm_tag(int local_block_index,
   return phyid * 1024 + local_block_index * 32 + get_buffer_id(offset);
 }
 
+//! Send, and post the receive of, each exchanged variable as its own message:
+//! Gloo takes one tensor per send. Variable n adds n * 65536 to the tag.
+void exchange_each_var(ProcessGroupContext const& comm,
+                       std::vector<torch::Tensor>& sends,
+                       std::vector<torch::Tensor>& recvs, int peer,
+                       int send_tag, int recv_tag,
+                       std::vector<CommWorkPtr>& works);
+
 class MeshBlockImpl;
 
 class LayoutImpl {

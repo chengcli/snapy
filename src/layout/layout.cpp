@@ -615,22 +615,29 @@ void LayoutImpl::exchange_remote(MeshBlockImpl const* pmb,
     comm->start_coalescing();
   }
   for (auto const& op : remote_ops) {
-    auto send_work = comm->send(pmb->send_bufs[op.buffer_id], op.remote_process,
-                                op.send_tag);
-    if (send_work) {
-      works.push_back(send_work);
-    }
-    auto recv_work = comm->recv(pmb->recv_bufs[op.buffer_id], op.remote_process,
-                                op.recv_tag);
-    if (recv_work) {
-      works.push_back(recv_work);
-    }
+    exchange_each_var(*comm, pmb->send_bufs[op.buffer_id],
+                      pmb->recv_bufs[op.buffer_id], op.remote_process,
+                      op.send_tag, op.recv_tag, works);
   }
   if (coalescing) {
     auto coalesced_work = comm->end_coalescing();
     if (coalesced_work) {
       works.push_back(coalesced_work);
     }
+  }
+}
+
+void exchange_each_var(ProcessGroupContext const& comm,
+                       std::vector<torch::Tensor>& sends,
+                       std::vector<torch::Tensor>& recvs, int peer,
+                       int send_tag, int recv_tag,
+                       std::vector<CommWorkPtr>& works) {
+  for (int n = 0; n < sends.size(); ++n) {
+    std::vector<torch::Tensor> send = {sends[n]}, recv = {recvs[n]};
+    auto send_work = comm.send(send, peer, send_tag + n * 65536);
+    if (send_work) works.push_back(send_work);
+    auto recv_work = comm.recv(recv, peer, recv_tag + n * 65536);
+    if (recv_work) works.push_back(recv_work);
   }
 }
 
