@@ -747,6 +747,23 @@ TEST(forcing, limiter_marks_on_cuda) {
   }
 }
 
+// A species-only repair changes the state with density and energy intact:
+// the limiter must still mark the step, like a floor patch. -1e-4 at stage 1
+// entry: a negative vapor is refilled from its column (fix_vapor), a negative
+// cloud borrows from its parent vapor, and a negative primitive vapor handed
+// to W->U is clamped by the primitive limiter.
+TEST(forcing, limiter_species_repair_redoes_the_step) {
+  auto moist = "test_diffusion_moist.yaml";
+  for (auto [row, prim] :
+       {std::pair{int(ICY), false}, std::pair{int(ICY) + 1, false},
+        std::pair{int(ICY), true}}) {
+    auto r = limiter_step(moist, row, -1.e-4, 1, prim);
+    EXPECT_EQ(r.redo, 1) << "row " << row << " prim " << prim << "\n" << r.log;
+    EXPECT_NE(r.log.find("(causes: limiter)"), std::string::npos) << r.log;
+    EXPECT_EQ(r.retry, 0) << "row " << row << " prim " << prim;
+  }
+}
+
 TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
   options->hydro()->diffusion() = nullptr;
