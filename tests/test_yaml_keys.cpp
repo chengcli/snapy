@@ -180,3 +180,7 @@ TEST(yaml_keys, sedimentation_refuses_an_unknown_key) {
 TEST(yaml_keys, distribute_refuses_an_unknown_key) {
   expect_refused("distribute", "nb_2");
 }
+
+TEST(yaml_keys, integration_refuses_an_unknown_key) {
+  expect_refused("integration", "CFL");
+}
