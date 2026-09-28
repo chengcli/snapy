@@ -1,0 +1,69 @@
+# Card A for test_two_cards_species.cpp: two nucleation clouds, H2O(l) with one
+# parent vapor and NH4SH with two, both sedimenting. Card B (_b.yaml) declares
+# the same six species in another order, so every id below names a different
+# species once card B has refilled kintera's process-global species table.
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: H2O
+    composition: {H: 2, O: 1}
+    cv_R: 3.5
+
+  - name: NH3
+    composition: {N: 1, H: 3}
+    cv_R: 3.5
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 3.5
+
+  - name: H2O(l)
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+  - name: NH4SH
+    composition: {N: 1, H: 5, S: 1}
+    cv_R: 9.0
+    u0_R: -1.2e4
+
+reactions:
+  - equation: H2O <=> H2O(l)
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+  - equation: NH3 + H2S <=> NH4SH
+    type: nucleation
+    rate-constant: {formula: nh3_h2s_lewis}
+
+sedimentation:
+  radius: {}
+  density: {}
+  const-vsed:
+    H2O(l): -2.0
+    NH4SH: -1.0
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 1, nx2: 1, nx3: 1, nghost: 2}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    limiter: true
+
+forcing:
+  const-gravity:
+    grav1: -10.
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting

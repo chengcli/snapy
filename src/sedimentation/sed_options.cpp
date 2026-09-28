@@ -71,6 +71,7 @@ SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
                 name, "' is not a valid species.");
     int id = it - kintera::species_names.begin();
     op->particle_ids().push_back(id);
+    op->particle_names().push_back(name);
   }
 
   op->radius().resize(op->particle_ids().size(), 0.);
@@ -121,10 +122,15 @@ SedVelOptions SedVelOptionsImpl::from_yaml(YAML::Node const& node) {
 }
 
 std::vector<std::string> SedVelOptionsImpl::species() const {
-  std::vector<std::string> species_list;
+  if (particle_names().size() == particle_ids().size()) {
+    return particle_names();
+  }
 
-  for (int i = 0; i < particle_ids().size(); ++i) {
-    species_list.push_back(kintera::species_names[particle_ids()[i]]);
+  // options built by hand carry ids only: resolve them in the table as it is
+  // now, as kintera does for a thermo not built from a card
+  std::vector<std::string> species_list;
+  for (int id : particle_ids()) {
+    species_list.push_back(kintera::species_names[id]);
   }
 
   return species_list;

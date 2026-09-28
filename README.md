@@ -46,7 +46,7 @@ pkill -9 XXXXX
 - Python 3.9 or higher
 - PyTorch 2.7.x
 - NumPy
-- kintera >= 1.1.5
+- kintera >= 2.5.8
 
 ### Build from Source (Advanced)
 
@@ -62,7 +62,7 @@ Building from source is recommended only for advanced users who need to:
 - Autoconf, Automake, Libtool, and pkg-config on Linux (for fetched UCX)
 - PyTorch 2.7.x with C++ libraries
 - NetCDF C library
-- kintera >= 1.1.5
+- kintera >= 2.5.8
 
 **Build steps:**
 
