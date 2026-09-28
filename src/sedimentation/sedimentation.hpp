@@ -46,8 +46,14 @@ struct SedVelOptionsImpl {
   //! \return species names
   std::vector<std::string> species() const;
 
-  //! id of precipitating particles
+  //! id of precipitating particles in kintera's species table
   ADD_ARG(std::vector<int>, particle_ids) = {};
+
+  //! names of precipitating particles, in particle_ids order. Kept from the
+  //! card this was parsed from: kintera's species table is process-global and
+  //! refills when a later card declares other species (kintera #121), so
+  //! particle_ids cannot be resolved through it afterwards (issue #234).
+  ADD_ARG(std::vector<std::string>, particle_names) = {};
 
   //! radius and density of particles
   //! if specified, must be the same size of cloud particles in thermo
