@@ -125,7 +125,9 @@ endif()
 find_package_handle_standard_args(
   Kintera
   REQUIRED_VARS ${kintera_required_vars}
-  VERSION_VAR KINTERA_VERSION)
+  VERSION_VAR KINTERA_VERSION
+  REASON_FAILURE_MESSAGE
+    "snapy requires kintera >= ${Kintera_FIND_VERSION} (SpeciesThermo names()/mu(), kintera #121), found ${KINTERA_VERSION}")
 
 unset(kintera_lib_dir)
 unset(kintera_include_dir)
