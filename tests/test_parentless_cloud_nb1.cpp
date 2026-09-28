@@ -1,6 +1,9 @@
 // external
 #include <gtest/gtest.h>
 
+// C/C++
+#include <thread>
+
 // torch
 #include <torch/torch.h>
 
@@ -75,9 +78,15 @@ ColumnMass repair_split_column(int nb1, torch::Device device,
   };
   ColumnMass m{total_mass(), 0.};
 
-  // what advance_local() step (4) does on every block, before any exchange
+  // what advance_local() step (4) does on every block, before any exchange;
+  // Mesh::forward runs the blocks at once, one thread each, as here
+  std::vector<std::thread> threads;
   for (size_t b = 0; b < mesh->blocks.size(); ++b)
-    mesh->blocks[b]->phydro->peos->apply_conserved_limiter_(cons[b]);
+    threads.emplace_back([&, b] {
+      mesh->blocks[b]->phydro->peos->apply_conserved_limiter_(
+          cons[b], /*whole_column=*/true);
+    });
+  for (auto& t : threads) t.join();
 
   for (size_t b = 0; b < mesh->blocks.size(); ++b)
     EXPECT_GE(cons[b][ICY + 2].min().item<double>(), 0.) << "block " << b;
@@ -99,8 +108,8 @@ TEST_P(DeviceTest, parentless_cloud_repair_keeps_the_mass_with_nb1_1) {
 }
 
 // Two meshblocks along x1: the over-drained cell sits in the lower block, all
-// the positive rain in the upper one. The repair scans only the block-local
-// column, gives up, and the clamp creates mass equal to the deficit.
+// the positive rain in the upper one. A block-local repair gives up there and
+// the clamp creates mass equal to the deficit; the whole column must be used.
 TEST_P(DeviceTest, parentless_cloud_repair_keeps_the_mass_with_nb1_2) {
   double deficit = 1.e-4;
   auto m = repair_split_column(2, device, dtype, deficit);
