@@ -632,6 +632,8 @@ void exchange_each_var(ProcessGroupContext const& comm,
                        std::vector<torch::Tensor>& recvs, int peer,
                        int send_tag, int recv_tag,
                        std::vector<CommWorkPtr>& works) {
+  TORCH_CHECK(sends.size() <= 32768,
+              "too many variables in one exchange: ", sends.size());
   for (int n = 0; n < sends.size(); ++n) {
     std::vector<torch::Tensor> send = {sends[n]}, recv = {recvs[n]};
     auto send_work = comm.send(send, peer, send_tag + n * 65536);
