@@ -48,6 +48,9 @@ setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
 setup_parallel_test(test_check_redo_parallel 2)
+if(APPLE)  # Gloo is the Mac backend; Linux runs UCX
+  setup_parallel_test(test_gloo_one_tensor 2)
+endif()
 setup_parallel_test(test_sedimentation_cubed_seam 2)
 # The same two ranks on Gloo, which Linux CI (UCX by default) would not reach:
 # the limiter exchanges more than one variable, and a Gloo send takes one
