@@ -81,12 +81,14 @@ def maxrel(a, b):
 
 
 def bitequal(g, h):
-    return all(np.array_equal(g[k], h[k]) for k in g)
+    return all(np.array_equal(g[k], h[k], equal_nan=True) for k in g)
 
 
 def seam_table(root):
     rows = []
     for d in sorted(glob.glob(f"{root}/seam_*")):
+        if not os.path.exists(f"{d}/timing.json"):
+            continue  # still running
         m = re.match(r"seam_(.+?)_(smooth5|isentrope|none|local_polytrope)_"
                      r"(\w+?)_(cpu|gpu)$", os.path.basename(d))
         case, form, tag, dev = m.groups()
@@ -94,6 +96,8 @@ def seam_table(root):
         refused = t["rc"] != 0
         row = dict(case=case, form=form, layout=tag, dev=dev, rc=t["rc"],
                    wall=t["wall_s"])
+        if "Terminating abnormally" in open(f"{d}/run.log").read():
+            row["rc"] = "aborted"
         if not refused:
             ref, rblocks = assemble(d, "ref")
             st, _ = assemble(d, "state")
@@ -134,12 +138,20 @@ def seam_table(root):
 def simple_rows(root, prefix):
     rows = []
     for d in sorted(glob.glob(f"{root}/{prefix}_*")):
+        if not os.path.exists(f"{d}/timing.json"):
+            continue  # still running
         s, t = summaries(d)
         r = dict(name=os.path.basename(d)[len(prefix) + 1:], rc=t["rc"],
                  wall=t["wall_s"])
         if s:
             r.update({k: s[0][k] for k in s[0]})
             r["loop_wall"] = max(x["wall_s"] for x in s)
+        # check_redo < 0 prints this and the driver still returns 0
+        log = open(f"{d}/run.log").read()
+        r["status"] = ("ABORTED (floor redos)" if "Terminating abnormally"
+                       in log else ("ok" if t["rc"] == 0 else f"rc={t['rc']}"))
+        if r["status"] != "ok":
+            r["vmax_over_cs"] = "n/a"
         rows.append(r)
     return rows
 
@@ -177,12 +189,12 @@ def main():
                    for r in seam]
 
     for prefix, cols in [
-        ("anomaly", ["name", "rc", "cycles", "time", "rho_min", "p_min",
+        ("anomaly", ["name", "status", "cycles", "time", "rho_min", "p_min",
                      "nonfinite", "vmax_over_cs", "loop_wall"]),
-        ("positivity", ["name", "rc", "cycles", "time", "rho_min", "p_min",
+        ("positivity", ["name", "status", "cycles", "time", "rho_min", "p_min",
                         "nonfinite", "bad_cycle", "vmax_over_cs",
                         "loop_wall"]),
-        ("stretch", ["name", "rc", "cycles", "vmax_over_cs", "nonfinite",
+        ("stretch", ["name", "status", "cycles", "vmax_over_cs", "nonfinite",
                      "loop_wall"]),
         ("fault", ["name", "rc", "ref_nonfinite_b0", "fault_nonfinite"]),
         ("cost", ["name", "rc", "cycles", "loop_wall", "ref_us_per_call"]),

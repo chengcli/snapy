@@ -221,7 +221,8 @@ def execute(job, slot, args):
     with open(os.path.join(d, "input.yaml"), "w") as f:
         yaml.safe_dump(c, f, sort_keys=False)
     env = dict(os.environ)
-    env["BACKEND"] = "gloo"
+    # Gloo carries CPU tensors only; two ranks on two GPUs need UCX
+    env["BACKEND"] = "ucx" if dev == "gpu2" else "gloo"
     if dev == "cpu":
         env["DEVICE"] = "cpu"
         env["CUDA_VISIBLE_DEVICES"] = ""
