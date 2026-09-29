@@ -14,12 +14,12 @@ import numpy as np  # noqa: E402
 
 from analyze_t3 import frames  # noqa: E402
 
-FORMS = ["smooth5", "isentrope", "none"]
+FORMS = ["smooth5", "isentrope", "none", "local_polytrope"]
 
 
 def main():
     rundir, sdx, bdx, out = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-    fig, axes = plt.subplots(2, 3, figsize=(15, 7.5), constrained_layout=True)
+    fig, axes = plt.subplots(2, len(FORMS), figsize=(20, 7.5), constrained_layout=True)
     for j, form in enumerate(FORMS):
         fr = frames(os.path.join(rundir, f"straka_bubble_dx{sdx}_{form}_gpu"))
         v = fr[-1]

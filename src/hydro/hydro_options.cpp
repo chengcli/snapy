@@ -77,9 +77,10 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
         dyn["wb-density-ref"].as<std::string>(op->wb_density_ref());
     TORCH_CHECK(op->wb_density_ref() == "smooth5" ||
                     op->wb_density_ref() == "isentrope" ||
-                    op->wb_density_ref() == "none",
+                    op->wb_density_ref() == "none" ||
+                    op->wb_density_ref() == "local_polytrope",
                 "HydroOptions: 'dynamics/wb-density-ref' must be smooth5, "
-                "isentrope or none, got '",
+                "isentrope, none or local_polytrope, got '",
                 op->wb_density_ref(), "'.");
     op->wb_rop_guard() = dyn["wb-rop-guard"].as<bool>(false);
   }
