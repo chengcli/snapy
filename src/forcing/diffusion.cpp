@@ -4,6 +4,9 @@
 #include <cmath>
 #include <limits>
 
+// torch
+#include <c10/core/InferenceMode.h>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -226,9 +229,9 @@ std::array<torch::Tensor, 4> profile_options(DiffusionOptionsImpl const& op) {
           op.kappa_scale_x1_table()};
 }
 
-//! an in-place write bumps it; an inference tensor keeps none
+//! an in-place write bumps it; reset refuses inference tensors, which keep none
 int64_t version_of(torch::Tensor const& t) {
-  return t.defined() && !t.is_inference() ? t._version() : 0;
+  return t.defined() ? t._version() : 0;
 }
 
 bool active(Coordinate const& coord, int idir) {
@@ -250,6 +253,8 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
       node, "forcing/diffusion",
       {"nu_iso", "kappa_iso", "dynamic", "nu_scale_x1", "kappa_scale_x1"});
 
+  // the tables are ordinary tensors even when parsed under inference mode
+  c10::InferenceMode not_inference(false);
   auto op = DiffusionOptionsImpl::create();
   auto take_non_negative = [&](char const* key) {
     if (!node[key]) return 0.;
@@ -338,6 +343,18 @@ void DiffusionImpl::reset() {
               "[Diffusion] Isotropic heat conduction requires an EOS with a "
               "positive reference specific heat at constant volume.");
 
+  // an inference tensor keeps no version counter, so a later in-place write to
+  // it could not be detected
+  auto given = profile_options(*options);
+  char const* const names[] = {"nu_scale_x1", "nu_scale_x1_table",
+                               "kappa_scale_x1", "kappa_scale_x1_table"};
+  for (size_t i = 0; i < given.size(); ++i) {
+    TORCH_CHECK(!given[i].defined() || !given[i].is_inference(), "[Diffusion] ",
+                names[i],
+                " is an inference tensor (made under torch.inference_mode()); "
+                "pass an ordinary tensor, made outside inference mode.");
+  }
+
   // one value per x1 cell centre, ghosts included, from a tensor or a table
   auto nc1 = coord->options->nc1();
   auto layout = phydro->pmb->options->layout();
@@ -382,7 +399,7 @@ void DiffusionImpl::reset() {
   kappa_scale_ =
       profile(options->kappa_scale_x1(), options->kappa_scale_x1_table(),
               "kappa_scale_x1", &kappa_scale_max_);
-  profile_options_ = profile_options(*options);
+  profile_options_ = given;
   for (size_t i = 0; i < profile_options_.size(); ++i) {
     profile_versions_[i] = version_of(profile_options_[i]);
   }

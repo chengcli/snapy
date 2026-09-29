@@ -507,3 +507,36 @@ TEST(diffusion_x1_scale, profile_change_after_build_is_refused) {
     EXPECT_THROW(tendency(block, w, temp), c10::Error) << c.what;
   }
 }
+
+// An inference tensor keeps no version counter, so an in-place write to it
+// under inference mode after the build could not be detected: it is refused at
+// build, per cell and as a table. A YAML table parsed under inference mode is
+// an ordinary tensor and is accepted.
+TEST_P(DeviceTest, inference_tensor_profile_is_refused) {
+  auto nc1 = static_cast<int64_t>(centres(base_options()).size());
+  torch::Tensor cells, table;
+  {
+    c10::InferenceMode guard;  // as torch.inference_mode() in Python
+    cells = torch::ones({nc1}, torch::device(device).dtype(torch::kFloat64));
+    table = torch::tensor({0., 6., 1., 2.}, torch::kFloat64)
+                .view({2, 2})
+                .to(device);
+  }
+  ASSERT_TRUE(cells.is_inference());
+  auto options = base_options();
+  options->hydro()->diffusion()->nu_scale_x1(cells);
+  EXPECT_THROW(build(options), c10::Error) << "per cell";
+  options = base_options();
+  options->hydro()->diffusion()->kappa_scale_x1_table(table);
+  EXPECT_THROW(build(options), c10::Error) << "table";
+
+  options = base_options();
+  {
+    c10::InferenceMode guard;
+    options->hydro()->diffusion() =
+        parse(table_yaml("nu_scale_x1", {0., 6.}, {1., 2.}));
+  }
+  EXPECT_FALSE(
+      options->hydro()->diffusion()->nu_scale_x1_table().is_inference());
+  EXPECT_NO_THROW(build(options));
+}

@@ -124,8 +124,26 @@ def run(device):
             return "a non-uniform profile left the step unchanged"
         return None
 
+    def inference():
+        # an inference tensor keeps no version counter, so a later in-place
+        # write under torch.inference_mode() could not be detected: refused
+        with torch.inference_mode():
+            cells = torch.ones_like(x1v)
+        try:
+            make_block(device, cells=cells)
+        except RuntimeError as err:
+            if "inference tensor" not in str(err):
+                return "refused for another reason: %s" % str(err).splitlines()[0]
+        else:
+            return "an inference tensor was accepted as a profile"
+        # a YAML table parsed under inference mode is an ordinary tensor
+        with torch.inference_mode():
+            make_block(device, table={"x1": [0.0, float(NX1)], "scale": [1.0, 2.0]})
+        return None
+
     arm(failures, "unity", unity)
     arm(failures, "yaml-api", yaml_equals_api)
+    arm(failures, "inference", inference)
     return failures
 
 
