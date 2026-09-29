@@ -39,6 +39,7 @@ setup_test(test_process_group)
 setup_test(test_refine)
 setup_test(test_diffusion)
 setup_test(test_diffusion_moist)
+setup_test(test_diffusion_x1_scale)
 setup_test(test_condensate_conservation)
 setup_test(test_parentless_cloud)
 setup_test(test_fix_vapor_volume)
@@ -198,6 +199,7 @@ snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scal
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
+snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 
 # DISABLED: snapy.exchange.init_dist still calls the removed SlabLayout(px, py, ...)
 # constructor (see issue #224).
