@@ -269,6 +269,30 @@ class LayoutImpl {
   //! together; returns the pieces joined along x1 (last dim), bottom first.
   torch::Tensor gather_x1(torch::Tensor const& piece);
 
+  //! Point-to-point messages with another block, local or remote process
+  //! alike addressed by its block rank. The tag folds in both local block
+  //! indices, so several blocks per process do not collide; with one block
+  //! per process it is the tag given. The fold adds k * 65536 (k < 256): the
+  //! low 16 bits stay the given tag, which for the 0x77xx hydro tags no
+  //! make_comm_tag value has at <= 16 local blocks, and the total stays below
+  //! gather_x1's 1 << 24.
+  CommWorkPtr send_to_block(std::vector<torch::Tensor>& tensors, int block_rank,
+                            int tag);
+  CommWorkPtr recv_from_block(std::vector<torch::Tensor>& tensors,
+                              int block_rank, int tag);
+
+  //! The x1 reference relay, one column top->bottom (#254): the block
+  //! `above` hands this block its running face value. Undefined when
+  //! above < 0 (the column top anchors itself). A same-process neighbor
+  //! goes through a board, a remote one through the process group.
+  torch::Tensor take_x1_anchor(int above, torch::Tensor const& like, int tag);
+  //! Hand this block's bottom face value to the block `below`.
+  void pass_x1_anchor(int below, torch::Tensor const& face, int tag);
+
+  bool is_local_block(int block_rank) const {
+    return options->owner_process_rank(block_rank) == options->process_rank();
+  }
+
  protected:
   void _init_process_group();
 
