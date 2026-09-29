@@ -6,7 +6,7 @@
 import json
 import sys
 
-FORMS = ["smooth5", "isentrope", "none"]
+FORMS = ["smooth5", "isentrope", "none", "local_polytrope"]
 BUBBLE = {
     "straka": ["theta_p_min", "u_max", "u_min", "w_max", "w_min", "front_m",
                "theta_p_max"],
@@ -47,7 +47,13 @@ def main():
         for r in runs:
             m = r["metrics"]
             if m is None:
-                out.append(f"| {r['dx']} | {r['form']} | FAILED rc={r['rc']} |")
+                why = (f"aborted at t = {r['abort_time']:.0f} s after "
+                       f"{r['redos']} floor redos" if r["rc"] == "abnormal"
+                       else f"rc={r['rc']}")
+                out.append(f"| {r['dx']} | {r['form']} | FAILED: {why} |" +
+                           " |" * (len(keys) - 1) + f" failed | {r['wall_s']:.0f} |")
+                worst.setdefault((case, r["dx"]), {})[r["form"]] = (
+                    float("inf"), "failed")
                 continue
             cells, rels = [], []
             for k in keys:
@@ -79,10 +85,11 @@ def main():
     out.append("| case | dx | " + " | ".join(FORMS) + " | best | ratio worst/best |")
     out.append("|---" * 6 + "|")
     for (case, dx), d in sorted(worst.items(), key=lambda t: (t[0][0], -t[0][1])):
-        vals = {f: d[f][0] for f in FORMS if f in d}
+        vals = {f: d[f][0] for f in FORMS if f in d and d[f][0] != float("inf")}
         best = min(vals, key=vals.get)
         out.append(f"| {case} | {dx} | " + " | ".join(
-            f"{100 * d[f][0]:.1f}% ({d[f][1]})" if f in d else "-"
+            ("FAILED" if d[f][0] == float("inf") else
+             f"{100 * d[f][0]:.1f}% ({d[f][1]})") if f in d else "-"
             for f in FORMS) + f" | {best} | " + ", ".join(
             f"{f} {vals[f] / vals[best]:.2f}" for f in vals) + " |")
 

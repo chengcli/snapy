@@ -396,6 +396,39 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     auto p_b = wb[IPR];
     dref.copy_(rho_b * (pref / p_b).pow(1. / gamma));
     dsf.copy_(rho_b * (psf_lo / p_b).pow(1. / gamma));
+  } else if (form == "local_polytrope") {
+    // Ported from cshsgy/snapy study/250-t2-modes (612976c),
+    // src/hydro/hydro_rho_ref_study.cpp:36-62. n_i = dln p / dln rho across
+    // the two neighbours (the bottom cell's gamma where |dln rho| < 1e-8 or
+    // |n| < 0.05; the edge cells copy their neighbour). At a cell p = p_i,
+    // so dref = rho and the cell perturbation is zero. The face reference is
+    // the mean of the two adjacent cells' polytropes evaluated at psf_lo.
+    auto density = w[IDN];
+    auto pressure = w[IPR];
+    int nc1 = density.size(-1);
+    auto gamma = peos->compute("W->A", {w.narrow(-1, is, 1)});
+    auto dln_rho = torch::log(density.narrow(-1, 2, nc1 - 2) /
+                              density.narrow(-1, 0, nc1 - 2));
+    auto dln_p = torch::log(pressure.narrow(-1, 2, nc1 - 2) /
+                            pressure.narrow(-1, 0, nc1 - 2));
+    auto n_mid = torch::where(dln_rho.abs() < 1e-8, gamma, dln_p / dln_rho);
+    n_mid = torch::where(n_mid.abs() < 0.05, gamma, n_mid);
+    auto n = density.clone();
+    n.narrow(-1, 1, nc1 - 2).copy_(n_mid);
+    n.select(-1, 0).copy_(n_mid.select(-1, 0));
+    n.select(-1, nc1 - 1).copy_(n_mid.select(-1, nc1 - 3));
+
+    dref.copy_(density);
+    auto pface = psf_lo.narrow(-1, 1, nc1 - 1);
+    auto from_b = density.narrow(-1, 0, nc1 - 1) *
+                  (pface / pressure.narrow(-1, 0, nc1 - 1))
+                      .pow(1. / n.narrow(-1, 0, nc1 - 1));
+    auto from_a = density.narrow(-1, 1, nc1 - 1) *
+                  (pface / pressure.narrow(-1, 1, nc1 - 1))
+                      .pow(1. / n.narrow(-1, 1, nc1 - 1));
+    dsf.copy_(psf_lo);
+    dsf.narrow(-1, 1, nc1 - 1).copy_(0.5 * (from_b + from_a));
+    dsf.select(-1, 0).copy_(dsf.select(-1, 1));
   }
 
   if (below >= 0) {

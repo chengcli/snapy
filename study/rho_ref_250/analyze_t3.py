@@ -16,6 +16,7 @@ import argparse
 import glob
 import json
 import os
+import re
 
 import netCDF4
 import numpy as np
@@ -131,6 +132,13 @@ def main():
     for tj in sorted(glob.glob(os.path.join(args.rundir, "*", "timing.json"))):
         info = json.load(open(tj))
         d = os.path.dirname(tj)
+        log = open(os.path.join(d, "run.log")).read()
+        # the drivers return 0 after "Terminating abnormally" (check_redo < 0)
+        if "Terminating abnormally" in log:
+            info["rc"] = "abnormal"
+            t = re.findall(r"^time=([0-9.e+]+) cycle=(\d+)", log, re.M)
+            info["abort_time"] = float(t[-1][0]) if t else None
+            info["redos"] = log.count("Redoing the step")
         if info["rc"] != 0:
             rows.append({**info, "metrics": None})
             continue

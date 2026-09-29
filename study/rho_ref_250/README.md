@@ -12,6 +12,8 @@ the well-balanced x1 reconstruction should use). Not meant for main.
   Straka specifies. Build it with `bash build_driver.sh <snapy build>`.
 - `bryan.yaml`: Bryan & Fritsch (2002) saturated neutral moist bubble, the
   discriminating case. Run with `examples/bryan.cpp` unchanged.
+- Forms: smooth5, isentrope, none, and local_polytrope. local_polytrope is ported from
+  cshsgy/snapy@612976c `src/hydro/hydro_rho_ref_study.cpp:36-62`.
 - `run_t3.py`: case x resolution x `dynamics/wb-density-ref` matrix,
   plus the unperturbed background (`dT = 0`) for the initial-state residual
   and CPU spot checks. Grids wider than 1024 cells along x2 are split into two

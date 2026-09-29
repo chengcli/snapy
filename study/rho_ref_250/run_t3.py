@@ -18,7 +18,7 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FORMS = ["smooth5", "isentrope", "none"]
+FORMS = ["smooth5", "isentrope", "none", "local_polytrope"]
 
 # (case, dx [m]) -> (nx1, nx2); Straka is the half domain 25.6 x 6.4 km,
 # Bryan & Fritsch the full 20 x 10 km

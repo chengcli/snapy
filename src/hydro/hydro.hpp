@@ -57,6 +57,8 @@ struct HydroOptionsImpl {
   //!  - isentrope: the bottom interior cell's adiabat,
   //!               rho_b (p_ref / p_b)^(1 / gamma_b)
   //!  - none:      0, i.e. the density itself is reconstructed
+  //!  - local_polytrope: rho_i (p / p_i)^(1 / n_i), n_i = dln p / dln rho
+  //!               from the neighbours; faces average the two adjacent cells
   ADD_ARG(std::string, wb_density_ref) = "smooth5";
 
   //! Guard smooth5's rho/p divide against a non-positive pressure
