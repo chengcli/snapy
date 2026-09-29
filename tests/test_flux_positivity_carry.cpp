@@ -1,7 +1,9 @@
 // C/C++
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <string>
@@ -41,6 +43,10 @@ Arm forward_once(bool limiter, std::function<void(YAML::Node&)> const& edit,
   auto card = YAML::LoadFile(kCard);
   card["dynamics"]["equation-of-state"]["limiter"] = limiter;
   edit(card);
+  // scratch (#236 study): rerun a case on another EOS
+  if (char const* eos = std::getenv("CARRY_EOS")) {
+    card["dynamics"]["equation-of-state"]["type"] = std::string(eos);
+  }
   std::string name = std::string("test_flux_positivity_carry_") +
                      (limiter ? "on" : "off") + ".yaml";
   {
@@ -99,6 +105,7 @@ void expect_carried(Arm const& off, Arm const& on, int dim = 1,
   auto F1 = dim == 1 ? on.block->phydro->flux1() : on.block->phydro->flux2();
 
   int limited = 0;
+  double rE = 0., xEmax = 0., rM = 0., xMmax = 0.;
   for (int i = il; i <= iu + 1; ++i) {
     // what the withheld mass carries if cell d(n) is species n's donor
     auto carried = [&](std::function<int(double)> const& cell, double* dM) {
@@ -137,6 +144,8 @@ void expect_carried(Arm const& off, Arm const& on, int dim = 1,
     double e1 = at(F1, IPR, i);
     double tol = 1.e-12 * std::max(std::abs(e0), std::abs(dE));
     EXPECT_NEAR(e0 - e1, dE, tol) << "energy flux, face " << i;
+    rE = std::max(rE, std::abs(e0 - e1 - dE));
+    xEmax = std::max(xEmax, std::abs(dE));
     bool apart = std::abs(xE - dE) > 1.e3 * tol;
     for (int k = 0; k < 3; ++k) {
       double m0 = at(F0, IVX + k, i);
@@ -144,12 +153,19 @@ void expect_carried(Arm const& off, Arm const& on, int dim = 1,
       tol = 1.e-12 * std::max(std::abs(m0), std::abs(dM[k]));
       EXPECT_NEAR(m0 - m1, dM[k], tol)
           << "momentum flux " << k << ", face " << i;
+      rM = std::max(rM, std::abs(m0 - m1 - dM[k]));
+      xMmax = std::max(xMmax, std::abs(dM[k]));
       apart = apart || std::abs(xM[k] - dM[k]) > 1.e3 * tol;
     }
     int* count = at(F0, ICY, i) > 0. ? up : down;
     if (lim && apart && count) ++*count;
   }
   EXPECT_GT(limited, 0) << "the limiter never withheld a species flux";
+  std::printf(
+      "[budget] dim=%d limited=%d max|dE_exp|=%.6g max|dE_res|=%.3e "
+      "rel=%.3e max|dM_exp|=%.6g max|dM_res|=%.3e rel=%.3e\n",
+      dim, limited, xEmax, rE, rE / std::max(xEmax, 1e-300), xMmax, rM,
+      rM / std::max(xMmax, 1e-300));
 
   // unit cell volumes: the correction only moves energy and momentum
   auto cells = off.block->part({0, 0, 0}, PartOptions().exterior(false));
@@ -159,6 +175,8 @@ void expect_carried(Arm const& off, Arm const& on, int dim = 1,
     double t1 = on.du.index(cells)[c].sum().item<double>();
     EXPECT_NEAR(t1, t0, 1.e-12 * d0.abs().sum().item<double>() + 1.e-12)
         << "column total of row " << c;
+    std::printf("[budget] column total row %d: |t1-t0|=%.3e (scale %.3e)\n",
+                c, std::abs(t1 - t0), d0.abs().sum().item<double>());
   }
 }
 }  // namespace
@@ -291,6 +309,7 @@ void withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
   };
 
   int mixed = 0;
+  double rE = 0., xEmax = 0., rM = 0., xMmax = 0.;
   for (int i = il + 1; i <= iu; ++i) {
     double dE = 0., dM[3] = {0., 0., 0.};
     for (int n = 0; n < 2; ++n) {
@@ -320,13 +339,22 @@ void withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
     double e0 = at(F0, IPR, i), e1 = at(F1, IPR, i);
     double tol = 1.e-12 * std::max(std::abs(e0), std::abs(dE));
     EXPECT_NEAR(e0 - e1, dE, tol) << "energy flux, face " << i;
+    rE = std::max(rE, std::abs(e0 - e1 - dE));
+    xEmax = std::max(xEmax, std::abs(dE));
     for (int k = 0; k < 3; ++k) {
       double m0 = at(F0, IVX + k, i), m1 = at(F1, IVX + k, i);
       tol = 1.e-12 * std::max(std::abs(m0), std::abs(dM[k]));
       EXPECT_NEAR(m0 - m1, dM[k], tol)
           << "momentum flux " << k << ", face " << i;
+      rM = std::max(rM, std::abs(m0 - m1 - dM[k]));
+      xMmax = std::max(xMmax, std::abs(dM[k]));
     }
   }
+  std::printf(
+      "[budget] mixed max|dE_exp|=%.6g max|dE_res|=%.3e rel=%.3e "
+      "max|dM_exp|=%.6g max|dM_res|=%.3e rel=%.3e\n",
+      xEmax, rE, rE / std::max(xEmax, 1e-300), xMmax, rM,
+      rM / std::max(xMmax, 1e-300));
   EXPECT_GT(mixed, 0) << "no limited face with an upward net cloud flux and "
                          "a settling part";
 }
@@ -371,4 +399,36 @@ TEST(flux_positivity, moist_mixture_withholds_no_energy_or_momentum_yet) {
     }
   }
   EXPECT_GT(limited, 0) << "the limiter never withheld a species flux";
+}
+
+// scratch (#236 study): wall time of one limited hydro forward on a 256x256
+// slab (theta = 1/2 at every face), and of species_enthalpy alone.
+TEST(flux_positivity, scratch_carry_timing) {
+  if (!std::getenv("CARRY_TIMING")) GTEST_SKIP() << "set CARRY_TIMING";
+  auto edit = [](YAML::Node& card) {
+    card["geometry"]["bounds"]["x1max"] = 256.;
+    card["geometry"]["bounds"]["x2max"] = 256.;
+    card["geometry"]["cells"]["nx1"] = 256;
+    card["geometry"]["cells"]["nx2"] = 256;
+    card["boundary-condition"]["external"]["x2-inner"] = "reflecting";
+    card["boundary-condition"]["external"]["x2-outer"] = "reflecting";
+  };
+  auto arm = forward_once(true, edit, 2., 2., 0.);
+  auto ph = arm.block->phydro;
+  auto u = arm.vars.at("hydro_u");
+  auto w = arm.vars.at("hydro_w");
+  int n = 20;
+  for (int r = 0; r < 3; ++r) ph->forward(1., u, arm.vars);
+  auto t0 = std::chrono::high_resolution_clock::now();
+  for (int r = 0; r < n; ++r) ph->forward(1., u, arm.vars);
+  auto t1 = std::chrono::high_resolution_clock::now();
+  torch::Tensor h;
+  for (int r = 0; r < n; ++r) h = ph->peos->species_enthalpy(w);
+  auto t2 = std::chrono::high_resolution_clock::now();
+  std::printf("[timing] eos=%s forward %.3f ms, species_enthalpy %.3f ms "
+              "(defined=%d)\n",
+              std::getenv("CARRY_EOS") ? std::getenv("CARRY_EOS") : "card",
+              std::chrono::duration<double, std::milli>(t1 - t0).count() / n,
+              std::chrono::duration<double, std::milli>(t2 - t1).count() / n,
+              (int)h.defined());
 }
