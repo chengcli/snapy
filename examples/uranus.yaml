@@ -129,7 +129,7 @@ reactions:
 
   - equation: H2S(l,p) => H2S
     type: evaporation
-    rate-constant: {formula: h2s_ideal, diff_c: 0.2e-4, diff_T: 0., diff_P: 0., vm: 18.e-6, diameter: 1.0e-4}
+    rate-constant: {formula: h2s_ideal, diff_c: 0.2e-4, diff_T: 1.75, diff_P: -1., vm: 35.9e-6, diameter: 1.0e-4}  # H2S(l): 34.08 g/mol / 0.950 g/cm^3 (NIST, 212.2 K)
 
 problem:
   Ps: 50.e5

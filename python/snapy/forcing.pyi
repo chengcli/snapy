@@ -93,7 +93,7 @@ class CoriolisOptions:
         ...
 
 class DiffusionOptions:
-    """Constant isotropic hydro diffusion options."""
+    """Isotropic hydro diffusion options."""
 
     def __init__(self) -> None: ...
 
@@ -126,3 +126,48 @@ class DiffusionOptions:
 
     @overload
     def dynamic(self, value: bool) -> "DiffusionOptions": ...
+
+    @overload
+    def nu_scale_x1_table(self) -> torch.Tensor:
+        """Get the x1 profile of nu_iso as a (2, n) table of x1 knots and scale values."""
+        ...
+
+    @overload
+    def nu_scale_x1_table(self, value: torch.Tensor) -> "DiffusionOptions":
+        """Set the x1 profile of nu_iso as a (2, n) float64 table: x1 knots
+        (strictly increasing, n >= 2) and scale values (strictly positive),
+        linear between knots and held beyond the ends. Works with any number
+        of blocks along x1. Set before the MeshBlock is built."""
+        ...
+
+    @overload
+    def kappa_scale_x1_table(self) -> torch.Tensor:
+        """Get the x1 profile of kappa_iso as a (2, n) table."""
+        ...
+
+    @overload
+    def kappa_scale_x1_table(self, value: torch.Tensor) -> "DiffusionOptions":
+        """Set the x1 profile of kappa_iso as a (2, n) table, as nu_scale_x1_table."""
+        ...
+
+    @overload
+    def nu_scale_x1(self) -> torch.Tensor:
+        """Get the per-cell x1 profile of nu_iso."""
+        ...
+
+    @overload
+    def nu_scale_x1(self, value: torch.Tensor) -> "DiffusionOptions":
+        """Set the x1 profile of nu_iso per cell: a 1-D float64 tensor with one
+        value per x1 cell centre of the block, ghosts included. Refused when
+        x1 is split into more than one block (use nu_scale_x1_table)."""
+        ...
+
+    @overload
+    def kappa_scale_x1(self) -> torch.Tensor:
+        """Get the per-cell x1 profile of kappa_iso."""
+        ...
+
+    @overload
+    def kappa_scale_x1(self, value: torch.Tensor) -> "DiffusionOptions":
+        """Set the x1 profile of kappa_iso per cell, as nu_scale_x1."""
+        ...

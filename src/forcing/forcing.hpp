@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <array>
+
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
@@ -161,16 +164,37 @@ struct DiffusionOptionsImpl {
     return std::make_shared<DiffusionOptionsImpl>(*this);
   }
   void report(std::ostream& os) const {
+    auto show = [&os](char const* name, torch::Tensor const& cells,
+                      torch::Tensor const& table) {
+      os << "* " << name << " = ";
+      if (cells.defined()) {
+        os << cells.numel() << " cells\n";
+      } else if (table.defined()) {
+        os << "table of " << table.size(-1) << " points in x1\n";
+      } else {
+        os << "none (uniform)\n";
+      }
+    };
     os << "-- diffusion options --\n";
     os << "* nu_iso = " << nu_iso() << "\n"
        << "* kappa_iso = " << kappa_iso() << "\n"
        << "* dynamic = " << (dynamic() ? "true" : "false") << "\n";
+    show("nu_scale_x1", nu_scale_x1(), nu_scale_x1_table());
+    show("kappa_scale_x1", kappa_scale_x1(), kappa_scale_x1_table());
   }
 
   ADD_ARG(double, nu_iso) = 0.;
   ADD_ARG(double, kappa_iso) = 0.;
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
+  //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
+  //! cell centre of the block (ghosts included), set before it is built;
+  //! refused when x1 is split into several blocks (give a table instead)
+  ADD_ARG(torch::Tensor, nu_scale_x1);
+  ADD_ARG(torch::Tensor, kappa_scale_x1);
+  //! the same as a table (2, n): x1 knots, scale; interpolated onto the cells
+  ADD_ARG(torch::Tensor, nu_scale_x1_table);
+  ADD_ARG(torch::Tensor, kappa_scale_x1_table);
 };
 using DiffusionOptions = std::shared_ptr<DiffusionOptionsImpl>;
 
@@ -191,6 +215,20 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);
   double max_time_step(torch::Tensor w) const;
+
+ private:
+  //! refuses a profile changed since reset; every entry point that reads the
+  //! cached profiles (forward, max_time_step) calls it first
+  void check_profiles() const;
+
+  //! the x1 profiles on this block's cells (float64, CPU), their maxima, and
+  //! copies in the state's device and dtype
+  torch::Tensor nu_scale_, kappa_scale_, nu_scale_w_, kappa_scale_w_;
+  double nu_scale_max_ = 1., kappa_scale_max_ = 1.;
+  //! the profile options reset took, their versions and a copy of their
+  //! values, to refuse a change
+  std::array<torch::Tensor, 4> profile_options_, profile_values_;
+  std::array<int64_t, 4> profile_versions_{};
 };
 TORCH_MODULE(Diffusion);
 

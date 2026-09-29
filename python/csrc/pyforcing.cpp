@@ -54,5 +54,10 @@ void bind_forcing(py::module &m) {
            })
       .ADD_OPTION(double, snap::DiffusionOptionsImpl, nu_iso)
       .ADD_OPTION(double, snap::DiffusionOptionsImpl, kappa_iso)
-      .ADD_OPTION(bool, snap::DiffusionOptionsImpl, dynamic);
+      .ADD_OPTION(bool, snap::DiffusionOptionsImpl, dynamic)
+      .ADD_OPTION(torch::Tensor, snap::DiffusionOptionsImpl, nu_scale_x1)
+      .ADD_OPTION(torch::Tensor, snap::DiffusionOptionsImpl, kappa_scale_x1)
+      .ADD_OPTION(torch::Tensor, snap::DiffusionOptionsImpl, nu_scale_x1_table)
+      .ADD_OPTION(torch::Tensor, snap::DiffusionOptionsImpl,
+                  kappa_scale_x1_table);
 }
