@@ -1,0 +1,72 @@
+# Straka et al. (1993) density current, the #250 T3 control case.
+# Half domain x2 in [0, 25.6] km with a symmetry (reflecting) wall at x = 0;
+# 6.4 km deep; t = 900 s; nu = K = 75 m^2/s (K on theta, via straka_t3.cpp).
+# run_t3.py rewrites cells and
+# dynamics/wb-density-ref per run.
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 6.4e3, x2min: 0., x2max: 25.6e3, x3min: -0.5, x3max: 0.5}
+  cells: {nx1: 128, nx2: 512, nx3: 1, nghost: 3}
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 1
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    gammad: 1.4
+    weight: 28.9703e-3   # R = 287 J/kg/K
+    density-floor: 1.e-10
+    pressure-floor: 1.e-10
+    limiter: false
+
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+
+  riemann-solver:
+    type: lmars
+
+  wb-density-ref: smooth5
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.9
+  implicit-scheme: 0
+  nlim: -1
+  tlim: 900
+  ncycle_out: 1000
+
+outputs:
+  - type: netcdf
+    variables: [prim, uov]
+    dt: 900.
+
+forcing:
+  const-gravity:
+    grav1: -9.81
+  diffusion:
+    nu_iso: 75.
+    kappa_iso: 0.   # theta is diffused by straka_t3.cpp (problem/K)
+
+problem:
+  p0: 1.e5
+  Ts: 300.
+  xc: 0.
+  xr: 4.e3
+  zc: 3.e3
+  zr: 2.e3
+  dT: -15.
+  K: 75.          # m^2/s, K lap(theta)
