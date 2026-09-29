@@ -2,13 +2,11 @@
 // largest line that launch can hold. 1025 is the smallest that must take
 // the tiled path. WENO5, WENO3, and polynomial degrees 3 and 5 share it.
 
+#include <gtest/gtest.h>
 #include <torch/torch.h>
 
-#include <snap/recon/interpolation.hpp>
-
-#include <gtest/gtest.h>
-
 #include <exception>
+#include <snap/recon/interpolation.hpp>
 
 using namespace snap;
 
@@ -43,7 +41,7 @@ int overhang(Kind kind) {
 }
 
 torch::Tensor recon_left(Kind kind, torch::Tensor w, int dim,
-                          torch::Device device) {
+                         torch::Device device) {
   auto out_sizes = w.sizes().vec();
   out_sizes[dim] -= overhang(kind);
   auto out = torch::empty(out_sizes, w.options().device(device));
