@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """check_redo must redo a step whose saturation adjustment left a cell unadjusted.
 
-max-iter 1 leaves one strongly supersaturated NH4SH cell unadjusted (the cell of kintera's
-test_saturation_failure_reported.py). kintera only counts the failure, so check_redo must read
+The step starts from one strongly supersaturated NH4SH cell (the cell of kintera's
+test_saturation_failure_reported.py); with max-iter 1 the adjustment leaves cells unadjusted (at
+least one; 11 on the reference CPU run). kintera only counts the failures, so check_redo must read
 the count, redo the step with the saturation cause alone, and drain it so that the restored
 state is accepted. A control step with the default max-iter must be accepted: no other cause
-fires in this scenario. A last arm runs a two-block Mesh with the cell in block 1 only, so
-Mesh::check_redo must read the count of a block other than the first.
+fires in this scenario. A failure counted between steps (a ThermoY call from Python) is not the
+step's: a clean step after it must be accepted. A last arm runs a two-block Mesh with the cell in
+block 1 only, so Mesh::check_redo must read the count of a block other than the first.
 
   python test_check_redo_saturation.py [--device cuda]
 """
@@ -54,11 +56,10 @@ def modules(block):
     return eos, mods["hydro.eos.thermo"]
 
 
-def initial_state(block, cell=True):
-    """At rest, T and rho uniform, H2S everywhere, NH3 in one interior cell only (cell=False: none)."""
-    from snapy import kICY, kIDN, kIPR
+def fields(block, cell=True):
+    """T, rho uniform, H2S everywhere, NH3 in one interior cell only (cell=False: none)."""
+    from snapy import kICY, kIDN
 
-    eos, thermo = modules(block)
     u = dict(block.named_buffers())["hydro.D"].clone().zero_()
     temp = torch.full_like(u[kIDN], CELL[0])
     rho = torch.full_like(u[kIDN], CELL[1])
@@ -67,6 +68,15 @@ def initial_state(block, cell=True):
     if cell:
         k, j, i = u.size(1) // 2, u.size(2) // 2, u.size(3) // 2
         y[:, k, j, i] = torch.tensor(CELL[2:], dtype=y.dtype, device=y.device)
+    return u, temp, rho, y
+
+
+def initial_state(block, cell=True):
+    """At rest, with fields(block, cell)."""
+    from snapy import kICY, kIDN, kIPR
+
+    eos, thermo = modules(block)
+    u, temp, rho, y = fields(block, cell)
     ie = thermo.compute("VT->U", [thermo.compute("DY->V", [rho, y]), temp])
     u[kIDN] = rho * (1.0 - y.sum(0))
     u[kICY:] = rho * y
@@ -74,8 +84,8 @@ def initial_state(block, cell=True):
     return {"hydro_w": eos.compute("U->W", [u])}
 
 
-def initialize(block):
-    block_vars, _ = block.initialize(initial_state(block))
+def initialize(block, cell=True):
+    block_vars, _ = block.initialize(initial_state(block, cell))
     modules(block)[1].take_saturation_adjustment_failures()  # nothing before the step counts
     return block_vars
 
@@ -153,8 +163,36 @@ def run(device, yaml_file):
         if err != 0:
             failures.append("a drained count redid the step again (check_redo %d, causes %s)"
                             % (err, causes))
+    failures += between_steps_arm(device, yaml_file)
     failures += mesh_arm(device, yaml_file)
     return failures
+
+
+def between_steps_arm(device, yaml_file):
+    """A failed adjustment of the block's own ThermoY between steps, then a step with no NH3 (so
+    nothing to adjust): the step must be accepted, the stale count discarded at its start. The
+    call takes the interior with the NH3 cell, the shape advance_local passes: kintera reuses its
+    warm-start buffers without checking their shape."""
+    block = make_block(device, yaml_file, 1)
+    block_vars = initialize(block, cell=False)
+    thermo = modules(block)[1]
+    _, temp, rho, y = fields(block)
+    sl = block.part((0, 0, 0), False)[1:]
+    temp, rho, y = temp[sl], rho[sl].contiguous(), y[(slice(None),) + sl].contiguous()
+    ie = thermo.compute("VT->U", [thermo.compute("DY->V", [rho, y]), temp])
+    diag = torch.zeros(rho.shape + (1,), dtype=rho.dtype, device=rho.device)
+    thermo.forward(rho, ie, y, False, diag)
+    nbad = int((diag < 0).sum())
+    print("between  adjustment before the step: %d cell(s) failed" % nbad)
+    if nbad < 1:
+        return ["max-iter 1 left the NH3 cell adjusted; the between-steps arm is vacuous"]
+    step(block, block_vars)
+    err, causes = check_redo_causes(block, block_vars)
+    print("between  clean step after it: check_redo %d, causes %s" % (err, causes))
+    if err != 0:
+        return ["a failure counted before the step redid a clean step (check_redo %d, causes %s)"
+                % (err, causes)]
+    return []
 
 
 def mesh_arm(device, yaml_file):
