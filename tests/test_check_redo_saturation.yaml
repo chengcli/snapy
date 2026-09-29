@@ -1,0 +1,80 @@
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+  - name: NH3
+    composition: {N: 1, H: 3}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: H2S
+    composition: {H: 2, S: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: NH3(s)
+    composition: {N: 1, H: 3}
+    cv_R: 9.6
+    u0_R: -5520.
+
+  - name: NH4SH(s)
+    composition: {N: 1, H: 5, S: 1}
+    cv_R: 9.6
+    u0_R: -1.2e4
+
+reactions:
+  - equation: NH3 <=> NH3(s)
+    type: nucleation
+    rate-constant: {formula: nh3_ideal}
+
+  - equation: NH3 + H2S <=> NH4SH(s)
+    type: nucleation
+    rate-constant: {formula: nh3_h2s_lewis}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 4, nx2: 4, nx3: 1, nghost: 3}
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor:  1.e-10
+    pressure-floor: 1.e-10
+    limiter: true
+    max-iter: 1  # a strongly supersaturated NH4SH cell is left unadjusted
+
+  reconstruct:
+    vertical: {type: plm, scale: false, shock: false}
+    horizontal: {type: plm, scale: false, shock: false}
+
+  riemann-solver:
+    type: lmars
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.9
+  implicit-scheme: 0
+  nlim: 1
+  tlim: 1.e9
+  ncycle_out: 0

@@ -96,7 +96,9 @@ find_package(Disort REQUIRED)
 find_package(Harp REQUIRED)
 # >= 2.5.8: SpeciesThermo names()/mu() and populate_thermo (kintera #121),
 # read by the EOS cloud-parent cache and sedimentation (snapy #234)
-find_package(Kintera 2.5.8 REQUIRED)
+# >= 2.5.13: ThermoY take_saturation_adjustment_failures() (kintera #131),
+# read by check_redo
+find_package(Kintera 2.5.13 REQUIRED)
 #include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)

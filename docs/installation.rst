@@ -15,7 +15,7 @@ This will install the Python interface with pre-built binaries for Python 3.9-3.
 * Python 3.9 or higher
 * PyTorch 2.7.x
 * NumPy
-* kintera >= 2.5.8
+* kintera >= 2.5.13
 
 Build from Source (Advanced)
 -----------------------------
@@ -34,7 +34,7 @@ Prerequisites
 * C++17 compatible compiler
 * PyTorch 2.7.x with C++ libraries
 * NetCDF C library
-* kintera >= 2.5.8
+* kintera >= 2.5.13
 
 Build Steps
 ~~~~~~~~~~~
