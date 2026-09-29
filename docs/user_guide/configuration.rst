@@ -165,9 +165,10 @@ conduction.
 ``on_theta: true`` conducts on dry ideal-gas potential temperature instead of
 ``T``: the gradient is ``(T/theta) * d(theta)/dn`` with
 ``theta = T (1e5 Pa / p)^(R/cp)``. It is refused unless the equation of state
-type is ``ideal-gas``, including when the flag is turned on after the
-MeshBlock is built. Which theta to use for any other EOS is issue #252.
-Default ``false`` keeps the temperature flux.
+is dry ideal gas: type ``ideal-gas``, and no vapor or condensate species
+(the dry carrier in the species list does not count). That includes turning
+the flag on after the MeshBlock is built. Which theta to use otherwise is
+issue #252. Default ``false`` keeps the temperature flux.
 
 With ``dynamic: true`` the same two numbers are read as the dynamic viscosity
 ``mu`` and the conductivity ``k``: the fluxes are ``-mu * stress`` and

@@ -132,8 +132,9 @@ class DiffusionOptions:
         """Whether kappa_iso conducts on dry ideal-gas potential temperature.
 
         False, the default, conducts on temperature and leaves existing cases
-        unchanged. A non-ideal-gas EOS is refused (issue #252), including when
-        this flag is set after the MeshBlock is built.
+        unchanged. Refused unless the EOS is dry ideal gas: type ideal-gas
+        and no vapor or condensate species (issue #252), including when this
+        flag is set after the MeshBlock is built.
         """
         ...
 
@@ -141,7 +142,8 @@ class DiffusionOptions:
     def on_theta(self, value: bool) -> "DiffusionOptions":
         """Conduct kappa_iso on potential temperature when true.
 
-        Refused unless the EOS type is ideal-gas (issue #252).
+        Refused unless the EOS is dry ideal gas (issue #252): type ideal-gas,
+        and no vapor or condensate species.
         """
         ...
 

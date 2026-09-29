@@ -91,9 +91,10 @@ DiffusionOptions
                on_theta(value: bool) -> DiffusionOptions
 
       Conduct ``kappa_iso`` on dry ideal-gas potential temperature instead of
-      ``T``. Default ``False``. Refused unless the EOS type is ``ideal-gas``
-      (issue #252), at construction and again at the next ``forward`` or
-      ``max_time_step`` if the flag is set afterwards.
+      ``T``. Default ``False``. Refused unless the EOS is dry ideal gas:
+      type ``ideal-gas`` and no vapor or condensate species (issue #252),
+      at construction and again at the next ``forward`` or ``max_time_step``
+      if the flag is set afterwards.
 
    .. method:: nu_scale_x1_table() -> torch.Tensor
                nu_scale_x1_table(value: torch.Tensor) -> DiffusionOptions

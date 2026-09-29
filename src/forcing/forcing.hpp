@@ -225,8 +225,9 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   //! refuses a profile changed since reset; every entry point that reads the
   //! cached profiles (forward, max_time_step) calls it first
   void check_profiles() const;
-  //! on_theta is the dry ideal-gas theta. The flag is read live, so both
-  //! reset and check_profiles refuse any other EOS (issue #252).
+  //! on_theta is dry ideal-gas theta: type ideal-gas, and no vapor or
+  //! condensate. The flag is read live, so both reset and check_profiles
+  //! refuse anything else (issue #252).
   void check_on_theta_eos() const;
 
   //! the x1 profiles on this block's cells (float64, CPU), their maxima, and

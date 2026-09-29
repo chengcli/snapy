@@ -107,6 +107,36 @@ TEST_P(DeviceTest, on_theta_refuses_eos_other_than_ideal_gas) {
   auto dry = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
   dry->hydro()->diffusion()->on_theta() = true;
   EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(dry));
+
+  // ideal-gas type does not drop the moist card's vapor and cloud species.
+  auto labeled = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+  labeled->hydro()->eos()->type() = "ideal-gas";
+  labeled->hydro()->diffusion()->on_theta() = true;
+  try {
+    std::make_shared<MeshBlockImpl>(labeled);
+    FAIL() << "ideal-gas with vapor and cloud constructed";
+  } catch (c10::Error const& err) {
+    auto const msg = std::string(err.what());
+    EXPECT_NE(msg.find("#252"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("ideal-gas"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("vapor or condensate"), std::string::npos) << msg;
+  }
+
+  // kappa_iso > 0 used to fail these on species_cv_ref before the on_theta
+  // message. The refusal has to name the type and #252.
+  auto shallow = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  shallow->hydro()->eos()->type() = "shallow-water";
+  shallow->hydro()->diffusion()->on_theta() = true;
+  try {
+    std::make_shared<MeshBlockImpl>(shallow);
+    FAIL() << "shallow-water with on_theta constructed";
+  } catch (c10::Error const& err) {
+    auto const msg = std::string(err.what());
+    EXPECT_NE(msg.find("#252"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("shallow-water"), std::string::npos) << msg;
+    EXPECT_EQ(msg.find("positive reference specific heat"), std::string::npos)
+        << msg;
+  }
 }
 
 TEST_P(DeviceTest, on_theta_set_after_construction_refuses) {

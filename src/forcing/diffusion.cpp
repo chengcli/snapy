@@ -349,11 +349,12 @@ void DiffusionImpl::reset() {
               "[Diffusion] Only cartesian coordinates are supported.");
   TORCH_CHECK(options->nu_iso() == 0. || coord->options->nghost() >= 2,
               "[Diffusion] Isotropic viscosity requires nghost >= 2.");
+  // Before the heat-capacity check: shallow-water and plume-eos have no cv,
+  // and that older error would hide this one when kappa_iso > 0.
+  check_on_theta_eos();
   TORCH_CHECK(options->kappa_iso() == 0. || phydro->peos->species_cv_ref() > 0.,
               "[Diffusion] Isotropic heat conduction requires an EOS with a "
               "positive reference specific heat at constant volume.");
-  // on_theta is read live; check_profiles() repeats this at every forward.
-  check_on_theta_eos();
 
   // an inference tensor keeps no version counter, so a later in-place write to
   // it could not be detected
@@ -449,11 +450,18 @@ void DiffusionImpl::check_profiles() const {
 void DiffusionImpl::check_on_theta_eos() const {
   if (!options->on_theta()) return;
   auto const& eos_type = phydro->peos->options->type();
-  TORCH_CHECK(eos_type == "ideal-gas",
+  // vapor_ids[0] is the dry carrier. Any further vapor, or any cloud, means
+  // the card is not dry even if the EOS type was set to ideal-gas.
+  auto thermo = phydro->peos->options->thermo();
+  bool dry = true;
+  if (thermo) {
+    dry = thermo->cloud_ids().empty() && thermo->vapor_ids().size() <= 1;
+  }
+  TORCH_CHECK(eos_type == "ideal-gas" && dry,
               "[Diffusion] on_theta conducts on dry ideal-gas potential "
               "temperature and is refused for EOS type '",
-              eos_type,
-              "'; which theta to use for any other EOS is issue #252.");
+              eos_type, "'", dry ? "" : " with vapor or condensate species",
+              "; which theta to use for any other EOS is issue #252.");
 }
 
 torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
