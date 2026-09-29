@@ -113,6 +113,8 @@ DiffusionOptions
    A profile is refused together with ``dynamic=True``, when both the table
    and the per-cell form are given, and when it is set, replaced or changed,
    or ``dynamic`` is set to true beside it, after the MeshBlock is built (at
-   the next ``forward`` or ``max_time_step``). An inference tensor (made under
+   the next ``forward`` or ``max_time_step``, which compare the profile with a
+   copy taken at build, so a write through a NumPy array behind
+   ``torch.from_numpy`` or through ``.data`` is caught too). An inference tensor (made under
    ``torch.inference_mode()``) is refused, since its in-place changes cannot be
    detected; pass an ordinary tensor.

@@ -585,3 +585,38 @@ TEST_P(DeviceTest, profile_change_is_refused_by_max_time_step) {
     EXPECT_THROW(tendency(block, w, temp), c10::Error) << c.what;
   }
 }
+
+// Writes that reach the profile's storage without bumping its version counter:
+// a tensor over outside memory (torch.from_numpy in Python, from_blob here) and
+// the .data alias (variable_data), which shares the storage but not the
+// counter. A profile changed after the build must still be refused, at
+// max_time_step (before any forward) and at forward.
+TEST(diffusion_x1_scale, profile_write_through_outside_storage_is_refused) {
+  auto nc1 = static_cast<int64_t>(centres(base_options()).size());
+  std::vector<double> outside(nc1, 1.);
+  auto owned = torch::ones({nc1}, torch::kFloat64);
+  struct Case {
+    char const* what;
+    torch::Tensor cells;
+    std::function<void()> write;
+  };
+  std::vector<Case> cases = {
+      {"outside memory (from_numpy)",
+       torch::from_blob(outside.data(), {nc1}, torch::kFloat64),
+       [&] { outside[3] = 4.; }},
+      {".data alias", owned, [&] { owned.variable_data()[3] = 4.; }},
+  };
+  for (auto const& c : cases) {
+    auto options = base_options();
+    options->hydro()->diffusion()->nu_scale_x1(c.cells);
+    auto block = build(options);
+    torch::Tensor temp;
+    auto w = sheared_state(block, torch::kCPU, torch::kFloat64, &temp);
+    auto diffusion = block->phydro->pdiffusion;
+    EXPECT_NEAR(diffusion->max_time_step(w), 1. / (2. * 0.5), 1.e-12) << c.what;
+    c.write();
+    EXPECT_EQ(c.cells[3].item<double>(), 4.) << c.what;  // the write landed
+    EXPECT_THROW(diffusion->max_time_step(w), c10::Error) << c.what;
+    EXPECT_THROW(tendency(block, w, temp), c10::Error) << c.what;
+  }
+}

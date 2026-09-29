@@ -141,9 +141,34 @@ def run(device):
             make_block(device, table={"x1": [0.0, float(NX1)], "scale": [1.0, 2.0]})
         return None
 
+    def outside_writes():
+        # writes that bump no version counter: through the NumPy array behind
+        # torch.from_numpy, and through the .data alias; step() calls
+        # max_time_step before forward
+        import numpy as np
+
+        for how in ("from_numpy", ".data"):
+            array = np.ones(x1v.numel())
+            cells = torch.from_numpy(array) if how == "from_numpy" else torch.ones_like(x1v)
+            block = make_block(device, cells=cells)
+            step(block)
+            if how == "from_numpy":
+                array[3] = 4.0
+            else:
+                cells.data[3] = 4.0
+            try:
+                step(block)
+            except RuntimeError as err:
+                if "profile" not in str(err):
+                    return "%s: refused for another reason: %s" % (how, str(err).splitlines()[0])
+                continue
+            return "%s: a write after the build was not refused" % how
+        return None
+
     arm(failures, "unity", unity)
     arm(failures, "yaml-api", yaml_equals_api)
     arm(failures, "inference", inference)
+    arm(failures, "outside", outside_writes)
     return failures
 
 

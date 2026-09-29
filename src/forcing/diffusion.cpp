@@ -402,6 +402,10 @@ void DiffusionImpl::reset() {
   profile_options_ = given;
   for (size_t i = 0; i < profile_options_.size(); ++i) {
     profile_versions_[i] = version_of(profile_options_[i]);
+    // a write through outside storage (torch.from_numpy, .data) bumps no
+    // version, so the values are compared as well
+    profile_values_[i] =
+        given[i].defined() ? given[i].detach().clone() : torch::Tensor();
   }
   nu_scale_w_ = torch::Tensor();
   kappa_scale_w_ = torch::Tensor();
@@ -416,7 +420,8 @@ void DiffusionImpl::check_profiles() const {
     TORCH_CHECK(
         now[i].defined() == seen.defined() &&
             (!seen.defined() || (now[i].is_same(seen) &&
-                                 version_of(now[i]) == profile_versions_[i])),
+                                 version_of(now[i]) == profile_versions_[i] &&
+                                 torch::equal(now[i], profile_values_[i]))),
         "[Diffusion] an x1 coefficient profile must be set before the "
         "MeshBlock is constructed and not changed afterwards.");
     any = any || seen.defined();

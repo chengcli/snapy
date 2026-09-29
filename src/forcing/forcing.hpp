@@ -225,8 +225,9 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   //! copies in the state's device and dtype
   torch::Tensor nu_scale_, kappa_scale_, nu_scale_w_, kappa_scale_w_;
   double nu_scale_max_ = 1., kappa_scale_max_ = 1.;
-  //! the profile options reset took and their versions, to refuse a change
-  std::array<torch::Tensor, 4> profile_options_;
+  //! the profile options reset took, their versions and a copy of their
+  //! values, to refuse a change
+  std::array<torch::Tensor, 4> profile_options_, profile_values_;
   std::array<int64_t, 4> profile_versions_{};
 };
 TORCH_MODULE(Diffusion);
