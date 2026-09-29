@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <array>
+
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
@@ -185,7 +188,8 @@ struct DiffusionOptionsImpl {
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
   //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
-  //! cell centre of the block (ghosts included), set before it is built
+  //! cell centre of the block (ghosts included), set before it is built;
+  //! refused when x1 is split into several blocks (give a table instead)
   ADD_ARG(torch::Tensor, nu_scale_x1);
   ADD_ARG(torch::Tensor, kappa_scale_x1);
   //! the same as a table (2, n): x1 knots, scale; interpolated onto the cells
@@ -217,8 +221,9 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   //! copies in the state's device and dtype
   torch::Tensor nu_scale_, kappa_scale_, nu_scale_w_, kappa_scale_w_;
   double nu_scale_max_ = 1., kappa_scale_max_ = 1.;
-  //! whether reset took a per-cell tensor (to detect one set later)
-  bool nu_cells_ = false, kappa_cells_ = false;
+  //! the profile options reset took and their versions, to refuse a change
+  std::array<torch::Tensor, 4> profile_options_;
+  std::array<int64_t, 4> profile_versions_{};
 };
 TORCH_MODULE(Diffusion);
 

@@ -1,5 +1,6 @@
 // C/C++
 #include <cmath>
+#include <functional>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -16,6 +17,7 @@
 
 #include <snap/bc/bc_func.hpp>
 #include <snap/forcing/forcing.hpp>
+#include <snap/mesh/mesh.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 // tests
@@ -101,6 +103,45 @@ std::vector<double> centres(MeshBlockOptions const& options) {
   auto x = build(options)->pcoord->x1v.to(torch::kFloat64).contiguous();
   return std::vector<double>(x.data_ptr<double>(),
                              x.data_ptr<double>() + x.numel());
+}
+
+DiffusionOptions coefficients() {
+  auto op = DiffusionOptionsImpl::create();
+  op->nu_iso(0.5);
+  op->kappa_iso(0.25);
+  return op;
+}
+
+//! test_diffusion.yaml's column at 16 cells, as nb1 blocks along x1 in one
+//! process (cubed layout; the slab layout rejects nb1 > 1)
+Mesh split_column(int nb1, DiffusionOptions const& diffusion) {
+  auto block = base_options();
+  block->coord()->global_nx1() = 16;
+  block->coord()->nx1() = 16;
+  block->coord()->global_x1max() = 16.;
+  block->coord()->x1max() = 16.;
+  block->hydro()->diffusion() = diffusion;
+  if (nb1 > 1) {
+    block->layout()->type() = "cubed";
+    block->layout()->pz(nb1);
+  }
+  auto options = MeshOptionsImpl::create();
+  options->block(block);
+  options->blocks_per_process(nb1);
+  return Mesh(options);
+}
+
+//! the sheared state's tendency on every block, interiors joined along x1
+torch::Tensor column_tendency(Mesh const& mesh, torch::Device device,
+                              torch::Dtype dtype) {
+  std::vector<torch::Tensor> parts;
+  for (auto const& block : mesh->blocks) {
+    torch::Tensor temp;
+    auto w = sheared_state(block.ptr(), device, dtype, &temp);
+    auto il = block->pcoord->il(), iu = block->pcoord->iu();
+    parts.push_back(tendency(block.ptr(), w, temp).slice(-1, il, iu + 1));
+  }
+  return torch::cat(parts, -1);
 }
 
 }  // namespace
@@ -367,4 +408,102 @@ TEST(diffusion_x1_scale, reset_refuses_bad_profiles) {
   block->phydro->pdiffusion->options->nu_scale_x1(
       torch::ones({nc1}, torch::kFloat64));
   EXPECT_THROW(tendency(block, w, temp), c10::Error);
+}
+
+// The table is interpolated onto each block's own cells, so a column split
+// into nb1 = 2 or 4 blocks along x1 gets the tendency of the unsplit column.
+TEST_P(DeviceTest, table_profile_is_independent_of_the_x1_split) {
+  auto profile = [] {
+    return parse(
+        table_yaml("nu_scale_x1", {0., 5.3, 11., 16.}, {1., 3., 2., 5.}) +
+        ", " + table_yaml("kappa_scale_x1", {2.2, 9.}, {0.5, 4.}));
+  };
+  auto one = split_column(1, profile());
+  one->to(device, dtype);
+  auto expected = column_tendency(one, device, dtype);
+  ASSERT_EQ(expected.size(-1), 16);
+
+  auto plain = split_column(1, coefficients());
+  plain->to(device, dtype);
+  EXPECT_FALSE(torch::equal(column_tendency(plain, device, dtype), expected));
+
+  for (int nb1 : {2, 4}) {
+    auto mesh = split_column(nb1, profile());
+    mesh->to(device, dtype);
+    ASSERT_EQ(static_cast<int>(mesh->blocks.size()), nb1);
+    auto got = column_tendency(mesh, device, dtype);
+    EXPECT_TRUE(torch::equal(got, expected))
+        << "nb1 = " << nb1 << ": max |difference| "
+        << (got - expected).abs().max().item<double>();
+  }
+}
+
+// A per-cell tensor holds one block's cells, and every block of a mesh shares
+// the options: with x1 split, each block would take the same block-sized
+// profile. It is refused there; with one block along x1 it is accepted.
+TEST(diffusion_x1_scale, cells_profile_is_refused_when_x1_is_split) {
+  auto per_cell = [](char const* which, int64_t nc1) {
+    auto op = coefficients();
+    auto cells = torch::linspace(1., 2., nc1, torch::kFloat64);
+    if (std::string(which) == "nu") {
+      op->nu_scale_x1(cells);
+    } else {
+      op->kappa_scale_x1(cells);
+    }
+    return op;
+  };
+  for (char const* which : {"nu", "kappa"}) {
+    EXPECT_NO_THROW(split_column(1, per_cell(which, 16 + 4))) << which;
+    EXPECT_THROW(split_column(2, per_cell(which, 8 + 4)), c10::Error) << which;
+    EXPECT_THROW(split_column(4, per_cell(which, 4 + 4)), c10::Error) << which;
+  }
+  // the table is the way there
+  auto op = coefficients();
+  op->nu_scale_x1_table(
+      torch::tensor({0., 16., 1., 2.}, torch::kFloat64).view({2, 2}));
+  EXPECT_NO_THROW(split_column(2, op));
+}
+
+// reset reads the profile once: setting, replacing, clearing or writing into
+// it afterwards would be silently ignored, so forward refuses it
+TEST(diffusion_x1_scale, profile_change_after_build_is_refused) {
+  auto nc1 = static_cast<int64_t>(centres(base_options()).size());
+  auto cells = [&] { return torch::linspace(1., 2., nc1, torch::kFloat64); };
+  auto table = [] {
+    return torch::tensor({0., 6., 1., 2.}, torch::kFloat64).view({2, 2});
+  };
+  using Change = std::function<void(DiffusionOptions const&)>;
+  struct Case {
+    char const* what;
+    bool by_cells;
+    Change change;
+  };
+  std::vector<Case> cases = {
+      {"cells replaced", true,
+       [&](DiffusionOptions const& op) { op->nu_scale_x1(cells()); }},
+      {"cells written into", true,
+       [](DiffusionOptions const& op) { op->nu_scale_x1()[3] = 5.; }},
+      {"cells cleared", true,
+       [](DiffusionOptions const& op) { op->nu_scale_x1(torch::Tensor()); }},
+      {"table replaced", false,
+       [&](DiffusionOptions const& op) { op->nu_scale_x1_table(table()); }},
+      {"table written into", false,
+       [](DiffusionOptions const& op) { op->nu_scale_x1_table()[1][0] = 3.; }},
+      {"cells added to a table", false,
+       [&](DiffusionOptions const& op) { op->kappa_scale_x1(cells()); }},
+  };
+  for (auto const& c : cases) {
+    auto options = base_options();
+    if (c.by_cells) {
+      options->hydro()->diffusion()->nu_scale_x1(cells());
+    } else {
+      options->hydro()->diffusion()->nu_scale_x1_table(table());
+    }
+    auto block = build(options);
+    torch::Tensor temp;
+    auto w = sheared_state(block, torch::kCPU, torch::kFloat64, &temp);
+    EXPECT_NO_THROW(tendency(block, w, temp)) << c.what;
+    c.change(block->phydro->pdiffusion->options);
+    EXPECT_THROW(tendency(block, w, temp), c10::Error) << c.what;
+  }
 }

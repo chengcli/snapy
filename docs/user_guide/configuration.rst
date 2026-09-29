@@ -133,10 +133,26 @@ Add constant isotropic viscosity and heat conduction on a Cartesian mesh:
         nu_iso: 0.0         # Kinematic viscosity, or dynamic viscosity mu if dynamic
         kappa_iso: 0.0      # Thermal diffusivity (length^2 / time), or conductivity k if dynamic
         dynamic: false      # Read the two above as DYNAMIC coefficients
+        nu_scale_x1:        # optional x1 profile multiplying nu_iso
+          x1: [0., 5.e4, 1.e5]
+          scale: [1., 10., 100.]
+        kappa_scale_x1:     # optional x1 profile multiplying kappa_iso
+          x1: [0., 1.e5]
+          scale: [1., 10.]
 
 Diffusion is integrated explicitly and contributes a parabolic time-step
-limit. Curved coordinates, anisotropic coefficients, and spatially varying
-coefficients are not supported.
+limit, which uses the largest scale of each profile. Curved coordinates and
+anisotropic coefficients are not supported.
+
+``nu_scale_x1`` and ``kappa_scale_x1`` multiply the kinematic coefficients by
+a profile in the x1 coordinate: a table of x1 knots (strictly increasing, at
+least two) and scale values (finite, strictly positive), linear between knots
+and held beyond the ends, interpolated onto each block's cell centres. The
+table works with any number of blocks along x1. A profile is refused with
+``dynamic: true``. From Python the same table is the ``(2, n)`` tensor
+``nu_scale_x1_table``; a per-cell tensor ``nu_scale_x1`` (one value per x1
+cell of the block, ghosts included) is accepted only when a single block
+spans x1. Either must be set before the MeshBlock is built.
 
 With ``dynamic: false`` (the default) the coefficients are kinematic: the
 viscous flux carries the face-averaged density and heat conduction uses the

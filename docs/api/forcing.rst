@@ -86,3 +86,30 @@ DiffusionOptions
 
       Read ``nu_iso`` as ``mu`` and ``kappa_iso`` as ``k``. Default ``False``,
       which leaves the previous path bit-identical.
+
+   .. method:: nu_scale_x1_table() -> torch.Tensor
+               nu_scale_x1_table(value: torch.Tensor) -> DiffusionOptions
+               kappa_scale_x1_table() -> torch.Tensor
+               kappa_scale_x1_table(value: torch.Tensor) -> DiffusionOptions
+
+      An x1 profile multiplying the kinematic ``nu_iso`` (or ``kappa_iso``):
+      a ``(2, n)`` float64 tensor of x1 knots (strictly increasing) and
+      scale values (finite, strictly positive), ``n >= 2``. It is linear
+      between knots, held beyond the ends, and interpolated onto each
+      block's x1 cell centres, so it works with any number of blocks along
+      x1. Undefined by default (a uniform coefficient). The time-step bound
+      uses the largest scale.
+
+   .. method:: nu_scale_x1() -> torch.Tensor
+               nu_scale_x1(value: torch.Tensor) -> DiffusionOptions
+               kappa_scale_x1() -> torch.Tensor
+               kappa_scale_x1(value: torch.Tensor) -> DiffusionOptions
+
+      The same profile given per cell: a 1-D float64 tensor with one value
+      per x1 cell centre of the block, ghosts included (``nc1`` values).
+      Refused when x1 is split into more than one block, since every block
+      shares these options; use the table there.
+
+   A profile is refused together with ``dynamic=True``, when both the table
+   and the per-cell form are given, and when it is set, replaced or changed
+   after the MeshBlock is built.

@@ -220,6 +220,17 @@ torch::Tensor profile_from_table(torch::Tensor const& table,
   return (1. - f) * s.index_select(0, i) + f * s.index_select(0, i + 1);
 }
 
+//! the four profile options, in a fixed order
+std::array<torch::Tensor, 4> profile_options(DiffusionOptionsImpl const& op) {
+  return {op.nu_scale_x1(), op.nu_scale_x1_table(), op.kappa_scale_x1(),
+          op.kappa_scale_x1_table()};
+}
+
+//! an in-place write bumps it; an inference tensor keeps none
+int64_t version_of(torch::Tensor const& t) {
+  return t.defined() && !t.is_inference() ? t._version() : 0;
+}
+
 bool active(Coordinate const& coord, int idir) {
   if (idir == 0) return coord->options->nc1() > 1;
   if (idir == 1) return coord->options->nc2() > 1;
@@ -329,9 +340,10 @@ void DiffusionImpl::reset() {
 
   // one value per x1 cell centre, ghosts included, from a tensor or a table
   auto nc1 = coord->options->nc1();
+  auto layout = phydro->pmb->options->layout();
+  int nb1 = layout ? layout->pz() : 1;
   auto profile = [&](torch::Tensor const& cells, torch::Tensor const& table,
-                     char const* name, bool* from_cells, double* max) {
-    *from_cells = cells.defined();
+                     char const* name, double* max) {
     *max = 1.;
     if (!cells.defined() && !table.defined()) return torch::Tensor();
     TORCH_CHECK(!cells.defined() || !table.defined(), "[Diffusion] ", name,
@@ -343,6 +355,14 @@ void DiffusionImpl::reset() {
     if (table.defined()) {
       scale = profile_from_table(checked_table(table, name), coord->x1v);
     } else {
+      // the options, and so this tensor, are shared by every block
+      TORCH_CHECK(nb1 == 1, "[Diffusion] ", name,
+                  " given per cell covers one block's x1 cells, but x1 is "
+                  "split into ",
+                  nb1,
+                  " blocks; give it as a table in x1 instead (YAML {x1: [...], "
+                  "scale: [...]}, or ",
+                  name, "_table).");
       TORCH_CHECK(cells.dim() == 1 && cells.numel() == nc1, "[Diffusion] ",
                   name, " must be a 1-D profile over this block's nc1 = ", nc1,
                   " x1 cell centres, ghosts included; got ", cells.sizes());
@@ -358,10 +378,14 @@ void DiffusionImpl::reset() {
     return scale;
   };
   nu_scale_ = profile(options->nu_scale_x1(), options->nu_scale_x1_table(),
-                      "nu_scale_x1", &nu_cells_, &nu_scale_max_);
+                      "nu_scale_x1", &nu_scale_max_);
   kappa_scale_ =
       profile(options->kappa_scale_x1(), options->kappa_scale_x1_table(),
-              "kappa_scale_x1", &kappa_cells_, &kappa_scale_max_);
+              "kappa_scale_x1", &kappa_scale_max_);
+  profile_options_ = profile_options(*options);
+  for (size_t i = 0; i < profile_options_.size(); ++i) {
+    profile_versions_[i] = version_of(profile_options_[i]);
+  }
   nu_scale_w_ = torch::Tensor();
   kappa_scale_w_ = torch::Tensor();
 }
@@ -371,19 +395,17 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   auto pmb = phydro->pmb;
   auto coord = pmb->pcoord;
 
-  // a profile set after construction never reached `reset`
-  auto as_reset = [](torch::Tensor const& cells, torch::Tensor const& table,
-                     torch::Tensor const& scale, bool from_cells) {
-    return cells.defined() == from_cells &&
-           table.defined() == (scale.defined() && !from_cells);
-  };
-  TORCH_CHECK(
-      as_reset(options->nu_scale_x1(), options->nu_scale_x1_table(), nu_scale_,
-               nu_cells_) &&
-          as_reset(options->kappa_scale_x1(), options->kappa_scale_x1_table(),
-                   kappa_scale_, kappa_cells_),
-      "[Diffusion] an x1 coefficient profile must be set before the "
-      "MeshBlock is constructed.");
+  // a profile set, replaced or changed after construction never reached reset
+  auto now = profile_options(*options);
+  for (size_t i = 0; i < now.size(); ++i) {
+    auto const& seen = profile_options_[i];
+    TORCH_CHECK(
+        now[i].defined() == seen.defined() &&
+            (!seen.defined() || (now[i].is_same(seen) &&
+                                 version_of(now[i]) == profile_versions_[i])),
+        "[Diffusion] an x1 coefficient profile must be set before the "
+        "MeshBlock is constructed and not changed afterwards.");
+  }
   // in the state's device and dtype, so a profile of ones changes no bit
   auto on_state = [&w](torch::Tensor const& scale, torch::Tensor& work) {
     if (scale.defined() && (!work.defined() || work.device() != w.device() ||
