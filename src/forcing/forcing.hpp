@@ -178,7 +178,8 @@ struct DiffusionOptionsImpl {
     os << "-- diffusion options --\n";
     os << "* nu_iso = " << nu_iso() << "\n"
        << "* kappa_iso = " << kappa_iso() << "\n"
-       << "* dynamic = " << (dynamic() ? "true" : "false") << "\n";
+       << "* dynamic = " << (dynamic() ? "true" : "false") << "\n"
+       << "* on_theta = " << (on_theta() ? "true" : "false") << "\n";
     show("nu_scale_x1", nu_scale_x1(), nu_scale_x1_table());
     show("kappa_scale_x1", kappa_scale_x1(), kappa_scale_x1_table());
   }
@@ -187,6 +188,9 @@ struct DiffusionOptionsImpl {
   ADD_ARG(double, kappa_iso) = 0.;
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
+  //! kappa_iso conducts on dry ideal-gas potential temperature instead of T.
+  //! Default false keeps the temperature flux, so existing cases are unchanged.
+  ADD_ARG(bool, on_theta) = false;
   //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
   //! cell centre of the block (ghosts included), set before it is built;
   //! refused when x1 is split into several blocks (give a table instead)

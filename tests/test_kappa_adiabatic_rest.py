@@ -25,7 +25,14 @@ NX1, ZTOP = 64, 6.4e3
 TOL = 1.0e-9  # K; the control's own drift is ~1e-13 K at N = 10
 
 
-def config(kappa):
+# Default (temperature) conduction at N = 10, K = 75. Three significant figures.
+DEFAULT_DRIFT = 1.36e-2
+
+
+def config(kappa, on_theta=False):
+    diffusion = {"nu_iso": 0.0, "kappa_iso": float(kappa)}
+    if on_theta:
+        diffusion["on_theta"] = True
     return {
         "reference-state": {"Tref": TS, "Pref": P0},
         "species": [{"name": "dry", "composition": {"O": 0.42, "N": 1.56, "Ar": 0.01}, "cv_R": 2.5}],
@@ -39,16 +46,15 @@ def config(kappa):
                      "riemann-solver": {"type": "lmars"}},
         "boundary-condition": {"external": {"x1-inner": "reflecting", "x1-outer": "reflecting"}},
         "integration": {"type": "rk3", "cfl": 0.9},
-        "forcing": {"const-gravity": {"grav1": -G},
-                    "diffusion": {"nu_iso": 0.0, "kappa_iso": float(kappa)}},
+        "forcing": {"const-gravity": {"grav1": -G}, "diffusion": diffusion},
     }
 
 
-def make_block(kappa, device):
+def make_block(kappa, device, on_theta=False):
     from snapy import MeshBlock, MeshBlockOptions
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config(kappa), f)
+        yaml.safe_dump(config(kappa, on_theta), f)
         tmp = f.name
     try:
         block = MeshBlock(MeshBlockOptions.from_yaml(tmp))
@@ -87,8 +93,8 @@ def temperature(block_vars):
     return (w[kIPR] / (w[kIDN] * Rd)).flatten()
 
 
-def run_arm(kappa, nsteps, dt, device):
-    block = make_block(kappa, device)
+def run_arm(kappa, nsteps, dt, device, on_theta=False):
+    block = make_block(kappa, device, on_theta)
     block_vars, _ = block.initialize({"hydro_w": column(block)})
     for _ in range(nsteps):
         for stage in range(len(block.module("intg").stages)):
@@ -115,15 +121,32 @@ def main(argv=None):
 
     T0 = temperature(ref_vars)[active]
     Tc = run_arm(0.0, args.steps, dt, args.device)[active]
-    Tk = run_arm(args.kappa, args.steps, dt, args.device)[active]
+    Tk = run_arm(args.kappa, args.steps, dt, args.device, on_theta=True)[active]
+    Td = run_arm(args.kappa, args.steps, dt, args.device, on_theta=False)[active]
     d = Tk - Tc
-    print("N=%d dt=%.4f s  control max|T-T0| %.3e K  kappa=%g: max|T(K)-T(0)| %.3e K "
-          "(bottom %+.3e, top %+.3e)" % (args.steps, dt, (Tc - T0).abs().max().item(), args.kappa,
-                                          d.abs().max().item(), d[0].item(), d[-1].item()))
+    plain = Td - Tc
+    drift = plain.abs().max().item()
+    print("N=%d dt=%.4f s  control max|T-T0| %.3e K" % (
+        args.steps, dt, (Tc - T0).abs().max().item()))
+    print("on_theta kappa=%g: max|T(K)-T(0)| %.3e K (bottom %+.3e, top %+.3e)" % (
+        args.kappa, d.abs().max().item(), d[0].item(), d[-1].item()))
+    print("default kappa=%g: max|T(K)-T(0)| %.3e K (bottom %+.3e, top %+.3e)" % (
+        args.kappa, drift, plain[0].item(), plain[-1].item()))
+    failed = False
     if d.abs().max().item() > TOL:
-        print("FAIL (%s): kappa_iso moves heat in a resting constant-theta column" % args.device)
+        print("FAIL (%s): on_theta kappa_iso moves heat in a resting constant-theta column"
+              % args.device)
+        failed = True
+    # The unswitched flux still conducts on T. Pin that drift so a later change
+    # of the default cannot pass silently. Only the requested N = 10, K = 75 case.
+    if args.steps == 10 and args.kappa == 75.0 and abs(drift - DEFAULT_DRIFT) > 5e-5:
+        print("FAIL (%s): default drift %.6e K is not the pinned %.3e K"
+              % (args.device, drift, DEFAULT_DRIFT))
+        failed = True
+    if failed:
         return 1
-    print("PASS (%s): kappa_iso leaves a resting adiabatic column at rest" % args.device)
+    print("PASS (%s): on_theta leaves the column at rest; default drift stays %.3e K"
+          % (args.device, DEFAULT_DRIFT))
     return 0
 
 

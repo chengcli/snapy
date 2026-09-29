@@ -249,9 +249,9 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   TORCH_CHECK(!node["K"] && !node["type"],
               "DiffusionOptions: legacy 'K' and 'type' keys are unsupported; "
               "use 'nu_iso' and 'kappa_iso'.");
-  check_keys(
-      node, "forcing/diffusion",
-      {"nu_iso", "kappa_iso", "dynamic", "nu_scale_x1", "kappa_scale_x1"});
+  check_keys(node, "forcing/diffusion",
+             {"nu_iso", "kappa_iso", "dynamic", "on_theta", "nu_scale_x1",
+              "kappa_scale_x1"});
 
   // the tables are ordinary tensors even when parsed under inference mode
   c10::InferenceMode not_inference(false);
@@ -284,6 +284,16 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
                 "DiffusionOptions: dynamic must be true or false, got '", text,
                 "'.");
     op->dynamic() = text == "true";
+  }
+  if (node["on_theta"]) {
+    auto const flag = node["on_theta"];
+    TORCH_CHECK(flag.IsScalar(),
+                "DiffusionOptions: on_theta must be true or false.");
+    auto const text = flag.Scalar();
+    TORCH_CHECK(text == "true" || text == "false",
+                "DiffusionOptions: on_theta must be true or false, got '", text,
+                "'.");
+    op->on_theta() = text == "true";
   }
   // {x1: [...], scale: [...]}: an x1 profile as a table in the x1 coordinate
   auto take_table = [&](char const* key) {
@@ -476,6 +486,19 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   if (options->kappa_iso() > 0. && !options->dynamic()) {
     rho_cv = w[IDN] * phydro->peos->specific_heat_cv(w, temp);
   }
+  // Dry ideal-gas potential temperature, theta = T (p_ref / p)^(R/cp), with
+  // the mixture R = p / (rho T) and cp = cv + R. p_ref = 1e5 Pa is a constant
+  // reference; for a spatially constant R/cp it only scales theta. A moist or
+  // variable-composition theta is issue #252's open question.
+  torch::Tensor theta, t_over_theta;
+  if (options->kappa_iso() > 0. && options->on_theta()) {
+    constexpr double p_ref = 1.0e5;
+    auto pres = w[IPR];
+    auto gas_r = pres / (w[IDN] * temp);
+    auto cp = phydro->peos->specific_heat_cv(w, temp) + gas_r;
+    theta = temp * torch::pow(p_ref / pres, gas_r / cp);
+    t_over_theta = temp / theta;
+  }
 
   std::array<torch::Tensor, 3> fluxes;
   bool has_flux = false;
@@ -541,6 +564,12 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     if (options->kappa_iso() > 0.) {
       auto dtdn =
           face_normal_derivative(temp, coord, idir, face_start, face_end);
+      if (options->on_theta()) {
+        // (T/theta)_face * d(theta)/dn, in place of dT/dn. Same prefactor
+        // below.
+        dtdn = face_average(t_over_theta, idir, face_start, face_end) *
+               face_normal_derivative(theta, coord, idir, face_start, face_end);
+      }
       if (options->dynamic()) {
         flux[IPR].index(face_index) -= options->kappa_iso() * dtdn;
       } else {
