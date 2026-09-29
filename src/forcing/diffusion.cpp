@@ -155,6 +155,71 @@ torch::Tensor face_coefficient(torch::Tensor value, Coordinate const& coord,
   return out;
 }
 
+//! x1 profile at the faces of direction `idir`, broadcastable against a face
+//! field
+torch::Tensor scale_at_faces(torch::Tensor scale, int idir, Region const& start,
+                             Region const& end) {
+  if (idir != 0) return scale.slice(0, start[2], end[2]).view({1, 1, -1});
+  return (0.5 * (scale.slice(0, start[2], end[2]) +
+                 scale.slice(0, start[2] - 1, end[2] - 1)))
+      .view({1, 1, -1});
+}
+
+//! value times an x1 profile at the faces; a wall face extrapolates their
+//! product
+torch::Tensor face_scaled_coefficient(torch::Tensor value, torch::Tensor scale,
+                                      Coordinate const& coord, int idir,
+                                      Region start, Region end, bool wall_lower,
+                                      bool wall_upper) {
+  auto out = face_average(value, idir, start, end) *
+             scale_at_faces(scale, idir, start, end);
+  auto dim = kSpatialDims[idir] - 1;
+  auto nface = end[dim] - start[dim];
+  if (nface < 3 || (!wall_lower && !wall_upper)) return out;
+
+  auto product = value * scale.view({1, 1, -1});
+  if (wall_lower) {
+    out.narrow(dim, 0, 1).copy_(
+        extrapolate_to_wall(product, coord, idir, start, end, false));
+  }
+  if (wall_upper) {
+    out.narrow(dim, nface - 1, 1)
+        .copy_(extrapolate_to_wall(product, coord, idir, start, end, true));
+  }
+  return out;
+}
+
+//! a (2, n) table of x1 knots and scale: n >= 2, finite, x1 strictly
+//! increasing, scale > 0
+torch::Tensor checked_table(torch::Tensor const& table, char const* name) {
+  TORCH_CHECK(table.dim() == 2 && table.size(0) == 2 && table.size(1) >= 2,
+              "[Diffusion] ", name,
+              " table must hold x1 knots and scale values, at least two of "
+              "each; got ",
+              table.sizes());
+  auto t = table.to(torch::kCPU, torch::kFloat64).contiguous();
+  TORCH_CHECK(torch::isfinite(t).all().item<bool>(), "[Diffusion] ", name,
+              " table must be finite.");
+  TORCH_CHECK((t[0].slice(0, 1) > t[0].slice(0, 0, -1)).all().item<bool>(),
+              "[Diffusion] ", name, " x1 knots must be strictly increasing.");
+  TORCH_CHECK(t[1].min().item<double>() > 0., "[Diffusion] ", name,
+              " scale values must be strictly positive.");
+  return t;
+}
+
+//! a checked table, linear in x1 between knots and held beyond the ends, at the
+//! cell centres x1v; a centre on a knot takes that knot's value exactly
+torch::Tensor profile_from_table(torch::Tensor const& table,
+                                 torch::Tensor const& x1v) {
+  auto x = table[0].contiguous(), s = table[1].contiguous();
+  auto xv = x1v.to(torch::kCPU, torch::kFloat64).contiguous();
+  auto i = (torch::searchsorted(x, xv, /*out_int32=*/false, /*right=*/true) - 1)
+               .clamp(0, x.size(0) - 2);
+  auto x0 = x.index_select(0, i), x1 = x.index_select(0, i + 1);
+  auto f = ((xv - x0) / (x1 - x0)).clamp(0., 1.);
+  return (1. - f) * s.index_select(0, i) + f * s.index_select(0, i + 1);
+}
+
 bool active(Coordinate const& coord, int idir) {
   if (idir == 0) return coord->options->nc1() > 1;
   if (idir == 1) return coord->options->nc2() > 1;
@@ -170,7 +235,9 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   TORCH_CHECK(!node["K"] && !node["type"],
               "DiffusionOptions: legacy 'K' and 'type' keys are unsupported; "
               "use 'nu_iso' and 'kappa_iso'.");
-  check_keys(node, "forcing/diffusion", {"nu_iso", "kappa_iso", "dynamic"});
+  check_keys(
+      node, "forcing/diffusion",
+      {"nu_iso", "kappa_iso", "dynamic", "nu_scale_x1", "kappa_scale_x1"});
 
   auto op = DiffusionOptionsImpl::create();
   auto take_non_negative = [&](char const* key) {
@@ -202,6 +269,41 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
                 "'.");
     op->dynamic() = text == "true";
   }
+  // {x1: [...], scale: [...]}: an x1 profile as a table in the x1 coordinate
+  auto take_table = [&](char const* key) {
+    if (!node[key]) return torch::Tensor();
+    auto const table = node[key];
+    TORCH_CHECK(table.IsMap(), "DiffusionOptions: ", key,
+                " must be a table {x1: [...], scale: [...]}.");
+    check_keys(table, std::string("forcing/diffusion/") + key, {"x1", "scale"});
+    auto numbers = [&](char const* sub) {
+      auto const list = table[sub];
+      TORCH_CHECK(list && list.IsSequence(), "DiffusionOptions: ", key, ".",
+                  sub, " must be a list of numbers.");
+      std::vector<double> out;
+      for (auto const& item : list) {
+        TORCH_CHECK(item.IsScalar(), "DiffusionOptions: ", key, ".", sub,
+                    " must be a list of numbers.");
+        try {
+          out.push_back(item.as<double>());
+        } catch (YAML::Exception const&) {
+          TORCH_CHECK(false, "DiffusionOptions: ", key, ".", sub,
+                      " must be a list of numbers, got '", item.Scalar(), "'.");
+        }
+      }
+      return out;
+    };
+    auto x1 = numbers("x1");
+    auto scale = numbers("scale");
+    TORCH_CHECK(x1.size() == scale.size(), "DiffusionOptions: ", key,
+                " needs as many scale values as x1 knots; got ", scale.size(),
+                " and ", x1.size(), ".");
+    return checked_table(torch::stack({torch::tensor(x1, torch::kFloat64),
+                                       torch::tensor(scale, torch::kFloat64)}),
+                         key);
+  };
+  op->nu_scale_x1_table() = take_table("nu_scale_x1");
+  op->kappa_scale_x1_table() = take_table("kappa_scale_x1");
   return op;
 }
 
@@ -224,12 +326,74 @@ void DiffusionImpl::reset() {
   TORCH_CHECK(options->kappa_iso() == 0. || phydro->peos->species_cv_ref() > 0.,
               "[Diffusion] Isotropic heat conduction requires an EOS with a "
               "positive reference specific heat at constant volume.");
+
+  // one value per x1 cell centre, ghosts included, from a tensor or a table
+  auto nc1 = coord->options->nc1();
+  auto profile = [&](torch::Tensor const& cells, torch::Tensor const& table,
+                     char const* name, bool* from_cells, double* max) {
+    *from_cells = cells.defined();
+    *max = 1.;
+    if (!cells.defined() && !table.defined()) return torch::Tensor();
+    TORCH_CHECK(!cells.defined() || !table.defined(), "[Diffusion] ", name,
+                " is given both per cell and as a table; give one.");
+    TORCH_CHECK(!options->dynamic(), "[Diffusion] ", name,
+                " scales the kinematic coefficient and has no meaning with "
+                "dynamic: true.");
+    torch::Tensor scale;
+    if (table.defined()) {
+      scale = profile_from_table(checked_table(table, name), coord->x1v);
+    } else {
+      TORCH_CHECK(cells.dim() == 1 && cells.numel() == nc1, "[Diffusion] ",
+                  name, " must be a 1-D profile over this block's nc1 = ", nc1,
+                  " x1 cell centres, ghosts included; got ", cells.sizes());
+      TORCH_CHECK(cells.scalar_type() == torch::kFloat64, "[Diffusion] ", name,
+                  " must be float64.");
+      scale = cells.to(torch::kCPU).clone();
+      TORCH_CHECK(torch::isfinite(scale).all().item<bool>() &&
+                      scale.min().item<double>() > 0.,
+                  "[Diffusion] ", name,
+                  " must be finite and strictly positive.");
+    }
+    *max = scale.max().item<double>();
+    return scale;
+  };
+  nu_scale_ = profile(options->nu_scale_x1(), options->nu_scale_x1_table(),
+                      "nu_scale_x1", &nu_cells_, &nu_scale_max_);
+  kappa_scale_ =
+      profile(options->kappa_scale_x1(), options->kappa_scale_x1_table(),
+              "kappa_scale_x1", &kappa_cells_, &kappa_scale_max_);
+  nu_scale_w_ = torch::Tensor();
+  kappa_scale_w_ = torch::Tensor();
 }
 
 torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
                                      torch::Tensor temp, double dt) {
   auto pmb = phydro->pmb;
   auto coord = pmb->pcoord;
+
+  // a profile set after construction never reached `reset`
+  auto as_reset = [](torch::Tensor const& cells, torch::Tensor const& table,
+                     torch::Tensor const& scale, bool from_cells) {
+    return cells.defined() == from_cells &&
+           table.defined() == (scale.defined() && !from_cells);
+  };
+  TORCH_CHECK(
+      as_reset(options->nu_scale_x1(), options->nu_scale_x1_table(), nu_scale_,
+               nu_cells_) &&
+          as_reset(options->kappa_scale_x1(), options->kappa_scale_x1_table(),
+                   kappa_scale_, kappa_cells_),
+      "[Diffusion] an x1 coefficient profile must be set before the "
+      "MeshBlock is constructed.");
+  // in the state's device and dtype, so a profile of ones changes no bit
+  auto on_state = [&w](torch::Tensor const& scale, torch::Tensor& work) {
+    if (scale.defined() && (!work.defined() || work.device() != w.device() ||
+                            work.scalar_type() != w.scalar_type())) {
+      work = scale.to(w.device(), w.scalar_type());
+    }
+  };
+  on_state(nu_scale_, nu_scale_w_);
+  on_state(kappa_scale_, kappa_scale_w_);
+
   auto [cell_start, cell_end] = region_bounds(
       pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3)));
   PartOptions div_options;
@@ -280,11 +444,16 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     bool wall_lower = idir == 0 && pmb->options->is_wall_boundary(0, 0, -1);
     bool wall_upper = idir == 0 && pmb->options->is_wall_boundary(0, 0, 1);
 
-    // rho at the face; the dynamic form carries no face density
+    // rho at the face, times the viscosity profile when one is given; the
+    // dynamic form carries no face density
     torch::Tensor rho_face;
     if (!options->dynamic()) {
-      rho_face = face_coefficient(w[IDN], coord, idir, face_start, face_end,
-                                  wall_lower, wall_upper);
+      rho_face = nu_scale_w_.defined()
+                     ? face_scaled_coefficient(w[IDN], nu_scale_w_, coord, idir,
+                                               face_start, face_end, wall_lower,
+                                               wall_upper)
+                     : face_coefficient(w[IDN], coord, idir, face_start,
+                                        face_end, wall_lower, wall_upper);
     }
 
     if (options->nu_iso() > 0.) {
@@ -325,8 +494,12 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
         // using the local mixture volumetric heat capacity.
         flux[IPR].index(face_index) -=
             options->kappa_iso() *
-            face_coefficient(rho_cv, coord, idir, face_start, face_end,
-                             wall_lower, wall_upper) *
+            (kappa_scale_w_.defined()
+                 ? face_scaled_coefficient(rho_cv, kappa_scale_w_, coord, idir,
+                                           face_start, face_end, wall_lower,
+                                           wall_upper)
+                 : face_coefficient(rho_cv, coord, idir, face_start, face_end,
+                                    wall_lower, wall_upper)) *
             dtdn;
       }
     }
@@ -368,7 +541,8 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
     coeff = std::max(options->nu_iso() / rho_min,
                      cv > 0. ? options->kappa_iso() / (rho_min * cv) : 0.);
   } else {
-    coeff = std::max(options->nu_iso(), options->kappa_iso());
+    coeff = std::max(options->nu_iso() * nu_scale_max_,
+                     options->kappa_iso() * kappa_scale_max_);
   }
   if (coeff == 0.) return std::numeric_limits<double>::max();
   TORCH_CHECK(std::isfinite(coeff), "[Diffusion] diffusivity is not finite");
