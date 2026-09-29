@@ -609,6 +609,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     _hydro_u0.copy_(hydro_u);
     if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
     phydro->peos->reset_limiter_marks(hydro_u);
+    saturation_failures();  // a failure counted before the step is not its own
 
     if (pscalar->nvar() > 0) {
       _scalar_s0.copy_(scalar_s);
@@ -1073,6 +1074,7 @@ std::array<bool, 2> MeshBlockImpl::limiter_hits() const {
 }
 
 int64_t MeshBlockImpl::saturation_failures() {
+  // by name, as step (6) does: the EOS types keep their ThermoY private
   auto modules = named_modules();
   auto m = modules.find("hydro.eos.thermo");
   auto pthermo =
@@ -1123,7 +1125,7 @@ int MeshBlockImpl::check_redo(Variables &vars) {
   // floor_hit first: its fresh cons2prim marks an end state the limiter repairs
   bool floor = floor_hit(vars);
   auto hits = limiter_hits();
-  // drained on every call; read after limiter_hits' sync, so no wait
+  // drained on every call; on CUDA one more integer read to the host
   bool sat = saturation_failures() > 0;
   auto flag =
       torch::tensor({floor ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,

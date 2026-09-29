@@ -476,7 +476,7 @@ int MeshImpl::check_redo(MeshVariables& vars) {
     auto hits = blocks[i]->limiter_hits();
     if (hits[0]) h[2] = 1.;
     if (hits[1]) h[3] = 1.;
-    // drained in every block; read after limiter_hits' sync, so no wait
+    // drained in every block; on CUDA one more integer read to the host
     if (blocks[i]->saturation_failures() > 0) h[4] = 1.;
   }
   std::vector<at::Tensor> flag_reduce = {flag};
