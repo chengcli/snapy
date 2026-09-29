@@ -155,11 +155,11 @@ constexpr int kIu =
 
 void dispatch(Inputs const& in, RefOutput const& out, bool uniform,
               bool phys_in, bool phys_out, bool wall_clamp = false,
-              int iu = kIu) {
+              int iu = kIu, bool rop_guard = false) {
   at::native::call_hydro_ref_x1(in.w.device().type(), in.w, in.dx1f, in.anchor,
                                 out.psf_lo, out.psf_hi, out.pref, out.dsf,
                                 out.dref, iu, 1.0, uniform, phys_in, phys_out,
-                                wall_clamp);
+                                wall_clamp, rop_guard);
 }
 
 //! the cells a block owns: [il, iu]. tensor_reference has no clamped branch on
@@ -346,7 +346,7 @@ TEST(HydroRefX1Dispatch,
   auto a = allocate_output(big.w);
   at::native::call_hydro_ref_x1(torch::kCPU, big.w, big.dx1f, torch::Tensor(),
                                 a.psf_lo, a.psf_hi, a.pref, a.dsf, a.dref,
-                                ng + 11, g, true, true, false, true);
+                                ng + 11, g, true, true, false, true, false);
 
   // the bottom FOUR of those cells as their own block -- same wall, same
   // column, and the seam anchor the relay would have handed it (hydro.cpp's
@@ -356,7 +356,7 @@ TEST(HydroRefX1Dispatch,
   auto b = allocate_output(small.w);
   at::native::call_hydro_ref_x1(torch::kCPU, small.w, small.dx1f, anchor,
                                 b.psf_lo, b.psf_hi, b.pref, b.dsf, b.dref,
-                                ng + 3, g, true, true, false, true);
+                                ng + 3, g, true, true, false, true, false);
 
   auto want = a.pref.narrow(-1, ng, 4);
   auto got = b.pref.narrow(-1, ng, 4);
@@ -384,6 +384,49 @@ TEST(HydroRefX1Dispatch, without_the_clamp_a_thin_blocks_ghosts_do_reach_it) {
   dispatch(moved, b, true, true, true, /*wall_clamp=*/false, iu);
 
   EXPECT_FALSE(torch::equal(interior(a.pref, iu), interior(b.pref, iu)));
+}
+
+// The rho/p guard is opt-in and must not move a single bit while every
+// pressure is positive, on either backend.
+TEST(HydroRefX1Dispatch, rop_guard_is_bit_identical_on_a_positive_column) {
+  std::vector<torch::Device> devices = {torch::kCPU};
+  if (torch::cuda::is_available()) devices.push_back(torch::kCUDA);
+  for (auto device : devices) {
+    for (bool clamp : {false, true}) {
+      auto in = make_inputs(torch::kFloat64, /*uniform=*/true, false);
+      in.w = in.w.to(device);
+      in.dx1f = in.dx1f.to(device);
+      auto a = allocate_output(in.w);
+      auto b = allocate_output(in.w);
+      dispatch(in, a, true, true, true, clamp, kIu, /*rop_guard=*/false);
+      dispatch(in, b, true, true, true, clamp, kIu, /*rop_guard=*/true);
+      EXPECT_TRUE(torch::equal(a.dref, b.dref)) << device;
+      EXPECT_TRUE(torch::equal(a.dsf, b.dsf)) << device;
+      EXPECT_TRUE(torch::equal(a.pref, b.pref)) << device;
+    }
+  }
+}
+
+// A cell with p <= 0 poisons the unguarded smoothing (rho/p < 0 or inf); the
+// guard drops it from the stencil and keeps the reference finite, and a cell
+// whose stencil does not reach it is untouched.
+TEST(HydroRefX1Dispatch, rop_guard_keeps_the_reference_finite) {
+  auto in = make_inputs(torch::kFloat64, /*uniform=*/true, false);
+  auto bad = in;
+  bad.w = in.w.clone();
+  bad.w[snap::IPR].select(-1, 5).zero_();
+  auto a = allocate_output(bad.w);
+  auto b = allocate_output(bad.w);
+  auto c = allocate_output(in.w);
+  dispatch(bad, a, true, true, true, true, kIu, /*rop_guard=*/false);
+  dispatch(bad, b, true, true, true, true, kIu, /*rop_guard=*/true);
+  dispatch(in, c, true, true, true, true, kIu, /*rop_guard=*/false);
+  EXPECT_FALSE(torch::isfinite(interior(a.dref)).all().item<bool>());
+  EXPECT_TRUE(torch::isfinite(b.dref).all().item<bool>());
+  EXPECT_TRUE(torch::isfinite(b.dsf).all().item<bool>());
+  // cell 2 (il) is three cells from cell 5: dref only depends on the face
+  // pressures and on rho/p within i+-2, and the faces do not see p(5)
+  EXPECT_TRUE(torch::equal(b.dref.select(-1, 2), c.dref.select(-1, 2)));
 }
 
 }  // namespace

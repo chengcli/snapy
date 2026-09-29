@@ -37,7 +37,9 @@ struct HydroOptionsImpl {
     os << "* verbose = " << verbose() << "\n"
        << "* disable_flux_x1 = " << disable_flux_x1() << "\n"
        << "* disable_flux_x2 = " << disable_flux_x2() << "\n"
-       << "* disable_flux_x3 = " << disable_flux_x3() << "\n";
+       << "* disable_flux_x3 = " << disable_flux_x3() << "\n"
+       << "* wb_density_ref = " << wb_density_ref() << "\n"
+       << "* wb_rop_guard = " << wb_rop_guard() << "\n";
   }
 
   //! verbose
@@ -49,6 +51,16 @@ struct HydroOptionsImpl {
 
   //! Keep the well-balanced x1 reference's stencils off the wall ghosts
   ADD_ARG(bool, wb_wall_clamp) = true;
+
+  //! Density reference of the well-balanced x1 reconstruction (#250):
+  //!  - smooth5:   p_ref x (5-point binomial smoothing of rho/p along x1)
+  //!  - isentrope: the bottom interior cell's adiabat,
+  //!               rho_b (p_ref / p_b)^(1 / gamma_b)
+  //!  - none:      0, i.e. the density itself is reconstructed
+  ADD_ARG(std::string, wb_density_ref) = "smooth5";
+
+  //! Guard smooth5's rho/p divide against a non-positive pressure
+  ADD_ARG(bool, wb_rop_guard) = false;
 
   //! forcing options
   ADD_ARG(ConstGravityOptions, grav) = nullptr;

@@ -50,10 +50,11 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     // Only the TOP level is checked here: the equation-of-state sub-block is
     // co-owned (kintera reads its own keys from it), so it is checked against
     // both libraries' keys in EquationOfStateOptionsImpl::from_yaml.
-    static std::array<char const*, 8> const dynamics_keys = {
+    static std::array<char const*, 10> const dynamics_keys = {
         "equation-of-state", "reconstruct",     "riemann-solver",
         "verbose",           "disable-flux-x1", "disable-flux-x2",
-        "disable-flux-x3",   "wb-wall-clamp"};
+        "disable-flux-x3",   "wb-wall-clamp",   "wb-density-ref",
+        "wb-rop-guard"};
     for (auto const& item : dyn) {
       auto key = item.first.as<std::string>();
       auto joined = [] {  // the message lists the checked keys
@@ -72,6 +73,15 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
     op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
     op->wb_wall_clamp() = dyn["wb-wall-clamp"].as<bool>(true);
+    op->wb_density_ref() =
+        dyn["wb-density-ref"].as<std::string>(op->wb_density_ref());
+    TORCH_CHECK(op->wb_density_ref() == "smooth5" ||
+                    op->wb_density_ref() == "isentrope" ||
+                    op->wb_density_ref() == "none",
+                "HydroOptions: 'dynamics/wb-density-ref' must be smooth5, "
+                "isentrope or none, got '",
+                op->wb_density_ref(), "'.");
+    op->wb_rop_guard() = dyn["wb-rop-guard"].as<bool>(false);
   }
 
   // --------------- forcings --------------- //

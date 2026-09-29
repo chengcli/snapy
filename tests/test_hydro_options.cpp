@@ -256,6 +256,36 @@ TEST(hydro_options, wb_wall_clamp_ships_enabled) {
   std::remove(f.c_str());
 }
 
+// wb-density-ref ships as smooth5 (#250), accepts the three forms, and
+// refuses anything else; wb-rop-guard ships off.
+TEST(hydro_options, wb_density_ref_parses_and_ships_smooth5) {
+  auto write = [](std::string const &fname, std::string const &extra) {
+    std::ofstream f(fname);
+    f << "dynamics:\n"
+         "  equation-of-state:\n"
+         "    type: ideal-gas\n"
+      << extra;
+  };
+  std::string f = "test_wb_density_ref.yaml";
+
+  write(f, "");
+  auto op = snap::HydroOptionsImpl::from_yaml(f);
+  EXPECT_EQ(op->wb_density_ref(), "smooth5");
+  EXPECT_FALSE(op->wb_rop_guard());
+
+  for (std::string form : {"smooth5", "isentrope", "none"}) {
+    write(f, "  wb-density-ref: " + form + "\n  wb-rop-guard: true\n");
+    op = snap::HydroOptionsImpl::from_yaml(f);
+    EXPECT_EQ(op->wb_density_ref(), form);
+    EXPECT_TRUE(op->wb_rop_guard());
+  }
+
+  write(f, "  wb-density-ref: smooth3\n");
+  EXPECT_THROW(snap::HydroOptionsImpl::from_yaml(f), c10::Error);
+
+  std::remove(f.c_str());
+}
+
 // The wb-wall-clamp option has exactly one wire into the solver, in
 // HydroImpl::_hydro_ref_x1. Every other test drives call_hydro_ref_x1 with a
 // literal bool, so replacing that wire with `false` leaves all of them green.
