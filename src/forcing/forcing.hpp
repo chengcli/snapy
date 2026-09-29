@@ -189,7 +189,8 @@ struct DiffusionOptionsImpl {
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
   //! kappa_iso conducts on dry ideal-gas potential temperature instead of T.
-  //! Default false keeps the temperature flux, so existing cases are unchanged.
+  //! Refused unless the EOS type is ideal-gas (issue #252). Default false
+  //! keeps the temperature flux, so existing cases are unchanged.
   ADD_ARG(bool, on_theta) = false;
   //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
   //! cell centre of the block (ghosts included), set before it is built;

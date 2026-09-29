@@ -87,3 +87,24 @@ TEST_P(DeviceTest, conserved_limiter_uses_nucleation_parent_metadata) {
                               1.e-6, 1.e-6));
   EXPECT_TRUE(torch::equal(cons[ICY + 1], torch::zeros_like(cons[ICY + 1])));
 }
+
+TEST_P(DeviceTest, on_theta_refuses_eos_other_than_ideal_gas) {
+  for (auto const& eos_type :
+       std::vector<std::string>{"ideal-moist", "moist-mixture"}) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+    options->hydro()->eos()->type() = eos_type;
+    options->hydro()->diffusion()->on_theta() = true;
+    try {
+      std::make_shared<MeshBlockImpl>(options);
+      FAIL() << eos_type << " with on_theta constructed";
+    } catch (c10::Error const& err) {
+      auto const msg = std::string(err.what());
+      EXPECT_NE(msg.find("#252"), std::string::npos) << msg;
+      EXPECT_NE(msg.find(eos_type), std::string::npos) << msg;
+    }
+  }
+
+  auto dry = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  dry->hydro()->diffusion()->on_theta() = true;
+  EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(dry));
+}

@@ -352,6 +352,17 @@ void DiffusionImpl::reset() {
   TORCH_CHECK(options->kappa_iso() == 0. || phydro->peos->species_cv_ref() > 0.,
               "[Diffusion] Isotropic heat conduction requires an EOS with a "
               "positive reference specific heat at constant volume.");
+  // theta below is the dry ideal-gas potential temperature. Which theta any
+  // other EOS should conduct on is issue #252, so those types are refused
+  // here rather than given this formula.
+  if (options->on_theta()) {
+    auto const& eos_type = phydro->peos->options->type();
+    TORCH_CHECK(eos_type == "ideal-gas",
+                "[Diffusion] on_theta conducts on dry ideal-gas potential "
+                "temperature and is refused for EOS type '",
+                eos_type,
+                "'; which theta to use for any other EOS is issue #252.");
+  }
 
   // an inference tensor keeps no version counter, so a later in-place write to
   // it could not be detected
@@ -488,8 +499,8 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   }
   // Dry ideal-gas potential temperature, theta = T (p_ref / p)^(R/cp), with
   // the mixture R = p / (rho T) and cp = cv + R. p_ref = 1e5 Pa is a constant
-  // reference; for a spatially constant R/cp it only scales theta. A moist or
-  // variable-composition theta is issue #252's open question.
+  // reference; for a spatially constant R/cp it only scales theta. reset()
+  // has already refused on_theta unless the EOS type is ideal-gas.
   torch::Tensor theta, t_over_theta;
   if (options->kappa_iso() > 0. && options->on_theta()) {
     constexpr double p_ref = 1.0e5;
