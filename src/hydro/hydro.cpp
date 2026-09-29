@@ -323,33 +323,25 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // owning x1-outer anchors at the true domain top; every block below receives
   // the running seam-face pressure from the block above and passes on that
   // value plus its own interior hydrostatic drop (= its bottom-face pressure).
-  // A serial top->bottom scan along the x1 process column. nb1 == 1 (no x1
-  // neighbor) => an empty anchor tells the backend to compute the local top
-  // anchor.
+  // A serial top->bottom scan along the x1 block column, whether the blocks
+  // sit on other processes or on other threads of this one (#254). nb1 == 1
+  // (no x1 neighbor) => an empty anchor tells the backend to compute the
+  // local top anchor.
+  constexpr int kWbRefTag = 0x7715;
   torch::Tensor anchor;
   int below = -1;
   int above = -1;
-  bool x1_split = false;
   auto layout = pmb->get_layout();
-  if (layout && layout->has_process_group() && !layout->options->periodic_z() &&
-      layout->options->pz() >
-          1) {  // pz==nb1: relay only across a SPLIT x1 column (else unmatched
-                // send/recv at nb1=1)
-    x1_split = true;
-    TORCH_CHECK(layout->options->blocks_per_process() == 1,
-                "[Hydro] the x1 reference relay addresses block ranks as "
-                "process ranks: one block per process only");
+  // pz==nb1: relay only across a SPLIT x1 column (else unmatched send/recv at
+  // nb1=1)
+  bool x1_split =
+      layout && !layout->options->periodic_z() && layout->options->pz() > 1;
+  if (x1_split) {
     auto iloc = layout->loc_of(layout->options->rank());
     above = layout->neighbor_rank(iloc, {0, 0, 1});   // toward x1-outer
     below = layout->neighbor_rank(iloc, {0, 0, -1});  // toward x1-inner
-    constexpr int kWbRefTag = 0x7715;
-
-    if (above >= 0) {
-      std::vector<torch::Tensor> rbuf = {
-          torch::empty({w.size(1), w.size(2), 1}, w.options())};
-      layout->comm->recv(rbuf, above, kWbRefTag)->wait();
-      anchor = rbuf[0];
-    }
+    anchor = layout->take_x1_anchor(
+        above, torch::empty({w.size(1), w.size(2), 1}, w.options()), kWbRefTag);
   }
 
   if (x1_uniform_ < 0) {
@@ -376,9 +368,7 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
       g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
 
   if (below >= 0) {
-    constexpr int kWbRefTag = 0x7715;
-    std::vector<torch::Tensor> sbuf = {psf_lo.narrow(-1, is, 1).contiguous()};
-    layout->comm->send(sbuf, below, kWbRefTag)->wait();
+    layout->pass_x1_anchor(below, psf_lo.narrow(-1, is, 1), kWbRefTag);
   }
 
   // Ghost-row reference exchange across x1 seams: overwrite this block's
@@ -391,40 +381,46 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // dynamics nb1-dependent. After this exchange the perturbation field seen
   // by the reconstruction is identical on both sides of every seam, so the
   // seam-face states agree and the single-valued seam flux average becomes a
-  // no-op. nb1=1: no seams, bit-unchanged.
-  if (x1_split && (below >= 0 || above >= 0)) {
+  // no-op. nb1=1: no seams, bit-unchanged. Across process seams only: a
+  // same-process neighbor may not have computed its rows yet.
+  int remote_below =
+      (below >= 0 && !layout->is_local_block(below)) ? below : -1;
+  int remote_above =
+      (above >= 0 && !layout->is_local_block(above)) ? above : -1;
+  if (remote_below >= 0 || remote_above >= 0) {
     constexpr int kWbGhostUpTag = 0x7717;
     constexpr int kWbGhostDnTag = 0x7718;
     int ng = is;  // il() == nghost
     std::vector<CommWorkPtr> sends;
-    if (above >=
+    if (remote_above >=
         0) {  // my top interior rows are the above block's lower ghosts
       std::vector<torch::Tensor> up = {
           torch::cat({pref.narrow(-1, iu - ng + 1, ng),
                       dref.narrow(-1, iu - ng + 1, ng)},
                      -1)
               .contiguous()};
-      sends.push_back(layout->comm->send(up, above, kWbGhostUpTag));
+      sends.push_back(layout->send_to_block(up, remote_above, kWbGhostUpTag));
     }
-    if (below >=
+    if (remote_below >=
         0) {  // my bottom interior rows are the below block's upper ghosts
       std::vector<torch::Tensor> dn = {
           torch::cat({pref.narrow(-1, is, ng), dref.narrow(-1, is, ng)}, -1)
               .contiguous()};
-      sends.push_back(layout->comm->send(dn, below, kWbGhostDnTag));
+      sends.push_back(layout->send_to_block(dn, remote_below, kWbGhostDnTag));
     }
-    if (below >= 0) {  // receive my lower ghost rows from below's top interior
+    if (remote_below >=
+        0) {  // receive my lower ghost rows from below's top interior
       std::vector<torch::Tensor> rb = {
           torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
-      layout->comm->recv(rb, below, kWbGhostUpTag)->wait();
+      layout->recv_from_block(rb, remote_below, kWbGhostUpTag)->wait();
       pref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, 0, ng));
       dref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, ng, ng));
     }
-    if (above >=
+    if (remote_above >=
         0) {  // receive my upper ghost rows from above's bottom interior
       std::vector<torch::Tensor> ra = {
           torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
-      layout->comm->recv(ra, above, kWbGhostDnTag)->wait();
+      layout->recv_from_block(ra, remote_above, kWbGhostDnTag)->wait();
       pref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, 0, ng));
       dref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, ng, ng));
     }
