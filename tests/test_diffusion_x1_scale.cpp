@@ -540,3 +540,48 @@ TEST_P(DeviceTest, inference_tensor_profile_is_refused) {
       options->hydro()->diffusion()->nu_scale_x1_table().is_inference());
   EXPECT_NO_THROW(build(options));
 }
+
+// max_time_step reads the cached profile maxima too: a profile replaced or
+// written into after the build, or dynamic set to true beside it, is refused
+// there even before the first forward, rather than bounding dt by the stale
+// (smaller) coefficient. An unchanged profile still gives its bound.
+TEST_P(DeviceTest, profile_change_is_refused_by_max_time_step) {
+  auto nc1 = static_cast<int64_t>(centres(base_options()).size());
+  using Change = std::function<void(DiffusionOptions const&)>;
+  struct Case {
+    char const* what;
+    bool by_cells;
+    Change change;
+  };
+  std::vector<Case> cases = {
+      {"table replaced by a larger one", false,
+       [](DiffusionOptions const& op) {
+         op->nu_scale_x1_table(
+             torch::tensor({0., 6., 1., 4.}, torch::kFloat64).view({2, 2}));
+       }},
+      {"cells written into", true,
+       [](DiffusionOptions const& op) { op->nu_scale_x1()[3] = 4.; }},
+      {"dynamic set to true", false,
+       [](DiffusionOptions const& op) { op->dynamic(true); }},
+  };
+  for (auto const& c : cases) {
+    auto options = base_options();
+    if (c.by_cells) {
+      options->hydro()->diffusion()->nu_scale_x1(
+          torch::ones({nc1}, torch::kFloat64));
+    } else {
+      options->hydro()->diffusion()->nu_scale_x1_table(
+          torch::tensor({0., 6., 1., 1.}, torch::kFloat64).view({2, 2}));
+    }
+    auto block = build(options);
+    block->to(device, dtype);
+    torch::Tensor temp;
+    auto w = sheared_state(block, device, dtype, &temp);
+    auto diffusion = block->phydro->pdiffusion;
+    // dx = 1, one active dimension: 1 / (2 nu max s) with max s = 1
+    EXPECT_NEAR(diffusion->max_time_step(w), 1. / (2. * 0.5), 1.e-12) << c.what;
+    c.change(diffusion->options);
+    EXPECT_THROW(diffusion->max_time_step(w), c10::Error) << c.what;
+    EXPECT_THROW(tendency(block, w, temp), c10::Error) << c.what;
+  }
+}

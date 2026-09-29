@@ -407,13 +407,10 @@ void DiffusionImpl::reset() {
   kappa_scale_w_ = torch::Tensor();
 }
 
-torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
-                                     torch::Tensor temp, double dt) {
-  auto pmb = phydro->pmb;
-  auto coord = pmb->pcoord;
-
+void DiffusionImpl::check_profiles() const {
   // a profile set, replaced or changed after construction never reached reset
   auto now = profile_options(*options);
+  bool any = false;
   for (size_t i = 0; i < now.size(); ++i) {
     auto const& seen = profile_options_[i];
     TORCH_CHECK(
@@ -422,7 +419,20 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
                                  version_of(now[i]) == profile_versions_[i])),
         "[Diffusion] an x1 coefficient profile must be set before the "
         "MeshBlock is constructed and not changed afterwards.");
+    any = any || seen.defined();
   }
+  // reset refuses this pair; dynamic is read live, so check it again
+  TORCH_CHECK(!any || !options->dynamic(),
+              "[Diffusion] an x1 coefficient profile has no meaning with "
+              "dynamic: true, set after the MeshBlock was constructed.");
+}
+
+torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
+                                     torch::Tensor temp, double dt) {
+  auto pmb = phydro->pmb;
+  auto coord = pmb->pcoord;
+
+  check_profiles();
   // in the state's device and dtype, so a profile of ones changes no bit
   auto on_state = [&w](torch::Tensor const& scale, torch::Tensor& work) {
     if (scale.defined() && (!work.defined() || work.device() != w.device() ||
@@ -552,6 +562,7 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
 }
 
 double DiffusionImpl::max_time_step(torch::Tensor w) const {
+  check_profiles();
   auto coord = phydro->pmb->pcoord;
   auto interior =
       phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));

@@ -111,7 +111,8 @@ DiffusionOptions
       shares these options; use the table there.
 
    A profile is refused together with ``dynamic=True``, when both the table
-   and the per-cell form are given, and when it is set, replaced or changed
-   after the MeshBlock is built. An inference tensor (made under
+   and the per-cell form are given, and when it is set, replaced or changed,
+   or ``dynamic`` is set to true beside it, after the MeshBlock is built (at
+   the next ``forward`` or ``max_time_step``). An inference tensor (made under
    ``torch.inference_mode()``) is refused, since its in-place changes cannot be
    detected; pass an ordinary tensor.

@@ -217,6 +217,10 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   double max_time_step(torch::Tensor w) const;
 
  private:
+  //! refuses a profile changed since reset; every entry point that reads the
+  //! cached profiles (forward, max_time_step) calls it first
+  void check_profiles() const;
+
   //! the x1 profiles on this block's cells (float64, CPU), their maxima, and
   //! copies in the state's device and dtype
   torch::Tensor nu_scale_, kappa_scale_, nu_scale_w_, kappa_scale_w_;
