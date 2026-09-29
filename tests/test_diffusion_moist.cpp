@@ -108,3 +108,39 @@ TEST_P(DeviceTest, on_theta_refuses_eos_other_than_ideal_gas) {
   dry->hydro()->diffusion()->on_theta() = true;
   EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(dry));
 }
+
+TEST_P(DeviceTest, on_theta_set_after_construction_refuses) {
+  for (auto const& eos_type :
+       std::vector<std::string>{"ideal-moist", "moist-mixture"}) {
+    auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
+    options->hydro()->eos()->type() = eos_type;
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    block->to(device, dtype);
+    block->phydro->pdiffusion->options->on_theta() = true;
+    auto w = make_primitive(block, device, dtype);
+    auto temp = block->pcoord->x1v.to(device, dtype).view({1, 1, -1});
+    auto du = torch::zeros_like(w);
+    try {
+      block->phydro->pdiffusion->forward(du, w, temp, 0.1);
+      FAIL() << eos_type << " forward ran after on_theta was set";
+    } catch (c10::Error const& err) {
+      auto const msg = std::string(err.what());
+      EXPECT_NE(msg.find("#252"), std::string::npos) << msg;
+      EXPECT_NE(msg.find(eos_type), std::string::npos) << msg;
+    }
+  }
+
+  auto dry_options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  auto dry = std::make_shared<MeshBlockImpl>(dry_options);
+  dry->to(device, dtype);
+  dry->phydro->pdiffusion->options->on_theta() = true;
+  auto coord = dry->pcoord;
+  auto w = torch::zeros({dry->phydro->peos->nvar(), coord->options->nc3(),
+                         coord->options->nc2(), coord->options->nc1()},
+                        torch::device(device).dtype(dtype));
+  w[IDN] = 1.;
+  w[IPR] = 1.e5;
+  auto temp = coord->x1v.to(device, dtype).view({1, 1, -1});
+  auto du = torch::zeros_like(w);
+  EXPECT_NO_THROW(dry->phydro->pdiffusion->forward(du, w, temp, 0.1));
+}
