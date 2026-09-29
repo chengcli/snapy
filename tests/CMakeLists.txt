@@ -42,6 +42,7 @@ setup_test(test_diffusion_moist)
 setup_test(test_condensate_conservation)
 setup_test(test_parentless_cloud)
 setup_test(test_fix_vapor_volume)
+setup_test(test_parentless_cloud_nb1)
 setup_test(test_wall_saturation)
 setup_test(test_cloud_parent_slots)
 setup_test(test_two_cards_species)
@@ -69,6 +70,16 @@ set_tests_properties(test_sedimentation_cubed_seam_gloo PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
   SKIP_RETURN_CODE 125
   LABELS "exchange")
+
+setup_parallel_test(test_parentless_cloud_nb1_mp 2)
+if(UCX_FOUND)  # the same two ranks on Gloo, which Linux (UCX) would not reach
+  add_test(NAME test_parentless_cloud_nb1_mp_gloo
+           COMMAND torchrun --no-python --nproc-per-node=2
+                   $<TARGET_FILE:test_parentless_cloud_nb1_mp.${buildl}>)
+  set_tests_properties(test_parentless_cloud_nb1_mp_gloo PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    ENVIRONMENT "BACKEND=gloo")
+endif()
 
 if(UCX_FOUND)
   add_test(

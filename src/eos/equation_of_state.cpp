@@ -204,7 +204,8 @@ torch::Tensor EquationOfStateImpl::forward(torch::Tensor cons,
   return compute("U->W", {cons, prim});
 }
 
-void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
+void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
+                                                   bool whole_column) {
   auto pmb = phydro->pmb;
   auto pcoord = pmb->pcoord;
 
@@ -288,25 +289,40 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons) {
     // A cloud with no parent vapor (e.g. precipitation made by coagulation)
     // takes its deficit from the same species in the column, as fix_vapor does
     // for vapor; the parented clouds are non-negative by now and pass through.
-    // The repair is per meshblock and scans each column from the top. It gives
-    // up only when the deficit summed down from a negative cell to the bottom
-    // exceeds the repaired sum above it, both at working precision, i.e. when
-    // the rounded column total is strictly negative; a zero total is repaired.
-    // The clamp then adds mass equal to the remaining deficit, as the old
-    // per-cell clamp did. This exception is accepted and tested
+    // The repair scans each column from the top. With whole_column, a column
+    // split along x1 is gathered and repaired whole on each of its blocks,
+    // which keeps its own part (#232), so the outcome does not depend on nb1.
+    // It gives up only when the deficit summed down from a negative cell to the
+    // bottom exceeds the repaired sum above it, both at working precision, i.e.
+    // when the rounded column total is strictly negative; a zero total is
+    // repaired. The clamp then adds mass equal to the remaining deficit, as the
+    // old per-cell clamp did. This exception is accepted and tested
     // (test_parentless_cloud).
     if (parentless) {
       auto cloud = cons.index(interior).narrow(0, ICY + nvapor, ncloud);
       auto major = cons.index(interior)[IDN].unsqueeze(0);
+      auto layout = pmb->get_layout();
+      bool split = whole_column && layout && layout->options->pz() > 1;
+      auto column = split ? layout->gather_x1(torch::cat(
+                                {cloud, major, vol.expand_as(major)}))
+                          : torch::Tensor();
+      auto ccloud = split ? column.narrow(0, 0, ncloud) : cloud;
+      auto cmajor = split ? column.narrow(0, ncloud, 1) : major;
+      auto cvol = split ? column.narrow(0, ncloud + 1, 1) : vol;
       auto iter = at::TensorIteratorConfig()
                       .resize_outputs(false)
-                      .declare_static_shape(cloud.sizes(),
-                                            /*squash_dim=*/cloud.dim() - 1)
-                      .add_output(cloud)
-                      .add_owned_input(major.expand_as(cloud))
-                      .add_owned_input(vol.expand_as(cloud))
+                      .declare_static_shape(ccloud.sizes(),
+                                            /*squash_dim=*/ccloud.dim() - 1)
+                      .add_output(ccloud)
+                      .add_owned_input(cmajor.expand_as(ccloud))
+                      .add_owned_input(cvol.expand_as(ccloud))
                       .build();
       at::native::call_fix_vapor(cons.device().type(), iter);
+      if (split) {  // this block's part of the repaired column
+        int nx1 = cloud.size(-1);
+        int rz = std::get<2>(layout->loc_of(layout->options->rank()));
+        cloud.copy_(ccloud.narrow(-1, rz * nx1, nx1));
+      }
       cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
     }
 
