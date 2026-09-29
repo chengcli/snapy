@@ -373,7 +373,30 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   auto dx1f = pcoord->dx1f.contiguous();
   at::native::call_hydro_ref_x1(
       w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
-      g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
+      g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp(),
+      options->wb_rop_guard());
+
+  // The backend computes the smooth5 density reference; the other forms
+  // replace it. Both only change what the reconstruction sees as rho', never
+  // p_ref, so the rest state is balanced identically for every form.
+  auto const& form = options->wb_density_ref();
+  if (form == "none") {
+    dref.zero_();
+    dsf.zero_();
+  } else if (form == "isentrope") {
+    // One adiabat per column through the bottom interior cell. It must be the
+    // same adiabat on every block of the column, which the x1 relay does not
+    // carry yet, so refuse a split x1 column rather than seam the reference.
+    TORCH_CHECK(!x1_split && phys_in,
+                "[Hydro] wb-density-ref: isentrope needs the whole x1 column "
+                "on one block (nb1 == 1)");
+    auto wb = w.narrow(-1, is, 1);
+    auto gamma = peos->compute("W->A", {wb});
+    auto rho_b = wb[IDN];
+    auto p_b = wb[IPR];
+    dref.copy_(rho_b * (pref / p_b).pow(1. / gamma));
+    dsf.copy_(rho_b * (psf_lo / p_b).pow(1. / gamma));
+  }
 
   if (below >= 0) {
     constexpr int kWbRefTag = 0x7715;

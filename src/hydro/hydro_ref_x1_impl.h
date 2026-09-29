@@ -64,24 +64,43 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
 //! makes rho' degenerate with the pressure perturbation, so entropy/buoyancy
 //! anomalies bypass the high-order reconstruction; a bottom-anchored
 //! isentrope reference errs by orders of magnitude on a stratified column.
+//!
+//! rop_guard: a cell whose pressure is not positive (or whose rho/p is not
+//! finite) is dropped from the stencil and the binomial weights of the rest
+//! are renormalised; with no valid cell left the reference is 0, i.e. the
+//! density itself is reconstructed there. When every cell is valid the guarded
+//! sum is evaluated in the same order as the unguarded one, so the result is
+//! bit-identical. Off by default, so the unguarded divide can still be tested.
 template <typename T>
 inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
                                                 int flat, int nc1, int i,
-                                                int jlo, int jhi) {
+                                                int jlo, int jhi,
+                                                bool rop_guard = false) {
+  constexpr int bw[5] = {1, 4, 6, 4, 1};
   T v[5];
+  T wsum = T(16);
   for (int m = -2; m <= 2; ++m) {
     int j = i + m;
     j = j < jlo ? jlo : (j > jhi ? jhi : j);
-    v[m + 2] = w[IDN * ncells + flat + j] / w[IPR * ncells + flat + j];
+    T pres = w[IPR * ncells + flat + j];
+    T val = w[IDN * ncells + flat + j] / pres;
+    if (rop_guard &&
+        !(pres > T(0) && fabs(val) <= std::numeric_limits<T>::max())) {
+      val = T(0);
+      wsum -= T(bw[m + 2]);
+    }
+    v[m + 2] = val;
   }
-  return (v[0] + T(4) * v[1] + T(6) * v[2] + T(4) * v[3] + v[4]) / T(16);
+  if (rop_guard && !(wsum > T(0))) return T(0);
+  return (v[0] + T(4) * v[1] + T(6) * v[2] + T(4) * v[3] + v[4]) / wsum;
 }
 
 template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     T const* w, T const* dx1f, T const* psf_lo, T const* psf_hi, T* pref,
     T* dsf, T* dref, int column, int i, int ncolumns, int nc1, int iu, T grav,
-    bool uniform, bool phys_in, bool phys_out, bool wall_clamp) {
+    bool uniform, bool phys_in, bool phys_out, bool wall_clamp,
+    bool rop_guard) {
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
   int il = nc1 - 1 - iu;
@@ -181,9 +200,10 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   pref[flat + i] = cell_pref;
   int jlo = (wall_clamp && phys_in) ? il : 0;
   int jhi = (wall_clamp && phys_out) ? iu : nc1 - 1;
-  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi);
+  T rs =
+      hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi, rop_guard);
   T rf = i > 0 ? T(0.5) * (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1,
-                                                   jlo, jhi) +
+                                                   jlo, jhi, rop_guard) +
                            rs)
                : rs;
   dref[flat + i] = cell_pref * rs;
@@ -194,13 +214,14 @@ template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_impl(
     T const* w, T const* dx1f, T const* anchor, T* psf_lo, T* psf_hi, T* pref,
     T* dsf, T* dref, int column, int ncolumns, int nc1, int iu, T grav,
-    bool uniform, bool phys_in, bool phys_out, bool wall_clamp) {
+    bool uniform, bool phys_in, bool phys_out, bool wall_clamp,
+    bool rop_guard) {
   hydro_ref_x1_scan_impl(w, dx1f, anchor, psf_lo, psf_hi, column, ncolumns, nc1,
                          iu, grav);
   for (int i = 0; i < nc1; ++i) {
     hydro_ref_x1_cell_impl(w, dx1f, psf_lo, psf_hi, pref, dsf, dref, column, i,
                            ncolumns, nc1, iu, grav, uniform, phys_in, phys_out,
-                           wall_clamp);
+                           wall_clamp, rop_guard);
   }
 }
 

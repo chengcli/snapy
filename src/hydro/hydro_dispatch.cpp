@@ -16,7 +16,7 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& psf_hi, torch::Tensor const& pref,
                       torch::Tensor const& dsf, torch::Tensor const& dref,
                       int iu, double grav, bool uniform, bool phys_in,
-                      bool phys_out, bool wall_clamp) {
+                      bool phys_out, bool wall_clamp, bool rop_guard) {
   int ncolumns = w.size(1) * w.size(2);
   int nc1 = w.size(3);
   AT_DISPATCH_FLOATING_TYPES(w.scalar_type(), "hydro_ref_x1_cpu", [&] {
@@ -28,7 +28,8 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
             psf_lo.data_ptr<scalar_t>(), psf_hi.data_ptr<scalar_t>(),
             pref.data_ptr<scalar_t>(), dsf.data_ptr<scalar_t>(),
             dref.data_ptr<scalar_t>(), static_cast<int>(column), ncolumns, nc1,
-            iu, scalar_t(grav), uniform, phys_in, phys_out, wall_clamp);
+            iu, scalar_t(grav), uniform, phys_in, phys_out, wall_clamp,
+            rop_guard);
       }
     });
   });
@@ -40,7 +41,7 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& pref, torch::Tensor const& dsf,
                       torch::Tensor const& dref, int iu, double grav,
                       bool uniform, bool phys_in, bool phys_out,
-                      bool wall_clamp) {
+                      bool wall_clamp, bool rop_guard) {
   int nc1 = w.size(-1);
   int il = nc1 - 1 - iu;
   auto rho = w[IDN];
@@ -156,21 +157,35 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
                             dp / torch::log(ratio)));
   }
 
+  auto clamp_pad = [&](torch::Tensor v) {
+    if (wall_clamp && phys_in) {  // clamp the smoothing to interior cells
+      v.narrow(-1, 0, il).copy_(v.narrow(-1, il, 1).expand({-1, -1, il}));
+    }
+    if (wall_clamp && phys_out) {
+      v.narrow(-1, iu + 1, nc1 - 1 - iu)
+          .copy_(v.narrow(-1, iu, 1).expand({-1, -1, nc1 - 1 - iu}));
+    }
+    auto lo_edge = v.narrow(-1, 0, 1);
+    auto hi_edge = v.narrow(-1, nc1 - 1, 1);
+    return torch::cat({lo_edge, lo_edge, v, hi_edge, hi_edge}, -1);
+  };
+  auto binomial = [&](torch::Tensor const& pad) {
+    return pad.narrow(-1, 0, nc1) + 4. * pad.narrow(-1, 1, nc1) +
+           6. * pad.narrow(-1, 2, nc1) + 4. * pad.narrow(-1, 3, nc1) +
+           pad.narrow(-1, 4, nc1);
+  };
   auto rop = (rho / w[IPR]).clone();
-  if (wall_clamp && phys_in) {  // clamp the smoothing to interior cells
-    rop.narrow(-1, 0, il).copy_(rop.narrow(-1, il, 1).expand({-1, -1, il}));
+  torch::Tensor rs;
+  if (rop_guard) {  // see hydro_ref_x1_rop_smooth
+    auto valid = (w[IPR] > 0.) & torch::isfinite(rop);
+    rop.masked_fill_(valid.logical_not(), 0.);
+    auto wsum = binomial(clamp_pad(valid.to(rop.dtype())));
+    auto num = binomial(clamp_pad(rop));
+    rs = torch::where(wsum > 0., num / wsum.clamp_min(1.),
+                      torch::zeros_like(num));
+  } else {
+    rs = binomial(clamp_pad(rop)) / 16.;
   }
-  if (wall_clamp && phys_out) {
-    rop.narrow(-1, iu + 1, nc1 - 1 - iu)
-        .copy_(rop.narrow(-1, iu, 1).expand({-1, -1, nc1 - 1 - iu}));
-  }
-  auto lo_edge = rop.narrow(-1, 0, 1);
-  auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
-  auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);
-  auto rs = (pad.narrow(-1, 0, nc1) + 4. * pad.narrow(-1, 1, nc1) +
-             6. * pad.narrow(-1, 2, nc1) + 4. * pad.narrow(-1, 3, nc1) +
-             pad.narrow(-1, 4, nc1)) /
-            16.;
   auto rf = rs.clone();
   rf.narrow(-1, 1, nc1 - 1)
       .copy_(0.5 * (rs.narrow(-1, 0, nc1 - 1) + rs.narrow(-1, 1, nc1 - 1)));

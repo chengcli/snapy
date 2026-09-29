@@ -66,7 +66,7 @@ std::tuple<torch::Tensor, double, int> balance_column(
     at::native::call_hydro_ref_x1(wb.device().type(), wb, dxf, anchor, psf_lo,
                                   psf_hi, pref, dsf, dref, nc1 - 1, grav,
                                   uniform, /*phys_in=*/true, /*phys_out=*/true,
-                                  wall_clamp);
+                                  wall_clamp, /*rop_guard=*/false);
     auto pp = prs - pref;
     auto c = pp.narrow(-1, nc1 - 1, 1);  // one gauge per column, at its top
     err = ((pp - c).abs() / (rho * wgt)).max().item<double>();
