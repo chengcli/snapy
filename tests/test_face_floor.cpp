@@ -79,3 +79,44 @@ TEST(hydro, face_floor_uses_adjacent_density_cuda) {
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   face_floor_uses_adjacent_density(torch::Device(torch::kCUDA, 0));
 }
+
+namespace {
+struct FrozenPeek : HydroImpl {
+  static auto ref() { return &FrozenPeek::_hydro_ref_x1; }
+};
+}
+
+TEST(hydro, frozen_reference_is_initial_target_and_restart_persistent) {
+  auto block = make_block(torch::kCPU);
+  auto h = block->phydro;
+  auto pc = block->pcoord;
+  auto w = torch::zeros({h->peos->nvar(), pc->options->nc3(),
+                        pc->options->nc2(), pc->options->nc1()}, torch::kFloat64);
+  w[IDN].copy_(torch::exp(-pc->x1v / 2000.));
+  w[IPR].copy_(w[IDN] * 20000.);
+  auto [p, pc0, d, dc] = ((*h).*FrozenPeek::ref())(w);
+  auto expected = torch::stack({p, pc0, d, dc});
+  h->options->wb_density_ref() = "frozen";
+  EXPECT_THROW(((*h).*FrozenPeek::ref())(w), c10::Error);
+  Variables vars{{"hydro_w", w}};
+  h->initialize_wb_reference(vars);
+  ASSERT_TRUE(torch::equal(vars.at("wb_frozen_x1"), expected));
+  w[IDN].mul_(1.1);
+  w[IPR].mul_(1.2);
+  auto [p1, pc1, d1, dc1] = ((*h).*FrozenPeek::ref())(w);
+  EXPECT_TRUE(torch::equal(torch::stack({p1, pc1, d1, dc1}), expected));
+  auto u = h->peos->compute("W->U", {w});
+  auto after = h->forward(0.001, u, vars);
+  EXPECT_GT(after[IVX].abs().max().item<double>(), 0.);
+  EXPECT_TRUE(torch::equal(vars.at("wb_frozen_x1"), expected));
+
+  auto restored_block = make_block(torch::kCPU);
+  auto restored = restored_block->phydro;
+  restored->options->wb_density_ref() = "frozen";
+  Variables missing{{"hydro_w", w}};
+  EXPECT_THROW(restored->initialize_wb_reference(missing, true), c10::Error);
+  Variables saved{{"hydro_w", w}, {"wb_frozen_x1", expected.clone()}};
+  restored->initialize_wb_reference(saved, true);
+  auto [p2, pc2, d2, dc2] = ((*restored).*FrozenPeek::ref())(w);
+  EXPECT_TRUE(torch::equal(torch::stack({p2, pc2, d2, dc2}), expected));
+}

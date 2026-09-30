@@ -63,7 +63,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // Well-balanced x1 reconstruction: decompose pressure and density into a
     // discretely hydrostatic reference + perturbation, reconstruct only the
     // perturbations, restore the reference at the faces. The restored faces
-    // satisfy psf_lo(i) - psf_hi(i) = g*rho(i)*dx1f(i) identically, so a
+    // satisfy psf_lo(i) - psf_hi(i) = g*rho(i)*dx1f(i) identically (at
+    // initialization only for the frozen target). For the dynamic forms, a
     // resting stratification generates zero flux residual regardless of the
     // reconstruction. Engaged whenever gravity is on and the scheme is
     // defined: the state carries a pressure row, and the block owns the full

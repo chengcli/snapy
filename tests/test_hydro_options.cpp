@@ -274,7 +274,7 @@ TEST(hydro_options, wb_density_ref_parses_and_ships_smooth5) {
   EXPECT_FALSE(op->wb_rop_guard());
 
   for (std::string form :
-       {"smooth5", "isentrope", "none", "local_polytrope"}) {
+       {"smooth5", "isentrope", "none", "local_polytrope", "frozen"}) {
     write(f, "  wb-density-ref: " + form + "\n  wb-rop-guard: true\n");
     op = snap::HydroOptionsImpl::from_yaml(f);
     EXPECT_EQ(op->wb_density_ref(), form);

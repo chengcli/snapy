@@ -20,6 +20,7 @@ HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
 }
 
 void HydroImpl::reset() {
+  frozen_x1_ = torch::Tensor();
   TORCH_CHECK(pmb, "[Hydro] Parent MeshBlock is null");
 
   //// ---- (1) set up equation-of-state model ---- ////
@@ -311,8 +312,40 @@ void HydroImpl::_revise_x1outer_ghost(torch::Tensor const& w) {
   }
 }
 
+void HydroImpl::initialize_wb_reference(Variables& vars, bool restart) {
+  if (options->wb_density_ref() != "frozen") return;
+  TORCH_CHECK(options->grav() && options->grav()->grav1() != 0 &&
+                  peos->options->type() != "shallow-water",
+              "[Hydro] frozen reference requires a compressible x1 gravity model");
+  auto const& w = vars.at("hydro_w");
+  if (restart) {
+    TORCH_CHECK(vars.count("wb_frozen_x1"),
+                "[Hydro] frozen restart is missing its t=0 wb_frozen_x1 target");
+    frozen_x1_ = vars.at("wb_frozen_x1").to(w.options());
+    auto sizes = w.sizes().vec();
+    sizes[0] = 4;
+    TORCH_CHECK(frozen_x1_.sizes() == sizes,
+                "[Hydro] frozen restart target shape does not match the grid");
+  } else {
+    auto [psf, pref, dsf, dref] = _build_hydro_ref_x1(w);
+    frozen_x1_ = torch::stack({psf, pref, dsf, dref}).detach();
+  }
+  vars["wb_frozen_x1"] = frozen_x1_;
+}
+
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
+  if (options->wb_density_ref() != "frozen") return _build_hydro_ref_x1(w);
+  TORCH_CHECK(frozen_x1_.defined(),
+              "[Hydro] initialize the frozen reference at t=0 before advancing");
+  TORCH_CHECK(frozen_x1_.device() == w.device() &&
+                  frozen_x1_.scalar_type() == w.scalar_type(),
+              "[Hydro] frozen reference and state must share device and dtype");
+  return {frozen_x1_[0], frozen_x1_[1], frozen_x1_[2], frozen_x1_[3]};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+HydroImpl::_build_hydro_ref_x1(torch::Tensor const& w) const {
   auto pcoord = pmb->pcoord;
   int is = pcoord->il();
   int iu = pcoord->iu();

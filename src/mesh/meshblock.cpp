@@ -496,6 +496,9 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
       vars, vars.at("hydro_u"),
       vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor());
 
+  // Ghosts are synchronized; capture before any RK stage or user forcing.
+  phydro->initialize_wb_reference(vars);
+
   //// ---------------- (11) Start timing ----------------- ////
   _time_start = clock();
 
@@ -1253,6 +1256,7 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
     set_scalar_primitive(vars, vars.at("scalar_s"), vars.at("hydro_u"));
   }
 
+  phydro->initialize_wb_reference(vars, /*restart=*/true);
   return current_time;
 }
 

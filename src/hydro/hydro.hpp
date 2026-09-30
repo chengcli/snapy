@@ -59,6 +59,7 @@ struct HydroOptionsImpl {
   //!  - none:      0, i.e. the density itself is reconstructed
   //!  - local_polytrope: rho_i (p / p_i)^(1 / n_i), n_i = dln p / dln rho
   //!               from the neighbours; faces average the two adjacent cells
+  //!  - frozen: smooth5 pressure AND density targets captured at initialization
   ADD_ARG(std::string, wb_density_ref) = "smooth5";
 
   //! Guard smooth5's rho/p divide against a non-positive pressure
@@ -170,6 +171,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! directly, outside the stage loop, and must keep working.
   int rk_stage = -1;
 
+  //! Capture t=0 reconstruction targets, or restore them from a restart.
+  //! Physical pressure/density and the gravity source remain prognostic.
+  void initialize_wb_reference(Variables& vars, bool restart = false);
+
  protected:
   void _revise_x1inner_ghost(torch::Tensor const& w);
   void _revise_x1outer_ghost(torch::Tensor const& w);
@@ -180,7 +185,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   // Per-column hydrostatic references for the well-balanced x1
   // reconstruction: {psf_lo (face pressure), pref (cell pressure), dsf (face
   // density), dref (cell density)}, rebuilt from the current field on every
-  // call.
+  // call, except frozen, which returns the initialization target.
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   _hydro_ref_x1(torch::Tensor const& w) const;
   torch::Tensor _apply_implicit_correction(torch::Tensor& du,
@@ -188,6 +193,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                                            Variables const& other);
 
  private:
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+  _build_hydro_ref_x1(torch::Tensor const& w) const;
+  torch::Tensor frozen_x1_;  // also owned by Variables for restart serialization
+
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();
 
