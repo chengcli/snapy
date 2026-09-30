@@ -8,10 +8,17 @@
 
 namespace snap {
 
+namespace {
+double machine_epsilon(c10::ScalarType dtype) {
+  return dtype == torch::kFloat ? std::numeric_limits<float>::epsilon()
+                                : std::numeric_limits<double>::epsilon();
+}
+}  // namespace
+
 double positivity_roundoff(c10::ScalarType dtype) {
-  double eps = dtype == torch::kFloat ? std::numeric_limits<float>::epsilon()
-                                      : std::numeric_limits<double>::epsilon();
-  return kPositivityRoundoffUlp * eps;
+  double ulp = dtype == torch::kFloat ? kPositivityRoundoffUlpFloat
+                                      : kPositivityRoundoffUlp;
+  return ulp * machine_epsilon(dtype);
 }
 
 torch::Tensor flux_positivity_theta(torch::Tensor const& u,
@@ -57,7 +64,7 @@ torch::Tensor flux_positivity_theta(torch::Tensor const& u,
   // particular in all ghost cells, whose outflow is not accumulated above --
   // their true factors arrive via the caller's ghost fill).
   // Stop 4096 ulp short of zero: an exact-zero target rounds negative.
-  double margin = positivity_roundoff(u.scalar_type());
+  double margin = kPositivityRoundoffUlp * machine_epsilon(u.scalar_type());
   auto avail = u.relu() * pcoord->cell_volume() * (1. - margin);
   auto drain = out.mul_(dt);
   if (drain_out) *drain_out = drain;

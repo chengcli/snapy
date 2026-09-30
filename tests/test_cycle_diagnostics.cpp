@@ -232,21 +232,21 @@ TEST(cycle_info, logged_pe_is_the_column_geopotential) {
 
 namespace {
 //! kCard edited in place and written out: same species, so the table agrees
-std::shared_ptr<MeshBlockImpl> block_from(YAML::Node card,
-                                          std::string const& name,
-                                          Variables* vars,
-                                          double cloud = 0.02) {
+std::shared_ptr<MeshBlockImpl> block_from(
+    YAML::Node card, std::string const& name, Variables* vars,
+    double cloud = 0.02, torch::Dtype dtype = torch::kFloat64) {
   {
     std::ofstream(name) << card;
   }
   auto block =
       std::make_shared<MeshBlockImpl>(MeshBlockOptionsImpl::from_yaml(name));
   std::remove(name.c_str());
+  if (dtype != torch::kFloat64) block->to(torch::kCPU, dtype);
 
   auto coord = block->pcoord;
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                          coord->options->nc2(), coord->options->nc1()},
-                        torch::kFloat64);
+                        dtype);
   w[IDN].fill_(1.);
   w[IPR].fill_(1.e5);
   w[ICY].fill_(0.01);
@@ -326,6 +326,33 @@ TEST(cycle_info, positivity_severe_needs_more_than_roundoff_withheld) {
     double flux = hydro->lim_flux()[0].item<double>();
     ASSERT_GT(flux, 0.) << "cloud=" << cloud;
     EXPECT_NEAR(hydro->lim_cut()[0].item<double>() / flux, 0.5, 1.e-9)
+        << "cloud=" << cloud;
+  }
+}
+
+// In float32 the bound is kPositivityRoundoffUlpFloat float32 ulp (7.6e-6)
+// of the cell's gas mass. At 4096 ulp (4.9e-4) a 1e-4 cloud settling at
+// theta = 0.5 was not severe; it is, as in float64. 1e-30 still is not. theta
+// is 0.5 less the 4096 ulp margin, 2.4e-4 in float32.
+TEST(cycle_info, positivity_severe_float32_needs_more_than_roundoff_withheld) {
+  auto card = YAML::LoadFile(kCard);
+  card["forcing"]["const-gravity"]["grav1"] = -1.e-12;
+  card["dynamics"]["equation-of-state"]["limiter"] = true;
+  card["sedimentation"] =
+      YAML::Load("{radius: {}, density: {}, const-vsed: {cloud: -2.}}");
+  for (auto [cloud, severe] :
+       {std::pair{1.e-4, 5}, std::pair{1.e-5, 5}, std::pair{1.e-30, 0}}) {
+    Variables vars;
+    auto block = block_from(card, "test_cycle_diagnostics_roundoff32.yaml",
+                            &vars, cloud, torch::kFloat32);
+    auto hydro = block->phydro;
+    hydro->forward(1., vars.at("hydro_u"), vars);
+
+    EXPECT_NEAR(hydro->positivity_min()[0].item<double>(), 0.5, 1.e-3)
+        << "cloud=" << cloud;
+    EXPECT_EQ(hydro->positivity_hits()[0].item<int64_t>(), 5)
+        << "cloud=" << cloud;
+    EXPECT_EQ(hydro->positivity_severe()[0].item<int64_t>(), severe)
         << "cloud=" << cloud;
   }
 }

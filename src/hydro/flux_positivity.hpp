@@ -17,7 +17,13 @@ namespace snap {
 //! for MeshBlock::check_redo. The clip or repair itself is always applied.
 constexpr double kPositivityRoundoffUlp = 4096.;
 
-//! kPositivityRoundoffUlp times the machine epsilon of `dtype`
+//! The same bound in float32, in float32 ulp. 4096 of them is 4.9e-4 of the
+//! gas mass, the size of a real repair; a species update rounds by at most
+//! 1 ulp of the gas mass. The margin of flux_positivity_theta stays 4096 ulp.
+constexpr double kPositivityRoundoffUlpFloat = 64.;
+
+//! kPositivityRoundoffUlp (kPositivityRoundoffUlpFloat in float32) times the
+//! machine epsilon of `dtype`
 double positivity_roundoff(c10::ScalarType dtype);
 
 //! \brief Per-cell positivity limiter factors for donor-form tracer fluxes.
