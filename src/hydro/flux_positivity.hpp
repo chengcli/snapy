@@ -8,6 +8,18 @@
 
 namespace snap {
 
+//! Round-off, in ulp of the working precision, for the species mass the
+//! positivity machinery withholds or repairs. flux_positivity_theta already
+//! leaves this fraction of a cell's own species mass behind on purpose; a
+//! withheld or repaired mass below this fraction of the cell's TOTAL gas mass
+//! (rho_total * volume, all species) is reported as round-off, not as a
+//! positivity event: it neither counts as severe nor marks a limiter patch
+//! for MeshBlock::check_redo. The clip or repair itself is always applied.
+constexpr double kPositivityRoundoffUlp = 4096.;
+
+//! kPositivityRoundoffUlp times the machine epsilon of `dtype`
+double positivity_roundoff(c10::ScalarType dtype);
+
 //! \brief Per-cell positivity limiter factors for donor-form tracer fluxes.
 //!
 //! For each channel c and cell i, sums the outgoing (donor-side) flux over all
@@ -40,11 +52,15 @@ namespace snap {
 //!               face of cell i (divergence convention).
 //! \param pcoord coordinate providing face_area1/2/3 and cell_volume
 //! \param dt     full stage time step
+//! \param drain  if given, receives dt * out_i, the species mass (not density)
+//!               each cell would lose unlimited; the limiter withholds
+//!               (1 - theta_i) * drain_i of it
 torch::Tensor flux_positivity_theta(torch::Tensor const& u,
                                     torch::Tensor const& flux1,
                                     torch::Tensor const& flux2,
                                     torch::Tensor const& flux3,
-                                    Coordinate const& pcoord, double dt);
+                                    Coordinate const& pcoord, double dt,
+                                    torch::Tensor* drain = nullptr);
 
 //! \brief Scale each face's flux by the donor cell's theta, in place.
 //!

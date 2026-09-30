@@ -15,6 +15,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/coord_utils.hpp>
+#include <snap/hydro/flux_positivity.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
@@ -341,7 +342,15 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     TORCH_CHECK(err == 0,
                 "[EquationOfState] apply_conserved_limiter_: "
                 "Failed to fix vapor mass fractions.");
-    if (mark) limiter_marks_[0].logical_or_(species().ne(species_before).any());
+    // a repair of round-off size, relative to the cell's total gas density,
+    // is applied but not marked (kPositivityRoundoffUlp): kinetics leaves
+    // ~1e-304 in a cloud-free cell that no smaller dt removes (#256)
+    if (mark) {
+      auto rho = cons.index(interior)[IDN] + species().sum(0);
+      auto tol = positivity_roundoff(cons.scalar_type()) * rho.abs();
+      limiter_marks_[0].logical_or_(
+          ((species() - species_before).abs() > tol).any());
+    }
   }
 }
 
@@ -361,8 +370,11 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
     if (limiter_marks_.defined()) {  // floor_hit sees no species row
       auto interior =
           phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
+      // mass fractions: the same round-off bound as the conserved repair
       limiter_marks_[0].logical_or_(
-          (prim.index(interior).narrow(0, ICY, ny) < 0.).any());
+          (prim.index(interior).narrow(0, ICY, ny) <
+           -positivity_roundoff(prim.scalar_type()))
+              .any());
     }
     prim.narrow(0, ICY, ny).clamp_min_(0.);
   }
