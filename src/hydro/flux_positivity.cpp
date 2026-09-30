@@ -8,11 +8,18 @@
 
 namespace snap {
 
+double positivity_roundoff(c10::ScalarType dtype) {
+  double eps = dtype == torch::kFloat ? std::numeric_limits<float>::epsilon()
+                                      : std::numeric_limits<double>::epsilon();
+  return kPositivityRoundoffUlp * eps;
+}
+
 torch::Tensor flux_positivity_theta(torch::Tensor const& u,
                                     torch::Tensor const& flux1,
                                     torch::Tensor const& flux2,
                                     torch::Tensor const& flux3,
-                                    Coordinate const& pcoord, double dt) {
+                                    Coordinate const& pcoord, double dt,
+                                    torch::Tensor* drain_out) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
 
   auto out = torch::zeros_like(u);
@@ -50,12 +57,10 @@ torch::Tensor flux_positivity_theta(torch::Tensor const& u,
   // particular in all ghost cells, whose outflow is not accumulated above --
   // their true factors arrive via the caller's ghost fill).
   // Stop 4096 ulp short of zero: an exact-zero target rounds negative.
-  double eps = u.scalar_type() == torch::kFloat
-                   ? std::numeric_limits<float>::epsilon()
-                   : std::numeric_limits<double>::epsilon();
-  double margin = 4096. * eps;
+  double margin = positivity_roundoff(u.scalar_type());
   auto avail = u.relu() * pcoord->cell_volume() * (1. - margin);
   auto drain = out.mul_(dt);
+  if (drain_out) *drain_out = drain;
   return torch::where(drain > 0.,
                       (avail / drain.clamp_min(1e-300)).clamp_max(1.0),
                       torch::ones_like(u));
