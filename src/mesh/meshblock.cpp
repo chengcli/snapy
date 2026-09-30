@@ -978,10 +978,11 @@ void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
   }
 }
 
-void MeshBlockImpl::finalize(Variables const &vars, double time) {
+int MeshBlockImpl::finalize(Variables const &vars, double time) {
   // make final output
   make_outputs(vars, time, /*final_write=*/true);
 
+  int status = 0;
   auto sig = SignalHandler::GetInstance();
   if (sig->GetSignalFlag(SIGTERM) != 0) {
     SINFO() << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -995,6 +996,7 @@ void MeshBlockImpl::finalize(Variables const &vars, double time) {
     SINFO() << std::endl << "Terminating on time limit" << std::endl;
   } else {
     SINFO() << std::endl << "Terminating abnormally" << std::endl;
+    status = 1;
   }
 
   SINFO() << "time=" << time << " cycle=" << cycle << std::endl;
@@ -1041,6 +1043,8 @@ void MeshBlockImpl::finalize(Variables const &vars, double time) {
   if (_playout->has_process_group() && _playout->comm->owns_process_group()) {
     _playout->comm->shutdown();
   }
+
+  return status;
 }
 
 bool MeshBlockImpl::floor_hit(Variables const &vars) {

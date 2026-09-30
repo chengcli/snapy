@@ -197,7 +197,8 @@ int main(int argc, char **argv) {
     block->make_outputs(vars, current_time);
   }
 
-  block->finalize(vars, current_time);
+  int status = block->finalize(vars, current_time);
 
   CommandLine::Destroy();
+  return status;
 }
