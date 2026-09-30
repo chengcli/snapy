@@ -2,6 +2,7 @@
 #include <sys/utsname.h>
 #include <yaml-cpp/yaml.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <exception>
 #include <map>
@@ -110,6 +111,14 @@ struct ColumnBoard {
   std::map<int, torch::Tensor> pieces;
 };
 std::map<std::tuple<int, int, int>, ColumnBoard> g_column_boards;
+
+//! same-process x1 reference anchors in flight (take_x1_anchor), keyed by
+//! (process, receiving block rank)
+std::map<std::pair<int, int>, torch::Tensor> g_x1_anchors;
+
+//! same-process block-to-block messages in flight (post_to_local_block),
+//! keyed by (process, sender block rank, receiver block rank, tag)
+std::map<std::tuple<int, int, int, int>, torch::Tensor> g_local_mail;
 
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
@@ -835,6 +844,127 @@ torch::Tensor LayoutImpl::gather_x1(torch::Tensor const& piece) {
     }
   }
   return column;
+}
+
+CommWorkPtr LayoutImpl::send_to_block(std::vector<torch::Tensor>& tensors,
+                                      int block_rank, int tag) {
+  TORCH_CHECK(has_process_group(),
+              "[Layout:send_to_block] a remote block requires an initialized "
+              "process group");
+  int bpp = std::max(1, options->blocks_per_process());
+  TORCH_CHECK(bpp <= 16,
+              "[Layout:send_to_block] at most 16 blocks per process");
+  int me = options->local_block_index(options->rank());
+  int peer = options->local_block_index(block_rank);
+  std::lock_guard<std::mutex> lock(g_process_comm_mutex);
+  return comm->send(tensors, options->owner_process_rank(block_rank),
+                    tag + (me * bpp + peer) * 0x10000);
+}
+
+CommWorkPtr LayoutImpl::recv_from_block(std::vector<torch::Tensor>& tensors,
+                                        int block_rank, int tag) {
+  TORCH_CHECK(has_process_group(),
+              "[Layout:recv_from_block] a remote block requires an "
+              "initialized process group");
+  int bpp = std::max(1, options->blocks_per_process());
+  TORCH_CHECK(bpp <= 16,
+              "[Layout:recv_from_block] at most 16 blocks per process");
+  int me = options->local_block_index(options->rank());
+  int peer = options->local_block_index(block_rank);
+  std::lock_guard<std::mutex> lock(g_process_comm_mutex);
+  return comm->recv(tensors, options->owner_process_rank(block_rank),
+                    tag + (peer * bpp + me) * 0x10000);
+}
+
+torch::Tensor LayoutImpl::take_x1_anchor(int above, torch::Tensor const& like,
+                                         int tag) {
+  if (above < 0) return torch::Tensor();
+  if (!is_local_block(above)) {
+    std::vector<torch::Tensor> rbuf = {torch::empty_like(like)};
+    recv_from_block(rbuf, above, tag)->wait();
+    return rbuf[0];
+  }
+  // the block above runs on another thread of this process (Mesh advances
+  // local blocks together); a caller stepping them one by one must go top
+  // down, or this would wait forever
+  std::pair<int, int> key = {options->process_rank(), options->rank()};
+  std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+  bool posted = g_local_exchange_cv.wait_for(
+      lock, std::chrono::minutes(5), [&]() { return g_x1_anchors.count(key); });
+  TORCH_CHECK(posted, "[Layout:take_x1_anchor] block ", options->rank(),
+              " waited 5 min for the x1 reference of block ", above,
+              " above it in this process; local blocks must run concurrently "
+              "or from the x1 top down");
+  auto anchor = g_x1_anchors.at(key);
+  g_x1_anchors.erase(key);
+#ifdef USE_CUDA
+  // written on the poster's stream, freed after use on this one
+  if (anchor.is_cuda()) anchor.record_stream(c10::cuda::getCurrentCUDAStream());
+#endif
+  return anchor;
+}
+
+void LayoutImpl::pass_x1_anchor(int below, torch::Tensor const& face, int tag) {
+  if (below < 0) return;
+  if (!is_local_block(below)) {
+    std::vector<torch::Tensor> sbuf = {face.contiguous()};
+    send_to_block(sbuf, below, tag)->wait();
+    return;
+  }
+  auto posted = face.contiguous();
+#ifdef USE_CUDA
+  // the block below reads this face on its own stream
+  if (posted.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
+#endif
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  g_x1_anchors[{options->process_rank(), below}] = posted;
+  g_local_exchange_cv.notify_all();
+}
+
+void LayoutImpl::post_to_local_block(int block_rank, torch::Tensor const& t,
+                                     int tag) {
+  TORCH_CHECK(is_local_block(block_rank), "[Layout:post_to_local_block] block ",
+              block_rank, " is not in this process");
+  auto posted = t.contiguous();
+#ifdef USE_CUDA
+  // the receiving block reads this tensor on its own stream
+  if (posted.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
+#endif
+  std::tuple<int, int, int, int> key = {options->process_rank(),
+                                        options->rank(), block_rank, tag};
+  std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+  // one message per (sender, receiver, tag) in flight: wait for the previous
+  // one to be taken
+  bool free =
+      g_local_exchange_cv.wait_for(lock, std::chrono::minutes(5),
+                                   [&]() { return !g_local_mail.count(key); });
+  TORCH_CHECK(free, "[Layout:post_to_local_block] block ", options->rank(),
+              " waited 5 min for block ", block_rank,
+              " to take its previous message, tag ", tag);
+  g_local_mail[key] = posted;
+  g_local_exchange_cv.notify_all();
+}
+
+torch::Tensor LayoutImpl::take_from_local_block(int block_rank, int tag) {
+  TORCH_CHECK(is_local_block(block_rank),
+              "[Layout:take_from_local_block] block ", block_rank,
+              " is not in this process");
+  std::tuple<int, int, int, int> key = {options->process_rank(), block_rank,
+                                        options->rank(), tag};
+  std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+  bool posted = g_local_exchange_cv.wait_for(
+      lock, std::chrono::minutes(5), [&]() { return g_local_mail.count(key); });
+  TORCH_CHECK(posted, "[Layout:take_from_local_block] block ", options->rank(),
+              " waited 5 min for block ", block_rank, ", tag ", tag,
+              "; local blocks must run concurrently");
+  auto t = g_local_mail.at(key);
+  g_local_mail.erase(key);
+  g_local_exchange_cv.notify_all();
+#ifdef USE_CUDA
+  // written on the poster's stream, freed after use on this one
+  if (t.is_cuda()) t.record_stream(c10::cuda::getCurrentCUDAStream());
+#endif
+  return t;
 }
 
 void LayoutImpl::_init_process_group() {

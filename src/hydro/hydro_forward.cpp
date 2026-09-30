@@ -68,7 +68,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // reconstruction. Engaged whenever gravity is on and the scheme is
     // defined: the state carries a pressure row, and the block owns the full
     // x1 column, OR it spans a vertical (nb1>1) decomposition -- in which case
-    // _hydro_ref_x1 makes the reference continuous across the x1 process seams
+    // _hydro_ref_x1 makes the reference continuous across the x1 block seams
     // with a distributed scan, so WB now engages under x1 decomposition too.
     bool wb_x1 =
         grav1 && w.size(0) > IPR && options->eos()->type() != "shallow-water";
@@ -184,15 +184,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // the seam, independent of reconstruction details (same principle as
     // flux correction at mesh-refinement boundaries). The scalar advective
     // flux upwinds by this mass flux afterwards and inherits the property.
-    // No exchange, no behavior change at nb1 = 1.
+    // No exchange, no behavior change at nb1 = 1. Across process seams only,
+    // as with one block per process; a same-process seam is not averaged.
     if (!options->disable_flux_x1() && playout &&
         playout->has_process_group() && playout->options->pz() > 1) {
-      TORCH_CHECK(playout->options->blocks_per_process() == 1,
-                  "[Hydro] the x1 seam exchange addresses block ranks as "
-                  "process ranks: one block per process only");
       auto iloc = playout->loc_of(playout->options->rank());
       int above = playout->neighbor_rank(iloc, {0, 0, 1});
       int below = playout->neighbor_rank(iloc, {0, 0, -1});
+      if (above >= 0 && playout->is_local_block(above)) above = -1;
+      if (below >= 0 && playout->is_local_block(below)) below = -1;
       if (above >= 0 || below >= 0) {
         constexpr int kSeamFluxUpTag = 0x7720;  // payload travels upward
         constexpr int kSeamFluxDnTag = 0x7721;  // payload travels downward
@@ -222,21 +222,21 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         if (above >= 0) {
           up_mine = {pack(iu + 1)};
           seam_sends.push_back(
-              playout->comm->send(up_mine, above, kSeamFluxUpTag));
+              playout->send_to_block(up_mine, above, kSeamFluxUpTag));
         }
         if (below >= 0) {
           dn_mine = {pack(il)};
           seam_sends.push_back(
-              playout->comm->send(dn_mine, below, kSeamFluxDnTag));
+              playout->send_to_block(dn_mine, below, kSeamFluxDnTag));
         }
         if (above >= 0) {
           std::vector<torch::Tensor> theirs = {torch::empty_like(up_mine[0])};
-          playout->comm->recv(theirs, above, kSeamFluxDnTag)->wait();
+          playout->recv_from_block(theirs, above, kSeamFluxDnTag)->wait();
           unpack(iu + 1, 0.5 * (up_mine[0] + theirs[0]));
         }
         if (below >= 0) {
           std::vector<torch::Tensor> theirs = {torch::empty_like(dn_mine[0])};
-          playout->comm->recv(theirs, below, kSeamFluxUpTag)->wait();
+          playout->recv_from_block(theirs, below, kSeamFluxUpTag)->wait();
           unpack(il, 0.5 * (dn_mine[0] + theirs[0]));
         }
         for (auto& sw : seam_sends) sw->wait();

@@ -4,6 +4,7 @@
 
 // C/C++
 #include <cmath>
+#include <limits>
 #include <vector>
 
 // snap
@@ -14,9 +15,9 @@
 
 namespace {
 
-double column_integral(std::vector<double> const& u,
-                       std::vector<double> const& vol, int var, int stride1,
-                       int il, int iu) {
+template <typename T>
+double column_integral(std::vector<T> const& u, std::vector<T> const& vol,
+                       int var, int stride1, int il, int iu) {
   double sum = 0;
   for (int i = il; i <= iu; ++i) sum += vol[i] * u[var * stride1 + i];
   return sum;
@@ -227,6 +228,81 @@ TEST(vic_redistribution,
   EXPECT_NEAR(mass_fix[snap::IVY * stride1 + 1], -0.1, 1.e-12);
   EXPECT_EQ(mass_fix[snap::IPR * stride1 + 1], 1.);
   EXPECT_EQ(mass_fix[snap::IPR * stride1 + 0], 0.);
+}
+
+// A donor's species availability is rebuilt from the primitives, rho * y, which
+// can sit an ulp above the conserved density u. A pass-3b clamp that drains
+// rho * y to exactly zero then leaves u + du = -1 ulp, and the column repair
+// re-mixes that cell with the one below: 1.8e-13 moved against a 9.4e-38
+// deficit on examples/uranus.yaml (#260). The donor keeps 4096 ulp instead,
+// in each precision the kernel dispatches to (float32 and float64).
+namespace {
+
+template <typename T>
+void drain_a_species_donor() {
+  constexpr int nlayer = 2;
+  constexpr int ny = 1;
+  constexpr int nhydro = snap::ICY + ny;
+  constexpr int stride1 = nlayer;
+  constexpr int stride2 = 1;
+  constexpr T eps = std::numeric_limits<T>::epsilon();
+
+  std::vector<T> du(nhydro * nlayer, 0.);
+  std::vector<T> w(nhydro * nlayer, 0.);
+  std::vector<T> vol(nlayer, 1.);
+  std::vector<T> mass_fix(nhydro * nlayer, 0.);
+  std::vector<Eigen::Matrix<T, 3, 1>> delta(nlayer);
+
+  // the top cell of the uranus column: a trace of precipitation
+  T rho = 1.19606e-2;
+  w[snap::IDN * stride1 + 0] = 1.39720e-2;
+  w[snap::IDN * stride1 + 1] = rho;
+  w[snap::ICY * stride1 + 0] = 2.9e-11;
+  w[snap::ICY * stride1 + 1] = T(7.52353515609675681e-22) / rho;
+  T rhoy = w[snap::IDN * stride1 + 1] * w[snap::ICY * stride1 + 1];
+  T u = std::nextafter(rhoy, T(0));  // conserved density, one ulp below
+
+  // the explicit update leaves 2^-10 of it; a + d is exact (Sterbenz)
+  T d = -rhoy * (1 - std::ldexp(T(1), -10));
+  du[snap::ICY * stride1 + 1] = d;
+
+  // move 1e-3 of total mass down through the face, far more than is left
+  T c = 1.e-3;
+  delta[0] << c, 0., 0.;
+  delta[1] << d - c, 0., 0.;
+
+  auto original = du;
+  snap::vic_constituent_column<T, 3>(du.data(), w.data(), mass_fix.data(),
+                                     delta.data(), vol.data(), nlayer, 0, ny,
+                                     stride1, stride2);
+  for (int i = 0; i < nlayer; ++i) {
+    snap::vic_redistribute_cell<T, 3>(du.data(), mass_fix.data(), delta.data(),
+                                      i, 0, ny, stride1, stride2);
+  }
+
+  // the fixture must REACH the clamp: Mf * y drains more than is available
+  ASSERT_LT(mass_fix[snap::IVX * stride1 + 1] * w[snap::ICY * stride1 + 1],
+            -(rhoy + d));
+
+  T kept = u + du[snap::ICY * stride1 + 1];
+  EXPECT_GE(kept, 0.) << "u = " << u << ", du = " << du[snap::ICY * stride1 + 1]
+                      << ": the donor was drained below zero";
+  // 4096 ulp of rho * y, less the ulp that u sits below it
+  EXPECT_GE(kept, 4000 * eps * rhoy)
+      << "kept " << kept / (eps * rhoy) << " ulp of rho * y";
+  EXPECT_NEAR(column_integral(du, vol, snap::ICY, stride1, 0, 1),
+              column_integral(original, vol, snap::ICY, stride1, 0, 1),
+              4 * eps * rhoy);
+}
+
+}  // namespace
+
+TEST(vic_redistribution, a_drained_species_donor_stays_non_negative) {
+  drain_a_species_donor<double>();
+}
+
+TEST(vic_redistribution, a_drained_float_species_donor_stays_non_negative) {
+  drain_a_species_donor<float>();
 }
 
 TEST(implicit_options, parses_implicit_scheme_bits) {
