@@ -102,3 +102,20 @@ TEST(UranusCycle1, abnormal_termination_exits_nonzero) {
          "not exercised";
   EXPECT_NE(r.code, 0) << "Terminating abnormally exited 0";
 }
+
+// RED on 93d1de1. The round-off repairs no longer redo the 100 x 200 deck,
+// and it is clean through cycle 38. A real H2S / H2S(l) transfer then does:
+// 1.6e-10 kg/m^3, 1.8e-10 of the cell's gas density, about 200 times the
+// 4096-ulp bound, across one whole horizontal row. The redo budget runs out
+// at cycle 232. One x2 cell keeps that transfer (about 5e-9 of the cell) and
+// exhausts at cycle 32. 80 x1 cells finish 50 cycles with no redo, and 50 x1
+// still reaches nlim 40, so the vertical count stays 100. nx2 of 4 or 16
+// dies in the first few cycles with limcut of order 1, which is a different
+// failure. nlim 40 is past this column's abort.
+TEST(UranusLate, column_reaches_cycle_40) {
+  auto r = run_deck("test_uranus_late_abort.yaml");
+  ASSERT_NE(r.code, -1) << r.log;
+  EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
+            std::string::npos);
+  EXPECT_NE(r.log.find("Terminating on cycle limit"), std::string::npos);
+}
