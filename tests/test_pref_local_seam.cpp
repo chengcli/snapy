@@ -298,9 +298,9 @@ double rel_diff(torch::Tensor const& a, torch::Tensor const& b, int var,
 
 }  // namespace
 
-// One process. Four blocks along x1 against one block, 200 steps. The ghost
-// rows of the reference are not exchanged inside the process, so the states
-// diverge. A fixed exchange keeps this under 1e-12.
+// One process. Four blocks along x1 against one block, 200 steps. The p_ref
+// and dref ghost rows go to every x1 neighbour, same-process blocks included,
+// so the split column tracks the one-block state. This keeps it under 1e-12.
 TEST(HydroRefX1, in_process_split_matches_one_block_after_200_steps) {
   torch::set_num_threads(1);
   auto one = make_column(1);
