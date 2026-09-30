@@ -1,6 +1,12 @@
-# #236 study plan, rev 4 (branch (a))
+# #236 study plan, rev 5 (branch (a))
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 5 critique -> change
+- a. Gate 0 built an old sha (3f7ad96) and aborted on a count mismatch -> Gate 0 builds current main 5eeb9b6 (v2.10.36, kintera >= 2.5.13); the 3f7ad96 counts are a prior only, and a count mismatch is recorded, not an abort.
+- b. Gate 4 used 842a116 as a bitwise oracle -> Gate 4 = full ctest plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes, (2) formulation A with no extras; 842a116 is a candidate only and never the oracle; no rebase comparison.
+- c. The non-ideal option's species scope was implicit -> the test-only option registers virial z and u for dry gas and vapour ONLY and leaves every cloud extra unset; this scope is stated in the option text, in O1 and in Gate 1b.
+- d. Where species positivity is guaranteed was not studied -> new item P: face flux limiter vs cell clamp, what the cell clamp does to mass, energy and momentum, and what it reports; reproducer is the 2D moist Jupiter CRM with limiter: true that clamps vapour/cloud on nearly every step (#263).
 
 Issue: https://github.com/chengcli/snapy/issues/236
 
@@ -21,8 +27,8 @@ Critique -> change (Tianhao's bot review of rev 3)
 5. A must stay supported -> no TORCH_CHECK and no behaviour change. New test A-NI: formulation A on the z!=1 model with a non-empty intEng extra must satisfy I1 exactly and pass the carry cells. The decision rule picks A or B on the gates and does not reject A.
 
 Kept from rev 3 (chen sihe, agreed)
-- Gate 0 records the six moist-mixture limited-face counts on main and does not abort on a mismatch. It requires all six red and the ideal-moist arms green.
-- Gate 4 is the full ctest plus the python limiter tests.
+- Gate 0 records the six moist-mixture limited-face counts on main and does not abort on a mismatch. It requires all six red and the ideal-moist arms green. (Rev 5: main is 5eeb9b6.)
+- Gate 4 is the full ctest plus the python limiter tests. (Rev 5: plus the two bitwise checks against 5eeb9b6.)
 - G-AB (A = B bitwise-to-4-ulp where z=1).
 - The dropped inv_mu control (fails at rel about 0.97-0.98, not 1e-12).
 - The W->E kg/m3 bug (moist_mixture.cpp:184-185) stays its own fix, never folded into A or B.
@@ -48,7 +54,7 @@ kintera main (4dc613d) today
 - eval_intEng_R with intEng_R_extra (:266-302) exists. Its T-derivative is taken via the name + "_ddT" (eval_cv_R :169-174; thermo_dispatch.cpp:103-110, .cu:98-103).
 - There is no c-derivative of intEng_R_extra. No eval_intEng_R_ddC exists.
 
-The test-only option adds (one set per species, constants compiled in; they return increments because call_func2 adds)
+The test-only option adds (one set per species, for dry gas and vapour ONLY; no cloud extra is registered, so every cloud czh, czh_ddC and intEng extra stays unset; constants compiled in; they return increments because call_func2 adds)
 - z_virial_<sp>(T, c) = B(T) c, onto czh = 1
 - z_virial_<sp>_ddC(T, c) = B(T), with B = b - a/(RT) in m3/mol
 - u_virial_<sp>(T, c) = -a c / R, in K
@@ -92,6 +98,7 @@ O1 (closed form, standalone)
 - z = 1 + B c, B = b - a/(RT); u = u0 + cv T - a c.
 - Dry: a 0.137, b 3.87e-5, cv 2.5R, u0 0, M 28.97e-3.
 - Vapour: a 0.5536, b 3.05e-5, cv 3.5R, u0 -4.4e4 J/mol, M 18.015e-3.
+- Scope: virial z and u for dry gas and vapour ONLY. Clouds get no extra (z, u extras unset), so h_c = u_c is the ideal value in every z!=1 cell.
 - Dense state: T 353 K, c 1000/1000 mol/m3. Rechecked, same values as rev 3:
   - dry 10646.79 J/mol = 367511.0 J/kg
   - vapour -32344.85 J/mol = -1795439.8 J/kg
@@ -157,13 +164,34 @@ G-AB (z=1 cells only)
 - If it fails, B is not the claimed reduction and is stopped.
 
 Gates
-- 0 (CPU): build main 3f7ad96. Record the six moist-mixture counts, M_n and T. Pass if all six moist-mixture cases are red (energy residual rel 1.0 at every limited face) and every ideal-moist arm is green. A count mismatch is recorded, not an abort. 842a116's after-numbers are recorded.
+- 0 (CPU): build current main 5eeb9b6 (v2.10.36) against kintera >= 2.5.13. Record the six moist-mixture counts, M_n and T. The earlier 3f7ad96 counts are a prior only. Pass if all six moist-mixture cases are red (energy residual rel 1.0 at every limited face) and every ideal-moist arm is green. A count mismatch against the prior is recorded, not an abort. 842a116's after-numbers are recorded as a candidate's, not as an oracle.
 - 1 (CPU, no snapy): O1/O2 are reproduced in J/mol and J/kg, including the card z!=1 values. I1 and I3 hold on O1. Every control misses by its stated size (+-10%) and by >= 1e3 x tolerance, X included.
-- 1b (CPU and CUDA, kintera test build): the registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
+- 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (czh = 1, czh_ddC = 0, extra = 0 exactly). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
-- 4: full ctest + python limiter tests show no new failures vs main. Ideal-moist fluxes are bitwise equal to main. A's results with no extras are bitwise equal to 842a116. Column totals hold. Runtime recorded.
+- 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
 - Coverage: all 36 cells ran on their device and passed.
+```
+
+## positivity: face flux limiter vs cell clamp (new in rev 5)
+
+```text
+P. Where is species positivity guaranteed?
+- Two places today: the face flux limiter (limits the species flux so no donor goes negative) and the cell clamp in apply_conserved_limiter_ (equation_of_state.cpp on 5eeb9b6: fix_vapor on the vapour rows, clamp_min_(0) on the cloud rows).
+- Question: which one is the guarantee? If the face limiter guarantees it, the cell clamp should fire only at round-off; if it does not, the clamp is the real guarantee and its side effects are part of the scheme.
+
+What the cell clamp does (to be measured, per clamped cell and per column)
+- Mass: clamp_min_(0) on a cloud row adds mass (delta = -min(q, 0) * rho); fix_vapor changes vapour and, on the split-column path, cloud (its exact rule is read from the source at Gate 0, not assumed). Record the net added species mass and whether IDN or the total density changes.
+- Energy: the clamp changes species without changing IEN, so the implied T and p shift. Record the change in total energy vs the energy the added mass would carry (h_c or h_v at the cell state).
+- Momentum: IVX-IVZ are untouched, so the velocity rho v / rho changes when rho changes. Record the momentum and KE change.
+- Reporting: the clamp sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. Record how many cells are clamped, how many are marked, and the largest |delta|/rho, per step.
+
+Reproducer
+- 2D moist Jupiter CRM (H2O + NH3, 100x100, ideal-moist, limiter: true, rk3, cfl 0.9) from #263, which clamps vapour/cloud on nearly every step.
+- Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, or with snapy's run_hydro (#257 order), 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303). Both runs are measured, on 5eeb9b6.
+- Whether a species-only clamp should request a redo (#226's choice) is decided here, not in #263.
+
+Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee.
 ```
 
 ## grid, decision, open items
