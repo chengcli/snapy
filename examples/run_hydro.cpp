@@ -1,3 +1,6 @@
+// C/C++
+#include <cstdlib>
+
 // yaml
 #include <yaml-cpp/yaml.h>
 
@@ -130,7 +133,10 @@ int main(int argc, char **argv) {
     w.narrow(0, ICY, ny).select(3, i) = thermo_x->compute("X->Y", {xfrac});
   }
 
-  // add noise
+  // add noise; study probe (#260): SNAP_SEED makes it reproducible
+  if (char const *seed = std::getenv("SNAP_SEED")) {
+    torch::manual_seed(std::atoll(seed));
+  }
   w[IVX] += 0.01 * torch::rand_like(w[IVX]);
   w[IVY] += 0.01 * torch::rand_like(w[IVY]);
 

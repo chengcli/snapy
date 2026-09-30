@@ -6,6 +6,7 @@
 
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
+#include <snap/utils/probe_cell.hpp>
 
 #include "flux_positivity.hpp"
 #include "hydro.hpp"
@@ -24,6 +25,39 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   auto const& w = other.at("hydro_w");
 
   peos->forward(u, w);
+
+  // study probe (#260): one conserved row at one cell, term by term
+  auto const& pc = ProbeCell::get();
+  int PS = ICY + pc.n;
+  int PK = pmb->pcoord->kl() + pc.k, PJ = pmb->pcoord->jl() + pc.j,
+      PI = pmb->pcoord->il() + pc.i;
+  auto P = [&](char const* tag, double v) {
+    if (pc.on)
+      std::printf("PROBE call=%d stage=%d %s % .17e\n", ProbeCell::call(),
+                  rk_stage, tag, v);
+  };
+  double pf1lo = 0, pf1hi = 0, pf1lo_sed = 0, pf1hi_sed = 0;
+  if (pc.on) {
+    P("dt", dt);
+    P("u[s]", probe_at(u, PS, PK, PJ, PI));
+    P("u[IDN]", probe_at(u, IDN, PK, PJ, PI));
+    P("rho_tot",
+      (u.narrow(0, ICY, u.size(0) - ICY).sum(0) + u[IDN])
+          .index({PK, PJ, PI})
+          .item<double>());
+    P("w[IDN]", probe_at(w, IDN, PK, PJ, PI));
+    P("w[s]", probe_at(w, PS, PK, PJ, PI));
+    P("w[IVX]", probe_at(w, IVX, PK, PJ, PI));
+    P("w[IVY]", probe_at(w, IVY, PK, PJ, PI));
+    P("w[IPR]", probe_at(w, IPR, PK, PJ, PI));
+    P("u-rho*y", probe_at(u, PS, PK, PJ, PI) -
+                     probe_at(w, IDN, PK, PJ, PI) * probe_at(w, PS, PK, PJ, PI));
+    P("u[s]_im1", probe_at(u, PS, PK, PJ, PI - 1));
+    P("u[s]_ip1", probe_at(u, PS, PK, PJ, PI + 1));
+    P("u[s]_jm1", probe_at(u, PS, PK, PJ - 1, PI));
+    P("u[s]_jp1", probe_at(u, PS, PK, PJ + 1, PI));
+    P("vol", pmb->pcoord->cell_volume().index({PK, PJ, PI}).item<double>());
+  }
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -156,6 +190,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                 ? torch::Tensor()
                                 : _face_pressure1;
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1, face_pressure1);
+      if (pc.on) {
+        pf1lo = probe_at(_flux1, PS, PK, PJ, PI);
+        pf1hi = probe_at(_flux1, PS, PK, PJ, PI + 1);
+        P("F1adv_lo", pf1lo);
+        P("F1adv_hi", pf1hi);
+      }
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -170,6 +210,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       auto fadv = carry ? _flux1.narrow(0, ICY, ny).clone() : torch::Tensor();
       psed->forward(w, _flux1);
       if (carry) fsed1 = _flux1.narrow(0, ICY, ny) - fadv;
+      if (pc.on) {
+        P("F1sed_lo", probe_at(_flux1, PS, PK, PJ, PI) - pf1lo);
+        P("F1sed_hi", probe_at(_flux1, PS, PK, PJ, PI + 1) - pf1hi);
+      }
     }
 
     // Make internal x1 seam fluxes single-valued. The two ranks sharing an
@@ -297,6 +341,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
     if (!options->disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+      if (pc.on) {
+        P("F2_lo", probe_at(_flux2, PS, PK, PJ, PI));
+        P("F2_hi", probe_at(_flux2, PS, PK, PJ + 1, PI));
+      }
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -384,7 +432,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       flux_positivity_carry_(theta, hspec, u.narrow(0, IVX, 3) / w[IDN], _flux1,
                              _flux2, _flux3, pmb->pcoord, fsed1);
     }
+    if (pc.on) {
+      int n = pc.n;
+      P("theta_c", probe_at(theta, n, PK, PJ, PI));
+      P("theta_im1", probe_at(theta, n, PK, PJ, PI - 1));
+      P("theta_ip1", probe_at(theta, n, PK, PJ, PI + 1));
+      P("theta_jm1", probe_at(theta, n, PK, PJ - 1, PI));
+      P("theta_jp1", probe_at(theta, n, PK, PJ + 1, PI));
+      P("drain_c", probe_at(drain, n, PK, PJ, PI));
+    }
     flux_positivity_scale_(theta, f1, f2, f3, pmb->pcoord);
+    if (pc.on) {
+      P("F1lim_lo", probe_at(_flux1, PS, PK, PJ, PI));
+      P("F1lim_hi", probe_at(_flux1, PS, PK, PJ, PI + 1));
+      if (_flux2.defined()) {
+        P("F2lim_lo", probe_at(_flux2, PS, PK, PJ, PI));
+        P("F2lim_hi", probe_at(_flux2, PS, PK, PJ + 1, PI));
+      }
+    }
 
     if (f1_pre.defined()) {
       // non-negative while every bfunc keeps the ghost theta in [0,1]
@@ -403,6 +468,28 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (5) Calculate flux divergence ------------ ////
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+  if (pc.on) {
+    auto pco = pmb->pcoord;
+    double V = pco->cell_volume().index({PK, PJ, PI}).item<double>();
+    auto a1 = pco->face_area1();
+    double d1 = (a1.index({PK, PJ, PI + 1}).item<double>() *
+                     probe_at(_flux1, PS, PK, PJ, PI + 1) -
+                 a1.index({PK, PJ, PI}).item<double>() *
+                     probe_at(_flux1, PS, PK, PJ, PI)) /
+                V;
+    P("div1", d1);
+    if (_flux2.defined()) {
+      auto a2 = pco->face_area2();
+      double d2 = (a2.index({PK, PJ + 1, PI}).item<double>() *
+                       probe_at(_flux2, PS, PK, PJ + 1, PI) -
+                   a2.index({PK, PJ, PI}).item<double>() *
+                       probe_at(_flux2, PS, PK, PJ, PI)) /
+                  V;
+      P("div2", d2);
+    }
+    P("div", probe_at(_div, PS, PK, PJ, PI));
+    // what theta guarantees: u - dt*outflow/V >= margin * u
+  }
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -419,7 +506,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // only a block carrying tracers needs the forcings' dry-density increment
   bool track_dry = pmb->pscalar && pmb->pscalar->nvar() > 0;
   auto dry_before = track_dry ? du[IDN].clone() : torch::Tensor();
+  if (pc.on) P("du_flux", probe_at(du, PS, PK, PJ, PI));
   for (auto& f : forcings) f.forward(du, w, temp, dt);
+  if (pc.on) P("du_forcing", probe_at(du, PS, PK, PJ, PI));
   _forcing_dry = track_dry ? du[IDN] - dry_before : torch::Tensor();
 
   // Preserve the original cell-centred gravity work through the implicit
@@ -542,7 +631,23 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
             "caller invoking HydroImpl::forward directly will see this.");
       }
     }
+    double du_pre = pc.on ? probe_at(du, PS, PK, PJ, PI) : 0.;
+    double du_pre_ip1 = pc.on ? probe_at(du, PS, PK, PJ, PI + 1) : 0.;
+    double du_pre_im1 = pc.on ? probe_at(du, PS, PK, PJ, PI - 1) : 0.;
     _apply_implicit_correction(du, w, dt_corr, other);
+    if (pc.on) {
+      P("dt_corr", dt_corr);
+      P("du_vic", probe_at(du, PS, PK, PJ, PI) - du_pre);
+      P("du_vic_ip1", probe_at(du, PS, PK, PJ, PI + 1) - du_pre_ip1);
+      P("du_vic_im1", probe_at(du, PS, PK, PJ, PI - 1) - du_pre_im1);
+      auto mc = picorr->mass_correction();
+      P("vic_M_lo", probe_at(mc, IVX, PK, PJ, PI));
+      P("vic_M_hi", probe_at(mc, IVX, PK, PJ, PI + 1));
+      P("vic_Mtot_lo", probe_at(mc, IVZ, PK, PJ, PI));
+      P("vic_Mtot_hi", probe_at(mc, IVZ, PK, PJ, PI + 1));
+      P("vic_mass_s", probe_at(mc, PS, PK, PJ, PI));
+      P("vic_mass_s_ip1", probe_at(mc, PS, PK, PJ, PI + 1));
+    }
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
@@ -557,6 +662,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     int ie = pmb->pcoord->iu() + 1;
     du[IPR].slice(-1, is, ie) += gravity_energy_correction;
   }
+  if (pc.on) P("du_final", probe_at(du, PS, PK, PJ, PI));
 
   return du;
 }

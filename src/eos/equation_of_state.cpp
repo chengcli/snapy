@@ -11,6 +11,10 @@
 // kintera
 #include <kintera/species.hpp>
 
+// C/C++
+#include <cstdio>
+#include <cstdlib>
+
 // snap
 #include <snap/snap.h>
 
@@ -350,6 +354,28 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
       auto tol = positivity_roundoff(cons.scalar_type()) * rho.abs();
       limiter_marks_[0].logical_or_(
           ((species() - species_before).abs() > tol).any());
+      // study probe (#260): list every entry that marks
+      if (std::getenv("SNAP_PROBE_MARKS")) {
+        auto d = (species() - species_before).abs();
+        auto hit = (d > tol).nonzero();
+        if (hit.size(0) > 0)
+          std::printf("MARKCOUNT stage=%d n=%ld maxdelta %.4e\n",
+                      phydro->rk_stage, (long)hit.size(0),
+                      d.max().item<double>());
+        for (int r = 0; r < hit.size(0) && r < 20; ++r) {
+          int n = hit[r][0].item<int>(), k = hit[r][1].item<int>(),
+              j = hit[r][2].item<int>(), i = hit[r][3].item<int>();
+          std::printf(
+              "MARK stage=%d [%d,%d,%d,%d] before % .17e after % .17e "
+              "delta % .4e tol %.4e rho %.6e\n",
+              phydro->rk_stage, n, k, j, i,
+              species_before.index({n, k, j, i}).item<double>(),
+              species().index({n, k, j, i}).item<double>(),
+              d.index({n, k, j, i}).item<double>(),
+              tol.index({k, j, i}).item<double>(),
+              rho.index({k, j, i}).item<double>());
+        }
+      }
     }
   }
 }

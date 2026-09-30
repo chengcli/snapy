@@ -9,6 +9,7 @@
 #include <vector>
 
 // snap
+#include <snap/utils/probe_cell.hpp>
 #include <snap/coord/coord_utils.hpp>
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
@@ -727,7 +728,40 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   // -------- (4) multi-stage averaging --------
   hydro_u.set_(pintg->forward(stage, _hydro_u0, hydro_u, fut_hydro_du));
+  auto const &pc = ProbeCell::get();
+  torch::Tensor pcol;
+  int PS = ICY + pc.n, PK = pcoord->kl() + pc.k, PJ = pcoord->jl() + pc.j,
+      PI = pcoord->il() + pc.i;
+  bool mark_before = false;
+  if (pc.on) {
+    if (stage == 0) ++ProbeCell::call();
+    pcol = hydro_u[PS].index({PK, PJ}).clone();
+    std::printf("PROBE call=%d stage=%d u0[s] % .17e\n", ProbeCell::call(),
+                stage, probe_at(_hydro_u0, PS, PK, PJ, PI));
+    std::printf("PROBE call=%d stage=%d u_int[s] % .17e\n", ProbeCell::call(),
+                stage, probe_at(hydro_u, PS, PK, PJ, PI));
+    auto const &m = phydro->peos->limiter_marks();
+    mark_before = m.defined() && m[0].item<bool>();
+  }
   phydro->peos->apply_conserved_limiter_(hydro_u, /*whole_column=*/true);
+  if (pc.on) {
+    std::printf("PROBE call=%d stage=%d u_lim[s] % .17e\n", ProbeCell::call(),
+                stage, probe_at(hydro_u, PS, PK, PJ, PI));
+    auto const &m = phydro->peos->limiter_marks();
+    bool mark_after = m.defined() && m[0].item<bool>();
+    auto post = hydro_u[PS].index({PK, PJ});
+    auto diff = (post - pcol).abs();
+    int il = pcoord->il(), iu = pcoord->iu();
+    for (int i = il; i <= iu; ++i) {
+      double b = pcol[i].item<double>(), a = post[i].item<double>();
+      if (b < 0. || a != b)
+        std::printf("PROBE call=%d stage=%d col i=%d before % .17e after "
+                    "% .17e delta % .3e\n",
+                    ProbeCell::call(), stage, i - il, b, a, a - b);
+    }
+    std::printf("PROBE call=%d stage=%d mark %d->%d\n", ProbeCell::call(),
+                stage, (int)mark_before, (int)mark_after);
+  }
 
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
