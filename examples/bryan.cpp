@@ -327,5 +327,5 @@ int main(int argc, char** argv) {
     mesh->make_outputs(vars, current_time);
   }
 
-  mesh->finalize(vars, current_time);
+  return mesh->finalize(vars, current_time);
 }

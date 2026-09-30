@@ -264,10 +264,10 @@ int main(int argc, char** argv) {
     block->make_outputs(vars, current_time);
   }
 
-  block->finalize(vars, current_time);
+  int status = block->finalize(vars, current_time);
   std::cout << "Completed jupiter_evap_precip_1d at time=" << current_time
             << " seconds" << std::endl;
 
   CommandLine::Destroy();
-  return 0;
+  return status;
 }

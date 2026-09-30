@@ -76,5 +76,5 @@ int main(int argc, char** argv) {
     block->make_outputs(vars, current_time);
   }
 
-  block->finalize(vars, current_time);
+  return block->finalize(vars, current_time);
 }
