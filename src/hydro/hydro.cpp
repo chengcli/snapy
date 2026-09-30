@@ -381,48 +381,53 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // dynamics nb1-dependent. After this exchange the perturbation field seen
   // by the reconstruction is identical on both sides of every seam, so the
   // seam-face states agree and the single-valued seam flux average becomes a
-  // no-op. nb1=1: no seams, bit-unchanged. Across process seams only: a
-  // same-process neighbor may not have computed its rows yet.
-  int remote_below =
-      (below >= 0 && !layout->is_local_block(below)) ? below : -1;
-  int remote_above =
-      (above >= 0 && !layout->is_local_block(above)) ? above : -1;
-  if (remote_below >= 0 || remote_above >= 0) {
+  // no-op. nb1=1: no seams, bit-unchanged. A same-process neighbor goes
+  // through a board, a remote one through the process group (#254).
+  if (x1_split && (below >= 0 || above >= 0)) {
     constexpr int kWbGhostUpTag = 0x7717;
     constexpr int kWbGhostDnTag = 0x7718;
     int ng = is;  // il() == nghost
+    std::vector<std::vector<torch::Tensor>> sbufs;
     std::vector<CommWorkPtr> sends;
-    if (remote_above >=
-        0) {  // my top interior rows are the above block's lower ghosts
-      std::vector<torch::Tensor> up = {
-          torch::cat({pref.narrow(-1, iu - ng + 1, ng),
-                      dref.narrow(-1, iu - ng + 1, ng)},
-                     -1)
-              .contiguous()};
-      sends.push_back(layout->send_to_block(up, remote_above, kWbGhostUpTag));
-    }
-    if (remote_below >=
-        0) {  // my bottom interior rows are the below block's upper ghosts
-      std::vector<torch::Tensor> dn = {
-          torch::cat({pref.narrow(-1, is, ng), dref.narrow(-1, is, ng)}, -1)
-              .contiguous()};
-      sends.push_back(layout->send_to_block(dn, remote_below, kWbGhostDnTag));
-    }
-    if (remote_below >=
-        0) {  // receive my lower ghost rows from below's top interior
-      std::vector<torch::Tensor> rb = {
+    auto post = [&](torch::Tensor rows, int to, int tag) {
+      if (layout->is_local_block(to)) {
+        layout->post_to_local_block(to, rows, tag);
+      } else {
+        sbufs.push_back({rows.contiguous()});
+        sends.push_back(layout->send_to_block(sbufs.back(), to, tag));
+      }
+    };
+    auto take = [&](int from, int tag) {
+      if (layout->is_local_block(from))
+        return layout->take_from_local_block(from, tag);
+      std::vector<torch::Tensor> rbuf = {
           torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
-      layout->recv_from_block(rb, remote_below, kWbGhostUpTag)->wait();
-      pref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, 0, ng));
-      dref.narrow(-1, 0, ng).copy_(rb[0].narrow(-1, ng, ng));
+      layout->recv_from_block(rbuf, from, tag)->wait();
+      return rbuf[0];
+    };
+    sbufs.reserve(2);
+    if (above >= 0) {  // my top interior rows are the above block's lower
+                       // ghosts
+      post(torch::cat({pref.narrow(-1, iu - ng + 1, ng),
+                       dref.narrow(-1, iu - ng + 1, ng)},
+                      -1),
+           above, kWbGhostUpTag);
     }
-    if (remote_above >=
-        0) {  // receive my upper ghost rows from above's bottom interior
-      std::vector<torch::Tensor> ra = {
-          torch::empty({w.size(1), w.size(2), 2 * ng}, w.options())};
-      layout->recv_from_block(ra, remote_above, kWbGhostDnTag)->wait();
-      pref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, 0, ng));
-      dref.narrow(-1, iu + 1, ng).copy_(ra[0].narrow(-1, ng, ng));
+    if (below >= 0) {  // my bottom interior rows are the below block's upper
+                       // ghosts
+      post(torch::cat({pref.narrow(-1, is, ng), dref.narrow(-1, is, ng)}, -1),
+           below, kWbGhostDnTag);
+    }
+    if (below >= 0) {  // receive my lower ghost rows from below's top interior
+      auto rb = take(below, kWbGhostUpTag);
+      pref.narrow(-1, 0, ng).copy_(rb.narrow(-1, 0, ng));
+      dref.narrow(-1, 0, ng).copy_(rb.narrow(-1, ng, ng));
+    }
+    if (above >= 0) {  // receive my upper ghost rows from above's bottom
+                       // interior
+      auto ra = take(above, kWbGhostDnTag);
+      pref.narrow(-1, iu + 1, ng).copy_(ra.narrow(-1, 0, ng));
+      dref.narrow(-1, iu + 1, ng).copy_(ra.narrow(-1, ng, ng));
     }
     for (auto& sw : sends) sw->wait();
   }

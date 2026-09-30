@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -124,8 +125,15 @@ TEST(HydroRefX1, local_blocks_restart_the_reference_at_the_seam) {
 
   auto wu = uniform_w(upper);
   auto wl = uniform_w(lower);
-  double from_above = at_cell(pref_of(upper->phydro, wu), upper->pcoord->il());
-  double from_below = at_cell(pref_of(lower->phydro, wl), lower->pcoord->iu());
+  // The two blocks exchange reference rows, so they run concurrently, as the
+  // mesh worker threads run them.
+  torch::Tensor pu, pl;
+  std::thread tu([&]() { pu = pref_of(upper->phydro, wu); });
+  std::thread tl([&]() { pl = pref_of(lower->phydro, wl); });
+  tu.join();
+  tl.join();
+  double from_above = at_cell(pu, upper->pcoord->il());
+  double from_below = at_cell(pl, lower->pcoord->iu());
 
   // The block that still owns the domain top reproduces the unsplit cell.
   EXPECT_NEAR(from_above, unsplit_above, 1e-6)
