@@ -265,8 +265,10 @@ int main(int argc, char** argv) {
   }
 
   int status = block->finalize(vars, current_time);
-  std::cout << "Completed jupiter_evap_precip_1d at time=" << current_time
-            << " seconds" << std::endl;
+  if (status == 0) {
+    std::cout << "Completed jupiter_evap_precip_1d at time=" << current_time
+              << " seconds" << std::endl;
+  }
 
   CommandLine::Destroy();
   return status;
