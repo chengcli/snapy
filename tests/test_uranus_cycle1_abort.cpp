@@ -1,14 +1,22 @@
-// RED on main 3f7ad96. examples/uranus.yaml aborts on cycle 1: five redos,
-// cause "limiter", thetamin 0, then "Terminating abnormally", and the process
-// still exits 0. These are two defects.
+// Two defects, tested on different decks.
 //
-// Smallest deck with that signature, including no extrapolate_ad warning: the
-// shipped file, one x2 cell, 96 x1 cells, nlim 2. 92 x1 cells still prints
-// one extrapolate_ad non-convergence, which the shipped 100 x 200 deck does
-// not. Nine and fewer x1 cells also trip floor, clamp or saturation.
-// Raising equation-of-state max-iter from 5 to 50 clears the equilibrate_tp
-// warnings on the full deck; cycle 1 still aborts. The abort does not follow
-// from those warnings.
+// column_finishes_the_two_cycles is RED on main 3f7ad96. examples/uranus.yaml
+// aborts on cycle 1: five redos, cause "limiter", thetamin 0, then
+// "Terminating abnormally". Smallest deck with that signature, including no
+// extrapolate_ad warning: the shipped file, one x2 cell, 96 x1 cells, nlim 2.
+// 92 x1 cells still prints one extrapolate_ad non-convergence, which the
+// shipped 100 x 200 deck does not. Nine and fewer x1 cells also trip floor,
+// clamp or saturation. Raising equation-of-state max-iter from 5 to 50
+// clears the equilibrate_tp warnings on the full deck; cycle 1 still aborts.
+// The abort does not follow from those warnings.
+//
+// abnormal_termination_exits_nonzero does not use that deck. A fix for the
+// limiter abort makes the column finish, so the exit-code check needs a deck
+// that aborts on purpose. test_abnormal_exit_floor.yaml sets pressure-floor
+// above the initial pressure: every step trips the floor check and exhausts
+// the redo budget. max_redo is not a yaml key on the pyharp this tree links
+// (IntegratorOptionsImpl::from_yaml never reads it; the default stays 5), so
+// a yaml max_redo of 0 would not force the abort. nlim is only a backstop.
 
 // external
 #include <gtest/gtest.h>
@@ -34,12 +42,11 @@ std::string find_file(std::vector<std::string> const& names) {
   return {};
 }
 
-RunResult run_deck() {
+RunResult run_deck(std::string const& yaml_name) {
   auto bin = find_file(
       {std::getenv("SNAPY_RUN_HYDRO") ? std::getenv("SNAPY_RUN_HYDRO") : "",
        "../bin/run_hydro.release", "./run_hydro.release"});
-  auto deck = find_file({"test_uranus_cycle1_abort.yaml",
-                         "../tests/test_uranus_cycle1_abort.yaml"});
+  auto deck = find_file({yaml_name, "../tests/" + yaml_name});
   if (bin.empty() || deck.empty()) {
     return {-1, "missing run_hydro.release or the deck\n"};
   }
@@ -76,7 +83,7 @@ RunResult run_deck() {
 // The shipped failure, on the smallest column that keeps it. A fixed run with
 // nlim 2 stops on the cycle limit instead of exhausting the redo budget.
 TEST(UranusCycle1, column_finishes_the_two_cycles) {
-  auto r = run_deck();
+  auto r = run_deck("test_uranus_cycle1_abort.yaml");
   ASSERT_NE(r.code, -1) << r.log;
   EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
             std::string::npos);
@@ -84,10 +91,11 @@ TEST(UranusCycle1, column_finishes_the_two_cycles) {
 }
 
 // run_hydro breaks out of the time loop on a redo failure and then falls off
-// main, so "Terminating abnormally" is reported as success. Separate from the
-// limiter abort: this stays red while that deck still aborts and exits 0.
+// main, so "Terminating abnormally" is reported as success. The floor deck
+// aborts whatever the limiter does, so this stays red on a library that still
+// exits 0 and goes green once finalize returns that status.
 TEST(UranusCycle1, abnormal_termination_exits_nonzero) {
-  auto r = run_deck();
+  auto r = run_deck("test_abnormal_exit_floor.yaml");
   ASSERT_NE(r.code, -1) << r.log;
   ASSERT_NE(r.log.find("Terminating abnormally"), std::string::npos)
       << "this deck no longer terminates abnormally; the exit-code check was "
