@@ -1,0 +1,83 @@
+# Forces an abnormal termination independent of the physics. pressure-floor
+# is above the initial pressure, so every step trips the floor check and
+# exhausts the default redo budget (5). max_redo is not read from yaml on
+# the pyharp this tree links (IntegratorOptionsImpl::from_yaml never loads
+# it), so a yaml max_redo of 0 would not force the abort. nlim is only a
+# backstop: if the floor does not abort, the run hits the cycle limit and
+# the test's "Terminating abnormally" assert fails.
+reference-state:
+  Tref: 0.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {H: 1.5, He: 0.15}
+    cv_R: 2.5
+
+geometry:
+  type: cartesian
+
+  bounds:
+    x1min: 0.
+    x1max: 300.e3
+    x2min: 0.
+    x2max: 2400.e3
+    x3min: 0.
+    x3max: 2400.e3
+
+  cells:
+    nx1: 8
+    nx2: 4
+    nx3: 1
+    nghost: 3
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  verbose: false
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor:  1.e-10
+    pressure-floor: 1.e12
+    limiter: true
+    max-iter: 10
+    ftol: 1.e-6
+
+  reconstruct:
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
+
+  riemann-solver:
+    type: hllc
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.45
+  implicit-scheme: 1
+  nlim: 20
+  tlim: 100.e5
+  ncycle_out: 1
+
+forcing:
+  const-gravity:
+    grav1: -22.
+
+problem:
+  Ps: 100.e5
+  Ts: 600.
+  Tmin: 110.
+  xH2O: 3.e-3
+  xNH3: 3.2e-4
+  xH2S: 1.e-5

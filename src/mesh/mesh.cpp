@@ -503,18 +503,18 @@ void MeshImpl::set_cycle(int cycle) {
   }
 }
 
-void MeshImpl::finalize(MeshVariables const& vars, double time) {
+int MeshImpl::finalize(MeshVariables const& vars, double time) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::finalize expects one Variables map per local MeshBlock");
 
   if (blocks.size() == 1) {
-    blocks.front()->finalize(vars.front(), time);
-    return;
+    return blocks.front()->finalize(vars.front(), time);
   }
 
   make_outputs(vars, time, /*final_write=*/true);
 
   auto root = blocks.front();
+  int status = 0;
   auto sig = SignalHandler::GetInstance();
   if (sig->GetSignalFlag(SIGTERM) != 0) {
     SINFO() << std::endl << "Terminating on Terminate signal" << std::endl;
@@ -529,6 +529,7 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
     SINFO() << std::endl << "Terminating on time limit" << std::endl;
   } else {
     SINFO() << std::endl << "Terminating abnormally" << std::endl;
+    status = 1;
   }
 
   SINFO() << "time=" << time << " cycle=" << root->cycle << std::endl;
@@ -549,6 +550,8 @@ void MeshImpl::finalize(MeshVariables const& vars, double time) {
       layout->comm->shutdown();
     }
   }
+
+  return status;
 }
 
 }  // namespace snap

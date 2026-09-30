@@ -338,12 +338,21 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto f2 = _flux2.defined() ? _flux2.narrow(0, ICY, ny) : torch::Tensor();
     auto f3 = _flux3.defined() ? _flux3.narrow(0, ICY, ny) : torch::Tensor();
 
-    auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt);
+    torch::Tensor drain;
+    auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt, &drain);
     // census of interior (cell, species) entries, before the ghost fill
     auto cells = pmb->part({0, 0, 0}, PartOptions().exterior(false));
     auto ti = theta.index(cells).to(torch::kFloat64);
     _positivity_hits += (ti < 1.).sum();
-    _positivity_severe += (ti < 0.9).sum();
+    // severe: theta < 0.9 AND the withheld mass is above round-off of the
+    // cell's gas mass. An empty cell drained by a round-off face flux has
+    // theta = 0 at any dt; its withheld mass is ~1e-20 of the cell's (#256).
+    auto cell_mass = (u[IDN] + uy.sum(0)) * pmb->pcoord->cell_volume();
+    auto withheld = ((1. - theta) * drain).index(cells).to(torch::kFloat64);
+    auto above =
+        withheld > positivity_roundoff(u.scalar_type()) *
+                       cell_mass.unsqueeze(0).index(cells).to(torch::kFloat64);
+    _positivity_severe += ((ti < 0.9) & above).sum();
     _positivity_min.copy_(torch::minimum(_positivity_min, ti.min()));
 
     // Raw copy, never interpolated: the donor of a panel-seam face is the

@@ -241,6 +241,8 @@ int main(int argc, char** argv) {
 
     auto& hydro_u = vars["hydro_u"];
     auto& hydro_w = vars["hydro_w"];
+    // Kinetics needs the final dynamics state, including saturation adjustment.
+    peos->forward(hydro_u, hydro_w);
     auto temp = peos->compute("W->T", {hydro_w});
     auto pres = hydro_w[IPR];
     auto xfrac = thermo_y->compute("Y->X", {hydro_w.narrow(0, ICY, ny)});
@@ -264,10 +266,12 @@ int main(int argc, char** argv) {
     block->make_outputs(vars, current_time);
   }
 
-  block->finalize(vars, current_time);
-  std::cout << "Completed jupiter_evap_precip_1d at time=" << current_time
-            << " seconds" << std::endl;
+  int status = block->finalize(vars, current_time);
+  if (status == 0) {
+    std::cout << "Completed jupiter_evap_precip_1d at time=" << current_time
+              << " seconds" << std::endl;
+  }
 
   CommandLine::Destroy();
-  return 0;
+  return status;
 }
