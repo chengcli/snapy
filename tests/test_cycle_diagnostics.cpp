@@ -234,7 +234,8 @@ namespace {
 //! kCard edited in place and written out: same species, so the table agrees
 std::shared_ptr<MeshBlockImpl> block_from(YAML::Node card,
                                           std::string const& name,
-                                          Variables* vars) {
+                                          Variables* vars,
+                                          double cloud = 0.02) {
   {
     std::ofstream(name) << card;
   }
@@ -249,7 +250,7 @@ std::shared_ptr<MeshBlockImpl> block_from(YAML::Node card,
   w[IDN].fill_(1.);
   w[IPR].fill_(1.e5);
   w[ICY].fill_(0.01);
-  w[ICY + 1].fill_(0.02);
+  w[ICY + 1].fill_(cloud);
   (*vars)["hydro_w"] = w;
   block->initialize(*vars);
   block->pintg->options->ncycle_out(1);
@@ -295,6 +296,38 @@ TEST(cycle_info, positivity_meters_read_their_hand_computed_values) {
   EXPECT_TRUE(found) << out;
   EXPECT_EQ(read_token(out, " thetasevere=", &found), 5.) << out;
   EXPECT_TRUE(found) << out;
+}
+
+// The same settling column with less cloud: theta = dx / (dt |vsed|) = 0.5
+// does not depend on how much cloud there is, but severe counts only a
+// withheld mass above kPositivityRoundoffUlp ulp of the cell's gas mass
+// (#256). 1e-6 of the cell's mass, nearly empty but real: the five faces are
+// severe, as at 0.02. 1e-300: the limiter still halves the five faces, and
+// none of them is severe.
+TEST(cycle_info, positivity_severe_needs_more_than_roundoff_withheld) {
+  auto card = YAML::LoadFile(kCard);
+  card["forcing"]["const-gravity"]["grav1"] = -1.e-12;
+  card["dynamics"]["equation-of-state"]["limiter"] = true;
+  card["sedimentation"] =
+      YAML::Load("{radius: {}, density: {}, const-vsed: {cloud: -2.}}");
+  for (auto [cloud, severe] : {std::pair{1.e-6, 5}, std::pair{1.e-300, 0}}) {
+    Variables vars;
+    auto block =
+        block_from(card, "test_cycle_diagnostics_roundoff.yaml", &vars, cloud);
+    auto hydro = block->phydro;
+    hydro->forward(1., vars.at("hydro_u"), vars);
+
+    EXPECT_NEAR(hydro->positivity_min()[0].item<double>(), 0.5, 1.e-9)
+        << "cloud=" << cloud;
+    EXPECT_EQ(hydro->positivity_hits()[0].item<int64_t>(), 5)
+        << "cloud=" << cloud;
+    EXPECT_EQ(hydro->positivity_severe()[0].item<int64_t>(), severe)
+        << "cloud=" << cloud;
+    double flux = hydro->lim_flux()[0].item<double>();
+    ASSERT_GT(flux, 0.) << "cloud=" << cloud;
+    EXPECT_NEAR(hydro->lim_cut()[0].item<double>() / flux, 0.5, 1.e-9)
+        << "cloud=" << cloud;
+  }
 }
 
 // Two cells, so one interior face carries the whole transfer M. Unclamped, a

@@ -767,6 +767,32 @@ TEST(forcing, limiter_species_repair_redoes_the_step) {
   }
 }
 
+// A repair of round-off size is applied but not marked (#256): run_hydro's
+// kinetics leaves ~-1e-304 cloud in cloud-free cells, and no smaller dt
+// removes it. The mark measures what the repair changes, against
+// kPositivityRoundoffUlp ulp (9.1e-13) of the cell's gas density: -1e-300
+// cloud in a cloud-free unit-density cell, in u or in a W->U primitive, is
+// not redone; -1e-9 is 1.1e3 times above the bound and is. A -1e-300 vapor
+// next to 0.01 vapor is still redone: fix_vapor moves 5e-3 to fill it.
+TEST(forcing, limiter_roundoff_species_repair_is_not_redone) {
+  auto moist = "test_diffusion_moist.yaml";
+  for (bool prim : {false, true}) {
+    auto r = limiter_step(moist, ICY + 1, -1.e-300, 1, prim);
+    EXPECT_EQ(r.redo, 0) << "prim " << prim << "\n" << r.log;
+    EXPECT_EQ(r.log.find("Redoing"), std::string::npos) << r.log;
+    EXPECT_EQ(r.retry, 0) << "prim " << prim;
+
+    auto g = limiter_step(moist, ICY + 1, -1.e-9, 1, prim);
+    EXPECT_EQ(g.redo, 1) << "prim " << prim << "\n" << g.log;
+    EXPECT_NE(g.log.find("(causes: limiter)"), std::string::npos) << g.log;
+    EXPECT_EQ(g.retry, 0) << "prim " << prim;
+  }
+
+  auto v = limiter_step(moist, ICY, -1.e-300, 1);
+  EXPECT_EQ(v.redo, 1) << v.log;
+  EXPECT_NE(v.log.find("(causes: limiter)"), std::string::npos) << v.log;
+}
+
 TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
   options->hydro()->diffusion() = nullptr;
