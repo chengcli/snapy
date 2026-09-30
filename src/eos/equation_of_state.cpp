@@ -371,10 +371,9 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
       auto interior =
           phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
       // mass fractions: the same round-off bound as the conserved repair
-      limiter_marks_[0].logical_or_(
-          (prim.index(interior).narrow(0, ICY, ny) <
-           -positivity_roundoff(prim.scalar_type()))
-              .any());
+      limiter_marks_[0].logical_or_((prim.index(interior).narrow(0, ICY, ny) <
+                                     -positivity_roundoff(prim.scalar_type()))
+                                        .any());
     }
     prim.narrow(0, ICY, ny).clamp_min_(0.);
   }
