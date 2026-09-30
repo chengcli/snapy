@@ -935,9 +935,9 @@ void LayoutImpl::post_to_local_block(int block_rank, torch::Tensor const& t,
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   // one message per (sender, receiver, tag) in flight: wait for the previous
   // one to be taken
-  bool free = g_local_exchange_cv.wait_for(
-      lock, std::chrono::minutes(5),
-      [&]() { return !g_local_mail.count(key); });
+  bool free =
+      g_local_exchange_cv.wait_for(lock, std::chrono::minutes(5),
+                                   [&]() { return !g_local_mail.count(key); });
   TORCH_CHECK(free, "[Layout:post_to_local_block] block ", options->rank(),
               " waited 5 min for block ", block_rank,
               " to take its previous message, tag ", tag);

@@ -29,9 +29,8 @@
 #include <vector>
 
 // torch
-#include <unistd.h>
-
 #include <torch/torch.h>
+#include <unistd.h>
 
 // snap
 #include <snap/snap.h>
@@ -249,13 +248,13 @@ void fill_column(Mesh mesh, MeshVariables& vars) {
     auto x = coord->x2v;
     auto Tbg = T0 - lapse * z;
     auto p = p0 * (Tbg / T0).pow(g / (Rd * lapse));
-    auto bubble =
-        ((x - xc) / xr).pow(2).view({1, nc2, 1}) +
-        ((z - zc) / zr).pow(2).view({1, 1, nc1});
+    auto bubble = ((x - xc) / xr).pow(2).view({1, nc2, 1}) +
+                  ((z - zc) / zr).pow(2).view({1, 1, nc1});
     auto T = Tbg.view({1, 1, nc1}) + dT * torch::exp(-bubble);
     auto pp = p.view({1, 1, nc1}).expand({nc3, nc2, nc1});
-    auto w = torch::zeros({mesh->blocks[b]->phydro->peos->nvar(), nc3, nc2, nc1},
-                          torch::kFloat64);
+    auto w =
+        torch::zeros({mesh->blocks[b]->phydro->peos->nvar(), nc3, nc2, nc1},
+                     torch::kFloat64);
     w[IDN].copy_(pp / (Rd * T));
     w[IPR].copy_(pp);
     vars[b]["hydro_w"] = w;
@@ -270,9 +269,10 @@ void step_column(Mesh mesh, MeshVariables& vars) {
 
 torch::Tensor column_state(Mesh mesh, MeshVariables const& vars) {
   std::vector<MeshBlock> blocks(mesh->blocks.begin(), mesh->blocks.end());
-  std::sort(blocks.begin(), blocks.end(), [](MeshBlock const& a, MeshBlock const& b) {
-    return a->pcoord->options->x1min() < b->pcoord->options->x1min();
-  });
+  std::sort(blocks.begin(), blocks.end(),
+            [](MeshBlock const& a, MeshBlock const& b) {
+              return a->pcoord->options->x1min() < b->pcoord->options->x1min();
+            });
   std::vector<torch::Tensor> parts;
   for (auto const& block : blocks) {
     size_t b = 0;
