@@ -241,6 +241,8 @@ int main(int argc, char** argv) {
 
     auto& hydro_u = vars["hydro_u"];
     auto& hydro_w = vars["hydro_w"];
+    // Kinetics needs the final dynamics state, including saturation adjustment.
+    peos->forward(hydro_u, hydro_w);
     auto temp = peos->compute("W->T", {hydro_w});
     auto pres = hydro_w[IPR];
     auto xfrac = thermo_y->compute("Y->X", {hydro_w.narrow(0, ICY, ny)});
