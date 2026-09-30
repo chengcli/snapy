@@ -2,9 +2,10 @@
 // cause "limiter", thetamin 0, then "Terminating abnormally", and the process
 // still exits 0. These are two defects.
 //
-// Smallest deck with that signature: the shipped file, one x2 cell, 10 x1
-// cells, nlim 2. Nine x1 cells is smaller but also trips floor, clamp and
-// saturation, and a non-positive temperature, so it is a different failure.
+// Smallest deck with that signature, including no extrapolate_ad warning: the
+// shipped file, one x2 cell, 96 x1 cells, nlim 2. 92 x1 cells still prints
+// one extrapolate_ad non-convergence, which the shipped 100 x 200 deck does
+// not. Nine and fewer x1 cells also trip floor, clamp or saturation.
 // Raising equation-of-state max-iter from 5 to 50 clears the equilibrate_tp
 // warnings on the full deck; cycle 1 still aborts. The abort does not follow
 // from those warnings.
@@ -74,7 +75,7 @@ RunResult run_deck() {
 
 // The shipped failure, on the smallest column that keeps it. A fixed run with
 // nlim 2 stops on the cycle limit instead of exhausting the redo budget.
-TEST(UranusCycle1, ten_by_one_finishes_the_two_cycles) {
+TEST(UranusCycle1, column_finishes_the_two_cycles) {
   auto r = run_deck();
   ASSERT_NE(r.code, -1) << r.log;
   EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
