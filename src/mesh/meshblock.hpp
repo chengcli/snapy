@@ -223,7 +223,8 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   void print_cycle_info(Variables const& vars, double time, double dt) const;
 
   //! make final output and print diagnostics
-  void finalize(Variables const& vars, double time);
+  //! \return 0, or 1 if the run terminated abnormally
+  int finalize(Variables const& vars, double time);
 
   //! check if redo is needed
   /*!
