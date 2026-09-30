@@ -106,7 +106,13 @@ TEST(UranusCycle1, abnormal_termination_exits_nonzero) {
 TEST(UranusLate, column_reaches_cycle_40) {
   auto r = run_deck("test_uranus_late_abort.yaml");
   ASSERT_NE(r.code, -1) << r.log;
+  EXPECT_EQ(r.code, 0) << r.log;
+  // Kinetics must use the final, saturation-adjusted state. Reading the
+  // previous stage's cloud abundance removes cloud that has already evaporated
+  // and causes real species repairs, even before the redo budget is exhausted.
+  EXPECT_EQ(r.log.find("Redoing the step"), std::string::npos) << r.log;
   EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
             std::string::npos);
+  EXPECT_EQ(r.log.find("Terminating abnormally"), std::string::npos);
   EXPECT_NE(r.log.find("Terminating on cycle limit"), std::string::npos);
 }
