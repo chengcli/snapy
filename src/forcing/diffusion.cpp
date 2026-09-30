@@ -507,6 +507,8 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   }
   if (options->kappa_iso() > 0. && !options->dynamic()) {
     rho_cv = w[IDN] * phydro->peos->specific_heat_cv(w, temp);
+    // on theta, kappa_iso diffuses theta: rho * cp = rho * cv + p / T (#261)
+    if (options->on_theta()) rho_cv = rho_cv + w[IPR] / temp;
   }
   // Dry ideal-gas potential temperature, theta = T (p_ref / p)^(R/cp), with
   // the mixture R = p / (rho T) and cp = cv + R. p_ref = 1e5 Pa is a constant
