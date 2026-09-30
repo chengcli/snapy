@@ -18,11 +18,18 @@
 #include <gtest/gtest.h>
 
 // C/C++
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 // torch
+#include <unistd.h>
+
 #include <torch/torch.h>
 
 // snap
@@ -86,8 +93,6 @@ double restarted_pref(MeshBlock block, torch::Tensor const& w) {
   return anchor + 0.5 * g * rho * dx;
 }
 
-}  // namespace
-
 // Uniform rho = 1 and p = 1e5, one process, dx = 1. p_ref of the cell under
 // the seam is fixed by the cells above it. Splitting the column inside one
 // process must not change it.
@@ -131,4 +136,188 @@ TEST(HydroRefX1, local_blocks_restart_the_reference_at_the_seam) {
   EXPECT_NEAR(from_below, unsplit_below, 1e-6)
       << "lower block p_ref " << from_below << " unsplit " << unsplit_below
       << " restart-from-own-top " << restarted_pref(lower, wl);
+}
+
+// RED on b94e5ed. The anchor now crosses an in-process seam, but the ghost
+// rows of p_ref and dref are still exchanged only between processes
+// (hydro.cpp, the block gated by x1_split). After 200 steps a 4-block
+// in-process column therefore leaves the one-block state. On this 32 x 8
+// polytrope the difference is rho 6.4e-5, p 1.1e-6, |dv| 1.4e-4 m/s. The
+// #250 tropopause column is the larger one Cheng measured at 2.49e-4.
+const char* kDriftYaml = R"(
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    gammad: 1.4
+    weight: 28.9703e-3
+    density-floor: 1.e-300
+    pressure-floor: 1.e-300
+    limiter: false
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+  riemann-solver:
+    type: lmars
+
+integration:
+  type: rk3
+  cfl: 0.5
+  implicit-scheme: 0
+
+forcing:
+  const-gravity:
+    grav1: -9.81
+
+distribute:
+  layout: slab
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 1
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 6400., x2min: 0., x2max: 6400., x3min: -0.5, x3max: 0.5}
+  cells: {nx1: 32, nx2: 8, nx3: 1, nghost: 3}
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+)";
+
+Mesh make_column(int nb1) {
+  char fname[] = "/tmp/pref-drift-XXXXXX";
+  int fd = mkstemp(fname);
+  EXPECT_NE(fd, -1);
+  if (fd != -1) close(fd);
+  std::ofstream out(fname);
+  out << kDriftYaml;
+  out.close();
+  auto block_opts = MeshBlockOptionsImpl::from_yaml(fname);
+  std::remove(fname);
+  if (nb1 > 1) {
+    block_opts->layout()->type() = "cubed";
+    block_opts->layout()->pz(nb1);
+  }
+  auto mesh_opts = MeshOptionsImpl::create();
+  mesh_opts->block(block_opts);
+  mesh_opts->blocks_per_process(nb1);
+  auto mesh = Mesh(mesh_opts);
+  mesh->to(torch::kCPU, torch::kFloat64);
+  return mesh;
+}
+
+void fill_column(Mesh mesh, MeshVariables& vars) {
+  constexpr double g = 9.81;
+  constexpr double Rd = 287.0;
+  constexpr double cp = 1004.5;
+  constexpr double T0 = 300.;
+  constexpr double p0 = 1.e5;
+  constexpr double lapse = g / cp;
+  constexpr double xc = 3200.;
+  constexpr double zc = 2000.;
+  constexpr double xr = 1600.;
+  constexpr double zr = 800.;
+  constexpr double dT = -20.;
+  for (size_t b = 0; b < mesh->blocks.size(); ++b) {
+    auto coord = mesh->blocks[b]->pcoord;
+    int nc1 = coord->options->nc1();
+    int nc2 = coord->options->nc2();
+    int nc3 = coord->options->nc3();
+    auto z = coord->x1v;
+    auto x = coord->x2v;
+    auto Tbg = T0 - lapse * z;
+    auto p = p0 * (Tbg / T0).pow(g / (Rd * lapse));
+    auto bubble =
+        ((x - xc) / xr).pow(2).view({1, nc2, 1}) +
+        ((z - zc) / zr).pow(2).view({1, 1, nc1});
+    auto T = Tbg.view({1, 1, nc1}) + dT * torch::exp(-bubble);
+    auto pp = p.view({1, 1, nc1}).expand({nc3, nc2, nc1});
+    auto w = torch::zeros({mesh->blocks[b]->phydro->peos->nvar(), nc3, nc2, nc1},
+                          torch::kFloat64);
+    w[IDN].copy_(pp / (Rd * T));
+    w[IPR].copy_(pp);
+    vars[b]["hydro_w"] = w;
+  }
+}
+
+void step_column(Mesh mesh, MeshVariables& vars) {
+  auto dt = mesh->max_time_step(vars);
+  int nstage = mesh->blocks.front()->pintg->stages.size();
+  for (int stage = 0; stage < nstage; ++stage) mesh->forward(vars, dt, stage);
+}
+
+torch::Tensor column_state(Mesh mesh, MeshVariables const& vars) {
+  std::vector<MeshBlock> blocks(mesh->blocks.begin(), mesh->blocks.end());
+  std::sort(blocks.begin(), blocks.end(), [](MeshBlock const& a, MeshBlock const& b) {
+    return a->pcoord->options->x1min() < b->pcoord->options->x1min();
+  });
+  std::vector<torch::Tensor> parts;
+  for (auto const& block : blocks) {
+    size_t b = 0;
+    for (; b < mesh->blocks.size(); ++b)
+      if (mesh->blocks[b]->pcoord->options->x1min() ==
+          block->pcoord->options->x1min())
+        break;
+    auto coord = block->pcoord;
+    auto w = vars[b].at("hydro_w");
+    parts.push_back(w.slice(-1, coord->il(), coord->iu() + 1)
+                        .slice(-2, coord->jl(), coord->ju() + 1));
+  }
+  return torch::cat(parts, -1);
+}
+
+double rel_diff(torch::Tensor const& a, torch::Tensor const& b, int var,
+                double floor) {
+  double da = (a[var] - b[var]).abs().max().item<double>();
+  double sc = std::max(a[var].abs().max().item<double>(),
+                       b[var].abs().max().item<double>());
+  return da / std::max(sc, floor);
+}
+
+}  // namespace
+
+// One process. Four blocks along x1 against one block, 200 steps. The ghost
+// rows of the reference are not exchanged inside the process, so the states
+// diverge. A fixed exchange keeps this under 1e-14.
+TEST(HydroRefX1, in_process_split_matches_one_block_after_200_steps) {
+  torch::set_num_threads(1);
+  auto one = make_column(1);
+  auto split = make_column(4);
+  ASSERT_EQ(one->blocks.size(), 1u);
+  ASSERT_EQ(split->blocks.size(), 4u);
+
+  MeshVariables v1(one->blocks.size());
+  MeshVariables v4(split->blocks.size());
+  fill_column(one, v1);
+  fill_column(split, v4);
+  one->initialize(v1);
+  split->initialize(v4);
+
+  for (int step = 0; step < 200; ++step) {
+    step_column(one, v1);
+    step_column(split, v4);
+  }
+
+  auto a = column_state(one, v1);
+  auto b = column_state(split, v4);
+  ASSERT_TRUE(a.sizes() == b.sizes()) << a.sizes() << " vs " << b.sizes();
+  double rho = rel_diff(a, b, IDN, 0.);
+  double pres = rel_diff(a, b, IPR, 0.);
+  double vx = rel_diff(a, b, IVX, 1.);
+  double state = std::max(rho, std::max(pres, vx));
+  EXPECT_LE(state, 1e-14) << "rho " << rho << " p " << pres << " vx " << vx;
 }
