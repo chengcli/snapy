@@ -289,6 +289,13 @@ class LayoutImpl {
   //! Hand this block's bottom face value to the block `below`.
   void pass_x1_anchor(int below, torch::Tensor const& face, int tag);
 
+  //! A message to / from another block of this process (a board, not the
+  //! process group). The blocks must run concurrently, as the mesh worker
+  //! threads do. A post waits until the receiver took the previous message
+  //! with the same tag; a take waits until the sender posted.
+  void post_to_local_block(int block_rank, torch::Tensor const& t, int tag);
+  torch::Tensor take_from_local_block(int block_rank, int tag);
+
   bool is_local_block(int block_rank) const {
     return options->owner_process_rank(block_rank) == options->process_rank();
   }
