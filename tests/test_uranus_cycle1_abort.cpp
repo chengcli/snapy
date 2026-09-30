@@ -34,12 +34,11 @@ std::string find_file(std::vector<std::string> const& names) {
   return {};
 }
 
-RunResult run_deck() {
+RunResult run_deck(std::string const& yaml_name) {
   auto bin = find_file(
       {std::getenv("SNAPY_RUN_HYDRO") ? std::getenv("SNAPY_RUN_HYDRO") : "",
        "../bin/run_hydro.release", "./run_hydro.release"});
-  auto deck = find_file({"test_uranus_cycle1_abort.yaml",
-                         "../tests/test_uranus_cycle1_abort.yaml"});
+  auto deck = find_file({yaml_name, "../tests/" + yaml_name});
   if (bin.empty() || deck.empty()) {
     return {-1, "missing run_hydro.release or the deck\n"};
   }
@@ -76,7 +75,7 @@ RunResult run_deck() {
 // The shipped failure, on the smallest column that keeps it. A fixed run with
 // nlim 2 stops on the cycle limit instead of exhausting the redo budget.
 TEST(UranusCycle1, column_finishes_the_two_cycles) {
-  auto r = run_deck();
+  auto r = run_deck("test_uranus_cycle1_abort.yaml");
   ASSERT_NE(r.code, -1) << r.log;
   EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
             std::string::npos);
@@ -87,10 +86,27 @@ TEST(UranusCycle1, column_finishes_the_two_cycles) {
 // main, so "Terminating abnormally" is reported as success. Separate from the
 // limiter abort: this stays red while that deck still aborts and exits 0.
 TEST(UranusCycle1, abnormal_termination_exits_nonzero) {
-  auto r = run_deck();
+  auto r = run_deck("test_uranus_cycle1_abort.yaml");
   ASSERT_NE(r.code, -1) << r.log;
   ASSERT_NE(r.log.find("Terminating abnormally"), std::string::npos)
       << "this deck no longer terminates abnormally; the exit-code check was "
          "not exercised";
   EXPECT_NE(r.code, 0) << "Terminating abnormally exited 0";
+}
+
+// RED on 93d1de1. The round-off repairs no longer redo the 100 x 200 deck,
+// and it is clean through cycle 38. A real H2S / H2S(l) transfer then does:
+// 1.6e-10 kg/m^3, 1.8e-10 of the cell's gas density, about 200 times the
+// 4096-ulp bound, across one whole horizontal row. The redo budget runs out
+// at cycle 232. One x2 cell keeps that transfer (about 5e-9 of the cell) and
+// exhausts at cycle 32. 80 x1 cells finish 50 cycles with no redo, and 50 x1
+// still reaches nlim 40, so the vertical count stays 100. nx2 of 4 or 16
+// dies in the first few cycles with limcut of order 1, which is a different
+// failure. nlim 40 is past this column's abort.
+TEST(UranusLate, column_reaches_cycle_40) {
+  auto r = run_deck("test_uranus_late_abort.yaml");
+  ASSERT_NE(r.code, -1) << r.log;
+  EXPECT_EQ(r.log.find("Maximum number of redo attempts exceeded"),
+            std::string::npos);
+  EXPECT_NE(r.log.find("Terminating on cycle limit"), std::string::npos);
 }
