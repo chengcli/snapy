@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <limits>
+
 // eigen
 #include <Eigen/Dense>
 
@@ -125,13 +128,19 @@ void DISPATCH_MACRO vic_constituent_column(T* du, T* w, T* mass_fix,
 
   // pass 3b: donor-upwinded species transfer with sequential availability
   // clamping; carry the running availability of the lower cell upward
+  // availability is rho * y from the primitives, which differs from the
+  // conserved species density by an ulp or so; draining exactly to it can land
+  // one ulp below zero (#260). Leave the margin flux_positivity_theta leaves
+  // (kPositivityRoundoffUlp = 4096 ulp) of the donor's own species mass.
+  T const keep = T(1) - T(4096) * std::numeric_limits<T>::epsilon();
   for (int n = 0; n < ny; ++n) {
-    avail = (W(IDN, 0) * W(ICY + n, 0) + DU(ICY + n, 0)) * VOL(0);
+    avail = (W(IDN, 0) * W(ICY + n, 0) * keep + DU(ICY + n, 0)) * VOL(0);
     if (avail < 0) avail = 0;
     for (int i = 0; i + 1 < nlayer; ++i) {
       T Mf = MASS(IVX + dir, i + 1);  // face between cells i and i+1
-      T avail_up =
-          (W(IDN, i + 1) * W(ICY + n, i + 1) + DU(ICY + n, i + 1)) * VOL(i + 1);
+      T avail_up = (W(IDN, i + 1) * W(ICY + n, i + 1) * keep +
+                    DU(ICY + n, i + 1)) *
+                   VOL(i + 1);
       if (avail_up < 0) avail_up = 0;
 
       T q = Mf > 0 ? Mf * W(ICY + n, i) : Mf * W(ICY + n, i + 1);
