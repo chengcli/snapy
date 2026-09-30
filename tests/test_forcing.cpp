@@ -645,16 +645,16 @@ struct LimiterStep {
 // row `row` of one interior cell of hydro_u just before stage `at` (row < 0:
 // nothing planted), or, with `prim`, into a W->U call's primitive input.
 LimiterStep limiter_step(std::string const& yaml, int row, double value, int at,
-                         bool prim = false,
-                         torch::Device device = torch::kCPU) {
+                         bool prim = false, torch::Device device = torch::kCPU,
+                         torch::Dtype dtype = torch::kFloat64) {
   auto options = MeshBlockOptionsImpl::from_yaml(yaml);
   options->hydro()->eos()->limiter(true);
   auto block = std::make_shared<MeshBlockImpl>(options);
-  block->to(device);
+  block->to(device, dtype);
   auto coord = block->pcoord;
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                          coord->options->nc2(), coord->options->nc1()},
-                        torch::dtype(torch::kFloat64).device(device));
+                        torch::dtype(dtype).device(device));
   w[IDN].fill_(1.);
   w[IPR].fill_(1.e5);
   if (w.size(0) > ICY) w[ICY].fill_(0.01);  // unsaturated vapor at 350 K
@@ -791,6 +791,33 @@ TEST(forcing, limiter_roundoff_species_repair_is_not_redone) {
   auto v = limiter_step(moist, ICY, -1.e-300, 1);
   EXPECT_EQ(v.redo, 1) << v.log;
   EXPECT_NE(v.log.find("(causes: limiter)"), std::string::npos) << v.log;
+}
+
+// The same bound in float32 is kPositivityRoundoffUlpFloat float32 ulp
+// (7.6e-6), not 4096 of them (4.9e-4): at 4096, the -1e-4 cloud repair that
+// is redone in float64 was accepted as round-off. -1e-5 is 1.3 times above
+// the bound and is redone; -8 ulp, eight times the rounding of a species
+// update, and -1e-37, the float32 analogue of the kinetics residue, are not.
+TEST(forcing, limiter_float32_roundoff_is_ulp_of_float32) {
+  auto moist = "test_diffusion_moist.yaml";
+  double ulp = std::numeric_limits<float>::epsilon();
+  for (bool prim : {false, true}) {
+    for (double value : {-1.e-4, -1.e-5}) {
+      auto g = limiter_step(moist, ICY + 1, value, 1, prim, torch::kCPU,
+                            torch::kFloat32);
+      EXPECT_EQ(g.redo, 1) << "value " << value << " prim " << prim << "\n"
+                           << g.log;
+      EXPECT_NE(g.log.find("(causes: limiter)"), std::string::npos) << g.log;
+      EXPECT_EQ(g.retry, 0) << "value " << value << " prim " << prim;
+    }
+    for (double value : {-8. * ulp, -1.e-37}) {
+      auto r = limiter_step(moist, ICY + 1, value, 1, prim, torch::kCPU,
+                            torch::kFloat32);
+      EXPECT_EQ(r.redo, 0) << "value " << value << " prim " << prim << "\n"
+                           << r.log;
+      EXPECT_EQ(r.retry, 0) << "value " << value << " prim " << prim;
+    }
+  }
 }
 
 TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
