@@ -76,6 +76,9 @@ TEST(hydro, face_floor_uses_adjacent_density) {
 }
 
 TEST(hydro, face_floor_uses_adjacent_density_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   face_floor_uses_adjacent_density(torch::Device(torch::kCUDA, 0));
 }

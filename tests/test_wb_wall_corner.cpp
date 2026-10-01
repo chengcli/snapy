@@ -6,10 +6,12 @@
 // reflecting condition registered under another name) must stay at rest too.
 
 // C/C++
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <vector>
 
 // POSIX
 #include <unistd.h>
@@ -87,11 +89,14 @@ forcing:
     nu_iso: 0.0234
 )";
 
-Mesh make_mesh(torch::Device device, std::string const& wall) {
+Mesh make_mesh(torch::Device device, std::string const& wall, int nb2 = 1) {
   std::string config = kConfig;
   for (std::string face : {"x1-inner: ", "x1-outer: "}) {
     config.replace(config.find(face + "reflecting") + face.size(), 10, wall);
   }
+  config.replace(config.find("nb2: 1"), 6, "nb2: " + std::to_string(nb2));
+  config.replace(config.find("blocks_per_process: 1"), 21,
+                 "blocks_per_process: " + std::to_string(nb2));
   char fname[] = "/tmp/wb-wall-corner-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
@@ -158,6 +163,9 @@ TEST(WallCorner, x2_uniform_rest_keeps_u2_zero) {
 }
 
 TEST(WallCorner, x2_uniform_rest_keeps_u2_zero_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   x2_uniform_rest_keeps_u2_zero(torch::Device(torch::kCUDA, 0), "reflecting");
 }
@@ -167,6 +175,78 @@ TEST(WallCorner, user_wall_keeps_u2_zero) {
 }
 
 TEST(WallCorner, user_wall_keeps_u2_zero_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   x2_uniform_rest_keeps_u2_zero(torch::Device(torch::kCUDA, 0), "user_wall");
+}
+
+// Compare every interior primitive and conserved field after ten identical
+// steps. The x2 split introduces extra wall corners but no physical boundary.
+namespace {
+std::vector<torch::Tensor> wall_corner_fields(int nb2) {
+  auto mesh = make_mesh(torch::kCPU, "reflecting", nb2);
+  EXPECT_EQ(mesh->blocks.size(), static_cast<size_t>(nb2));
+  MeshVariables vars(mesh->blocks.size());
+  for (size_t b = 0; b < mesh->blocks.size(); ++b) {
+    auto block = mesh->blocks[b];
+    auto coord = block->pcoord;
+    constexpr double Lz = 6.488906699059797, m = 1.49;
+
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    auto temp = (1. + Lz - coord->x1v.cpu()).view({1, 1, -1});
+    w[IDN] = temp.pow(m).expand_as(w[IDN]);
+    w[IPR] = w[IDN] * temp;
+    auto cells = block->part({0, 0, 0}, PartOptions().exterior(false));
+    auto dx = coord->dx1f.cpu().narrow(0, coord->il(), coord->options->nx1());
+    auto [balanced, residual, sweeps] =
+        balance_column(w.index(cells).contiguous(), dx.contiguous(), 2.49,
+                       /*wall_clamp=*/true, /*rtol=*/5.e-14, /*max_iter=*/400);
+    w.index_put_(cells, balanced);
+    // A smooth tangential velocity makes each corner depend on its exchanged
+    // column; copying the adjacent edge column is wrong even on a balanced
+    // background. Coordinates and the perturbation are global for both grids.
+    auto phase = 2. * std::acos(-1.) * coord->x2v.cpu() / 1.6222266747649493;
+    w[IVY] = (1.e-3 * phase.sin()).view({1, -1, 1}).expand_as(w[IVY]);
+    vars[b]["hydro_w"] = w;
+  }
+  mesh->initialize(vars);
+  for (int step = 0; step < 10; ++step) {
+    auto dt = mesh->max_time_step(vars);
+    for (int stage = 0; stage < mesh->blocks[0]->pintg->stages.size(); ++stage)
+      mesh->forward(vars, dt, stage);
+  }
+  std::vector<size_t> order;
+  for (size_t b = 0; b < mesh->blocks.size(); ++b) order.push_back(b);
+  std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    return mesh->blocks[a]->pcoord->options->x2min() <
+           mesh->blocks[b]->pcoord->options->x2min();
+  });
+  std::vector<torch::Tensor> result;
+  for (auto name : {"hydro_w", "hydro_u"}) {
+    std::vector<torch::Tensor> parts;
+    for (auto b : order) {
+      auto cells = mesh->blocks[b]->part({0, 0, 0}, PartOptions().exterior(false));
+      parts.push_back(vars[b].at(name).index(cells).clone());
+    }
+    result.push_back(torch::cat(parts, 2));
+  }
+  return result;
+}
+}  // namespace
+
+TEST(WallCorner, x2_split_matches_one_block_exactly) {
+  torch::set_num_threads(1);
+  auto one = wall_corner_fields(1);
+  auto two = wall_corner_fields(2);
+  for (size_t field = 0; field < one.size(); ++field) {
+    ASSERT_EQ(one[field].sizes(), two[field].sizes());
+    double error = (one[field] - two[field]).abs().max().item<double>();
+    std::printf("wall corner %s max abs error = %.17g\n",
+                field == 0 ? "hydro_w" : "hydro_u", error);
+    EXPECT_EQ(error, 0.) << (field == 0 ? "hydro_w" : "hydro_u");
+  }
 }

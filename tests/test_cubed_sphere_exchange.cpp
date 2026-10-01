@@ -177,6 +177,9 @@ TEST(CubedSphere, subdivided_panel_exchange_matches_one_block) {
 }
 
 TEST(CubedSphere, subdivided_panel_exchange_matches_one_block_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   PanelFields ref;
   try {

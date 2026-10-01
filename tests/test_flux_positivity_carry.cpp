@@ -240,6 +240,9 @@ TEST(flux_positivity, withheld_mass_keeps_its_donors_energy_and_momentum) {
 }
 
 TEST(flux_positivity, withheld_mass_keeps_its_donors_energy_and_momentum_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   withheld_mass_keeps_its_donors_energy_and_momentum(
       torch::Device(torch::kCUDA, 0));
@@ -338,6 +341,9 @@ TEST(flux_positivity,
 
 TEST(flux_positivity,
      withheld_mixed_flux_keeps_each_parts_energy_and_momentum_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   withheld_mixed_flux_keeps_each_parts_energy_and_momentum(
       torch::Device(torch::kCUDA, 0));

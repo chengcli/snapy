@@ -1,5 +1,7 @@
 #pragma once
 
+#include <configure.h>
+
 // external
 #include <gtest/gtest.h>
 
@@ -28,6 +30,11 @@ class DeviceTest : public testing::TestWithParam<Parameters> {
     device = torch::Device(param.device_type);
     dtype = param.dtype;
 
+#ifndef USE_CUDA
+    if (device.type() == torch::kCUDA) {
+      GTEST_SKIP() << "CUDA support is disabled in this build";
+    }
+#endif
     // Check if the device is available, and skip the test if not
     if (device.type() == torch::kCUDA && !torch::cuda::is_available()) {
       GTEST_SKIP() << "CUDA is not available, skipping test.";

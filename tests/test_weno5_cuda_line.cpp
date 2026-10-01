@@ -1,3 +1,5 @@
+#include <configure.h>
+
 // CUDA launches one thread block per reconstruction line. 1024 cells is the
 // largest line that launch can hold. 1025 is the smallest that must take
 // the tiled path. WENO5, WENO3, and polynomial degrees 3 and 5 share it.
@@ -100,6 +102,9 @@ void expect_matches_cpu(Kind kind, torch::Tensor w, int dim) {
 }  // namespace
 
 TEST(recon_cuda, line_above_1024_matches_cpu) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) {
     GTEST_SKIP() << "no CUDA device";
   }

@@ -153,10 +153,17 @@ set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS test_radiating_boundary_p
 # SNAPY_TEST_PYTHONPATH below; the raw add_test ones drive a built binary and import none.
 function(snapy_add_python_test name)
   cmake_parse_arguments(ARG "" "TIMEOUT" "LABELS;ARGS" ${ARGN})
-  add_test(
-    NAME ${name}_python
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py ${ARG_ARGS}
-  )
+  if("cuda" IN_LIST ARG_LABELS AND NOT CUDA)
+    add_test(NAME ${name}_python
+      COMMAND ${Python3_EXECUTABLE} -c
+              "import sys; print('CUDA support is disabled in this build'); sys.exit(125)")
+    set_tests_properties(${name}_python PROPERTIES SKIP_RETURN_CODE 125)
+  else()
+    add_test(
+      NAME ${name}_python
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py ${ARG_ARGS}
+    )
+  endif()
   set_tests_properties(${name}_python PROPERTIES
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
     LABELS "${ARG_LABELS}"

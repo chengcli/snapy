@@ -246,6 +246,9 @@ TEST(HydroRefX1Dispatch, without_the_clamp_the_ghosts_do_reach_the_interior) {
 }
 
 TEST(HydroRefX1Dispatch, cuda_matches_cpu) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) {
     GTEST_SKIP() << "CUDA is not available";
   }

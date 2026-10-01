@@ -1,3 +1,5 @@
+#include <configure.h>
+
 // C/C++
 #include <cstdio>
 #include <fstream>
@@ -326,6 +328,9 @@ TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference) {
 }
 
 TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   wb_wall_clamp_reaches_the_x1_reference(torch::Device(torch::kCUDA, 0));
 }

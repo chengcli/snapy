@@ -133,6 +133,9 @@ TEST(sedimentation, rising_cloud_is_taken_from_the_cell_below) {
 }
 
 TEST(sedimentation, rising_cloud_is_taken_from_the_cell_below_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "no CUDA device";
   expect_rising_cloud_taken_from_below(torch::kCUDA);
 }

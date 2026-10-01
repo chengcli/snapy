@@ -1,3 +1,5 @@
+#include <configure.h>
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -560,6 +562,9 @@ TEST(radiating, composition_entropy_and_joint_limiter) {
 }
 
 TEST(radiating, cpu_cuda_agreement) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA unavailable";
   auto b = block_for("moist-mixture");
   auto ref = background(b), input = ref.clone();
