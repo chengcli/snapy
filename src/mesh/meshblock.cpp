@@ -837,28 +837,23 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     op.eos = phydro->peos.get();
     op.coord = pcoord.get();
     auto refresh = [&](torch::Tensor field, int type) {
-      if (!field.defined() || field.numel() == 0)
-        return;
+      if (!field.defined() || field.numel() == 0) return;
       op.type(type);
       int nface =
           static_cast<int>(fns.size()) < 2 ? static_cast<int>(fns.size()) : 2;
       for (int f = 0; f < nface; ++f) {
-        if (!fns[f] || is_outflow(fns[f]))
-          continue;
+        if (!fns[f] || is_outflow(fns[f])) continue;
         if (static_cast<size_t>(f) < names.size() &&
             names[f].compare(0, 8, "periodic") == 0) {
           continue;
         }
         int spatial = 3 - f / 2;
-        if (field.size(spatial) == 1)
-          continue;
+        if (field.size(spatial) == 1) continue;
         for (int orth = 1; orth <= 3; ++orth) {
-          if (orth == spatial || field.size(orth) <= 1)
-            continue;
+          if (orth == spatial || field.size(orth) <= 1) continue;
           int n = static_cast<int>(field.size(orth));
           int g = ng < n / 2 ? ng : n / 2;
-          if (g <= 0)
-            continue;
+          if (g <= 0) continue;
           fns[f](field.narrow(orth, 0, g), spatial, op);
           fns[f](field.narrow(orth, n - g, g), spatial, op);
         }
