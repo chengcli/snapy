@@ -1,6 +1,14 @@
-# #236 study plan, rev 8b (branch (a))
+# #236 study plan, rev 9 (ideal gas only)
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 9 critique -> change (review of 05d5e6c)
+- Folds in the 11:51 KEEP/DROP list (ideal gas only) and the 12:58 literature-read plan, in that order and verbatim below.
+- The 12:58 DECIDE supersedes the A/B decision rule: compare A against G on z=1, with P extended to the CFL ladder.
+- The 11:51 ADD of an empty Literature section is superseded by the filled Literature section from the 12:58 post.
+- The accuracy threshold is PROPOSED: accepted by the coordinating bot as the starting proposal, pending confirmation by the three signers at sign.
+
+Earlier revision entries are retained as history; their old scope, gates and A/B decisions are superseded by rev 9 where noted below.
 
 Rev 8b critique -> change (review of db40758)
 - 1. L186 and L195 omitted the cp override precondition -> both the gas/cloud czh line and Gate 1b require use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise, including torch::where(n9.mask, intEng_nasa, result) at :294 on kintera 4dc613d.
@@ -40,7 +48,71 @@ Rev 5 critique -> change
 
 Issue: https://github.com/chengcli/snapy/issues/236
 
+## rev 9: ideal-gas scope and literature-read plan
+
+The following two coordinating-bot posts are preserved verbatim. The 12:58 plan is the later decision where the posts overlap; it supersedes the A/B decision rule. Non-ideal gases remain later work.
+
+### 11:51 KEEP/DROP list (ideal gas only)
+
+```text
+KEEP   formulation A as the carry (h_n = u_n + R_n T per gas, h_c = u_c per cloud, + KE); O3 (YAML only, z=1) for
+       every species incl. dry; I1 (sum identity, dry included); I2 (locality); the controls C, dropped inv_mu and
+       condensate; the use_nasa9_cp / use_h2_cp precondition. Gate 0 (main 5eeb9b6 counts, kintera v2.5.15);
+       Gates 2 + 3 on the z=1 cells only: 6 moist-mixture cases x {CPU, CUDA} = 12, plus the 12 ideal-moist
+       controls = 24 cells, a skip is a gap; Gate 4 (full ctest + python limiter tests, the two bitwise checks vs
+       5eeb9b6, flip moist_mixture_withholds_no_energy_or_momentum_yet to expect_carried). Item P as written
+       (CUDA is the deciding run; CPU per-cell mass/energy/momentum table). W->E kg/m3 bug stays its own fix.
+DROP   formulation B; the kintera test-only virial option; eval_intEng_R_ddC and its kintera PR; the 12 z!=1
+       cells; O1, O2, I3, I4, X, A-NI, G-AB; the A-vs-B runtime gate and the A/B decision rule.
+LATER  non-ideal gases (z!=1) get a Limit line in the fix PR and a new upstream issue for human discussion.
+ADD    a "Literature" section, empty for now: we are running a literature pass (species-positivity limiters
+       and the energy/momentum carried with limited species mass) and will post citations with page numbers.
+```
+
+The 11:51 ADD of an empty Literature section is superseded by the filled Literature section from the 12:58 post below.
+
+### 12:58 plan after the literature read (Xi approved: "好，就这样")
+
+```text
+FINDING  Our per-species cut (and A, which adds h_n + KE to it) appears in none of the 7 numerics papers read.
+         The standard is G: blend the WHOLE face flux vector toward a positivity-safe first-order flux with ONE
+         coefficient (Hu, Adams & Shu 2013 JCP 242 eq 12, LF, CFL <= 1/2; Wong et al. 2021 JCP 444 Alg. 4, HLLC,
+         CFL <= 0.5; Clayton et al. 2026 Comput. Fluids 317 eq 5.1). Energy and momentum stay consistent by
+         construction. Thermo (Satoh 2003 eq 9-10, 41; Bannon 2002 eq 6.1-6.4; Li & Chen 2019 eq 10, 14) supports
+         A's weights: gas c_p T + h0, cloud c_l T + h0 (no pV), + KE, one shared reference. Caution: Subbareddy
+         et al. 2017 JCP 348 eq 9 gives dE/drho_s at fixed p,u, which is not h_n + KE. No LMARS positivity proof
+         was found; every proof needs CFL <= 0.5, and the #263 reproducer runs cfl 0.9.
+COMPARE  A (per-species cut + h_n + KE) vs G (common-coefficient blend toward a positivity-safe HLLC/LF flux),
+         both on the z=1 scope.
+TESTS    (1) the 24 z=1 cells: limited-face energy/momentum residuals, column totals IDN, ICY.., IPR, IVX-IVZ.
+         (2) literature tests: Wong 1D interface advection with a 1e-8 partial-density floor (positivity, order);
+             Larrouturou 1991 two-species Sod tube (Y overshoot); Hu smooth advection u = 1 + 1e-6 + cos(2 pi x)
+             (L-inf error vs CFL).
+         (3) P as a CFL ladder: #263 CRM at cfl 0.9 / 0.5 / 0.3, CPU and CUDA: clamped cells, marked cells,
+             mass added by the clamp (interior and ghost), per step.
+DECIDE   G if it conserves exactly, keeps species >= 0 with no clamp at CFL <= 0.5, and its accuracy loss in (2)
+         is acceptable (state the threshold in rev 9); otherwise A. Report the cfl 0.9 result either way.
+ADD      a Literature section with these citations (eq/page as above); full notes are in our reading notes.
+```
+
+**PROPOSED accuracy threshold for DECIDE in the 12:58 block:** On each test in TESTS (2) at CFL 0.5, G's L-inf error must be at most 2x that of the unlimited scheme at the same resolution, and G's observed convergence order must be within 0.5 of the unlimited scheme's. The coordinating bot accepted this as the starting proposal; the three reviewers must confirm it at sign.
+
+## Literature
+
+- Hu, Adams & Shu 2013 JCP 242 (eq 12).
+- Wong et al. 2021 JCP 444 (Alg. 4).
+- Clayton et al. 2026 Comput. Fluids 317 (eq 5.1).
+- Satoh 2003 (eq 9-10, 41).
+- Bannon 2002 (eq 6.1-6.4).
+- Li & Chen 2019 (eq 10, 14).
+- Subbareddy et al. 2017 JCP 348 (eq 9).
+- Larrouturou 1991.
+
+Full notes are in the team's reading notes. This filled section supersedes the empty-Literature ADD in the 11:51 post.
+
 ## critique -> change, scope
+
+Superseded by rev 9: the historical non-ideal branch-(a) scope, 36-cell count, G-AB and A/B eligibility below are not active gates. Rev 9 uses 24 z=1 cells and the 12:58 A-versus-G DECIDE.
 
 ```text
 Scope: branch (a) only. A test-only kintera option registers virial functions in the CPU and device func2 tables, so all 24 moist-mixture cells run, including the 12 z!=1 cells. Branch (b) and its TORCH_CHECK are removed. Drafting only; nothing run.
@@ -75,6 +147,8 @@ Cell count: 36 = 24 moist-mixture gate cells (6 cases x {z=1, z!=1} x {CPU, CUDA
 ```
 
 ## kintera contract, invariants, dry gas
+
+Superseded by rev 9: the test-only virial option, new eval_intEng_R_ddC API/kintera PR, B, I3, I4 and G-AB below are dropped from this study. I1, I2, dry inclusion and the cp-override precondition remain in the z=1 scope.
 
 ```text
 kintera main (4dc613d) today
@@ -115,6 +189,8 @@ Dry gas left out in rev 3, now fixed
 ```
 
 ## oracles and controls
+
+Superseded by rev 9: B, O1, O2, X and the non-ideal A comparisons below are historical only. O3 remains YAML-only on z=1 for every species; C, dropped inv_mu and condensate controls are retained in that scope.
 
 ```text
 B (J/mol, then divide by M_n)
@@ -183,8 +259,10 @@ Tolerances (abs / rel)
   - momentum flux: 1e-12 / 1e-13
   - counts: exact
 - code M vs composition M: rel 2e-5
+Superseded by rev 9: the following A-vs-B runtime gate is dropped.
 - runtime: median of 5; soft gate B <= A + 15%
 
+Superseded by rev 9: G-AB is dropped; the historical block below is retained for reference.
 G-AB (z=1 cells only)
 - |h_A - h_B| <= 4 eps S_n, eps = 2^-52, S_n = (R/M)(|u0_R| + cv_R T + z T) + KE.
 - It applies to dry, vapour and cloud, including ghosts.
@@ -196,15 +274,21 @@ G-AB (z=1 cells only)
 
 Gates
 - 0 (CPU): build current main 5eeb9b6 (v2.10.36) against kintera v2.5.15 (4dc613d, kintera main), the same for both builds so the bitwise checks reproduce. Record the six moist-mixture counts, M_n and T. The earlier 3f7ad96 counts are a prior only. Pass if all six moist-mixture cases are red (energy residual rel 1.0 at every limited face) and every ideal-moist arm is green. A count mismatch against the prior is recorded, not an abort. 842a116's after-numbers are recorded as a candidate's, not as an oracle.
+Superseded by rev 9: Gate 1 below depends on dropped O1/O2/I3/X work; it is not an active gate.
 - 1 (CPU, no snapy): O1/O2 are reproduced in J/mol and J/kg, including the card z!=1 values. I1 and I3 hold on O1. Every control misses by its stated size (+-10%) and by >= 1e3 x tolerance, X included.
+Superseded by rev 9: Gate 1b below and its test-only kintera work are dropped; keep use_nasa9_cp and use_h2_cp off for the retained scope.
 - 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice, dry included; cloud slots start at vapor_ids().size(), thermo_y.cpp:78). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3. (use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise)
+Superseded by rev 9: Gates 2 and 3 below are restricted to the 24 z=1 cells (12 moist-mixture plus 12 ideal-moist controls); compare A versus G under the 12:58 plan, not A versus B.
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
 - 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
+Superseded by rev 9: coverage is 24 z=1 cells, with a skip still a gap; the old 36-cell requirement below is inactive.
 - Coverage: all 36 cells ran on their device and passed.
 ```
 
 ## positivity: face flux limiter vs cell clamp (new in rev 5)
+
+Superseded by rev 9 where the run/decision wording differs: retain P's instrumentation, interior/ghost budgets, CPU table and CUDA deciding evidence, but run the 12:58 CFL ladder (0.9 / 0.5 / 0.3) on both devices and use its DECIDE for A versus G.
 
 ```text
 P. Where is species positivity guaranteed?
@@ -228,6 +312,7 @@ Pass for P: a table per run of clamped cells, marked cells from the study-build 
 ## grid, decision, open items
 
 ```text
+Superseded by rev 9: retain only the IM and MM z=1 columns of the historical grid below; z!=1 and the old A/B and dropped unit-test requirements are inactive.
 Grid, target test_flux_positivity_carry. Columns: IM cpu/cuda | MM z=1 cpu/cuda | MM z!=1 cpu/cuda. E = exists at 5eeb9b6 (line), N = new, G = gap today (gap test line).
 - adv lmars: E169/NG | G351/NG | N/N
 - adv hllc: E169/NG | NG/NG | N/N
@@ -243,6 +328,7 @@ Tests added
 - The parameterised Carry.<case>/<eos> and Carry_cuda.<case>/<eos>.
 - Unit tests: I1, I2, I3, X, A-NI, G-AB, and the kintera function tests (1b).
 
+Superseded by rev 9: the entire historical A/B decision below is replaced by the 12:58 DECIDE and its linked PROPOSED accuracy threshold; the W->E bug remains its own fix.
 Decision (branch a)
 - Both A and B remain supported formulations. Neither is removed and no TORCH_CHECK is added.
 - A formulation is eligible as the default if it passes every gate in its scope.
@@ -258,6 +344,7 @@ Decision (branch a)
 - The kintera test option and eval_intEng_R_ddC go in a kintera PR with its own numbers. The test functions stay test-only.
 
 Open
+Superseded by rev 9: the following kintera PR ownership task is dropped; non-ideal work goes to a Limit line and a separate upstream issue for human discussion.
 - Xi to confirm who owns the kintera PR: the test-only option plus eval_intEng_R_ddC.
 - Not verified:
   - harp's element table: kintera computes M via harp::get_compound_weight (molar_mass.cpp:17-18); IUPAC weights give 28.96998e-3 or 28.96968e-3;
