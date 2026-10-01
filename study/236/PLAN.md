@@ -1,6 +1,22 @@
-# #236 study plan, rev 9b (ideal gas only)
+# #236 study plan, rev 9c (ideal gas only)
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 9c critique -> change (review of rev 9b)
+- Rev 9c: separates Wong positivity/order tests, makes Hu's two checks vote, tightens the Larrouturou vote, adds a second carry card and closes the independent rev 9a review leftovers; Sihe Chen's items (Slack 1790887060.769699) and coordinating-bot items (Slack 1790887177.825939) are mapped below. Sign-off restarts on this sha.
+- 1 (Sihe Chen): Wong interface uses initial trace density, not a floor, with positivity only; a separate proposed smooth trace card carries the L1 order gate (L123-L124); rev 9b response 7 is corrected.
+- 2 (Sihe Chen): Larrouturou CFL and paper/study species mappings are explicit (L125-L126).
+- 3a: I1 now targets O3, not a dropped O1 residual (L294).
+- 3b: I2 defines its own S_n (L295).
+- 3c: Gates 2/3 use 12 z=1 configurations per device and A/G-specific oracles (L399-L400).
+- 3d: Gate 4's A-only scope was already closed in rev 9b at L349; retained at L401.
+- 3e: actual-clamp versus marked-cell distinction was closed in rev 9b at L140,152-155,374; ghost clamps explicitly count now (L160, L177).
+- 3f: Hu N ladder, t=1, fitted order and zero-clamp unlimited reference are explicit (L122, L128).
+- 3g: logs the previously unlogged rev 9a L338 cross-reference repair in the historical grid/decision fence; that fence is unchanged in rev 9c, and its linked criteria now mean the current rev 9c criteria (L208).
+- 3h: the '7 numerics papers' count remains as written inside the verbatim 12:58 block; the count discrepancy is noted, not edited (L208).
+- bot-9c-1: nontrivial 0.7/0.3 initial fractions and their range replace the vacuous [0,1]-based vote; the pure-species paper comparison does not vote (L125-L126).
+- bot-9c-2: both Hu order and CFL-0.5 2x L-inf checks vote (L122); the new ladder/time clarification does not change the latter's same-resolution scope.
+- bot-9c-3: second proposed carry card, separate-process recipe and run-matrix row added, with inspected source citations (L179-L183).
 
 Rev 9b critique -> change (review of rev 9)
 - Rev 9b: oracle-review items B1, B2, 1-11 from the coordinating bot's independent review of rev 9 (Slack, 2026-10-01); Xi->Sihe Chen attribution fix for rev 9a. Sihe Chen's approve on 5f175ed4 is superseded; sign-off round restarts on this sha.
@@ -12,7 +28,7 @@ Rev 9 critique -> change (review of 05d5e6c)
 - Folds in the 11:51 KEEP/DROP list (ideal gas only) and the 12:58 literature-read plan, in that order and verbatim below.
 - The 12:58 DECIDE supersedes the A/B decision rule: compare A against G on z=1, with P extended to the CFL ladder.
 - The 11:51 ADD of an empty Literature section is superseded by the filled Literature section from the 12:58 post.
-- The single accuracy threshold introduced in rev 9 is superseded by the rev 9b per-test DECIDE criteria below.
+- The single accuracy threshold introduced in rev 9 is superseded by the rev 9c per-test DECIDE criteria below.
 
 Earlier revision entries are retained as history; their old scope, gates and A/B decisions are superseded by rev 9 where noted below.
 
@@ -101,11 +117,15 @@ DECIDE   G if it conserves exactly, keeps species >= 0 with no clamp at CFL <= 0
 ADD      a Literature section with these citations (eq/page as above); full notes are in our reading notes.
 ```
 
-**Per-test DECIDE accuracy criteria (rev 9b):** Apply these to TESTS (2); the verbatim 12:58 DECIDE remains unchanged. The revised timing, diagnostics and G implementation below are PROPOSED pending the restarted three-signer review.
+**Per-test DECIDE accuracy criteria (rev 9c):** Apply these to TESTS (2); the verbatim 12:58 DECIDE remains unchanged. The revised timing, diagnostics and G implementation below are PROPOSED pending the restarted three-signer review.
 
-1. Hu, Adams & Shu 2013 smooth advection (u = 1 + 1e-6 + cos(2 pi x)): at CFL 0.5 and the same resolution, G's L-inf error <= 2x the unlimited scheme (robustness check only). Measure convergence order separately with dt = 0.5*dx^(5/3) in both arms; G's observed order must be within 0.5 of unlimited. The timestep is per oracle review, to verify against Hu 2013 p.11; no local PDF was found. The original numerical thresholds were accepted by Sihe Chen; the revised timing awaits all three signers. PROPOSED variable convention pending the paper: u_adv is the advected scalar/partial density carrying the 1e-6 offset, while transport velocity is v; confirm whether the paper's u denotes that scalar before implementing, rather than silently interpreting it as Snapy's velocity. Require a nonzero count of limited faces in G, not merely a passing error norm.
-2. Wong et al. 2021 1D interface advection with a 1e-8 partial-density floor: every species partial density >= 0 at every cell and step, with no clamp invoked; measure L1 convergence order on the smooth part and require it within 0.5 of unlimited. No L-inf-vs-unlimited gate. PROPOSED gas pair: gamma 1.4 / 1.67 and molar mass 29 / 4 g/mol. Report max |p-p0|/p0 and max |v-v0| (the velocity diagnostic max |u-u0| in the review) for Abgrall contact oscillations. Positivity/order criterion proposed by Sihe Chen at rev 9 review; the other two signers must confirm it, and the new gas pair/L1 details await the restarted sign-off.
-3. Larrouturou 1991 two-species Sod tube: the DECIDE vote applies to BOTH A and G; PASS is each mass fraction Y_n in [-1e-3, 1+1e-3] at every cell and step. Report the unlimited scheme's maximum excursion (max over cells and steps of max(-Y_n, Y_n - 1)) beside each arm's excursion. No convergence-order gate. The 1e-3 bound is PROPOSED (Cheng; all three signers must confirm); round-off-level tightness is explicitly NOT required (agreed by Sihe Chen's review). A's species-only scaling is not an upper-Y constraint: only ICY.. is scaled, with dry flux untouched by that operation (src/hydro/hydro_forward.cpp:335-339,386; src/hydro/flux_positivity.cpp:76-103); test the maximum principle rather than assume it.
+1. Hu, Adams & Shu 2013 smooth advection (u = 1 + 1e-6 + cos(2 pi x)): two checks VOTE under DECIDE: (a) G's observed convergence order within 0.5 of unlimited on the order ladder below; (b) at CFL 0.5 and the same resolution, G's L-inf error <= 2x the unlimited scheme. Measure convergence order separately with dt = 0.5*dx^(5/3) in both arms; G's observed order must be within 0.5 of unlimited. The timestep is per oracle review, to verify against Hu 2013 p.11; no local PDF was found. The original numerical thresholds were accepted by Sihe Chen; the revised timing awaits all three signers. PROPOSED variable convention pending the paper: u_adv is the advected scalar/partial density carrying the 1e-6 offset, while transport velocity is v; confirm whether the paper's u denotes that scalar before implementing, rather than silently interpreting it as Snapy's velocity. Require a nonzero count of limited faces in G, not merely a passing error norm.
+2. Wong et al. 2021: separate the interface positivity case from the smooth-order case, following Sihe Chen (Slack 1790887060.769699). Interface (§6.2 / Table 5): a single N=200 piecewise-constant run; 1e-8 is the INITIAL trace partial density, not a floor. Its ONLY gate is every species partial density >= 0 at every cell and step, with no clamp; report the per-cell clamp counter including ghosts, max |p-p0|/p0 and max |u-u0| (u is velocity here). No interface order gate and no L-inf-vs-unlimited gate. Smooth trace advection (§6.1 / Table 4 style) has the separate L1 order vote specified below: G's observed order within 0.5 of the unlimited scheme. These are study criteria, not a claim that the proposed smooth card reproduces Table 4 exactly.
+   Smooth trace card (all chosen values PROPOSED): periodic x in [0,1], constant total density rho=1 kg/m3, p0=1e5 Pa, velocity u0=1 m/s; first non-dry gas partial density rho_1(x,0)=1e-8*(1+0.5*sin(2*pi*x)), dry gas rho_2=1-rho_1, no clouds. Gas 1/2 use gamma 1.4/1.67 and molar mass 29/4 g/mol (the retained PROPOSED pair); construct T and energy consistently from that ideal-mixture EOS. N=50,100,200,400,800 uniform cells, final time t=1, CFL=0.5. Initialize exact cell averages and compare at t=1 against the analytically translated cell averages; E1(N)=sum_i dx*|rho_1,i-rho_1,exact,i|. Fit observed order as the least-squares slope of log E1 against log dx over all five N, separately for G and unlimited; report all errors and adjacent-grid orders. A zero/round-off-saturated error makes the fit indeterminate, not an automatic pass. Use the B2 zero-clamp reference and report positivity/clamp and contact diagnostics on this card too. Interface and smooth-order votes both feed DECIDE.
+3. Larrouturou 1991 two-species Sod tube: both A and G receive a PROPOSED DECIDE vote from a nontrivial-mixture run, with Y_1,L=0.7, Y_1,R=0.3 and Y_2,L=0.3, Y_2,R=0.7. Require each Y_n in [min_x Y0_n - 1e-3, max_x Y0_n + 1e-3] (here [0.299,0.701]) at every cell and step. Report beside EACH arm the unlimited maximum excursion max over species, cells and steps of max(0, min_x Y0_n-Y_n, Y_n-max_x Y0_n); report the same excursion for that arm. No order gate; round-off-level tightness is NOT required (Sihe Chen's review); the bound awaits all three signers. Rationale: with two nonnegative partial densities summing to rho, both Y_n already lie in [0,1], so the old [-1e-3,1+1e-3] vote cannot distinguish positivity-preserving arms. Keep Y_1,L=1, Y_1,R=0 as a REPORTED, NON-VOTING comparison against the paper's 1+1.5e-6 overshoot; report max Y_1 and its excursion separately from the nontrivial-mixture vote.
+   Larrouturou card for BOTH runs: CFL=0.5 is our PROPOSED choice; the paper (INRIA RR-1080 §5) used CFL=0.75. Paper Y_1 is the initially left gas (Y_L=1, Y_R=0, gamma 1.4), Y_2 the initially right gamma-1.2 gas; paper resolution 101 points, final time t=0.21. No Snapy species mapping was fixed in rev 9b: PROPOSED Y_1 is the first non-dry vapour component (ICY), Y_2 is dry (IDN); no cloud. Retain the rev 9b item-7 PROPOSED study pair gamma 1.4/1.67, molar mass 29/4 g/mol for Y_1/Y_2 in BOTH study runs. This differs from the paper's gamma 1.4/1.2, so the non-voting reported comparison is an adapted case, not a numerical reproduction of its overshoot. PROPOSED finite-volume realization: 101 cells on [0,1], diaphragm x=0.5, final time t=0.21 in paper units; initialize diaphragm-cut cells with the exact volume averages. The dimensionalization of the remaining paper states and boundary conditions is an open implementation prerequisite: set it consistently with the EOS/floors before running, without changing it between the two cards. All parameters are identical between the voting and reported cards except initial fractions. Paper parameters above are attributed to the review, pending direct paper verification.
+
+Hu run specification (rev 9c): N=50,100,200,400,800 (paper's 50-800 ladder, per review), final time t=1. PROPOSED fitting convention: exact cell-average initialization/reference on the periodic unit interval, fit the least-squares slope of log L-inf error versus log dx over all five resolutions, with adjacent-grid orders and every error reported; round-off-saturated or zero errors make the fit indeterminate. Use dt=0.5*dx^(5/3), clipping the last step to t=1, for the order vote. The separate CFL=0.5 2x vote compares G with unlimited at the SAME N and final time (no cross-resolution ratio); report it for every listed N. This supplies the previously missing N/time specification; it does not narrow rev 9b's same-resolution rule. Unlimited means G blend/A flux limiter OFF via B2's PROPOSED debug_disable_flux_positivity while limiter:true keeps repair enabled; require observed clamp count=0, interior AND ghost, and no NaNs for a valid reference, otherwise void that case's comparison. Hu's advected-variable interpretation and paper dt/p.11 verification remain open as in rev 9b.
 
 ## Literature
 
@@ -137,7 +157,7 @@ All Snapy source references in this revision are to 5eeb9b6761ae484a98b3993aae18
 ### B2: unlimited reference and shared diagnostics
 
 - limiter: false switches off conserved cell repair AND primitive repair, as well as the flux limiter (src/eos/equation_of_state.cpp:213,358; src/hydro/hydro_forward.cpp:335). The inspected option is a single EOS limiter bool (src/eos/equation_of_state.hpp:49-54); the inspected flux path has no independent cut switch. PROPOSED required code change: add debug_disable_flux_positivity, leaving limiter: true for cell repair and bypassing only A's flux cut/carry or G's blend. It must not disable sedimentation. This is the unlimited-reference arm for both numerical comparisons and on/off flux tests, and is part of the arm implementation plan, not an existing option.
-- Every TESTS (2) run, including the unlimited reference, must log per-cell NaNs BEFORE repair, clamp counters/masks and mass changes at every step/stage (interior and ghost separately). A NaN in the reference voids that case's accuracy comparison even if repair removes it; report every clamp in the reference. DECIDE's no-clamp clause requires zero actual clamps in G, not just zero marked blocks. Existing code replaces NaNs and reports thresholded species marks, not the required census (src/eos/equation_of_state.cpp:217-219,348-352,359-364,384-385); meshblock exposes two bools and uses them in redos (src/mesh/meshblock.cpp:1070-1077,1129-1144). Add the counters before mutation, not after the data have been repaired.
+- Every TESTS (2) run, including the unlimited reference, must log per-cell NaNs BEFORE repair, clamp counters/masks and mass changes at every step/stage (interior and ghost separately). A NaN OR any clamp in the reference voids that case's accuracy comparison even if repair removes it; report every clamp in the reference. DECIDE's no-clamp clause requires zero actual clamps in G, including ghost cells at every step/stage, not just zero marked blocks; count interior and ghost clamps separately but either violates no-clamp. Existing code replaces NaNs and reports thresholded species marks, not the required census (src/eos/equation_of_state.cpp:217-219,348-352,359-364,384-385); meshblock exposes two bools and uses them in redos (src/mesh/meshblock.cpp:1070-1077,1129-1144). Add the counters before mutation, not after the data have been repaired.
 
 ### O3, mutation tests and thermodynamic tolerances (items 1-4, 11)
 
@@ -154,9 +174,19 @@ All Snapy source references in this revision are to 5eeb9b6761ae484a98b3993aae18
 - Snapy's explicit hydro timestep is min_d,cells dx_d/(|v_d|+a), then limited by diffusion; the block/global minimum is multiplied by cfl and 2^(-current_redo) (src/hydro/hydro.cpp:125-133,190-212; src/mesh/meshblock.cpp:507-525). The implicit-correction branch has different denominators/shear bounds (src/hydro/hydro.cpp:145-187). For explicit uniform 2D define tau_x=max(|v_x|+a)/dx and tau_y=max(|v_y|+a)/dy: absent other restrictions dt_snap=cfl/max(tau_x,tau_y), whereas Hu eq. 29 uses dt=CFL_Hu/(tau_x+tau_y). Log actual dt, both rates and CFL_Hu=dt*(tau_x+tau_y) at every stage of the 0.9/0.5/0.3 ladder; input cfl=0.5 is NOT necessarily Hu CFL<=0.5 (equal rates give CFL_Hu=1). PROPOSED additional capped control dt<=0.5/(tau_x+tau_y), including the G settling speed restriction above, is required for a claim at Hu CFL<=0.5. Keep and report the uncapped cfl 0.9 outcome either way. Paper equation attribution remains per oracle review pending the PDF.
 - All TESTS (2) runs use the B2 per-cell clamp instrumentation, not just CRM. G's positivity/no-clamp gate and both arms' Larrouturou Y vote are independent of the accuracy norms. A fallback under DECIDE must report its own failures; a failed A interval vote is not silently promoted to a passing maximum-principle guarantee.
 
+P clarification (rev 9c): retain nonzero positivity hits, causal clamp attribution and mass closure; zero marked cells alone is not a pass. For DECIDE's no-clamp claim, require zero actual interior AND ghost clamps, including round-off clamps, in all TESTS (2) and qualifying P runs. The CRM CFL=0.9 run is still reported whether it passes or fails. Historical P wording below remains superseded.
+
+Second carry card (PROPOSED): test_flux_positivity_carry_vapor_u0.yaml, following the existing test_flux_positivity_carry.yaml name (tests/test_flux_positivity_carry.cpp:26-27 at 5eeb9b6); rev 9b specified the card's state but no filename. Copy the base thermodynamic card and set vapor u0_R=-1000 K, retaining the cloud offset and nonzero velocities. The carry binary loads one thermodynamic base card per process (source comment/kCard at :26-27, YAML::LoadFile at :41); it writes temporary on/off variants at :44-51, so this does NOT mean one YAML read per process. PROPOSED harness change: choose the base-card path once at process startup and invoke a fresh process for each card, never swap species tables within a process. Existing one-step calls are at :68-69 and the nonzero (vx,vy)=(2,3) comparison at :175-176.
+
+| Additional card/run | Arm | Device | N | Step count | Gates/oracles |
+| --- | --- | --- | --- | --- | --- |
+| test_flux_positivity_carry_vapor_u0.yaml (PROPOSED) | A plus B2 unlimited reference; ideal-moist and moist-mixture, lmars/hllc | CPU and CUDA, fp64, separate processes per card/device | 6x1x1, 2 ghosts (base-card geometry; tests/test_flux_positivity_carry.yaml:27-30) | One hydro forward with dt=1 per arm, as source :35,69; proposed new-card run | Gate 2 CPU / Gate 3 CUDA; own-state O3, I1/I2 and A carry energy/momentum residual; five hook mutations must turn affected carry/O3 checks red |
+
+The second card is an additional A thermodynamic-regression row beyond the 24 primary device/configuration cells, not an extra G positivity-at-CFL<=0.5 claim: its dt=1 drain test follows the carry fixture. All new card/harness work is proposed implementation work, not added files in this documentation commit.
+
 ### Rev 9b responses
 
-The following mapping covers every requested item; line numbers refer to this revision. PROPOSED items remain open for the restarted sign-off, including the new G algorithm/settling contract and Hu paper verification.
+The following mapping covers every requested item; line numbers in this historical table refer to rev 9b, except the explicitly updated item 7 which points to rev 9c. PROPOSED items remain open for the restarted sign-off, including the new G algorithm/settling contract and Hu paper verification.
 
 | Item | PLAN.md lines | Response |
 | --- | --- | --- |
@@ -168,12 +198,34 @@ The following mapping covers every requested item; line numbers refer to this re
 | 4 | 147,316-317 | A carry energy residual paired with O3 on the same cells. |
 | 5 | 152-153,374 | Nonzero hits, attribution and mass closure; disagreement: physical mass sources must be included in full-step budgets (src/hydro/hydro_forward.cpp:415-422). |
 | 6 | 154 | Actual Snapy-to-Hu CFL conversion and capped control. |
-| 7 | 107 | Wong L1 order, proposed distinct gases and contact diagnostics. |
+| 7 | rev 9c L123-L124 | Fixed in rev 9c: interface positivity only, initial trace density; L1 order moved to a separate smooth trace card; contact diagnostics retained. |
 | 8 | 108,155 | Both A and G receive the Y-interval vote; unlimited excursion alongside each. |
 | 9 | 106,152 | Hu offset variable is PROPOSED pending PDF verification; nonzero limited faces required. |
 | 10 | 140,155 | Per-cell clamp census in every literature-test run. |
 | 11 | 148,310 | Primary enthalpy tolerance retained; 12.7267535627529 amplification; proposed T budget. |
 | attribution | 6,9,106-108 | Rev 9a review credit corrected to Sihe Chen; prior approve superseded; genuine Xi 12:58 attribution retained. |
+
+## Rev 9c responses
+
+Items 1 and 2 credit Sihe Chen (Slack 1790887060.769699); 3a-3h address the independent rev 9a review as supplied in this brief (the dungeon2 review file was not locally inspected). bot-9c-1..3 credit the coordinating bot's 9c review (Slack 1790887177.825939). Current line numbers below refer to rev 9c; explicit rev 9b numbers identify prior closures.
+
+| Item | Status | PLAN.md lines and response |
+| --- | --- | --- |
+| 1 | fixed | L123-L124: interface positivity only, initial trace density; separate concrete smooth L1 order test. Rev 9b item 7 corrected. |
+| 2 | fixed | L125-L126: CFL 0.5 proposal versus paper 0.75, paper/study Y_1 mappings, both arms; voting interval superseded by bot-9c-1. |
+| 3a | fixed | L294: I1 retargeted from dropped O1 to surviving O3, paired carry check. |
+| 3b | fixed | L295: independent inline S_n definition. |
+| 3c | fixed | L399-L400: active z=1 A/G counts and arm-specific oracles replace 18 x A/B. |
+| 3d | already closed in 9b at L349 | A-only Gate 4 bitwise checks retained at L401. |
+| 3e | already closed in 9b at L140,152-155,374; clarified | L160, L177: actual clamps, not marks; ghost clamps explicitly count, reference must also have zero clamps. |
+| 3f | fixed | L122, L128: N=50-800, t=1, fit convention, B2 unlimited recipe and zero-clamp reference. |
+| 3g | note | L15: history now logs the unlogged rev 9a L338 cross-reference repair; historical grid/decision fence unchanged, and its rev 9b criteria link resolves to the current rev 9c criteria. |
+| 3h | note | L16: '7 numerics papers' versus five numerics citations remains an unresolved count discrepancy, left as written because the 12:58 block is verbatim. |
+| bot-9c-1 | fixed | L125-L126: nontrivial initial-range vote, both arms; pure-species overshoot comparison reported, not voting. |
+| bot-9c-2 | fixed | L122: both Hu checks vote; same-resolution CFL=0.5 comparison preserved. |
+| bot-9c-3 | fixed | L179-L183: named second card, run row and separate-process requirement; source confirms one base card, not one YAML read. |
+
+No requested item was rejected as a code contradiction. The retained proposed study gas pair differs from Larrouturou's paper pair; this is explicitly an adapted reported comparison. The frozen 12:58 block's Wong 'floor' wording and combined tests list remain historical verbatim text; the current executable criteria are the rev 9c criteria above.
 
 ## critique -> change, scope
 
@@ -239,8 +291,8 @@ New production API (kintera, general; test functions stay test-only)
 - Snapy B uses eval_czh_ddC and eval_intEng_R_ddC. It computes all species (dry included), divides each molar term by its own M_n (h *= Rgas*inv_mu, as W->E does at moist_mixture.cpp:184 on 5eeb9b6), and returns rows 1..ny.
 
 Invariants (|x-y| <= abs + rel*max)
-- I1: sum over dry, vapour and cloud of c_n M_n h_n = U + p + rho KE. Tolerance 1e-6 J/m3 + 1e-12. At O1 the residual is 3.7e-9 on |U+p| = 2.17e7.
-- I2: h_n in cell i is unchanged, bitwise, when the neighbours change. h - KE is unchanged when v changes, within 4 eps S_n.
+- I1: sum over dry, vapour and cloud of c_n M_n h_n = U + p + rho KE. Tolerance 1e-6 J/m3 + 1e-12. Evaluate at each surviving O3 cell including dry and nonzero KE, using independent YAML U=sum_n rho_n*(R/M_n)*(u0_R,n+cv_R,n*T) and p=R*T*sum_gas rho_n/M_n; report the measured residual per cell, not the dropped O1 number. Pair A carry residuals with O3 on the same state as specified in rev 9b item 4.
+- I2: h_n in cell i is unchanged, bitwise, when the neighbours change. h - KE is unchanged when v changes, within 4 eps S_n, eps=2^-52, S_n=(R/M_n)*(|u0_R,n|+cv_R,n*T+z_n*T)+|KE|, where z_n=1 for gas and 0 for cloud in this z=1 study; this definition is independent of the dropped G-AB block.
 - I3: (dU/dV)_T,N = T (dp/dT)_V,N - p, by Richardson finite difference on the kintera VT->U and VT->P path. Tolerance 1e-3 Pa + 1e-8. At O1: 690600.0 = 690600.0, residual 2.2e-5 Pa.
 - I4: B = O2 within 1e-6 J/mol + 1e-8.
 
@@ -344,8 +396,8 @@ Superseded by rev 9: Gate 1 below depends on dropped O1/O2/I3/X work; it is not 
 Superseded by rev 9: Gate 1b below and its test-only kintera work are dropped; keep use_nasa9_cp and use_h2_cp off for the retained scope.
 - 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice, dry included; cloud slots start at vapor_ids().size(), thermo_y.cpp:78). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3. (use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise)
 Superseded by rev 9: Gates 2 and 3 below are restricted to the 24 z=1 cells (12 moist-mixture plus 12 ideal-moist controls); compare A versus G under the 12:58 plan, not A versus B.
-- 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
-- 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
+- 2 (CPU): 12 z=1 configurations (6 moist-mixture plus 6 ideal-moist) run for each of A and G, each with its B2 reference. A meets O3/I1/I2 and per-species carry residuals paired with O3; its five species_enthalpy mutations go red. G meets the independently recomputed whole-vector blend oracle, row conservation and positivity/no-clamp contract, not A carry residuals. The second vapor-u0 card is an additional A regression row. No B, O1/O2, A-NI or G-AB requirement remains in this gate.
+- 3 (CUDA, fp64): the same 12 z=1 configurations per A/G arm and the additional A vapor-u0 row meet their Gate 2 arm-specific checks plus applicable CPU/CUDA tolerances. This is 24 primary device/configuration cells across Gates 2 and 3, each exercised for both arms; extra thermodynamic/literature rows are reported separately. A skip is a gap and fails the gate; no B, O1/O2, A-NI or G-AB requirement.
 - 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two arm-A-only bitwise checks, both against 5eeb9b6 (neither constrains G): (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
 Superseded by rev 9: coverage is 24 z=1 cells, with a skip still a gap; the old 36-cell requirement below is inactive.
 - Coverage: all 36 cells ran on their device and passed.
