@@ -14,7 +14,7 @@ Line numbers below refer to PLAN.md at 9b4a61f8.
 - PLAN L363-375 lists the tolerances. The unchanged `expect_carried` uses the stricter energy tolerance `1e-12*max(abs(F_off[IPR]),abs(expected_dE))`, momentum analogously, exact dry flux equality, and column tolerance `1e-12 + 1e-12*sum(abs(du_off))` (test source:134-160). Its ideal-moist assertions pass. For moist-mixture the probe requires each limited-face carry residual to exceed that energy tolerance and its ratio to abs(expected_dE) to be within 1e-12 of 1; all measured ratios are exactly 1. The probe additionally checks column totals for every dumped conserved row. This baseline carry oracle uses W->E, as PLAN L167 acknowledges; this is not an independent O3 validation.
 - PLAN gives no Gate 0 output directory; use the requested fallback `study/236/gate0/`.
 
-**Scope:** all eight requested arm/device runs completed. Their baseline signatures pass below. This is the requested advection subset, **not a claim that full six-case Gate 0 is complete**: settling, x2, donors and mixed-flux cases have not been newly measured here. No A/G implementation, full CTest, O3/mutation gate or sign-off is claimed.
+**Scope:** all eight requested arm/device runs completed. Their baseline signatures pass below. At the original advection publication this was **not a claim that full six-case Gate 0 was complete** (the CPU follow-up below now supplies the missing cases): settling, x2, donors and mixed-flux cases have not been newly measured here. No A/G implementation, full CTest, O3/mutation gate or sign-off is claimed.
 
 ## Per-arm/device results
 
@@ -105,3 +105,49 @@ Probe SHA-256: `ca685c07ff44e3c33531336730548fb89b0bbcdaa62fab81031b6fbf9d1f310f
 - [moist-mixture-hllc-cuda.csv](moist-mixture-hllc-cuda.csv) — [moist-mixture-hllc-cuda.log](moist-mixture-hllc-cuda.log)
 
 Dependency/build/probe logs, `BUILD-CONFIG.txt`, `environment.log`, `version.log` and `kintera-libraries.sha256` preserve setup and failure evidence. PLAN.md is byte-identical to 9b4a61f8, including all protected blocks.
+
+## CPU follow-up: remaining four Gate 0 cases
+
+Baseline/version and tolerances are unchanged: Snapy 5eeb9b6, Kintera v2.5.15/4dc613d, the existing CPU-only Release build. PLAN.md remains byte-identical to 6f9e0adc/9b4a61f8 in this data commit. F_off/F_on again mean **limiter-off/limiter-on**, not cp-off/on; both heat-capacity flags are false for both arms.
+
+All eight new runs match the expected result: four ideal-moist tests green (exit 0), four moist-mixture tests red (exit 1), with relative carry-energy residual exactly 1 at EVERY limited face in moist-mixture. These are the original named GoogleTest bodies; the external diagnostic copy overrides only `dynamics.equation-of-state.type` after each test's YAML edits and attaches a dump listener. No Snapy checkout source was edited. In conjunction with the earlier LMARS/HLLC advection runs, all six CPU cases now have the expected baseline signature. The four non-advection CUDA cases were not requested and remain unmeasured.
+
+| Case | Config | Pass/fail vs expected | Limited faces | M_n (dry/vapor/cloud kg/mol) | cp flags (NASA9/H2) | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| settling | ideal-moist | PASS (green) | 5 test-slice / 5 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| settling | moist-mixture | PASS (expected red; exit 1) | 5 test-slice / 5 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| x2 | ideal-moist | PASS (green) | 5 test-slice / 30 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| x2 | moist-mixture | PASS (expected red; exit 1) | 5 test-slice / 30 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| donors | ideal-moist | PASS (green) | 4 test-slice / 4 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| donors | moist-mixture | PASS (expected red; exit 1) | 4 test-slice / 4 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| mixed | ideal-moist | PASS (green) | 5 test-slice / 5 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+| mixed | moist-mixture | PASS (expected red; exit 1) | 5 test-slice / 5 whole grid | 0.02897 / 0.018015 / 0.018015 | off/off in both arms | CPU |
+
+Each on/off (and mixed-case bare) arm is a separate single hydro forward: dt=1, step count=1, final time=1 from initial time=0. It is not a multistep evolution. Each process starts with `test_flux_positivity_carry.yaml` at main 5eeb9b6. Runtime `GATE_EOS=ideal-moist` or `moist-mixture` sets `dynamics.equation-of-state.type` on every helper-loaded card; the test's other edits are retained. LMARS is the base-card solver throughout these four cases. The existing B2 debug knob is not implemented; this is the unchanged baseline limiter boolean comparison.
+
+- Settling: original test lines 184-191; cloud const-vsed=-2, velocity=(0,3,0), 6x1x1.
+- Along x2: lines 197-209; 6x6x1, reflecting x2 boundaries, velocity=(0,2,3).
+- Donors: lines 219-239; original six-cell density and three-velocity arrays, no sedimentation; the original assertions require two distinguishable upward and two downward limited faces.
+- Mixed: lines 253-336; original six-cell nonuniform arrays, cloud const-vsed=-1; the additional unlimited bare arm has no sedimentation and determines the settling increment for the original energy/momentum oracle. One forward per bare/off/on arm.
+
+Dumps retain the requested row names and %.17g F_off/F_on values; extra axis/i/j/k columns identify geometry. All x1 faces il..iu+1 are dumped over every interior transverse row. For along-x2 **both x1 and x2 faces** are dumped: 42 x1 faces plus 42 x2 faces (each with six conserved rows), including jl..ju+1 for every interior x1 column. Its limited-face count is 5 on the original test's sampled line and 30 over the six-column slab; x1 has zero limited faces. Other cases have seven x1 faces. New data totals: 2*504 + 6*42 = **1260 rows / 2520 flux values**. No raw numeric dump was postprocessed.
+
+Compile/link reused the existing CPU target's compile and link commands with the external diagnostic translation unit; no library rebuild or environment change was needed. Compilation passed. The process command was:
+
+```sh
+GATE_EOS=<ideal-moist|moist-mixture> GATE_OUTPUT=<absolute CSV> OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=0 \
+  gate0-followup.release --gtest_filter=flux_positivity.<test-name>
+```
+
+The four exact test-name suffixes and their raw dump/log pairs are:
+
+- `withheld_settling_mass_keeps_its_energy_and_momentum`, ideal-moist: [settling-ideal-moist-cpu.csv](settling-ideal-moist-cpu.csv), [settling-ideal-moist-cpu.log](settling-ideal-moist-cpu.log).
+- `withheld_settling_mass_keeps_its_energy_and_momentum`, moist-mixture: [settling-moist-mixture-cpu.csv](settling-moist-mixture-cpu.csv), [settling-moist-mixture-cpu.log](settling-moist-mixture-cpu.log).
+- `withheld_mass_keeps_its_energy_and_momentum_along_x2`, ideal-moist: [x2-ideal-moist-cpu.csv](x2-ideal-moist-cpu.csv), [x2-ideal-moist-cpu.log](x2-ideal-moist-cpu.log).
+- `withheld_mass_keeps_its_energy_and_momentum_along_x2`, moist-mixture: [x2-moist-mixture-cpu.csv](x2-moist-mixture-cpu.csv), [x2-moist-mixture-cpu.log](x2-moist-mixture-cpu.log).
+- `withheld_mass_keeps_its_donors_energy_and_momentum`, ideal-moist: [donors-ideal-moist-cpu.csv](donors-ideal-moist-cpu.csv), [donors-ideal-moist-cpu.log](donors-ideal-moist-cpu.log).
+- `withheld_mass_keeps_its_donors_energy_and_momentum`, moist-mixture: [donors-moist-mixture-cpu.csv](donors-moist-mixture-cpu.csv), [donors-moist-mixture-cpu.log](donors-moist-mixture-cpu.log).
+- `withheld_mixed_flux_keeps_each_parts_energy_and_momentum`, ideal-moist: [mixed-ideal-moist-cpu.csv](mixed-ideal-moist-cpu.csv), [mixed-ideal-moist-cpu.log](mixed-ideal-moist-cpu.log).
+- `withheld_mixed_flux_keeps_each_parts_energy_and_momentum`, moist-mixture: [mixed-moist-mixture-cpu.csv](mixed-moist-mixture-cpu.csv), [mixed-moist-mixture-cpu.log](mixed-moist-mixture-cpu.log).
+
+The moist-mixture failure logs are intentionally retained verbatim apart from trailing whitespace. They demonstrate missing carry, not a run crash. The diagnostic copy and compile helper remain outside the repository.

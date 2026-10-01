@@ -1,0 +1,86 @@
+Running main() from /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = flux_positivity.withheld_settling_mass_keeps_its_energy_and_momentum
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from flux_positivity
+[ RUN      ] flux_positivity.withheld_settling_mass_keeps_its_energy_and_momentum
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:145: Failure
+The difference between e0 - e1 and dE is 27229.006013116737, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to 27229.006013116737, and
+tol evaluates to 5.445801202618394e-08.
+energy flux, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:151: Failure
+The difference between m0 - m1 and dM[k] is 0.060000000000054572, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.060000000000054572, and
+tol evaluates to 1.1999999999999999e-13.
+momentum flux 1, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:145: Failure
+The difference between e0 - e1 and dE is 27229.006013116737, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to 27229.006013116737, and
+tol evaluates to 5.445801202618394e-08.
+energy flux, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:151: Failure
+The difference between m0 - m1 and dM[k] is 0.060000000000054572, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.060000000000054572, and
+tol evaluates to 1.1999999999999999e-13.
+momentum flux 1, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:145: Failure
+The difference between e0 - e1 and dE is 27229.006013116737, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to 27229.006013116737, and
+tol evaluates to 5.445801202618394e-08.
+energy flux, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:151: Failure
+The difference between m0 - m1 and dM[k] is 0.060000000000054572, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.060000000000054572, and
+tol evaluates to 1.1999999999999999e-13.
+momentum flux 1, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:145: Failure
+The difference between e0 - e1 and dE is 27229.006013116737, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to 27229.006013116737, and
+tol evaluates to 5.445801202618394e-08.
+energy flux, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:151: Failure
+The difference between m0 - m1 and dM[k] is 0.060000000000054572, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.060000000000054572, and
+tol evaluates to 1.1999999999999999e-13.
+momentum flux 1, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:145: Failure
+The difference between e0 - e1 and dE is 27229.006013116737, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to 27229.006013116737, and
+tol evaluates to 5.445801202618394e-08.
+energy flux, face 7
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:151: Failure
+The difference between m0 - m1 and dM[k] is 0.060000000000054572, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.060000000000054572, and
+tol evaluates to 1.1999999999999999e-13.
+momentum flux 1, face 7
+[  FAILED  ] flux_positivity.withheld_settling_mass_keeps_its_energy_and_momentum (38 ms)
+[----------] 1 test from flux_positivity (40 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (40 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] flux_positivity.withheld_settling_mass_keeps_its_energy_and_momentum
+
+ 1 FAILED TEST

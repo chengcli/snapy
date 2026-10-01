@@ -1,0 +1,151 @@
+Running main() from /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from flux_positivity
+[ RUN      ] flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:328: Failure
+The difference between e0 - e1 and dE is 20969.758293502848, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to -20969.758293502848, and
+tol evaluates to 3.8883051475351758e-07.
+energy flux, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.1247268856448483, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.1247268856448483, and
+tol evaluates to 9.9933180206601662e-08.
+momentum flux 0, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.12354610705603947, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.12354610705603947, and
+tol evaluates to 9.5345000000000564e-12.
+momentum flux 1, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.0059038929440440703, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.0059038929440440703, and
+tol evaluates to 1.15e-14.
+momentum flux 2, face 3
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:328: Failure
+The difference between e0 - e1 and dE is 42014.931399184796, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to -42014.931399184796, and
+tol evaluates to 2.4496171810793744e-07.
+energy flux, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.17640301966303171, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.17640301966303171, and
+tol evaluates to 1.0016064325694425e-07.
+momentum flux 0, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.18330846207876661, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.18330846207876661, and
+tol evaluates to 1.1865937499999922e-11.
+momentum flux 1, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.034527212078674492, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.034527212078674492, and
+tol evaluates to 1.7105624999999887e-12.
+momentum flux 2, face 4
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:328: Failure
+The difference between e0 - e1 and dE is 7410.1822934566371, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to -7410.1822934566371, and
+tol evaluates to 4.3944361264356329e-07.
+energy flux, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.070794665709655119, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.070794665709655119, and
+tol evaluates to 9.9897546873289056e-08.
+momentum flux 0, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.06013666427403954, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.06013666427403954, and
+tol evaluates to 6.3503750000000002e-12.
+momentum flux 1, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.027500835726034116, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.027500835726034116, and
+tol evaluates to 1.3078749999999998e-12.
+momentum flux 2, face 5
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:328: Failure
+The difference between e0 - e1 and dE is 35742.752633330674, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to -35742.752633330674, and
+tol evaluates to 2.9660221672176931e-07.
+energy flux, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.15591372093032696, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.15591372093032696, and
+tol evaluates to 1.0008197750923308e-07.
+momentum flux 0, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.20900610465129113, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.20900610465129113, and
+tol evaluates to 1.2772249999999998e-11.
+momentum flux 1, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.066365479651205234, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.066365479651205234, and
+tol evaluates to 3.2185624999999994e-12.
+momentum flux 2, face 6
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:328: Failure
+The difference between e0 - e1 and dE is 1292.1176974559894, which exceeds tol, where
+e0 - e1 evaluates to 0,
+dE evaluates to -1292.1176974559894, and
+tol evaluates to 4.4876134810478107e-07.
+energy flux, face 7
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.080304981653581992, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.080304981653581992, and
+tol evaluates to 9.9951401094270907e-08.
+momentum flux 0, face 7
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.047656489114114554, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to 0.047656489114114554, and
+tol evaluates to 5.2055437500000002e-12.
+momentum flux 1, face 7
+/data00/ai_workspace/worker2/gate0-followup-w5a149772/probe.cpp:332: Failure
+The difference between m0 - m1 and dM[k] is 0.042533464918116055, which exceeds tol, where
+m0 - m1 evaluates to 0,
+dM[k] evaluates to -0.042533464918116055, and
+tol evaluates to 2.6483718750000006e-12.
+momentum flux 2, face 7
+[  FAILED  ] flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum (25 ms)
+[----------] 1 test from flux_positivity (26 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (26 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum
+
+ 1 FAILED TEST

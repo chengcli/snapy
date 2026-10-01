@@ -1,0 +1,12 @@
+8 CPU cases ran; 4 exit 0 ideal-moist, 4 expected exit 1 moist-mixture.
+1260 unique new face/row records, 2520 flux values.
+All moist-mixture limited-face relative energy residuals exactly 1.
+Probe SHA256 bb4fddae276e15559261f50e25d1f8ce590931ce4e8232de5cd97132390e6dde
+settling-ideal-moist-cpu.csv fb1fe8857fc1d1d21512a2dbaf0093d273b2d3b05450e7554aae48eb82a18193
+settling-moist-mixture-cpu.csv d4bccd1f0db06f9660c7b22173452061b402f3ab57972613ff7ae7a12459eaa5
+x2-ideal-moist-cpu.csv 2aed2726b50795a1e4d50a38d9cd7ee40509afd133dced59d8963ded3d670692
+x2-moist-mixture-cpu.csv a26080fef1eeb5a4ece5e6dacd4a46f7fb6064ecc5b9567659e89de8919bd421
+donors-ideal-moist-cpu.csv 249e395f572c377c7a1bbf0b393892db08c6811a841af3f6c93296f974411f02
+donors-moist-mixture-cpu.csv 2dc4fab8214d4c51c886efe1df947bff10ed18ac0ea47e8736bb33575ebf8f0c
+mixed-ideal-moist-cpu.csv d88da85d629bcb335968e7e0cfc3bd3013c40cf0ae9f5818f628aeda84096bd9
+mixed-moist-mixture-cpu.csv d433555acb3ec1a0f8d1a53cb6e3a408ceca8bacb30c794395d00d13d3827842

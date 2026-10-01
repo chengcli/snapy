@@ -1,0 +1,27 @@
+Running main() from /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from flux_positivity
+[ RUN      ] flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[HydroOptions] -- constant gravity options --
+* grav1 = -1e-12
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+[       OK ] flux_positivity.withheld_mixed_flux_keeps_each_parts_energy_and_momentum (45 ms)
+[----------] 1 test from flux_positivity (46 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (46 ms total)
+[  PASSED  ] 1 test.

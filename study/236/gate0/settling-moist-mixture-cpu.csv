@@ -1,0 +1,55 @@
+# case=withheld_settling_mass_keeps_its_energy_and_momentum config=moist-mixture device=cpu snapy=5eeb9b6761ae484a98b3993aae18314fc58cf862 kintera=4dc613d04f24621b3119d343c5c7c9b93628895b version=2.5.15
+# N=6x1x1 ghosts=2 dt=1 step_count=1 final_time=1; each off/on/bare arm independently starts at t=0
+# base_card=test_flux_positivity_carry.yaml selection=dynamics.equation-of-state.type; F_off=limiter:false F_on=limiter:true
+# M_dry=0.028969999999999999 M_vapor=0.018015 M_cloud=0.018015 kg/mol use_nasa9_cp=0 use_h2_cp=0
+# F_on_use_nasa9_cp=0 F_on_use_h2_cp=0
+axis,i,j,k,face,row,F_off,F_on
+x1,2,0,0,2,IDN,0,0
+x1,2,0,0,2,IVX,100000,100000
+x1,2,0,0,2,IVY,0,0
+x1,2,0,0,2,IPR,0,0
+x1,2,0,0,2,ICY,0,0
+x1,2,0,0,2,ICY+1,0,0
+x1,3,0,0,3,IDN,0,0
+x1,3,0,0,3,IVX,100000,100000
+x1,3,0,0,3,IVY,-0.12,-0.12
+x1,3,0,0,3,IPR,54458.01202618394,54458.01202618394
+x1,3,0,0,3,ICY,0,0
+x1,3,0,0,3,ICY+1,-0.040000000000000001,-0.01999999999998181
+# limited axis=x1 i=3 j=0 k=0 expected_dE=27229.006013116737 energy_residual=-27229.006013116737 relative=1
+x1,4,0,0,4,IDN,0,0
+x1,4,0,0,4,IVX,100000,100000
+x1,4,0,0,4,IVY,-0.12,-0.12
+x1,4,0,0,4,IPR,54458.01202618394,54458.01202618394
+x1,4,0,0,4,ICY,0,0
+x1,4,0,0,4,ICY+1,-0.040000000000000001,-0.01999999999998181
+# limited axis=x1 i=4 j=0 k=0 expected_dE=27229.006013116737 energy_residual=-27229.006013116737 relative=1
+x1,5,0,0,5,IDN,0,0
+x1,5,0,0,5,IVX,100000,100000
+x1,5,0,0,5,IVY,-0.12,-0.12
+x1,5,0,0,5,IPR,54458.01202618394,54458.01202618394
+x1,5,0,0,5,ICY,0,0
+x1,5,0,0,5,ICY+1,-0.040000000000000001,-0.01999999999998181
+# limited axis=x1 i=5 j=0 k=0 expected_dE=27229.006013116737 energy_residual=-27229.006013116737 relative=1
+x1,6,0,0,6,IDN,0,0
+x1,6,0,0,6,IVX,100000,100000
+x1,6,0,0,6,IVY,-0.12,-0.12
+x1,6,0,0,6,IPR,54458.01202618394,54458.01202618394
+x1,6,0,0,6,ICY,0,0
+x1,6,0,0,6,ICY+1,-0.040000000000000001,-0.01999999999998181
+# limited axis=x1 i=6 j=0 k=0 expected_dE=27229.006013116737 energy_residual=-27229.006013116737 relative=1
+x1,7,0,0,7,IDN,0,0
+x1,7,0,0,7,IVX,100000,100000
+x1,7,0,0,7,IVY,-0.12,-0.12
+x1,7,0,0,7,IPR,54458.01202618394,54458.01202618394
+x1,7,0,0,7,ICY,0,0
+x1,7,0,0,7,ICY+1,-0.040000000000000001,-0.01999999999998181
+# limited axis=x1 i=7 j=0 k=0 expected_dE=27229.006013116737 energy_residual=-27229.006013116737 relative=1
+x1,8,0,0,8,IDN,0,0
+x1,8,0,0,8,IVX,100000,100000
+x1,8,0,0,8,IVY,0,0
+x1,8,0,0,8,IPR,0,0
+x1,8,0,0,8,ICY,0,0
+x1,8,0,0,8,ICY+1,0,0
+# axis=x1 limited_faces_all=5 limited_faces_test_slice=5 species_face_hits=5 max_relative_energy_residual=1
+# original_test_failed=1
