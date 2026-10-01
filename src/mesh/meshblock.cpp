@@ -13,6 +13,7 @@
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
+#include <snap/utils/nan_probe.hpp>
 #include <snap/utils/signal_handler.hpp>
 
 #include "meshblock.hpp"
@@ -601,6 +602,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // Publish the stage: the vertical implicit correction is nonlinear in dt and
   // must weight dt INSIDE the solve, so it needs to know which stage it is in.
   phydro->rk_stage = stage;
+  nanprobe::state().cycle = cycle;
+  nanprobe::state().stage = stage;
+  nanprobe::state().redo = pintg->current_redo;
 
   auto hydro_u = vars.at("hydro_u");
   auto scalar_s =
@@ -729,8 +733,11 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // -------- (4) multi-stage averaging --------
+  nanprobe::probe("mb_du_total", fut_hydro_du);
   hydro_u.set_(pintg->forward(stage, _hydro_u0, hydro_u, fut_hydro_du));
+  nanprobe::probe("mb_u_rk", hydro_u);
   phydro->peos->apply_conserved_limiter_(hydro_u, /*whole_column=*/true);
+  nanprobe::probe("mb_u_limiter", hydro_u);
 
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
@@ -803,6 +810,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   // Physical ghosts must include the final-stage species adjustment.
   apply_boundaries(vars, hydro_u, scalar_s);
+  nanprobe::probe("mb_u_bc", hydro_u);
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
@@ -1053,6 +1061,8 @@ bool MeshBlockImpl::floor_hit(Variables const &vars) {
               "MeshBlock::check_redo needs hydro_w to restore the primitives");
   // hydro_w is one stage stale: test the primitives as they stand
   auto w = phydro->peos->forward(hydro_u.clone()).index(interior);
+  nanprobe::state().stage = 9;  // 9 = floor check
+  nanprobe::probe("floor_w_interior", w);
   auto const &eos = phydro->peos->options;
   // negated so a NaN, which fails every comparison, counts as a hit
   bool hit = !(w[IDN].min().item<double>() > 1.001 * eos->density_floor());

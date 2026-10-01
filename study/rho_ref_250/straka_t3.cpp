@@ -14,6 +14,7 @@
 #include <snap/snap.h>
 
 #include <snap/mesh/mesh.hpp>
+#include <snap/utils/nan_probe.hpp>
 
 using namespace snap;
 
@@ -96,9 +97,20 @@ void diffuse_theta(MeshBlock block, Variables& vars, double K, double dt,
   dth.narrow(-2, 0, ng).copy_(dth.narrow(-2, jl, ng).flip(-2));
   dth.narrow(-2, ju + 1, ng).copy_(dth.narrow(-2, ju + 1 - ng, ng).flip(-2));
 
+  namespace np = nanprobe;
+  np::state().stage = 10;  // 10 = theta diffusion (driver)
+  np::probe("thd_u_in", u);
+  np::probe("thd_w_in", w);
+  np::probe("thd_pow_base_p0_over_p", p0 / pres);
+  np::probe("thd_theta", theta);
+  np::probe("thd_dth", dth);
+  np::probe("thd_pow_base_ratio", (theta + dth) / theta);
   auto temp_new = temp * ((theta + dth) / theta).pow(cp / cv);
+  np::probe("thd_temp_new", temp_new);
   u[IPR] += rho * cv * (temp_new - temp);
+  np::probe("thd_u_out", u);
   peos->forward(u, w);
+  np::probe("thd_w_out", w);
 }
 
 void initialize_block(MeshBlock block, Variables& vars,

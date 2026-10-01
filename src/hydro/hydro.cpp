@@ -10,6 +10,7 @@
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
+#include <snap/utils/nan_probe.hpp>
 #include "hydro_dispatch.hpp"
 
 namespace snap {
@@ -465,6 +466,20 @@ HydroImpl::_build_hydro_ref_x1(torch::Tensor const& w) const {
     dsf.copy_(psf_lo);
     dsf.narrow(-1, 1, nc1 - 1).copy_(0.5 * (from_b + from_a));
     dsf.select(-1, 0).copy_(dsf.select(-1, 1));
+    if (nanprobe::active()) {  // face i: cells i-1 (b) and i (a)
+      auto pad = [&](torch::Tensor const& t) {
+        auto f = torch::full_like(density, 0.);
+        f.narrow(-1, 1, nc1 - 1).copy_(t);
+        return f;
+      };
+      nanprobe::probe("lp_n", n);
+      nanprobe::probe("lp_pow_base_b",
+                      pad(pface / pressure.narrow(-1, 0, nc1 - 1)));
+      nanprobe::probe("lp_pow_base_a",
+                      pad(pface / pressure.narrow(-1, 1, nc1 - 1)));
+      nanprobe::probe("lp_from_b", pad(from_b));
+      nanprobe::probe("lp_from_a", pad(from_a));
+    }
   }
 
   if (below >= 0) {

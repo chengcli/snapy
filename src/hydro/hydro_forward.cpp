@@ -6,6 +6,7 @@
 
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
+#include <snap/utils/nan_probe.hpp>
 
 #include "flux_positivity.hpp"
 #include "hydro.hpp"
@@ -23,7 +24,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
 
+  namespace np = nanprobe;
+  np::probe("u_in", u);
   peos->forward(u, w);
+  np::probe("w_c2p", w);
+  if (np::active()) {
+    np::probe("cs2_cell", peos->compute("W->A", {w}) * w[IPR] / w[IDN]);
+    np::probe("ie_cell", w[IPR] / (peos->compute("W->A", {w}) - 1.));
+  }
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -77,6 +85,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     torch::Tensor wtmp;
     if (wb_x1) {
       auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
+      np::probe("ref_psf_lo", psf_lo);
+      np::probe("ref_pref", pref);
+      np::probe("ref_dsf", dsf);
+      np::probe("ref_dref", dref);
       auto pressure = w[IPR].clone();
       auto density = w[IDN].clone();
 
@@ -101,7 +113,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
       // floor=false: reconstruction-stage floors would clamp legitimately
       // negative perturbations.
+      np::probe("x1_wpert", w);
       wtmp = precon1->forward(w, DIM1, /*floor=*/false);
+      np::probe("x1_lr_pert", wtmp);
 
       w[IPR].copy_(pressure);
       w[IDN].copy_(density);
@@ -130,6 +144,16 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
           {density.narrow(-1, 0, 1), density.narrow(-1, 0, n1 - 1)}, -1);
       wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, rho_below));
       wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, density));
+      np::probe("x1_lr_full", wtmp);
+      if (np::active()) {  // ILT/IRT face states feeding lmars, x1
+        np::probe("x1_face_p_over_rho",
+                  (wtmp[ILT][IPR] + wtmp[IRT][IPR]) /
+                      (wtmp[ILT][IDN] + wtmp[IRT][IDN]));
+        np::probe("x1_pl_raw", pl);
+        np::probe("x1_pr_raw", pr);
+        np::probe("x1_dl_raw", dl);
+        np::probe("x1_dr_raw", dr);
+      }
     } else {
       wtmp = precon1->forward(w, DIM1);
       if (grav1) {
@@ -157,6 +181,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                 ? torch::Tensor()
                                 : _face_pressure1;
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1, face_pressure1);
+      np::probe("x1_flux", _flux1);
+      np::probe("x1_face_pressure", _face_pressure1);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -254,6 +280,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   if (u.size(DIM2) > 1) {
     wtmp2 = precon23->forward(w, DIM2);
+    np::probe("x2_lr", wtmp2);
+    if (np::active()) {
+      np::probe("x2_face_p_over_rho", (wtmp2[ILT][IPR] + wtmp2[IRT][IPR]) /
+                                          (wtmp2[ILT][IDN] + wtmp2[IRT][IDN]));
+    }
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
@@ -298,6 +329,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
     if (!options->disable_flux_x2()) {
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+      np::probe("x2_flux", _flux2);
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -394,6 +426,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   //// ------------ (5) Calculate flux divergence ------------ ////
   _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+  np::probe("div", _div);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
@@ -410,7 +443,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // only a block carrying tracers needs the forcings' dry-density increment
   bool track_dry = pmb->pscalar && pmb->pscalar->nvar() > 0;
   auto dry_before = track_dry ? du[IDN].clone() : torch::Tensor();
-  for (auto& f : forcings) f.forward(du, w, temp, dt);
+  np::probe("du_div", du);
+  np::probe("temp", temp);
+  for (size_t fi = 0; fi < forcings.size(); ++fi) {
+    forcings[fi].forward(du, w, temp, dt);
+    np::probe(("du_forcing" + std::to_string(fi) + "_" + forcings[fi].ptr()->name())
+                  .c_str(),
+              du);
+  }
   _forcing_dry = track_dry ? du[IDN] - dry_before : torch::Tensor();
 
   // Preserve the original cell-centred gravity work through the implicit
@@ -487,6 +527,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                (1. - non_hydrostatic);
     }
     gravity_energy_correction = face_gravity_work - original_gravity_work;
+    np::probe("grav_energy_corr", gravity_energy_correction);
   }
 
   // apply hydrostatic correction
@@ -534,6 +575,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       }
     }
     _apply_implicit_correction(du, w, dt_corr, other);
+    np::probe("du_implicit", du);
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
@@ -548,6 +590,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     int ie = pmb->pcoord->iu() + 1;
     du[IPR].slice(-1, is, ie) += gravity_energy_correction;
   }
+  np::probe("du_final", du);
 
   return du;
 }
