@@ -819,7 +819,6 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
     exchange(sync_vars, sync_opts);
-    set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
   // Tangential exchange fills face ghosts but not corners (skip_corner).
@@ -864,6 +863,10 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     };
     refresh(hydro_u, kConserved);
     refresh(scalar_s, kScalar);
+  }
+
+  if (pscalar->nvar() > 0) {
+    set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
   if (options->verbose()) {

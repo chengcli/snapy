@@ -89,8 +89,17 @@ forcing:
     nu_iso: 0.0234
 )";
 
-Mesh make_mesh(torch::Device device, std::string const& wall, int nb2 = 1) {
+Mesh make_mesh(torch::Device device, std::string const& wall, int nb2 = 1,
+               bool tracer = false) {
   std::string config = kConfig;
+  if (tracer) {
+    config += R"(
+scalar:
+  nvar: 1
+  names: [tracer]
+  reconstruct: {type: weno5, scale: false, shock: false}
+)";
+  }
   for (std::string face : {"x1-inner: ", "x1-outer: "}) {
     config.replace(config.find(face + "reflecting") + face.size(), 10, wall);
   }
@@ -185,8 +194,9 @@ TEST(WallCorner, user_wall_keeps_u2_zero_cuda) {
 // Compare every interior primitive and conserved field after ten identical
 // steps. The x2 split introduces extra wall corners but no physical boundary.
 namespace {
-std::vector<torch::Tensor> wall_corner_fields(int nb2, torch::Device device) {
-  auto mesh = make_mesh(device, "reflecting", nb2);
+std::vector<torch::Tensor> wall_corner_fields(int nb2, torch::Device device,
+                                              bool tracer = false) {
+  auto mesh = make_mesh(device, "reflecting", nb2, tracer);
   EXPECT_EQ(mesh->blocks.size(), static_cast<size_t>(nb2));
   MeshVariables vars(mesh->blocks.size());
   for (size_t b = 0; b < mesh->blocks.size(); ++b) {
@@ -212,12 +222,55 @@ std::vector<torch::Tensor> wall_corner_fields(int nb2, torch::Device device) {
     auto phase = 2. * std::acos(-1.) * coord->x2v.cpu() / 1.6222266747649493;
     w[IVY] = (1.e-3 * phase.sin()).view({1, -1, 1}).expand_as(w[IVY]);
     vars[b]["hydro_w"] = w.to(device);
+    if (tracer) {
+      // Vary along both axes, including the wall/seam corner patches.
+      auto x1 = coord->x1v.cpu().view({1, 1, -1}) / Lz;
+      auto x2 = phase.view({1, -1, 1});
+      auto r = (0.25 + 0.03 * x1 + 0.02 * x2.sin() + 0.01 * x1 * x2.cos())
+                   .expand_as(w[IDN])
+                   .unsqueeze(0)
+                   .clone();
+      vars[b]["scalar_r"] = r.to(device);
+      for (int i : {-1, 1}) {
+        for (int j : {-1, 1}) {
+          auto corner = r.index(block->part({0, j, i}, PartOptions()));
+          EXPECT_GT((corner.select(3, 0) - corner.select(3, 1))
+                        .abs()
+                        .max()
+                        .item<double>(),
+                    0.);
+          EXPECT_GT((corner.select(2, 0) - corner.select(2, 1))
+                        .abs()
+                        .max()
+                        .item<double>(),
+                    0.);
+        }
+      }
+    }
   }
   mesh->initialize(vars);
   for (int step = 0; step < 10; ++step) {
     auto dt = mesh->max_time_step(vars);
     for (int stage = 0; stage < mesh->blocks[0]->pintg->stages.size(); ++stage)
       mesh->forward(vars, dt, stage);
+  }
+  if (tracer) {
+    // Exchange refreshes conserved wall corners. The cached primitive must
+    // describe those same cells when Mesh::forward returns.
+    for (size_t b = 0; b < mesh->blocks.size(); ++b) {
+      auto const& v = vars[b];
+      auto expected = v.at("scalar_s") / v.at("hydro_u")[IDN].unsqueeze(0);
+      for (int i : {-1, 1}) {
+        for (int j : {-1, 1}) {
+          auto corner = mesh->blocks[b]->part({0, j, i}, PartOptions());
+          auto error = (v.at("scalar_r").index(corner) - expected.index(corner))
+                           .abs()
+                           .max()
+                           .item<double>();
+          EXPECT_EQ(error, 0.) << "block " << b << " corner " << i << "," << j;
+        }
+      }
+    }
   }
   std::vector<size_t> order;
   for (size_t b = 0; b < mesh->blocks.size(); ++b) order.push_back(b);
@@ -263,4 +316,21 @@ TEST(WallCorner, x2_split_matches_one_block_exactly_cuda) {
 #endif
   if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
   x2_split_matches_one_block_exactly(torch::Device(torch::kCUDA, 0));
+}
+
+void scalar_corner_primitive_matches_conserved(torch::Device device) {
+  torch::set_num_threads(1);
+  for (int nb2 : {1, 2}) wall_corner_fields(nb2, device, true);
+}
+
+TEST(WallCorner, scalar_corner_primitive_matches_conserved) {
+  scalar_corner_primitive_matches_conserved(torch::kCPU);
+}
+
+TEST(WallCorner, scalar_corner_primitive_matches_conserved_cuda) {
+#ifndef USE_CUDA
+  GTEST_SKIP() << "CUDA support is disabled in this build";
+#endif
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  scalar_corner_primitive_matches_conserved(torch::Device(torch::kCUDA, 0));
 }
