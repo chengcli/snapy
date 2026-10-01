@@ -1,6 +1,11 @@
-# #236 study plan, rev 8 (branch (a))
+# #236 study plan, rev 8b (branch (a))
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 8b critique -> change (review of db40758)
+- 1. L186 and L195 omitted the cp override precondition -> both the gas/cloud czh line and Gate 1b require use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise, including torch::where(n9.mask, intEng_nasa, result) at :294 on kintera 4dc613d.
+- 2. L210's first sentence conflicted with its ghost-cell exception -> prefix the mass-conservation claim with "In the interior," and keep interior and ghost added mass separate.
+- 3. L213 and L220 treated block flags as cell counts and repeated settled CPU evidence -> add a per-cell counter / mask dump in the study build, record interior and ghost mass separately because marks see only the interior, and identify CUDA as the new deciding evidence; #263's CPU run already has 4000 cycles / 0 redos.
 
 Rev 8 critique -> change (review of b301975)
 - L187. Gate 1b said every cloud extra reads back czh = 1, but kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice (dry included) -> cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; cloud slots start at vapor_ids().size() (thermo_y.cpp:78).
@@ -183,7 +188,7 @@ Tolerances (abs / rel)
 G-AB (z=1 cells only)
 - |h_A - h_B| <= 4 eps S_n, eps = 2^-52, S_n = (R/M)(|u0_R| + cv_R T + z T) + KE.
 - It applies to dry, vapour and cloud, including ghosts.
-- With no extras registered, czh = 1 on gases and 0 on clouds, czh_ddC = 0 and extra = 0 exactly (eval_uhs.cpp:225-226, 247, 268-288), so B = A + 0.
+- With no extras registered, czh = 1 on gases and 0 on clouds, czh_ddC = 0 and extra = 0 exactly (eval_uhs.cpp:225-226, 247, 268-288), so B = A + 0. (use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise)
 - Cloud half: a cloud has z = 0 (czh = 0 on every cloud slot, which start at vapor_ids().size(), thermo_y.cpp:78), so S_n for a cloud drops the z T term, and intEng_R = uref_R + T cref_R exactly unless the NASA-9 or H2 cp path overrides that slot (eval_uhs.cpp:289-295, 296-300); an overridden slot is checked against its override, not against uref_R + T cref_R.
 - Bound at the card: cloud 2.7e-9, vapour 6.5e-10 J/kg.
 - It covers the 12 z=1 cells.
@@ -192,7 +197,7 @@ G-AB (z=1 cells only)
 Gates
 - 0 (CPU): build current main 5eeb9b6 (v2.10.36) against kintera v2.5.15 (4dc613d, kintera main), the same for both builds so the bitwise checks reproduce. Record the six moist-mixture counts, M_n and T. The earlier 3f7ad96 counts are a prior only. Pass if all six moist-mixture cases are red (energy residual rel 1.0 at every limited face) and every ideal-moist arm is green. A count mismatch against the prior is recorded, not an abort. 842a116's after-numbers are recorded as a candidate's, not as an oracle.
 - 1 (CPU, no snapy): O1/O2 are reproduced in J/mol and J/kg, including the card z!=1 values. I1 and I3 hold on O1. Every control misses by its stated size (+-10%) and by >= 1e3 x tolerance, X included.
-- 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice, dry included; cloud slots start at vapor_ids().size(), thermo_y.cpp:78). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
+- 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice, dry included; cloud slots start at vapor_ids().size(), thermo_y.cpp:78). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3. (use_nasa9_cp and use_h2_cp off; eval_uhs.cpp:289-300 overrides intEng otherwise)
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
 - 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
@@ -207,17 +212,17 @@ P. Where is species positivity guaranteed?
 - Question: which one is the guarantee? If the face limiter guarantees it, the cell clamp should fire only at round-off; if it does not, the clamp is the real guarantee and its side effects are part of the scheme.
 
 What the cell clamp does (to be measured, per clamped cell and per column)
-- Mass: the parent borrow and fix_vapor conserve mass; mass is added only by clamp_min_(0) on a parentless cloud with a negative column total (delta = -min(rho_c,0)). The clamp at equation_of_state.cpp:327 (5eeb9b6) acts on all of cons (ghost cells and every cloud), while the parentless fix_vapor at :321 acts on the interior only, so parentless clouds in ghost cells gain mass without passing through fix_vapor first. Record the added mass (interior and ghost separately) and the mass moved between cells.
+- Mass: In the interior, the parent borrow and fix_vapor conserve mass; mass is added only by clamp_min_(0) on a parentless cloud with a negative column total (delta = -min(rho_c,0)). The clamp at equation_of_state.cpp:327 (5eeb9b6) acts on all of cons (ghost cells and every cloud), while the parentless fix_vapor at :321 acts on the interior only, so parentless clouds in ghost cells gain mass without passing through fix_vapor first. Record the added mass (interior and ghost separately) and the mass moved between cells.
 - Energy: the clamp changes species without changing IEN, so the implied T and p shift. Record the change in total energy vs the energy the added mass would carry (h_c or h_v at the cell state).
 - Momentum: IVX-IVZ are untouched, so the velocity rho v / rho changes when rho changes. Record the momentum and KE change.
-- Reporting: the clamp sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. Record how many cells are clamped, how many are marked, and the largest |delta|/rho, per step.
+- Reporting: the species repair sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. limiter_marks_ is a 2-element bool per block (equation_of_state.cpp:385, torch::zeros({2}, ...) on 5eeb9b6), not a per-cell count. Add a per-cell counter / mask dump in the study build to record clamped cells, cells exceeding the marking threshold ("marked cells"), and the largest |delta|/rho per step. The marks see only the interior (:255 cons.index(interior), :349), so they are blind to ghost-cell mass added at :327; instrument the clamp before/after and record added mass for interior and ghost separately, as above. The marks drive redos (meshblock.cpp:1070 limiter_patch_hit() exposes the first flag; check_redo reads limiter_hits() at :1131-1144, and mesh.cpp:476-493 does so mesh-wide). Thus #263's CPU run_hydro result, 4000 cycles / 0 redos, already settles the CPU marked-cell decision; the new deciding evidence in P is CUDA.
 
 Reproducer
 - 2D moist Jupiter CRM (H2O + NH3, 100x100, ideal-moist, limiter: true, rk3, cfl 0.9) from #263; with the external driver (path+sha recorded) species repairs above round-off occur nearly every step; with run_hydro, 0 redos.
 - Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303); #263's run_hydro row (#257 order) is 4000 cycles, 0 redos, and "-" for negative species at step start, so the denormal negatives were measured only with the refreshed external driver. Measured on the 5eeb9b6 tree (fa136b5), CPU.
 - Whether a species-only clamp should request a redo (#226's choice) is decided here, not in #263.
 
-Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee, by this rule: the face limiter is the guarantee iff marked cells = 0 on the deciding run_hydro run, 4000 cycles as in #263, on both CPU and CUDA.
+Pass for P: a table per run of clamped cells, marked cells from the study-build per-cell counter / mask dump (not the 2-element block bool), max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; record interior and ghost added mass separately because the marks observe only the interior. State which mechanism is the positivity guarantee by this rule: the face limiter is the guarantee iff interior marked cells = 0 on the deciding run_hydro run, 4000 cycles as in #263, on both CPU and CUDA. Marks drive redos, so #263's 4000 cycles / 0 redos already settles the CPU decision; CUDA is the new deciding evidence in P. The CPU per-cell and mass-budget table still needs the study instrumentation; zero redos does not count round-off clamps or ghost-cell added mass.
 ```
 
 ## grid, decision, open items
