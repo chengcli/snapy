@@ -1,0 +1,445 @@
+-- The CXX compiler identification is GNU 11.5.0
+-- The C compiler identification is GNU 11.5.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found Python3: /home/chengcli/pyenv/bin/python (found version "3.11.13") found components: Interpreter Development.Module
+--
+-- ==== snapy configure begin ====
+-- Build Type = Release
+--
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_add_package.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_set_if_empty.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_setup_cuda_test.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_setup_parallel_test.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_setup_problem.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/macros/macro_setup_test.cmake
+-- snapy-1. Set up project compiler flags ...
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/compilers.cmake
+-- snapy-2. Setting up project parameters ...
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/source/cmake/parameters.cmake
+-- Found NetCDF: /lib64/libnetcdf.so
+-- snapy-3. Setting up system libraries ...
+-- Found Torch: /home/chengcli/pyenv/lib64/python3.11/site-packages/torch/lib/libtorch.so (found version "2.10.0")
+-- Found Disort: /home/chengcli/pyenv/lib64/python3.11/site-packages/pydisort/lib/libdisort_release.so (found version "1.8.5")
+-- Found Harp: /home/chengcli/pyenv/lib64/python3.11/site-packages/pyharp/lib/libharp_release.so (found version "2.6.5")
+-- Found Kintera: /data00/ai_workspace/worker2/gate0-w5a149772/packages/kintera/lib/libkintera_release.so (found suitable version "2.5.15", minimum required is "2.5.13")
+-- {fmt} version: 12.1.0
+-- Build type: Release
+-- Creating cached library fmt-12.1.0.tar.gz
+CMake Deprecation Warning at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/CMakeLists.txt:4 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/googlemock/CMakeLists.txt:39 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/gtest-src/googletest/CMakeLists.txt:49 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Found Python: /home/chengcli/pyenv/bin/python3.11 (found version "3.11.13") found components: Interpreter
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Creating cached library gtest-v1.13.0.tar.gz
+-- Creating cached library yaml-cpp-0.8.0.tar.gz
+CMake Deprecation Warning at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/CMakeLists.txt:2 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Performing Test EIGEN_COMPILER_SUPPORT_CPP11
+-- Performing Test EIGEN_COMPILER_SUPPORT_CPP11 - Success
+-- Performing Test COMPILER_SUPPORT_std=cpp03
+-- Performing Test COMPILER_SUPPORT_std=cpp03 - Success
+-- Performing Test standard_math_library_linked_to_automatically
+-- Performing Test standard_math_library_linked_to_automatically - Success
+-- Standard libraries to link to explicitly: none
+CMake Warning (dev) at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/CMakeLists.txt:131 (option):
+  Policy CMP0077 is not set: option() honors normal variables.  Run "cmake
+  --help-policy CMP0077" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+  For compatibility with older versions of CMake, option is clearing the
+  normal variable 'EIGEN_BUILD_PKGCONFIG'.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Performing Test COMPILER_SUPPORT_WERROR
+-- Performing Test COMPILER_SUPPORT_WERROR - Success
+-- Performing Test COMPILER_SUPPORT_pedantic
+-- Performing Test COMPILER_SUPPORT_pedantic - Success
+-- Performing Test COMPILER_SUPPORT_Wall
+-- Performing Test COMPILER_SUPPORT_Wall - Success
+-- Performing Test COMPILER_SUPPORT_Wextra
+-- Performing Test COMPILER_SUPPORT_Wextra - Success
+-- Performing Test COMPILER_SUPPORT_Wundef
+-- Performing Test COMPILER_SUPPORT_Wundef - Success
+-- Performing Test COMPILER_SUPPORT_Wcastalign
+-- Performing Test COMPILER_SUPPORT_Wcastalign - Success
+-- Performing Test COMPILER_SUPPORT_Wcharsubscripts
+-- Performing Test COMPILER_SUPPORT_Wcharsubscripts - Success
+-- Performing Test COMPILER_SUPPORT_Wnonvirtualdtor
+-- Performing Test COMPILER_SUPPORT_Wnonvirtualdtor - Success
+-- Performing Test COMPILER_SUPPORT_Wunusedlocaltypedefs
+-- Performing Test COMPILER_SUPPORT_Wunusedlocaltypedefs - Success
+-- Performing Test COMPILER_SUPPORT_Wpointerarith
+-- Performing Test COMPILER_SUPPORT_Wpointerarith - Success
+-- Performing Test COMPILER_SUPPORT_Wwritestrings
+-- Performing Test COMPILER_SUPPORT_Wwritestrings - Success
+-- Performing Test COMPILER_SUPPORT_Wformatsecurity
+-- Performing Test COMPILER_SUPPORT_Wformatsecurity - Success
+-- Performing Test COMPILER_SUPPORT_Wshorten64to32
+-- Performing Test COMPILER_SUPPORT_Wshorten64to32 - Failed
+-- Performing Test COMPILER_SUPPORT_Wlogicalop
+-- Performing Test COMPILER_SUPPORT_Wlogicalop - Success
+-- Performing Test COMPILER_SUPPORT_Wenumconversion
+-- Performing Test COMPILER_SUPPORT_Wenumconversion - Success
+-- Performing Test COMPILER_SUPPORT_Wcpp11extensions
+-- Performing Test COMPILER_SUPPORT_Wcpp11extensions - Failed
+-- Performing Test COMPILER_SUPPORT_Wdoublepromotion
+-- Performing Test COMPILER_SUPPORT_Wdoublepromotion - Success
+-- Performing Test COMPILER_SUPPORT_Wshadow
+-- Performing Test COMPILER_SUPPORT_Wshadow - Success
+-- Performing Test COMPILER_SUPPORT_Wnopsabi
+-- Performing Test COMPILER_SUPPORT_Wnopsabi - Success
+-- Performing Test COMPILER_SUPPORT_Wnovariadicmacros
+-- Performing Test COMPILER_SUPPORT_Wnovariadicmacros - Success
+-- Performing Test COMPILER_SUPPORT_Wnolonglong
+-- Performing Test COMPILER_SUPPORT_Wnolonglong - Success
+-- Performing Test COMPILER_SUPPORT_fnochecknew
+-- Performing Test COMPILER_SUPPORT_fnochecknew - Success
+-- Performing Test COMPILER_SUPPORT_fnocommon
+-- Performing Test COMPILER_SUPPORT_fnocommon - Success
+-- Performing Test COMPILER_SUPPORT_fstrictaliasing
+-- Performing Test COMPILER_SUPPORT_fstrictaliasing - Success
+-- Performing Test COMPILER_SUPPORT_wd981
+-- Performing Test COMPILER_SUPPORT_wd981 - Failed
+-- Performing Test COMPILER_SUPPORT_wd2304
+-- Performing Test COMPILER_SUPPORT_wd2304 - Failed
+-- Performing Test COMPILER_SUPPORT_STRICTANSI
+-- Performing Test COMPILER_SUPPORT_STRICTANSI - Failed
+-- Performing Test COMPILER_SUPPORT_Qunusedarguments
+-- Performing Test COMPILER_SUPPORT_Qunusedarguments - Failed
+-- Performing Test COMPILER_SUPPORT_ansi
+-- Performing Test COMPILER_SUPPORT_ansi - Success
+-- Performing Test COMPILER_SUPPORT_OPENMP
+-- Performing Test COMPILER_SUPPORT_OPENMP - Success
+CMake Warning (dev) at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/CMakeLists.txt:479 (option):
+  Policy CMP0077 is not set: option() honors normal variables.  Run "cmake
+  --help-policy CMP0077" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+  For compatibility with older versions of CMake, option is clearing the
+  normal variable 'EIGEN_BUILD_DOC'.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found unsuitable Qt version "" from NOTFOUND
+-- Looking for a Fortran compiler
+-- Looking for a Fortran compiler - /usr/bin/f95
+-- The Fortran compiler identification is GNU 11.5.0
+-- Detecting Fortran compiler ABI info
+-- Detecting Fortran compiler ABI info - done
+-- Check for working Fortran compiler: /usr/bin/f95 - skipped
+-- Could NOT find CHOLMOD (missing: CHOLMOD_INCLUDES CHOLMOD_LIBRARIES)
+-- Could NOT find UMFPACK (missing: UMFPACK_INCLUDES UMFPACK_LIBRARIES)
+-- Could NOT find KLU (missing: KLU_INCLUDES KLU_LIBRARIES)
+-- Could NOT find SuperLU (missing: SUPERLU_INCLUDES SUPERLU_LIBRARIES SUPERLU_VERSION_OK) (Required is at least version "4.0")
+-- Checking for one of the modules 'hwloc'
+-- A version of Pastix has been found but pastix_nompi.h does not exist in the include directory. Because Eigen tests require a version without MPI, we disable the Pastix backend.
+-- Could NOT find SPQR (missing: SPQR_INCLUDES SPQR_LIBRARIES)
+-- Found unsuitable Qt version "" from NOTFOUND
+-- Performing Test COMPILER_SUPPORT_FASTMATH
+-- Performing Test COMPILER_SUPPORT_FASTMATH - Success
+CMake Warning (dev) at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/test/CMakeLists.txt:368 (find_package):
+  Policy CMP0167 is not set: The FindBoost module is removed.  Run "cmake
+  --help-policy CMP0167" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Could NOT find Boost (missing: Boost_INCLUDE_DIR) (Required is at least version "1.53.0")
+-- Could NOT find GoogleHash (missing: GOOGLEHASH_INCLUDES GOOGLEHASH_COMPILE)
+-- Could NOT find Adolc (missing: ADOLC_INCLUDES ADOLC_LIBRARIES)
+-- Could NOT find MPFR (missing: MPFR_INCLUDES MPFR_LIBRARIES MPFR_VERSION_OK) (Required is at least version "1.0.0")
+-- Found PkgConfig: /usr/bin/pkg-config (found version "1.7.3")
+-- Could NOT find FFTW (missing: FFTW_INCLUDES FFTW_LIBRARIES)
+CMake Warning (dev) at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/unsupported/test/CMakeLists.txt:293 (find_package):
+  Policy CMP0146 is not set: The FindCUDA module is removed.  Run "cmake
+  --help-policy CMP0146" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found CUDA: /usr/local/cuda-12.9 (found suitable version "12.9", minimum required is "7.0")
+-- Found unsuitable Qt version "" from NOTFOUND
+-- Qt4 not found, so disabling the mandelbrot and opengl demos
+-- Could NOT find CHOLMOD (missing: CHOLMOD_INCLUDES CHOLMOD_LIBRARIES)
+-- Could NOT find UMFPACK (missing: UMFPACK_INCLUDES UMFPACK_LIBRARIES)
+-- Could NOT find KLU (missing: KLU_INCLUDES KLU_LIBRARIES)
+-- Could NOT find SuperLU (missing: SUPERLU_INCLUDES SUPERLU_LIBRARIES SUPERLU_VERSION_OK) (Required is at least version "4.0")
+-- Checking for one of the modules 'hwloc'
+-- A version of Pastix has been found but pastix_nompi.h does not exist in the include directory. Because Eigen tests require a version without MPI, we disable the Pastix backend.
+-- ************************************************************
+-- ***    Eigen's unit tests configuration summary          ***
+-- ************************************************************
+--
+-- Build type:        Release
+-- Build site:        csrwks2026-0013.engin.umich.edu
+-- Build string:      linux-5.14.0-687.48.1.el9_8.x86_64-g++-11.5.0-sse2-64bit
+-- Enabled backends:
+-- Disabled backends: CHOLMOD,  UMFPACK,  KLU,  SuperLU,  PaStiX,  METIS,  SPQR,  Qt4 support,  Boost.Multiprecision,  GoogleHash,  Adolc,  MPFR C++,  fftw,  OpenGL,
+-- Default order:     Column-major
+-- Maximal matrix/vector size: 320
+-- SSE2:              Using architecture defaults
+-- SSE3:              Using architecture defaults
+-- SSSE3:             Using architecture defaults
+-- SSE4.1:            Using architecture defaults
+-- SSE4.2:            Using architecture defaults
+-- AVX:               Using architecture defaults
+-- AVX2:              Using architecture defaults
+-- FMA:               Using architecture defaults
+-- AVX512:            Using architecture defaults
+-- AVX512DQ:          Using architecture defaults
+-- Altivec:           Using architecture defaults
+-- VSX:               Using architecture defaults
+-- MIPS MSA:          Using architecture defaults
+-- ARM NEON:          Using architecture defaults
+-- ARMv8 NEON:        Using architecture defaults
+-- S390X ZVECTOR:     Using architecture defaults
+-- C++11:             OFF
+-- SYCL:              OFF
+-- CUDA:              OFF
+-- HIP:               OFF
+--
+CXX:               /usr/bin/c++
+ CXX_VERSION:       c++ (GCC) 11.5.0 20240719 (Red Hat 11.5.0-14)
+ CXX_FLAGS:          -std=c++03 -pedantic -Wall -Wextra -Wundef -Wcast-align -Wchar-subscripts -Wnon-virtual-dtor -Wunused-local-typedefs -Wpointer-arith -Wwrite-strings -Wformat-security -Wlogical-op -Wenum-conversion -Wdouble-promotion -Wshadow -Wno-psabi -Wno-variadic-macros -Wno-long-long -fno-check-new -fno-common -fstrict-aliasing -ansi
+ Sparse lib flags:
+
+-- ************************************************************
+--
+-- Configured Eigen 3.4.0
+--
+-- Available targets (use: make TARGET):
+-- ---------+--------------------------------------------------------------
+-- Target   |   Description
+-- ---------+--------------------------------------------------------------
+-- install  | Install Eigen. Headers will be installed to:
+--          |     <CMAKE_INSTALL_PREFIX>/<INCLUDE_INSTALL_DIR>
+--          |   Using the following values:
+--          |     CMAKE_INSTALL_PREFIX: /usr/local
+--          |     INCLUDE_INSTALL_DIR:  include/eigen3
+--          |   Change the install location of Eigen headers using:
+--          |     cmake . -DCMAKE_INSTALL_PREFIX=yourprefix
+--          |   Or:
+--          |     cmake . -DINCLUDE_INSTALL_DIR=yourdir
+-- doc      | Generate the API documentation, requires Doxygen & LaTeX
+-- check    | Build and run the unit-tests. Read this page:
+--          |   http://eigen.tuxfamily.org/index.php?title=Tests
+-- blas     | Build BLAS library (not the same thing as Eigen)
+-- uninstall| Remove files installed by the install target
+-- ---------+--------------------------------------------------------------
+--
+CMake Warning at /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu/_deps/eigen-src/CMakeLists.txt:638 (export):
+  Cannot create package registry file:
+
+    /home/chengcli/.cmake/packages/Eigen3/a6270124b416ac87137cab4ab392de17
+
+  Read-only file system
+
+
+
+-- Creating cached library eigen-3.4.0.tar.gz
+-- snapy-4. Setting up project libraries ...
+-- snapy-5. Setting up unit tests ...
+CMake Warning at tests/CMakeLists.txt:276 (message):
+  SNAPY_TEST_PYTHONPATH is unset: the *_python ctests will import the
+  installed snapy, not this tree.  Their verdicts do not constrain this
+  branch.
+
+
+-- snapy-6. Setting up examples ...
+-- Configuring done (49.8s)
+-- Generating done (1.4s)
+-- Build files have been written to: /data00/ai_workspace/worker2/gate0-w5a149772/build-cpu
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/contrib/graphbuilder.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/contrib/graphbuilderadapter.cpp.o
+[  0%] Building CXX object _deps/gtest-build/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/binary.cpp.o
+[  0%] Building CXX object _deps/fmt-build/CMakeFiles/fmt.dir/src/format.cc.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/convert.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/depthguard.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/directives.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emit.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitfromevents.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitter.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitterstate.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitterutils.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/exceptions.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/exp.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/memory.cpp.o
+[  0%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/node.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/node_data.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/nodebuilder.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/nodeevents.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/null.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/ostream_wrapper.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/parse.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/parser.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/regex_yaml.cpp.o
+[ 20%] Building CXX object _deps/fmt-build/CMakeFiles/fmt.dir/src/os.cc.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scanner.cpp.o
+[ 20%] Linking CXX static library ../../lib/libfmt.a
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scanscalar.cpp.o
+[ 20%] Built target fmt
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scantag.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scantoken.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/simplekey.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/singledocparser.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/stream.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/tag.cpp.o
+[ 20%] Linking CXX static library ../../lib/libyaml-cpp.a
+[ 20%] Built target yaml-cpp
+[ 20%] Building CXX object src/CMakeFiles/snap_release.dir/bc/bc_dispatch.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/snap_release.dir/bc/internal_boundary.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/snap_release.dir/bc/bc_func.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/snap_release.dir/bc/rectify_solid.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/cartesian.cpp.o
+[ 40%] Linking CXX static library ../../../lib/libgtest.a
+[ 40%] Built target gtest
+[ 40%] Building CXX object _deps/gtest-build/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 40%] Linking CXX static library ../../../lib/libgtest_main.a
+[ 40%] Built target gtest_main
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/coord_dispatch.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/coord_utils.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/coordgen.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/coordinate.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/cubed_sphere_utils.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/gnomonic_equiangle.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/spherical_polar.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/coord/spherical_utils.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/aneos.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/aneos/aneos_thermo_dummy.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/eos_dispatch.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/equation_of_state.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/ideal_gas.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/ideal_moist.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/moist_mixture.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/plume_eos.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/eos/shallow_water.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/body_heat.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/bot_heat.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/bot_sponge_lyr.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/const_gravity.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/coriolis.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/diffusion.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/plume_forcing.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/relax_bot_comp.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/relax_bot_temp.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/relax_bot_velo.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/top_cool.cpp.o
+[ 40%] Building CXX object src/CMakeFiles/snap_release.dir/forcing/top_sponge_lyr.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/balance_column.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/flux_positivity.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/hydro.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/hydro_dispatch.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/hydro_forward.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/hydro_options.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/hydro/register_forcing_modules.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/implicit/implicit_dispatch.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/implicit/implicit_hydro.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/check_keys.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/command_line.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/io_wrapper.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/parameter_input.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/read_restart_file.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/input/signal.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/connectivity.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/cubed_layout.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/cubed_sphere_layout.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/distributed.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/layout.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/process_group.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/process_group_ucx.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/layout/slab_layout.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/mesh/mesh.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/mesh/mesh_functions.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/mesh/meshblock.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/mesh/meshblock_options.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/output/combine_netcdf.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/output/combine_restart.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/snap_release.dir/output/hdf5.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/load_diag_output_data.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/load_hydro_output_data.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/load_scalar_output_data.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/load_user_output_data.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/mppnccombine.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/netcdf.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/output_type.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/output_utils.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/pnetcdf.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/output/restart.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/cp3.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/cp5.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/interpolation.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/plm.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/ppm.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/recon_dispatch.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/reconstruct.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/weno3.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/recon/weno5.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/hllc.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/hllc_dispatch.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/lmars.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/lmars_dispatch.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/plume_roe.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/riemann_solver.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/roe.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/roe_dispatch.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/shallow_roe.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/riemann/shallow_roe_dispatch.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/scalar/scalar.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/snap_release.dir/scalar/scalar_options.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/sedimentation/sed_hydro.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/sedimentation/sed_hydro_dispatch.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/sedimentation/sed_options.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/sedimentation/sed_vel.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/flip_zero.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/pull_neighbors.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/refine.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/signal_handler.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/utils_dispatch.cpp.o
+[100%] Building CXX object src/CMakeFiles/snap_release.dir/utils/vectorize.cpp.o
+[100%] Linking CXX shared library ../lib/libsnap_release.so
+[100%] Built target snap_release
+[100%] Building CXX object tests/CMakeFiles/test_flux_positivity_carry.release.dir/test_flux_positivity_carry.cpp.o
+[100%] Linking CXX executable test_flux_positivity_carry.release
+[100%] Built target test_flux_positivity_carry.release

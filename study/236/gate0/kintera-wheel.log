@@ -1,0 +1,14 @@
+WARNING: The directory '/home/chengcli/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing /data00/ai_workspace/worker2/gate0-w5a149772/kintera
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: kintera
+  Building wheel for kintera (pyproject.toml): started
+  Building wheel for kintera (pyproject.toml): still running...
+  Building wheel for kintera (pyproject.toml): finished with status 'done'
+  Created wheel for kintera: filename=kintera-2.5.15-cp311-cp311-linux_x86_64.whl size=27063092 sha256=6822d68d9f730eeff0eaae3737a11d6a2910462a3a835f2727e9fc6670edddc4
+  Stored in directory: /tmp/pip-ephem-wheel-cache-jgacm07o/wheels/b8/cc/a2/f2c96894249f9abb0a565c9a8836777d0d86e69e04bfb8983d
+Successfully built kintera
+
+[notice] A new release of pip available: 22.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip

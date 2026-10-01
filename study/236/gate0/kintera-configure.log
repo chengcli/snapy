@@ -1,0 +1,70 @@
+-- The CXX compiler identification is GNU 11.5.0
+-- The C compiler identification is GNU 11.5.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- The CUDA compiler identification is NVIDIA 12.9.86 with host compiler GNU 11.5.0
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /usr/local/cuda-12.9/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Found Python3: /home/chengcli/pyenv/bin/python (found version "3.11.13") found components: Interpreter Development.Module
+--
+-- ==== kintera configure begin ====
+-- Default Build Type = Release
+--
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/macros/macro_add_package.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/macros/macro_set_if_empty.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/macros/macro_setup_problem.cmake
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/macros/macro_setup_test.cmake
+-- kintera-1. Set up project compiler flags ...
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/compilers.cmake
+-- kintera-2. Setting up project parameters ...
+-- Include /data00/ai_workspace/worker2/gate0-w5a149772/kintera/cmake/parameters.cmake
+-- kintera-3. Setting up system libraries ...
+-- Python3_EXECUTABLE: /home/chengcli/pyenv/bin/python
+-- Found Torch: /home/chengcli/pyenv/lib64/python3.11/site-packages/torch/lib/libtorch.so (found version "2.10.0")
+-- Python3_EXECUTABLE: /home/chengcli/pyenv/bin/python
+-- Found Disort: /home/chengcli/pyenv/lib64/python3.11/site-packages/pydisort/lib/libdisort_release.so (found version "1.8.5")
+-- Python3_EXECUTABLE: /home/chengcli/pyenv/bin/python
+-- Found Harp: /home/chengcli/pyenv/lib64/python3.11/site-packages/pyharp/lib/libharp_release.so (found version "2.6.5")
+-- {fmt} version: 12.1.0
+-- Build type: Release
+-- Creating cached library fmt-12.1.0.tar.gz
+CMake Deprecation Warning at build/_deps/gtest-src/googlemock/CMakeLists.txt:39 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at build/_deps/gtest-src/googletest/CMakeLists.txt:49 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Found Python: /home/chengcli/pyenv/bin/python3.11 (found version "3.11.13") found components: Interpreter
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Creating cached library gtest-v1.13.0.tar.gz
+-- Creating cached library yaml-cpp-0.8.0.tar.gz
+-- Found CUDAToolkit: /usr/local/cuda-12.9/targets/x86_64-linux/include (found version "12.9.86")
+-- kintera-4. Setting up project libraries ...
+-- Configuring done (27.5s)
+-- Generating done (0.1s)
+-- Build files have been written to: /data00/ai_workspace/worker2/gate0-w5a149772/kintera/build

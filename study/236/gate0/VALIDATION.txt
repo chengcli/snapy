@@ -1,0 +1,19 @@
+PLAN.md byte-identical to 9b4a61f8ebdde95b5f2dce10388de7633fd55f9c
+PLAN.md SHA256 108f95d646db95e3c3595580f71fd67d02c04ea7e4ab5cb44925de0d24163569
+Protected block 1: byte-identical; SHA256 8b6c062558dd817badef93457a2cff0c684c23b195c45071407c03a71cca1675
+Protected block 2: byte-identical; SHA256 1c837820599165b3a89d67649dc969573d3d3ae480043b7a0fccaa46a656ddf8
+Literature and historical grid/decision: unchanged (entire PLAN.md bytes identical).
+8 CSV dumps; each 42 unique face/row pairs, faces 2..8 and six requested rows.
+Both baseline target builds completed; all 8 final diagnostic runs exited 0.
+Both cp flags false in both flux arms in all 8 dumps.
+Molar masses match plan nominal masses within 2e-5 relative.
+All four CPU/CUDA flux comparisons within plan tolerances.
+Raw CSV formatting: fprintf %.17g; no postprocessing of numeric dumps.
+CSV SHA256 19d06fd1620e42b5fbeff69e67568638017da5b3b05eb0b295aa22bcf07e76b7 ideal-moist-hllc-cpu.csv
+CSV SHA256 3aab957a671ef2833cf625c1a1002437d6fe5a5be5668e4cb85c1da369075ed5 ideal-moist-hllc-cuda.csv
+CSV SHA256 e54b309afef336dfbc080885b4b54394ce53b162dddd059e15aad8a793569b3a ideal-moist-lmars-cpu.csv
+CSV SHA256 c2e90d1b45fc894031f30d7abdb3f870afcc60667ad48b845228e77ca852a5a0 ideal-moist-lmars-cuda.csv
+CSV SHA256 84c244f405345349083d7b0505920032021c5d75c0f87634936c675ed64473d1 moist-mixture-hllc-cpu.csv
+CSV SHA256 ddd20b488ac754653bc61c7efe5995a4bdf9d7d23d4a760b0f93d9dbbf3d571a moist-mixture-hllc-cuda.csv
+CSV SHA256 f5a7d6b5fe5c2c72a34736ed1871d3918fdf67815045e366807bf9d8c57086cf moist-mixture-lmars-cpu.csv
+CSV SHA256 fa91a0377dcbf3536bd59b30425dc9fe8caf01ed032f598f11f5b9b3c661c44d moist-mixture-lmars-cuda.csv

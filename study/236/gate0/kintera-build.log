@@ -1,0 +1,128 @@
+[  1%] Building CXX object _deps/gtest-build/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[  2%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/contrib/graphbuilder.cpp.o
+[  2%] Building CXX object _deps/fmt-build/CMakeFiles/fmt.dir/src/format.cc.o
+[  3%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/contrib/graphbuilderadapter.cpp.o
+[  4%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/binary.cpp.o
+[  5%] Building CXX object _deps/fmt-build/CMakeFiles/fmt.dir/src/os.cc.o
+[  6%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/convert.cpp.o
+[  7%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/depthguard.cpp.o
+[  8%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/directives.cpp.o
+[  9%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emit.cpp.o
+[  9%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitfromevents.cpp.o
+[ 10%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitter.cpp.o
+[ 11%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitterstate.cpp.o
+[ 12%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/emitterutils.cpp.o
+[ 13%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/exceptions.cpp.o
+[ 14%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/exp.cpp.o
+[ 15%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/memory.cpp.o
+[ 16%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/node.cpp.o
+[ 17%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/node_data.cpp.o
+[ 18%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/nodebuilder.cpp.o
+[ 18%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/nodeevents.cpp.o
+[ 19%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/null.cpp.o
+[ 20%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/ostream_wrapper.cpp.o
+[ 21%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/parse.cpp.o
+[ 22%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/parser.cpp.o
+[ 23%] Linking CXX static library ../../lib/libfmt.a
+[ 23%] Built target fmt
+[ 24%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/regex_yaml.cpp.o
+[ 25%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scanner.cpp.o
+[ 26%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scanscalar.cpp.o
+[ 27%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scantag.cpp.o
+[ 28%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/scantoken.cpp.o
+[ 28%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/simplekey.cpp.o
+[ 29%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/singledocparser.cpp.o
+[ 30%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/stream.cpp.o
+[ 31%] Building CXX object _deps/yaml-cpp-build/CMakeFiles/yaml-cpp.dir/src/tag.cpp.o
+[ 32%] Linking CXX static library ../../lib/libyaml-cpp.a
+[ 32%] Built target yaml-cpp
+[ 33%] Building CXX object _deps/yaml-cpp-build/util/CMakeFiles/yaml-cpp-sandbox.dir/sandbox.cpp.o
+[ 34%] Building CXX object _deps/yaml-cpp-build/util/CMakeFiles/yaml-cpp-parse.dir/parse.cpp.o
+[ 35%] Building CXX object _deps/yaml-cpp-build/util/CMakeFiles/yaml-cpp-read.dir/read.cpp.o
+[ 36%] Building CXX object src/CMakeFiles/kintera_release.dir/equilibrium/equilibrium.cpp.o
+[ 37%] Building CXX object src/CMakeFiles/kintera_release.dir/diffusion/diffusion.cpp.o
+[ 38%] Linking CXX executable parse
+[ 39%] Linking CXX executable read
+[ 39%] Built target yaml-cpp-parse
+[ 40%] Building CXX object src/CMakeFiles/kintera_release.dir/equilibrium/equilibrium_dispatch.cpp.o
+[ 40%] Built target yaml-cpp-read
+[ 41%] Building CXX object src/CMakeFiles/kintera_release.dir/equilibrium/equilibrium_options.cpp.o
+[ 42%] Linking CXX executable sandbox
+[ 42%] Built target yaml-cpp-sandbox
+[ 43%] Building CXX object src/CMakeFiles/kintera_release.dir/func_table.cpp.o
+[ 44%] Linking CXX static library ../../../lib/libgtest.a
+[ 45%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/arrhenius.cpp.o
+[ 45%] Built target gtest
+[ 46%] Building CXX object _deps/gtest-build/googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o
+[ 47%] Linking CXX static library ../../../lib/libgmock.a
+[ 47%] Built target gmock
+[ 47%] Building CXX object _deps/gtest-build/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 48%] Linking CXX static library ../../../lib/libgtest_main.a
+[ 48%] Built target gtest_main
+[ 49%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/coagulation.cpp.o
+[ 50%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/evaporation.cpp.o
+[ 51%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/evolve_implicit_dispatch.cpp.o
+[ 52%] Building CXX object _deps/gtest-build/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o
+[ 52%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/jacobian_mass_action.cpp.o
+[ 53%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/kb_falloff.cpp.o
+[ 54%] Linking CXX static library ../../../lib/libgmock_main.a
+[ 54%] Built target gmock_main
+[ 55%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/kinetics.cpp.o
+[ 56%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/kinetics_options.cpp.o
+[ 57%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/lindemann_falloff.cpp.o
+[ 58%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/rate_constant.cpp.o
+[ 59%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/sri_falloff.cpp.o
+[ 60%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/three_body.cpp.o
+[ 61%] Building CXX object src/CMakeFiles/kintera_release.dir/kinetics/troe_falloff.cpp.o
+[ 62%] Building CXX object src/CMakeFiles/kintera_release.dir/math/interpolation.cpp.o
+[ 62%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/jacobian_photolysis.cpp.o
+[ 63%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/kinetics_base_reader.cpp.o
+[ 64%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/load_xsection_kin7.cpp.o
+[ 65%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/load_xsection_yaml.cpp.o
+[ 66%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/photochem.cpp.o
+[ 67%] Building CXX object src/CMakeFiles/kintera_release.dir/photochem/photolysis.cpp.o
+[ 68%] Building CXX object src/CMakeFiles/kintera_release.dir/reaction.cpp.o
+[ 69%] Building CXX object src/CMakeFiles/kintera_release.dir/species.cpp.o
+[ 70%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/eval_uhs.cpp.o
+[ 71%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/extrapolate_ad.cpp.o
+[ 71%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/log_svp.cpp.o
+[ 72%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/nucleation.cpp.o
+[ 73%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/relative_humidity.cpp.o
+[ 74%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/thermo_dispatch.cpp.o
+[ 75%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/thermo_options.cpp.o
+[ 76%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/thermo_x.cpp.o
+[ 77%] Building CXX object src/CMakeFiles/kintera_release.dir/thermo/thermo_y.cpp.o
+[ 78%] Building CXX object src/CMakeFiles/kintera_release.dir/units/units.cpp.o
+[ 79%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/check_resize.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/find_resource.cpp.o
+[ 80%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/fp_value.cpp.o
+[ 81%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/molar_mass.cpp.o
+[ 82%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/parse_comp_string.cpp.o
+[ 83%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/parse_yaml.cpp.o
+[ 84%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/permute_matrix.cpp.o
+[ 85%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/serialize.cpp.o
+[ 86%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/stoichiometry.cpp.o
+[ 87%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/suggest.cpp.o
+[ 88%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/to_lower_copy.cpp.o
+[ 89%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/trim_copy.cpp.o
+[ 89%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/utils_dispatch.cpp.o
+[ 90%] Building CXX object src/CMakeFiles/kintera_release.dir/utils/vectorize.cpp.o
+[ 91%] Linking CXX shared library ../lib/libkintera_release.so
+[ 91%] Built target kintera_release
+[ 92%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/equilibrium/equilibrium_dispatch.cu.o
+[ 93%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/func_table.cu.o
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+[ 95%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/math/sparse_solver.cu.o
+[ 95%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/kinetics/evolve_implicit_dispatch.cu.o
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+[ 96%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/thermo/thermo_dispatch.cu.o
+[ 97%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/utils/user_funcs.cu.o
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+[ 98%] Building CUDA object src/CMakeFiles/kintera_cuda_release.dir/utils/utils_dispatch.cu.o
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+[100%] Linking CUDA device code CMakeFiles/kintera_cuda_release.dir/cmake_device_link.o
+[100%] Linking CXX shared library ../lib/libkintera_cuda_release.so
+[100%] Built target kintera_cuda_release

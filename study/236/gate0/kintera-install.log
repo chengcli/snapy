@@ -1,0 +1,7 @@
+WARNING: The directory '/home/chengcli/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing ./gate0-w5a149772/wheels/kintera-2.5.15-cp311-cp311-linux_x86_64.whl
+Installing collected packages: kintera
+Successfully installed kintera-2.5.15
+
+[notice] A new release of pip available: 22.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
