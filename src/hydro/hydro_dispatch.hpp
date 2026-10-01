@@ -11,8 +11,7 @@ using hydro_ref_x1_fn = void (*)(
     torch::Tensor const& anchor, torch::Tensor const& psf_lo,
     torch::Tensor const& psf_hi, torch::Tensor const& pref,
     torch::Tensor const& dsf, torch::Tensor const& dref, int iu, double grav,
-    bool uniform, bool phys_in, bool phys_out, bool wall_clamp,
-    bool rop_guard);
+    bool uniform, bool phys_in, bool phys_out, bool wall_clamp, bool rop_guard);
 
 DECLARE_DISPATCH(hydro_ref_x1_fn, call_hydro_ref_x1);
 

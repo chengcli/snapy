@@ -200,8 +200,7 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   pref[flat + i] = cell_pref;
   int jlo = (wall_clamp && phys_in) ? il : 0;
   int jhi = (wall_clamp && phys_out) ? iu : nc1 - 1;
-  T rs =
-      hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi, rop_guard);
+  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi, rop_guard);
   T rf = i > 0 ? T(0.5) * (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1,
                                                    jlo, jhi, rop_guard) +
                            rs)

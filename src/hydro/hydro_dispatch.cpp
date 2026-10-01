@@ -23,13 +23,13 @@ void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
     auto anchor_ptr = anchor.defined() ? anchor.data_ptr<scalar_t>() : nullptr;
     at::parallel_for(0, ncolumns, 0, [&](int64_t begin, int64_t end) {
       for (int64_t column = begin; column < end; ++column) {
-        hydro_ref_x1_impl(
-            w.data_ptr<scalar_t>(), dx1f.data_ptr<scalar_t>(), anchor_ptr,
-            psf_lo.data_ptr<scalar_t>(), psf_hi.data_ptr<scalar_t>(),
-            pref.data_ptr<scalar_t>(), dsf.data_ptr<scalar_t>(),
-            dref.data_ptr<scalar_t>(), static_cast<int>(column), ncolumns, nc1,
-            iu, scalar_t(grav), uniform, phys_in, phys_out, wall_clamp,
-            rop_guard);
+        hydro_ref_x1_impl(w.data_ptr<scalar_t>(), dx1f.data_ptr<scalar_t>(),
+                          anchor_ptr, psf_lo.data_ptr<scalar_t>(),
+                          psf_hi.data_ptr<scalar_t>(),
+                          pref.data_ptr<scalar_t>(), dsf.data_ptr<scalar_t>(),
+                          dref.data_ptr<scalar_t>(), static_cast<int>(column),
+                          ncolumns, nc1, iu, scalar_t(grav), uniform, phys_in,
+                          phys_out, wall_clamp, rop_guard);
       }
     });
   });

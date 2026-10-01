@@ -84,14 +84,15 @@ namespace {
 struct FrozenPeek : HydroImpl {
   static auto ref() { return &FrozenPeek::_hydro_ref_x1; }
 };
-}
+}  // namespace
 
 TEST(hydro, frozen_reference_is_initial_target_and_restart_persistent) {
   auto block = make_block(torch::kCPU);
   auto h = block->phydro;
   auto pc = block->pcoord;
   auto w = torch::zeros({h->peos->nvar(), pc->options->nc3(),
-                        pc->options->nc2(), pc->options->nc1()}, torch::kFloat64);
+                         pc->options->nc2(), pc->options->nc1()},
+                        torch::kFloat64);
   w[IDN].copy_(torch::exp(-pc->x1v / 2000.));
   w[IPR].copy_(w[IDN] * 20000.);
   auto [p, pc0, d, dc] = ((*h).*FrozenPeek::ref())(w);

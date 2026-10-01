@@ -195,7 +195,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
  private:
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   _build_hydro_ref_x1(torch::Tensor const& w) const;
-  torch::Tensor frozen_x1_;  // also owned by Variables for restart serialization
+  torch::Tensor
+      frozen_x1_;  // also owned by Variables for restart serialization
 
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();
