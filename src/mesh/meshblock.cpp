@@ -1,5 +1,6 @@
 // C/C++
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
@@ -1059,7 +1060,97 @@ bool MeshBlockImpl::floor_hit(Variables const &vars) {
   if (w.size(0) > IPR) {  // shallow water carries no pressure row
     hit = hit || !(w[IPR].min().item<double>() > 1.001 * eos->pressure_floor());
   }
+  if (std::getenv("SNAPY_FLOOR_DIAG")) _floor_diag(hydro_u, hit);
   return hit;
+}
+
+// #250 scratch diagnostic: the first non-finite state and the first floor
+// hits, with the offending cells and their x1/x2 neighbours
+void MeshBlockImpl::_floor_diag(torch::Tensor const &hydro_u, bool hit) {
+  static bool seen_nonfinite = false;
+  static int nhits = 0;
+  auto const &eos = phydro->peos->options;
+  auto wf = phydro->peos->forward(hydro_u.clone()).to(torch::kCPU);
+  int ng = pcoord->options->nghost();
+  auto wi = wf.slice(-1, ng, wf.size(-1) - ng).slice(-2, ng, wf.size(-2) - ng);
+  auto x1v = pcoord->x1v.to(torch::kCPU), x2v = pcoord->x2v.to(torch::kCPU);
+  auto pre = [&]() -> std::ostream & {
+    return std::cout << "[FloorDiag] cycle=" << cycle
+                     << " redo=" << pintg->current_redo << std::setprecision(17)
+                     << " time=" << diag_time << " dt=" << diag_dt;
+  };
+  if (!seen_nonfinite) {
+    auto bad = (~torch::isfinite(wi)).any(0);
+    auto ucpu = hydro_u.to(torch::kCPU);
+    auto badu = (~torch::isfinite(ucpu)).any().item<bool>();
+    if (bad.any().item<bool>() || badu) {
+      seen_nonfinite = true;
+      pre() << " first non-finite: interior prim cells="
+            << bad.sum().item<int64_t>()
+            << " any non-finite hydro_u(incl ghosts)=" << badu << std::endl;
+    }
+  }
+  auto from = std::getenv("SNAPY_FLOOR_DIAG_FROM");
+  if (from && cycle >= std::atoi(from)) {  // precursor extrema, finite cells
+    auto fin = torch::isfinite(wi).all(0);
+    auto big = torch::full_like(wi[IDN], 1.e300);
+    auto loc = [&](torch::Tensor q) {
+      int64_t a = q.argmin().item<int64_t>();
+      int64_t n1 = q.size(-1), n2 = q.size(-2);
+      return std::to_string(a / n1 % n2) + "," + std::to_string(a % n1);
+    };
+    auto rho = torch::where(fin, wi[IDN], big);
+    auto p = torch::where(fin, wi[IPR], big);
+    auto np = torch::where(fin, -wi[IPR], big);
+    auto vel = torch::where(fin, -(wi[IVX].abs() + wi[IVY].abs()), big);
+    pre() << " minrho=" << rho.min().item<double>() << "@(j,i)=" << loc(rho)
+          << " minp=" << p.min().item<double>() << "@" << loc(p)
+          << " maxp=" << -np.min().item<double>() << "@" << loc(np)
+          << " max|u1|+|u2|=" << -vel.min().item<double>() << "@" << loc(vel)
+          << " nonfinite=" << (~fin).sum().item<int64_t>() << std::endl;
+  }
+  if (!hit || nhits >= 30) return;
+  {
+    auto bad = (~torch::isfinite(wi)).any(0).nonzero();
+    if (bad.size(0) > 0) {
+      auto lo = std::get<0>(bad.min(0)), hi = std::get<0>(bad.max(0));
+      pre() << " nonfinite bbox j=[" << lo[1].item<int64_t>() << ","
+            << hi[1].item<int64_t>() << "] i=[" << lo[2].item<int64_t>() << ","
+            << hi[2].item<int64_t>() << "]" << std::endl;
+    }
+  }
+  nhits++;
+  double fl[2] = {eos->density_floor(), eos->pressure_floor()};
+  int var[2] = {IDN, IPR};
+  char const *name[2] = {"rho", "p"};
+  for (int v = 0; v < 2; ++v) {
+    auto q = wi[var[v]];
+    auto mask = ~(q > 1.001 * fl[v]);
+    int64_t n = mask.sum().item<int64_t>();
+    pre() << " var=" << name[v] << " ncells_hit=" << n
+          << " min=" << q.min().item<double>() << " floor=" << fl[v]
+          << std::endl;
+    auto idx = mask.nonzero();  // (k, j, i) interior
+    for (int64_t m = 0; m < std::min<int64_t>(idx.size(0), 4); ++m) {
+      int64_t k = idx[m][0].item<int64_t>(), j = idx[m][1].item<int64_t>(),
+              i = idx[m][2].item<int64_t>();
+      int64_t K = k + (wf.size(1) > 1 ? ng : 0), J = j + ng, I = i + ng;
+      auto at = [&](int c, int64_t jj, int64_t ii) {
+        return wf[c][K][jj][ii].item<double>();
+      };
+      pre() << "   cell(k,j,i interior)=(" << k << "," << j << "," << i
+            << ") x1=" << x1v[I].item<double>()
+            << " x2=" << x2v[J].item<double>() << " " << name[v] << "="
+            << q[k][j][i].item<double>() << " | rho,u1,u2,p=" << at(IDN, J, I)
+            << "," << at(IVX, J, I) << "," << at(IVY, J, I) << ","
+            << at(IPR, J, I) << std::endl;
+      pre() << "     nbr rho/p: i-1=" << at(IDN, J, I - 1) << "/"
+            << at(IPR, J, I - 1) << " i+1=" << at(IDN, J, I + 1) << "/"
+            << at(IPR, J, I + 1) << " j-1=" << at(IDN, J - 1, I) << "/"
+            << at(IPR, J - 1, I) << " j+1=" << at(IDN, J + 1, I) << "/"
+            << at(IPR, J + 1, I) << std::endl;
+    }
+  }
 }
 
 bool MeshBlockImpl::vic_dry_clamp_hit() const {

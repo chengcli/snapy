@@ -235,6 +235,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! true if a fresh primitive of `hydro_u` sits at or below a floor
   bool floor_hit(Variables const& vars);
 
+  //! #250 scratch diagnostic (SNAPY_FLOOR_DIAG): time/dt of this cycle
+  mutable double diag_time = 0., diag_dt = 0.;
+  void _floor_diag(torch::Tensor const& hydro_u, bool hit);
+
   //! true if the VIC dry-gas clamp emptied a cell during this step
   bool vic_dry_clamp_hit() const;
 

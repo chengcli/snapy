@@ -389,6 +389,7 @@ void MeshImpl::print_cycle_info(MeshVariables const& vars, double time,
               "Mesh::print_cycle_info expects one Variables map per local "
               "MeshBlock");
 
+  for (auto& b : blocks) b->diag_time = time, b->diag_dt = dt;  // #250 diag
   auto root = blocks.front();
   auto pintg = root->pintg;
   if (pintg->options->ncycle_out() == 0 ||
