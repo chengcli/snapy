@@ -822,6 +822,50 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
+  // Tangential exchange fills face ghosts but not corners (skip_corner).
+  // The corner stays the reflection of the pre-exchange column, and a viscous
+  // cross derivative at the wall row beside an x2 edge sources u2. Reflect
+  // only inside those tangential ghost slabs. Re-applying the whole boundary
+  // pass would also wrap periodic faces and replace a neighbor block's ghosts
+  // (#264).
+  {
+    int ng = pcoord->options->nghost();
+    auto const &fns = options->bfuncs();
+    auto const &names = options->bcnames();
+    BoundaryFuncOptions op;
+    op.nghost(ng);
+    op.eos = phydro->peos.get();
+    op.coord = pcoord.get();
+    auto refresh = [&](torch::Tensor field, int type) {
+      if (!field.defined() || field.numel() == 0)
+        return;
+      op.type(type);
+      for (int f = 0; f < static_cast<int>(fns.size()); ++f) {
+        if (!fns[f])
+          continue;
+        if (static_cast<size_t>(f) >= names.size() ||
+            names[f].compare(0, 10, "reflecting") != 0) {
+          continue;
+        }
+        int spatial = 3 - f / 2;
+        if (field.size(spatial) == 1)
+          continue;
+        for (int orth = 1; orth <= 3; ++orth) {
+          if (orth == spatial || field.size(orth) <= 1)
+            continue;
+          int n = static_cast<int>(field.size(orth));
+          int g = ng < n / 2 ? ng : n / 2;
+          if (g <= 0)
+            continue;
+          fns[f](field.narrow(orth, 0, g), spatial, op);
+          fns[f](field.narrow(orth, n - g, g), spatial, op);
+        }
+      }
+    };
+    refresh(hydro_u, kConserved);
+    refresh(scalar_s, kScalar);
+  }
+
   if (options->verbose()) {
     SINFO(MeshBlock) << "ghost zone exchange completed." << std::endl;
   }
