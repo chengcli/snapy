@@ -823,11 +823,11 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
   }
 
   // Tangential exchange fills face ghosts but not corners (skip_corner).
-  // The corner stays the reflection of the pre-exchange column, and a viscous
-  // cross derivative at the wall row beside an x2 edge sources u2. Reflect
-  // only inside those tangential ghost slabs. Re-applying the whole boundary
-  // pass would also wrap periodic faces and replace a neighbor block's ghosts
-  // (#264).
+  // Re-apply each installed x1 wall on the x2/x3 ghost slabs only, so the
+  // corner matches the updated column. Any x1 function, not just reflecting:
+  // a user wall such as fixed_temperature has the same corner (#264).
+  // Periodic is skipped because exchange already owns it. Outflow is skipped
+  // because its background must match the full block and it needs primitives.
   {
     int ng = pcoord->options->nghost();
     auto const &fns = options->bfuncs();
@@ -840,11 +840,13 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
       if (!field.defined() || field.numel() == 0)
         return;
       op.type(type);
-      for (int f = 0; f < static_cast<int>(fns.size()); ++f) {
-        if (!fns[f])
+      int nface =
+          static_cast<int>(fns.size()) < 2 ? static_cast<int>(fns.size()) : 2;
+      for (int f = 0; f < nface; ++f) {
+        if (!fns[f] || is_outflow(fns[f]))
           continue;
-        if (static_cast<size_t>(f) >= names.size() ||
-            names[f].compare(0, 10, "reflecting") != 0) {
+        if (static_cast<size_t>(f) < names.size() &&
+            names[f].compare(0, 8, "periodic") == 0) {
           continue;
         }
         int spatial = 3 - f / 2;
