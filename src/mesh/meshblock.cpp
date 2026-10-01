@@ -823,11 +823,10 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
   }
 
   // Tangential exchange fills face ghosts but not corners (skip_corner).
-  // Re-apply each installed x1 wall on the x2/x3 ghost slabs only, so the
-  // corner matches the updated column. Any x1 function, not just reflecting:
-  // a user wall such as fixed_temperature has the same corner (#264).
-  // Periodic is skipped because exchange already owns it. Outflow is skipped
-  // because its background must match the full block and it needs primitives.
+  // Re-apply each installed x1 function on the x2/x3 slabs exchange owns, so
+  // the corner matches the updated column. A physical tangential face already
+  // wrote that corner. Outflow is not reapplied: its background must match the
+  // full block and it needs primitives (#264).
   {
     int ng = pcoord->options->nghost();
     auto const &fns = options->bfuncs();
@@ -836,6 +835,12 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     op.nghost(ng);
     op.eos = phydro->peos.get();
     op.coord = pcoord.get();
+    auto physical = [&](int face) {
+      if (face < 0 || face >= static_cast<int>(fns.size()) || !fns[face])
+        return false;
+      return !(static_cast<size_t>(face) < names.size() &&
+               names[face].compare(0, 8, "periodic") == 0);
+    };
     auto refresh = [&](torch::Tensor field, int type) {
       if (!field.defined() || field.numel() == 0) return;
       op.type(type);
@@ -843,10 +848,6 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
           static_cast<int>(fns.size()) < 2 ? static_cast<int>(fns.size()) : 2;
       for (int f = 0; f < nface; ++f) {
         if (!fns[f] || is_outflow(fns[f])) continue;
-        if (static_cast<size_t>(f) < names.size() &&
-            names[f].compare(0, 8, "periodic") == 0) {
-          continue;
-        }
         int spatial = 3 - f / 2;
         if (field.size(spatial) == 1) continue;
         for (int orth = 1; orth <= 3; ++orth) {
@@ -854,8 +855,10 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
           int n = static_cast<int>(field.size(orth));
           int g = ng < n / 2 ? ng : n / 2;
           if (g <= 0) continue;
-          fns[f](field.narrow(orth, 0, g), spatial, op);
-          fns[f](field.narrow(orth, n - g, g), spatial, op);
+          int inner = (3 - orth) * 2;
+          if (!physical(inner)) fns[f](field.narrow(orth, 0, g), spatial, op);
+          if (!physical(inner + 1))
+            fns[f](field.narrow(orth, n - g, g), spatial, op);
         }
       }
     };

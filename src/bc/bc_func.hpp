@@ -25,6 +25,10 @@ struct BCRegistrar {
   }
 };
 
+// A face function may be called again on a tangential ghost slab after
+// exchange: the orthogonal size is then nghost, not the block. It must not
+// depend on that shape, and a second call must match the first (write ghosts
+// from the interior; do not accumulate) (#264).
 #define BC_FUNCTION(name, var, dim, op)                            \
   void name(torch::Tensor const&, int, snap::BoundaryFuncOptions); \
   static BCRegistrar bc_##name(#name, name);                       \
