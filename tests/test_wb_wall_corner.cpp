@@ -2,7 +2,8 @@
 // reflecting x1 walls, periodic x2 and isotropic viscosity, grows u2 in the
 // wall-adjacent row at the x2 block edge. Nothing in the state varies in x2, so
 // u2 must stay zero. One block is enough: its periodic x2 edge is a seam too.
-// Viscosity alone does it; the same column with kappa_iso alone stays at rest.
+// Viscosity alone does it. The same column behind a user wall (the stock
+// reflecting condition registered under another name) must stay at rest too.
 
 // C/C++
 #include <cmath>
@@ -19,9 +20,20 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/hydro/balance_column.hpp>
 #include <snap/mesh/mesh.hpp>
 
 using namespace snap;
+
+// the stock reflecting wall under a name of its own: nothing may key on the
+// name "reflecting" to find a physical wall
+BC_FUNCTION(user_wall_inner, var, dim, op) {
+  get_bc_func()["reflecting_inner"](var, dim, op);
+}
+
+BC_FUNCTION(user_wall_outer, var, dim, op) {
+  get_bc_func()["reflecting_outer"](var, dim, op);
+}
 
 namespace {
 
@@ -40,6 +52,7 @@ distribute:
   blocks_per_process: 1
 
 dynamics:
+  wb-wall-clamp: true
   equation-of-state:
     type: ideal-gas
     gammad: 1.6666666666666667
@@ -74,26 +87,33 @@ forcing:
     nu_iso: 0.0234
 )";
 
-Mesh make_mesh() {
+Mesh make_mesh(torch::Device device, std::string const& wall) {
+  std::string config = kConfig;
+  for (std::string face : {"x1-inner: ", "x1-outer: "}) {
+    config.replace(config.find(face + "reflecting") + face.size(), 10, wall);
+  }
   char fname[] = "/tmp/wb-wall-corner-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
   std::ofstream out(fname);
-  out << kConfig;
+  out << config;
   out.close();
   auto mesh = Mesh(MeshOptionsImpl::from_yaml(fname));
   std::remove(fname);
-  mesh->to(torch::kCPU, torch::kFloat64);
+  mesh->to(device, torch::kFloat64);
   return mesh;
 }
 
 }  // namespace
 
-// T = 1 + Lz - z, rho = T^m, p = rho T, at rest: uniform in x2. Ten steps.
-TEST(WallCorner, x2_uniform_rest_keeps_u2_zero) {
+// T = 1 + Lz - z, rho = T^m, p = rho T, projected onto the scheme's discrete
+// hydrostatic balance, at rest: uniform in x2. Ten steps. Unprojected, the
+// polytrope alone grows u1 to 1.9e-7 c_s in the top rows with no diffusion.
+void x2_uniform_rest_keeps_u2_zero(torch::Device device,
+                                   std::string const& wall) {
   torch::set_num_threads(1);
-  auto mesh = make_mesh();
+  auto mesh = make_mesh(device, wall);
   ASSERT_EQ(mesh->blocks.size(), 1u);
   auto block = mesh->blocks[0];
   auto coord = block->pcoord;
@@ -103,10 +123,16 @@ TEST(WallCorner, x2_uniform_rest_keeps_u2_zero) {
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                          coord->options->nc2(), coord->options->nc1()},
                         torch::kFloat64);
-  auto temp = (1. + Lz - coord->x1v).view({1, 1, -1});
+  auto temp = (1. + Lz - coord->x1v.cpu()).view({1, 1, -1});
   w[IDN] = temp.pow(m).expand_as(w[IDN]);
   w[IPR] = w[IDN] * temp;
-  vars[0]["hydro_w"] = w;
+  auto cells = block->part({0, 0, 0}, PartOptions().exterior(false));
+  auto dx = coord->dx1f.cpu().narrow(0, coord->il(), coord->options->nx1());
+  auto [balanced, residual, sweeps] =
+      balance_column(w.index(cells).contiguous(), dx.contiguous(), 2.49,
+                     /*wall_clamp=*/true, /*rtol=*/5.e-14, /*max_iter=*/400);
+  w.index_put_(cells, balanced);
+  vars[0]["hydro_w"] = w.to(device);
   mesh->initialize(vars);
 
   int nstage = block->pintg->stages.size();
@@ -125,4 +151,22 @@ TEST(WallCorner, x2_uniform_rest_keeps_u2_zero) {
   // RED: on 5eeb9b6 u2 is not zero in the wall row at the x2 edge
   EXPECT_LE(mach2, 1e-12) << "max |u2|/c_s " << mach2;
   EXPECT_LE(mach, 1e-12) << "max |v|/c_s " << mach;
+}
+
+TEST(WallCorner, x2_uniform_rest_keeps_u2_zero) {
+  x2_uniform_rest_keeps_u2_zero(torch::kCPU, "reflecting");
+}
+
+TEST(WallCorner, x2_uniform_rest_keeps_u2_zero_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  x2_uniform_rest_keeps_u2_zero(torch::Device(torch::kCUDA, 0), "reflecting");
+}
+
+TEST(WallCorner, user_wall_keeps_u2_zero) {
+  x2_uniform_rest_keeps_u2_zero(torch::kCPU, "user_wall");
+}
+
+TEST(WallCorner, user_wall_keeps_u2_zero_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  x2_uniform_rest_keeps_u2_zero(torch::Device(torch::kCUDA, 0), "user_wall");
 }
