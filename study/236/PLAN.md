@@ -1,15 +1,18 @@
-# #236 study plan, rev 9a (ideal gas only)
+# #236 study plan, rev 9b (ideal gas only)
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
 
+Rev 9b critique -> change (review of rev 9)
+- Rev 9b: oracle-review items B1, B2, 1-11 from the coordinating bot's independent review of rev 9 (Slack, 2026-10-01); Xi->Sihe Chen attribution fix for rev 9a. Sihe Chen's approve on 5f175ed4 is superseded; sign-off round restarts on this sha.
+
 Rev 9a critique -> change (review of e0c1c822)
-- rev 9a: per-test DECIDE accuracy criteria replacing the single PROPOSED threshold of rev 9, following Xi's rev 9 review (SIGN-OFF changes on e0c1c822). Items 1 and 2 as Xi stated; the Larrouturou bound is written as the single interval [-1e-3, 1+1e-3] and remains PROPOSED for confirmation by the three signers.
+- rev 9a: per-test DECIDE accuracy criteria replacing the single PROPOSED threshold of rev 9, following Sihe Chen's rev 9 review (SIGN-OFF changes on e0c1c822). Items 1 and 2 as Sihe Chen stated; the Larrouturou bound is written as the single interval [-1e-3, 1+1e-3] and remains PROPOSED for confirmation by the three signers.
 
 Rev 9 critique -> change (review of 05d5e6c)
 - Folds in the 11:51 KEEP/DROP list (ideal gas only) and the 12:58 literature-read plan, in that order and verbatim below.
 - The 12:58 DECIDE supersedes the A/B decision rule: compare A against G on z=1, with P extended to the CFL ladder.
 - The 11:51 ADD of an empty Literature section is superseded by the filled Literature section from the 12:58 post.
-- The single accuracy threshold introduced in rev 9 is superseded by the rev 9a per-test DECIDE criteria below.
+- The single accuracy threshold introduced in rev 9 is superseded by the rev 9b per-test DECIDE criteria below.
 
 Earlier revision entries are retained as history; their old scope, gates and A/B decisions are superseded by rev 9 where noted below.
 
@@ -40,12 +43,12 @@ Rev 6 critique -> change (review of 07fc199)
 - c. P described main's repair wrongly (a parented cloud borrows from its parent vapour first; the rows are partial densities) -> P cites equation_of_state.cpp:256-327 and states where mass is added (clamp_min_(0) on a parentless cloud only).
 - d. The reproducer's "clamps on nearly every step" held only with the external driver -> it states both drivers: species repairs nearly every step with the external driver, 0 redos with run_hydro.
 - e. Gate 0 asked for kintera >= 2.5.13 -> kintera v2.5.15 (4dc613d, kintera main) for both builds, so the bitwise checks reproduce.
-- f. P had no decision rule -> the face limiter is the guarantee iff marked cells = 0 on the run_hydro run.
+- f. P had no decision rule -> the face limiter is the guarantee iff marked cells = 0 on the run_hydro run. Superseded by rev 9b: hits > 0, clamp attribution and mass closure are also required.
 - g. L79 and the grid cited lines of 842a116, which no chengcli ref holds -> they cite 5eeb9b6 lines. The mapping found two 842a116 tests that do not exist at 5eeb9b6: moist_mixture_withheld_mass_keeps_its_energy_and_momentum (the grid's MM z=1 lmars cell is now the gap test at 5eeb9b6:351) and moist_mixture_nasa9_h2_enthalpy_matches_internal_plus_pressure (the hand h_dry test; a new test does this).
 
 Rev 5 critique -> change
 - a. Gate 0 built main 3f7ad96, which is not current main -> Gate 0 builds current main 5eeb9b6 (v2.10.36, kintera >= 2.5.13); the 3f7ad96 counts are a prior only, and a count mismatch is recorded, not an abort.
-- b. Gate 4 used 842a116 as a bitwise oracle -> Gate 4 = full ctest plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes, (2) formulation A with no extras; 842a116 is a candidate only and never the oracle; no rebase comparison.
+- b. Gate 4 used 842a116 as a bitwise oracle -> Gate 4 = full ctest plus two arm-A-only bitwise checks, both against 5eeb9b6 (neither constrains G): (1) ideal-moist fluxes, (2) formulation A with no extras; 842a116 is a candidate only and never the oracle; no rebase comparison.
 - c. The non-ideal option's species scope was implicit -> the test-only option registers virial z and u for dry gas and vapour ONLY and leaves every cloud extra unset; this scope is stated in the option text, in O1 and in Gate 1b.
 - d. Where species positivity is guaranteed was not studied -> new item P: face flux limiter vs cell clamp, what the cell clamp does to mass, energy and momentum, and what it reports; reproducer is the 2D moist Jupiter CRM with limiter: true that clamps vapour/cloud on nearly every step (#263).
 
@@ -98,11 +101,11 @@ DECIDE   G if it conserves exactly, keeps species >= 0 with no clamp at CFL <= 0
 ADD      a Literature section with these citations (eq/page as above); full notes are in our reading notes.
 ```
 
-**Per-test DECIDE accuracy criteria (rev 9a):** Apply the following criteria to TESTS (2); the 12:58 DECIDE rule above remains unchanged.
+**Per-test DECIDE accuracy criteria (rev 9b):** Apply these to TESTS (2); the verbatim 12:58 DECIDE remains unchanged. The revised timing, diagnostics and G implementation below are PROPOSED pending the restarted three-signer review.
 
-1. Hu, Adams & Shu 2013 smooth advection (u = 1 + 1e-6 + cos(2 pi x)), CFL 0.5, same resolution as the unlimited run: G's L-inf error <= 2x the unlimited scheme, and G's observed convergence order within 0.5 of the unlimited scheme. Status: accepted by Xi; to be confirmed by the other two signers.
-2. Wong et al. 2021 1D interface advection with a 1e-8 partial-density floor: pass is every species partial density >= 0 at every cell and every step with no clamp invoked, plus the observed convergence order on the smooth part of the solution within 0.5 of the unlimited scheme. No L-inf-vs-unlimited gate. Status: proposed by Xi at rev 9 review; to be confirmed by the other two signers.
-3. Larrouturou 1991 two-species Sod tube: PASS is each mass fraction Y_n in [-1e-3, 1+1e-3] at every cell and every step. Report the unlimited scheme's maximum excursion (max over cells and steps of max(-Y_n, Y_n - 1)) beside G's. No convergence-order gate. The 1e-3 bound is PROPOSED (Cheng; to be confirmed by all three signers); round-off-level tightness is explicitly NOT required (agreed by Xi's review).
+1. Hu, Adams & Shu 2013 smooth advection (u = 1 + 1e-6 + cos(2 pi x)): at CFL 0.5 and the same resolution, G's L-inf error <= 2x the unlimited scheme (robustness check only). Measure convergence order separately with dt = 0.5*dx^(5/3) in both arms; G's observed order must be within 0.5 of unlimited. The timestep is per oracle review, to verify against Hu 2013 p.11; no local PDF was found. The original numerical thresholds were accepted by Sihe Chen; the revised timing awaits all three signers. PROPOSED variable convention pending the paper: u_adv is the advected scalar/partial density carrying the 1e-6 offset, while transport velocity is v; confirm whether the paper's u denotes that scalar before implementing, rather than silently interpreting it as Snapy's velocity. Require a nonzero count of limited faces in G, not merely a passing error norm.
+2. Wong et al. 2021 1D interface advection with a 1e-8 partial-density floor: every species partial density >= 0 at every cell and step, with no clamp invoked; measure L1 convergence order on the smooth part and require it within 0.5 of unlimited. No L-inf-vs-unlimited gate. PROPOSED gas pair: gamma 1.4 / 1.67 and molar mass 29 / 4 g/mol. Report max |p-p0|/p0 and max |v-v0| (the velocity diagnostic max |u-u0| in the review) for Abgrall contact oscillations. Positivity/order criterion proposed by Sihe Chen at rev 9 review; the other two signers must confirm it, and the new gas pair/L1 details await the restarted sign-off.
+3. Larrouturou 1991 two-species Sod tube: the DECIDE vote applies to BOTH A and G; PASS is each mass fraction Y_n in [-1e-3, 1+1e-3] at every cell and step. Report the unlimited scheme's maximum excursion (max over cells and steps of max(-Y_n, Y_n - 1)) beside each arm's excursion. No convergence-order gate. The 1e-3 bound is PROPOSED (Cheng; all three signers must confirm); round-off-level tightness is explicitly NOT required (agreed by Sihe Chen's review). A's species-only scaling is not an upper-Y constraint: only ICY.. is scaled, with dry flux untouched by that operation (src/hydro/hydro_forward.cpp:335-339,386; src/hydro/flux_positivity.cpp:76-103); test the maximum principle rather than assume it.
 
 ## Literature
 
@@ -116,6 +119,61 @@ ADD      a Literature section with these citations (eq/page as above); full note
 - Larrouturou 1991.
 
 Full notes are in the team's reading notes. This filled section supersedes the empty-Literature ADD in the 11:51 post.
+
+## rev 9b: implementation contracts and independent oracles
+
+All Snapy source references in this revision are to 5eeb9b6761ae484a98b3993aae18314fc58cf862, checked against that commit; Kintera references are to 4dc613d04f24621b3119d343c5c7c9b93628895b (v2.5.15), retrieved and inspected at that commit. These are study specifications, not implementation or numerical results.
+
+### B1: existing limiter versus proposed G
+
+- Existing A mechanics: theta is per (cell, species), not one scalar per face. Only conserved species partial-density rows ICY.. are passed to the limiter; IDN (dry mass), IVX-IVZ and IPR are not scaled by theta (src/hydro/hydro_forward.cpp:335-342,386). Independently reconstruct theta_s = min(1, max(rho_s,0)*V*(1-4096*eps)/max(dt*out_s,1e-300)), or 1 when out_s=0, with out_s the sum of outgoing area-weighted species fluxes; then F_on,s = theta_s,donor*F_hi,s (src/hydro/flux_positivity.cpp:39-73,83-103). This is the existing-code oracle, not a whole-vector LF blend. Momentum/energy instead lose the withheld species mass times donor velocity/enthalpy when hspec exists (src/hydro/flux_positivity.cpp:127-136; src/hydro/hydro_forward.cpp:380-386).
+- Existing settling: fsed1 is the species flux increment from sedimentation before the limiter (src/hydro/hydro_forward.cpp:167-172). The net species flux, including settling, selects theta's donor. The carry splits advective and settling parts, using each part's own sign for its energy/momentum donor but the net-flux share for both; the final net species flux is scaled (src/hydro/flux_positivity.cpp:127-142; src/hydro/hydro_forward.cpp:382-386). fsed1 is a saved diagnostic input to carry, not a separately scaled conserved flux.
+- Disagreement B1: the bot's assumed existing common-face theta/F_lo blend is absent; the inspected limiter is per-species donor scaling plus carry, so its oracle above must not be replaced by the prospective G oracle (src/hydro/flux_positivity.cpp:63-103,127-142).
+- PROPOSED G flux specification: implement a new first-order LF/Rusanov low-order arm, not a relabeling of existing HLLC or A. For z=1 Cartesian tests, use piecewise-constant primitive states and U = (rho_d, rho*v, E, rho_s), E = sum_all rho_n*(R/M_n)*(u0_R,n+cv_R,n*T) + rho*|v|^2/2, dry included. The advective physical flux has species/dry mass rho_n*v_normal, momentum rho*v*v_normal+p*normal, and energy (E+p)*v_normal. Define F_lo = (F(U_L)+F(U_R))/2 - alpha_d*(U_R-U_L)/2, with a single direction-wide alpha_d = max_cells(|v_d|+a) (including boundary donor states), a = sqrt(gamma_mix*p/rho), gamma_mix = sum(c_n*cp_R,n)/sum(c_n*cv_R,n), c_n=rho_n/M_n; gases have cp_R=cv_R+1, clouds cp_R=cv_R. This reproduces the z=1 mixture sound-speed construction, not a fixed dry gamma (src/eos/moist_mixture.cpp:221-247; W->A and WA->L dispatch at src/eos/moist_mixture.cpp:78-87). Existing HLLC receives that EOS gamma/sound speed and uses pressure-corrected L/R speeds, not this LF alpha (src/riemann/hllc.cpp:42-53; src/riemann/hllc_impl.h:34-54).
+- PROPOSED G settling and composition: add a first-order upwind settling contribution to F_lo, with cloud mass, momentum and energy transported together using donor velocity and O3 h_c; F_hi is the existing reconstructed-state Riemann flux before positivity modification (src/hydro/hydro_forward.cpp:153-158), including settling before blending. For x1 use the conservative proposed bound alpha_1 = max_cells(|v_1|+a) + max_cells,species(|v_settle,s|) in LF and the step restriction, and verify positivity of this combined low-order update before allowing a G gate to pass. Blend all conserved hydro rows IDN, IVX-IVZ, IPR and ICY.. with ONE theta_f in [0,1] per face, shared across rows and neighboring blocks. G replaces both A's species scaling and ideal-moist carry; it does not run on top of them. The existing split to replace is src/hydro/hydro_forward.cpp:380-386 and src/hydro/flux_positivity.cpp:138-148. Separate scalar tracers need an explicit follow-up transport contract; they are not silently counted as hydro rows.
+- PROPOSED G admissibility/open question: choose face coefficients to preserve nonnegative dry/species densities and admissible internal energy in both adjacent updated cells at each stage. The coefficient-construction algorithm and a positivity-safe combined settling/EOS timestep bound remain to be established; neither is supplied by the existing per-species code (src/hydro/flux_positivity.cpp:63-73). G is ineligible for DECIDE until these are implemented and validated, including the stated no-clamp tests; a mixture/settling positivity proof must not be inferred from the existing HLLC speeds.
+- PROPOSED G oracle: on EVERY face and EVERY limited row, independently reconstruct F_lo in Python from primitive states, YAML thermodynamics and settling speeds (no calls to the implementation's flux/EOS conversion), and check F_on,r = theta_f*F_hi,r + (1-theta_f)*F_lo,r with the SAME theta_f for all rows. Log all row residuals, face coefficients and shared-face equality. Relative tolerance PROPOSED 1e-12, normalized by max(|F_on,r|, |theta_f*F_hi,r|, |(1-theta_f)*F_lo,r|); require exact zero if this scale is zero. Also check the existing A oracle above independently. A-only dry-flux equality, A-only carry residuals and A-only Gate 4 bitwise checks are not G constraints; conservation/positivity and full regression gates apply to both.
+
+### B2: unlimited reference and shared diagnostics
+
+- limiter: false switches off conserved cell repair AND primitive repair, as well as the flux limiter (src/eos/equation_of_state.cpp:213,358; src/hydro/hydro_forward.cpp:335). The inspected option is a single EOS limiter bool (src/eos/equation_of_state.hpp:49-54); the inspected flux path has no independent cut switch. PROPOSED required code change: add debug_disable_flux_positivity, leaving limiter: true for cell repair and bypassing only A's flux cut/carry or G's blend. It must not disable sedimentation. This is the unlimited-reference arm for both numerical comparisons and on/off flux tests, and is part of the arm implementation plan, not an existing option.
+- Every TESTS (2) run, including the unlimited reference, must log per-cell NaNs BEFORE repair, clamp counters/masks and mass changes at every step/stage (interior and ghost separately). A NaN in the reference voids that case's accuracy comparison even if repair removes it; report every clamp in the reference. DECIDE's no-clamp clause requires zero actual clamps in G, not just zero marked blocks. Existing code replaces NaNs and reports thresholded species marks, not the required census (src/eos/equation_of_state.cpp:217-219,348-352,359-364,384-385); meshblock exposes two bools and uses them in redos (src/mesh/meshblock.cpp:1070-1077,1129-1144). Add the counters before mutation, not after the data have been repaired.
+
+### O3, mutation tests and thermodynamic tolerances (items 1-4, 11)
+
+- Evaluate O3 at EACH cell's own YAML composition, p, rho and nonzero kinetic energy, including dry, vapor and cloud. The printed card enthalpies below are KE=0 illustrations only, not shared expected values. Add a cell with nonzero vapor u0_R (PROPOSED -1000 K) as well as nonzero velocity; evaluate h_n independently from the displayed formulas. The existing ideal-moist hook includes both u0 and metric KE (src/eos/ideal_moist.cpp:265-279); the new moist-mixture A hook must satisfy the same independent checks, not inherit the default undefined hook (src/eos/equation_of_state.hpp:123-126; src/hydro/hydro_forward.cpp:380-384).
+- Run C, dropped inv_mu, cloud + R_c*T, cloud cv_R=3.5 and cloud-as-vapor as five separate mutations injected into species_enthalpy (the hook consumed at src/hydro/hydro_forward.cpp:364,382-384), not just wrong Python answers. For EACH mutation both the affected carry cells and O3 must go red against unchanged independent references; restore the hook between mutations. The old Gate 1 control run is superseded by this production-path mutation requirement. Gas/cloud coefficients and units being mutated are visible in src/eos/ideal_moist.cpp:265-279; implementing the missing moist-mixture hook is arm A work.
+- Print use_nasa9_cp and use_h2_cp in EVERY run log; a cell fails if either is on. Verified at Kintera src/thermo/eval_uhs.cpp:288-300: the linear uref_R + T*cref_R result is overridden by NASA-9/H2 paths at :289-295 and :296-300. This precondition applies to every arm and every mutation, not only the superseded Gate 1b.
+- A-only face energy/momentum residuals test carry mechanics. The current energy reference uses the code's own W->E and adds vapor RT (tests/test_flux_positivity_carry.cpp:94-115), so pair each such cell with YAML-only O3 on the SAME state; that residual alone cannot certify enthalpy. W->E's conversion is src/eos/moist_mixture.cpp:184-193; its kg/m3 argument issue remains a separate fix. G instead uses the independent whole-vector blend oracle and column conservation.
+- h_n at 1e-12 relative remains primary. PROPOSED T tolerance: 7e-14 relative, conservatively below 1e-12/12.7; supersedes the old 1e-11. From O3's KE=0 cloud h_c=(R/M_c)*(-3430+9*T), |d ln |h_c|/d ln T|=|9*T/(-3430+9*T)|=12.7267535627529 at the printed T=353.347 K (about 12.7x amplification). Recompute conditioning on every actual state including KE; near-zero h uses the stated absolute enthalpy tolerance. Tighten the T absolute floor to PROPOSED 1e-12 K so the old 1e-9 K floor does not defeat this relative budget.
+
+### P, CFL and non-vacuous coverage (items 5-6, 9-10)
+
+- P requires positivity hits > 0 in addition to zero marked cells; otherwise the run is vacuous and cannot establish a limiter guarantee. Existing positivity_hits counts (cell,species) theta<1, not limited faces (src/hydro/hydro_forward.cpp:343-346); record BOTH that count and a new face count for A/G, with nonzero G face count required by Hu. Instrument clamp attribution before/after transport and before/after kinetics/forcing and report causes separately; external forcing is applied after divergence (src/hydro/hydro_forward.cpp:403-421). No assertion about an uninspected external kinetics driver substitutes for this instrumentation.
+- For each step require interior mass change - net inward boundary mass flux integrated over the step - recorded interior clamp mass = 0 to PROPOSED 1e-12 relative, with scale max(initial interior mass, absolute budget terms). Keep ghost clamp mass separate. This formula applies to the transport/source-free budget; if forcing/kinetics adds physical mass, also subtract its measured source increment in the full-step closure and report both budgets. Disagreement 5: an unqualified full-step source-free identity is not valid when forcing adds mass, because forcing modifies du after transport (src/hydro/hydro_forward.cpp:415-422). Zero redos alone cannot settle the new non-vacuous clamp/budget gate (src/mesh/meshblock.cpp:1129-1144).
+- Snapy's explicit hydro timestep is min_d,cells dx_d/(|v_d|+a), then limited by diffusion; the block/global minimum is multiplied by cfl and 2^(-current_redo) (src/hydro/hydro.cpp:125-133,190-212; src/mesh/meshblock.cpp:507-525). The implicit-correction branch has different denominators/shear bounds (src/hydro/hydro.cpp:145-187). For explicit uniform 2D define tau_x=max(|v_x|+a)/dx and tau_y=max(|v_y|+a)/dy: absent other restrictions dt_snap=cfl/max(tau_x,tau_y), whereas Hu eq. 29 uses dt=CFL_Hu/(tau_x+tau_y). Log actual dt, both rates and CFL_Hu=dt*(tau_x+tau_y) at every stage of the 0.9/0.5/0.3 ladder; input cfl=0.5 is NOT necessarily Hu CFL<=0.5 (equal rates give CFL_Hu=1). PROPOSED additional capped control dt<=0.5/(tau_x+tau_y), including the G settling speed restriction above, is required for a claim at Hu CFL<=0.5. Keep and report the uncapped cfl 0.9 outcome either way. Paper equation attribution remains per oracle review pending the PDF.
+- All TESTS (2) runs use the B2 per-cell clamp instrumentation, not just CRM. G's positivity/no-clamp gate and both arms' Larrouturou Y vote are independent of the accuracy norms. A fallback under DECIDE must report its own failures; a failed A interval vote is not silently promoted to a passing maximum-principle guarantee.
+
+### Rev 9b responses
+
+The following mapping covers every requested item; line numbers refer to this revision. PROPOSED items remain open for the restarted sign-off, including the new G algorithm/settling contract and Hu paper verification.
+
+| Item | PLAN.md lines | Response |
+| --- | --- | --- |
+| B1 | 129-135,251,316-317,349 | Existing per-species oracle; proposed G, settling and wave speed; disagreement at line 131. A-only gates also scoped below. |
+| B2 | 106,139-140 | Independent flux-disable knob required; repair and NaN/clamp logging retained; Hu timing pending paper. |
+| 1 | 144,290 | Own-state O3, nonzero KE and vapor reference energy. |
+| 2 | 145 | Five hook mutations; carry and O3 must fail; old Gate 1 superseded. |
+| 3 | 146 | Both cp flags printed/off; Kintera lines checked. |
+| 4 | 147,316-317 | A carry energy residual paired with O3 on the same cells. |
+| 5 | 152-153,374 | Nonzero hits, attribution and mass closure; disagreement: physical mass sources must be included in full-step budgets (src/hydro/hydro_forward.cpp:415-422). |
+| 6 | 154 | Actual Snapy-to-Hu CFL conversion and capped control. |
+| 7 | 107 | Wong L1 order, proposed distinct gases and contact diagnostics. |
+| 8 | 108,155 | Both A and G receive the Y-interval vote; unlimited excursion alongside each. |
+| 9 | 106,152 | Hu offset variable is PROPOSED pending PDF verification; nonzero limited faces required. |
+| 10 | 140,155 | Per-cell clamp census in every literature-test run. |
+| 11 | 148,310 | Primary enthalpy tolerance retained; 12.7267535627529 amplification; proposed T budget. |
+| attribution | 6,9,106-108 | Rev 9a review credit corrected to Sihe Chen; prior approve superseded; genuine Xi 12:58 attribution retained. |
 
 ## critique -> change, scope
 
@@ -190,7 +248,7 @@ Dry gas left out in rev 3, now fixed
 - The sum identity: a new test computes h_dry with the A formula by hand (842a116's nasa9 test did this; 5eeb9b6 has no such test). Under B it must use B's dry value.
 - G-AB covered only the vapour and the cloud; the dry row is added.
 - The column totals covered only IPR and IVX-IVZ; IDN and every ICY row are added, exact to the same tolerance.
-- The counts: the dry mass flux on vs off must be exactly equal, on every face, CPU and CUDA.
+- The counts (arm A only): the dry mass flux on vs off must be exactly equal, on every face, CPU and CUDA (src/hydro/hydro_forward.cpp:335-339,386 on 5eeb9b6). G uses the rev 9b whole-vector oracle instead.
 - O3 had no h_d; it is added (part 3).
 - The dropped inv_mu control for dry was listed only for the sum; it is now also a per-species gate.
 ```
@@ -229,7 +287,7 @@ O3 (YAML only, z=1)
 - h_v = (R/M_v)(u0_R + cv_R T + T) + KE
 - h_c = (R/M_c)(u0_R + cv_R T) + KE
 - Card: dry 2.5; vapour 3.5, u0 0; cloud 9.0, u0 -3430. M comes from the code at Gate 0 (nominal 28.97e-3 / 18.015e-3).
-- Values: T 353.347 K; h_d 3.54940e5, h_v 7.33861e5, h_c -1.15325e5 J/kg.
+- Values (KE=0 illustration only; evaluate O3 at each cell's own state with KE != 0 and include nonzero vapor u0_R as required by rev 9b): T 353.347 K; h_d 3.54940e5, h_v 7.33861e5, h_c -1.15325e5 J/kg.
 
 Controls, each must miss by >= 1e3 x its tolerance
 - A on O1 (dense): rel 5.0e-2 dry, 1.7e-2 vapour.
@@ -249,14 +307,14 @@ Non-circular: any other split is h + delta with sum c delta = 0 and delta != 0. 
 
 ```text
 Tolerances (abs / rel)
-- T vs code: 1e-9 K / 1e-11
+- T vs code: PROPOSED 1e-12 K / 7e-14 (rev 9b cloud cancellation budget; h_n remains primary)
 - h_n vs O1 or O3, all species including dry: 1e-9 J/kg / 1e-12
 - O2 vs O1: 1e-6 J/mol / 1e-8
 - I1: 1e-6 J/m3 / 1e-12
 - I3: 1e-3 Pa / 1e-8
-- limited counts vs Gate 0, and the dry mass flux: exact
-- face energy residual: 1e-9 / 1e-12
-- face momentum residual: 1e-12 / 1e-12
+- limited counts vs Gate 0, and the dry mass flux: exact for arm A only; G uses its own face census/oracle
+- face energy residual (arm A only, paired with O3 on the same cell): 1e-9 / 1e-12
+- face momentum residual (arm A only): 1e-12 / 1e-12
 - column totals IDN, ICY.., IPR, IVX-IVZ: 1e-12 / 1e-12 of sum|du|
 - CPU vs CUDA:
   - h_n: 1e-9 / 1e-14
@@ -288,7 +346,7 @@ Superseded by rev 9: Gate 1b below and its test-only kintera work are dropped; k
 Superseded by rev 9: Gates 2 and 3 below are restricted to the 24 z=1 cells (12 moist-mixture plus 12 ideal-moist controls); compare A versus G under the 12:58 plan, not A versus B.
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
-- 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
+- 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two arm-A-only bitwise checks, both against 5eeb9b6 (neither constrains G): (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
 Superseded by rev 9: coverage is 24 z=1 cells, with a skip still a gap; the old 36-cell requirement below is inactive.
 - Coverage: all 36 cells ran on their device and passed.
 ```
@@ -306,14 +364,14 @@ What the cell clamp does (to be measured, per clamped cell and per column)
 - Mass: In the interior, the parent borrow and fix_vapor conserve mass; mass is added only by clamp_min_(0) on a parentless cloud with a negative column total (delta = -min(rho_c,0)). The clamp at equation_of_state.cpp:327 (5eeb9b6) acts on all of cons (ghost cells and every cloud), while the parentless fix_vapor at :321 acts on the interior only, so parentless clouds in ghost cells gain mass without passing through fix_vapor first. Record the added mass (interior and ghost separately) and the mass moved between cells.
 - Energy: the clamp changes species without changing IEN, so the implied T and p shift. Record the change in total energy vs the energy the added mass would carry (h_c or h_v at the cell state).
 - Momentum: IVX-IVZ are untouched, so the velocity rho v / rho changes when rho changes. Record the momentum and KE change.
-- Reporting: the species repair sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. limiter_marks_ is a 2-element bool per block (equation_of_state.cpp:385, torch::zeros({2}, ...) on 5eeb9b6), not a per-cell count. Add a per-cell counter / mask dump in the study build to record clamped cells, cells exceeding the marking threshold ("marked cells"), and the largest |delta|/rho per step. The marks see only the interior (:255 cons.index(interior), :349), so they are blind to ghost-cell mass added at :327; instrument the clamp before/after and record added mass for interior and ghost separately, as above. The marks drive redos (meshblock.cpp:1070 limiter_patch_hit() exposes the first flag; check_redo reads limiter_hits() at :1131-1144, and mesh.cpp:476-493 does so mesh-wide). Thus #263's CPU run_hydro result, 4000 cycles / 0 redos, already settles the CPU marked-cell decision; the new deciding evidence in P is CUDA.
+- Reporting: the species repair sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. limiter_marks_ is a 2-element bool per block (equation_of_state.cpp:385, torch::zeros({2}, ...) on 5eeb9b6), not a per-cell count. Add a per-cell counter / mask dump in the study build to record clamped cells, cells exceeding the marking threshold ("marked cells"), and the largest |delta|/rho per step. The marks see only the interior (:255 cons.index(interior), :349), so they are blind to ghost-cell mass added at :327; instrument the clamp before/after and record added mass for interior and ghost separately, as above. The marks drive redos (meshblock.cpp:1070 limiter_patch_hit() exposes the first flag; check_redo reads limiter_hits() at :1131-1144, and mesh.cpp:476-493 does so mesh-wide). Superseded by rev 9b for the stronger P gate (hits, actual clamps and budgets required): the historical inference was that #263's CPU run_hydro result, 4000 cycles / 0 redos, already settles the CPU marked-cell decision; the new deciding evidence in P is CUDA.
 
 Reproducer
 - 2D moist Jupiter CRM (H2O + NH3, 100x100, ideal-moist, limiter: true, rk3, cfl 0.9) from #263; with the external driver (path+sha recorded) species repairs above round-off occur nearly every step; with run_hydro, 0 redos.
 - Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303); #263's run_hydro row (#257 order) is 4000 cycles, 0 redos, and "-" for negative species at step start, so the denormal negatives were measured only with the refreshed external driver. Measured on the 5eeb9b6 tree (fa136b5), CPU.
 - Whether a species-only clamp should request a redo (#226's choice) is decided here, not in #263.
 
-Pass for P: a table per run of clamped cells, marked cells from the study-build per-cell counter / mask dump (not the 2-element block bool), max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; record interior and ghost added mass separately because the marks observe only the interior. State which mechanism is the positivity guarantee by this rule: the face limiter is the guarantee iff interior marked cells = 0 on the deciding run_hydro run, 4000 cycles as in #263, on both CPU and CUDA. Marks drive redos, so #263's 4000 cycles / 0 redos already settles the CPU decision; CUDA is the new deciding evidence in P. The CPU per-cell and mass-budget table still needs the study instrumentation; zero redos does not count round-off clamps or ghost-cell added mass.
+Pass for P: a table per run of clamped cells, marked cells from the study-build per-cell counter / mask dump (not the 2-element block bool), max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; record interior and ghost added mass separately because the marks observe only the interior. Superseded by rev 9b: the following zero-marks-only rule and CPU-settled conclusion are historical; require hits > 0, attributed per-cell clamps and mass closure under the new P contract. Historical rule: the face limiter is the guarantee iff interior marked cells = 0 on the deciding run_hydro run, 4000 cycles as in #263, on both CPU and CUDA. Marks drive redos, so #263's 4000 cycles / 0 redos already settles the CPU decision; CUDA is the new deciding evidence in P. The CPU per-cell and mass-budget table still needs the study instrumentation; zero redos does not count round-off clamps or ghost-cell added mass.
 ```
 
 ## grid, decision, open items
@@ -335,7 +393,7 @@ Tests added
 - The parameterised Carry.<case>/<eos> and Carry_cuda.<case>/<eos>.
 - Unit tests: I1, I2, I3, X, A-NI, G-AB, and the kintera function tests (1b).
 
-Superseded by rev 9: the entire historical A/B decision below is replaced by the 12:58 DECIDE and its linked rev 9a per-test accuracy criteria; the W->E bug remains its own fix.
+Superseded by rev 9: the entire historical A/B decision below is replaced by the 12:58 DECIDE and its linked rev 9b per-test accuracy criteria; the W->E bug remains its own fix.
 Decision (branch a)
 - Both A and B remain supported formulations. Neither is removed and no TORCH_CHECK is added.
 - A formulation is eligible as the default if it passes every gate in its scope.
