@@ -1,6 +1,15 @@
-# #236 study plan, rev 6 (branch (a))
+# #236 study plan, rev 7 (branch (a))
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 7 critique -> change (review of 9ed02b7)
+- a. L78 cited moist_mixture.cpp:202, an 842a116 line (at 5eeb9b6 it is `auto mom = ...`) -> it cites conc = V * inv_mu at moist_mixture.cpp:223 and :236 on 5eeb9b6.
+- b. L79 cited h *= Rgas*inv_mu at :211, an 842a116 line (at 5eeb9b6 it is `int ny = ...`) -> it cites W->E, which does this at moist_mixture.cpp:184 on 5eeb9b6.
+- c. P cited the repair as equation_of_state.cpp:256-327 and left out the vapour pass and the marks -> it cites :253-354 on 5eeb9b6 in step order: parent borrow (:269-285), parentless fix_vapor + clamp_min_(0) (:302-328), vapour pass via columnar fix_vapor with TORCH_CHECK (:330-344), marks (:348-353).
+- d. Gate 4 (2) did not define "unlimited face" -> an unlimited face is one where every species' donor theta == 1 (share == 0; flux_positivity.cpp:127-136 on 5eeb9b6).
+- e. P's decision rule did not name the devices -> the marked-cells rule applies to the run_hydro run on both CPU and CUDA.
+- f. The #263 context implied the run_hydro run measured denormal negatives -> #263's run_hydro row shows "-" for negative species at step start; the denormal negatives were measured only with the refreshed external driver.
+- g. Rev 6 line g said L79 and the grid cite 5eeb9b6 lines; the grid did, but L78 (:202) and L79 (:211) still held 842a116 line numbers -> fixed by a and b above.
 
 Rev 6 critique -> change (review of 07fc199)
 - a. The rev 5 line (a) misstated what Gate 0 did (rev 4 already recorded mismatches) -> it says Gate 0 built main 3f7ad96, which is not current main.
@@ -75,8 +84,8 @@ New production API (kintera, general; test functions stay test-only)
 - eval_intEng_R_ddC(temp, conc, op) -> tensor shaped like conc.
 - Entry n = d(u_n/R)/dc_n in K m3/mol at fixed T. It is 0 where no extra is set.
 - It calls call_func2 with the intEng_R_extra names + "_ddC", on CPU and CUDA, and mirrors eval_czh_ddC.
-- Inputs: temp in K; conc in mol/m3 (moist_mixture.cpp:202).
-- Snapy B uses eval_czh_ddC and eval_intEng_R_ddC. It computes all species (dry included), divides each molar term by its own M_n (h *= Rgas*inv_mu, :211), and returns rows 1..ny.
+- Inputs: temp in K; conc in mol/m3 (conc = V * inv_mu, moist_mixture.cpp:223 and :236 on 5eeb9b6).
+- Snapy B uses eval_czh_ddC and eval_intEng_R_ddC. It computes all species (dry included), divides each molar term by its own M_n (h *= Rgas*inv_mu, as W->E does at moist_mixture.cpp:184 on 5eeb9b6), and returns rows 1..ny.
 
 Invariants (|x-y| <= abs + rel*max)
 - I1: sum over dry, vapour and cloud of c_n M_n h_n = U + p + rho KE. Tolerance 1e-6 J/m3 + 1e-12. At O1 the residual is 3.7e-9 on |U+p| = 2.17e7.
@@ -178,7 +187,7 @@ Gates
 - 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (czh = 1, czh_ddC = 0, extra = 0 exactly). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
-- 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face, and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
+- 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
 - Coverage: all 36 cells ran on their device and passed.
 ```
 
@@ -186,7 +195,7 @@ Gates
 
 ```text
 P. Where is species positivity guaranteed?
-- Two places today: the face flux limiter (limits the species flux so no donor goes negative) and the cell repair in apply_conserved_limiter_ (equation_of_state.cpp:256-327 on 5eeb9b6: a parented cloud first borrows from its parent vapour in the same cell; a parentless cloud goes through columnar fix_vapor, then clamp_min_(0)).
+- Two places today: the face flux limiter (limits the species flux so no donor goes negative) and the cell repair in apply_conserved_limiter_ (equation_of_state.cpp:253-354 on 5eeb9b6, in step order: parent borrow, a parented cloud borrows its deficit from its parent vapour in the same cell (:269-285); parentless fix_vapor + clamp_min_(0) on the clouds (:302-328); vapour pass via columnar fix_vapor with TORCH_CHECK (:330-344); marks (:348-353)).
 - Question: which one is the guarantee? If the face limiter guarantees it, the cell clamp should fire only at round-off; if it does not, the clamp is the real guarantee and its side effects are part of the scheme.
 
 What the cell clamp does (to be measured, per clamped cell and per column)
@@ -197,10 +206,10 @@ What the cell clamp does (to be measured, per clamped cell and per column)
 
 Reproducer
 - 2D moist Jupiter CRM (H2O + NH3, 100x100, ideal-moist, limiter: true, rk3, cfl 0.9) from #263; with the external driver (path+sha recorded) species repairs above round-off occur nearly every step; with run_hydro, 0 redos.
-- Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, or with snapy's run_hydro (#257 order), 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303). Both runs are measured, on 5eeb9b6.
+- Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303); #263's run_hydro row (#257 order) is 4000 cycles, 0 redos, and "-" for negative species at step start, so the denormal negatives were measured only with the refreshed external driver. Measured on the 5eeb9b6 tree (fa136b5), CPU.
 - Whether a species-only clamp should request a redo (#226's choice) is decided here, not in #263.
 
-Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee, by this rule: the face limiter is the guarantee iff marked cells = 0 on the run_hydro run.
+Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee, by this rule: the face limiter is the guarantee iff marked cells = 0 on the run_hydro run, on both CPU and CUDA.
 ```
 
 ## grid, decision, open items
