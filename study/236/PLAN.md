@@ -1,6 +1,13 @@
-# #236 study plan, rev 7 (branch (a))
+# #236 study plan, rev 8 (branch (a))
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 8 critique -> change (review of b301975)
+- L187. Gate 1b said every cloud extra reads back czh = 1, but kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice (dry included) -> cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; cloud slots start at vapor_ids().size() (thermo_y.cpp:78).
+- L179. G-AB said czh = 1 for all species -> czh = 1 on gases and 0 on clouds (eval_uhs.cpp:225-226, 247, 268-288); the cloud half drops the z T term from S_n and notes the NASA-9/H2 cp overrides (eval_uhs.cpp:289-300).
+- L69. The call_func2 ranges were wrong (utils_dispatch.cpp:47-67, utils_dispatch.cu:42-102) -> kintera 4dc613d call_func2_cpu src/utils/utils_dispatch.cpp:47-69 (registered :110), call_func2_cuda src/utils/utils_dispatch.cu:42-65 (registered :102).
+- L202. The mass line did not say where the clamp acts -> clamp_min_(0) at equation_of_state.cpp:327 acts on all of cons (ghost cells and every cloud), while fix_vapor at :321 is interior only, so parentless clouds in ghost cells gain mass without passing through fix_vapor first.
+- P. The deciding run_hydro run had no length -> it is 4000 cycles, as in #263.
 
 Rev 7 critique -> change (review of 9ed02b7)
 - a. L78 cited moist_mixture.cpp:202, an 842a116 line (at 5eeb9b6 it is `auto mom = ...`) -> it cites conc = V * inv_mu at moist_mixture.cpp:223 and :236 on 5eeb9b6.
@@ -66,7 +73,7 @@ Cell count: 36 = 24 moist-mixture gate cells (6 cases x {z=1, z!=1} x {CPU, CUDA
 
 ```text
 kintera main (4dc613d) today
-- func2 is f(T, c_n) per species; call_func2 adds to a preset value (utils_dispatch.cpp:47-67, CPU; utils_dispatch.cu:42-102, CUDA).
+- func2 is f(T, c_n) per species; call_func2 adds to a preset value (CPU: call_func2_cpu, src/utils/utils_dispatch.cpp:47-69, REGISTER_ALL_CPU_DISPATCH at :110; CUDA: call_func2_cuda, src/utils/utils_dispatch.cu:42-65, REGISTER_CUDA_DISPATCH at :102).
 - The CPU table is empty (func_table.cpp:30-32). The CUDA table is {nullptr} (func_table.cu:39-43). Names are looked up via get_device_func2 (user_funcs.cu:54).
 - eval_czh (eval_uhs.cpp:223-243) and eval_czh_ddC (:245-264) exist on CPU and CUDA.
 - eval_intEng_R with intEng_R_extra (:266-302) exists. Its T-derivative is taken via the name + "_ddT" (eval_cv_R :169-174; thermo_dispatch.cpp:103-110, .cu:98-103).
@@ -176,7 +183,8 @@ Tolerances (abs / rel)
 G-AB (z=1 cells only)
 - |h_A - h_B| <= 4 eps S_n, eps = 2^-52, S_n = (R/M)(|u0_R| + cv_R T + z T) + KE.
 - It applies to dry, vapour and cloud, including ghosts.
-- With no extras registered, czh = 1, czh_ddC = 0 and extra = 0 exactly (eval_uhs.cpp:225-226, 247, 268-288), so B = A + 0.
+- With no extras registered, czh = 1 on gases and 0 on clouds, czh_ddC = 0 and extra = 0 exactly (eval_uhs.cpp:225-226, 247, 268-288), so B = A + 0.
+- Cloud half: a cloud has z = 0 (czh = 0 on every cloud slot, which start at vapor_ids().size(), thermo_y.cpp:78), so S_n for a cloud drops the z T term, and intEng_R = uref_R + T cref_R exactly unless the NASA-9 or H2 cp path overrides that slot (eval_uhs.cpp:289-295, 296-300); an overridden slot is checked against its override, not against uref_R + T cref_R.
 - Bound at the card: cloud 2.7e-9, vapour 6.5e-10 J/kg.
 - It covers the 12 z=1 cells.
 - If it fails, B is not the claimed reduction and is stopped.
@@ -184,7 +192,7 @@ G-AB (z=1 cells only)
 Gates
 - 0 (CPU): build current main 5eeb9b6 (v2.10.36) against kintera v2.5.15 (4dc613d, kintera main), the same for both builds so the bitwise checks reproduce. Record the six moist-mixture counts, M_n and T. The earlier 3f7ad96 counts are a prior only. Pass if all six moist-mixture cases are red (energy residual rel 1.0 at every limited face) and every ideal-moist arm is green. A count mismatch against the prior is recorded, not an abort. 842a116's after-numbers are recorded as a candidate's, not as an oracle.
 - 1 (CPU, no snapy): O1/O2 are reproduced in J/mol and J/kg, including the card z!=1 values. I1 and I3 hold on O1. Every control misses by its stated size (+-10%) and by >= 1e3 x tolerance, X included.
-- 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (czh = 1, czh_ddC = 0, extra = 0 exactly). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
+- 1b (CPU and CUDA, kintera test build): scope is dry gas and vapour ONLY; every cloud extra must read back unset (cloud czh = 0, czh_ddC = 0, intEng_R = uref_R + T cref_R exactly; kintera 4dc613d eval_uhs.cpp:225-226 sets czh = 1 only on the vapor_ids slice, dry included; cloud slots start at vapor_ids().size(), thermo_y.cpp:78). The registered functions match O1 per species: czh, czh_ddC, eval_intEng_R and eval_intEng_R_ddC to 1e-12. I3 holds on the VT->U and VT->P path. X, registered in the same build, fails I3.
 - 2 (CPU): 18 cells x {A, B} meet every tolerance. z=1 cells go against O3; z!=1 cells against O1 at each cell's state and O2. I1 and I2 hold for A and B. A-NI holds. G-AB holds on 6 cells. The controls fail.
 - 3 (CUDA, fp64): 18 cells x {A, B} meet the same checks plus the CPU vs CUDA rows. G-AB holds on 6 cells. A skip is a gap and fails the gate.
 - 4: full ctest (+ python limiter tests) shows no new failures vs 5eeb9b6 except moist_mixture_withholds_no_energy_or_momentum_yet, replaced by expect_carried(off, on) as its comment directs, plus two bitwise checks, both against 5eeb9b6: (1) ideal-moist fluxes are bitwise equal; (2) formulation A with no extras is bitwise equal to 5eeb9b6 in every flux row on every unlimited face (a face where every species' donor theta == 1, i.e. share == 0; flux_positivity.cpp:127-136 on 5eeb9b6), and in the species rows on limited faces, for one forward pass. 842a116 is a candidate only, never the oracle. No rebase comparison. Column totals hold. Runtime recorded.
@@ -199,7 +207,7 @@ P. Where is species positivity guaranteed?
 - Question: which one is the guarantee? If the face limiter guarantees it, the cell clamp should fire only at round-off; if it does not, the clamp is the real guarantee and its side effects are part of the scheme.
 
 What the cell clamp does (to be measured, per clamped cell and per column)
-- Mass: the parent borrow and fix_vapor conserve mass; mass is added only by clamp_min_(0) on a parentless cloud with a negative column total (delta = -min(rho_c,0)). Record the added mass and the mass moved between cells.
+- Mass: the parent borrow and fix_vapor conserve mass; mass is added only by clamp_min_(0) on a parentless cloud with a negative column total (delta = -min(rho_c,0)). The clamp at equation_of_state.cpp:327 (5eeb9b6) acts on all of cons (ghost cells and every cloud), while the parentless fix_vapor at :321 acts on the interior only, so parentless clouds in ghost cells gain mass without passing through fix_vapor first. Record the added mass (interior and ghost separately) and the mass moved between cells.
 - Energy: the clamp changes species without changing IEN, so the implied T and p shift. Record the change in total energy vs the energy the added mass would carry (h_c or h_v at the cell state).
 - Momentum: IVX-IVZ are untouched, so the velocity rho v / rho changes when rho changes. Record the momentum and KE change.
 - Reporting: the clamp sets limiter_marks_[0] only when a change exceeds positivity_roundoff * rho (#256); below that it is silent. Record how many cells are clamped, how many are marked, and the largest |delta|/rho, per step.
@@ -209,7 +217,7 @@ Reproducer
 - Context from #263 (closed, not a snapy source defect): with the external driver applying kinetics to a stale hydro_w, ~30k cells start each step with negative species (min/rho -8.8e-13) and every redo is a species clamp; with hydro_w refreshed first, 4000 cycles run with 0 redos and the negatives are denormal (min/rho -1.1e-303); #263's run_hydro row (#257 order) is 4000 cycles, 0 redos, and "-" for negative species at step start, so the denormal negatives were measured only with the refreshed external driver. Measured on the 5eeb9b6 tree (fa136b5), CPU.
 - Whether a species-only clamp should request a redo (#226's choice) is decided here, not in #263.
 
-Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee, by this rule: the face limiter is the guarantee iff marked cells = 0 on the run_hydro run, on both CPU and CUDA.
+Pass for P: a table per run of clamped cells, marked cells, max |delta|/rho, and the mass, energy and momentum change per step, CPU and CUDA; and a statement of which mechanism is the positivity guarantee, by this rule: the face limiter is the guarantee iff marked cells = 0 on the deciding run_hydro run, 4000 cycles as in #263, on both CPU and CUDA.
 ```
 
 ## grid, decision, open items
