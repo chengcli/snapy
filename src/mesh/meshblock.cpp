@@ -822,48 +822,26 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
-  // Tangential exchange fills face ghosts but not corners (skip_corner).
-  // Re-apply each installed x1 function on the x2/x3 slabs exchange owns, so
-  // the corner matches the updated column. A physical tangential face already
-  // wrote that corner. Outflow is not reapplied: its background must match the
-  // full block and it needs primitives (#264).
+  // Negative control: copy the adjacent edge column into wall corners.
   {
     int ng = pcoord->options->nghost();
-    auto const &fns = options->bfuncs();
-    auto const &names = options->bcnames();
-    BoundaryFuncOptions op;
-    op.nghost(ng);
-    op.eos = phydro->peos.get();
-    op.coord = pcoord.get();
-    auto physical = [&](int face) {
-      if (face < 0 || face >= static_cast<int>(fns.size()) || !fns[face])
-        return false;
-      return !(static_cast<size_t>(face) < names.size() &&
-               names[face].compare(0, 8, "periodic") == 0);
-    };
-    auto refresh = [&](torch::Tensor field, int type) {
+    auto copy_corners = [&](torch::Tensor field) {
       if (!field.defined() || field.numel() == 0) return;
-      op.type(type);
-      int nface =
-          static_cast<int>(fns.size()) < 2 ? static_cast<int>(fns.size()) : 2;
-      for (int f = 0; f < nface; ++f) {
-        if (!fns[f] || is_outflow(fns[f])) continue;
-        int spatial = 3 - f / 2;
-        if (field.size(spatial) == 1) continue;
-        for (int orth = 1; orth <= 3; ++orth) {
-          if (orth == spatial || field.size(orth) <= 1) continue;
-          int n = static_cast<int>(field.size(orth));
-          int g = ng < n / 2 ? ng : n / 2;
-          if (g <= 0) continue;
-          int inner = (3 - orth) * 2;
-          if (!physical(inner)) fns[f](field.narrow(orth, 0, g), spatial, op);
-          if (!physical(inner + 1))
-            fns[f](field.narrow(orth, n - g, g), spatial, op);
+      for (int wall = 0; wall < 2; ++wall) {
+        int i = wall ? field.size(3) - ng : 0;
+        auto slab = field.narrow(3, i, ng);
+        for (int orth : {1, 2}) {
+          int n = field.size(orth);
+          if (n <= 1) continue;
+          slab.narrow(orth, 0, ng).copy_(
+              slab.narrow(orth, ng, 1).expand_as(slab.narrow(orth, 0, ng)));
+          slab.narrow(orth, n - ng, ng).copy_(
+              slab.narrow(orth, n - ng - 1, 1).expand_as(slab.narrow(orth, n - ng, ng)));
         }
       }
     };
-    refresh(hydro_u, kConserved);
-    refresh(scalar_s, kScalar);
+    copy_corners(hydro_u);
+    copy_corners(scalar_s);
   }
 
   if (options->verbose()) {
