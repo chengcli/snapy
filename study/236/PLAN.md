@@ -1,12 +1,15 @@
-# #236 study plan, rev 9 (ideal gas only)
+# #236 study plan, rev 9a (ideal gas only)
 
 Study plan for issue #236; not for merge. Drafting only; nothing run.
+
+Rev 9a critique -> change (review of e0c1c822)
+- rev 9a: per-test DECIDE accuracy criteria replacing the single PROPOSED threshold of rev 9, following Xi's rev 9 review (SIGN-OFF changes on e0c1c822). Items 1 and 2 as Xi stated; the Larrouturou bound is written as the single interval [-1e-3, 1+1e-3] and remains PROPOSED for confirmation by the three signers.
 
 Rev 9 critique -> change (review of 05d5e6c)
 - Folds in the 11:51 KEEP/DROP list (ideal gas only) and the 12:58 literature-read plan, in that order and verbatim below.
 - The 12:58 DECIDE supersedes the A/B decision rule: compare A against G on z=1, with P extended to the CFL ladder.
 - The 11:51 ADD of an empty Literature section is superseded by the filled Literature section from the 12:58 post.
-- The accuracy threshold is PROPOSED: accepted by the coordinating bot as the starting proposal, pending confirmation by the three signers at sign.
+- The single accuracy threshold introduced in rev 9 is superseded by the rev 9a per-test DECIDE criteria below.
 
 Earlier revision entries are retained as history; their old scope, gates and A/B decisions are superseded by rev 9 where noted below.
 
@@ -95,7 +98,11 @@ DECIDE   G if it conserves exactly, keeps species >= 0 with no clamp at CFL <= 0
 ADD      a Literature section with these citations (eq/page as above); full notes are in our reading notes.
 ```
 
-**PROPOSED accuracy threshold for DECIDE in the 12:58 block:** On each test in TESTS (2) at CFL 0.5, G's L-inf error must be at most 2x that of the unlimited scheme at the same resolution, and G's observed convergence order must be within 0.5 of the unlimited scheme's. The coordinating bot accepted this as the starting proposal; the three reviewers must confirm it at sign.
+**Per-test DECIDE accuracy criteria (rev 9a):** Apply the following criteria to TESTS (2); the 12:58 DECIDE rule above remains unchanged.
+
+1. Hu, Adams & Shu 2013 smooth advection (u = 1 + 1e-6 + cos(2 pi x)), CFL 0.5, same resolution as the unlimited run: G's L-inf error <= 2x the unlimited scheme, and G's observed convergence order within 0.5 of the unlimited scheme. Status: accepted by Xi; to be confirmed by the other two signers.
+2. Wong et al. 2021 1D interface advection with a 1e-8 partial-density floor: pass is every species partial density >= 0 at every cell and every step with no clamp invoked, plus the observed convergence order on the smooth part of the solution within 0.5 of the unlimited scheme. No L-inf-vs-unlimited gate. Status: proposed by Xi at rev 9 review; to be confirmed by the other two signers.
+3. Larrouturou 1991 two-species Sod tube: PASS is each mass fraction Y_n in [-1e-3, 1+1e-3] at every cell and every step. Report the unlimited scheme's maximum excursion (max over cells and steps of max(-Y_n, Y_n - 1)) beside G's. No convergence-order gate. The 1e-3 bound is PROPOSED (Cheng; to be confirmed by all three signers); round-off-level tightness is explicitly NOT required (agreed by Xi's review).
 
 ## Literature
 
@@ -328,7 +335,7 @@ Tests added
 - The parameterised Carry.<case>/<eos> and Carry_cuda.<case>/<eos>.
 - Unit tests: I1, I2, I3, X, A-NI, G-AB, and the kintera function tests (1b).
 
-Superseded by rev 9: the entire historical A/B decision below is replaced by the 12:58 DECIDE and its linked PROPOSED accuracy threshold; the W->E bug remains its own fix.
+Superseded by rev 9: the entire historical A/B decision below is replaced by the 12:58 DECIDE and its linked rev 9a per-test accuracy criteria; the W->E bug remains its own fix.
 Decision (branch a)
 - Both A and B remain supported formulations. Neither is removed and no TORCH_CHECK is added.
 - A formulation is eligible as the default if it passes every gate in its scope.
