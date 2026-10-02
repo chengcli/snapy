@@ -363,7 +363,7 @@ TEST(flux_positivity,
 
 TEST(flux_positivity,
      moist_mixture_withheld_mass_keeps_its_energy_and_momentum_cuda) {
-  if (!torch::cuda::is_available()) GTEST_SKIP() << "CUDA is not available";
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
   auto edit = [](YAML::Node& card) {
     card["dynamics"]["equation-of-state"]["type"] = "moist-mixture";
   };
