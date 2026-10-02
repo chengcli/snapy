@@ -11,8 +11,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_restart_new_output import (FRAME_DT, RESTART_DT, RESUME_TLIM, BASE_TLIM,
-                                    restart_schedule, run, write_case)
+from run_restart_output_schedule import (
+    BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
+    restart_schedule, run, write_case,
+)
 
 import netCDF4
 import numpy as np

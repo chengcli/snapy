@@ -2,7 +2,7 @@
 """An in-place resume must never rewrite a frame the base leg already completed. The output
 file name carries the block's POSITION (out<n>), so restoring the file counter by schedule
 KEY hands a reordered block another position's counter and writes over finished frames.
-Reuses the harness of run_restart_new_output.py."""
+Reuses the harness of run_restart_output_schedule.py."""
 import argparse
 import hashlib
 import os
@@ -15,8 +15,10 @@ import netCDF4
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_restart_new_output import (BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
-                                    restart_schedule, run, write_case)
+from run_restart_output_schedule import (
+    BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
+    restart_schedule, run, write_case,
+)
 
 SKIP_CODE = 125
 SLOW_DT = 20.0  # out2's cadence: fewer frames than out1, so a swapped counter goes BACKWARDS

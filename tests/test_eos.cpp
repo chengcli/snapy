@@ -135,15 +135,10 @@ TEST_P(DeviceTest, moist_mixture) {
       torch::empty({nvar, nc3, nc2, nc1}, torch::device(device).dtype(dtype));
 
   cons.uniform_(0., 1.);
-
-  cons[IDN].abs_();
-  cons[IDN] += 1.E-6;  // avoid division by zero
-
-  cons[IPR].abs_().mul_(10.);
-  cons[IPR] += 0.5 * cons.narrow(0, IVX, 3).pow(2).sum() / cons[IDN];
-
-  std::cout << "cons min = " << cons.min() << std::endl;
-  std::cout << "cons max = " << cons.max() << std::endl;
+  cons[IDN].add_(1.);
+  // Keep thermal energy well-conditioned without scaling it with grid size.
+  cons[IPR].mul_(1.e5).add_(1.e5);
+  cons[IPR] += 0.5 * cons.narrow(0, IVX, 3).pow(2).sum(0) / cons[IDN];
 
   auto prim = peos->forward(cons);
   auto cons2 = peos->compute("W->U", {prim});

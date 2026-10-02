@@ -14,6 +14,7 @@
 // fvm
 #include <snap/recon/interp_simple.hpp>
 #include <snap/recon/interpolation.hpp>
+#include <snap/recon/reconstruct.hpp>
 
 // tests
 #include "device_testing.hpp"
@@ -192,6 +193,24 @@ TEST_P(DeviceTest, interp_plm_round_off_slopes_stay_finite) {
     if (dtype == torch::kFloat64) {
       EXPECT_EQ(interp_plm(s[0], s[1], s[2]), resultl.item<double>());
       EXPECT_EQ(interp_plm(s[2], s[1], s[0]), resultr.item<double>());
+    }
+  }
+}
+
+TEST_P(DeviceTest, reconstruct_preserves_a_constant_field) {
+  auto w = torch::full({1, 8, 9, 10}, 2., torch::device(device).dtype(dtype));
+  for (const auto *type : {"dc", "plm", "weno5"}) {
+    auto options = ReconstructOptionsImpl::create();
+    options->interp()->type(type);
+    Reconstruct recon(options);
+    recon->to(device, dtype);
+    for (int dim : {1, 2, 3}) {
+      auto result = recon->forward(w, dim);
+      auto shape = w.sizes().vec();
+      shape.insert(shape.begin(), 2);
+      EXPECT_EQ(result.sizes().vec(), shape) << type << " dim=" << dim;
+      EXPECT_TRUE(torch::allclose(result, torch::full_like(result, 2.)))
+          << type << " dim=" << dim;
     }
   }
 }
