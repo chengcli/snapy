@@ -819,6 +819,53 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
     sync_vars.clear();
     sync_vars["scalar_s"] = scalar_s;
     exchange(sync_vars, sync_opts);
+  }
+
+  // Tangential exchange fills face ghosts but not corners (skip_corner).
+  // Re-apply each installed x1 function on the x2/x3 slabs exchange owns, so
+  // the corner matches the updated column. A physical tangential face already
+  // wrote that corner. Outflow is not reapplied: its background must match the
+  // full block and it needs primitives (#264).
+  {
+    int ng = pcoord->options->nghost();
+    auto const &fns = options->bfuncs();
+    auto const &names = options->bcnames();
+    BoundaryFuncOptions op;
+    op.nghost(ng);
+    op.eos = phydro->peos.get();
+    op.coord = pcoord.get();
+    auto physical = [&](int face) {
+      if (face < 0 || face >= static_cast<int>(fns.size()) || !fns[face])
+        return false;
+      return !(static_cast<size_t>(face) < names.size() &&
+               names[face].compare(0, 8, "periodic") == 0);
+    };
+    auto refresh = [&](torch::Tensor field, int type) {
+      if (!field.defined() || field.numel() == 0) return;
+      op.type(type);
+      int nface =
+          static_cast<int>(fns.size()) < 2 ? static_cast<int>(fns.size()) : 2;
+      for (int f = 0; f < nface; ++f) {
+        if (!fns[f] || is_outflow(fns[f])) continue;
+        int spatial = 3 - f / 2;
+        if (field.size(spatial) == 1) continue;
+        for (int orth = 1; orth <= 3; ++orth) {
+          if (orth == spatial || field.size(orth) <= 1) continue;
+          int n = static_cast<int>(field.size(orth));
+          int g = ng < n / 2 ? ng : n / 2;
+          if (g <= 0) continue;
+          int inner = (3 - orth) * 2;
+          if (!physical(inner)) fns[f](field.narrow(orth, 0, g), spatial, op);
+          if (!physical(inner + 1))
+            fns[f](field.narrow(orth, n - g, g), spatial, op);
+        }
+      }
+    };
+    refresh(hydro_u, kConserved);
+    refresh(scalar_s, kScalar);
+  }
+
+  if (pscalar->nvar() > 0) {
     set_scalar_primitive(vars, scalar_s, hydro_u);
   }
 
