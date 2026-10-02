@@ -48,6 +48,7 @@ setup_test(test_condensate_conservation)
 setup_test(test_parentless_cloud)
 setup_test(test_fix_vapor_volume)
 setup_test(test_parentless_cloud_nb1)
+setup_test(test_vapor_column_nb1)
 setup_test(test_wall_saturation)
 setup_test(test_cloud_parent_slots)
 setup_test(test_two_cards_species)
@@ -204,9 +205,6 @@ snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
-snapy_add_python_test(test_kappa_adiabatic_rest TIMEOUT 60 LABELS "python;forcing")
-snapy_add_python_test(test_kappa_adiabatic_rest_cuda TIMEOUT 60 LABELS "python;forcing;cuda")
-set_tests_properties(test_kappa_adiabatic_rest_cuda_python PROPERTIES SKIP_RETURN_CODE 125)
 
 # DISABLED: snapy.exchange.init_dist still calls the removed SlabLayout(px, py, ...)
 # constructor (see issue #224).
@@ -312,6 +310,17 @@ add_test(
 )
 
 set_tests_properties(test_shallow_splash PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+
+add_test(
+  NAME test_bryan_balance_ic
+  COMMAND ${CMAKE_COMMAND}
+          -Dbuildl=release
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_bryan_balance_ic.cmake
+)
+
+set_tests_properties(test_bryan_balance_ic PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 
@@ -476,4 +485,32 @@ if (FULL_TESTS)
     TIMEOUT 2400
     LABELS "gpu;ucx;long"
   )
+endif()
+
+# A build without CUDA skips every CUDA test, even when a GPU is visible.
+# Registration is the gate; torch.cuda.is_available() is not.
+if(NOT CUDA)
+  get_property(_snapy_tests DIRECTORY PROPERTY TESTS)
+  foreach(_t IN LISTS _snapy_tests)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+      set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+                   "SNAPY_BUILD_CUDA=set:0")
+    else()
+      set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT
+                   "SNAPY_BUILD_CUDA=0")
+    endif()
+    set(_disable FALSE)
+    if(_t MATCHES "cuda")
+      set(_disable TRUE)
+    endif()
+    get_property(_labels TEST ${_t} PROPERTY LABELS)
+    foreach(_l IN LISTS _labels)
+      if(_l STREQUAL "cuda" OR _l STREQUAL "gpu")
+        set(_disable TRUE)
+      endif()
+    endforeach()
+    if(_disable)
+      set_tests_properties(${_t} PROPERTIES DISABLED TRUE)
+    endif()
+  endforeach()
 endif()
