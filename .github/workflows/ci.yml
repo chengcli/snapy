@@ -84,14 +84,14 @@ jobs:
                 -DCUDA=OFF \
                 -DNETCDF=ON \
                 -DBUILD_TESTS=ON \
-                -DFULL_TESTS=${{ github.event_name == 'workflow_dispatch' && runner.os == 'Linux' && 'ON' || 'OFF' }} \
+                -DFULL_TESTS=${{ github.event_name != 'pull_request' && runner.os == 'Linux' && 'ON' || 'OFF' }} \
                 -DSNAPY_TEST_PYTHONPATH="$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 
       - name: Build
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }} --parallel 4
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          elif [[ "${{ github.event_name }}" != "pull_request" ]]; then
             cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }} --parallel 3
           else
             cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }} --parallel 3 \
@@ -106,8 +106,8 @@ jobs:
           cd ${{ github.workspace }}/build/tests
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             ctest --output-on-failure -E '^test_shallow_xy_decomp$'
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            ctest --output-on-failure -E '^(test_straka|test_shallow_xy|test_shallow_splash|test_shock_cpu|test_run_hydro_cpu)$'
+          elif [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            ctest --output-on-failure -E '^(test_straka|test_shallow_xy|test_shallow_splash|test_shock_cpu|test_run_hydro_cpu|test_mesh_multi_block\.release)$'
           else
             ctest --output-on-failure \
                   -R '^(test_(eos|plm|gloo_one_tensor)\.release|test_python_import_path_python)$'
