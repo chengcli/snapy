@@ -1138,24 +1138,30 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   return 0;
 }
 
-int MeshBlockImpl::check_redo(Variables &vars) {
-  // dt is global, so the decision must be: MAX over every rank, per cause
-  // floor_hit first: its fresh cons2prim marks an end state the limiter repairs
+std::array<bool, 5> MeshBlockImpl::local_redo_flags(Variables const &vars) {
+  // floor_hit may mark a limiter repair; read those marks afterwards.
   bool floor = floor_hit(vars);
   auto hits = limiter_hits();
-  // drained on every call; on CUDA one more integer read to the host
-  bool sat = saturation_failures() > 0;
-  auto flag =
-      torch::tensor({floor ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,
-                     hits[0] ? 1. : 0., hits[1] ? 1. : 0., sat ? 1. : 0.},
-                    torch::dtype(torch::kFloat64));
-  std::vector<at::Tensor> flag_reduce = {flag};
+  bool sat = saturation_failures() > 0;  // drains the counter exactly once
+  return {floor, vic_dry_clamp_hit(), hits[0], hits[1], sat};
+}
+
+int MeshBlockImpl::reduce_redo_flags(std::array<bool, 5> const &flags) const {
+  auto flag = torch::zeros({5}, torch::dtype(torch::kFloat64));
+  auto f = flag.accessor<double, 1>();
+  for (size_t i = 0; i < flags.size(); ++i) f[i] = flags[i] ? 1. : 0.;
+  std::vector<at::Tensor> reduced = {flag};
   if (_playout->has_process_group()) {
-    _playout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
+    _playout->comm->allreduce(reduced, c10d::ReduceOp::MAX);
   }
-  auto f = flag_reduce[0].accessor<double, 1>();
-  return apply_redo(vars, (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2 |
-                              (f[3] > 0.) << 3 | (f[4] > 0.) << 4);
+  auto global = reduced[0].accessor<double, 1>();
+  int causes = 0;
+  for (size_t i = 0; i < flags.size(); ++i) causes |= (global[i] > 0.) << i;
+  return causes;
+}
+
+int MeshBlockImpl::check_redo(Variables &vars) {
+  return apply_redo(vars, reduce_redo_flags(local_redo_flags(vars)));
 }
 
 double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {

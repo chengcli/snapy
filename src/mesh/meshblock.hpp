@@ -233,6 +233,10 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   int check_redo(Variables& vars);
 
+  //! Collect local causes once, then reduce each cause across processes.
+  std::array<bool, 5> local_redo_flags(Variables const& vars);
+  int reduce_redo_flags(std::array<bool, 5> const& flags) const;
+
   //! true if a fresh primitive of `hydro_u` sits at or below a floor
   bool floor_hit(Variables const& vars);
 
