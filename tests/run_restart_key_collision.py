@@ -40,10 +40,15 @@ def written_after(table, stream: str, resume_t: float) -> list[int]:
   return sorted(n for (s, n), t in table.items() if s == stream and t > resume_t + 1e-6)
 
 
-def checkpoint_variant(source: Path, target: Path, drop: set[str]) -> Path:
+def checkpoint_variant(source: Path, target: Path, key_mode: str) -> Path:
   tensors = restart_tensors(source)
-  for name in drop:
-    tensors.pop(name)
+  nsaved = tensors["file_number"].numel()
+  if key_mode == "legacy":
+    tensors["output_key"] = tensors["output_key"][:nsaved]
+  elif key_mode == "keyless":
+    tensors.pop("output_key")
+  else:
+    raise ValueError(f"unknown key mode {key_mode}")
 
   class TensorModule(torch.nn.Module):
     def __init__(self):
@@ -55,7 +60,9 @@ def checkpoint_variant(source: Path, target: Path, drop: set[str]) -> Path:
   return target
 
 
-def run_precision_reorder(base_yaml: Path, tests_dir: Path, launch, env) -> None:
+def run_precision_reorder(
+    base_yaml: Path, tests_dir: Path, launch, env, old_exe: Path | None = None,
+) -> None:
   restart = {"type": "restart", "dt": 6.e-7}
   short = {"type": "netcdf", "variables": ["prim"], "dt": 4.e-7}
   long = {"type": "netcdf", "variables": ["prim"], "dt": 4.9e-7}
@@ -79,12 +86,17 @@ def run_precision_reorder(base_yaml: Path, tests_dir: Path, launch, env) -> None
         f"precision fixture has indistinguishable schedules at {resume_t}: {saved_next}")
 
   tensors = restart_tensors(restart_file)
-  if not {"output_key", "output_key_v2"}.issubset(tensors):
-    raise AssertionError("new restart must retain output_key and add output_key_v2")
+  nsaved = tensors["file_number"].numel()
+  if "output_key_v2" in tensors:
+    raise AssertionError("precise keys must not use a separate legacy-visible buffer")
+  if tensors["output_key"].numel() != 2 * nsaved:
+    raise AssertionError(
+        f"new output_key has {tensors['output_key'].numel()} entries, expected "
+        f"{nsaved} legacy keys followed by {nsaved} precise keys")
   legacy_file = checkpoint_variant(
-      restart_file, base_dir / "legacy.restart", {"output_key_v2"})
+      restart_file, base_dir / "legacy.restart", "legacy")
   keyless_file = checkpoint_variant(
-      restart_file, base_dir / "keyless.restart", {"output_key", "output_key_v2"})
+      restart_file, base_dir / "keyless.restart", "keyless")
 
   def resume(name: str, checkpoint: Path):
     resumed_dir = tests_dir / name
@@ -118,12 +130,53 @@ def run_precision_reorder(base_yaml: Path, tests_dir: Path, launch, env) -> None
             f"expected {expected[slot]} from saved schedules {saved_next}; "
             f"resume {resume_t}")
 
+  if old_exe is not None:
+    run_old_binary_roundtrip(
+        restart_file, tests_dir, scaled_case, launch, env, old_exe,
+        restart, long, short, advance)
+
+
+def run_old_binary_roundtrip(
+    restart_file: Path, tests_dir: Path, scaled_case, launch, env,
+    old_exe: Path, restart, long, short, advance,
+) -> None:
+  old_dir = tests_dir / "restart_key_old_reader_resumed"
+  old_card = scaled_case(old_dir, 1.15e-6, [restart, long, short])
+  old_launch = launch[:-1] + [str(old_exe)]
+  run(old_launch + [str(old_card), "--restart", str(restart_file.resolve())],
+      old_dir, env)
+  old_file = sorted(old_dir.glob("*.restart"))[-1]
+  old_t, old_next, _ = restart_schedule(old_file)
+  old_tensors = restart_tensors(old_file)
+  old_nsaved = old_tensors["file_number"].numel()
+  if old_tensors["output_key"].numel() != old_nsaved:
+    raise AssertionError(
+        "old writer did not replace the precise suffix with legacy-only keys")
+
+  new_dir = tests_dir / "restart_key_after_old_writer"
+  new_card = scaled_case(new_dir, 1.6e-6, [restart, long, short])
+  run(launch + [str(new_card), "--restart", str(old_file.resolve())],
+      new_dir, env)
+  new_t, new_next, _ = restart_schedule(
+      sorted(new_dir.glob("*.restart"))[-1])
+  expected = [new_next[0], advance(old_next[1], long["dt"], new_t),
+              advance(old_next[2], short["dt"], new_t)]
+  for slot in (1, 2):
+    if abs(new_next[slot] - expected[slot]) > 1.e-15:
+      raise AssertionError(
+          f"new reader rebound old-writer slot {slot} to {new_next[slot]}, "
+          f"expected positional legacy schedule {expected[slot]} from "
+          f"{old_next} at {old_t}")
+  if "output_key_v2" in old_tensors:
+    raise AssertionError("old writer carried a stale precise-key buffer forward")
+
 
 def main() -> int:
   parser = argparse.ArgumentParser()
   parser.add_argument("--build-dir", required=True)
   parser.add_argument("--build-type", required=True)
   parser.add_argument("--precision-only", action="store_true")
+  parser.add_argument("--old-exe", type=Path)
   args = parser.parse_args()
 
   build_dir = Path(args.build_dir).resolve()
@@ -150,7 +203,11 @@ def main() -> int:
     raise AssertionError("the two netcdf blocks already collide in leg 1: test defused")
   launch = [torchrun, "--master-port=" + env.get("MASTER_PORT", "29500"),
             "--no-python", "--nproc-per-node=1", str(exe)]
-  run_precision_reorder(base_yaml, tests_dir, launch, env)
+  if args.old_exe is not None:
+    args.old_exe = args.old_exe.resolve()
+    if not args.old_exe.is_file():
+      raise FileNotFoundError(f"missing old executable {args.old_exe}")
+  run_precision_reorder(base_yaml, tests_dir, launch, env, args.old_exe)
   if args.precision_only:
     return 0
 

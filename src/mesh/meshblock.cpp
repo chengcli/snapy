@@ -1215,19 +1215,21 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   int nsaved = data.at("file_number").size(0);
   std::vector<bool> claimed(nsaved, false);
   std::vector<int> match(output_types.size(), -1);
-  // New files carry both keys: old readers use output_key, while new readers
-  // prefer the exact-cadence v2 key. Legacy collisions cannot be disambiguated.
-  bool precise_keys = data.count("output_key_v2");
-  char const *key_name = precise_keys    ? "output_key_v2"
-                         : data.count("output_key") ? "output_key"
-                                                        : nullptr;
+  // New files append N exact keys after the N legacy keys. Old readers consume
+  // only the prefix; an old writer replaces it with an N-entry legacy tensor.
+  auto saved_keys =
+      data.count("output_key") ? data.at("output_key") : torch::Tensor();
+  bool precise_keys = saved_keys.defined() && saved_keys.dim() == 1 &&
+                      saved_keys.size(0) == 2 * nsaved;
+  int key_offset = precise_keys ? nsaved : 0;
   auto current_key = [precise_keys](std::shared_ptr<OutputType> const &output) {
     return precise_keys ? output->schedule_key_v2() : output->schedule_key();
   };
-  if (key_name) {
+  if (saved_keys.defined()) {
     // a block still matching its own saved slot keeps it; nothing can steal it
     for (int n = 0; n < nsaved && n < (int)output_types.size(); ++n) {
-      if (data.at(key_name)[n].item<int64_t>() == current_key(output_types[n])) {
+      if (saved_keys[key_offset + n].item<int64_t>() ==
+          current_key(output_types[n])) {
         match[n] = n;
         claimed[n] = true;
       }
@@ -1236,7 +1238,8 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       if (match[n] >= 0) continue;
       auto key = current_key(output_types[n]);
       for (int k = 0; k < nsaved; ++k) {
-        if (!claimed[k] && data.at(key_name)[k].item<int64_t>() == key) {
+        if (!claimed[k] &&
+            saved_keys[key_offset + k].item<int64_t>() == key) {
           match[n] = k;
           claimed[k] = true;
           break;
@@ -1307,7 +1310,6 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   vars.erase("file_number");
   vars.erase("next_time");
   vars.erase("output_key");
-  vars.erase("output_key_v2");
 
   if (rebuild_scalar_r) {
     set_scalar_primitive(vars, vars.at("scalar_s"), vars.at("hydro_u"));
