@@ -62,7 +62,7 @@ std::tuple<torch::Tensor, double, int> balance_column(
   // and a column already at the fixed point comes back after zero updates
   double err = std::numeric_limits<double>::infinity();
   int sweeps = 0;
-  for (; sweeps < max_iter; ++sweeps) {
+  for (; sweeps <= max_iter; ++sweeps) {
     at::native::call_hydro_ref_x1(wb.device().type(), wb, dxf, anchor, psf_lo,
                                   psf_hi, pref, dsf, dref, nc1 - 1, grav,
                                   uniform, /*phys_in=*/true, /*phys_out=*/true,
@@ -70,7 +70,7 @@ std::tuple<torch::Tensor, double, int> balance_column(
     auto pp = prs - pref;
     auto c = pp.narrow(-1, nc1 - 1, 1);  // one gauge per column, at its top
     err = ((pp - c).abs() / (rho * wgt)).max().item<double>();
-    if (err < rtol) break;
+    if (err < rtol || sweeps == max_iter) break;
     prs.copy_(pref + c);
     rho.copy_(prs / rt);
     // a diverging column walks its top cells to vacuum, and once rho goes
@@ -82,16 +82,6 @@ std::tuple<torch::Tensor, double, int> balance_column(
         sweeps, " -- the column is diverging, not converging.");
   }
 
-  if (err >= rtol) {
-    // The last allowed update has not been measured yet.
-    at::native::call_hydro_ref_x1(wb.device().type(), wb, dxf, anchor, psf_lo,
-                                  psf_hi, pref, dsf, dref, nc1 - 1, grav,
-                                  uniform, /*phys_in=*/true, /*phys_out=*/true,
-                                  wall_clamp);
-    auto pp = prs - pref;
-    auto c = pp.narrow(-1, nc1 - 1, 1);
-    err = ((pp - c).abs() / (rho * wgt)).max().item<double>();
-  }
   TORCH_CHECK(err < rtol, "balance_column: no discrete balance after ", sweeps,
               " sweeps; residual bound on |a|/g is ", err, " > ", rtol);
   return {wb, err, sweeps};
