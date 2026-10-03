@@ -1,4 +1,5 @@
 // C/C++ headers
+#include <cstring>
 #include <sstream>
 #include <stdexcept>
 
@@ -18,6 +19,28 @@ int64_t OutputType::schedule_key() const {
   uint64_t h = 14695981039346656037ull;
   for (unsigned char c : id) h = (h ^ c) * 1099511628211ull;
   return static_cast<int64_t>(h);
+}
+
+int64_t OutputType::schedule_key_v2() const {
+  auto append = [](uint64_t &hash, unsigned char byte) {
+    hash = (hash ^ byte) * 1099511628211ull;
+  };
+  uint64_t hash = 14695981039346656037ull;
+  for (unsigned char c : options->file_type()) append(hash, c);
+  append(hash, 0);
+
+  static_assert(sizeof(double) == sizeof(uint64_t));
+  uint64_t cadence;
+  double dt = options->dt();
+  std::memcpy(&cadence, &dt, sizeof(cadence));
+  for (int shift = 0; shift < 64; shift += 8) {
+    append(hash, static_cast<unsigned char>(cadence >> shift));
+  }
+  for (auto const &variable : options->variables()) {
+    append(hash, 0);
+    for (unsigned char c : variable) append(hash, c);
+  }
+  return static_cast<int64_t>(hash);
 }
 
 namespace {

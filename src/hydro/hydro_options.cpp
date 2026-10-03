@@ -1,6 +1,4 @@
 // C/C++
-#include <algorithm>
-#include <array>
 #include <string>
 
 // yaml
@@ -8,6 +6,7 @@
 
 // snap
 #include <snap/forcing/forcing.hpp>
+#include <snap/input/check_keys.hpp>
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
@@ -44,59 +43,37 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   auto config = YAML::LoadFile(filename);
   auto dyn = config["dynamics"];
   if (dyn) {
-    // Every key here is read by a presence check, so an unknown key -- a
-    // typo, or an option that no longer exists -- would be silently ignored
-    // and the run would proceed as if it had been applied. Reject it instead.
-    // Only the TOP level is checked here: the equation-of-state sub-block is
-    // co-owned (kintera reads its own keys from it), so it is checked against
-    // both libraries' keys in EquationOfStateOptionsImpl::from_yaml.
-    static std::array<char const*, 8> const dynamics_keys = {
-        "equation-of-state", "reconstruct",     "riemann-solver",
-        "verbose",           "disable-flux-x1", "disable-flux-x2",
-        "disable-flux-x3",   "wb-wall-clamp"};
-    for (auto const& item : dyn) {
-      auto key = item.first.as<std::string>();
-      auto joined = [] {  // the message lists the checked keys
-        std::string s;
-        for (auto const* k : dynamics_keys)
-          s += (s.empty() ? "" : ", ") + std::string(k);
-        return s;
-      };
-      TORCH_CHECK(std::find(dynamics_keys.begin(), dynamics_keys.end(), key) !=
-                      dynamics_keys.end(),
-                  "HydroOptions: unknown key 'dynamics/", key,
-                  "'. Valid keys: ", joined(), ".");
+    TORCH_CHECK(dyn.IsMap() || dyn.IsNull(),
+                "HydroOptions: dynamics must be a map.");
+    if (!dyn.IsNull()) {
+      check_keys(dyn, "dynamics",
+                 {"equation-of-state", "reconstruct", "riemann-solver",
+                  "verbose", "disable-flux-x1", "disable-flux-x2",
+                  "disable-flux-x3", "wb-wall-clamp"});
+      op->verbose() = dyn["verbose"].as<bool>(verbose);
+      op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
+      op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
+      op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
+      op->wb_wall_clamp() = dyn["wb-wall-clamp"].as<bool>(true);
     }
-    op->verbose() = dyn["verbose"].as<bool>(verbose);
-    op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
-    op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
-    op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
-    op->wb_wall_clamp() = dyn["wb-wall-clamp"].as<bool>(true);
   }
 
   // --------------- forcings --------------- //
   auto forcing = config["forcing"];
   if (!forcing) return op;
 
-  // Same rationale as the dynamics sweep above.
-  for (auto const& item : forcing) {
-    auto key = item.first.as<std::string>();
-    TORCH_CHECK(key != "fric-heat",
-                "HydroOptions: 'forcing/fric-heat' has been removed. The x1 "
-                "face gravity work already carries the sedimentation channel "
-                "of the mass flux, so this key would apply the "
-                "precipitation potential-energy release twice. Delete it.");
-    TORCH_CHECK(
-        key == "const-gravity" || key == "coriolis" || key == "diffusion" ||
-            key == "body-heat" || key == "top-cool" || key == "bot-heat" ||
-            key == "relax-bot-comp" || key == "relax-bot-temp" ||
-            key == "relax-bot-velo" || key == "top-sponge-lyr" ||
-            key == "bot-sponge-lyr" || key == "plume-forcing",
-        "HydroOptions: unknown key 'forcing/", key,
-        "'. Valid keys: const-gravity, coriolis, diffusion, body-heat, "
-        "top-cool, bot-heat, relax-bot-comp, relax-bot-temp, relax-bot-velo, "
-        "top-sponge-lyr, bot-sponge-lyr, plume-forcing.");
-  }
+  TORCH_CHECK(forcing.IsMap() || forcing.IsNull(),
+              "HydroOptions: forcing must be a map.");
+  if (forcing.IsNull()) return op;
+  TORCH_CHECK(!forcing["fric-heat"].IsDefined(),
+              "HydroOptions: 'forcing/fric-heat' has been removed. The x1 "
+              "face gravity work already carries the sedimentation channel "
+              "of the mass flux, so this key would apply the "
+              "precipitation potential-energy release twice. Delete it.");
+  check_keys(forcing, "forcing",
+             {"const-gravity", "coriolis", "diffusion", "body-heat", "top-cool",
+              "bot-heat", "relax-bot-comp", "relax-bot-temp", "relax-bot-velo",
+              "top-sponge-lyr", "bot-sponge-lyr", "plume-forcing"});
 
   op->grav() = ConstGravityOptionsImpl::from_yaml(forcing);
   if (op->grav()) {

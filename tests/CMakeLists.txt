@@ -50,6 +50,7 @@ setup_test(test_forcing)
 setup_parallel_test(test_exchange 2)
 setup_parallel_test(test_output_barrier 2)
 setup_parallel_test(test_check_redo_parallel 2)
+setup_parallel_test(test_cycle_diagnostics_parallel 2)
 if(APPLE)  # Gloo is the Mac backend; Linux runs UCX
   setup_parallel_test(test_gloo_one_tensor 2)
 endif()
@@ -168,6 +169,7 @@ snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
+snapy_add_python_test(test_dry_carry_zero_base TIMEOUT 60 LABELS "python;forcing;scalar")
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 
@@ -287,80 +289,27 @@ if (NOT APPLE)
       LABELS "restart;examples"
     )
 
-    add_test(
-      NAME test_restart_cycle_limit
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_cycle_limit.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_cycle_limit PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      SKIP_RETURN_CODE 125
-      TIMEOUT 600
-      LABELS "restart;examples"
-    )
-
-    add_test(
-      NAME test_restart_dt_change
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_dt_change.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_dt_change PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      TIMEOUT 600
-      SKIP_RETURN_CODE 125
-      LABELS "restart;examples"
-    )
-
-    add_test(
-      NAME test_restart_output_schedule
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_output_schedule.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_output_schedule PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      TIMEOUT 600
-      SKIP_RETURN_CODE 125
-      LABELS "restart;examples"
-    )
-
-    add_test(
-      NAME test_restart_key_collision
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_key_collision.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_key_collision PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      TIMEOUT 600
-      SKIP_RETURN_CODE 125
-      LABELS "restart;examples"
-    )
-
-    add_test(
-      NAME test_restart_inplace_reorder
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_inplace_reorder.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_inplace_reorder PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      TIMEOUT 600
-      SKIP_RETURN_CODE 125
-      LABELS "restart;examples"
-    )
+    set(restart_tests
+      cycle_limit
+      dt_change
+      output_schedule
+      key_collision
+      inplace_reorder)
+    foreach(restart_test IN LISTS restart_tests)
+      add_test(
+        NAME test_restart_${restart_test}
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_${restart_test}.py
+                --build-dir ${CMAKE_BINARY_DIR}
+                --build-type release
+      )
+      set_tests_properties(test_restart_${restart_test} PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+        TIMEOUT 600
+        SKIP_RETURN_CODE 125
+        LABELS "restart;examples"
+      )
+    endforeach()
 endif()
 
 setup_parallel_test(test_mesh_multi_block 2)

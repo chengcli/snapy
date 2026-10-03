@@ -63,6 +63,38 @@ TEST_P(DeviceTest, moist_conduction_uses_local_mixture_specific_heat) {
   }
 }
 
+TEST(diffusion,
+     dynamic_conduction_timestep_uses_local_volumetric_heat_capacity) {
+  auto options =
+      MeshBlockOptionsImpl::from_yaml("test_diffusion_dynamic_cv.yaml");
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  auto peos = block->phydro->peos;
+  auto diffusion = block->phydro->pdiffusion;
+  auto w = make_primitive(block, torch::kCPU, torch::kFloat64);
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  int ng = block->pcoord->options->nghost();
+
+  // Vary density and composition independently. The minimum density is dry,
+  // while the minimum rho*cv is a denser, vapor-rich cell; multiplying
+  // separate minima therefore gives neither cell's volumetric heat capacity.
+  w[IDN].fill_(1.1);
+  w[ICY].fill_(0.9);
+  w[ICY + 1].zero_();
+  w[IDN].narrow(-1, ng, 1).fill_(1.);
+  w[ICY].narrow(-1, ng, 1).zero_();
+  w[IPR].fill_(1.e5);
+
+  auto temp = peos->compute("W->T", {w});
+  auto rho_cv = w[IDN] * peos->specific_heat_cv(w, temp);
+  auto rho_cv_min = rho_cv.index(interior).min().item<double>();
+  auto rho_min = w[IDN].index(interior).min().item<double>();
+  ASSERT_LT(rho_cv_min, rho_min * peos->species_cv_ref());
+
+  // dx=1 and ndim=1 in this fixture.
+  double expected = rho_cv_min / (2. * diffusion->options->kappa_iso());
+  EXPECT_NEAR(diffusion->max_time_step(w), expected, 1.e-12 * expected);
+}
+
 TEST_P(DeviceTest, conserved_limiter_uses_nucleation_parent_metadata) {
   auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion_moist.yaml");
   options->hydro()->eos()->limiter() = true;

@@ -63,8 +63,8 @@ def stream_times(case_dir: Path) -> dict[str, list[float]]:
   return {k: sorted(v) for k, v in times.items()}
 
 
-def restart_schedule(path: Path):
-  """(last_time, next_time[], file_number[]) from block 0 of a restart, bundle or plain."""
+def restart_tensors(path: Path) -> dict[str, torch.Tensor]:
+  """Tensors from block 0 of a restart bundle or plain checkpoint."""
   with path.open("rb") as f:
     if f.readline().strip() == b"SNAPY_RESTART_BUNDLE_V1":
       n = int(f.readline())
@@ -78,12 +78,19 @@ def restart_schedule(path: Path):
   with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmp:
     tmp.write(payload)
   try:
-    m = torch.jit.load(tmp.name, map_location="cpu")
+    module = torch.jit.load(tmp.name, map_location="cpu")
   finally:
     os.unlink(tmp.name)
-  d = dict(m.named_buffers())
-  d.update(dict(m.named_parameters()))
-  return (float(d["last_time"].item()), d["next_time"].tolist(), d["file_number"].tolist())
+  tensors = dict(module.named_buffers(remove_duplicate=False))
+  tensors.update(dict(module.named_parameters(remove_duplicate=False)))
+  return tensors
+
+
+def restart_schedule(path: Path):
+  """(last_time, next_time[], file_number[]) from block 0 of a restart."""
+  tensors = restart_tensors(path)
+  return (float(tensors["last_time"].item()), tensors["next_time"].tolist(),
+          tensors["file_number"].tolist())
 
 
 def numbers(case_dir: Path, stream: str) -> list[int]:

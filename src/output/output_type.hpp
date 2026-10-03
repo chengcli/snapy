@@ -116,9 +116,11 @@ class OutputType {
   int file_number = 0;
   double next_time = 0.0;
 
-  //! stable identity of this output block (file type, dt, variables), stored in
-  //! restart files
+  //! Legacy restart identity; retained so older readers can load new files.
   int64_t schedule_key() const;
+
+  //! Restart identity with the exact cadence bits.
+  int64_t schedule_key_v2() const;
 
   // constructors
   OutputType() : options(OutputOptionsImpl::create()) {}

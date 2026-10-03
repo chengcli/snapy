@@ -1,0 +1,29 @@
+reference-state: {Tref: 300., Pref: 1.e5}
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 16., x2min: 0., x2max: 1., x3min: 0., x3max: 1.}
+  cells: {nx1: 16, nx2: 1, nx3: 1, nghost: 2}
+dynamics:
+  equation-of-state: {type: ideal-gas, limiter: true}
+  reconstruct:
+    vertical: {type: dc, scale: false, shock: false}
+    horizontal: {type: dc, scale: false, shock: false}
+  riemann-solver: {type: lmars}
+boundary-condition:
+  external:
+    x1-inner: outflow
+    x1-outer: outflow
+    x2-inner: reflecting
+    x2-outer: reflecting
+    x3-inner: reflecting
+    x3-outer: reflecting
+integration: {type: rk1, cfl: 0.9, nlim: 1, tlim: 1.}
+scalar:
+  nvar: 1
+  names: [tr]
+  upper-bound: 1.
+  reconstruct: {type: dc, scale: false, shock: false}

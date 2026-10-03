@@ -70,18 +70,15 @@ torch::Tensor RelaxBotTempImpl::forward(torch::Tensor du, torch::Tensor w,
 
   // A bottom temperature is usually prescribed at a pressure level, and in a
   // finite-volume grid that level is the domain's lower FACE. Relaxing the
-  // first interior cell CENTRE, half a cell above it, leaves the face itself
-  // off the prescribed value and over-forces a stratified column, whose
-  // centre deficit exceeds its face deficit. With `at-face: true`, relax the
-  // extrapolated face temperature
-  //   T_face = 1.5*T0 - 0.5*T1
-  // instead of T0. Only cell 0 is nudged and d(T_face)/d(T0) = 1.5, so the
-  // gain is divided by 1.5, keeping the damping coefficient on T0 unchanged.
+  // first interior cell CENTRE leaves the face itself off the prescribed value
+  // and over-forces a stratified column. With `at-face: true`, extrapolate
+  // from the first two cell centres using their actual x1 coordinates. Only
+  // cell 0 is nudged, so divide the gain by d(T_face)/d(T0).
   // A relaxation is kept rather than a Dirichlet ghost condition: the wall is
   // rigid and no-flux, and pinning T there would imply a conductive flux the
   // equations do not carry.
   auto target = temp_bot;
-  double gain = 1.0;
+  torch::Tensor gain;
   if (options->at_face()) {
     auto bottom2 = phydro->pmb->part(
         {0, 0, -1}, PartOptions().exterior(false).depth(2).ndim(3));
@@ -95,11 +92,16 @@ torch::Tensor RelaxBotTempImpl::forward(torch::Tensor du, torch::Tensor w,
                 t2.size(-1), ". Set nghost >= 2.");
     auto T0 = t2.narrow(-1, 0, 1);
     auto T1 = t2.narrow(-1, 1, 1);
-    target = 1.5 * T0 - 0.5 * T1;
-    gain = 1.0 / 1.5;
+    int il = phydro->pmb->pcoord->il();
+    auto x1v = phydro->pmb->pcoord->x1v;
+    auto x1f = phydro->pmb->pcoord->x1f;
+    auto a = (x1v[il] - x1f[il]) / (x1v[il + 1] - x1v[il]);
+    target = (1. + a) * T0 - a * T1;
+    gain = 1.0 / (1. + a);
   }
-  du[IPR].index(bottom) +=
-      gain * dt / options->tau() * rho * cv * (options->btemp() - target);
+  auto heating = dt / options->tau() * rho * cv * (options->btemp() - target);
+  if (gain.defined()) heating *= gain;
+  du[IPR].index(bottom) += heating;
   return du;
 }
 

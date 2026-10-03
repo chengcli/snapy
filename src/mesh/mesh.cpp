@@ -27,6 +27,8 @@
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
 
+#include "cycle_diagnostics.hpp"
+
 namespace snap {
 
 namespace {
@@ -388,74 +390,12 @@ void MeshImpl::print_cycle_info(MeshVariables const& vars, double time,
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::print_cycle_info expects one Variables map per local "
               "MeshBlock");
-
-  auto root = blocks.front();
-  auto pintg = root->pintg;
-  if (pintg->options->ncycle_out() == 0 ||
-      root->cycle % pintg->options->ncycle_out() != 0) {
-    return;
-  }
-
-  const int dt_precision = std::numeric_limits<double>::max_digits10 - 3;
-  bool compute_mass = false;
-  bool compute_energy = false;
-
-  if (vars.front().count("hydro_u")) {
-    compute_mass = true;
-    compute_energy = root->phydro->peos->nvar() > IPR;
-  }
-
-  SINFO() << "cycle=" << root->cycle << " redo=" << pintg->current_redo
-          << std::scientific << std::setprecision(dt_precision)
-          << " time=" << time << " dt=" << dt;
-
-  c10d::ReduceOptions opsum;
-  opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = root->options->layout()->process_root_rank();
-
-  torch::Tensor local_sum;
-  if (compute_mass || compute_energy) {
-    for (int i = 0; i < blocks.size(); ++i) {
-      auto interior = blocks[i]->part({0, 0, 0}, PartOptions().exterior(false));
-      auto vol = blocks[i]->pcoord->cell_volume();
-      auto hydro_u_tot = vars[i].at("hydro_u") * vol;
-      auto block_sum = hydro_u_tot.index(interior).sum({1, 2, 3});
-      if (!local_sum.defined()) {
-        local_sum = block_sum.clone();
-      } else {
-        local_sum += block_sum;
-      }
-    }
-  }
-
-  if (local_sum.defined()) {
-    std::vector<at::Tensor> sum = {local_sum};
-    if (root->get_layout()->has_process_group()) {
-      root->get_layout()->comm->reduce(sum, opsum.reduceOp, opsum.rootRank);
-    }
-
-    if (compute_mass) {
-      auto mass = sum[0][IDN];
-      SINFO() << std::scientific << std::setprecision(dt_precision)
-              << " mass0=" << mass.item<double>();
-
-      int ny = local_sum.size(0) - ICY;
-      if (ny > 0) {
-        for (int n = 0; n < ny; ++n) {
-          mass += sum[0][ICY + n];
-        }
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " masst=" << mass.item<double>();
-      }
-    }
-
-    if (compute_energy) {
-      SINFO() << std::scientific << std::setprecision(dt_precision)
-              << " energy=" << sum[0][IPR].item<double>();
-    }
-  }
-
-  SINFO() << std::endl;
+  std::vector<std::pair<MeshBlockImpl const*, Variables const*>> local;
+  for (size_t i = 0; i < blocks.size(); ++i)
+    local.emplace_back(blocks[i].get(), &vars[i]);
+  print_cycle_diagnostics(local, time, dt,
+                          std::numeric_limits<double>::max_digits10 - 3,
+                          " energy=");
 }
 
 int MeshImpl::check_redo(MeshVariables& vars) {
@@ -467,26 +407,13 @@ int MeshImpl::check_redo(MeshVariables& vars) {
     return -1;
   }
 
-  // one decision per process: a hit in any block rolls back every block
-  auto flag = torch::zeros({5}, torch::dtype(torch::kFloat64));
-  auto h = flag.accessor<double, 1>();
-  for (int i = 0; i < blocks.size(); ++i) {
-    if (blocks[i]->floor_hit(vars[i])) h[0] = 1.;
-    if (blocks[i]->vic_dry_clamp_hit()) h[1] = 1.;
-    auto hits = blocks[i]->limiter_hits();
-    if (hits[0]) h[2] = 1.;
-    if (hits[1]) h[3] = 1.;
-    // drained in every block; on CUDA one more integer read to the host
-    if (blocks[i]->saturation_failures() > 0) h[4] = 1.;
+  // A hit in any local block rolls back every block on every process.
+  std::array<bool, 5> flags{};
+  for (size_t i = 0; i < blocks.size(); ++i) {
+    auto local = blocks[i]->local_redo_flags(vars[i]);
+    for (size_t j = 0; j < flags.size(); ++j) flags[j] = flags[j] || local[j];
   }
-  std::vector<at::Tensor> flag_reduce = {flag};
-  auto layout = blocks.front()->get_layout();
-  if (layout->has_process_group()) {
-    layout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
-  }
-  auto f = flag_reduce[0].accessor<double, 1>();
-  int causes = (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2 |
-               (f[3] > 0.) << 3 | (f[4] > 0.) << 4;
+  int causes = blocks.front()->reduce_redo_flags(flags);
 
   int out = 0;
   for (int i = 0; i < blocks.size(); ++i) {

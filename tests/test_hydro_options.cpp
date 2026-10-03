@@ -331,3 +331,42 @@ TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference_cuda) {
   if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
   wb_wall_clamp_reaches_the_x1_reference(torch::Device(torch::kCUDA, 0));
 }
+
+TEST(hydro_options, reject_non_map_option_blocks) {
+  char const *filename = "test_options_non_map.yaml";
+  for (auto const *input :
+       {"dynamics: [ignored]\n", "dynamics:\n  equation-of-state: [ignored]\n",
+        "dynamics:\n  equation-of-state: {type: ideal-gas}\nforcing: "
+        "[ignored]\n"}) {
+    {
+      std::ofstream file(filename);
+      file << input;
+    }
+    EXPECT_ANY_THROW(snap::HydroOptionsImpl::from_yaml(filename)) << input;
+  }
+  std::remove(filename);
+}
+
+TEST(hydro_options, accept_empty_option_blocks) {
+  char const *filename = "test_options_empty_blocks.yaml";
+  for (auto const *input :
+       {"forcing:\n", "dynamics:\n", "dynamics:\n  equation-of-state:\n",
+        "dynamics: {equation-of-state: null}\nforcing: null\n"}) {
+    {
+      std::ofstream file(filename);
+      file << input;
+    }
+    EXPECT_NO_THROW(snap::HydroOptionsImpl::from_yaml(filename)) << input;
+  }
+  std::remove(filename);
+}
+
+TEST(hydro_options, empty_dynamics_still_validates_forcing) {
+  char const *filename = "test_options_empty_dynamics_forcing.yaml";
+  {
+    std::ofstream file(filename);
+    file << "dynamics:\nforcing: {unknown: true}\n";
+  }
+  EXPECT_ANY_THROW(snap::HydroOptionsImpl::from_yaml(filename));
+  std::remove(filename);
+}

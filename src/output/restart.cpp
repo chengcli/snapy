@@ -49,6 +49,12 @@ void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
     output_next_times.push_back(out->next_time);
     output_keys.push_back(out->schedule_key());
   }
+  // Old readers use the first N entries. Precise keys follow them in the same
+  // tensor, so an old writer naturally replaces the whole value with N legacy
+  // entries instead of carrying unknown metadata into a later new restart.
+  for (auto out : pmb->output_types) {
+    output_keys.push_back(out->schedule_key_v2());
+  }
 
   out_vars["file_number"] = torch::tensor(output_file_numbers, torch::kInt64);
   out_vars["next_time"] = torch::tensor(output_next_times, torch::kFloat64);

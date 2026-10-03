@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <tuple>
+#include <vector>
 
 // external
 #include <gtest/gtest.h>
@@ -24,6 +25,22 @@
 using namespace snap;
 
 namespace {
+
+class DryDensitySourceImpl : public torch::nn::Cloneable<DryDensitySourceImpl> {
+ public:
+  double increment = 0.;
+
+  DryDensitySourceImpl() = default;
+  explicit DryDensitySourceImpl(double increment_) : increment(increment_) {}
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor /*w*/,
+                        torch::Tensor /*temp*/, double /*dt*/) {
+    du[IDN].select(-1, du.size(-1) / 2).add_(increment);
+    return du;
+  }
+};
+TORCH_MODULE(DryDensitySource);
 
 std::shared_ptr<MeshBlockImpl> make_block(
     std::string const& filename = "test_diffusion_moist.yaml") {
@@ -294,8 +311,34 @@ TEST(forcing, relax_bottom_temperature_at_face_under_an_inversion) {
       << expected[IPR].index(bot);
 }
 
-// at-face: true relaxes T_face = 1.5*T0 - 0.5*T1 with the gain divided by 1.5;
-// the default leaves the old cell-centre tendency bit-identical
+// A linear temperature on a stretched grid must extrapolate to its exact
+// value at the physical face.
+TEST(forcing, relax_bottom_temperature_at_face_uses_coordinate_spacing) {
+  auto block = make_block();
+  auto coord = block->pcoord;
+  int ng = coord->options->nghost();
+
+  // The first two active centres are 0.5 and 2.5 above a face at zero.
+  // A linear field T=100+10*x1 therefore has T_face=btemp exactly.
+  coord->x1f[ng] = 0.;
+  coord->x1v[ng] = 0.5;
+  coord->x1v[ng + 1] = 2.5;
+
+  auto w = make_primitive(block);
+  auto temp = (100. + 10. * coord->x1v).view({1, 1, -1}).expand_as(w[IDN]);
+  auto du = torch::zeros_like(w);
+  auto op = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 100., at-face: true}"));
+
+  RelaxBotTemp(op, block->phydro.get())->forward(du, w, temp, 0.5);
+
+  EXPECT_TRUE(torch::equal(du, torch::zeros_like(du)))
+      << "linear temperature at the requested face produced forcing "
+      << du[IPR].index(bottom3(block));
+}
+
+// On a uniform grid, at-face retains the original 1.5/-0.5 weights; the
+// default leaves the old cell-centre tendency bit-identical.
 TEST(forcing, relax_bottom_temperature_at_face) {
   auto block = make_block();
   auto w = make_primitive(block);
@@ -1254,6 +1297,101 @@ std::shared_ptr<MeshBlockImpl> make_sedimenting_block(std::string const& yaml,
   options->hydro()->grav() = gravity;
   return std::make_shared<MeshBlockImpl>(options);
 }
+
+TEST(forcing, native_dry_source_uses_each_rk_stage_weight) {
+  struct Case {
+    char const* type;
+    std::vector<double> wght2;
+  };
+  std::vector<Case> cases = {
+      {"rk1", {1.}},
+      {"rk2", {1., 0.5}},
+      {"rk3", {1., 0.25, 2. / 3.}},
+      {"rk3s4", {0.5, 0.5, 1. / 6., 0.5}},
+  };
+
+  auto run = [](char const* type, int target_stage, double increment) {
+    auto options =
+        MeshBlockOptionsImpl::from_yaml("test_scalar_source_bound.yaml");
+    options->intg()->type() = type;
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    auto source = DryDensitySource(0.);
+    block->phydro->forcings.push_back(torch::nn::AnyModule(source));
+
+    auto coord = block->pcoord;
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.);
+    w[IPR].fill_(1.e5);
+    auto r = torch::full({1, coord->options->nc3(), coord->options->nc2(),
+                          coord->options->nc1()},
+                         0.9, w.options());
+    Variables vars{{"hydro_w", w}, {"scalar_r", r}};
+    block->initialize(vars);
+
+    for (int stage = 0; stage <= target_stage; ++stage) {
+      source->increment = stage == target_stage ? increment : 0.;
+      block->forward(vars, 6.e-4, stage);
+    }
+    return vars.at("hydro_u")[IDN]
+        .select(-1, vars.at("hydro_u").size(-1) / 2)
+        .item<double>();
+  };
+
+  for (auto const& c : cases) {
+    for (int stage = 0; stage < c.wght2.size(); ++stage) {
+      double base = run(c.type, stage, 0.);
+      for (double increment : {-0.2, 0.2}) {
+        double actual = run(c.type, stage, increment) - base;
+        EXPECT_NEAR(actual, c.wght2[stage] * increment, 1.e-12)
+            << "integrator=" << c.type << " stage=" << stage
+            << " increment=" << increment;
+      }
+    }
+  }
+}
+
+TEST(forcing, native_dry_source_preserves_scalar_bounds_at_every_rk_order) {
+  constexpr double dt = 6.e-4;
+  for (auto type : {"rk1", "rk2", "rk3", "rk3s4"}) {
+    for (double increment : {-0.5, 0.5}) {
+      auto options =
+          MeshBlockOptionsImpl::from_yaml("test_scalar_source_bound.yaml");
+      options->intg()->type() = type;
+      auto block = std::make_shared<MeshBlockImpl>(options);
+      block->phydro->forcings.push_back(
+          torch::nn::AnyModule(DryDensitySource(increment)));
+
+      auto coord = block->pcoord;
+      auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                             coord->options->nc2(), coord->options->nc1()},
+                            torch::kFloat64);
+      w[IDN].fill_(1.);
+      w[IVX].fill_(1000.);
+      w[IPR].fill_(1.e5);
+      auto r = torch::full({1, coord->options->nc3(), coord->options->nc2(),
+                            coord->options->nc1()},
+                           0.9, w.options());
+      int il = coord->il(), iu = coord->iu();
+      r.select(-1, il + 7).fill_(1.);
+
+      Variables vars{{"hydro_w", w}, {"scalar_r", r}};
+      block->initialize(vars);
+      ASSERT_GE(block->max_time_step(vars), dt);
+      for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+        block->forward(vars, dt, stage);
+      }
+
+      auto interior = vars.at("scalar_r").slice(-1, il, iu + 1);
+      EXPECT_LE(interior.max().item<double>(), 1. + 1.e-12)
+          << "integrator=" << type << " increment=" << increment;
+      EXPECT_GE(interior.min().item<double>(), -1.e-12)
+          << "integrator=" << type << " increment=" << increment;
+    }
+  }
+}
+
 }  // namespace
 
 // three copies of one Stokes formula: the fused kernel must agree with the

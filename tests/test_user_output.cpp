@@ -358,6 +358,25 @@ TEST(OutputSlice, yaml_coordinate_presence_activates_slice_and_rejects_sum) {
       std::invalid_argument);
 }
 
+TEST(OutputScheduleKey, precise_cadences_do_not_collide) {
+  auto keys = [](double dt) {
+    auto options = OutputOptionsImpl::create();
+    options->file_type("netcdf").dt(dt).variables({"prim"});
+    TestOutputType output(options);
+    return std::pair(output.schedule_key(), output.schedule_key_v2());
+  };
+
+  auto submicro_a = keys(4.e-7);
+  auto submicro_b = keys(4.9e-7);
+  EXPECT_EQ(submicro_a.first, submicro_b.first);  // legacy six-decimal key
+  EXPECT_NE(submicro_a.second, submicro_b.second);
+
+  auto near_one_a = keys(1.0000001);
+  auto near_one_b = keys(1.0000004);
+  EXPECT_EQ(near_one_a.first, near_one_b.first);  // legacy six-decimal key
+  EXPECT_NE(near_one_a.second, near_one_b.second);
+}
+
 TEST(OutputPrecision, yaml_double_precision_defaults_off_and_is_reported) {
   auto off = OutputOptionsImpl::from_yaml(YAML::Load("{type: netcdf}"));
   EXPECT_FALSE(off->double_precision());

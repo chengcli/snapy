@@ -15,6 +15,7 @@
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
 
+#include "cycle_diagnostics.hpp"
 #include "meshblock.hpp"
 
 namespace snap {
@@ -619,6 +620,23 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (2) set containers for future results --------
   torch::Tensor fut_hydro_du, fut_scalar_ds;
 
+  // A dry source is inside the RK tendency. Addition carries the ratio at
+  // source entry; removal carries the complete source-free stage result so it
+  // cannot amplify a ratio that transport or the implicit solve just changed.
+  auto carry_dry_source = [&](torch::Tensor const &dry,
+                              torch::Tensor const &scalar_base) {
+    if (!dry.defined() || !vars.count("scalar_r")) return;
+    auto rho_base = pintg->forward(stage, _hydro_u0[IDN], hydro_u[IDN],
+                                   fut_hydro_du[IDN] - dry);
+    auto s_base = pintg->forward(stage, _scalar_s0, scalar_s, scalar_base);
+    auto remove_r =
+        torch::where(rho_base.unsqueeze(0) == 0., vars.at("scalar_r"),
+                     s_base / rho_base.unsqueeze(0));
+    auto carry_r =
+        torch::where(dry.unsqueeze(0) < 0., remove_r, vars.at("scalar_r"));
+    fut_scalar_ds.add_(carry_r * dry.unsqueeze(0));
+  };
+
   // -------- (3) launch all jobs --------
   // (3.A) hydro forward
   fut_hydro_du = phydro->forward(dt, hydro_u, vars);
@@ -648,11 +666,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
       fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
     }
-    // dry air a forcing creates or removes carries the cell's own r
-    auto dry_forcing = phydro->forcing_dry_increment();
-    if (dry_forcing.defined() && vars.count("scalar_r")) {
-      fut_scalar_ds.add_(vars.at("scalar_r") * dry_forcing);
-    }
+    // Native dry sources follow transport and the implicit tracer transfer.
+    carry_dry_source(phydro->forcing_dry_increment(), fut_scalar_ds);
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
@@ -696,11 +711,15 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   };
 
-  // a stage forcing's dry air carries the cell's own r, like a native forcing's
-  auto user_dry_before = (!user_stage_forcings.empty() && pscalar->nvar() > 0 &&
-                          vars.count("scalar_r"))
-                             ? fut_hydro_du[IDN].clone()
-                             : torch::Tensor();
+  // User scalar_ds is an independent additive tracer source. Keep the scalar
+  // base from before the callbacks so a simultaneous dry removal does not debit
+  // that explicitly supplied tracer.
+  bool track_user_dry = !user_stage_forcings.empty() && pscalar->nvar() > 0 &&
+                        vars.count("scalar_r");
+  auto user_dry_before =
+      track_user_dry ? fut_hydro_du[IDN].clone() : torch::Tensor();
+  auto user_scalar_before =
+      track_user_dry ? fut_scalar_ds.clone() : torch::Tensor();
   if (!user_stage_forcings.empty()) {
     auto inputs = stage_forcing_variables(*this, vars);
     for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
@@ -711,8 +730,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   if (user_dry_before.defined()) {
-    fut_scalar_ds.add_(vars.at("scalar_r") *
-                       (fut_hydro_du[IDN] - user_dry_before));
+    carry_dry_source(fut_hydro_du[IDN] - user_dry_before, user_scalar_before);
   }
   if (!user_stage_forcings.empty()) {
     if (options->verbose()) {
@@ -893,136 +911,110 @@ void MeshBlockImpl::make_outputs(Variables const &vars, double current_time,
   }
 }
 
-void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
-                                     double dt) const {
-  const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
+void print_cycle_diagnostics(
+    std::vector<std::pair<MeshBlockImpl const *, Variables const *>> const
+        &blocks,
+    double time, double dt, int precision, char const *energy_label) {
+  auto root = blocks.front().first;
+  auto pintg = root->pintg;
+  if (pintg->options->ncycle_out() == 0 ||
+      root->cycle % pintg->options->ncycle_out() != 0)
+    return;
 
-  bool compute_mass = false;
-  bool compute_ie = false;
-  bool compute_ke = false;
+  SINFO() << "cycle=" << root->cycle << " redo=" << pintg->current_redo
+          << std::scientific << std::setprecision(precision) << " time=" << time
+          << " dt=" << dt;
+  if (!blocks.front().second->count("hydro_u")) {
+    SINFO() << std::endl;
+    return;
+  }
 
-  c10d::ReduceOptions opsum;
-  opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->process_root_rank();
+  torch::Tensor conserved, ke_sum, pe_sum, meters, theta_min, vic_max;
+  auto add = [](torch::Tensor &total, torch::Tensor value) {
+    if (total.defined())
+      total += value;
+    else
+      total = value.clone();
+  };
+  for (auto const &[block, vars] : blocks) {
+    auto hydro = block->phydro;
+    auto coord = block->pcoord;
+    auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
+    auto vol = coord->cell_volume();
+    auto u = vars->at("hydro_u");
+    add(conserved, (u * vol).index(interior).sum({1, 2, 3}));
 
-  if (pintg->options->ncycle_out() != 0) {
-    if (cycle % pintg->options->ncycle_out() == 0) {
-      if (vars.count("hydro_u")) {
-        compute_mass = true;
-        compute_ie = phydro->peos->nvar() > IPR;
-        compute_ke = true;
+    // Read the conserved state; hydro_w can still describe an earlier stage.
+    if (u.size(0) >= IVX + 3) {
+      auto rho = u[IDN].unsqueeze(0).clone();
+      for (int n = ICY; n < u.size(0); ++n) rho += u[n].unsqueeze(0);
+      auto mom = u.narrow(0, IVX, 3).clone();
+      coord_vec_raise_(mom, coord->cosine_cell_kj);
+      auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, true) / rho;
+      add(ke_sum, (ke * vol).index(interior).sum({1, 2, 3}));
+      if (hydro->options->grav() && hydro->options->grav()->grav1() != 0.) {
+        auto pe = rho * (-hydro->options->grav()->grav1() * coord->x1v);
+        add(pe_sum, (pe * vol).index(interior).sum({1, 2, 3}));
       }
+    }
 
-      SINFO() << "cycle=" << cycle << " redo=" << pintg->current_redo
-              << std::scientific << std::setprecision(dt_precision)
-              << " time=" << time << " dt=" << dt;
-
-      auto interior = part({0, 0, 0}, PartOptions().exterior(false));
-
-      auto vol = pcoord->cell_volume();
-      auto hydro_u_tol = vars.at("hydro_u") * vol;
-
-      std::vector<at::Tensor> sum = {
-          hydro_u_tol.index(interior).sum({1, 2, 3})};
-      if (_playout->has_process_group()) {
-        _playout->comm->reduce(sum, opsum.reduceOp, opsum.rootRank);
-      }
-
-      if (compute_mass) {
-        auto mass = sum[0][IDN];
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " mass0=" << mass.item<double>();
-
-        int ny = hydro_u_tol.size(0) - ICY;  // number of species
-        if (ny > 0) {
-          for (int n = 0; n < ny; ++n) {
-            mass += sum[0][ICY + n];
-          }
-          SINFO() << std::scientific << std::setprecision(dt_precision)
-                  << " masst=" << mass.item<double>();
-        }
-      }
-
-      // ke from u alone: hydro_w is a stage stale here (cf. _cons2ke)
-      torch::Tensor rho_tot;
-      if (compute_ke) {
-        auto u = vars.at("hydro_u");
-        int nyk = u.size(0) - ICY;
-        rho_tot = u[IDN].unsqueeze(0).clone();
-        for (int n = 0; n < nyk; ++n) rho_tot += u[ICY + n].unsqueeze(0);
-
-        auto mom = u.narrow(0, IVX, 3).clone();
-        coord_vec_raise_(mom, pcoord->cosine_cell_kj);
-        auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, /*keepdim=*/true) /
-                  rho_tot;
-
-        std::vector<at::Tensor> ke_sum = {
-            (ke * vol).index(interior).sum({1, 2, 3})};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(ke_sum, opsum.reduceOp, opsum.rootRank);
-        }
-
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " ke=" << ke_sum[0][0].item<double>();
-      }
-
-      if (compute_ie) {
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " ie=" << sum[0][IPR].item<double>();
-      }
-
-      // ie is internal plus kinetic; a budget also needs the geopotential
-      if (rho_tot.defined() && phydro->options->grav() &&
-          phydro->options->grav()->grav1() != 0.) {
-        auto pe_tol =
-            rho_tot * (-phydro->options->grav()->grav1() * pcoord->x1v) * vol;
-        std::vector<at::Tensor> pe_sum = {
-            pe_tol.index(interior).sum({1, 2, 3})};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(pe_sum, opsum.reduceOp, opsum.rootRank);
-        }
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " pe=" << pe_sum[0][0].item<double>();
-      }
-
-      // reduced to the root rank outside any data-dependent branch
-      auto reduce_across = [&](at::Tensor t, c10d::ReduceOp op) {
-        std::vector<at::Tensor> v = {t.to(torch::kFloat64).clone()};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(v, op, opsum.rootRank);
-        }
-        return v[0];
-      };
-
-      auto sums = reduce_across(
-          torch::stack({phydro->lim_cut()[0].to(torch::kFloat64),
-                        phydro->lim_flux()[0].to(torch::kFloat64),
-                        phydro->positivity_severe()[0].to(torch::kFloat64)}),
-          c10d::ReduceOp::SUM);
-      auto tmin = reduce_across(phydro->positivity_min(), c10d::ReduceOp::MIN);
-
-      // the meters below accumulate over the whole run; nothing resets them
-      SINFO() << " run-to-date:";
-
-      double tot = sums[1].item<double>();
-      if (tot > 0.) {
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " limcut=" << sums[0].item<double>() / tot;
-      }
-      SINFO() << std::scientific << std::setprecision(dt_precision)
-              << " thetamin=" << tmin[0].item<double>() << " thetasevere="
-              << static_cast<long long>(sums[2].item<double>());
-
-      if (phydro->picorr) {
-        auto vc = reduce_across(phydro->picorr->clamp_residual(),
-                                c10d::ReduceOp::MAX);
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " vicclamp=" << vc[0].item<double>();
-      }
-
-      SINFO() << std::endl;
+    add(meters,
+        torch::stack({hydro->lim_cut()[0].to(torch::kFloat64),
+                      hydro->lim_flux()[0].to(torch::kFloat64),
+                      hydro->positivity_severe()[0].to(torch::kFloat64)}));
+    auto tmin = hydro->positivity_min().to(torch::kFloat64);
+    theta_min =
+        theta_min.defined() ? torch::minimum(theta_min, tmin) : tmin.clone();
+    if (hydro->picorr) {
+      auto vc = hydro->picorr->clamp_residual().to(torch::kFloat64);
+      vic_max = vic_max.defined() ? torch::maximum(vic_max, vc) : vc.clone();
     }
   }
+
+  auto layout = root->get_layout();
+  auto reduce = [&](torch::Tensor &value, c10d::ReduceOp op) {
+    if (!value.defined() || !layout->has_process_group()) return;
+    std::vector<at::Tensor> values = {value};
+    layout->comm->reduce(values, op,
+                         root->options->layout()->process_root_rank());
+    value = values[0];
+  };
+  reduce(conserved, c10d::ReduceOp::SUM);
+  reduce(ke_sum, c10d::ReduceOp::SUM);
+  reduce(pe_sum, c10d::ReduceOp::SUM);
+  reduce(meters, c10d::ReduceOp::SUM);
+  reduce(theta_min, c10d::ReduceOp::MIN);
+  reduce(vic_max, c10d::ReduceOp::MAX);
+
+  auto print = [&](char const *name, double value) {
+    SINFO() << std::scientific << std::setprecision(precision) << name << value;
+  };
+  auto mass = conserved[IDN];
+  print(" mass0=", mass.item<double>());
+  if (conserved.size(0) > ICY) {
+    for (int n = ICY; n < conserved.size(0); ++n) mass += conserved[n];
+    print(" masst=", mass.item<double>());
+  }
+  if (ke_sum.defined()) print(" ke=", ke_sum[0].item<double>());
+  if (root->phydro->peos->nvar() > IPR)
+    print(energy_label, conserved[IPR].item<double>());
+  if (pe_sum.defined()) print(" pe=", pe_sum[0].item<double>());
+
+  SINFO() << " run-to-date:";
+  double total = meters[1].item<double>();
+  if (total > 0.) print(" limcut=", meters[0].item<double>() / total);
+  print(" thetamin=", theta_min[0].item<double>());
+  SINFO() << " thetasevere="
+          << static_cast<long long>(meters[2].item<double>());
+  if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
+  SINFO() << std::endl;
+}
+
+void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
+                                     double dt) const {
+  print_cycle_diagnostics({{this, &vars}}, time, dt,
+                          std::numeric_limits<double>::max_digits10 - 4,
+                          " ie=");
 }
 
 int MeshBlockImpl::finalize(Variables const &vars, double time) {
@@ -1171,24 +1163,30 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   return 0;
 }
 
-int MeshBlockImpl::check_redo(Variables &vars) {
-  // dt is global, so the decision must be: MAX over every rank, per cause
-  // floor_hit first: its fresh cons2prim marks an end state the limiter repairs
+std::array<bool, 5> MeshBlockImpl::local_redo_flags(Variables const &vars) {
+  // floor_hit may mark a limiter repair; read those marks afterwards.
   bool floor = floor_hit(vars);
   auto hits = limiter_hits();
-  // drained on every call; on CUDA one more integer read to the host
-  bool sat = saturation_failures() > 0;
-  auto flag =
-      torch::tensor({floor ? 1. : 0., vic_dry_clamp_hit() ? 1. : 0.,
-                     hits[0] ? 1. : 0., hits[1] ? 1. : 0., sat ? 1. : 0.},
-                    torch::dtype(torch::kFloat64));
-  std::vector<at::Tensor> flag_reduce = {flag};
+  bool sat = saturation_failures() > 0;  // drains the counter exactly once
+  return {floor, vic_dry_clamp_hit(), hits[0], hits[1], sat};
+}
+
+int MeshBlockImpl::reduce_redo_flags(std::array<bool, 5> const &flags) const {
+  auto flag = torch::zeros({5}, torch::dtype(torch::kFloat64));
+  auto f = flag.accessor<double, 1>();
+  for (size_t i = 0; i < flags.size(); ++i) f[i] = flags[i] ? 1. : 0.;
+  std::vector<at::Tensor> reduced = {flag};
   if (_playout->has_process_group()) {
-    _playout->comm->allreduce(flag_reduce, c10d::ReduceOp::MAX);
+    _playout->comm->allreduce(reduced, c10d::ReduceOp::MAX);
   }
-  auto f = flag_reduce[0].accessor<double, 1>();
-  return apply_redo(vars, (f[0] > 0.) | (f[1] > 0.) << 1 | (f[2] > 0.) << 2 |
-                              (f[3] > 0.) << 3 | (f[4] > 0.) << 4);
+  auto global = reduced[0].accessor<double, 1>();
+  int causes = 0;
+  for (size_t i = 0; i < flags.size(); ++i) causes |= (global[i] > 0.) << i;
+  return causes;
+}
+
+int MeshBlockImpl::check_redo(Variables &vars) {
+  return apply_redo(vars, reduce_redo_flags(local_redo_flags(vars)));
 }
 
 double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
@@ -1224,20 +1222,30 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
   int nsaved = data.at("file_number").size(0);
   std::vector<bool> claimed(nsaved, false);
   std::vector<int> match(output_types.size(), -1);
-  if (data.count("output_key")) {
+  // New files append N exact keys after the N legacy keys. Old readers consume
+  // only the prefix; an old writer replaces it with an N-entry legacy tensor.
+  auto saved_keys =
+      data.count("output_key") ? data.at("output_key") : torch::Tensor();
+  bool precise_keys = saved_keys.defined() && saved_keys.dim() == 1 &&
+                      saved_keys.size(0) == 2 * nsaved;
+  int key_offset = precise_keys ? nsaved : 0;
+  auto current_key = [precise_keys](std::shared_ptr<OutputType> const &output) {
+    return precise_keys ? output->schedule_key_v2() : output->schedule_key();
+  };
+  if (saved_keys.defined()) {
     // a block still matching its own saved slot keeps it; nothing can steal it
     for (int n = 0; n < nsaved && n < (int)output_types.size(); ++n) {
-      if (data.at("output_key")[n].item<int64_t>() ==
-          output_types[n]->schedule_key()) {
+      if (saved_keys[key_offset + n].item<int64_t>() ==
+          current_key(output_types[n])) {
         match[n] = n;
         claimed[n] = true;
       }
     }
     for (int n = 0; n < output_types.size(); ++n) {
       if (match[n] >= 0) continue;
-      auto key = output_types[n]->schedule_key();
+      auto key = current_key(output_types[n]);
       for (int k = 0; k < nsaved; ++k) {
-        if (!claimed[k] && data.at("output_key")[k].item<int64_t>() == key) {
+        if (!claimed[k] && saved_keys[key_offset + k].item<int64_t>() == key) {
           match[n] = k;
           claimed[k] = true;
           break;

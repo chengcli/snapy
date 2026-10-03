@@ -110,15 +110,19 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   if (uniform) {
     constexpr double w6[6] = {11. / 1440., -31. / 480., 401. / 720.,
                               401. / 720., -31. / 480., 11. / 1440.};
-    if (i >= 2 && i < nc1 - 2 && !wall_in && !wall_out) {
-      T six = T(0);
+    T lower = lo < hi ? lo : hi;
+    T upper = lo > hi ? lo : hi;
+    auto use_six_faces = [&](int start, double const* weights,
+                             bool reverse = false) {
+      T value = T(0);
       for (int m = 0; m < 6; ++m) {
-        six +=
-            T(w6[m]) * hydro_ref_x1_face(psf_lo, psf_hi, flat, i - 2 + m, nc1);
+        value += T(weights[reverse ? 5 - m : m]) *
+                 hydro_ref_x1_face(psf_lo, psf_hi, flat, start + m, nc1);
       }
-      T lower = lo < hi ? lo : hi;
-      T upper = lo > hi ? lo : hi;
-      if (six >= lower && six <= upper) cell_pref = six;
+      if (value >= lower && value <= upper) cell_pref = value;
+    };
+    if (i >= 2 && i < nc1 - 2 && !wall_in && !wall_out) {
+      use_six_faces(i - 2, w6);
     }
 
     constexpr double w6e[2][6] = {
@@ -129,47 +133,20 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     };
     if (clamp_in) {
       int sigma = i - il;
-      T val = T(0);
-      for (int m = 0; m < 6; ++m) {
-        val += T(w6e[sigma][m]) *
-               hydro_ref_x1_face(psf_lo, psf_hi, flat, il + m, nc1);
-      }
-      T lower = lo < hi ? lo : hi;
-      T upper = lo > hi ? lo : hi;
-      if (val >= lower && val <= upper) cell_pref = val;
+      use_six_faces(il, w6e[sigma]);
     }
     if (clamp_out) {
       int s = iu + 1 - 5;
       int row = 4 - (i - s);
-      T val = T(0);
-      for (int m = 0; m < 6; ++m) {
-        val += T(w6e[row][5 - m]) *
-               hydro_ref_x1_face(psf_lo, psf_hi, flat, s + m, nc1);
-      }
-      T lower = lo < hi ? lo : hi;
-      T upper = lo > hi ? lo : hi;
-      if (val >= lower && val <= upper) cell_pref = val;
+      use_six_faces(s, w6e[row], true);
     }
     if (!phys_in && i < 2) {
-      T val = T(0);
-      for (int m = 0; m < 6; ++m) {
-        val += T(w6e[i][m]) * hydro_ref_x1_face(psf_lo, psf_hi, flat, m, nc1);
-      }
-      T lower = lo < hi ? lo : hi;
-      T upper = lo > hi ? lo : hi;
-      if (val >= lower && val <= upper) cell_pref = val;
+      use_six_faces(0, w6e[i]);
     }
     if (!phys_out && i >= nc1 - 2) {
       int sigma = i - (nc1 - 5);
       int row = 4 - sigma;
-      T val = T(0);
-      for (int m = 0; m < 6; ++m) {
-        val += T(w6e[row][5 - m]) *
-               hydro_ref_x1_face(psf_lo, psf_hi, flat, nc1 - 5 + m, nc1);
-      }
-      T lower = lo < hi ? lo : hi;
-      T upper = lo > hi ? lo : hi;
-      if (val >= lower && val <= upper) cell_pref = val;
+      use_six_faces(nc1 - 5, w6e[row], true);
     }
   } else {
     T dp = grav * w[IDN * ncells + flat + i] * dx1f[i];

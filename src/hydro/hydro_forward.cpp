@@ -415,7 +415,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   auto temp = peos->compute("W->T", {w});
   // only a block carrying tracers needs the forcings' dry-density increment
-  bool track_dry = pmb->pscalar && pmb->pscalar->nvar() > 0;
+  bool track_dry =
+      pmb->pscalar && pmb->pscalar->nvar() > 0 && !forcings.empty();
   auto dry_before = track_dry ? du[IDN].clone() : torch::Tensor();
   for (auto& f : forcings) f.forward(du, w, temp, dt);
   _forcing_dry = track_dry ? du[IDN] - dry_before : torch::Tensor();
