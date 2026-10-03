@@ -7,8 +7,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_restart_new_output import (BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
-                                    restart_schedule, run, stream_times, write_case)
+from run_restart_output_schedule import (
+    BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
+    restart_schedule, run, stream_times, write_case,
+)
 
 import shutil
 

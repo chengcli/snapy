@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""An output block added to the card AFTER a restart was written must land on the same dt
-grid as the blocks the restart restores. Before the fix its next_time was the resume
-instant, so its frames trailed the restored streams by one cycle for the rest of the run."""
+"""Appended and inserted output streams preserve restart schedules and file counters."""
 import argparse
 import os
 import re
@@ -21,7 +19,7 @@ SKIP_CODE = 125
 try:
   import yaml
 except Exception as exc:  # pragma: no cover - dependency guard
-  print(f"Skipping test_restart_new_output: yaml import failed: {exc}")
+  print(f"Skipping test_restart_output_schedule: yaml import failed: {exc}")
   sys.exit(SKIP_CODE)
 
 FRAME_DT = 7.0     # netcdf cadence
@@ -88,6 +86,10 @@ def restart_schedule(path: Path):
   return (float(d["last_time"].item()), d["next_time"].tolist(), d["file_number"].tolist())
 
 
+def numbers(case_dir: Path, stream: str) -> list[int]:
+  return sorted(int(f.name.split(".")[-2]) for f in case_dir.glob(f"*.{stream}.*.nc"))
+
+
 def main() -> int:
   parser = argparse.ArgumentParser()
   parser.add_argument("--build-dir", required=True)
@@ -116,11 +118,12 @@ def main() -> int:
   prim = {"type": "netcdf", "variables": ["prim"], "dt": FRAME_DT}
   launch = [torchrun, "--no-python", "--nproc-per-node=1", str(exe)]
 
-  base_dir = tests_dir / "restart_new_output_base"
+  base_dir = tests_dir / "restart_output_schedule_base"
   base_yaml_run = write_case(base_yaml, base_dir, BASE_TLIM, [restart, prim])
   run(launch + [str(base_yaml_run)], base_dir, env)
   restart_file = sorted(base_dir.glob("*.restart"))[-1]
-  resume_t, _, _ = restart_schedule(restart_file)
+  base_last = numbers(base_dir, "out1")[-1]
+  resume_t, _, saved_numbers = restart_schedule(restart_file)
   if resume_t % FRAME_DT == 0.0:
     raise AssertionError(f"resume time {resume_t} sits on the frame grid; the test cannot discriminate")
 
@@ -148,6 +151,33 @@ def main() -> int:
   if min(next_time[2] % FRAME_DT, FRAME_DT - next_time[2] % FRAME_DT) > 1e-9:
     raise AssertionError(f"new stream's next_time {next_time[2]} is off its {FRAME_DT} grid")
   print(f"ok: resume at {resume_t:.3f}; frames {after['out1']}; next_time {next_time}; file_number {file_number}")
+
+  uov = {"type": "netcdf", "variables": ["uov"], "dt": FRAME_DT}
+  # resume with uov INSERTED AHEAD of prim: prim is now out2 and must keep its own schedule
+  resumed_dir = tests_dir / "restart_insert_output_resumed"
+  resumed_yaml = write_case(base_yaml, resumed_dir, RESUME_TLIM, [restart, uov, prim])
+  run(launch + [str(resumed_yaml), "--restart", str(restart_file.resolve())], resumed_dir, env)
+
+  prim_numbers = numbers(resumed_dir, "out2")
+  uov_numbers = numbers(resumed_dir, "out1")
+  if not uov_numbers or uov_numbers[0] != saved_numbers[1]:
+    raise AssertionError(
+        f"inserted uov (out1) numbered from {uov_numbers[:1]} instead of continuing position 1's "
+        f"saved counter {saved_numbers[1]} (base run ended at {base_last}): the file name is out1, "
+        f"so an in-place resume would rewrite frames that position already wrote")
+  if not prim_numbers or prim_numbers[0] != 0:
+    raise AssertionError(
+        f"prim moved to out2, a position the restart has no counter for, so it must number from "
+        f"0; got {prim_numbers[:1]}")
+  _, next_time, file_number = restart_schedule(sorted(resumed_dir.glob("*.restart"))[-1])
+  if next_time[1] != next_time[2]:
+    raise AssertionError(f"streams not co-scheduled after resume: next_time {next_time}")
+  times = stream_times(resumed_dir)   # the inserted block also writes once at the resume instant
+  after = {s: [t for t in ts if abs(t - resume_t) > 1e-3] for s, ts in times.items()}
+  if after["out2"] != after["out1"]:
+    raise AssertionError(f"frames differ after resume:\n  out1 {times['out1']}\n  out2 {times['out2']}")
+  print(f"ok: prim numbers {prim_numbers}, uov numbers {uov_numbers}, next_time {next_time}, "
+        f"file_number {file_number}")
   return 0
 
 

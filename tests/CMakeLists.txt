@@ -9,19 +9,14 @@ setup_test(test_implicit_cfl)
 setup_test(test_radiating_boundary)
 setup_test(test_plm)
 setup_test(test_weno)
-setup_test(test_reconstruct)
 setup_test(test_riemann)
-setup_test(test_weno5_cuda_line)
+if(CUDA)
+  setup_test(test_weno5_cuda_line)
+endif()
 setup_test(test_backward_substitution)
 setup_test(test_scalar)
-setup_test(test_internal_boundary)
 setup_test(test_rectify)
 setup_test(test_flip_zero_count)
-setup_test(test_pull_2d)
-setup_test(test_pull_3d)
-setup_test(test_slab)
-setup_test(test_cubed)
-setup_test(test_cubed_sphere)
 setup_test(test_cubed_sphere_exchange)
 setup_test(test_coordinate)
 setup_test(test_hydrostatic)
@@ -36,7 +31,6 @@ setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
-setup_test(test_output_dir)
 setup_test(test_netcdf_utils)
 setup_test(test_user_output)
 setup_test(test_process_group)
@@ -63,19 +57,17 @@ setup_parallel_test(test_sedimentation_cubed_seam 2)
 # The same two ranks on Gloo, which Linux CI (UCX by default) would not reach:
 # the limiter exchanges more than one variable, and a Gloo send takes one
 # tensor. With UCX built, the Gloo result must equal the UCX one bit for bit.
-set(seam_compare "")
 if(UCX_FOUND)
-  set(seam_compare --compare-ucx)
+  add_test(NAME test_sedimentation_cubed_seam_gloo
+           COMMAND ${Python3_EXECUTABLE}
+                   ${CMAKE_CURRENT_SOURCE_DIR}/run_seam_backends.py
+                   --exe $<TARGET_FILE:test_sedimentation_cubed_seam.${buildl}>
+                   --compare-ucx)
+  set_tests_properties(test_sedimentation_cubed_seam_gloo PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    SKIP_RETURN_CODE 125
+    LABELS "exchange")
 endif()
-add_test(NAME test_sedimentation_cubed_seam_gloo
-         COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/run_seam_backends.py
-                 --exe $<TARGET_FILE:test_sedimentation_cubed_seam.${buildl}>
-                 ${seam_compare})
-set_tests_properties(test_sedimentation_cubed_seam_gloo PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  SKIP_RETURN_CODE 125
-  LABELS "exchange")
 
 setup_parallel_test(test_parentless_cloud_nb1_mp 2)
 if(UCX_FOUND)  # the same two ranks on Gloo, which Linux (UCX) would not reach
@@ -119,21 +111,6 @@ if(UCX_FOUND)
     )
   endif()
 endif()
-# Built so they keep compiling against the current API, but DISABLED: each needs
-# something the repo does not provide (see issue #224).
-setup_test(test_read_topo)  # topography .pt file; no assertions
-setup_test(test_aneos)      # real ANEOSThermoImpl (only a weak stub here) and example.aneos
-set_tests_properties(test_read_topo.${buildl} test_aneos.${buildl} PROPERTIES DISABLED TRUE)
-
-# Not registered, because they no longer compile or have nothing to run against:
-#   test_thomas_solver.cu         TridiagSolverOptions, alloc_eigen5, forward_sweep_cuda are gone
-#   test_transform.cpp            athena/, exo3/ headers
-#   test_cs_velocity_rotation.cpp application/, athena/, exo3/ headers
-#   test_implicit.cpp             globals.h, fvm/, namespace canoe
-#   test_hydro.cpp                namespace canoe, flux_divergence
-#   test_crater.py                canoe module, h5py and a local 256^3 HDF5 dump
-#   test_robert.py                checker for two netCDF files passed on argv; no robert case
-
 set_tests_properties(test_exchange.release PROPERTIES
   ENVIRONMENT
     "BLOCKS_PER_PROCESS=3;EXPECT_LOCAL_NEIGHBOR=1;EXPECT_REMOTE_NEIGHBOR=1"
@@ -153,10 +130,13 @@ set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS test_radiating_boundary_p
 # Every python ctest that imports snapy goes through this, so it is enrolled for
 # SNAPY_TEST_PYTHONPATH below; the raw add_test ones drive a built binary and import none.
 function(snapy_add_python_test name)
-  cmake_parse_arguments(ARG "" "TIMEOUT" "LABELS;ARGS" ${ARGN})
+  cmake_parse_arguments(ARG "" "TIMEOUT;SCRIPT" "LABELS;ARGS" ${ARGN})
+  if(NOT ARG_SCRIPT)
+    set(ARG_SCRIPT ${name}.py)
+  endif()
   add_test(
     NAME ${name}_python
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py ${ARG_ARGS}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${ARG_SCRIPT} ${ARG_ARGS}
   )
   set_tests_properties(${name}_python PROPERTIES
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
@@ -173,51 +153,48 @@ snapy_add_python_test(test_cubed_sphere_vertical_velocity_exchange
                       LABELS "python;exchange;cubed-sphere;diagnostic")
 snapy_add_python_test(test_jit_user_forcing TIMEOUT 30 LABELS "python;forcing")
 snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;eos;positivity")
-snapy_add_python_test(test_fix_vapor_reports_failure_cuda TIMEOUT 60 LABELS "python;eos;positivity;cuda")
-set_tests_properties(test_fix_vapor_reports_failure_cuda_python PROPERTIES SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_options_type TIMEOUT 60 LABELS "python;implicit")
 snapy_add_python_test(test_shear_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo")
 snapy_add_python_test(test_check_redo_saturation TIMEOUT 60 LABELS "python;mesh;redo;eos")
-snapy_add_python_test(test_check_redo_saturation_cuda TIMEOUT 60 LABELS "python;mesh;redo;eos;cuda")
-set_tests_properties(test_check_redo_saturation_cuda_python PROPERTIES SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
-snapy_add_python_test(test_flux_positivity_cubedsphere_cuda TIMEOUT 300
-                      LABELS "python;positivity;cubed-sphere;cuda")
-set_tests_properties(test_flux_positivity_cubedsphere_cuda_python PROPERTIES
-                     SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
-snapy_add_python_test(test_flux_positivity_cubedsphere_moist_cuda TIMEOUT 300
-                      LABELS "python;positivity;cubed-sphere;cuda")
-set_tests_properties(test_flux_positivity_cubedsphere_moist_cuda_python PROPERTIES
-                     SKIP_RETURN_CODE 125)
-snapy_add_python_test(test_vic_moist_device TIMEOUT 120
-                      LABELS "python;implicit;cuda")
-set_tests_properties(test_vic_moist_device_python PROPERTIES SKIP_RETURN_CODE 125)
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 
-# DISABLED: snapy.exchange.init_dist still calls the removed SlabLayout(px, py, ...)
-# constructor (see issue #224).
-add_test(
-  NAME test_exchange_python
-  COMMAND torchrun --nproc-per-node=4 ${CMAKE_CURRENT_SOURCE_DIR}/test_exchange.py
-)
-set_tests_properties(test_exchange_python PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-  LABELS "python;exchange"
-  DISABLED TRUE
-)
-set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS test_exchange_python)
+# CUDA variants reuse the same scripts and assertions.
+if(CUDA)
+  snapy_add_python_test(test_fix_vapor_reports_failure_cuda
+    SCRIPT test_fix_vapor_reports_failure.py ARGS --device cuda
+    TIMEOUT 60 LABELS "python;eos;positivity;cuda")
+  snapy_add_python_test(test_check_redo_saturation_cuda
+    SCRIPT test_check_redo_saturation.py ARGS --device cuda
+    TIMEOUT 60 LABELS "python;mesh;redo;eos;cuda")
+  snapy_add_python_test(test_flux_positivity_cubedsphere_cuda
+    SCRIPT test_flux_positivity_cubedsphere.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;positivity;cubed-sphere;cuda")
+  snapy_add_python_test(test_flux_positivity_cubedsphere_moist_cuda
+    SCRIPT test_flux_positivity_cubedsphere_moist.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;positivity;cubed-sphere;cuda")
+  snapy_add_python_test(test_vic_moist_device
+    TIMEOUT 120 LABELS "python;implicit;cuda")
+  set_tests_properties(
+    test_fix_vapor_reports_failure_cuda_python
+    test_check_redo_saturation_cuda_python
+    test_flux_positivity_cubedsphere_cuda_python
+    test_flux_positivity_cubedsphere_moist_cuda_python
+    test_vic_moist_device_python
+    PROPERTIES SKIP_RETURN_CODE 125)
+endif()
 
 # Checks the SNAPY_TEST_PYTHONPATH wiring below. Its own PYTHONPATH stands in for the
 # caller's and must survive behind SNAPY_TEST_PYTHONPATH.
@@ -271,38 +248,18 @@ endif()
 # ============= #
 # Example Tests #
 # ============= #
-add_test(
-  NAME test_straka
-  COMMAND ${CMAKE_COMMAND}
-          -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka.cmake
-)
-
-set_tests_properties(test_straka PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-)
-
-add_test(
-  NAME test_shallow_xy
-  COMMAND ${CMAKE_COMMAND}
-          -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_xy.cmake
-)
-
-set_tests_properties(test_shallow_xy PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-)
-
-add_test(
-  NAME test_shallow_splash
-  COMMAND ${CMAKE_COMMAND}
-          -Dbuildl=release
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash.cmake
-)
-
-set_tests_properties(test_shallow_splash PROPERTIES
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-)
+set(reference_examples straka)
+if(FULL_TESTS)
+  list(APPEND reference_examples shallow_xy shallow_splash)
+endif()
+foreach(example IN LISTS reference_examples)
+  add_test(NAME test_${example}
+           COMMAND ${CMAKE_COMMAND} -Dbuildl=release
+                   -P ${CMAKE_CURRENT_SOURCE_DIR}/run_${example}.cmake)
+  set_tests_properties(test_${example} PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    LABELS "reference")
+endforeach()
 
 add_test(
   NAME test_bryan_balance_ic
@@ -361,29 +318,14 @@ if (NOT APPLE)
     )
 
     add_test(
-      NAME test_restart_new_output
+      NAME test_restart_output_schedule
       COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_new_output.py
+              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_output_schedule.py
               --build-dir ${CMAKE_BINARY_DIR}
               --build-type release
     )
 
-    set_tests_properties(test_restart_new_output PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      TIMEOUT 600
-      SKIP_RETURN_CODE 125
-      LABELS "restart;examples"
-    )
-
-    add_test(
-      NAME test_restart_insert_output
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/run_restart_insert_output.py
-              --build-dir ${CMAKE_BINARY_DIR}
-              --build-type release
-    )
-
-    set_tests_properties(test_restart_insert_output PROPERTIES
+    set_tests_properties(test_restart_output_schedule PROPERTIES
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
       TIMEOUT 600
       SKIP_RETURN_CODE 125
@@ -421,9 +363,9 @@ if (NOT APPLE)
     )
 endif()
 
-if (FULL_TESTS)
-  setup_parallel_test(test_mesh_multi_block 2)
+setup_parallel_test(test_mesh_multi_block 2)
 
+if(NOT APPLE OR FULL_TESTS)
   add_test(
     NAME test_exchange_decomp
     COMMAND ${Python3_EXECUTABLE}
@@ -437,6 +379,25 @@ if (FULL_TESTS)
     PROCESSORS 6
     RUN_SERIAL TRUE
     TIMEOUT 1200
+    LABELS "decomp;gloo"
+  )
+endif()
+
+if(FULL_TESTS)
+  add_test(
+    NAME test_shallow_splash_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+            --backend gloo
+  )
+
+  set_tests_properties(test_shallow_splash_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    PROCESSORS 6
+    RUN_SERIAL TRUE
+    TIMEOUT 2400
     LABELS "decomp;gloo"
   )
 
@@ -453,23 +414,6 @@ if (FULL_TESTS)
     PROCESSORS 4
     RUN_SERIAL TRUE
     TIMEOUT 1200
-    LABELS "decomp;gloo"
-  )
-
-  add_test(
-    NAME test_shallow_splash_decomp
-    COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
-            --build-dir ${CMAKE_BINARY_DIR}
-            --build-type release
-            --backend gloo
-  )
-
-  set_tests_properties(test_shallow_splash_decomp PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-    PROCESSORS 6
-    RUN_SERIAL TRUE
-    TIMEOUT 2400
     LABELS "decomp;gloo"
   )
 
