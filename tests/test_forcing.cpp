@@ -294,8 +294,35 @@ TEST(forcing, relax_bottom_temperature_at_face_under_an_inversion) {
       << expected[IPR].index(bot);
 }
 
-// at-face: true relaxes T_face = 1.5*T0 - 0.5*T1 with the gain divided by 1.5;
-// the default leaves the old cell-centre tendency bit-identical
+// A linear temperature on a stretched grid must extrapolate to its exact
+// value at the physical face.
+TEST(forcing, relax_bottom_temperature_at_face_uses_coordinate_spacing) {
+  auto block = make_block();
+  auto coord = block->pcoord;
+  int ng = coord->options->nghost();
+
+  // The first two active centres are 0.5 and 2.5 above a face at zero.
+  // A linear field T=100+10*x1 therefore has T_face=btemp exactly.
+  coord->x1f[ng] = 0.;
+  coord->x1v[ng] = 0.5;
+  coord->x1v[ng + 1] = 2.5;
+
+  auto w = make_primitive(block);
+  auto temp =
+      (100. + 10. * coord->x1v).view({1, 1, -1}).expand_as(w[IDN]);
+  auto du = torch::zeros_like(w);
+  auto op = RelaxBotTempOptionsImpl::from_yaml(YAML::Load(
+      "relax-bot-temp: {tau: 2., btemp: 100., at-face: true}"));
+
+  RelaxBotTemp(op, block->phydro.get())->forward(du, w, temp, 0.5);
+
+  EXPECT_TRUE(torch::equal(du, torch::zeros_like(du)))
+      << "linear temperature at the requested face produced forcing "
+      << du[IPR].index(bottom3(block));
+}
+
+// On a uniform grid, at-face retains the original 1.5/-0.5 weights; the
+// default leaves the old cell-centre tendency bit-identical.
 TEST(forcing, relax_bottom_temperature_at_face) {
   auto block = make_block();
   auto w = make_primitive(block);
