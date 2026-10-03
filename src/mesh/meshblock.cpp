@@ -629,7 +629,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     auto rho_base = pintg->forward(stage, _hydro_u0[IDN], hydro_u[IDN],
                                    fut_hydro_du[IDN] - dry);
     auto s_base = pintg->forward(stage, _scalar_s0, scalar_s, scalar_base);
-    auto remove_r = s_base / rho_base.unsqueeze(0);
+    auto remove_r =
+        torch::where(rho_base.unsqueeze(0) == 0., vars.at("scalar_r"),
+                     s_base / rho_base.unsqueeze(0));
     auto carry_r =
         torch::where(dry.unsqueeze(0) < 0., remove_r, vars.at("scalar_r"));
     fut_scalar_ds.add_(carry_r * dry.unsqueeze(0));

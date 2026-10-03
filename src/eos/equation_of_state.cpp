@@ -37,15 +37,17 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
   auto op = EquationOfStateOptionsImpl::create();
 
   if (!config["dynamics"]) return op;
-  TORCH_CHECK(config["dynamics"].IsMap(),
+  TORCH_CHECK(config["dynamics"].IsMap() || config["dynamics"].IsNull(),
               "EquationOfStateOptions: dynamics must be a map.");
+  if (config["dynamics"].IsNull()) return op;
   if (!config["dynamics"]["equation-of-state"]) return op;
 
   auto node = config["dynamics"]["equation-of-state"];
 
   TORCH_CHECK(
-      node.IsMap(),
+      node.IsMap() || node.IsNull(),
       "EquationOfStateOptions: dynamics/equation-of-state must be a map.");
+  if (node.IsNull()) return op;
   check_keys(node, "dynamics/equation-of-state",
              {"type", "gammad", "weight", "density-floor", "pressure-floor",
               "temperature-floor", "limiter", "eos-file", "verbose"},

@@ -346,3 +346,27 @@ TEST(hydro_options, reject_non_map_option_blocks) {
   }
   std::remove(filename);
 }
+
+TEST(hydro_options, accept_empty_option_blocks) {
+  char const *filename = "test_options_empty_blocks.yaml";
+  for (auto const *input :
+       {"forcing:\n", "dynamics:\n", "dynamics:\n  equation-of-state:\n",
+        "dynamics: {equation-of-state: null}\nforcing: null\n"}) {
+    {
+      std::ofstream file(filename);
+      file << input;
+    }
+    EXPECT_NO_THROW(snap::HydroOptionsImpl::from_yaml(filename)) << input;
+  }
+  std::remove(filename);
+}
+
+TEST(hydro_options, empty_dynamics_still_validates_forcing) {
+  char const *filename = "test_options_empty_dynamics_forcing.yaml";
+  {
+    std::ofstream file(filename);
+    file << "dynamics:\nforcing: {unknown: true}\n";
+  }
+  EXPECT_ANY_THROW(snap::HydroOptionsImpl::from_yaml(filename));
+  std::remove(filename);
+}

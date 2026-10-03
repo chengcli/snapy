@@ -169,6 +169,7 @@ snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")
 snapy_add_python_test(test_eos_species_registry TIMEOUT 120 LABELS "python;eos")
 snapy_add_python_test(test_stage_forcing_dry_tracer TIMEOUT 60 LABELS "python;forcing;scalar")
+snapy_add_python_test(test_dry_carry_zero_base TIMEOUT 60 LABELS "python;forcing;scalar")
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 

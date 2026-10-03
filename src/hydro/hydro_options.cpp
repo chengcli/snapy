@@ -43,23 +43,28 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
   auto config = YAML::LoadFile(filename);
   auto dyn = config["dynamics"];
   if (dyn) {
-    TORCH_CHECK(dyn.IsMap(), "HydroOptions: dynamics must be a map.");
-    check_keys(dyn, "dynamics",
-               {"equation-of-state", "reconstruct", "riemann-solver", "verbose",
-                "disable-flux-x1", "disable-flux-x2", "disable-flux-x3",
-                "wb-wall-clamp"});
-    op->verbose() = dyn["verbose"].as<bool>(verbose);
-    op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
-    op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
-    op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
-    op->wb_wall_clamp() = dyn["wb-wall-clamp"].as<bool>(true);
+    TORCH_CHECK(dyn.IsMap() || dyn.IsNull(),
+                "HydroOptions: dynamics must be a map.");
+    if (!dyn.IsNull()) {
+      check_keys(dyn, "dynamics",
+                 {"equation-of-state", "reconstruct", "riemann-solver",
+                  "verbose", "disable-flux-x1", "disable-flux-x2",
+                  "disable-flux-x3", "wb-wall-clamp"});
+      op->verbose() = dyn["verbose"].as<bool>(verbose);
+      op->disable_flux_x1() = dyn["disable-flux-x1"].as<bool>(false);
+      op->disable_flux_x2() = dyn["disable-flux-x2"].as<bool>(false);
+      op->disable_flux_x3() = dyn["disable-flux-x3"].as<bool>(false);
+      op->wb_wall_clamp() = dyn["wb-wall-clamp"].as<bool>(true);
+    }
   }
 
   // --------------- forcings --------------- //
   auto forcing = config["forcing"];
   if (!forcing) return op;
 
-  TORCH_CHECK(forcing.IsMap(), "HydroOptions: forcing must be a map.");
+  TORCH_CHECK(forcing.IsMap() || forcing.IsNull(),
+              "HydroOptions: forcing must be a map.");
+  if (forcing.IsNull()) return op;
   TORCH_CHECK(!forcing["fric-heat"].IsDefined(),
               "HydroOptions: 'forcing/fric-heat' has been removed. The x1 "
               "face gravity work already carries the sedimentation channel "
