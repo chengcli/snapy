@@ -620,6 +620,23 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (2) set containers for future results --------
   torch::Tensor fut_hydro_du, fut_scalar_ds;
 
+  // A dry source is inside the RK tendency. Addition carries the ratio at
+  // source entry; removal carries the complete source-free stage result so it
+  // cannot amplify a ratio that transport or the implicit solve just changed.
+  auto carry_dry_source = [&](torch::Tensor const& dry,
+                              torch::Tensor const& scalar_base) {
+    if (!dry.defined() || !vars.count("scalar_r")) return;
+    auto rho_base =
+        pintg->forward(stage, _hydro_u0[IDN], hydro_u[IDN],
+                       fut_hydro_du[IDN] - dry);
+    auto s_base =
+        pintg->forward(stage, _scalar_s0, scalar_s, scalar_base);
+    auto remove_r = s_base / rho_base.unsqueeze(0);
+    auto carry_r =
+        torch::where(dry.unsqueeze(0) < 0., remove_r, vars.at("scalar_r"));
+    fut_scalar_ds.add_(carry_r * dry.unsqueeze(0));
+  };
+
   // -------- (3) launch all jobs --------
   // (3.A) hydro forward
   fut_hydro_du = phydro->forward(dt, hydro_u, vars);
@@ -649,11 +666,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
       fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
     }
-    // dry air a forcing creates or removes carries the cell's own r
-    auto dry_forcing = phydro->forcing_dry_increment();
-    if (dry_forcing.defined() && vars.count("scalar_r")) {
-      fut_scalar_ds.add_(vars.at("scalar_r") * dry_forcing);
-    }
+    // Native dry sources follow transport and the implicit tracer transfer.
+    carry_dry_source(phydro->forcing_dry_increment(), fut_scalar_ds);
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed = end - start;
@@ -697,11 +711,15 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
   };
 
-  // a stage forcing's dry air carries the cell's own r, like a native forcing's
-  auto user_dry_before = (!user_stage_forcings.empty() && pscalar->nvar() > 0 &&
-                          vars.count("scalar_r"))
-                             ? fut_hydro_du[IDN].clone()
-                             : torch::Tensor();
+  // User scalar_ds is an independent additive tracer source. Keep the scalar
+  // base from before the callbacks so a simultaneous dry removal does not debit
+  // that explicitly supplied tracer.
+  bool track_user_dry = !user_stage_forcings.empty() && pscalar->nvar() > 0 &&
+                        vars.count("scalar_r");
+  auto user_dry_before =
+      track_user_dry ? fut_hydro_du[IDN].clone() : torch::Tensor();
+  auto user_scalar_before =
+      track_user_dry ? fut_scalar_ds.clone() : torch::Tensor();
   if (!user_stage_forcings.empty()) {
     auto inputs = stage_forcing_variables(*this, vars);
     for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
@@ -712,8 +730,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   if (user_dry_before.defined()) {
-    fut_scalar_ds.add_(vars.at("scalar_r") *
-                       (fut_hydro_du[IDN] - user_dry_before));
+    carry_dry_source(fut_hydro_du[IDN] - user_dry_before,
+                     user_scalar_before);
   }
   if (!user_stage_forcings.empty()) {
     if (options->verbose()) {

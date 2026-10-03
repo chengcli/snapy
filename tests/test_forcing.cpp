@@ -25,6 +25,23 @@ using namespace snap;
 
 namespace {
 
+class DryDensitySourceImpl
+    : public torch::nn::Cloneable<DryDensitySourceImpl> {
+ public:
+  double increment = 0.;
+
+  DryDensitySourceImpl() = default;
+  explicit DryDensitySourceImpl(double increment_) : increment(increment_) {}
+  void reset() override {}
+
+  torch::Tensor forward(torch::Tensor du, torch::Tensor /*w*/,
+                        torch::Tensor /*temp*/, double /*dt*/) {
+    du[IDN].select(-1, du.size(-1) / 2).add_(increment);
+    return du;
+  }
+};
+TORCH_MODULE(DryDensitySource);
+
 std::shared_ptr<MeshBlockImpl> make_block(
     std::string const& filename = "test_diffusion_moist.yaml") {
   return std::make_shared<MeshBlockImpl>(
@@ -1281,6 +1298,48 @@ std::shared_ptr<MeshBlockImpl> make_sedimenting_block(std::string const& yaml,
   options->hydro()->grav() = gravity;
   return std::make_shared<MeshBlockImpl>(options);
 }
+
+TEST(forcing, native_dry_source_preserves_scalar_bounds_at_every_rk_order) {
+  constexpr double dt = 6.e-4;
+  for (auto type : {"rk1", "rk2", "rk3"}) {
+    for (double increment : {-0.5, 0.5}) {
+      auto options =
+          MeshBlockOptionsImpl::from_yaml("test_scalar_source_bound.yaml");
+      options->intg()->type() = type;
+      auto block = std::make_shared<MeshBlockImpl>(options);
+      block->phydro->forcings.push_back(
+          torch::nn::AnyModule(DryDensitySource(increment)));
+
+      auto coord = block->pcoord;
+      auto w = torch::zeros({block->phydro->peos->nvar(),
+                             coord->options->nc3(), coord->options->nc2(),
+                             coord->options->nc1()},
+                            torch::kFloat64);
+      w[IDN].fill_(1.);
+      w[IVX].fill_(1000.);
+      w[IPR].fill_(1.e5);
+      auto r = torch::full({1, coord->options->nc3(),
+                            coord->options->nc2(), coord->options->nc1()},
+                           0.9, w.options());
+      int il = coord->il(), iu = coord->iu();
+      r.select(-1, il + 7).fill_(1.);
+
+      Variables vars{{"hydro_w", w}, {"scalar_r", r}};
+      block->initialize(vars);
+      ASSERT_GE(block->max_time_step(vars), dt);
+      for (int stage = 0; stage < block->pintg->stages.size(); ++stage) {
+        block->forward(vars, dt, stage);
+      }
+
+      auto interior = vars.at("scalar_r").slice(-1, il, iu + 1);
+      EXPECT_LE(interior.max().item<double>(), 1. + 1.e-12)
+          << "integrator=" << type << " increment=" << increment;
+      EXPECT_GE(interior.min().item<double>(), -1.e-12)
+          << "integrator=" << type << " increment=" << increment;
+    }
+  }
+}
+
 }  // namespace
 
 // three copies of one Stokes formula: the fused kernel must agree with the
