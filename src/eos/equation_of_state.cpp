@@ -26,7 +26,6 @@
 #include "ideal_gas.hpp"
 #include "ideal_moist.hpp"
 #include "moist_mixture.hpp"
-#include "plume_eos.hpp"
 #include "shallow_water.hpp"
 
 namespace snap {
@@ -370,8 +369,6 @@ EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,
     return p->register_module(name, ANEOS(opts, p));
   } else if (opts->type() == "shallow-water") {
     return p->register_module(name, ShallowWater(opts, p));
-  } else if (opts->type() == "plume-eos") {
-    return p->register_module(name, PlumeEOS(opts, p));
   } else {
     TORCH_CHECK(false, "EquationOfState: Unknown type: ", opts->type());
   }
