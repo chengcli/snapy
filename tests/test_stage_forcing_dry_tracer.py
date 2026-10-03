@@ -156,8 +156,12 @@ def main() -> int:
     args = parser.parse_args()
     device = torch.device(args.device)
 
-    weights = {"rk1": (1.0,), "rk2": (1.0, 0.5),
-               "rk3": (1.0, 0.25, 2.0 / 3.0)}
+    weights = {
+        "rk1": (1.0,),
+        "rk2": (1.0, 0.5),
+        "rk3": (1.0, 0.25, 2.0 / 3.0),
+        "rk3s4": (0.5, 0.5, 1.0 / 6.0, 0.5),
+    }
     failures = []
     for kind, wght2 in weights.items():
         for dry in (-0.5, 0.5):

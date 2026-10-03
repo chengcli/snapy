@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <tuple>
+#include <vector>
 
 // external
 #include <gtest/gtest.h>
@@ -1299,9 +1300,64 @@ std::shared_ptr<MeshBlockImpl> make_sedimenting_block(std::string const& yaml,
   return std::make_shared<MeshBlockImpl>(options);
 }
 
+TEST(forcing, native_dry_source_uses_each_rk_stage_weight) {
+  struct Case {
+    char const* type;
+    std::vector<double> wght2;
+  };
+  std::vector<Case> cases = {
+      {"rk1", {1.}},
+      {"rk2", {1., 0.5}},
+      {"rk3", {1., 0.25, 2. / 3.}},
+      {"rk3s4", {0.5, 0.5, 1. / 6., 0.5}},
+  };
+
+  auto run = [](char const* type, int target_stage, double increment) {
+    auto options =
+        MeshBlockOptionsImpl::from_yaml("test_scalar_source_bound.yaml");
+    options->intg()->type() = type;
+    auto block = std::make_shared<MeshBlockImpl>(options);
+    auto source = DryDensitySource(0.);
+    block->phydro->forcings.push_back(torch::nn::AnyModule(source));
+
+    auto coord = block->pcoord;
+    auto w = torch::zeros({block->phydro->peos->nvar(),
+                           coord->options->nc3(), coord->options->nc2(),
+                           coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.);
+    w[IPR].fill_(1.e5);
+    auto r = torch::full({1, coord->options->nc3(), coord->options->nc2(),
+                          coord->options->nc1()},
+                         0.9, w.options());
+    Variables vars{{"hydro_w", w}, {"scalar_r", r}};
+    block->initialize(vars);
+
+    for (int stage = 0; stage <= target_stage; ++stage) {
+      source->increment = stage == target_stage ? increment : 0.;
+      block->forward(vars, 6.e-4, stage);
+    }
+    return vars.at("hydro_u")[IDN]
+        .select(-1, vars.at("hydro_u").size(-1) / 2)
+        .item<double>();
+  };
+
+  for (auto const& c : cases) {
+    for (int stage = 0; stage < c.wght2.size(); ++stage) {
+      double base = run(c.type, stage, 0.);
+      for (double increment : {-0.2, 0.2}) {
+        double actual = run(c.type, stage, increment) - base;
+        EXPECT_NEAR(actual, c.wght2[stage] * increment, 1.e-12)
+            << "integrator=" << c.type << " stage=" << stage
+            << " increment=" << increment;
+      }
+    }
+  }
+}
+
 TEST(forcing, native_dry_source_preserves_scalar_bounds_at_every_rk_order) {
   constexpr double dt = 6.e-4;
-  for (auto type : {"rk1", "rk2", "rk3"}) {
+  for (auto type : {"rk1", "rk2", "rk3", "rk3s4"}) {
     for (double increment : {-0.5, 0.5}) {
       auto options =
           MeshBlockOptionsImpl::from_yaml("test_scalar_source_bound.yaml");
