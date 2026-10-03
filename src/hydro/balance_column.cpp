@@ -82,6 +82,16 @@ std::tuple<torch::Tensor, double, int> balance_column(
         sweeps, " -- the column is diverging, not converging.");
   }
 
+  if (err >= rtol) {
+    // The last allowed update has not been measured yet.
+    at::native::call_hydro_ref_x1(wb.device().type(), wb, dxf, anchor, psf_lo,
+                                  psf_hi, pref, dsf, dref, nc1 - 1, grav,
+                                  uniform, /*phys_in=*/true, /*phys_out=*/true,
+                                  wall_clamp);
+    auto pp = prs - pref;
+    auto c = pp.narrow(-1, nc1 - 1, 1);
+    err = ((pp - c).abs() / (rho * wgt)).max().item<double>();
+  }
   TORCH_CHECK(err < rtol, "balance_column: no discrete balance after ", sweeps,
               " sweeps; residual bound on |a|/g is ", err, " > ", rtol);
   return {wb, err, sweeps};

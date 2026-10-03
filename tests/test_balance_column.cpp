@@ -200,6 +200,27 @@ TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
   }
 }
 
+// The final permitted update must be checked before declaring non-convergence.
+TEST(BalanceColumn, the_last_allowed_update_can_converge) {
+  constexpr double rtol = 1.e-10;
+  auto c = marched_column(64, 3.0e5, /*uniform=*/true);
+  auto [expected, expected_err, sweeps] =
+      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol);
+  ASSERT_GT(sweeps, 0);
+
+  torch::Tensor actual;
+  double actual_err = 0.;
+  int actual_sweeps = 0;
+  EXPECT_NO_THROW(std::tie(actual, actual_err, actual_sweeps) =
+                      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol,
+                                           /*max_iter=*/sweeps));
+  if (actual.defined()) {
+    EXPECT_TRUE(torch::equal(actual, expected));
+    EXPECT_DOUBLE_EQ(actual_err, expected_err);
+    EXPECT_EQ(actual_sweeps, sweeps);
+  }
+}
+
 // p/rho pins the temperature for the ideal mixtures this is for, so the whole
 // point is that only p and rho move, and together.
 TEST(BalanceColumn, the_temperature_and_every_other_channel_stay_put) {
