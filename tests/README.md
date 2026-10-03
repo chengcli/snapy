@@ -1,14 +1,14 @@
 # Test suites
 
-Pull requests and pushes run the Linux core suite: numerical regressions,
-short integration cases, communication, and restart checks. macOS builds the
-library and Python extension, then checks EOS, reconstruction, Gloo, and the
-installed Python import path.
+Pull requests run the Linux core suite, including Straka, multi-block and slab
+halo exchange, and restart regressions. macOS builds the library and Python
+extension, then checks EOS, reconstruction, Gloo messaging, and the installed
+Python import path.
 
-Use **Run workflow** on Continuous Integration before a release or when changing
-distributed behavior. It runs the broader macOS suite and enables Linux
-reference examples and full decomposition tests. The existing
-test_shallow_xy_decomp exclusion remains in place.
+Pushes to main and **Run workflow** on Continuous Integration run the full
+Linux suite and the broader macOS suite. Use a manual run before a release
+or when changing distributed behavior. The existing test_shallow_xy_decomp
+exclusion remains in place.
 
 For a local build with the matching Python package installed:
 
@@ -18,7 +18,7 @@ cmake --build build --parallel 4
 ctest --test-dir build/tests --output-on-failure
 ~~~
 
-Set FULL_TESTS=ON for the reference examples and decomposition matrix.
+Set FULL_TESTS=ON for the additional reference examples and decomposition matrix.
 CUDA checks require a CUDA build and a suitable GPU. Set
 SNAPY_TEST_PYTHONPATH to the directory containing the matching installed
 snapy package when testing outside CI.

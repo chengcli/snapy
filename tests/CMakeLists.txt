@@ -248,16 +248,18 @@ endif()
 # ============= #
 # Example Tests #
 # ============= #
+set(reference_examples straka)
 if(FULL_TESTS)
-  foreach(example straka shallow_xy shallow_splash)
-    add_test(NAME test_${example}
-             COMMAND ${CMAKE_COMMAND} -Dbuildl=release
-                     -P ${CMAKE_CURRENT_SOURCE_DIR}/run_${example}.cmake)
-    set_tests_properties(test_${example} PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-      LABELS "reference")
-  endforeach()
+  list(APPEND reference_examples shallow_xy shallow_splash)
 endif()
+foreach(example IN LISTS reference_examples)
+  add_test(NAME test_${example}
+           COMMAND ${CMAKE_COMMAND} -Dbuildl=release
+                   -P ${CMAKE_CURRENT_SOURCE_DIR}/run_${example}.cmake)
+  set_tests_properties(test_${example} PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    LABELS "reference")
+endforeach()
 
 add_test(
   NAME test_bryan_balance_ic
@@ -361,9 +363,9 @@ if (NOT APPLE)
     )
 endif()
 
-if (FULL_TESTS)
-  setup_parallel_test(test_mesh_multi_block 2)
+setup_parallel_test(test_mesh_multi_block 2)
 
+if(NOT APPLE OR FULL_TESTS)
   add_test(
     NAME test_exchange_decomp
     COMMAND ${Python3_EXECUTABLE}
@@ -377,6 +379,25 @@ if (FULL_TESTS)
     PROCESSORS 6
     RUN_SERIAL TRUE
     TIMEOUT 1200
+    LABELS "decomp;gloo"
+  )
+endif()
+
+if(FULL_TESTS)
+  add_test(
+    NAME test_shallow_splash_decomp
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --build-type release
+            --backend gloo
+  )
+
+  set_tests_properties(test_shallow_splash_decomp PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    PROCESSORS 6
+    RUN_SERIAL TRUE
+    TIMEOUT 2400
     LABELS "decomp;gloo"
   )
 
@@ -393,23 +414,6 @@ if (FULL_TESTS)
     PROCESSORS 4
     RUN_SERIAL TRUE
     TIMEOUT 1200
-    LABELS "decomp;gloo"
-  )
-
-  add_test(
-    NAME test_shallow_splash_decomp
-    COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/run_shallow_splash_decomp.py
-            --build-dir ${CMAKE_BINARY_DIR}
-            --build-type release
-            --backend gloo
-  )
-
-  set_tests_properties(test_shallow_splash_decomp PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-    PROCESSORS 6
-    RUN_SERIAL TRUE
-    TIMEOUT 2400
     LABELS "decomp;gloo"
   )
 
