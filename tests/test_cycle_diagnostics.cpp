@@ -15,6 +15,7 @@
 #include <snap/hydro/hydro.hpp>
 #include <snap/implicit/implicit_hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/mesh/mesh.hpp>
 
 using namespace snap;
 
@@ -401,4 +402,55 @@ TEST(cycle_info, vicclamp_reads_the_clamped_fraction) {
   bool found = false;
   EXPECT_NEAR(read_token(out, " vicclamp=", &found), 0.03, 1.e-6) << out;
   EXPECT_TRUE(found) << out;
+}
+
+
+TEST(cycle_info, mesh_aggregates_all_local_blocks_once) {
+  auto card = YAML::LoadFile(kCard);
+  card["distribute"] = YAML::Load(
+      "{layout: cubed, nb1: 2, blocks_per_process: 2, backend: gloo}");
+  card["integration"] = YAML::Load(
+      "{type: rk3, implicit-scheme: 1, ncycle_out: 1}");
+  char const* filename = "test_cycle_diagnostics_mesh.yaml";
+  { std::ofstream file(filename); file << card; }
+  auto mesh = Mesh(MeshOptionsImpl::from_yaml(filename));
+  std::remove(filename);
+  ASSERT_EQ(mesh->blocks.size(), 2);
+  MeshVariables vars(2);
+  for (int i = 0; i < 2; ++i) {
+    auto block = mesh->blocks[i];
+    auto coord = block->pcoord;
+    auto u = torch::zeros(
+        {block->phydro->peos->nvar(), coord->options->nc3(),
+         coord->options->nc2(), coord->options->nc1()}, torch::kFloat64);
+    u[IDN].fill_(1.);
+    u[ICY].fill_(0.25);
+    u[ICY + 1].fill_(0.25);
+    u[IVX].fill_(3. * (i + 1));
+    u[IPR].fill_(10. * (i + 1));
+    vars[i]["hydro_u"] = u;
+    block->phydro->lim_cut().fill_(i ? 3. : 1.);
+    block->phydro->lim_flux().fill_(i ? 6. : 4.);
+    block->phydro->positivity_min().fill_(i ? 0.3 : 0.8);
+    block->phydro->positivity_severe().fill_(i ? 5 : 2);
+    ASSERT_TRUE(block->phydro->picorr);
+    block->phydro->picorr->clamp_residual().fill_(i ? 0.2 : 0.1);
+  }
+  testing::internal::CaptureStdout();
+  mesh->print_cycle_info(vars, 0., 1.);
+  auto out = testing::internal::GetCapturedStdout();
+  // Two half-columns of volume 3 each: KE=9+36, PE=1.5*10*integral(z dz).
+  for (auto const& expected : {
+           std::pair{" mass0=", 6.}, {" masst=", 9.}, {" ke=", 45.},
+           {" energy=", 90.}, {" pe=", 270.}, {" limcut=", 0.4},
+           {" thetamin=", 0.3}, {" thetasevere=", 7.}, {" vicclamp=", 0.2}}) {
+    bool found = false;
+    auto value = read_token(out, expected.first, &found);
+    EXPECT_TRUE(found) << expected.first << " missing from " << out;
+    EXPECT_NEAR(value, expected.second, 1.e-11) << expected.first << out;
+  }
+  auto first = out.find("cycle=");
+  ASSERT_NE(first, std::string::npos) << out;
+  EXPECT_EQ(out.find("cycle=", first + 1), std::string::npos) << out;
+  EXPECT_NE(out.find(" run-to-date:"), std::string::npos) << out;
 }

@@ -15,6 +15,7 @@
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
 
+#include "cycle_diagnostics.hpp"
 #include "meshblock.hpp"
 
 namespace snap {
@@ -893,136 +894,102 @@ void MeshBlockImpl::make_outputs(Variables const &vars, double current_time,
   }
 }
 
-void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
-                                     double dt) const {
-  const int dt_precision = std::numeric_limits<double>::max_digits10 - 4;
+void print_cycle_diagnostics(
+    std::vector<std::pair<MeshBlockImpl const*, Variables const*>> const& blocks,
+    double time, double dt, int precision, char const* energy_label) {
+  auto root = blocks.front().first;
+  auto pintg = root->pintg;
+  if (pintg->options->ncycle_out() == 0 ||
+      root->cycle % pintg->options->ncycle_out() != 0) return;
 
-  bool compute_mass = false;
-  bool compute_ie = false;
-  bool compute_ke = false;
+  SINFO() << "cycle=" << root->cycle << " redo=" << pintg->current_redo
+          << std::scientific << std::setprecision(precision)
+          << " time=" << time << " dt=" << dt;
+  if (!blocks.front().second->count("hydro_u")) {
+    SINFO() << std::endl;
+    return;
+  }
 
-  c10d::ReduceOptions opsum;
-  opsum.reduceOp = c10d::ReduceOp::SUM;
-  opsum.rootRank = options->layout()->process_root_rank();
+  torch::Tensor conserved, ke_sum, pe_sum, meters, theta_min, vic_max;
+  auto add = [](torch::Tensor& total, torch::Tensor value) {
+    if (total.defined()) total += value;
+    else total = value.clone();
+  };
+  for (auto const& [block, vars] : blocks) {
+    auto hydro = block->phydro;
+    auto coord = block->pcoord;
+    auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
+    auto vol = coord->cell_volume();
+    auto u = vars->at("hydro_u");
+    add(conserved, (u * vol).index(interior).sum({1, 2, 3}));
 
-  if (pintg->options->ncycle_out() != 0) {
-    if (cycle % pintg->options->ncycle_out() == 0) {
-      if (vars.count("hydro_u")) {
-        compute_mass = true;
-        compute_ie = phydro->peos->nvar() > IPR;
-        compute_ke = true;
+    // Read the conserved state; hydro_w can still describe an earlier stage.
+    if (u.size(0) >= IVX + 3) {
+      auto rho = u[IDN].unsqueeze(0).clone();
+      for (int n = ICY; n < u.size(0); ++n) rho += u[n].unsqueeze(0);
+      auto mom = u.narrow(0, IVX, 3).clone();
+      coord_vec_raise_(mom, coord->cosine_cell_kj);
+      auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, true) / rho;
+      add(ke_sum, (ke * vol).index(interior).sum({1, 2, 3}));
+      if (hydro->options->grav() && hydro->options->grav()->grav1() != 0.) {
+        auto pe = rho * (-hydro->options->grav()->grav1() * coord->x1v);
+        add(pe_sum, (pe * vol).index(interior).sum({1, 2, 3}));
       }
+    }
 
-      SINFO() << "cycle=" << cycle << " redo=" << pintg->current_redo
-              << std::scientific << std::setprecision(dt_precision)
-              << " time=" << time << " dt=" << dt;
-
-      auto interior = part({0, 0, 0}, PartOptions().exterior(false));
-
-      auto vol = pcoord->cell_volume();
-      auto hydro_u_tol = vars.at("hydro_u") * vol;
-
-      std::vector<at::Tensor> sum = {
-          hydro_u_tol.index(interior).sum({1, 2, 3})};
-      if (_playout->has_process_group()) {
-        _playout->comm->reduce(sum, opsum.reduceOp, opsum.rootRank);
-      }
-
-      if (compute_mass) {
-        auto mass = sum[0][IDN];
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " mass0=" << mass.item<double>();
-
-        int ny = hydro_u_tol.size(0) - ICY;  // number of species
-        if (ny > 0) {
-          for (int n = 0; n < ny; ++n) {
-            mass += sum[0][ICY + n];
-          }
-          SINFO() << std::scientific << std::setprecision(dt_precision)
-                  << " masst=" << mass.item<double>();
-        }
-      }
-
-      // ke from u alone: hydro_w is a stage stale here (cf. _cons2ke)
-      torch::Tensor rho_tot;
-      if (compute_ke) {
-        auto u = vars.at("hydro_u");
-        int nyk = u.size(0) - ICY;
-        rho_tot = u[IDN].unsqueeze(0).clone();
-        for (int n = 0; n < nyk; ++n) rho_tot += u[ICY + n].unsqueeze(0);
-
-        auto mom = u.narrow(0, IVX, 3).clone();
-        coord_vec_raise_(mom, pcoord->cosine_cell_kj);
-        auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, /*keepdim=*/true) /
-                  rho_tot;
-
-        std::vector<at::Tensor> ke_sum = {
-            (ke * vol).index(interior).sum({1, 2, 3})};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(ke_sum, opsum.reduceOp, opsum.rootRank);
-        }
-
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " ke=" << ke_sum[0][0].item<double>();
-      }
-
-      if (compute_ie) {
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " ie=" << sum[0][IPR].item<double>();
-      }
-
-      // ie is internal plus kinetic; a budget also needs the geopotential
-      if (rho_tot.defined() && phydro->options->grav() &&
-          phydro->options->grav()->grav1() != 0.) {
-        auto pe_tol =
-            rho_tot * (-phydro->options->grav()->grav1() * pcoord->x1v) * vol;
-        std::vector<at::Tensor> pe_sum = {
-            pe_tol.index(interior).sum({1, 2, 3})};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(pe_sum, opsum.reduceOp, opsum.rootRank);
-        }
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " pe=" << pe_sum[0][0].item<double>();
-      }
-
-      // reduced to the root rank outside any data-dependent branch
-      auto reduce_across = [&](at::Tensor t, c10d::ReduceOp op) {
-        std::vector<at::Tensor> v = {t.to(torch::kFloat64).clone()};
-        if (_playout->has_process_group()) {
-          _playout->comm->reduce(v, op, opsum.rootRank);
-        }
-        return v[0];
-      };
-
-      auto sums = reduce_across(
-          torch::stack({phydro->lim_cut()[0].to(torch::kFloat64),
-                        phydro->lim_flux()[0].to(torch::kFloat64),
-                        phydro->positivity_severe()[0].to(torch::kFloat64)}),
-          c10d::ReduceOp::SUM);
-      auto tmin = reduce_across(phydro->positivity_min(), c10d::ReduceOp::MIN);
-
-      // the meters below accumulate over the whole run; nothing resets them
-      SINFO() << " run-to-date:";
-
-      double tot = sums[1].item<double>();
-      if (tot > 0.) {
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " limcut=" << sums[0].item<double>() / tot;
-      }
-      SINFO() << std::scientific << std::setprecision(dt_precision)
-              << " thetamin=" << tmin[0].item<double>() << " thetasevere="
-              << static_cast<long long>(sums[2].item<double>());
-
-      if (phydro->picorr) {
-        auto vc = reduce_across(phydro->picorr->clamp_residual(),
-                                c10d::ReduceOp::MAX);
-        SINFO() << std::scientific << std::setprecision(dt_precision)
-                << " vicclamp=" << vc[0].item<double>();
-      }
-
-      SINFO() << std::endl;
+    add(meters, torch::stack({hydro->lim_cut()[0].to(torch::kFloat64),
+                             hydro->lim_flux()[0].to(torch::kFloat64),
+                             hydro->positivity_severe()[0].to(torch::kFloat64)}));
+    auto tmin = hydro->positivity_min().to(torch::kFloat64);
+    theta_min = theta_min.defined() ? torch::minimum(theta_min, tmin) : tmin.clone();
+    if (hydro->picorr) {
+      auto vc = hydro->picorr->clamp_residual().to(torch::kFloat64);
+      vic_max = vic_max.defined() ? torch::maximum(vic_max, vc) : vc.clone();
     }
   }
+
+  auto layout = root->get_layout();
+  auto reduce = [&](torch::Tensor& value, c10d::ReduceOp op) {
+    if (!value.defined() || !layout->has_process_group()) return;
+    std::vector<at::Tensor> values = {value};
+    layout->comm->reduce(values, op,
+                         root->options->layout()->process_root_rank());
+    value = values[0];
+  };
+  reduce(conserved, c10d::ReduceOp::SUM);
+  reduce(ke_sum, c10d::ReduceOp::SUM);
+  reduce(pe_sum, c10d::ReduceOp::SUM);
+  reduce(meters, c10d::ReduceOp::SUM);
+  reduce(theta_min, c10d::ReduceOp::MIN);
+  reduce(vic_max, c10d::ReduceOp::MAX);
+
+  auto print = [&](char const* name, double value) {
+    SINFO() << std::scientific << std::setprecision(precision) << name << value;
+  };
+  auto mass = conserved[IDN];
+  print(" mass0=", mass.item<double>());
+  if (conserved.size(0) > ICY) {
+    for (int n = ICY; n < conserved.size(0); ++n) mass += conserved[n];
+    print(" masst=", mass.item<double>());
+  }
+  if (ke_sum.defined()) print(" ke=", ke_sum[0].item<double>());
+  if (root->phydro->peos->nvar() > IPR)
+    print(energy_label, conserved[IPR].item<double>());
+  if (pe_sum.defined()) print(" pe=", pe_sum[0].item<double>());
+
+  SINFO() << " run-to-date:";
+  double total = meters[1].item<double>();
+  if (total > 0.) print(" limcut=", meters[0].item<double>() / total);
+  print(" thetamin=", theta_min[0].item<double>());
+  SINFO() << " thetasevere=" << static_cast<long long>(meters[2].item<double>());
+  if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
+  SINFO() << std::endl;
+}
+
+void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
+                                     double dt) const {
+  print_cycle_diagnostics({{this, &vars}}, time, dt,
+                          std::numeric_limits<double>::max_digits10 - 4, " ie=");
 }
 
 int MeshBlockImpl::finalize(Variables const &vars, double time) {
