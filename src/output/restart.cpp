@@ -43,16 +43,19 @@ void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
   std::vector<int> output_file_numbers;
   std::vector<double> output_next_times;
   std::vector<int64_t> output_keys;
+  std::vector<int64_t> output_keys_v2;
 
   for (auto out : pmb->output_types) {
     output_file_numbers.push_back(out->file_number);
     output_next_times.push_back(out->next_time);
     output_keys.push_back(out->schedule_key());
+    output_keys_v2.push_back(out->schedule_key_v2());
   }
 
   out_vars["file_number"] = torch::tensor(output_file_numbers, torch::kInt64);
   out_vars["next_time"] = torch::tensor(output_next_times, torch::kFloat64);
   out_vars["output_key"] = torch::tensor(output_keys, torch::kInt64);
+  out_vars["output_key_v2"] = torch::tensor(output_keys_v2, torch::kInt64);
 
   // create filename: <basename>.<blockid>.<file_number>.part
   std::string fname;

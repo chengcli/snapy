@@ -13,11 +13,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_restart_output_schedule import (
     BASE_TLIM, FRAME_DT, RESTART_DT, RESUME_TLIM,
-    restart_schedule, run, write_case,
+    restart_schedule, restart_tensors, run, write_case,
 )
 
 import netCDF4
 import numpy as np
+import torch
+import yaml
 
 SLOW_DT = 11.0  # a second netcdf cadence, distinct from FRAME_DT until the resume edits it
 
@@ -38,10 +40,90 @@ def written_after(table, stream: str, resume_t: float) -> list[int]:
   return sorted(n for (s, n), t in table.items() if s == stream and t > resume_t + 1e-6)
 
 
+def checkpoint_variant(source: Path, target: Path, drop: set[str]) -> Path:
+  tensors = restart_tensors(source)
+  for name in drop:
+    tensors.pop(name)
+
+  class TensorModule(torch.nn.Module):
+    def __init__(self):
+      super().__init__()
+      for name, tensor in tensors.items():
+        self.register_buffer(name, tensor)
+
+  torch.jit.script(TensorModule()).save(str(target))
+  return target
+
+
+def run_precision_reorder(base_yaml: Path, tests_dir: Path, launch, env) -> None:
+  restart = {"type": "restart", "dt": 6.e-7}
+  short = {"type": "netcdf", "variables": ["prim"], "dt": 4.e-7}
+  long = {"type": "netcdf", "variables": ["prim"], "dt": 4.9e-7}
+
+  def scaled_case(case_dir: Path, tlim: float, outputs) -> Path:
+    card = write_case(base_yaml, case_dir, tlim, outputs)
+    config = yaml.safe_load(card.read_text())
+    for key in ("x1min", "x1max", "x2min", "x2max", "x3min", "x3max"):
+      config["geometry"]["bounds"][key] = float(config["geometry"]["bounds"][key]) * 1.e-7
+    card.write_text(yaml.safe_dump(config, sort_keys=False))
+    return card
+
+  base_dir = tests_dir / "restart_key_precision_base"
+  card = scaled_case(base_dir, 9.e-7, [restart, short, long])
+  run(launch + [str(card)], base_dir, env)
+  restart_file = sorted(p for p in base_dir.glob("*.restart") if ".final." not in p.name)[-1]
+  resume_t, saved_next, _ = restart_schedule(restart_file)
+  if not (saved_next[1] != saved_next[2] and saved_next[1] > resume_t and
+          saved_next[2] > resume_t):
+    raise AssertionError(
+        f"precision fixture has indistinguishable schedules at {resume_t}: {saved_next}")
+
+  tensors = restart_tensors(restart_file)
+  if not {"output_key", "output_key_v2"}.issubset(tensors):
+    raise AssertionError("new restart must retain output_key and add output_key_v2")
+  legacy_file = checkpoint_variant(
+      restart_file, base_dir / "legacy.restart", {"output_key_v2"})
+  keyless_file = checkpoint_variant(
+      restart_file, base_dir / "keyless.restart", {"output_key", "output_key_v2"})
+
+  def resume(name: str, checkpoint: Path):
+    resumed_dir = tests_dir / name
+    resumed = scaled_case(resumed_dir, 1.35e-6, [restart, long, short])
+    run(launch + [str(resumed), "--restart", str(checkpoint.resolve())],
+        resumed_dir, env)
+    return restart_schedule(sorted(resumed_dir.glob("*.restart"))[-1])[:2]
+
+  precise_t, precise_next = resume("restart_key_precision_resumed", restart_file)
+  legacy_t, legacy_next = resume("restart_key_legacy_resumed", legacy_file)
+  keyless_t, keyless_next = resume("restart_key_keyless_resumed", keyless_file)
+
+  def advance(saved: float, dt: float, final_time: float) -> float:
+    while saved <= final_time:
+      saved += dt
+    return saved
+
+  identity = [precise_next[0], advance(saved_next[2], long["dt"], precise_t),
+              advance(saved_next[1], short["dt"], precise_t)]
+  positional = [legacy_next[0], advance(saved_next[1], long["dt"], legacy_t),
+                advance(saved_next[2], short["dt"], legacy_t)]
+  for label, actual, expected in (
+      ("precise", precise_next, identity),
+      ("legacy", legacy_next, positional),
+      ("keyless", keyless_next, positional),
+  ):
+    for slot in (1, 2):
+      if abs(actual[slot] - expected[slot]) > 1.e-15:
+        raise AssertionError(
+            f"{label} cadence reorder restored slot {slot} to {actual[slot]}, "
+            f"expected {expected[slot]} from saved schedules {saved_next}; "
+            f"resume {resume_t}")
+
+
 def main() -> int:
   parser = argparse.ArgumentParser()
   parser.add_argument("--build-dir", required=True)
   parser.add_argument("--build-type", required=True)
+  parser.add_argument("--precision-only", action="store_true")
   args = parser.parse_args()
 
   build_dir = Path(args.build_dir).resolve()
@@ -66,7 +148,11 @@ def main() -> int:
   edited = dict(fast, dt=SLOW_DT)  # its schedule key becomes the slow block's
   if fast["dt"] == slow["dt"]:
     raise AssertionError("the two netcdf blocks already collide in leg 1: test defused")
-  launch = [torchrun, "--no-python", "--nproc-per-node=1", str(exe)]
+  launch = [torchrun, "--master-port=" + env.get("MASTER_PORT", "29500"),
+            "--no-python", "--nproc-per-node=1", str(exe)]
+  run_precision_reorder(base_yaml, tests_dir, launch, env)
+  if args.precision_only:
+    return 0
 
   # leg 1: three output blocks, the two netcdf ones on DIFFERENT cadences
   case_dir = tests_dir / "restart_key_collision"
