@@ -597,11 +597,10 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
     double thermal_diffusivity = 0.;
     if (options->kappa_iso() > 0.) {
       auto temp = phydro->peos->compute("W->T", {w});
-      auto rho_cv_min =
-          (w[IDN] * phydro->peos->specific_heat_cv(w, temp))
-              .index(interior)
-              .min()
-              .item<double>();
+      auto rho_cv_min = (w[IDN] * phydro->peos->specific_heat_cv(w, temp))
+                            .index(interior)
+                            .min()
+                            .item<double>();
       thermal_diffusivity = options->kappa_iso() / rho_cv_min;
     }
     coeff = std::max(options->nu_iso() / rho_min, thermal_diffusivity);

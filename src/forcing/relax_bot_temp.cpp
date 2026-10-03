@@ -99,8 +99,7 @@ torch::Tensor RelaxBotTempImpl::forward(torch::Tensor du, torch::Tensor w,
     target = (1. + a) * T0 - a * T1;
     gain = 1.0 / (1. + a);
   }
-  auto heating =
-      dt / options->tau() * rho * cv * (options->btemp() - target);
+  auto heating = dt / options->tau() * rho * cv * (options->btemp() - target);
   if (gain.defined()) heating *= gain;
   du[IPR].index(bottom) += heating;
   return du;

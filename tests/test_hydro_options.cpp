@@ -332,14 +332,16 @@ TEST(hydro_options, wb_wall_clamp_reaches_the_x1_reference_cuda) {
   wb_wall_clamp_reaches_the_x1_reference(torch::Device(torch::kCUDA, 0));
 }
 
-
 TEST(hydro_options, reject_non_map_option_blocks) {
-  char const* filename = "test_options_non_map.yaml";
-  for (auto const* input : {
-           "dynamics: [ignored]\n",
-           "dynamics:\n  equation-of-state: [ignored]\n",
-           "dynamics:\n  equation-of-state: {type: ideal-gas}\nforcing: [ignored]\n"}) {
-    { std::ofstream file(filename); file << input; }
+  char const *filename = "test_options_non_map.yaml";
+  for (auto const *input :
+       {"dynamics: [ignored]\n", "dynamics:\n  equation-of-state: [ignored]\n",
+        "dynamics:\n  equation-of-state: {type: ideal-gas}\nforcing: "
+        "[ignored]\n"}) {
+    {
+      std::ofstream file(filename);
+      file << input;
+    }
     EXPECT_ANY_THROW(snap::HydroOptionsImpl::from_yaml(filename)) << input;
   }
   std::remove(filename);

@@ -14,8 +14,8 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/implicit/implicit_hydro.hpp>
-#include <snap/mesh/meshblock.hpp>
 #include <snap/mesh/mesh.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
 
@@ -404,15 +404,17 @@ TEST(cycle_info, vicclamp_reads_the_clamped_fraction) {
   EXPECT_TRUE(found) << out;
 }
 
-
 TEST(cycle_info, mesh_aggregates_all_local_blocks_once) {
   auto card = YAML::LoadFile(kCard);
   card["distribute"] = YAML::Load(
       "{layout: cubed, nb1: 2, blocks_per_process: 2, backend: gloo}");
-  card["integration"] = YAML::Load(
-      "{type: rk3, implicit-scheme: 1, ncycle_out: 1}");
+  card["integration"] =
+      YAML::Load("{type: rk3, implicit-scheme: 1, ncycle_out: 1}");
   char const* filename = "test_cycle_diagnostics_mesh.yaml";
-  { std::ofstream file(filename); file << card; }
+  {
+    std::ofstream file(filename);
+    file << card;
+  }
   auto mesh = Mesh(MeshOptionsImpl::from_yaml(filename));
   std::remove(filename);
   ASSERT_EQ(mesh->blocks.size(), 2);
@@ -420,9 +422,9 @@ TEST(cycle_info, mesh_aggregates_all_local_blocks_once) {
   for (int i = 0; i < 2; ++i) {
     auto block = mesh->blocks[i];
     auto coord = block->pcoord;
-    auto u = torch::zeros(
-        {block->phydro->peos->nvar(), coord->options->nc3(),
-         coord->options->nc2(), coord->options->nc1()}, torch::kFloat64);
+    auto u = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
     u[IDN].fill_(1.);
     u[ICY].fill_(0.25);
     u[ICY + 1].fill_(0.25);
@@ -440,10 +442,15 @@ TEST(cycle_info, mesh_aggregates_all_local_blocks_once) {
   mesh->print_cycle_info(vars, 0., 1.);
   auto out = testing::internal::GetCapturedStdout();
   // Two half-columns of volume 3 each: KE=9+36, PE=1.5*10*integral(z dz).
-  for (auto const& expected : {
-           std::pair{" mass0=", 6.}, {" masst=", 9.}, {" ke=", 45.},
-           {" energy=", 90.}, {" pe=", 270.}, {" limcut=", 0.4},
-           {" thetamin=", 0.3}, {" thetasevere=", 7.}, {" vicclamp=", 0.2}}) {
+  for (auto const& expected : {std::pair{" mass0=", 6.},
+                               {" masst=", 9.},
+                               {" ke=", 45.},
+                               {" energy=", 90.},
+                               {" pe=", 270.},
+                               {" limcut=", 0.4},
+                               {" thetamin=", 0.3},
+                               {" thetasevere=", 7.},
+                               {" vicclamp=", 0.2}}) {
     bool found = false;
     auto value = read_token(out, expected.first, &found);
     EXPECT_TRUE(found) << expected.first << " missing from " << out;

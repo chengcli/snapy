@@ -24,10 +24,10 @@
 
 // snap
 #include <snap/mesh/mesh.hpp>
-
-#include "cycle_diagnostics.hpp"
 #include <snap/utils/log.hpp>
 #include <snap/utils/signal_handler.hpp>
+
+#include "cycle_diagnostics.hpp"
 
 namespace snap {
 

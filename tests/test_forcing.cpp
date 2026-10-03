@@ -26,8 +26,7 @@ using namespace snap;
 
 namespace {
 
-class DryDensitySourceImpl
-    : public torch::nn::Cloneable<DryDensitySourceImpl> {
+class DryDensitySourceImpl : public torch::nn::Cloneable<DryDensitySourceImpl> {
  public:
   double increment = 0.;
 
@@ -326,11 +325,10 @@ TEST(forcing, relax_bottom_temperature_at_face_uses_coordinate_spacing) {
   coord->x1v[ng + 1] = 2.5;
 
   auto w = make_primitive(block);
-  auto temp =
-      (100. + 10. * coord->x1v).view({1, 1, -1}).expand_as(w[IDN]);
+  auto temp = (100. + 10. * coord->x1v).view({1, 1, -1}).expand_as(w[IDN]);
   auto du = torch::zeros_like(w);
-  auto op = RelaxBotTempOptionsImpl::from_yaml(YAML::Load(
-      "relax-bot-temp: {tau: 2., btemp: 100., at-face: true}"));
+  auto op = RelaxBotTempOptionsImpl::from_yaml(
+      YAML::Load("relax-bot-temp: {tau: 2., btemp: 100., at-face: true}"));
 
   RelaxBotTemp(op, block->phydro.get())->forward(du, w, temp, 0.5);
 
@@ -1321,9 +1319,8 @@ TEST(forcing, native_dry_source_uses_each_rk_stage_weight) {
     block->phydro->forcings.push_back(torch::nn::AnyModule(source));
 
     auto coord = block->pcoord;
-    auto w = torch::zeros({block->phydro->peos->nvar(),
-                           coord->options->nc3(), coord->options->nc2(),
-                           coord->options->nc1()},
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
                           torch::kFloat64);
     w[IDN].fill_(1.);
     w[IPR].fill_(1.e5);
@@ -1367,15 +1364,14 @@ TEST(forcing, native_dry_source_preserves_scalar_bounds_at_every_rk_order) {
           torch::nn::AnyModule(DryDensitySource(increment)));
 
       auto coord = block->pcoord;
-      auto w = torch::zeros({block->phydro->peos->nvar(),
-                             coord->options->nc3(), coord->options->nc2(),
-                             coord->options->nc1()},
+      auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                             coord->options->nc2(), coord->options->nc1()},
                             torch::kFloat64);
       w[IDN].fill_(1.);
       w[IVX].fill_(1000.);
       w[IPR].fill_(1.e5);
-      auto r = torch::full({1, coord->options->nc3(),
-                            coord->options->nc2(), coord->options->nc1()},
+      auto r = torch::full({1, coord->options->nc3(), coord->options->nc2(),
+                            coord->options->nc1()},
                            0.9, w.options());
       int il = coord->il(), iu = coord->iu();
       r.select(-1, il + 7).fill_(1.);

@@ -65,26 +65,22 @@ TEST(cycle_info, aggregates_two_local_blocks_across_two_processes) {
     int block_rank = block->options->layout()->rank();
     double rho = block_rank + 1.;
     auto coord = block->pcoord;
-    auto u = torch::zeros(
-        {block->phydro->peos->nvar(), coord->options->nc3(),
-         coord->options->nc2(), coord->options->nc1()},
-        torch::kFloat64);
+    auto u = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
     u[IDN].fill_(rho);
     u[IVX].fill_(2. * rho);
     u[IPR].fill_(10. * rho);
     vars[i]["hydro_u"] = u;
 
-    auto interior = block->part(
-        {0, 0, 0}, PartOptions().exterior(false).ndim(3));
+    auto interior =
+        block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
     auto vol = coord->cell_volume();
     double block_volume = vol.index(interior).sum().item<double>();
     mass += rho * block_volume;
     ke += 2. * rho * block_volume;
     energy += 10. * rho * block_volume;
-    pe += (rho * 10. * coord->x1v * vol)
-              .index(interior)
-              .sum()
-              .item<double>();
+    pe += (rho * 10. * coord->x1v * vol).index(interior).sum().item<double>();
 
     double meter = block_rank + 1.;
     block->phydro->lim_cut().fill_(meter);
@@ -116,8 +112,8 @@ TEST(cycle_info, aggregates_two_local_blocks_across_two_processes) {
            {" ke=", expected[1].item<double>()},
            {" energy=", expected[2].item<double>()},
            {" pe=", expected[3].item<double>()},
-           {" limcut=", expected[4].item<double>() /
-                           expected[5].item<double>()},
+           {" limcut=",
+            expected[4].item<double>() / expected[5].item<double>()},
            {" thetasevere=", expected[6].item<double>()},
            {" thetamin=", 0.4},
            {" vicclamp=", 0.4},

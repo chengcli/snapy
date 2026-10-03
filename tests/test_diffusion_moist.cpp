@@ -63,15 +63,15 @@ TEST_P(DeviceTest, moist_conduction_uses_local_mixture_specific_heat) {
   }
 }
 
-TEST(diffusion, dynamic_conduction_timestep_uses_local_volumetric_heat_capacity) {
+TEST(diffusion,
+     dynamic_conduction_timestep_uses_local_volumetric_heat_capacity) {
   auto options =
       MeshBlockOptionsImpl::from_yaml("test_diffusion_dynamic_cv.yaml");
   auto block = std::make_shared<MeshBlockImpl>(options);
   auto peos = block->phydro->peos;
   auto diffusion = block->phydro->pdiffusion;
   auto w = make_primitive(block, torch::kCPU, torch::kFloat64);
-  auto interior =
-      block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
   int ng = block->pcoord->options->nghost();
 
   // Vary density and composition independently. The minimum density is dry,

@@ -623,14 +623,12 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // A dry source is inside the RK tendency. Addition carries the ratio at
   // source entry; removal carries the complete source-free stage result so it
   // cannot amplify a ratio that transport or the implicit solve just changed.
-  auto carry_dry_source = [&](torch::Tensor const& dry,
-                              torch::Tensor const& scalar_base) {
+  auto carry_dry_source = [&](torch::Tensor const &dry,
+                              torch::Tensor const &scalar_base) {
     if (!dry.defined() || !vars.count("scalar_r")) return;
-    auto rho_base =
-        pintg->forward(stage, _hydro_u0[IDN], hydro_u[IDN],
-                       fut_hydro_du[IDN] - dry);
-    auto s_base =
-        pintg->forward(stage, _scalar_s0, scalar_s, scalar_base);
+    auto rho_base = pintg->forward(stage, _hydro_u0[IDN], hydro_u[IDN],
+                                   fut_hydro_du[IDN] - dry);
+    auto s_base = pintg->forward(stage, _scalar_s0, scalar_s, scalar_base);
     auto remove_r = s_base / rho_base.unsqueeze(0);
     auto carry_r =
         torch::where(dry.unsqueeze(0) < 0., remove_r, vars.at("scalar_r"));
@@ -730,8 +728,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   if (user_dry_before.defined()) {
-    carry_dry_source(fut_hydro_du[IDN] - user_dry_before,
-                     user_scalar_before);
+    carry_dry_source(fut_hydro_du[IDN] - user_dry_before, user_scalar_before);
   }
   if (!user_stage_forcings.empty()) {
     if (options->verbose()) {
@@ -913,27 +910,31 @@ void MeshBlockImpl::make_outputs(Variables const &vars, double current_time,
 }
 
 void print_cycle_diagnostics(
-    std::vector<std::pair<MeshBlockImpl const*, Variables const*>> const& blocks,
-    double time, double dt, int precision, char const* energy_label) {
+    std::vector<std::pair<MeshBlockImpl const *, Variables const *>> const
+        &blocks,
+    double time, double dt, int precision, char const *energy_label) {
   auto root = blocks.front().first;
   auto pintg = root->pintg;
   if (pintg->options->ncycle_out() == 0 ||
-      root->cycle % pintg->options->ncycle_out() != 0) return;
+      root->cycle % pintg->options->ncycle_out() != 0)
+    return;
 
   SINFO() << "cycle=" << root->cycle << " redo=" << pintg->current_redo
-          << std::scientific << std::setprecision(precision)
-          << " time=" << time << " dt=" << dt;
+          << std::scientific << std::setprecision(precision) << " time=" << time
+          << " dt=" << dt;
   if (!blocks.front().second->count("hydro_u")) {
     SINFO() << std::endl;
     return;
   }
 
   torch::Tensor conserved, ke_sum, pe_sum, meters, theta_min, vic_max;
-  auto add = [](torch::Tensor& total, torch::Tensor value) {
-    if (total.defined()) total += value;
-    else total = value.clone();
+  auto add = [](torch::Tensor &total, torch::Tensor value) {
+    if (total.defined())
+      total += value;
+    else
+      total = value.clone();
   };
-  for (auto const& [block, vars] : blocks) {
+  for (auto const &[block, vars] : blocks) {
     auto hydro = block->phydro;
     auto coord = block->pcoord;
     auto interior = block->part({0, 0, 0}, PartOptions().exterior(false));
@@ -955,11 +956,13 @@ void print_cycle_diagnostics(
       }
     }
 
-    add(meters, torch::stack({hydro->lim_cut()[0].to(torch::kFloat64),
-                             hydro->lim_flux()[0].to(torch::kFloat64),
-                             hydro->positivity_severe()[0].to(torch::kFloat64)}));
+    add(meters,
+        torch::stack({hydro->lim_cut()[0].to(torch::kFloat64),
+                      hydro->lim_flux()[0].to(torch::kFloat64),
+                      hydro->positivity_severe()[0].to(torch::kFloat64)}));
     auto tmin = hydro->positivity_min().to(torch::kFloat64);
-    theta_min = theta_min.defined() ? torch::minimum(theta_min, tmin) : tmin.clone();
+    theta_min =
+        theta_min.defined() ? torch::minimum(theta_min, tmin) : tmin.clone();
     if (hydro->picorr) {
       auto vc = hydro->picorr->clamp_residual().to(torch::kFloat64);
       vic_max = vic_max.defined() ? torch::maximum(vic_max, vc) : vc.clone();
@@ -967,7 +970,7 @@ void print_cycle_diagnostics(
   }
 
   auto layout = root->get_layout();
-  auto reduce = [&](torch::Tensor& value, c10d::ReduceOp op) {
+  auto reduce = [&](torch::Tensor &value, c10d::ReduceOp op) {
     if (!value.defined() || !layout->has_process_group()) return;
     std::vector<at::Tensor> values = {value};
     layout->comm->reduce(values, op,
@@ -981,7 +984,7 @@ void print_cycle_diagnostics(
   reduce(theta_min, c10d::ReduceOp::MIN);
   reduce(vic_max, c10d::ReduceOp::MAX);
 
-  auto print = [&](char const* name, double value) {
+  auto print = [&](char const *name, double value) {
     SINFO() << std::scientific << std::setprecision(precision) << name << value;
   };
   auto mass = conserved[IDN];
@@ -999,7 +1002,8 @@ void print_cycle_diagnostics(
   double total = meters[1].item<double>();
   if (total > 0.) print(" limcut=", meters[0].item<double>() / total);
   print(" thetamin=", theta_min[0].item<double>());
-  SINFO() << " thetasevere=" << static_cast<long long>(meters[2].item<double>());
+  SINFO() << " thetasevere="
+          << static_cast<long long>(meters[2].item<double>());
   if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
   SINFO() << std::endl;
 }
@@ -1007,7 +1011,8 @@ void print_cycle_diagnostics(
 void MeshBlockImpl::print_cycle_info(Variables const &vars, double time,
                                      double dt) const {
   print_cycle_diagnostics({{this, &vars}}, time, dt,
-                          std::numeric_limits<double>::max_digits10 - 4, " ie=");
+                          std::numeric_limits<double>::max_digits10 - 4,
+                          " ie=");
 }
 
 int MeshBlockImpl::finalize(Variables const &vars, double time) {
@@ -1238,8 +1243,7 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       if (match[n] >= 0) continue;
       auto key = current_key(output_types[n]);
       for (int k = 0; k < nsaved; ++k) {
-        if (!claimed[k] &&
-            saved_keys[key_offset + k].item<int64_t>() == key) {
+        if (!claimed[k] && saved_keys[key_offset + k].item<int64_t>() == key) {
           match[n] = k;
           claimed[k] = true;
           break;

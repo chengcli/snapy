@@ -43,8 +43,9 @@ EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
 
   auto node = config["dynamics"]["equation-of-state"];
 
-  TORCH_CHECK(node.IsMap(),
-              "EquationOfStateOptions: dynamics/equation-of-state must be a map.");
+  TORCH_CHECK(
+      node.IsMap(),
+      "EquationOfStateOptions: dynamics/equation-of-state must be a map.");
   check_keys(node, "dynamics/equation-of-state",
              {"type", "gammad", "weight", "density-floor", "pressure-floor",
               "temperature-floor", "limiter", "eos-file", "verbose"},
@@ -275,10 +276,10 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
       int count = field.size(0);
       auto major = cons.index(interior)[IDN].unsqueeze(0);
       auto layout = pmb->get_layout();
-      bool split = count > 0 && whole_column && layout &&
-                   layout->options->pz() > 1;
-      auto column = split ? layout->gather_x1(
-                                torch::cat({field, major, vol.expand_as(major)}))
+      bool split =
+          count > 0 && whole_column && layout && layout->options->pz() > 1;
+      auto column = split ? layout->gather_x1(torch::cat(
+                                {field, major, vol.expand_as(major)}))
                           : torch::Tensor();
       auto repaired = split ? column.narrow(0, 0, count) : field;
       auto cmajor = split ? column.narrow(0, count, 1) : major;
@@ -303,7 +304,8 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     };
 
     if (parentless) {
-      repair_column(cons.index(interior).narrow(0, ICY + nvapor, ncloud), false);
+      repair_column(cons.index(interior).narrow(0, ICY + nvapor, ncloud),
+                    false);
       cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
     }
     repair_column(cons.index(interior).narrow(0, ICY, nvapor), true);
