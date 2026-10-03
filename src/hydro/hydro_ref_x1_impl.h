@@ -20,24 +20,6 @@ inline DISPATCH_MACRO T hydro_ref_x1_face(T const* psf_lo, T const* psf_hi,
 }
 
 template <typename T>
-inline DISPATCH_MACRO T hydro_ref_x1_six_face(
-    T const* psf_lo, T const* psf_hi, int flat, int start, int nc1,
-    double const* weights, bool reverse = false) {
-  T value = T(0);
-  for (int m = 0; m < 6; ++m) {
-    value += T(weights[reverse ? 5 - m : m]) *
-             hydro_ref_x1_face(psf_lo, psf_hi, flat, start + m, nc1);
-  }
-  return value;
-}
-
-template <typename T>
-inline DISPATCH_MACRO T hydro_ref_x1_accept(T value, T lower, T upper,
-                                             T fallback) {
-  return value >= lower && value <= upper ? value : fallback;
-}
-
-template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
                                                   T const* anchor, T* psf_lo,
                                                   T* psf_hi, int column,
@@ -130,10 +112,17 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
                               401. / 720., -31. / 480., 11. / 1440.};
     T lower = lo < hi ? lo : hi;
     T upper = lo > hi ? lo : hi;
+    auto use_six_faces = [&](int start, double const* weights,
+                             bool reverse = false) {
+      T value = T(0);
+      for (int m = 0; m < 6; ++m) {
+        value += T(weights[reverse ? 5 - m : m]) *
+                 hydro_ref_x1_face(psf_lo, psf_hi, flat, start + m, nc1);
+      }
+      if (value >= lower && value <= upper) cell_pref = value;
+    };
     if (i >= 2 && i < nc1 - 2 && !wall_in && !wall_out) {
-      T six =
-          hydro_ref_x1_six_face(psf_lo, psf_hi, flat, i - 2, nc1, w6);
-      cell_pref = hydro_ref_x1_accept(six, lower, upper, cell_pref);
+      use_six_faces(i - 2, w6);
     }
 
     constexpr double w6e[2][6] = {
@@ -144,28 +133,20 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     };
     if (clamp_in) {
       int sigma = i - il;
-      T val =
-          hydro_ref_x1_six_face(psf_lo, psf_hi, flat, il, nc1, w6e[sigma]);
-      cell_pref = hydro_ref_x1_accept(val, lower, upper, cell_pref);
+      use_six_faces(il, w6e[sigma]);
     }
     if (clamp_out) {
       int s = iu + 1 - 5;
       int row = 4 - (i - s);
-      T val =
-          hydro_ref_x1_six_face(psf_lo, psf_hi, flat, s, nc1, w6e[row], true);
-      cell_pref = hydro_ref_x1_accept(val, lower, upper, cell_pref);
+      use_six_faces(s, w6e[row], true);
     }
     if (!phys_in && i < 2) {
-      T val =
-          hydro_ref_x1_six_face(psf_lo, psf_hi, flat, 0, nc1, w6e[i]);
-      cell_pref = hydro_ref_x1_accept(val, lower, upper, cell_pref);
+      use_six_faces(0, w6e[i]);
     }
     if (!phys_out && i >= nc1 - 2) {
       int sigma = i - (nc1 - 5);
       int row = 4 - sigma;
-      T val = hydro_ref_x1_six_face(psf_lo, psf_hi, flat, nc1 - 5, nc1,
-                                      w6e[row], true);
-      cell_pref = hydro_ref_x1_accept(val, lower, upper, cell_pref);
+      use_six_faces(nc1 - 5, w6e[row], true);
     }
   } else {
     T dp = grav * w[IDN * ncells + flat + i] * dx1f[i];
