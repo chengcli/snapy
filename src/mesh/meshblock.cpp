@@ -10,6 +10,7 @@
 
 // snap
 #include <snap/coord/coord_utils.hpp>
+#include <snap/hydro/flux_positivity.hpp>
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
@@ -608,6 +609,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (1) save initial state --------
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
+    phydro->gravity_work_defect().zero_();  // a redone step starts afresh
+    phydro->commit_gravity_work_fix();      // the previous step was accepted
+    phydro->gravity_work_wall_mass().zero_();
     if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
     phydro->peos->reset_limiter_marks(hydro_u);
     saturation_failures();  // a failure counted before the step is not its own
@@ -817,7 +821,85 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // Physical ghosts must include the final-stage species adjustment.
+  // gravity-work-fixer (#283): once per step, after the last mass change, add
+  // the step's global E+PE defect D back as heat, uniform per unit mass:
+  // dE_i = -D m_i / sum_j m_j V_j. Momentum and mass are untouched. A Mesh
+  // with several local blocks sums them first (MeshImpl::forward).
+  if (stage == pintg->stages.size() - 1 && phydro->gravity_work_fixer() &&
+      !defer_gravity_work_fixer) {
+    std::vector<at::Tensor> reduce = {gravity_work_fixer_sums(vars)};
+    if (_playout->has_process_group()) {
+      _playout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
+    }
+    apply_gravity_work_fixer(vars, reduce[0]);
+  }
+
   apply_boundaries(vars, hydro_u, scalar_s);
+}
+
+torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
+    Variables const &vars) const {
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  // immersed solid cells are refilled each step: they take no share of -D
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto mv = (m * pcoord->cell_volume()).index(in3);
+  // the mass of the cells next to the x1 walls sets the wall faces' round-off
+  auto mwall = torch::zeros_like(mv.select(-1, 0).sum());
+  if (phydro->is_x1_wall(0)) mwall += mv.select(-1, 0).sum();
+  if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
+  // the limiter patched a cell or found a NaN: the redo check discards the step
+  auto hits = limiter_hits();
+  auto redo = torch::full_like(mwall, hits[0] || hits[1] ? 1. : 0.);
+  return torch::stack({phydro->gravity_work_defect()[0],
+                       mv.sum().to(torch::kFloat64),
+                       phydro->gravity_work_wall_mass()[0],
+                       mwall.to(torch::kFloat64), redo.to(torch::kFloat64)})
+      .cpu();
+}
+
+void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
+                                             torch::Tensor const &global) {
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  // immersed solid cells are refilled each step: they take no share of -D
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  double D = global[0].item<double>(), mass = global[1].item<double>();
+  double wall = global[2].item<double>(), mwall = global[3].item<double>();
+  if (global[4].item<double>() > 0. ||
+      !torch::isfinite(global).all().item<bool>()) {
+    // a step the redo check will discard (limiter repair, NaN, non-finite
+    // sums) is left to it, as with the fixer off
+    phydro->gravity_work_defect().zero_();
+    phydro->gravity_work_wall_mass().zero_();
+    return;
+  }
+  // the defect leaves out boundary fluxes: refuse a step that moved mass
+  // through an x1 boundary face (whatever installed it: YAML or Python).
+  // A sealed wall's flux is round-off, of order eps times its cell's mass; the
+  // bound allows 1e3 eps of the wall cells' mass per step, so it scales with
+  // the dtype and the wall area. Measured: 0.14 eps explicit (float64 and
+  // float32); under an implicit scheme it grows about linearly with dt (15 eps
+  // at acoustic Courant 44, 304 eps at 1778).
+  double eps = machine_epsilon(hydro_u.scalar_type());
+  double bound = 1.e3 * eps * mwall;
+  TORCH_CHECK(wall <= bound, "const-gravity gravity-work-fixer: ", wall,
+              " kg crossed an x1 boundary face this step (", wall / mwall,
+              " of the x1 wall cells' mass; round-off bound ", 1.e3 * eps,
+              "); the fixer's E+PE defect leaves out boundary fluxes, so it "
+              "needs impenetrable x1 boundaries. Set gravity-work-fixer: "
+              "false for open x1 boundaries.");
+  double efix = -D / mass;  // J/kg
+  hydro_u[IPR].index(in3) += m.index(in3) * efix;
+  phydro->gravity_work_defect().zero_();
+  phydro->gravity_work_wall_mass().zero_();
+  phydro->add_gravity_work_fix(-D);  // counted once the step is accepted
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
@@ -1007,6 +1089,8 @@ void print_cycle_diagnostics(
   SINFO() << " thetasevere="
           << static_cast<long long>(meters[2].item<double>());
   if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
+  if (root->phydro->gravity_work_fixer())  // global: every block holds it
+    print(" fixgrav=", root->phydro->gravity_work_fix()[0].item<double>());
   SINFO() << std::endl;
 }
 
@@ -1143,7 +1227,8 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
       return -1;  // terminate
     }
 
-    // reset variables
+    // reset variables (the fixer's -D goes with them: drop its count)
+    phydro->drop_gravity_work_fix();
     vars["hydro_u"].copy_(_hydro_u0);
     phydro->peos->forward(vars["hydro_u"], vars["hydro_w"]);
     if (vars.count("scalar_s")) {
@@ -1160,6 +1245,7 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
 
   // good to go
   pintg->current_redo = 0;
+  phydro->commit_gravity_work_fix();
   return 0;
 }
 

@@ -15,7 +15,8 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
 
   auto node = forcing["const-gravity"];
   check_keys(node, "forcing/const-gravity",
-             {"grav1", "grav2", "grav3", "non-hydrostatic"});
+             {"grav1", "grav2", "grav3", "non-hydrostatic", "gravity-work",
+              "gravity-work-fixer"});
   auto op = ConstGravityOptionsImpl::create();
 
   op->grav1() = node["grav1"].as<double>(0.);
@@ -23,6 +24,21 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
   op->grav3() = node["grav3"].as<double>(0.);
   op->non_hydrostatic() = node["non-hydrostatic"].as<double>(1.);
   TORCH_CHECK(op->non_hydrostatic() >= 0. && op->non_hydrostatic() <= 1.);
+
+  op->gravity_work() = node["gravity-work"].as<std::string>("cell");
+  TORCH_CHECK(op->gravity_work() == "cell" ||
+                  op->gravity_work() == "face-wallc" ||
+                  op->gravity_work() == "face",
+              "forcing/const-gravity/gravity-work must be cell, face-wallc or "
+              "face, got '",
+              op->gravity_work(), "'");
+  bool cell = op->gravity_work() == "cell";
+  op->gravity_work_fixer() = node["gravity-work-fixer"].as<bool>(cell);
+  if (op->gravity_work_fixer() && op->grav1() != 0.) {
+    TORCH_CHECK(cell,
+                "forcing/const-gravity/gravity-work-fixer needs gravity-work: "
+                "cell");
+  }
 
   return op;
 }

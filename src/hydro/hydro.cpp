@@ -49,9 +49,47 @@ void HydroImpl::reset() {
                  << "\n";
   }
 
+  // gravity-work options, checked here so YAML and Python construction agree
+  if (options->grav()) {
+    auto const& gw = options->grav()->gravity_work();
+    TORCH_CHECK(gw == "cell" || gw == "face-wallc" || gw == "face",
+                "const-gravity gravity-work must be cell, face-wallc or face, "
+                "got '",
+                gw, "'");
+    // the fixer runs with gravity-work: cell only; record the effective value
+    // (a face form set from Python keeps the default true otherwise)
+    if (gw != "cell") options->grav()->gravity_work_fixer() = false;
+    TORCH_CHECK(!gravity_work_fixer() || (options->grav()->grav2() == 0. &&
+                                          options->grav()->grav3() == 0.),
+                "const-gravity gravity-work-fixer needs grav2 = grav3 = 0 (its "
+                "potential is -grav1 * x1); set it false otherwise");
+    // mass that wraps across a periodic x1 face jumps by grav1 * Lx1 in that
+    // potential, which the E+PE defect would book as a defect. The layout's
+    // x1 wrap is read from its topology: a Python bfuncs() call clears names.
+    auto const& nm = pmb->options->bcnames();
+    bool wrap = pmb->options->layout()->periodic_z();
+    for (int f : {0, 1}) {
+      TORCH_CHECK(!gravity_work_fixer() ||
+                      !(wrap || (f < static_cast<int>(nm.size()) &&
+                                 nm[f].compare(0, 8, "periodic") == 0)),
+                  "const-gravity gravity-work-fixer needs non-periodic x1 "
+                  "boundaries (its potential -grav1 * x1 jumps across a "
+                  "periodic x1 face); set it false otherwise");
+    }
+  }
+
   //// ---- (6) set up implicit solver ---- ////
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
+    if (options->grav() && options->grav()->grav1() != 0. &&
+        options->grav()->gravity_work() != "cell") {
+      TORCH_WARN(
+          "gravity-work: ", options->grav()->gravity_work(),
+          " with an implicit scheme: the face work "
+          "sits outside the implicit operator, which linearises the cell "
+          "work; a tall column at acoustic Courant ~66 blows up "
+          "(chengcli/snapy#283). gravity-work: cell is consistent with it.");
+    }
     if (options->verbose()) {
       SINFO(Hydro) << "Implicit correction type: " << picorr->options->type()
                    << "\n";
@@ -120,6 +158,26 @@ void HydroImpl::reset() {
       register_buffer("positivity_min", torch::ones({1}, torch::kFloat64));
   _lim_cut = register_buffer("lim_cut", torch::zeros({1}, torch::kFloat64));
   _lim_flux = register_buffer("lim_flux", torch::zeros({1}, torch::kFloat64));
+  _gwfix_d = register_buffer("gwfix_d", torch::zeros({1}, torch::kFloat64));
+  _gwfix_total =
+      register_buffer("gwfix_total", torch::zeros({1}, torch::kFloat64));
+  _gwfix_pending =
+      register_buffer("gwfix_pending", torch::zeros({1}, torch::kFloat64));
+  _gwfix_wall =
+      register_buffer("gwfix_wall", torch::zeros({1}, torch::kFloat64));
+}
+
+bool HydroImpl::is_x1_wall(int f) const {
+  auto const& nm = pmb->options->bcnames();
+  return pmb->options->is_physical_boundary(0, 0, f == 0 ? -1 : 1) &&
+         !(f < static_cast<int>(nm.size()) &&
+           nm[f].compare(0, 8, "periodic") == 0);
+}
+
+bool HydroImpl::gravity_work_fixer() const {
+  auto g = options->grav();
+  return g && g->grav1() != 0. && g->gravity_work() == "cell" &&
+         g->gravity_work_fixer();
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {

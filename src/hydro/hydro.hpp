@@ -147,6 +147,31 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor lim_cut() const { return _lim_cut; }
   torch::Tensor lim_flux() const { return _lim_flux; }
 
+  //! gravity-work: cell with gravity-work-fixer on (and grav1 != 0)
+  bool gravity_work_fixer() const;
+  //! x1 face f (0 inner, 1 outer) of this block is a physical, non-periodic
+  //! boundary (a wall whatever installed it, or an open boundary)
+  bool is_x1_wall(int f) const;
+  //! this block's E+PE defect of the dynamics in the current step (J),
+  //! accumulated over the stages with their weight in the step
+  torch::Tensor gravity_work_defect() const { return _gwfix_d; }
+  //! energy the fixer has added in this run (J, global), accepted steps only;
+  //! like the other run-to-date meters it is not carried across a restart
+  torch::Tensor gravity_work_fix() const {
+    return _gwfix_total + _gwfix_pending;
+  }
+  //! the current step's fixer energy: committed when the step is accepted
+  //! (check_redo, or the next step's start), dropped when it is redone
+  void add_gravity_work_fix(double e) { _gwfix_pending += e; }
+  void commit_gravity_work_fix() {
+    _gwfix_total += _gwfix_pending;
+    _gwfix_pending.zero_();
+  }
+  void drop_gravity_work_fix() { _gwfix_pending.zero_(); }
+  //! mass through this block's physical x1 boundary faces in the current
+  //! step (kg, summed |flux|); the fixer needs it at round-off
+  torch::Tensor gravity_work_wall_mass() const { return _gwfix_wall; }
+
   //! RK stage currently being advanced, published by
   //! MeshBlockImpl::advance_local. The vertical implicit correction needs
   //! it because that solve is nonlinear in dt (see hydro_forward.cpp).
@@ -184,6 +209,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
   torch::Tensor _lim_cut, _lim_flux;
+  torch::Tensor _gwfix_d, _gwfix_total, _gwfix_pending, _gwfix_wall;
 };
 
 TORCH_MODULE(Hydro);

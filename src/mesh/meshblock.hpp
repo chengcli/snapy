@@ -191,6 +191,13 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
    */
   void forward(Variables& vars, double dt, int stage);
   void advance_local(Variables& vars, double dt, int stage);
+
+  //! gravity-work-fixer: this block's {E+PE defect D, mass M} (CPU, double),
+  //! and the step-end fix from the global sums
+  torch::Tensor gravity_work_fixer_sums(Variables const& vars) const;
+  void apply_gravity_work_fixer(Variables& vars, torch::Tensor const& global);
+  //! set by a Mesh with several local blocks: it reduces and applies the fix
+  bool defer_gravity_work_fixer = false;
   void exchange(Variables& vars, SyncOptions const& opts) const;
 
   //! Serialize state into MeshBlock-owned buffers without launching comms yet.

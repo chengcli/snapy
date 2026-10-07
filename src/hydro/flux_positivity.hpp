@@ -22,6 +22,9 @@ constexpr double kPositivityRoundoffUlp = 4096.;
 //! 1 ulp of the gas mass. The margin of flux_positivity_theta stays 4096 ulp.
 constexpr double kPositivityRoundoffUlpFloat = 64.;
 
+//! machine epsilon of `dtype` (float32 for kFloat, float64 otherwise)
+double machine_epsilon(c10::ScalarType dtype);
+
 //! kPositivityRoundoffUlp (kPositivityRoundoffUlpFloat in float32) times the
 //! machine epsilon of `dtype`
 double positivity_roundoff(c10::ScalarType dtype);
