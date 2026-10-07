@@ -547,6 +547,16 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         int ks = pmb->pcoord->kl(), ke = pmb->pcoord->ku() + 1;
         gwfix_stage =
             e.slice(-2, js, je).slice(-3, ks, ke).sum().to(torch::kFloat64);
+        // the fixer drops these faces, so it checks that no mass crossed them
+        for (int f : {0, 1}) {
+          if (!x1wall(f)) continue;
+          int i = f == 0 ? is : ie;
+          auto m = area1.select(-1, i) * total_mass_flux1.select(-1, i).abs();
+          _gwfix_wall += dt * m.slice(-1, js, je)
+                                  .slice(-2, ks, ke)
+                                  .sum()
+                                  .to(_gwfix_wall.device(), torch::kFloat64);
+        }
       }
     } else {
       gravity_energy_correction = face_gravity_work - original_gravity_work;

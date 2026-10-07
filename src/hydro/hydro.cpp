@@ -49,6 +49,19 @@ void HydroImpl::reset() {
                  << "\n";
   }
 
+  // gravity-work options, checked here so YAML and Python construction agree
+  if (options->grav()) {
+    auto const& gw = options->grav()->gravity_work();
+    TORCH_CHECK(gw == "cell" || gw == "face-wallc" || gw == "face",
+                "const-gravity gravity-work must be cell, face-wallc or face, "
+                "got '",
+                gw, "'");
+    TORCH_CHECK(!gravity_work_fixer() || (options->grav()->grav2() == 0. &&
+                                          options->grav()->grav3() == 0.),
+                "const-gravity gravity-work-fixer needs grav2 = grav3 = 0 (its "
+                "potential is -grav1 * x1); set it false otherwise");
+  }
+
   //// ---- (6) set up implicit solver ---- ////
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
@@ -132,6 +145,10 @@ void HydroImpl::reset() {
   _gwfix_d = register_buffer("gwfix_d", torch::zeros({1}, torch::kFloat64));
   _gwfix_total =
       register_buffer("gwfix_total", torch::zeros({1}, torch::kFloat64));
+  _gwfix_pending =
+      register_buffer("gwfix_pending", torch::zeros({1}, torch::kFloat64));
+  _gwfix_wall =
+      register_buffer("gwfix_wall", torch::zeros({1}, torch::kFloat64));
 }
 
 bool HydroImpl::gravity_work_fixer() const {

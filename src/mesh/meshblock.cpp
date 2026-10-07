@@ -609,6 +609,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
     phydro->gravity_work_defect().zero_();  // a redone step starts afresh
+    phydro->commit_gravity_work_fix();      // the previous step was accepted
+    phydro->gravity_work_wall_mass().zero_();
     if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
     phydro->peos->reset_limiter_marks(hydro_u);
     saturation_failures();  // a failure counted before the step is not its own
@@ -836,19 +838,6 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
 torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
     Variables const &vars) const {
-  auto const &nm = options->bcnames();
-  for (int f = 0; f < 2; ++f) {
-    TORCH_CHECK(f < static_cast<int>(nm.size()) &&
-                    (nm[f].compare(0, 10, "reflecting") == 0 ||
-                     nm[f].compare(0, 8, "periodic") == 0 ||
-                     nm[f].compare(0, 4, "user") == 0),
-                "forcing/const-gravity/gravity-work-fixer needs reflecting "
-                "(or periodic, or impenetrable user) x1 boundaries: its E+PE "
-                "defect leaves out the mass flux through an x1 boundary face "
-                "(got '",
-                f < static_cast<int>(nm.size()) ? nm[f] : "",
-                "'); set gravity-work-fixer: false");
-  }
   auto hydro_u = vars.at("hydro_u");
   int ny = hydro_u.size(0) - ICY;
   auto m = hydro_u[IDN].clone();
@@ -856,7 +845,8 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
   return torch::stack(
              {phydro->gravity_work_defect()[0],
-              (m * pcoord->cell_volume()).index(in3).sum().to(torch::kFloat64)})
+              (m * pcoord->cell_volume()).index(in3).sum().to(torch::kFloat64),
+              phydro->gravity_work_wall_mass()[0]})
       .cpu();
 }
 
@@ -867,11 +857,20 @@ void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
   auto m = hydro_u[IDN].clone();
   if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
   auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  // the defect leaves out boundary fluxes: refuse a step that moved mass
+  // through an x1 boundary face (whatever installed it: YAML or Python)
+  double wall = global[2].item<double>(), mass = global[1].item<double>();
+  TORCH_CHECK(wall <= 1.e-12 * mass, "const-gravity gravity-work-fixer: ", wall,
+              " kg crossed an x1 boundary face this step (", wall / mass,
+              " of the mass); the fixer's E+PE defect leaves out boundary "
+              "fluxes, so it needs impenetrable x1 boundaries. Set "
+              "gravity-work-fixer: false for open x1 boundaries.");
   double D = global[0].item<double>();
-  double efix = -D / global[1].item<double>();  // J/kg
+  double efix = -D / mass;  // J/kg
   hydro_u[IPR].index(in3) += m.index(in3) * efix;
   phydro->gravity_work_defect().zero_();
-  phydro->gravity_work_fix().sub_(D);
+  phydro->gravity_work_wall_mass().zero_();
+  phydro->add_gravity_work_fix(-D);  // counted once the step is accepted
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
@@ -1053,8 +1052,6 @@ void print_cycle_diagnostics(
   if (root->phydro->peos->nvar() > IPR)
     print(energy_label, conserved[IPR].item<double>());
   if (pe_sum.defined()) print(" pe=", pe_sum[0].item<double>());
-  if (root->phydro->gravity_work_fixer())  // global: every block holds it
-    print(" fixgrav=", root->phydro->gravity_work_fix()[0].item<double>());
 
   SINFO() << " run-to-date:";
   double total = meters[1].item<double>();
@@ -1063,6 +1060,8 @@ void print_cycle_diagnostics(
   SINFO() << " thetasevere="
           << static_cast<long long>(meters[2].item<double>());
   if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
+  if (root->phydro->gravity_work_fixer())  // global: every block holds it
+    print(" fixgrav=", root->phydro->gravity_work_fix()[0].item<double>());
   SINFO() << std::endl;
 }
 
@@ -1199,7 +1198,8 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
       return -1;  // terminate
     }
 
-    // reset variables
+    // reset variables (the fixer's -D goes with them: drop its count)
+    phydro->drop_gravity_work_fix();
     vars["hydro_u"].copy_(_hydro_u0);
     phydro->peos->forward(vars["hydro_u"], vars["hydro_w"]);
     if (vars.count("scalar_s")) {
@@ -1216,6 +1216,7 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
 
   // good to go
   pintg->current_redo = 0;
+  phydro->commit_gravity_work_fix();
   return 0;
 }
 

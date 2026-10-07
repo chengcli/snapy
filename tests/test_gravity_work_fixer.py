@@ -11,8 +11,10 @@ E+PE = sum (E + rho g z) dV must stay constant:
                                                          cell work, so E+PE is not exact there
   gravity-work: cell, gravity-work-fixer: false            drift > 100 TOL (planted control: the
                                                          defect the fixer removes is real)
-The fixer's energy (buffer hydro.gwfix_total, printed as fixgrav= in the cycle diagnostics) is
-reported, and the fixer refuses an x1 boundary that passes mass (outflow).
+The fixer's energy (buffers hydro.gwfix_total + gwfix_pending, printed as fixgrav= in the cycle diagnostics) is
+reported. The fixer accepts any impenetrable x1 boundary, including an unnamed one installed from
+Python, and refuses a step that moves mass through an x1 boundary face (outflow). The new keys
+are reachable from Python, where grav2 != 0 with the fixer is refused at construction.
 
   python test_gravity_work_fixer.py [--device cpu] [--nstep 200]
 """
@@ -54,7 +56,24 @@ def config(gravity, x1bc="reflecting", scheme=0):
     }
 
 
-def run(gravity, nstep, device, x1bc="reflecting", scheme=0):
+def python_reflecting(face):
+    """A reflecting x1 wall written in Python, installed without a name."""
+    import snapy
+
+    def bc(var, dim, op):
+        if var.size(dim) == 1:
+            return
+        ng, n = op.nghost(), var.size(dim)
+        lo = 0 if face == 0 else n - ng
+        src = ng if face == 0 else n - 2 * ng
+        var.narrow(dim, lo, ng).copy_(var.narrow(dim, src, ng).flip(dim))
+        if op.type() in (snapy.kConserved, snapy.kPrimitive):
+            var[4 - dim].narrow(dim - 1, lo, ng).mul_(-1)
+
+    return bc
+
+
+def run(gravity, nstep, device, x1bc="reflecting", scheme=0, pybc=False):
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
 
@@ -62,9 +81,13 @@ def run(gravity, nstep, device, x1bc="reflecting", scheme=0):
         yaml.safe_dump(config(gravity, x1bc, scheme), f)
         tmp = f.name
     try:
-        block = MeshBlock(MeshBlockOptions.from_yaml(tmp))
+        opts = MeshBlockOptions.from_yaml(tmp)
     finally:
         os.unlink(tmp)
+    if pybc:
+        opts.set_bfunc(0, 0, -1, python_reflecting(0))
+        opts.set_bfunc(0, 0, 1, python_reflecting(1))
+    block = MeshBlock(opts)
     block.to(torch.device(device))
 
     ng = 3
@@ -98,7 +121,8 @@ def run(gravity, nstep, device, x1bc="reflecting", scheme=0):
         for stage in range(nstage):
             block.forward(block_vars, dt, stage)
         drift = max(drift, abs(epe() - e0) / abs(e0))
-    fix = dict(block.named_buffers())["hydro.gwfix_total"].item()
+    buf = dict(block.named_buffers())
+    fix = (buf["hydro.gwfix_total"] + buf["hydro.gwfix_pending"]).item()
     return drift, fix, e0
 
 
@@ -117,8 +141,10 @@ def main():
             ("cell + fixer, implicit", {}, 1, "conserves"),
             ("face-wallc", {"gravity-work": "face-wallc"}, 0, "report"),
             ("cell, fixer off", {"gravity-work": "cell", "gravity-work-fixer": False}, 0, "drifts"))
+    arms += (("cell + fixer, Python wall", {}, 0, "conserves"),)
     for name, gravity, scheme, want in arms:
-        drift, fix, e0 = run(gravity, args.nstep, args.device, scheme=scheme)
+        drift, fix, e0 = run(gravity, args.nstep, args.device, scheme=scheme,
+                             pybc=name.endswith("Python wall"))
         print("%-24s max |d(E+PE)|/|E+PE| over %d steps = %.3e   fixgrav = %.3e J/m2 (%.1e of E+PE)"
               % (name, args.nstep, drift, fix, abs(fix / e0)))
         if want == "conserves" and not drift <= TOL:
@@ -130,10 +156,33 @@ def main():
         run({}, 2, args.device, x1bc="outflow")
         failures.append("the fixer accepted an outflow x1 boundary")
     except RuntimeError as e:
-        ok = "gravity-work-fixer needs reflecting" in str(e)
+        ok = "crossed an x1 boundary face" in str(e)
         print("outflow x1 + fixer: refused (%s)" % ("expected message" if ok else "unexpected message"))
         if not ok:
             failures.append("outflow x1 + fixer: unexpected error: %s" % str(e).splitlines()[0])
+
+    # the keys from Python, and the grav2 refusal on that path
+    from snapy import MeshBlock, MeshBlockOptions
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
+        yaml.safe_dump(config({}), f)
+        tmp = f.name
+    try:
+        opts = MeshBlockOptions.from_yaml(tmp)
+    finally:
+        os.unlink(tmp)
+    g = opts.hydro().grav()
+    print("python options: gravity_work=%s gravity_work_fixer=%s" % (g.gravity_work(), g.gravity_work_fixer()))
+    if g.gravity_work() != "cell" or g.gravity_work_fixer() is not True:
+        failures.append("python options do not read the defaults")
+    g.grav2(1.0)
+    try:
+        MeshBlock(opts)
+        failures.append("grav2 != 0 with the fixer was accepted from Python")
+    except RuntimeError as e:
+        ok = "grav2 = grav3 = 0" in str(e)
+        print("python grav2 + fixer: refused (%s)" % ("expected message" if ok else "unexpected message"))
+        if not ok:
+            failures.append("python grav2 + fixer: unexpected error: %s" % str(e).splitlines()[0])
 
     for f in failures:
         print("FAIL", f)

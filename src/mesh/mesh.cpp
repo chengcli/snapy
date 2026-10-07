@@ -345,7 +345,7 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
   auto root = blocks.front();
   if (stage == static_cast<int>(root->pintg->stages.size()) - 1 &&
       root->phydro->gravity_work_fixer()) {
-    auto sums = torch::zeros({2}, torch::kFloat64);
+    auto sums = torch::zeros({3}, torch::kFloat64);
     for (size_t i = 0; i < blocks.size(); ++i)
       sums += blocks[i]->gravity_work_fixer_sums(vars[i]);
     std::vector<at::Tensor> reduce = {sums};

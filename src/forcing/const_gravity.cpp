@@ -38,9 +38,6 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
     TORCH_CHECK(cell,
                 "forcing/const-gravity/gravity-work-fixer needs gravity-work: "
                 "cell");
-    TORCH_CHECK(op->grav2() == 0. && op->grav3() == 0.,
-                "forcing/const-gravity/gravity-work-fixer needs grav2 = grav3 "
-                "= 0 (its potential is -grav1 * x1); set it false otherwise");
   }
 
   return op;
