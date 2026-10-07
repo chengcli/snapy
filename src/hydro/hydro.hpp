@@ -147,6 +147,14 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor lim_cut() const { return _lim_cut; }
   torch::Tensor lim_flux() const { return _lim_flux; }
 
+  //! gravity-work: cell with gravity-work-fixer on (and grav1 != 0)
+  bool gravity_work_fixer() const;
+  //! this block's E+PE defect of the dynamics in the current step (J),
+  //! accumulated over the stages with their weight in the step
+  torch::Tensor gravity_work_defect() const { return _gwfix_d; }
+  //! energy the fixer has added since the start (J, global)
+  torch::Tensor gravity_work_fix() const { return _gwfix_total; }
+
   //! RK stage currently being advanced, published by
   //! MeshBlockImpl::advance_local. The vertical implicit correction needs
   //! it because that solve is nonlinear in dt (see hydro_forward.cpp).
@@ -184,6 +192,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
   torch::Tensor _lim_cut, _lim_flux;
+  torch::Tensor _gwfix_d, _gwfix_total;
 };
 
 TORCH_MODULE(Hydro);

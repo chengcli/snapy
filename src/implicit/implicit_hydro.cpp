@@ -254,7 +254,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // mass the VIC redistribution actually moved through each face (MASS[IVZ])
   // against the potential difference between that face and the cell centre;
   // the closed top face lives in the first outer ghost cell and remains zero.
-  if (grav1 != 0.) {
+  // gravity-work: cell keeps the matrix's cell work (no swap, #283)
+  if (grav1 != 0. && phydro->options->grav()->gravity_work() != "cell") {
     int is = pcoord->il();
     int ie = pcoord->iu() + 1;
 

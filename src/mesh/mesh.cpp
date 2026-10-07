@@ -338,8 +338,29 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
     return;
   }
 
+  for (auto& b : blocks) b->defer_gravity_work_fixer = true;
   run_block_jobs(
       [&](size_t i) { blocks[i]->advance_local(vars[i], dt, stage); });
+  // gravity-work-fixer: one sum over the local blocks, one reduction
+  auto root = blocks.front();
+  if (stage == static_cast<int>(root->pintg->stages.size()) - 1 &&
+      root->phydro->gravity_work_fixer()) {
+    auto sums = torch::zeros({2}, torch::kFloat64);
+    for (size_t i = 0; i < blocks.size(); ++i)
+      sums += blocks[i]->gravity_work_fixer_sums(vars[i]);
+    std::vector<at::Tensor> reduce = {sums};
+    auto layout = root->get_layout();
+    if (layout->has_process_group()) {
+      layout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
+    }
+    run_block_jobs([&](size_t i) {
+      blocks[i]->apply_gravity_work_fixer(vars[i], reduce[0]);
+      auto& v = vars[i];
+      blocks[i]->apply_boundaries(
+          v, v.at("hydro_u"),
+          v.count("scalar_s") ? v.at("scalar_s") : torch::Tensor());
+    });
+  }
   run_block_jobs([&](size_t i) { blocks[i]->exchange_ghost_zones(vars[i]); });
 }
 

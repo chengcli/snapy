@@ -608,6 +608,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (1) save initial state --------
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
+    phydro->gravity_work_defect().zero_();  // a redone step starts afresh
     if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
     phydro->peos->reset_limiter_marks(hydro_u);
     saturation_failures();  // a failure counted before the step is not its own
@@ -817,7 +818,60 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // Physical ghosts must include the final-stage species adjustment.
+  // gravity-work-fixer (#283): once per step, after the last mass change, add
+  // the step's global E+PE defect D back as heat, uniform per unit mass:
+  // dE_i = -D m_i / sum_j m_j V_j. Momentum and mass are untouched. A Mesh
+  // with several local blocks sums them first (MeshImpl::forward).
+  if (stage == pintg->stages.size() - 1 && phydro->gravity_work_fixer() &&
+      !defer_gravity_work_fixer) {
+    std::vector<at::Tensor> reduce = {gravity_work_fixer_sums(vars)};
+    if (_playout->has_process_group()) {
+      _playout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
+    }
+    apply_gravity_work_fixer(vars, reduce[0]);
+  }
+
   apply_boundaries(vars, hydro_u, scalar_s);
+}
+
+torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
+    Variables const &vars) const {
+  auto const &nm = options->bcnames();
+  for (int f = 0; f < 2; ++f) {
+    TORCH_CHECK(f < static_cast<int>(nm.size()) &&
+                    (nm[f].compare(0, 10, "reflecting") == 0 ||
+                     nm[f].compare(0, 8, "periodic") == 0 ||
+                     nm[f].compare(0, 4, "user") == 0),
+                "forcing/const-gravity/gravity-work-fixer needs reflecting "
+                "(or periodic, or impenetrable user) x1 boundaries: its E+PE "
+                "defect leaves out the mass flux through an x1 boundary face "
+                "(got '",
+                f < static_cast<int>(nm.size()) ? nm[f] : "",
+                "'); set gravity-work-fixer: false");
+  }
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  return torch::stack(
+             {phydro->gravity_work_defect()[0],
+              (m * pcoord->cell_volume()).index(in3).sum().to(torch::kFloat64)})
+      .cpu();
+}
+
+void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
+                                             torch::Tensor const &global) {
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  double D = global[0].item<double>();
+  double efix = -D / global[1].item<double>();  // J/kg
+  hydro_u[IPR].index(in3) += m.index(in3) * efix;
+  phydro->gravity_work_defect().zero_();
+  phydro->gravity_work_fix().sub_(D);
 }
 
 void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
@@ -999,6 +1053,8 @@ void print_cycle_diagnostics(
   if (root->phydro->peos->nvar() > IPR)
     print(energy_label, conserved[IPR].item<double>());
   if (pe_sum.defined()) print(" pe=", pe_sum[0].item<double>());
+  if (root->phydro->gravity_work_fixer())  // global: every block holds it
+    print(" fixgrav=", root->phydro->gravity_work_fix()[0].item<double>());
 
   SINFO() << " run-to-date:";
   double total = meters[1].item<double>();

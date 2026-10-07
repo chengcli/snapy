@@ -40,6 +40,19 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   int ny = u.size(0) - ICY;
   // the settling part of the x1 species flux, for the positivity carry
   torch::Tensor fsed1;
+  // gravity-work: cell -- the Riemann (background) x1 mass flux F^R; the mass
+  // that sedimentation and the positivity limiter add (F - F^R) keeps its
+  // face-form gravity work
+  torch::Tensor bflux1;
+  bool gw_cell = options->grav() && options->grav()->grav1() != 0. &&
+                 options->grav()->gravity_work() == "cell";
+  // x1 face f (0 inner, 1 outer) is a physical wall of this block
+  auto x1wall = [&](int f) {
+    auto const& nm = pmb->options->bcnames();
+    return pmb->options->is_physical_boundary(0, 0, f == 0 ? -1 : 1) &&
+           !(f < static_cast<int>(nm.size()) &&
+             nm[f].compare(0, 8, "periodic") == 0);
+  };
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -156,6 +169,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                 ? torch::Tensor()
                                 : _face_pressure1;
       priemann->forward(wlr1[ILT], wlr1[IRT], DIM1, _flux1, face_pressure1);
+      if (gw_cell) {
+        bflux1 = _flux1[IDN].clone();
+        if (ny > 0) bflux1 += _flux1.narrow(0, ICY, ny).sum(0);
+      }
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -206,15 +223,20 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         // and one message per seam is cheaper anyway. torch::cat allocates
         // fresh storage, so the payload cannot alias the flux buffers while a
         // send is in flight.
+        bool has_bf = bflux1.defined();  // F^R is averaged with the flux
         auto pack = [&](int face) {
-          auto f = _flux1.select(-1, face);
-          if (!has_fp) return f.clone();
-          return torch::cat({f, _face_pressure1.select(-1, face).unsqueeze(0)},
-                            0);
+          std::vector<torch::Tensor> rows = {_flux1.select(-1, face)};
+          if (has_fp)
+            rows.push_back(_face_pressure1.select(-1, face).unsqueeze(0));
+          if (has_bf) rows.push_back(bflux1.select(-1, face).unsqueeze(0));
+          if (rows.size() == 1) return rows[0].clone();
+          return torch::cat(rows, 0);
         };
         auto unpack = [&](int face, torch::Tensor const& avg) {
           _flux1.select(-1, face).copy_(avg.narrow(0, 0, nv));
-          if (has_fp) _face_pressure1.select(-1, face).copy_(avg[nv]);
+          int row = nv;
+          if (has_fp) _face_pressure1.select(-1, face).copy_(avg[row++]);
+          if (has_bf) bflux1.select(-1, face).copy_(avg[row]);
         };
 
         std::vector<CommWorkPtr> seam_sends;
@@ -429,6 +451,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // surfaces.  _flux1 is read after positivity limiting and sedimentation, so
   // it contains every contribution to vertical mass transport.
   torch::Tensor gravity_energy_correction;
+  // gravity-work-fixer: this stage's E+PE change of the dynamics (J)
+  torch::Tensor gwfix_stage;
   if (options->grav() && options->grav()->grav1() != 0. && _flux1.defined() &&
       !options->disable_flux_x1()) {
     auto grav1 = options->grav()->grav1();
@@ -436,6 +460,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto vertical_mass_flux1 = _flux1[IDN].clone();
     if (ny > 0) {
       vertical_mass_flux1 += _flux1.narrow(0, ICY, ny).sum(0);
+    }
+    auto total_mass_flux1 = vertical_mass_flux1.clone();
+    // cell: the cell work rho g v (const-gravity forcing) stays; only F - F^R
+    // is booked as face work
+    if (gw_cell) {
+      vertical_mass_flux1 = bflux1.defined()
+                                ? vertical_mass_flux1 - bflux1
+                                : torch::zeros_like(vertical_mass_flux1);
     }
 
     int is = pmb->pcoord->il();
@@ -466,7 +498,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // H = dx/12 (m_i - m_{i-1}), zeroed at every physical x1 boundary
     // (walls, outflow and periodic alike); rho'v' is no divergence
     auto type1 = precon1->pinterp1->options->type();
-    if (type1 == "cp3" || type1 == "cp5" || type1 == "weno5") {
+    if (!gw_cell && (type1 == "cp3" || type1 == "cp5" || type1 == "weno5")) {
       int n = ie - is;
       auto x1v = pmb->pcoord->x1v;
       auto rhov = w[IDN] * w[IVX];
@@ -494,7 +526,37 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                rho_grav.slice(-1, is, ie) *
                                (1. - non_hydrostatic);
     }
-    gravity_energy_correction = face_gravity_work - original_gravity_work;
+    if (gw_cell) {
+      gravity_energy_correction = face_gravity_work;
+      if (gravity_work_fixer()) {
+        // the PE change of the mass the x1 fluxes move (x1 wall faces dropped:
+        // the fixer runs with sealed walls only) plus the gravity work booked
+        // into E; x2/x3 fluxes do not move mass across geopotential surfaces
+        auto fw = total_mass_flux1.clone();
+        if (x1wall(0)) fw.select(-1, is).zero_();
+        if (x1wall(1)) fw.select(-1, ie).zero_();
+        auto dm =
+            -dt *
+            (area1.slice(-1, is + 1, ie + 1) * fw.slice(-1, is + 1, ie + 1) -
+             area1.slice(-1, is, ie) * fw.slice(-1, is, ie)) /
+            volume.slice(-1, is, ie);
+        auto e = (original_gravity_work + face_gravity_work +
+                  phi_cell.slice(0, is, ie) * dm) *
+                 volume.slice(-1, is, ie);
+        int js = pmb->pcoord->jl(), je = pmb->pcoord->ju() + 1;
+        int ks = pmb->pcoord->kl(), ke = pmb->pcoord->ku() + 1;
+        gwfix_stage =
+            e.slice(-2, js, je).slice(-3, ks, ke).sum().to(torch::kFloat64);
+      }
+    } else {
+      gravity_energy_correction = face_gravity_work - original_gravity_work;
+      // face-wallc: the x1 wall cells keep the cell work
+      if (options->grav()->gravity_work() == "face-wallc") {
+        if (x1wall(0)) gravity_energy_correction.select(-1, 0).zero_();
+        if (x1wall(1))
+          gravity_energy_correction.select(-1, ie - is - 1).zero_();
+      }
+    }
   }
 
   // apply hydrostatic correction
@@ -541,7 +603,23 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
             "caller invoking HydroImpl::forward directly will see this.");
       }
     }
+    // gravity-work-fixer: the implicit block's E+PE change (its mass transfer
+    // and the cell gravity work it linearises; its other energy flux sums to
+    // zero over a sealed column)
+    auto epe = [&](torch::Tensor const& d) {
+      auto m = d[IDN].clone();
+      if (ny > 0) m += d.narrow(0, ICY, ny).sum(0);
+      auto phi = -options->grav()->grav1() * pmb->pcoord->x1v;
+      auto in3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+      return ((d[IPR] + phi * m) * pmb->pcoord->cell_volume())
+          .index(in3)
+          .sum()
+          .to(torch::kFloat64);
+    };
+    torch::Tensor epe0;
+    if (gwfix_stage.defined()) epe0 = epe(du);
     _apply_implicit_correction(du, w, dt_corr, other);
+    if (gwfix_stage.defined()) gwfix_stage = gwfix_stage + epe(du) - epe0;
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();
@@ -555,6 +633,19 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     int is = pmb->pcoord->il();
     int ie = pmb->pcoord->iu() + 1;
     du[IPR].slice(-1, is, ie) += gravity_energy_correction;
+  }
+
+  if (gwfix_stage.defined()) {
+    // weight of this stage's du in the step's update u0 -> u1 (stage s:
+    // u <- w0 u0 + w1 u + w2 du): w2_s * prod_{t > s} w1_t (rk3: 1/6 1/6 2/3)
+    double cw = 1.;
+    auto const& st = pmb->pintg->stages;
+    if (rk_stage >= 0 && rk_stage < static_cast<int>(st.size())) {
+      cw = st[rk_stage].wght2();
+      for (int t = rk_stage + 1; t < static_cast<int>(st.size()); ++t)
+        cw *= st[t].wght1();
+    }
+    _gwfix_d += cw * gwfix_stage.to(_gwfix_d.device());
   }
 
   return du;

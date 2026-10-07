@@ -52,6 +52,15 @@ void HydroImpl::reset() {
   //// ---- (6) set up implicit solver ---- ////
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
+    if (options->grav() && options->grav()->grav1() != 0. &&
+        options->grav()->gravity_work() != "cell") {
+      TORCH_WARN(
+          "gravity-work: ", options->grav()->gravity_work(),
+          " with an implicit scheme: the face work "
+          "sits outside the implicit operator, which linearises the cell "
+          "work; a tall column at acoustic Courant ~66 blows up "
+          "(chengcli/snapy#283). gravity-work: cell is consistent with it.");
+    }
     if (options->verbose()) {
       SINFO(Hydro) << "Implicit correction type: " << picorr->options->type()
                    << "\n";
@@ -120,6 +129,15 @@ void HydroImpl::reset() {
       register_buffer("positivity_min", torch::ones({1}, torch::kFloat64));
   _lim_cut = register_buffer("lim_cut", torch::zeros({1}, torch::kFloat64));
   _lim_flux = register_buffer("lim_flux", torch::zeros({1}, torch::kFloat64));
+  _gwfix_d = register_buffer("gwfix_d", torch::zeros({1}, torch::kFloat64));
+  _gwfix_total =
+      register_buffer("gwfix_total", torch::zeros({1}, torch::kFloat64));
+}
+
+bool HydroImpl::gravity_work_fixer() const {
+  auto g = options->grav();
+  return g && g->grav1() != 0. && g->gravity_work() == "cell" &&
+         g->gravity_work_fixer();
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
