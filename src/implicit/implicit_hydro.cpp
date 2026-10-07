@@ -151,6 +151,13 @@ void ImplicitHydroImpl::ensure_workspace(torch::Tensor const& w) {
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
+  return forward_masked(du, w, gamma, dt, torch::Tensor());
+}
+
+torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
+                                                torch::Tensor w,
+                                                torch::Tensor gamma, double dt,
+                                                torch::Tensor solid) {
   if (options->scheme() == 0) {  // null operation
     if (_corr.sizes() != du.sizes() ||
         _corr.scalar_type() != du.scalar_type() ||
@@ -185,6 +192,9 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
   pcoord->prim2local1_(du);
 
+  auto mask = solid.defined() ? solid.to(w.options()).contiguous()
+                              : torch::zeros_like(gamma);
+
   //// -------- Solve block-tridiagonal matrix --------- ////
   auto iter =
       at::TensorIteratorConfig()
@@ -204,6 +214,7 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
           .add_input(_b)
           .add_input(_c)
           .add_input(_delta)
+          .add_owned_input(mask.unsqueeze(0).index(interior))
           .build();
 
   // Linearize the FULL gravity: du always carries it (body force + rho_grav
@@ -213,6 +224,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // gravity-work: face books the face work in the energy row (cartesian x1)
   bool face_work = phydro->face_work_in_operator();
   int adir = face_work ? kVicFaceWork : 0;
+  bool diffusive_work = grav1 != 0. &&
+                        phydro->options->grav()->gravity_work() == "cell" &&
+                        pcoord->options->type() == "cartesian";
+  if (diffusive_work) adir |= kVicDiffusiveCell;
 
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, adir);
@@ -246,6 +261,40 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   }
   _dry_clamp_step.copy_(
       torch::maximum(_dry_clamp_step, _mass_corr[IPR].max().detach()));
+
+  if (face_work || diffusive_work) {
+    int is = pcoord->il(), ie = pcoord->iu() + 1;
+    auto in3 =
+        phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+    auto volume = pcoord->cell_volume().index(in3);
+    auto requested = _mass_corr[IVX];
+    auto moved = _mass_corr[IVZ] - requested;
+    auto projected =
+        (requested.slice(-1, is, ie) - requested.slice(-1, is + 1, ie + 1))
+            .slice(-2, pcoord->jl(), pcoord->ju() + 1)
+            .slice(-3, pcoord->kl(), pcoord->ku() + 1) /
+        volume;
+    auto raw_mass = _delta
+                        .view({pcoord->options->nx3(), pcoord->options->nx2(),
+                               pcoord->options->nx1(), options->size()})
+                        .select(-1, 0);
+    auto explicit_mass = _du0[IDN].clone();
+    if (w.size(0) > ICY)
+      explicit_mass += _du0.narrow(0, ICY, w.size(0) - ICY).sum(0);
+    auto phi = -grav1 * pcoord->x1v.slice(0, is, ie);
+    auto projection_work =
+        phi * (raw_mass - explicit_mass.index(in3) - projected);
+    auto z = pcoord->x1v.slice(0, is, ie);
+    auto dp_lo = -grav1 * (pcoord->x1f.slice(0, is, ie) - z);
+    auto dp_hi = -grav1 * (pcoord->x1f.slice(0, is + 1, ie + 1) - z);
+    auto clamp_work = -(dp_hi * moved.slice(-1, is + 1, ie + 1) -
+                        dp_lo * moved.slice(-1, is, ie))
+                           .slice(-2, pcoord->jl(), pcoord->ju() + 1)
+                           .slice(-3, pcoord->kl(), pcoord->ku() + 1) /
+                      volume;
+    du[IPR].index(in3).add_(
+        torch::where(mask.index(in3) == 0, projection_work + clamp_work, 0.));
+  }
 
   /// (3) De-project from local orthonormal frame
   w[IVZ] /= sin_theta;

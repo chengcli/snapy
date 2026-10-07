@@ -18,9 +18,11 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     Eigen::Matrix<T, 5, 5>* a, Eigen::Matrix<T, 5, 5>* b,
     Eigen::Matrix<T, 5, 5>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
     int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
-    bool first_block, bool last_block, bool periodic) {
+    bool first_block, bool last_block, bool periodic, bool solid_lower = false,
+    bool solid_upper = false) {
   bool face_work = dir & kVicFaceWork;
-  dir &= ~kVicFaceWork;
+  bool diffusive_cell = dir & kVicDiffusiveCell;
+  dir &= ~(kVicFaceWork | kVicDiffusiveCell);
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -47,12 +49,16 @@ void DISPATCH_MACRO vic_assemble_full_impl(
 
   // Interface i-1/2 and the Jacobians in cells i-1 and i.
   CopyPrimitives(wl, wr, w, i, stride1, stride2, ny);
-  gm1 = GAMMA(i - 1) - 1.;
+  if (solid_lower) {
+    for (int n = 0; n < 5; ++n) wl[n] = wr[n];
+    wl[IVX + dir] = -wr[IVX + dir];
+  }
+  gm1 = GAMMA(solid_lower ? i : i - 1) - 1.;
   FluxJacobian(dfdq_prev, gm1, wl, dir);
   gm1 = GAMMA(i) - 1.;
   FluxJacobian(dfdq_curr, gm1, wr, dir);
 
-  gm1 = 0.5 * (GAMMA(i - 1) + GAMMA(i)) - 1.;
+  gm1 = 0.5 * (GAMMA(solid_lower ? i : i - 1) + GAMMA(i)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -63,10 +69,14 @@ void DISPATCH_MACRO vic_assemble_full_impl(
 
   // Interface i+1/2 and the Jacobian in cell i+1.
   CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
-  gm1 = GAMMA(i + 1) - 1.;
+  if (solid_upper) {
+    for (int n = 0; n < 5; ++n) wr[n] = wl[n];
+    wr[IVX + dir] = -wl[IVX + dir];
+  }
+  gm1 = GAMMA(solid_upper ? i : i + 1) - 1.;
   FluxJacobian(dfdq_next, gm1, wr, dir);
 
-  gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
+  gm1 = 0.5 * (GAMMA(i) + GAMMA(solid_upper ? i : i + 1)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -101,9 +111,18 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     c[i].row(IPR) -= 0.5 * grav * (0.5 * em - 0.5 * Ap.row(IDN));
   }
 
+  if (diffusive_cell) {
+    // Keep cell work g*m; book the Roe artificial mass flux against gravity.
+    a[i].row(IPR) -= 0.25 * grav * (Ap.row(IDN) - Am.row(IDN));
+    b[i].row(IPR) -= 0.25 * grav * Am.row(IDN);
+    c[i].row(IPR) += 0.25 * grav * Ap.row(IDN);
+  }
+
   // Fix boundary conditions for the cells at the ends of the column.
-  if (i == is && first_block && !periodic) a[i] += b[i] * Bnd.asDiagonal();
-  if (i == ie && last_block && !periodic) a[i] += c[i] * Bnd.asDiagonal();
+  if ((i == is || solid_lower) && first_block && !periodic)
+    a[i] += b[i] * Bnd.asDiagonal();
+  if ((i == ie || solid_upper) && last_block && !periodic)
+    a[i] += c[i] * Bnd.asDiagonal();
 }
 
 }  // namespace snap

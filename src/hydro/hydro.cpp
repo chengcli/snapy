@@ -312,7 +312,9 @@ torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
   } else {
     gamma = peos->compute("W->A", {wi});
   }
-  auto correction = picorr->forward(du, wi, gamma, dt);
+  auto correction = picorr->forward_masked(
+      du, wi, gamma, dt,
+      other.count("solid") ? other.at("solid") : torch::Tensor());
   du[IPR].add_(peos->internal_energy_offset(du));
   // picorr measured its delta after removing the EOS reference energy.
   // Diagnostics expose a conserved-state delta, so restore that reference

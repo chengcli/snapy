@@ -23,6 +23,21 @@ namespace snap {
 
 static std::mutex meshblock_mutex;
 
+static void check_implicit_grid(MeshBlockImpl const &block, torch::Tensor w,
+                                torch::Tensor solid = torch::Tensor()) {
+  if (!block.phydro->picorr || !block.phydro->options->grav()) return;
+  auto ratio = std::abs(block.phydro->options->grav()->grav1()) * w[IDN] *
+               block.pcoord->dx1f / w[IPR];
+  if (solid.defined()) ratio.masked_fill_(solid, 0.);
+  auto in3 = block.part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto maximum = ratio.index(in3).max().item<double>();
+  TORCH_CHECK(
+      maximum <= 0.5,
+      "initialize: implicit x1 grid is too coarse (max dz/Hp = ", maximum,
+      ", limit 0.5); refine to at least two cells per "
+      "pressure scale height or use an explicit scheme (#283)");
+}
+
 static void set_scalar_primitive(Variables &vars, torch::Tensor const &scalar_s,
                                  torch::Tensor const &hydro_u) {
   auto scalar_r = scalar_s / hydro_u[IDN].unsqueeze(0);
@@ -414,6 +429,9 @@ void MeshBlockImpl::initialize_local(Variables &vars) {
               "initialize: hydro_w has incorrect shape.", " Expected [",
               phydro->peos->nvar(), ", ", nc3, ", ", nc2, ", ", nc1,
               "] but got ", hydro_w.sizes());
+
+  check_implicit_grid(*this, hydro_w,
+                      vars.count("solid") ? vars.at("solid") : torch::Tensor());
 
   if (pscalar->nvar() > 0) {
     TORCH_CHECK(vars.count("scalar_r"), "initialize: scalar_r is required");
@@ -1379,6 +1397,10 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
     }
     vars[name] = tensor.to(torch::Device(options->device_str()));
   }
+
+  check_implicit_grid(
+      *this, phydro->peos->compute("U->W", {vars.at("hydro_u").clone()}),
+      vars.count("solid") ? vars.at("solid") : torch::Tensor());
 
   if (has_radiating_boundary()) {
     TORCH_CHECK(

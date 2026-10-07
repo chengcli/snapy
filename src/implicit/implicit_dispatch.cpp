@@ -46,11 +46,22 @@ void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
             auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
+            auto solid =
+                reinterpret_cast<scalar_t*>(data[10] + col * strides[10]);
 
             for (int i = 0; i < nlayer; ++i) {
-              vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, i, 0,
-                                        nlayer - 1, dt, grav, dir, ny, stride1,
-                                        stride2, first_block, last_block);
+              if (solid[i * stride2] != 0) {
+                a[i].setIdentity();
+                a[i] /= dt;
+                b[i].setZero();
+                c[i].setZero();
+                continue;
+              }
+              bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
+              bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
+              vic_assemble_partial_impl(
+                  a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt, grav, dir,
+                  ny, stride1, stride2, first_block, last_block, lower, upper);
             }
           }
         },
@@ -86,11 +97,23 @@ void vic_assemble_full_cpu(at::TensorIterator& iter, double dt, double grav,
             auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
+            auto solid =
+                reinterpret_cast<scalar_t*>(data[10] + col * strides[10]);
 
             for (int i = 0; i < nlayer; ++i) {
-              vic_assemble_full_impl(
-                  a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt, grav, dir,
-                  ny, stride1, stride2, first_block, last_block, periodic);
+              if (solid[i * stride2] != 0) {
+                a[i].setIdentity();
+                a[i] /= dt;
+                b[i].setZero();
+                c[i].setZero();
+                continue;
+              }
+              bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
+              bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
+              vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0,
+                                     nlayer - 1, dt, grav, dir, ny, stride1,
+                                     stride2, first_block, last_block, periodic,
+                                     lower, upper);
             }
           }
         },
@@ -161,12 +184,23 @@ void vic_redistribute_cpu(at::TensorIterator& iter, double /*dt*/,
             auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
             auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
-            vic_constituent_column<scalar_t, N>(
-                du, w, mass_fix, delta, vol, nlayer, dir, ny, stride1, stride2);
-
-            for (int i = 0; i < nlayer; ++i) {
-              vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1,
-                                    stride2);
+            auto solid =
+                reinterpret_cast<scalar_t*>(data[10] + col * strides[10]);
+            for (int lo = 0; lo < nlayer;) {
+              if (solid[lo * stride2] != 0) {
+                ++lo;
+                continue;
+              }
+              int hi = lo + 1;
+              while (hi < nlayer && solid[hi * stride2] == 0) ++hi;
+              vic_constituent_column<scalar_t, N>(
+                  du + lo * stride2, w + lo * stride2, mass_fix + lo * stride2,
+                  delta + lo, vol + lo * stride2, hi - lo, dir, ny, stride1,
+                  stride2);
+              for (int i = lo; i < hi; ++i)
+                vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1,
+                                      stride2);
+              lo = hi;
             }
           }
         },

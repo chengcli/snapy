@@ -25,7 +25,7 @@ Matrix roe_diffusion(double* left, double* right) {
 }
 
 template <int N>
-void check_energy_row() {
+void check_energy_row(int flag = snap::kVicFaceWork) {
   using Block = Eigen::Matrix<double, N, N>;
   double w[15] = {1.,  .8,   .6,   .12,  .09, .15, .07, .07,
                   .07, -.03, -.03, -.03, 2.,  1.7, 1.4};
@@ -46,6 +46,13 @@ void check_energy_row() {
                    .5 * (am.row(snap::IDN) * (q[1] - q[0]))(0);
     double upper = .5 * (q[1](snap::IVX) + q[2](snap::IVX)) -
                    .5 * (ap.row(snap::IDN) * (q[2] - q[1]))(0);
+
+    if (flag == snap::kVicDiffusiveCell) {
+      double diffusion =
+          lower + upper -
+          .5 * (q[0](snap::IVX) + 2. * q[1](snap::IVX) + q[2](snap::IVX));
+      return grav * q[1](snap::IVX) + .5 * grav * diffusion;
+    }
     return .5 * grav * (lower + upper);
   };
 
@@ -53,12 +60,10 @@ void check_energy_row() {
   auto assemble = [&](Block* aa, Block* bb, Block* cc, double g) {
     if constexpr (N == 5) {
       snap::vic_assemble_full_impl(aa, bb, cc, w, gamma, area, volume, 1, 0, 2,
-                                   .5, g, snap::kVicFaceWork, 0, 3, 1, false,
-                                   false, false);
+                                   .5, g, flag, 0, 3, 1, false, false, false);
     } else {
       snap::vic_assemble_partial_impl(aa, bb, cc, w, gamma, area, volume, 1, 0,
-                                      2, .5, g, snap::kVicFaceWork, 0, 3, 1,
-                                      false, false);
+                                      2, .5, g, flag, 0, 3, 1, false, false);
     }
   };
   assemble(a, b, c, grav);
@@ -88,8 +93,8 @@ void check_energy_row() {
           << "N=" << N << " cell=" << cell << " variable=" << vars[n];
     }
   }
-  std::cout << "VIC " << N << "x" << N << " face-work FD max error: " << worst
-            << '\n';
+  std::cout << "flag " << flag << " VIC " << N << "x" << N
+            << " face-work FD max error: " << worst << '\n';
 }
 
 }  // namespace
@@ -100,4 +105,12 @@ TEST(implicit_face_work, full_energy_row_matches_frozen_roe_flux) {
 
 TEST(implicit_face_work, partial_energy_row_matches_frozen_roe_flux) {
   check_energy_row<3>();
+}
+
+TEST(implicit_face_work, full_cell_work_includes_roe_mass_diffusion) {
+  check_energy_row<5>(snap::kVicDiffusiveCell);
+}
+
+TEST(implicit_face_work, partial_cell_work_includes_roe_mass_diffusion) {
+  check_energy_row<3>(snap::kVicDiffusiveCell);
 }
