@@ -25,13 +25,30 @@ Matrix roe_diffusion(double* left, double* right) {
 }
 
 template <int N>
-void check_energy_row(int flag = snap::kVicFaceWork) {
+void check_energy_row(int flag = snap::kVicFaceWork, bool curved = false,
+                      bool centroid = false) {
   using Block = Eigen::Matrix<double, N, N>;
   double w[15] = {1.,  .8,   .6,   .12,  .09, .15, .07, .07,
                   .07, -.03, -.03, -.03, 2.,  1.7, 1.4};
   double gamma[3] = {1.4, 1.4, 1.4};
   double area[4] = {1., 1., 1., 1.};
   double volume[3] = {1., 1., 1.};
+  double face[4] = {1., 2., 4., 7.};
+  if (curved) {
+    for (int j = 0; j < 4; ++j) area[j] = face[j] * face[j];
+    for (int j = 0; j < 3; ++j)
+      volume[j] = centroid
+                      ? (std::pow(face[j + 1], 3) - std::pow(face[j], 3)) / 3.
+                      : .5 * (area[j] + area[j + 1]) * (face[j + 1] - face[j]);
+  }
+  double center = centroid
+                      ? .75 * (std::pow(face[2], 4) - std::pow(face[1], 4)) /
+                            (std::pow(face[2], 3) - std::pow(face[1], 3))
+                      : 3.;
+  double lower_weight = curved ? area[1] * (center - face[1]) / volume[1] : .5;
+  double upper_weight = curved ? area[2] * (face[2] - center) / volume[1] : .5;
+  double work_lo[3] = {.25, .5 * lower_weight, .25};
+  double work_hi[3] = {.25, .5 * upper_weight, .25};
   double wl[5], wc[5], wr[5];
   for (int n = 0; n < 5; ++n) {
     wl[n] = w[3 * n];
@@ -48,10 +65,10 @@ void check_energy_row(int flag = snap::kVicFaceWork) {
                    .5 * (ap.row(snap::IDN) * (q[2] - q[1]))(0);
 
     if (flag == snap::kVicDiffusiveCell) {
-      double diffusion =
-          lower + upper -
-          .5 * (q[0](snap::IVX) + 2. * q[1](snap::IVX) + q[2](snap::IVX));
-      return grav * q[1](snap::IVX) + .5 * grav * diffusion;
+      double lower_diffusion = lower - .5 * (q[0](snap::IVX) + q[1](snap::IVX));
+      double upper_diffusion = upper - .5 * (q[1](snap::IVX) + q[2](snap::IVX));
+      return grav * (q[1](snap::IVX) + lower_weight * lower_diffusion +
+                     upper_weight * upper_diffusion);
     }
     return .5 * grav * (lower + upper);
   };
@@ -59,11 +76,13 @@ void check_energy_row(int flag = snap::kVicFaceWork) {
   Block a[3], b[3], c[3], a0[3], b0[3], c0[3];
   auto assemble = [&](Block* aa, Block* bb, Block* cc, double g) {
     if constexpr (N == 5) {
-      snap::vic_assemble_full_impl(aa, bb, cc, w, gamma, area, volume, 1, 0, 2,
-                                   .5, g, flag, 0, 3, 1, false, false, false);
+      snap::vic_assemble_full_impl(aa, bb, cc, w, gamma, area, volume, work_lo,
+                                   work_hi, 1, 0, 2, .5, g, flag, 0, 3, 1,
+                                   false, false, false);
     } else {
-      snap::vic_assemble_partial_impl(aa, bb, cc, w, gamma, area, volume, 1, 0,
-                                      2, .5, g, flag, 0, 3, 1, false, false);
+      snap::vic_assemble_partial_impl(aa, bb, cc, w, gamma, area, volume,
+                                      work_lo, work_hi, 1, 0, 2, .5, g, flag, 0,
+                                      3, 1, false, false);
     }
   };
   assemble(a, b, c, grav);
@@ -113,4 +132,14 @@ TEST(implicit_face_work, full_cell_work_includes_roe_mass_diffusion) {
 
 TEST(implicit_face_work, partial_cell_work_includes_roe_mass_diffusion) {
   check_energy_row<3>(snap::kVicDiffusiveCell);
+}
+
+TEST(implicit_face_work, full_cell_work_uses_curved_face_metrics) {
+  for (bool centroid : {false, true})
+    check_energy_row<5>(snap::kVicDiffusiveCell, true, centroid);
+}
+
+TEST(implicit_face_work, partial_cell_work_uses_curved_face_metrics) {
+  for (bool centroid : {false, true})
+    check_energy_row<3>(snap::kVicDiffusiveCell, true, centroid);
 }

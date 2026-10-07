@@ -43,6 +43,10 @@ void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
                 reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
             auto area = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
             auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto work_lo =
+                reinterpret_cast<scalar_t*>(data[11] + col * strides[11]);
+            auto work_hi =
+                reinterpret_cast<scalar_t*>(data[12] + col * strides[12]);
             auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
@@ -59,9 +63,10 @@ void vic_assemble_partial_cpu(at::TensorIterator& iter, double dt, double grav,
               }
               bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
               bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
-              vic_assemble_partial_impl(
-                  a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt, grav, dir,
-                  ny, stride1, stride2, first_block, last_block, lower, upper);
+              vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, work_lo,
+                                        work_hi, i, 0, nlayer - 1, dt, grav,
+                                        dir, ny, stride1, stride2, first_block,
+                                        last_block, lower, upper);
             }
           }
         },
@@ -94,6 +99,10 @@ void vic_assemble_full_cpu(at::TensorIterator& iter, double dt, double grav,
                 reinterpret_cast<scalar_t*>(data[3] + col * strides[3]);
             auto area = reinterpret_cast<scalar_t*>(data[4] + col * strides[4]);
             auto vol = reinterpret_cast<scalar_t*>(data[5] + col * strides[5]);
+            auto work_lo =
+                reinterpret_cast<scalar_t*>(data[11] + col * strides[11]);
+            auto work_hi =
+                reinterpret_cast<scalar_t*>(data[12] + col * strides[12]);
             auto a = reinterpret_cast<Matrix*>(data[6] + col * strides[6]);
             auto b = reinterpret_cast<Matrix*>(data[7] + col * strides[7]);
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
@@ -110,10 +119,10 @@ void vic_assemble_full_cpu(at::TensorIterator& iter, double dt, double grav,
               }
               bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
               bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
-              vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0,
-                                     nlayer - 1, dt, grav, dir, ny, stride1,
-                                     stride2, first_block, last_block, periodic,
-                                     lower, upper);
+              vic_assemble_full_impl(a, b, c, w, gamma, area, vol, work_lo,
+                                     work_hi, i, 0, nlayer - 1, dt, grav, dir,
+                                     ny, stride1, stride2, first_block,
+                                     last_block, periodic, lower, upper);
             }
           }
         },

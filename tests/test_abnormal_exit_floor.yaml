@@ -19,7 +19,7 @@ geometry:
 
   bounds:
     x1min: 0.
-    x1max: 30.e3
+    x1max: 300.e3
     x2min: 0.
     x2max: 2400.e3
     x3min: 0.

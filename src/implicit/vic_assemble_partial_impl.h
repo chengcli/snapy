@@ -29,10 +29,10 @@ namespace snap {
 template <typename T>
 void DISPATCH_MACRO vic_assemble_partial_impl(
     Eigen::Matrix<T, 3, 3>* a, Eigen::Matrix<T, 3, 3>* b,
-    Eigen::Matrix<T, 3, 3>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
-    int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
-    bool first_block, bool last_block, bool solid_lower = false,
-    bool solid_upper = false) {
+    Eigen::Matrix<T, 3, 3>* c, T* w, T* gamma, T* area, T* vol, T* work_lo,
+    T* work_hi, int i, int is, int ie, double dt, double grav, int dir, int ny,
+    int stride1, int stride2, bool first_block, bool last_block,
+    bool solid_lower = false, bool solid_upper = false) {
   bool face_work = dir & kVicFaceWork;
   bool diffusive_cell = dir & kVicDiffusiveCell;
   dir &= ~(kVicFaceWork | kVicDiffusiveCell);
@@ -132,10 +132,11 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   }
 
   if (diffusive_cell) {
-    // Keep cell work g*m; book the Roe artificial mass flux against gravity.
-    a[i].row(2) -= 0.25 * grav * (Ap2.row(0) - Am2.row(0));
-    b[i].row(2) -= 0.25 * grav * Am2.row(0);
-    c[i].row(2) += 0.25 * grav * Ap2.row(0);
+    // Face potential differences, area and volume weight the diffusive work.
+    T lower = work_lo[i * stride2], upper = work_hi[i * stride2];
+    a[i].row(2) -= grav * (upper * Ap2.row(0) - lower * Am2.row(0));
+    b[i].row(2) -= grav * lower * Am2.row(0);
+    c[i].row(2) += grav * upper * Ap2.row(0);
   }
 
   // ---- boundary condition. Bnd = diag(1, -1, 1). ----

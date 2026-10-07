@@ -53,20 +53,25 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
     dt = dt or 657 * dz / math.sqrt(tall.GAMMA * tall.RD * tall.T0)
     out = {'nz': nz, 'H': heights, 'scheme': scheme, 'work': work, 'fixer': fixer, 'dt': dt, 'device': device}
     wmax = 0.0
+    redos = 0
+    completed = 0
     for n in range(steps):
         for stage in range(len(b.module('intg').stages)):
             b.forward(v, dt, stage)
-        assert b.check_redo(v) == 0, "tall column requested a redo"
+        if b.check_redo(v):
+            redos += 1
+            break
         u = v['hydro_u'][sl]
         if not torch.isfinite(u).all():
             break
         wmax = max(wmax, (u[kIV1] / u[kIDN]).abs().max().item())
+        completed = n + 1
     u = v['hydro_u'][sl]
     rho = u[kIDN]
     vel = u[kIV1] / rho
     temp = (tall.GAMMA - 1) * (u[kIPR] - 0.5 * rho * vel ** 2) / (rho * tall.RD)
     out['epe_drift'] = (u[kIPR] + phi * u[kIDN]).sum().item() / e0 - 1
-    out.update(steps=n + 1, redos=0, finite=bool(torch.isfinite(u).all()), mass=rho.sum().item() / m0 - 1, top_rho=rho[..., -1].mean().item() / u0[kIDN, ..., -1].mean().item() - 1, top_T=temp[..., -1].mean().item(), wmax=wmax)
+    out.update(steps=completed, attempted_steps=n + 1, redos=redos, finite=bool(torch.isfinite(u).all()), mass=rho.sum().item() / m0 - 1, top_rho=rho[..., -1].mean().item() / u0[kIDN, ..., -1].mean().item() - 1, top_T=temp[..., -1].mean().item(), wmax=wmax)
     buf = dict(b.named_buffers())
     out['clamp'] = next((v for (k, v) in buf.items() if k.endswith('.dry_clamp_step'))).item()
     print(json.dumps(out), flush=True)
@@ -140,8 +145,52 @@ def clamp_energy(scheme, work):
                       'redistribution_error': error}), flush=True)
     return error
 
-def restart_refusal():
+def curved_cell_energy(scheme, geometry):
+    cfg=box.config({'gravity-work':'cell','gravity-work-fixer':False},scheme=scheme)
+    cfg['geometry'].update(type=geometry)
+    cfg['geometry']['cells'].update(nx1=8,nx2=6,nx3=6)
+    if geometry=='gnomonic-equiangle':
+        cfg['geometry']['bounds']={'x1min':10.,'x1max':18.,'x2min_pi':-.25,'x2max_pi':.25,'x3min_pi':-.25,'x3max_pi':.25}
+    else:
+        cfg['geometry']['bounds']={'x1min':10.,'x1max':18.,'x2min':.5,'x2max':2.5,'x3min':0.,'x3max':6.}
+    cfg['forcing']['const-gravity']['grav1']=-1.
+    b=create(cfg)
+    w=b.buffer('hydro.D').clone().zero_()
+    w[kIDN]=1.
+    w[kIPR]=10.
+    du=torch.zeros_like(w)
+    du[kIPR,...,7]=1.
+    du0=du.clone()
+    dt=.1
+    b.module('hydro.icorr').forward(du,w,torch.full_like(w[kIDN],1.4),dt)
+    coord=b.module('coord')
+    z=b.buffer('coord.x1v')[3:11]
+    sl=(slice(3,9),slice(3,9),slice(3,11))
+    if geometry=='gnomonic-equiangle':
+        vol=coord.cell_volume()[sl]
+        faces=coord.face_area1()[3:9,3:9,4:11]
+    else:
+        rf=b.buffer('coord.x1f')[3:12]
+        theta=b.buffer('coord.x2f')[3:10]
+        az=b.buffer('coord.x3f')[3:10]
+        angular=(az[1:]-az[:-1]).unsqueeze(-1)*(theta[:-1].cos()-theta[1:].cos()).unsqueeze(0)
+        vol=angular.unsqueeze(-1)*(rf[1:].pow(3)-rf[:-1].pow(3))/3.
+        faces=angular.unsqueeze(-1)*rf[1:-1].square()
+    raw=b.buffer('hydro.icorr.delta').reshape(6,6,8,5 if scheme==9 else 3)
+    rho=raw[...,0]; momentum=raw[...,1]; energy=raw[...,-1]
+    observed=((energy+z*rho-du0[kIPR][sl])*vol).sum()
+    adv=.5*(momentum[...,:-1]+momentum[...,1:])
+    expected=-dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
+    error=(observed-expected).abs().item()
+    scale=(du0[kIPR][sl]*vol).abs().sum().item()
+    out={'device':device,'geometry':geometry,'scheme':scheme,'observed':observed.item(),'expected':expected.item(),'error':error,'relative':error/scale,'finite':bool(torch.isfinite(du).all())}
+    print(json.dumps(out),flush=True)
+    return out
+
+def coarse_restart():
     cfg = tall.config(0)
+    cfg['forcing']['const-gravity'].update(
+        {'gravity-work': 'cell', 'gravity-work-fixer': False})
     cfg['geometry']['bounds']['x1max'] = 40 * tall.RD * tall.T0 / tall.GRAV
     b = create(cfg)
     w = b.buffer('hydro.D').clone().zero_()
@@ -166,33 +215,31 @@ def restart_refusal():
         path = str(Path(folder) / 'coarse.part')
         torch.jit.trace(state, torch.ones(1)).save(path)
         cfg['integration']['implicit-scheme'] = 9
-        try:
-            create(cfg).initialize_from_restart(path)
-        except RuntimeError as error:
-            if 'implicit x1 grid is too coarse' not in str(error):
-                raise
-        else:
-            raise AssertionError('coarse restart was accepted')
+        create(cfg).initialize_from_restart(path)
 
 if __name__ == '__main__':
-    restart_refusal()
+    coarse_restart()
     failures = []
     for work, fixer in (('cell', True), ('cell', False), ('face', False)):
         for nz in (120, 140, 150):
             out = tall_run(nz, nz * 11.3 / 45, 9, work, 300, fixer=fixer)
-            if not (out['finite'] and out['steps'] == 300 and abs(out['top_rho']) < 0.01
+            if not (out['finite'] and out['redos'] == 0 and out['steps'] == 300 and abs(out['top_rho']) < 0.01
                     and abs(out['top_T'] / tall.T0 - 1) < 0.01 and out['wmax'] < 0.1
                     and abs(out['mass']) < 1e-12 and out['clamp'] == 0
                     and (work == 'cell' and not fixer or abs(out['epe_drift']) < tall.EPE_TOL)):
                 failures.append(f'tall column {nz}: {out}')
-        try:
-            tall_run(45, 40, 9, work, 40, 1500, fixer=fixer)
-            failures.append(f'coarse grid accepted: {work}')
-        except RuntimeError as error:
-            if 'implicit x1 grid is too coarse' not in str(error):
-                raise
+        out = tall_run(45, 40, 9, work, 40, 1500, fixer=fixer)
+        if work == 'face':
+            # This under-resolved face run still needs the existing timestep retry.
+            if out['redos'] == 0 and not (
+                    out['finite'] and out['steps'] == 40 and out['wmax'] < 0.1
+                    and abs(out['mass']) < 1.e-12):
+                failures.append(f'coarse face run neither stable nor rejected: {out}')
+        elif not (out['finite'] and out['redos'] == 0 and out['steps'] == 40
+                  and out['wmax'] < 0.1 and abs(out['mass']) < 1.e-12):
+            failures.append(f'coarse cell column: {out}')
         out = tall_run(160, 40, 9, work, 40, 1500, fixer=fixer)
-        if not (out['finite'] and out['steps'] == 40 and out['wmax'] < 0.1
+        if not (out['finite'] and out['redos'] == 0 and out['steps'] == 40 and out['wmax'] < 0.1
                 and abs(out['mass']) < 1e-12
                 and (work == 'cell' and not fixer or abs(out['epe_drift']) < tall.EPE_TOL)):
             failures.append(f'coarse column 160: {out}')
@@ -211,6 +258,11 @@ if __name__ == '__main__':
         out = solid_run(scheme, 'face', False, strided=True)
         if not out['finite'] or out['mass'] >= 1.e-12:
             failures.append(f'transposed solid mask: {out}')
+    for scheme in (1, 9):
+        for geometry in ('gnomonic-equiangle', 'spherical-polar'):
+            out = curved_cell_energy(scheme, geometry)
+            if not out['finite'] or not out['relative'] <= 1.e-12:
+                failures.append(f'curved cell energy: {out}')
     for scheme in (1, 9):
         for work in ('cell', 'face'):
             defect = clamp_energy(scheme, work)

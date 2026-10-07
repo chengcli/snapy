@@ -195,6 +195,14 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto mask = solid.defined() ? solid.to(w.options()).contiguous()
                               : torch::zeros_like(gamma);
 
+  auto area = pcoord->face_area1().contiguous();
+  auto volume = pcoord->cell_volume().contiguous();
+  int nc1 = w.size(-1);
+  auto work_lo = .5 * area.narrow(-1, 0, nc1) *
+                 (pcoord->x1v - pcoord->x1f.narrow(0, 0, nc1)) / volume;
+  auto work_hi = .5 * area.narrow(-1, 1, nc1) *
+                 (pcoord->x1f.narrow(0, 1, nc1) - pcoord->x1v) / volume;
+
   //// -------- Solve block-tridiagonal matrix --------- ////
   auto iter =
       at::TensorIteratorConfig()
@@ -206,15 +214,15 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
           .add_owned_output(_mass_corr.index(interior))
           .add_owned_input(w.index(interior))
           .add_owned_input(gamma.unsqueeze(0).index(interior))
-          .add_owned_input(
-              pcoord->face_area1().unsqueeze(0).contiguous().index(interior))
-          .add_owned_input(
-              pcoord->cell_volume().unsqueeze(0).contiguous().index(interior))
+          .add_owned_input(area.unsqueeze(0).index(interior))
+          .add_owned_input(volume.unsqueeze(0).index(interior))
           .add_input(_a)
           .add_input(_b)
           .add_input(_c)
           .add_input(_delta)
           .add_owned_input(mask.unsqueeze(0).index(interior))
+          .add_owned_input(work_lo.unsqueeze(0).contiguous().index(interior))
+          .add_owned_input(work_hi.unsqueeze(0).contiguous().index(interior))
           .build();
 
   // Linearize the FULL gravity: du always carries it (body force + rho_grav
@@ -224,9 +232,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   // gravity-work: face books the face work in the energy row (cartesian x1)
   bool face_work = phydro->face_work_in_operator();
   int adir = face_work ? kVicFaceWork : 0;
-  bool diffusive_work = grav1 != 0. &&
-                        phydro->options->grav()->gravity_work() == "cell" &&
-                        pcoord->options->type() == "cartesian";
+  bool diffusive_work =
+      grav1 != 0. && phydro->options->grav()->gravity_work() == "cell";
   if (diffusive_work) adir |= kVicDiffusiveCell;
 
   if ((options->scheme() >> 3) & 1) {
