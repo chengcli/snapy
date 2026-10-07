@@ -55,11 +55,16 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
     wmax = 0.0
     redos = 0
     completed = 0
+    redo_status = 0
+    rolled_back = None
     for n in range(steps):
+        previous = v['hydro_u'][sl].clone()
         for stage in range(len(b.module('intg').stages)):
             b.forward(v, dt, stage)
-        if b.check_redo(v):
+        redo_status = b.check_redo(v)
+        if redo_status:
             redos += 1
+            rolled_back = bool(torch.equal(v['hydro_u'][sl], previous))
             break
         u = v['hydro_u'][sl]
         if not torch.isfinite(u).all():
@@ -71,7 +76,7 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
     vel = u[kIV1] / rho
     temp = (tall.GAMMA - 1) * (u[kIPR] - 0.5 * rho * vel ** 2) / (rho * tall.RD)
     out['epe_drift'] = (u[kIPR] + phi * u[kIDN]).sum().item() / e0 - 1
-    out.update(steps=completed, attempted_steps=n + 1, redos=redos, finite=bool(torch.isfinite(u).all()), mass=rho.sum().item() / m0 - 1, top_rho=rho[..., -1].mean().item() / u0[kIDN, ..., -1].mean().item() - 1, top_T=temp[..., -1].mean().item(), wmax=wmax)
+    out.update(steps=completed, attempted_steps=n + 1, redos=redos, redo_status=redo_status, rolled_back=rolled_back, finite=bool(torch.isfinite(u).all()), mass=rho.sum().item() / m0 - 1, top_rho=rho[..., -1].mean().item() / u0[kIDN, ..., -1].mean().item() - 1, top_T=temp[..., -1].mean().item(), wmax=wmax)
     buf = dict(b.named_buffers())
     out['clamp'] = next((v for (k, v) in buf.items() if k.endswith('.dry_clamp_step'))).item()
     print(json.dumps(out), flush=True)
@@ -230,11 +235,13 @@ if __name__ == '__main__':
                 failures.append(f'tall column {nz}: {out}')
         out = tall_run(45, 40, 9, work, 40, 1500, fixer=fixer)
         if work == 'face':
-            # This under-resolved face run still needs the existing timestep retry.
-            if out['redos'] == 0 and not (
-                    out['finite'] and out['steps'] == 40 and out['wmax'] < 0.1
-                    and abs(out['mass']) < 1.e-12):
-                failures.append(f'coarse face run neither stable nor rejected: {out}')
+            # Rollback coverage only; a retry does not establish stability.
+            if out['redo_status'] > 0:
+                if not out['rolled_back']:
+                    failures.append(f'coarse face retry did not restore its input: {out}')
+            elif not (out['finite'] and out['steps'] == 40 and out['wmax'] < 0.1
+                      and abs(out['mass']) < 1.e-12):
+                failures.append(f'coarse face run outside rollback control: {out}')
         elif not (out['finite'] and out['redos'] == 0 and out['steps'] == 40
                   and out['wmax'] < 0.1 and abs(out['mass']) < 1.e-12):
             failures.append(f'coarse cell column: {out}')

@@ -75,9 +75,9 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
       bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
       bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
 
-      vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi, i, 0, nlayer - 1,
-                                dt, grav, dir, ny, stride1, stride2,
-                                first_block, last_block, lower, upper);
+      vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi,
+                                i, 0, nlayer - 1, dt, grav, dir, ny, stride1,
+                                stride2, first_block, last_block, lower, upper);
     });
   });
 }
@@ -129,9 +129,10 @@ void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
       bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
       bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
 
-      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi, i, 0, nlayer - 1, dt,
-                             grav, dir, ny, stride1, stride2, first_block,
-                             last_block, periodic, lower, upper);
+      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi,
+                             i, 0, nlayer - 1, dt, grav, dir, ny, stride1,
+                             stride2, first_block, last_block, periodic, lower,
+                             upper);
     });
   });
 }

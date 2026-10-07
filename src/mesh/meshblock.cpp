@@ -884,17 +884,17 @@ void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
   // through an x1 boundary face (whatever installed it: YAML or Python).
   // A sealed wall's flux is round-off, of order eps times its cell's mass; the
   // bound allows 1e3 eps of the wall cells' mass per step, so it scales with
-  // the dtype and the wall area. Measured: 0.14 eps explicit (float64 and
-  // float32); under an implicit scheme it grows about linearly with dt (15 eps
-  // at acoustic Courant 44, 304 eps at 1778).
+  // the dtype and the wall area. At large implicit steps, sealed-wall
+  // round-off can exceed it; the onset depends on the grid and backend.
   double eps = machine_epsilon(hydro_u.scalar_type());
   double bound = 1.e3 * eps * mwall;
   TORCH_CHECK(wall <= bound, "const-gravity gravity-work-fixer: ", wall,
               " kg crossed an x1 boundary face this step (", wall / mwall,
               " of the x1 wall cells' mass; round-off bound ", 1.e3 * eps,
-              "); the fixer's E+PE defect leaves out boundary fluxes, so it "
-              "needs impenetrable x1 boundaries. Set gravity-work-fixer: "
-              "false for open x1 boundaries.");
+              "); the fixer's E+PE defect leaves out boundary fluxes. "
+              "For open x1 boundaries set gravity-work-fixer: false. "
+              "For sealed walls reduce the timestep to keep round-off below "
+              "the bound. Disabling the fixer drops the E+PE correction.");
   double efix = -D / mass;  // J/kg
   hydro_u[IPR].index(in3) += m.index(in3) * efix;
   phydro->gravity_work_defect().zero_();
