@@ -210,15 +210,18 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // sum to grav1); scaling by non_hydrostatic() drops the gravity coupling
   // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
   auto grav1 = phydro->options->grav()->grav1();
+  // gravity-work: face books the face work in the energy row (cartesian x1)
+  bool face_work = phydro->face_work_in_operator();
+  int adir = face_work ? kVicFaceWork : 0;
 
   if ((options->scheme() >> 3) & 1) {
-    at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, adir);
     at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
   } else {
     // Match the full-VIC pipeline: assemble coefficients, run the column
     // solve + reductions, then apply the per-cell redistribution map.
-    at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, 0);
+    at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, adir);
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
     at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
                                          0);
@@ -254,8 +257,10 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
   // mass the VIC redistribution actually moved through each face (MASS[IVZ])
   // against the potential difference between that face and the cell centre;
   // the closed top face lives in the first outer ghost cell and remains zero.
-  // gravity-work: cell keeps the matrix's cell work (no swap, #283)
-  if (grav1 != 0. && phydro->options->grav()->gravity_work() != "cell") {
+  // gravity-work: cell keeps the matrix's cell work (no swap, #283), and face
+  // in cartesian x1 already has the face work in the matrix
+  if (grav1 != 0. && phydro->options->grav()->gravity_work() != "cell" &&
+      !face_work) {
     int is = pcoord->il();
     int ie = pcoord->iu() + 1;
 

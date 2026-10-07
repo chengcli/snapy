@@ -8,6 +8,7 @@
 
 // snap
 #include "flux_decomposition_impl.h"
+#include "implicit_dispatch.hpp"
 
 #define GAMMA(n) gamma[(n) * stride2]
 #define AREA(n) area[(n) * stride2]
@@ -31,6 +32,8 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
     Eigen::Matrix<T, 3, 3>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
     int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
     bool first_block, bool last_block) {
+  bool face_work = dir & kVicFaceWork;
+  dir &= ~kVicFaceWork;
   Eigen::Matrix<T, 5, 5> Rmat, Rimat, Am, Ap, dfdqf;
   Eigen::Matrix<T, 5, 1> Lambda;
   Eigen::Matrix<T, 3, 3> Am2, Ap2, dfdq_prev, dfdq_curr, dfdq_next;
@@ -104,6 +107,19 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   a[i].diagonal() += Dt;
   b[i] = -(Am2 + dfdq_prev) * area_i * half_inv_vol;
   c[i] = -(Ap2 - dfdq_next) * area_ip1 * half_inv_vol;
+
+  // gravity-work: face. Replace the cell work grav*m_i in the energy row by
+  // grav/2 (F_{i-1/2} + F_{i+1/2}), the face work of the linearised mass flux
+  // F_{i+1/2} = (m_i + m_{i+1})/2 - |A|_rho (q_{i+1} - q_i)/2; the weight
+  // A (x1f - x1v) / V is 1/2 at both faces in cartesian x1
+  if (face_work) {
+    Eigen::Matrix<T, 1, 3> em;
+    em << 0., 1., 0.;
+    a[i](2, 1) += grav;
+    a[i].row(2) -= 0.5 * grav * (em + 0.5 * (Ap2.row(0) - Am2.row(0)));
+    b[i].row(2) -= 0.5 * grav * (0.5 * em + 0.5 * Am2.row(0));
+    c[i].row(2) -= 0.5 * grav * (0.5 * em - 0.5 * Ap2.row(0));
+  }
 
   // ---- boundary condition. Bnd = diag(1, -1, 1). ----
   if (i == is && first_block) a[i] += b[i] * Bnd.asDiagonal();

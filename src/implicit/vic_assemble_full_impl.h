@@ -5,6 +5,7 @@
 
 // snap
 #include "flux_decomposition_impl.h"
+#include "implicit_dispatch.hpp"
 
 #define GAMMA(n) gamma[(n) * stride2]
 #define AREA(n) area[(n) * stride2]
@@ -18,6 +19,8 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     Eigen::Matrix<T, 5, 5>* c, T* w, T* gamma, T* area, T* vol, int i, int is,
     int ie, double dt, double grav, int dir, int ny, int stride1, int stride2,
     bool first_block, bool last_block, bool periodic) {
+  bool face_work = dir & kVicFaceWork;
+  dir &= ~kVicFaceWork;
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -83,6 +86,20 @@ void DISPATCH_MACRO vic_assemble_full_impl(
   a[i].diagonal() += Dt;
   b[i] = -(Am + dfdq_prev) * area_i * half_inv_vol;
   c[i] = -(Ap - dfdq_next) * area_ip1 * half_inv_vol;
+
+  // gravity-work: face. Replace the cell work grav*m_i in the energy row by
+  // grav/2 (F_{i-1/2} + F_{i+1/2}), the face work of the linearised mass flux
+  // F_{i+1/2} = (m_i + m_{i+1})/2 - |A|_rho (q_{i+1} - q_i)/2; the weight
+  // A (x1f - x1v) / V is 1/2 at both faces in cartesian x1
+  if (face_work) {
+    Eigen::Matrix<T, 1, 5> em;
+    em.setZero();
+    em(IVX + dir) = 1.;
+    a[i](IPR, IVX + dir) += grav;
+    a[i].row(IPR) -= 0.5 * grav * (em + 0.5 * (Ap.row(IDN) - Am.row(IDN)));
+    b[i].row(IPR) -= 0.5 * grav * (0.5 * em + 0.5 * Am.row(IDN));
+    c[i].row(IPR) -= 0.5 * grav * (0.5 * em - 0.5 * Ap.row(IDN));
+  }
 
   // Fix boundary conditions for the cells at the ends of the column.
   if (i == is && first_block && !periodic) a[i] += b[i] * Bnd.asDiagonal();

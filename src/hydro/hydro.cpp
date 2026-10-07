@@ -82,7 +82,7 @@ void HydroImpl::reset() {
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
     if (options->grav() && options->grav()->grav1() != 0. &&
-        options->grav()->gravity_work() != "cell") {
+        options->grav()->gravity_work() != "cell" && !face_work_in_operator()) {
       TORCH_WARN(
           "gravity-work: ", options->grav()->gravity_work(),
           " with an implicit scheme: the face work "
@@ -178,6 +178,13 @@ bool HydroImpl::gravity_work_fixer() const {
   auto g = options->grav();
   return g && g->grav1() != 0. && g->gravity_work() == "cell" &&
          g->gravity_work_fixer();
+}
+
+bool HydroImpl::face_work_in_operator() const {
+  auto g = options->grav();
+  return g && g->grav1() != 0. && g->gravity_work() == "face" && picorr &&
+         picorr->options->scheme() != 0 &&
+         pmb->pcoord->options->type() == "cartesian";
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
