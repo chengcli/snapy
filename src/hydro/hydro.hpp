@@ -149,6 +149,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   //! gravity-work: cell with gravity-work-fixer on (and grav1 != 0)
   bool gravity_work_fixer() const;
+  //! x1 face f (0 inner, 1 outer) of this block is a physical, non-periodic
+  //! boundary (a wall whatever installed it, or an open boundary)
+  bool is_x1_wall(int f) const;
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }

@@ -268,7 +268,13 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                dphi_bot * face_mass.slice(-1, is, ie)) /
                              volume.slice(-1, is, ie);
     auto matrix_gravity_work = dt * grav1 * du[IVX].slice(-1, is, ie);
-    du[IPR].slice(-1, is, ie) += face_gravity_work - matrix_gravity_work;
+    auto swap = face_gravity_work - matrix_gravity_work;
+    // face-wallc: the x1 wall cells keep the matrix's cell work
+    if (phydro->options->grav()->gravity_work() == "face-wallc") {
+      if (phydro->is_x1_wall(0)) swap.select(-1, 0).zero_();
+      if (phydro->is_x1_wall(1)) swap.select(-1, ie - is - 1).zero_();
+    }
+    du[IPR].slice(-1, is, ie) += swap;
   }
 
   _corr.copy_(du);

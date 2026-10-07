@@ -46,13 +46,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   torch::Tensor bflux1;
   bool gw_cell = options->grav() && options->grav()->grav1() != 0. &&
                  options->grav()->gravity_work() == "cell";
-  // x1 face f (0 inner, 1 outer) is a physical wall of this block
-  auto x1wall = [&](int f) {
-    auto const& nm = pmb->options->bcnames();
-    return pmb->options->is_physical_boundary(0, 0, f == 0 ? -1 : 1) &&
-           !(f < static_cast<int>(nm.size()) &&
-             nm[f].compare(0, 8, "periodic") == 0);
-  };
 
   //// ------------ (2) Calculate dimension 1 flux ------------ ////
   if (u.size(DIM1) > 1) {
@@ -533,8 +526,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         // the fixer runs with sealed walls only) plus the gravity work booked
         // into E; x2/x3 fluxes do not move mass across geopotential surfaces
         auto fw = total_mass_flux1.clone();
-        if (x1wall(0)) fw.select(-1, is).zero_();
-        if (x1wall(1)) fw.select(-1, ie).zero_();
+        if (is_x1_wall(0)) fw.select(-1, is).zero_();
+        if (is_x1_wall(1)) fw.select(-1, ie).zero_();
         auto dm =
             -dt *
             (area1.slice(-1, is + 1, ie + 1) * fw.slice(-1, is + 1, ie + 1) -
@@ -549,7 +542,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
             e.slice(-2, js, je).slice(-3, ks, ke).sum().to(torch::kFloat64);
         // the fixer drops these faces, so it checks that no mass crossed them
         for (int f : {0, 1}) {
-          if (!x1wall(f)) continue;
+          if (!is_x1_wall(f)) continue;
           int i = f == 0 ? is : ie;
           auto m = area1.select(-1, i) * total_mass_flux1.select(-1, i).abs();
           _gwfix_wall += dt * m.slice(-1, js, je)
@@ -562,8 +555,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       gravity_energy_correction = face_gravity_work - original_gravity_work;
       // face-wallc: the x1 wall cells keep the cell work
       if (options->grav()->gravity_work() == "face-wallc") {
-        if (x1wall(0)) gravity_energy_correction.select(-1, 0).zero_();
-        if (x1wall(1))
+        if (is_x1_wall(0)) gravity_energy_correction.select(-1, 0).zero_();
+        if (is_x1_wall(1))
           gravity_energy_correction.select(-1, ie - is - 1).zero_();
       }
     }

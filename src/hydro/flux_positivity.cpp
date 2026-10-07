@@ -8,12 +8,10 @@
 
 namespace snap {
 
-namespace {
 double machine_epsilon(c10::ScalarType dtype) {
   return dtype == torch::kFloat ? std::numeric_limits<float>::epsilon()
                                 : std::numeric_limits<double>::epsilon();
 }
-}  // namespace
 
 double positivity_roundoff(c10::ScalarType dtype) {
   double ulp = dtype == torch::kFloat ? kPositivityRoundoffUlpFloat

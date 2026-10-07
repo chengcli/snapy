@@ -265,6 +265,15 @@ foreach(example IN LISTS reference_examples)
     LABELS "reference")
 endforeach()
 
+# straka at cfl 1.6 needs redos: a non-finite step must reach check_redo
+# (gravity-work-fixer on), not stop the run
+add_test(NAME test_straka_redo
+         COMMAND ${CMAKE_COMMAND} -Dbuildl=release
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/run_straka_redo.cmake)
+set_tests_properties(test_straka_redo PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 600)
+
 add_test(
   NAME test_bryan_balance_ic
   COMMAND ${CMAKE_COMMAND}

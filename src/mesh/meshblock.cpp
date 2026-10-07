@@ -10,6 +10,7 @@
 
 // snap
 #include <snap/coord/coord_utils.hpp>
+#include <snap/hydro/flux_positivity.hpp>
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
@@ -842,11 +843,21 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   int ny = hydro_u.size(0) - ICY;
   auto m = hydro_u[IDN].clone();
   if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  // immersed solid cells are refilled each step: they take no share of -D
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
   auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-  return torch::stack(
-             {phydro->gravity_work_defect()[0],
-              (m * pcoord->cell_volume()).index(in3).sum().to(torch::kFloat64),
-              phydro->gravity_work_wall_mass()[0]})
+  auto mv = (m * pcoord->cell_volume()).index(in3);
+  // the mass of the cells next to the x1 walls sets the wall faces' round-off
+  auto mwall = torch::zeros_like(mv.select(-1, 0).sum());
+  if (phydro->is_x1_wall(0)) mwall += mv.select(-1, 0).sum();
+  if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
+  // the limiter patched a cell or found a NaN: the redo check discards the step
+  auto hits = limiter_hits();
+  auto redo = torch::full_like(mwall, hits[0] || hits[1] ? 1. : 0.);
+  return torch::stack({phydro->gravity_work_defect()[0],
+                       mv.sum().to(torch::kFloat64),
+                       phydro->gravity_work_wall_mass()[0],
+                       mwall.to(torch::kFloat64), redo.to(torch::kFloat64)})
       .cpu();
 }
 
@@ -856,16 +867,34 @@ void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
   int ny = hydro_u.size(0) - ICY;
   auto m = hydro_u[IDN].clone();
   if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  // immersed solid cells are refilled each step: they take no share of -D
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
   auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  double D = global[0].item<double>(), mass = global[1].item<double>();
+  double wall = global[2].item<double>(), mwall = global[3].item<double>();
+  if (global[4].item<double>() > 0. ||
+      !torch::isfinite(global).all().item<bool>()) {
+    // a step the redo check will discard (limiter repair, NaN, non-finite
+    // sums) is left to it, as with the fixer off
+    phydro->gravity_work_defect().zero_();
+    phydro->gravity_work_wall_mass().zero_();
+    return;
+  }
   // the defect leaves out boundary fluxes: refuse a step that moved mass
-  // through an x1 boundary face (whatever installed it: YAML or Python)
-  double wall = global[2].item<double>(), mass = global[1].item<double>();
-  TORCH_CHECK(wall <= 1.e-12 * mass, "const-gravity gravity-work-fixer: ", wall,
-              " kg crossed an x1 boundary face this step (", wall / mass,
-              " of the mass); the fixer's E+PE defect leaves out boundary "
-              "fluxes, so it needs impenetrable x1 boundaries. Set "
-              "gravity-work-fixer: false for open x1 boundaries.");
-  double D = global[0].item<double>();
+  // through an x1 boundary face (whatever installed it: YAML or Python).
+  // A sealed wall's flux is round-off, of order eps times its cell's mass; the
+  // bound allows 1e3 eps of the wall cells' mass per step, so it scales with
+  // the dtype and the wall area. Measured: 0.14 eps explicit (float64 and
+  // float32); under an implicit scheme it grows about linearly with dt (15 eps
+  // at acoustic Courant 44, 304 eps at 1778).
+  double eps = machine_epsilon(hydro_u.scalar_type());
+  double bound = 1.e3 * eps * mwall;
+  TORCH_CHECK(wall <= bound, "const-gravity gravity-work-fixer: ", wall,
+              " kg crossed an x1 boundary face this step (", wall / mwall,
+              " of the x1 wall cells' mass; round-off bound ", 1.e3 * eps,
+              "); the fixer's E+PE defect leaves out boundary fluxes, so it "
+              "needs impenetrable x1 boundaries. Set gravity-work-fixer: "
+              "false for open x1 boundaries.");
   double efix = -D / mass;  // J/kg
   hydro_u[IPR].index(in3) += m.index(in3) * efix;
   phydro->gravity_work_defect().zero_();
