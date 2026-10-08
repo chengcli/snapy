@@ -23,7 +23,7 @@ DECLARE_DISPATCH(vic_redistribute_fn, vic_redistribute_full);
 namespace snap {
 
 //! vic_assemble_*: added to dir, the energy row books the face gravity work of
-//! the linearised x1 mass flux instead of the cell work (cartesian x1, #283)
+//! the linearised x1 mass flux instead of the cell work
 constexpr int kVicFaceWork = 16;
 // Cell work plus gravity work of the implicit Roe mass diffusion.
 constexpr int kVicDiffusiveCell = 32;

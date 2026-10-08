@@ -70,7 +70,7 @@ void check_energy_row(int flag = snap::kVicFaceWork, bool curved = false,
       return grav * (q[1](snap::IVX) + lower_weight * lower_diffusion +
                      upper_weight * upper_diffusion);
     }
-    return .5 * grav * (lower + upper);
+    return grav * (lower_weight * lower + upper_weight * upper);
   };
 
   Block a[3], b[3], c[3], a0[3], b0[3], c0[3];
@@ -142,4 +142,14 @@ TEST(implicit_face_work, full_cell_work_uses_curved_face_metrics) {
 TEST(implicit_face_work, partial_cell_work_uses_curved_face_metrics) {
   for (bool centroid : {false, true})
     check_energy_row<3>(snap::kVicDiffusiveCell, true, centroid);
+}
+
+TEST(implicit_face_work, full_face_work_uses_curved_face_metrics) {
+  for (bool centroid : {false, true})
+    check_energy_row<5>(snap::kVicFaceWork, true, centroid);
+}
+
+TEST(implicit_face_work, partial_face_work_uses_curved_face_metrics) {
+  for (bool centroid : {false, true})
+    check_energy_row<3>(snap::kVicFaceWork, true, centroid);
 }

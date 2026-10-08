@@ -118,25 +118,17 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
   b[i] = -(Am2 + dfdq_prev) * area_i * half_inv_vol;
   c[i] = -(Ap2 - dfdq_next) * area_ip1 * half_inv_vol;
 
-  // gravity-work: face. Replace the cell work grav*m_i in the energy row by
-  // grav/2 (F_{i-1/2} + F_{i+1/2}), the face work of the linearised mass flux
-  // F_{i+1/2} = (m_i + m_{i+1})/2 - |A|_rho (q_{i+1} - q_i)/2; the weight
-  // A (x1f - x1v) / V is 1/2 at both faces in cartesian x1
-  if (face_work) {
-    Eigen::Matrix<T, 1, 3> em;
-    em << 0., 1., 0.;
-    a[i](2, 1) += grav;
-    a[i].row(2) -= 0.5 * grav * (em + 0.5 * (Ap2.row(0) - Am2.row(0)));
-    b[i].row(2) -= 0.5 * grav * (0.5 * em + 0.5 * Am2.row(0));
-    c[i].row(2) -= 0.5 * grav * (0.5 * em - 0.5 * Ap2.row(0));
-  }
-
-  if (diffusive_cell) {
-    // Face potential differences, area and volume weight the diffusive work.
+  if (face_work || diffusive_cell) {
+    // The same face-to-centre potential weights as the mass update.
     T lower = work_lo[i * stride2], upper = work_hi[i * stride2];
     a[i].row(2) -= grav * (upper * Ap2.row(0) - lower * Am2.row(0));
     b[i].row(2) -= grav * lower * Am2.row(0);
     c[i].row(2) += grav * upper * Ap2.row(0);
+    if (face_work) {
+      a[i](2, 1) += grav * (1. - lower - upper);
+      b[i](2, 1) -= grav * lower;
+      c[i](2, 1) -= grav * upper;
+    }
   }
 
   // ---- boundary condition. Bnd = diag(1, -1, 1). ----

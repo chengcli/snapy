@@ -150,7 +150,7 @@ def clamp_energy(scheme, work):
                       'redistribution_error': error}), flush=True)
     return error
 
-def curved_cell_energy(scheme, geometry):
+def curved_energy(scheme, geometry, work):
     cfg=box.config({'gravity-work':'cell','gravity-work-fixer':False},scheme=scheme)
     cfg['geometry'].update(type=geometry)
     cfg['geometry']['cells'].update(nx1=8,nx2=6,nx3=6)
@@ -159,6 +159,7 @@ def curved_cell_energy(scheme, geometry):
     else:
         cfg['geometry']['bounds']={'x1min':10.,'x1max':18.,'x2min':.5,'x2max':2.5,'x3min':0.,'x3max':6.}
     cfg['forcing']['const-gravity']['grav1']=-1.
+    cfg['forcing']['const-gravity']['gravity-work']=work
     b=create(cfg)
     w=b.buffer('hydro.D').clone().zero_()
     w[kIDN]=1.
@@ -185,10 +186,11 @@ def curved_cell_energy(scheme, geometry):
     rho=raw[...,0]; momentum=raw[...,1]; energy=raw[...,-1]
     observed=((energy+z*rho-du0[kIPR][sl])*vol).sum()
     adv=.5*(momentum[...,:-1]+momentum[...,1:])
-    expected=-dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
-    error=(observed-expected).abs().item()
+    expected=0. if work=='face' else -dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
+    final=((du[kIPR][sl]+z*du[kIDN][sl]-du0[kIPR][sl])*vol).sum()
+    error=max((observed-expected).abs().item(),(final-expected).abs().item())
     scale=(du0[kIPR][sl]*vol).abs().sum().item()
-    out={'device':device,'geometry':geometry,'scheme':scheme,'observed':observed.item(),'expected':expected.item(),'error':error,'relative':error/scale,'finite':bool(torch.isfinite(du).all())}
+    out={'device':device,'geometry':geometry,'scheme':scheme,'work':work,'observed':observed.item(),'final':final.item(),'expected':float(expected),'error':error,'relative':error/scale,'finite':bool(torch.isfinite(du).all())}
     print(json.dumps(out),flush=True)
     return out
 
@@ -267,9 +269,10 @@ if __name__ == '__main__':
             failures.append(f'transposed solid mask: {out}')
     for scheme in (1, 9):
         for geometry in ('gnomonic-equiangle', 'spherical-polar'):
-            out = curved_cell_energy(scheme, geometry)
-            if not out['finite'] or not out['relative'] <= 1.e-12:
-                failures.append(f'curved cell energy: {out}')
+            for work in ('cell', 'face'):
+                out = curved_energy(scheme, geometry, work)
+                if not out['finite'] or not out['relative'] <= 1.e-12:
+                    failures.append(f'curved implicit energy: {out}')
     for scheme in (1, 9):
         for work in ('cell', 'face'):
             defect = clamp_energy(scheme, work)

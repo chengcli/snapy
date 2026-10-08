@@ -183,8 +183,7 @@ bool HydroImpl::gravity_work_fixer() const {
 bool HydroImpl::face_work_in_operator() const {
   auto g = options->grav();
   return g && g->grav1() != 0. && g->gravity_work() == "face" && picorr &&
-         picorr->options->scheme() != 0 &&
-         pmb->pcoord->options->type() == "cartesian";
+         picorr->options->scheme() != 0;
 }
 
 double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {

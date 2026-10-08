@@ -436,13 +436,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   for (auto& f : forcings) f.forward(du, w, temp, dt);
   _forcing_dry = track_dry ? du[IDN] - dry_before : torch::Tensor();
 
-  // Preserve the original cell-centred gravity work through the implicit
-  // solve: the VIC matrix assumes that energy-momentum coupling is present in
-  // its input.  After VIC has completed, replace that work with the value from
-  // the same finite-volume face mass flux as continuity.  Use only the x1
-  // divergence here: horizontal mass transport does not cross geopotential
-  // surfaces.  _flux1 is read after positivity limiting and sedimentation, so
-  // it contains every contribution to vertical mass transport.
+  // Face work uses the x1 mass flux after positivity limiting and
+  // sedimentation. Implicit face mode consumes it before the solve; the
+  // other modes keep their existing cell or post-solve work.
   torch::Tensor gravity_energy_correction;
   // gravity-work-fixer: this stage's E+PE change of the dynamics (J)
   torch::Tensor gwfix_stage;
