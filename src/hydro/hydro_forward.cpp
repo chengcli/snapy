@@ -621,6 +621,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     };
     torch::Tensor epe0;
     if (gwfix_stage.defined()) epe0 = epe(du);
+    // face work in the operator: the solve also sees the explicit face
+    // correction, so the energy it inverts is the face-form energy
+    if (gravity_energy_correction.defined() && face_work_in_operator()) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      du[IPR].slice(-1, is, ie) += gravity_energy_correction;
+      gravity_energy_correction = torch::Tensor();
+    }
     _apply_implicit_correction(du, w, dt_corr, other);
     if (gwfix_stage.defined()) gwfix_stage = gwfix_stage + epe(du) - epe0;
 

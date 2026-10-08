@@ -78,7 +78,7 @@ def python_reflecting(face):
 
 
 def run(gravity, nstep, device, x1bc="reflecting", scheme=0, pybc=False, dtype=torch.float64, nan=False,
-        cubed=False):
+        cubed=False, first_stage=False):
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
 
@@ -124,7 +124,7 @@ def run(gravity, nstep, device, x1bc="reflecting", scheme=0, pybc=False, dtype=t
         return ((u[kIPR] + u[kIDN] * GRAV * zz).sum() * dz).item()
 
     e0 = epe()
-    nstage = len(block.module("intg").stages)
+    nstage = 1 if first_stage else len(block.module("intg").stages)
     drift = 0.0
     for n in range(nstep):
         if nan and n == nstep - 1:  # a NaN in the bottom wall cell before the last step
@@ -140,6 +140,35 @@ def run(gravity, nstep, device, x1bc="reflecting", scheme=0, pybc=False, dtype=t
     if nan:
         return block.check_redo(block_vars)
     return drift, fix, e0, block_vars["hydro_u"][sl].double()
+
+
+def wallc_work(scheme, device):
+    from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1, kIV3
+
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", dir=os.getcwd()) as f:
+        yaml.safe_dump(config({"gravity-work": "face-wallc"}, scheme=scheme), f)
+        f.flush()
+        block = MeshBlock(MeshBlockOptions.from_yaml(f.name))
+    block.to(torch.device(device), torch.float64)
+    w = block.buffer("hydro.D").clone().zero_()
+    w[kIDN], w[kIPR] = 1.0, 1.e5
+    du = torch.zeros_like(w)
+    z = (torch.arange(NZ, device=w.device, dtype=w.dtype) + 0.5) / NZ
+    du[kIV1, ..., 3:3 + NZ] = torch.sin(torch.pi * z)
+    dt, g = 10.0, -GRAV
+    block.module("hydro.icorr").forward(du, w, torch.full_like(w[kIDN], GAMMA), dt)
+    raw = block.buffer("hydro.icorr.delta").reshape(NZ, 3 if scheme == 1 else 5)
+    mass = block.buffer("hydro.icorr.mass_corr")
+    if not all(torch.isfinite(x).all().item() for x in (du, raw, mass)):
+        raise AssertionError("non-finite implicit face-wallc result")
+    expected = (0.5 * g * (mass[kIV3, ..., 3:3 + NZ] + mass[kIV3, ..., 4:4 + NZ])
+                - dt * g * du[kIV1, ..., 3:3 + NZ]).flatten()
+    scale = expected[1:-1].abs().max().item()
+    expected[[0, -1]] = 0.0
+    actual = du[kIPR, ..., 3:3 + NZ].flatten() - raw[:, -1]
+    error = (actual - expected).abs().max().item() / scale
+    clamp = block.buffer("hydro.icorr.dry_clamp_step").item()
+    return error, scale, clamp
 
 
 def main():
@@ -193,16 +222,25 @@ def main():
             if not ok:
                 failures.append("%s + fixer: unexpected error: %s" % (name, str(e).splitlines()[0]))
 
-    # implicit: face-wallc keeps the cell work in the two x1 wall cells, so there its energy follows
-    # cell, not face: r = |E_wallc - E_cell| / |E_face - E_cell| after one step (explicit 2e-3;
-    # implicit 0.09 and 0.37 when the implicit face-work swap also covered the wall cells)
-    e = [run(g, 1, args.device, scheme=1)[3][kIPR].flatten() for g in
+    # Compare identical first-stage states before RK feedback changes them.
+    e = [run(g, 1, args.device, first_stage=True)[3][kIPR].flatten() for g in
          ({"gravity-work": "face"}, {"gravity-work": "face-wallc"},
           {"gravity-work": "cell", "gravity-work-fixer": False})]
-    r = max(((e[1][i] - e[2][i]) / (e[0][i] - e[2][i])).abs().item() for i in (0, -1))
-    print("implicit face-wallc in the wall cells: |E_wallc - E_cell| / |E_face - E_cell| = %.3e" % r)
-    if not r < 0.05:
-        failures.append("implicit face-wallc does not keep the cell work in the wall cells (r %.3e)" % r)
+    contrast = (e[0][[0, -1]] - e[2][[0, -1]]).abs().max().item()
+    error = max((e[1][[0, -1]] - e[2][[0, -1]]).abs().max().item(),
+                (e[1][1:-1] - e[0][1:-1]).abs().max().item())
+    print("explicit face-wallc: work error %.3e, wall contrast %.3e" % (error, contrast))
+    if (not all(torch.isfinite(x).all().item() for x in e)
+            or not contrast > 1.e-3 or not error < TOL * contrast):
+        failures.append("explicit face-wallc wall/interior work mismatch")
+
+    # Compare wallc with its raw VIC energy, not the separately corrected cell operator.
+    for scheme in (1, 9):
+        error, scale, clamp = wallc_work(scheme, args.device)
+        print("implicit face-wallc scheme %d: relative work error %.3e, interior swap %.3e"
+              % (scheme, error, scale))
+        if not error < TOL or not scale > 1.e-3 or clamp != 0:
+            failures.append("face-wallc wall/interior work mismatch, scheme %d" % scheme)
 
     # a NaN in a wall cell is left to the redo check (as with the fixer off), not refused
     try:

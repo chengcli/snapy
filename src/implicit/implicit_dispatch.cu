@@ -46,9 +46,9 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
     using Matrix = Eigen::Matrix<scalar_t, 3, 3>;
 
     int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<10>(iter);
-    std::array<char *, 10> data;
-    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
+    auto offset_calc = ::make_offset_calculator<13>(iter);
+    std::array<char *, 13> data;
+    for (int k = 0; k < 13; ++k) data[k] = (char *)iter.data_ptr(k);
 
     int64_t total = ncol * (int64_t)nlayer;
     at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
@@ -59,13 +59,25 @@ void vic_assemble_partial_cuda(at::TensorIterator &iter, double dt, double grav,
       auto gamma = reinterpret_cast<scalar_t *>(data[3] + offsets[3]);
       auto area = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
       auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto work_lo = reinterpret_cast<scalar_t *>(data[11] + offsets[11]);
+      auto work_hi = reinterpret_cast<scalar_t *>(data[12] + offsets[12]);
       auto a = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
       auto b = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
       auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
+      auto solid = reinterpret_cast<scalar_t *>(data[10] + offsets[10]);
+      if (solid[i * stride2] != 0) {
+        a[i].setIdentity();
+        a[i] /= dt;
+        b[i].setZero();
+        c[i].setZero();
+        return;
+      }
+      bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
+      bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
 
-      vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1,
-                                dt, grav, dir, ny, stride1, stride2,
-                                first_block, last_block);
+      vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi,
+                                i, 0, nlayer - 1, dt, grav, dir, ny, stride1,
+                                stride2, first_block, last_block, lower, upper);
     });
   });
 }
@@ -88,9 +100,9 @@ void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
     using Matrix = Eigen::Matrix<scalar_t, 5, 5>;
 
     int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<10>(iter);
-    std::array<char *, 10> data;
-    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
+    auto offset_calc = ::make_offset_calculator<13>(iter);
+    std::array<char *, 13> data;
+    for (int k = 0; k < 13; ++k) data[k] = (char *)iter.data_ptr(k);
 
     int64_t total = ncol * (int64_t)nlayer;
     at::native::launch_legacy_kernel<128, 1>(total, [=] __device__(int idx) {
@@ -101,13 +113,26 @@ void vic_assemble_full_cuda(at::TensorIterator &iter, double dt, double grav,
       auto gamma = reinterpret_cast<scalar_t *>(data[3] + offsets[3]);
       auto area = reinterpret_cast<scalar_t *>(data[4] + offsets[4]);
       auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
+      auto work_lo = reinterpret_cast<scalar_t *>(data[11] + offsets[11]);
+      auto work_hi = reinterpret_cast<scalar_t *>(data[12] + offsets[12]);
       auto a = reinterpret_cast<Matrix *>(data[6] + offsets[6]);
       auto b = reinterpret_cast<Matrix *>(data[7] + offsets[7]);
       auto c = reinterpret_cast<Matrix *>(data[8] + offsets[8]);
+      auto solid = reinterpret_cast<scalar_t *>(data[10] + offsets[10]);
+      if (solid[i * stride2] != 0) {
+        a[i].setIdentity();
+        a[i] /= dt;
+        b[i].setZero();
+        c[i].setZero();
+        return;
+      }
+      bool lower = i > 0 && solid[(i - 1) * stride2] != 0;
+      bool upper = i + 1 < nlayer && solid[(i + 1) * stride2] != 0;
 
-      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, i, 0, nlayer - 1, dt,
-                             grav, dir, ny, stride1, stride2, first_block,
-                             last_block, periodic);
+      vic_assemble_full_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi,
+                             i, 0, nlayer - 1, dt, grav, dir, ny, stride1,
+                             stride2, first_block, last_block, periodic, lower,
+                             upper);
     });
   });
 }
@@ -129,8 +154,8 @@ void vic_solve_cuda(at::TensorIterator &iter, double dt, double grav, int dir) {
     using Matrix = Eigen::Matrix<scalar_t, N, N>;
     using Vector = Eigen::Matrix<scalar_t, N, 1>;
 
-    native::gpu_kernel<10>(
-        iter, [=] GPU_LAMBDA(char *const data[10], unsigned int strides[10]) {
+    native::gpu_kernel<13>(
+        iter, [=] GPU_LAMBDA(char *const data[13], unsigned int strides[13]) {
           auto du = reinterpret_cast<scalar_t *>(data[0] + strides[0]);
           auto a = reinterpret_cast<Matrix *>(data[6] + strides[6]);
           auto b = reinterpret_cast<Matrix *>(data[7] + strides[7]);
@@ -163,9 +188,9 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double /*dt*/,
     using Vector = Eigen::Matrix<scalar_t, N, 1>;
 
     int64_t ncol = iter.numel();
-    auto offset_calc = ::make_offset_calculator<10>(iter);
-    std::array<char *, 10> data;
-    for (int k = 0; k < 10; ++k) data[k] = (char *)iter.data_ptr(k);
+    auto offset_calc = ::make_offset_calculator<13>(iter);
+    std::array<char *, 13> data;
+    for (int k = 0; k < 13; ++k) data[k] = (char *)iter.data_ptr(k);
 
     // Component B: the constituent column pass is serial per column (prefix sum
     // + sequential availability clamp); one thread per column, matching the
@@ -179,8 +204,19 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double /*dt*/,
       auto vol = reinterpret_cast<scalar_t *>(data[5] + offsets[5]);
       auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
 
-      vic_constituent_column<scalar_t, N>(du, w, mass_fix, delta, vol, nlayer,
-                                          dir, ny, stride1, stride2);
+      auto solid = reinterpret_cast<scalar_t *>(data[10] + offsets[10]);
+      for (int lo = 0; lo < nlayer;) {
+        if (solid[lo * stride2] != 0) {
+          ++lo;
+          continue;
+        }
+        int hi = lo + 1;
+        while (hi < nlayer && solid[hi * stride2] == 0) ++hi;
+        vic_constituent_column<scalar_t, N>(
+            du + lo * stride2, w + lo * stride2, mass_fix + lo * stride2,
+            delta + lo, vol + lo * stride2, hi - lo, dir, ny, stride1, stride2);
+        lo = hi;
+      }
     });
 
     int64_t total = ncol * (int64_t)nlayer;
@@ -192,7 +228,10 @@ void vic_redistribute_cuda(at::TensorIterator &iter, double /*dt*/,
       auto mass_fix = reinterpret_cast<scalar_t *>(data[1] + offsets[1]);
       auto delta = reinterpret_cast<Vector *>(data[9] + offsets[9]);
 
-      vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1, stride2);
+      auto solid = reinterpret_cast<scalar_t *>(data[10] + offsets[10]);
+      if (solid[i * stride2] == 0)
+        vic_redistribute_cell(du, mass_fix, delta, i, dir, ny, stride1,
+                              stride2);
     });
   });
 }
