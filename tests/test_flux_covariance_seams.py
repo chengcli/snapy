@@ -11,6 +11,9 @@ per-direction gating of the p* geometric source.
      too, even though the x3 faces are not corrected.
 
 The switch is read once per process, so each arm runs in its own process (as in test_flux_covariance_rows).
+Each case also asserts that the switch-on and switch-off arms differ (by more than DIFF_TOL, relative), so a
+renamed or ignored switch cannot pass trivially: case 1 compares the final conserved state, case 2 the x2 face
+momentum flux, which carries the p* shift even at rest.
 
   python test_flux_covariance_seams.py [--device cpu]
 """
@@ -30,6 +33,7 @@ import test_flux_covariance_rows as rows  # noqa: E402  (deck, builders, steppin
 NSTEP = 10
 DRIFT_TOL = 1e-12     # relative drift of each total over NSTEP steps
 REST_TOL = 1e-9       # max |v| / c_s after rows.NREST steps
+DIFF_TOL = 1e-13      # minimum relative on/off difference that shows the switch acted
 
 
 def totals(blocks, mv):
@@ -83,7 +87,8 @@ def arm_conservation(device):
     t1 = totals(blocks, mv)
     drift = ((t1 - t0) / t0).abs().tolist()
     vmax = max(float(w[1:4].abs().max()) for w in rows.end_prims(blocks, mv))
-    return {"mass": drift[0], "vapor": drift[1], "e_plus_pe": drift[2], "vmax": vmax}
+    fp = sum(float(m["hydro_u"].abs().sum()) for m in mv)  # final conserved state, summed
+    return {"mass": drift[0], "vapor": drift[1], "e_plus_pe": drift[2], "vmax": vmax, "fp": fp}
 
 
 def arm_gating(device):
@@ -95,7 +100,10 @@ def arm_gating(device):
     mv = [v]
     rows.advance(None, blocks, mv, rows.NREST)
     cs = math.sqrt(1.4 * rows.P0 / rows.RHO0)
-    return max(float(w[1:4].abs().max()) for w in rows.end_prims(blocks, mv)) / cs
+    vmax = max(float(w[1:4].abs().max()) for w in rows.end_prims(blocks, mv)) / cs
+    # the last x2 face flux of the normal momentum: p* shifts it even at rest
+    fp = float(blocks[0].buffer("hydro.F2")[2].abs().sum())
+    return {"vmax": vmax, "fp": fp}
 
 
 def run(task, switch, device, tmpdir):
@@ -121,8 +129,10 @@ def main():
         return 0
     failures = []
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp:
+        fps = {}
         for sw in (None, "1"):
             c = run("conservation", sw, a.device, tmp)
+            fps[sw] = c["fp"]
             print(f"six panels, closed walls, {NSTEP} steps, switch {sw or 'unset'}: relative drift "
                   f"mass {c['mass']:.3e}  vapor {c['vapor']:.3e}  E+PE {c['e_plus_pe']:.3e}  "
                   f"(max|v| {c['vmax']:.2f})", flush=True)
@@ -130,12 +140,24 @@ def main():
                 for k in ("mass", "vapor", "e_plus_pe"):
                     if not c[k] < DRIFT_TOL:
                         failures.append(f"{k} drift {c[k]:.3e} >= {DRIFT_TOL} with the term on")
-        off = run("gating", None, a.device, tmp)
-        on = run("gating", "1", a.device, tmp)
+        dc = abs(fps["1"] - fps[None]) / abs(fps[None])
+        print(f"conservation case: switch on vs off, relative difference of the final state {dc:.3e}",
+              flush=True)
+        if not dc > DIFF_TOL:
+            failures.append(f"conservation case: on and off agree ({dc:.3e} <= {DIFF_TOL}), the switch "
+                            "did not act")
+        g_off = run("gating", None, a.device, tmp)
+        g_on = run("gating", "1", a.device, tmp)
+        off, on = g_off["vmax"], g_on["vmax"]
         print(f"spherical-polar rest, x3 flux disabled (nx3 > 1), {rows.NREST} steps: max|v|/c_s "
               f"off {off:.3e}  on {on:.3e}", flush=True)
         if not on < REST_TOL:
             failures.append(f"rest with x3 disabled: on {on:.3e} >= {REST_TOL}")
+        dg = abs(g_on["fp"] - g_off["fp"]) / abs(g_off["fp"])
+        print(f"gating case: switch on vs off, relative difference of the x2 momentum flux {dg:.3e}",
+              flush=True)
+        if not dg > DIFF_TOL:
+            failures.append(f"gating case: on and off agree ({dg:.3e} <= {DIFF_TOL}), the switch did not act")
     for f in failures:
         print("FAIL:", f)
     if failures:

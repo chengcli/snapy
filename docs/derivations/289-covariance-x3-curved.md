@@ -1767,8 +1767,11 @@ The momentum corrections are formed in the face-local frame and mapped with
 `flux2global2_`/`flux2global3_`, as the Riemann flux is (`lmars.cpp`). The
 pressure part uses $D_1^{\rm p}$, which is centred but one-sided at the first and
 last interior cell (`d1_pressure`). The geometric pressure source is evaluated
-with the same $p^\star=p-\delta\,D_1^{\rm p}[p]$ in step 5 of `forward()`, and
-only when every resolved horizontal face carries the correction.
+with the same $p^\star=p-\delta\,D_1^{\rm p}[p]$ in step 5 of `forward()`, gated
+per direction: the $x_2$ source (the `IVY` row) takes $p^\star$ exactly when the
+$x_2$ faces carry the correction, and the $x_3$ source (`IVZ`) exactly when the
+$x_3$ faces do. With every resolved direction corrected, and with the switch
+off, this is the same single source evaluation as before.
 
 **Why $D_1^{\rm p}$ is one-sided at the ends.** The balance argument of 4A.3.2
 needs the flux and the source to see the *same* pressure difference. Next to a
@@ -1810,8 +1813,7 @@ rows from the #289 formula without reading this file. The rows **as coded** are
 §4B; this section is the record of what they replaced and why, because the
 file is the PR's evidence that a defect was found.
 
-**Second independent check.** `UCzhangxi/snapy`, branch
-`claude/focused-hawking-e5j8zv`, commit
+**Second independent check.** `UCzhangxi/snapy` commit
 `e2c3f57120d772e5e861d8bf9674e4f7ab447e35`, directory `study/289-allrows/`
 (`derivation.md` plus `symbolic_rows.py`, `quad_source.py`, `rest_balance.py`
 and their committed `.out` files). It reaches the same two-term form for every
@@ -1980,9 +1982,9 @@ Carried from §4A.5 (A1-A7, H5-H7), plus:
   cell's Favre value -- which is where (1A.2) is needed. Reconstructing $\rho$
   and $u$ separately **along $x_2$** is a separate, unquantified inconsistency,
   transverse and higher order in $\Delta x_2$.
-* **H9.** §4B gates the source shift on *both* horizontal directions carrying
-  the correction. If exactly one horizontal flux is disabled while the other is
-  corrected, the flux is shifted and the source is not, and the rest balance
-  would break by $\sim\delta|\partial_1p|/p$. An obscure configuration, and the
-  gate is deliberately conservative, but the asymmetry is real.
+* **H9 (closed by 668a647).** §4B first gated the source shift on *both*
+  horizontal directions carrying the correction, so with one horizontal flux
+  disabled the other's flux was shifted while its source was not. The gate is
+  now per direction (§4B.2), and `test_flux_covariance_seams` checks the case:
+  a spherical-polar rest state with the $x_3$ flux disabled stays at rest.
 * Nothing in §1A or §4C has been compiled or executed in snapy.
