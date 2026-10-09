@@ -619,7 +619,10 @@ $$
 i.e. twice as far out as $r_c$. Both differ from $r_c$ by $O(h^2/r)$, and since
 they only ever multiply a quantity that is already $O(h^2)$, using `x1v` to
 locate the derivatives in (2.10) perturbs $\Delta F$ by $O(h^4)$. The
-implementation uses `x1v`.
+implementation uses `x1v`, which equals $r_v$ on the spherical-polar grid but is
+the arithmetic mid-radius on a gnomonic panel (§2A.1); the $O(h^4)$ conclusion is
+unaffected either way, since $\bar r$ and $r_v$ both sit within $O(h^2/r)$ of
+$r_c$.
 
 ### 2.8 Why $\sqrt{g}$ and $g_{23}\neq0$ do not appear
 
@@ -751,7 +754,18 @@ $$
 
 $r_v$ is exactly snapy's `x1v` on the spherical-polar grid
 (`src/coord/spherical_polar.cpp:17-21`, `:61`), i.e. the cell centre the code
-already uses. In **Cartesian** both measures are the same uniform weight, so
+already uses. **That identification holds for spherical-polar only.** On a
+gnomonic cubed-sphere panel `x1v` is the *arithmetic* mid-radius $\bar r$, not
+the volume-weighted $r_v$ (`src/coord/gnomonic_equiangle.cpp:36-37`:
+`x1v = 0.5 * (x1f[0..nc1] + x1f[1..nc1+1])`), so there $r_v - \texttt{x1v} =
+h^2/(6\bar r)+O(h^4)$ rather than $0$. This does **not** change $\delta$ or
+$\sigma_c^2$: both are defined by the two *measures* (1.1), (2A.3), not by
+`x1v`, so every formula in this section stands on both curved grids, and the
+rest-balance result of §4A.3 does not depend on $\delta$'s value at all. What it
+does mean is that a gnomonic initial condition sampled at `x1v` is a point value
+at $\bar r$, not a cell average, so the cell-average reading of the stored state
+(A4) is the one under which $\delta$ is the right correction there. In
+**Cartesian** both measures are the same uniform weight, so
 $r_v = r_c = $ the cell mid-point and $\delta \equiv 0$ **exactly**: nothing in
 this section changes the Cartesian result.
 
