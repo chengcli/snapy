@@ -1,5 +1,6 @@
 // C/C++
 #include <cmath>
+#include <cstdio>
 
 // external
 #include <gtest/gtest.h>
@@ -38,7 +39,9 @@ std::shared_ptr<MeshBlockImpl> make_block(torch::Device device) {
   return block;
 }
 
-void face_floor_uses_adjacent_density(torch::Device device) {
+//! the dipped column, one forward; returns the block (fluxes in flux1())
+std::shared_ptr<MeshBlockImpl> dipped_column(torch::Device device,
+                                             double pscale) {
   auto block = make_block(device);
   auto coord = block->pcoord;
   int iu = coord->iu();
@@ -51,12 +54,18 @@ void face_floor_uses_adjacent_density(torch::Device device) {
   rho.select(-1, dipped).mul_(1.e-4);
   rho.select(-1, dipped - 1).mul_(0.2);
   w[IDN].copy_(rho);
-  w[IPR].copy_(torch::exp(-coord->x1v / 2.) * 1.e5);
+  w[IPR].copy_(torch::exp(-coord->x1v / 2.) * pscale);
 
   auto u = block->phydro->peos->compute("W->U", {w});
   Variables vars;
   vars["hydro_w"] = torch::empty_like(w);
   block->phydro->forward(1.e-4, u, vars);
+  return block;
+}
+
+void face_floor_uses_adjacent_density(torch::Device device) {
+  auto block = dipped_column(device, 1.e5);
+  int dipped = block->pcoord->iu() - 1;
 
   auto mass = block->phydro->flux1()[IDN];
   auto mom = block->phydro->flux1()[IVX];
@@ -83,10 +92,28 @@ void face_floor_uses_adjacent_density(torch::Device device) {
   }
 }
 
+// #289, with or without SNAP_WB_REF4: at p = 10 e^{-x/2} a cell's scan
+// pressure drops by e^{g dz rho/p} = e^1 > e^{0.5}, so every cell is flagged
+// and keeps the kernel's reference, which does not follow the dip; the
+// overshoot is then floored to the adjacent density, as with the switch off
+void face_floor_fires_on_an_unresolved_column(torch::Device device) {
+  auto block = dipped_column(device, 10.);
+  int dipped = block->pcoord->iu() - 1;
+  double dipped_mass =
+      block->phydro->flux1()[IDN].select(-1, dipped).item<double>();
+  std::printf("wb_ref4 %d, p = 10 e^{-x/2}: dipped face mass flux %.4e\n",
+              static_cast<int>(HydroImpl::wb_ref4()), dipped_mass);
+  EXPECT_LT(std::abs(dipped_mass), 1.e-9);
+}
+
 }  // namespace
 
 TEST(hydro, face_floor_uses_adjacent_density) {
   face_floor_uses_adjacent_density(torch::kCPU);
+}
+
+TEST(hydro, face_floor_fires_on_an_unresolved_column) {
+  face_floor_fires_on_an_unresolved_column(torch::kCPU);
 }
 
 TEST(hydro, face_floor_uses_adjacent_density_cuda) {
