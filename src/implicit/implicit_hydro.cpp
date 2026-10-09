@@ -395,9 +395,13 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
       moved += (du.narrow(0, ICY, du.size(0) - ICY) -
                 _du0.narrow(0, ICY, du.size(0) - ICY))
                    .sum(0);
-    du[IPR].slice(-1, is, ie) += corrected_pe_work(
-        moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is, ie, grav1,
-        pcoord->options->type() == "spherical-polar");
+    // solid cells get none: their slope stencil reads fluid neighbours
+    du[IPR].slice(-1, is, ie) += torch::where(
+        mask.slice(-1, is, ie) == 0,
+        corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is,
+                          ie, grav1,
+                          pcoord->options->type() == "spherical-polar"),
+        0.);
   }
 
   auto bad_results =
