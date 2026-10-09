@@ -23,7 +23,8 @@ inline torch::Tensor x1_variance(torch::Tensor const& x1f, bool spherical) {
 
 //! d q / d x1 at each x along the last dimension (n = x.size(0) cells): the
 //! slope at x_i of the quadratic through cells i - 1, i, i + 1, and through
-//! the first or last three cells at the two ends. Zero for n < 3.
+//! the first or last three cells at the two ends (also at an x1 seam: a split
+//! column differs from one block at O(h^4), derivation sec 7). Zero for n < 3.
 inline torch::Tensor centroid_slope(torch::Tensor const& q,
                                     torch::Tensor const& x) {
   int n = x.size(0);

@@ -192,7 +192,18 @@ minus (2).
 3. Closed walls need nothing beyond the one-sided slope stencil: conservation does not use the wall fluxes' value
    (they are zero), and the wall cells converge at $h^{4.4-4.6}$. At an internal block edge the same one-sided
    stencil makes $P$ a sum of per-block functionals; the faces shared by two blocks still telescope, so global
-   E+P stays exact. In 2-D/3-D, x2/x3 fluxes book no gravity work and move mass between columns at
+   E+P stays exact. **Limit: block seams.** A column split in x1 therefore conserves its own $P$, not the
+   one-block $P$: the seam cells take the one-sided slope where one block takes the centred one, so the states
+   differ there. Taking the centred slope at a seam needs the neighbour's $\Delta\rho$ in the ghost cells,
+   and that is not available without a new exchange: the ghost $\Delta\rho$ comes from the ghost-face mass
+   fluxes, which the reconstruction computes only on the owned faces, and the logged `pe=` reads ghost
+   $\rho$ that need not be current when the diagnostics run. All three sites (explicit work, VIC work, logged
+   `pe=`) call the same `corrected_pe_work`, so the booked work and the logged $P$ agree per block and E+P
+   stays at round-off on a split column. Measured (`tests/test_x1_seam_split.cpp`, isothermal spherical
+   column with a seam density bump, $t$ fixed): max relative 1-vs-2-block gap
+   $8.0\times10^{-7}$, $6.3\times10^{-8}$, $2.3\times10^{-9}$ at $n_z$ = 32, 64, 128 (order 3.7, 4.8,
+   i.e. $O(h^4)$, as $\sigma^2 \sim h^2$ times the $O(h^2)$ difference of the two slopes); switch off:
+   0, bit for bit, so the whole gap is the one-sided seam slope; E+P drift on the split column $\le 5\times10^{-15}$. In 2-D/3-D, x2/x3 fluxes book no gravity work and move mass between columns at
    the same radius; on spherical-polar $V = \Omega(\theta,\varphi)V_r(r)$ and $\sigma^2$, $s$ depend on $r$ only, so
    $\sum_{\rm columns}P$ depends only on each shell's total mass, which they conserve: E+P stays exact (§8.6 for Cartesian).
 4. Numbers below.
