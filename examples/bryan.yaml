@@ -7,10 +7,12 @@ species:
     composition: {O: 0.4200039819342909, N: 1.560014790041652, Ar: 0.01}
     cv_R: 2.5
 
-  # Bryan & Fritsch (2002, MWR 130) appendix, p. 2928: c_pv = 1885, c_pl = 4186
-  # J/kg/K, with R_v = R/0.018015 = 461.53 here. c_pl - c_pv stays 2301 (was
-  # 2301.19), so L(T) with u0_R is unchanged to 0.002 %; c_vv = c_pv - R_v is
-  # 1423.5, not the paper's 1424 (0.04 %), because the paper uses R_v = 461.
+  # The energy equation is exactly consistent with kintera's h2o_bryan curve
+  # (beta = 24.845, delta = 4.986009, T_r = 273.16): u0_R(l) = -beta T_r and
+  # cv_R(l) - cv_R(v) - 1 = delta. Against the Bryan & Fritsch (2002, MWR 130)
+  # appendix, p. 2928: c_pv = 1885 exact, c_pl 4186.19 (+0.005 %), and
+  # L(273.15) = 2.5037e6 vs L_v0 = 2.5e6 (0.15 %), which the h2o_bryan curve
+  # fixes, not this deck. c_pd, c_vd come from the composition (0.05 %).
   - name: H2O
     composition: {H: 2, O: 1}
     cv_R: 3.08424
@@ -18,7 +20,7 @@ species:
 
   - name: H2O(l)
     composition: {H: 2, O: 1}
-    cv_R: 9.06984
+    cv_R: 9.070249
     u0_R: -6786.6602
 
 geometry:
