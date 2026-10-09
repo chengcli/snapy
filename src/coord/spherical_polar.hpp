@@ -33,6 +33,8 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
   torch::Tensor face_area2() const override;
   torch::Tensor face_area3() const override;
   torch::Tensor cell_volume() const override;
+  torch::Tensor face_moment2_x1() const override;
+  torch::Tensor face_centroid_shift_x1() const override;
 
   torch::Tensor forward(
       torch::Tensor prim, torch::Tensor flux1, torch::Tensor flux2,

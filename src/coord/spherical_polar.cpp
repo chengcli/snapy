@@ -210,6 +210,17 @@ torch::Tensor SphericalPolarImpl::cell_volume() const {
   return radial * polar * dx3f.unsqueeze(1).unsqueeze(2);
 }
 
+torch::Tensor SphericalPolarImpl::face_moment2_x1() const {
+  // an x2 face is r sin(theta) dr dphi and an x3 face is r dr dtheta, so both
+  // carry the same radial weight w(r) = r
+  return radial_face_moment2_(x1f, options->nc1());
+}
+
+torch::Tensor SphericalPolarImpl::face_centroid_shift_x1() const {
+  // cell measure r^2 dr (cell_volume above), x2/x3 face measure r dr
+  return radial_face_centroid_shift_(x1f, options->nc1());
+}
+
 torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
                                           torch::Tensor flux1,
                                           torch::Tensor flux2,

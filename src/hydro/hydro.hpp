@@ -155,6 +155,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! gravity-work: face with an implicit scheme: the implicit
   //! operator books the face work of the mass it moves (#283)
   bool face_work_in_operator() const;
+  //! add the O(dx1^2) covariance term to the x2/x3 energy flux (#289)?
+  //! read once from SNAP_FLUX_COVARIANCE; off unless it is set
+  static bool flux_covariance();
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }
@@ -190,6 +193,17 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   void _revise_x1inner_lr(torch::Tensor const& wl, torch::Tensor const& wr);
   void _revise_x1outer_lr(torch::Tensor const& wl, torch::Tensor const& wt);
+
+  //! O(dx1^2) covariance correction to one horizontal energy flux (#289)
+  /*!
+   * \param[in] wl,wr  reconstructed states at the face, BEFORE the Riemann
+   *                   solver projects them into the face-local frame
+   * \param[in] dim    the solver's direction tag: 2 for x2, 1 for x3
+   * \return           the flux increment, shaped like one flux row; undefined
+   *                   when the x1 axis is too thin to difference
+   */
+  torch::Tensor _flux_covariance(torch::Tensor const& wl,
+                                 torch::Tensor const& wr, int dim) const;
 
   // Per-column hydrostatic references for the well-balanced x1
   // reconstruction: {psf_lo (face pressure), pref (cell pressure), dsf (face

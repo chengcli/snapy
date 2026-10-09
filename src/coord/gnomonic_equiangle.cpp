@@ -121,6 +121,21 @@ void GnomonicEquiangleImpl::reset() {
   register_buffer("dx3f_ang_kj", dx3f_ang_kj);
   register_buffer("dx3f_ang_face2_kj", dx3f_ang_face2_kj);
 
+  // exact solid angle of a cell's x1 face: the cube-face rectangle
+  // [tan x2f_j, tan x2f_{j+1}] x [tan x3f_k, tan x3f_{k+1}] seen from the
+  // centre, the corner sum of atan(x y / sqrt(1 + x^2 + y^2)); the six panels
+  // sum to 4 pi
+  auto xc = x2f.tan().unsqueeze(0);
+  auto yc = x3f.tan().unsqueeze(-1);
+  auto corner = (xc * yc / (1. + xc * xc + yc * yc).sqrt()).atan();
+  int nc2 = op->nc2(), nc3 = op->nc3();
+  solid_angle_kj = (corner.slice(0, 1, nc3 + 1).slice(1, 1, nc2 + 1) -
+                    corner.slice(0, 1, nc3 + 1).slice(1, 0, nc2) -
+                    corner.slice(0, 0, nc3).slice(1, 1, nc2 + 1) +
+                    corner.slice(0, 0, nc3).slice(1, 0, nc2))
+                       .unsqueeze(-1);
+  register_buffer("solid_angle_kj", solid_angle_kj);
+
   auto fx = face_area2() * sine_face2_kj;
   auto fy = face_area3() * sine_face3_kj;
 
@@ -190,8 +205,7 @@ torch::Tensor GnomonicEquiangleImpl::center_width3() const {
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
-  return (x1f * x1f).unsqueeze(0).unsqueeze(1) *
-         (dx2f_ang_kj * dx3f_ang_kj * sine_cell_kj);
+  return (x1f * x1f).unsqueeze(0).unsqueeze(1) * solid_angle_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area2() const {
@@ -203,10 +217,29 @@ torch::Tensor GnomonicEquiangleImpl::face_area3() const {
 }
 
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
-  auto area = face_area1();
-  int nlev = area.size(-1);
-  return 0.5 * (area.narrow(-1, 0, nlev - 1) + area.narrow(-1, 1, nlev - 1)) *
-         dx1f.unsqueeze(0).unsqueeze(1);
+  // exact: solid angle times (rp^3 - rm^3) / 3, written as
+  // dr (rp^2 + rp rm + rm^2) / 3 so that thin shells do not cancel
+  auto rm = x1f.slice(0, 0, options->nc1());
+  auto rp = x1f.slice(0, 1, options->nc1() + 1);
+  auto radial =
+      (dx1f * (rp * rp + rp * rm + rm * rm) / 3.0).unsqueeze(0).unsqueeze(1);
+  return radial * solid_angle_kj;
+}
+
+torch::Tensor GnomonicEquiangleImpl::face_moment2_x1() const {
+  // face_area2 = (x1v * dx1f) * (angular arc) = 0.5 (rp^2 - rm^2) * arc, and
+  // face_area3 likewise: both are the r-weighted radial measure times an
+  // angular factor that does not vary along x1 on one face. The angular factor
+  // carries the non-orthogonal metric and sqrt(g) and cancels in the average.
+  return radial_face_moment2_(x1f, options->nc1());
+}
+
+torch::Tensor GnomonicEquiangleImpl::face_centroid_shift_x1() const {
+  // Same two geometric measures as spherical-polar: the cell is r^2 dr times
+  // an angular factor and an x2/x3 face is r dr times one, so the shift is
+  // the same. cell_volume() above is the exact radial integral (rp^3-rm^3)/3
+  // times the same solid angle as face_area1().
+  return radial_face_centroid_shift_(x1f, options->nc1());
 }
 
 void GnomonicEquiangleImpl::interp_ghost(

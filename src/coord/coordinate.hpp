@@ -239,6 +239,57 @@ class CoordinateImpl {
 
   virtual torch::Tensor cell_volume() const;
 
+  //! x1 second central moment of an x2/x3 face's own area measure
+  /*!
+   * The finite-volume flux through an x2 (or x3) face is the FACE AVERAGE of
+   * the point flux, and that average is weighted by the face's area measure.
+   * For a product of two fields, the average of the product exceeds the
+   * product of the averages by `sigma1^2 a_1 b_1` (issue #289), with
+   * `sigma1^2` the second central moment of the face measure along x1, taken
+   * about the face's area centroid. A Cartesian x2/x3 face carries a uniform
+   * x1 weight, so `sigma1^2 = dx1^2/12`; curved grids override this.
+   *
+   * \return one value per x1 cell, shaped like `dx1f`
+   */
+  virtual torch::Tensor face_moment2_x1() const;
+
+  //! `face_moment2_x1` for an x2/x3 face whose area density grows like r
+  /*!
+   * On the spherical-polar and cubed-sphere grids an x2 or x3 face spans
+   * `dA = r dr x (angular)`, so its x1 weight is `w(r) = r` -- the
+   * non-orthogonal and `sqrt(g)` factors live in the angular part, are
+   * constant along x1 on one face, and cancel between the numerator and the
+   * denominator of the average. With `h = rp - rm` and `rbar = (rm+rp)/2`,
+   * the r-weighted moments are exact:
+   *   r_c      = (3 rbar^2 + h^2/4) / (3 rbar)
+   *   sigma1^2 = <r^2> - r_c^2 = (h^2/12) (1 - h^2/(12 rbar^2)) .
+   * The second, cancellation-free form is what is evaluated here, so the
+   * metric only shifts the Cartesian `h^2/12` by a relative `h^2/(12 rbar^2)`
+   * and recovers it exactly as `h/rbar -> 0`.
+   */
+  static torch::Tensor radial_face_moment2_(torch::Tensor const& x1f, int nc1);
+
+  //! x1 offset between where a CELL average lives and where a FACE average does
+  /*!
+   * A finite-volume cell stores the average over the CELL measure, whose x1
+   * centroid is `r_v`; the exact flux through an x2/x3 face is the average
+   * over the FACE measure, whose x1 centroid is `r_c`. On a curved grid the
+   * two measures carry different powers of r, so `r_v != r_c` and evaluating
+   * the flux from the cell value misses `(r_v - r_c) d_1(p u)` -- a SECOND
+   * O(dx1^2) term, of the same order as the covariance and of relative size
+   * ~L/r with L the local gradient scale (issue #289 item 2). It is exactly
+   * zero in Cartesian, where the two measures are the same uniform weight.
+   *
+   * \return one value per x1 cell, shaped like `dx1f`
+   */
+  virtual torch::Tensor face_centroid_shift_x1() const;
+
+  //! `face_centroid_shift_x1` when the cell measure is r^2 dr and the face
+  //! measure is r dr (spherical-polar and cubed-sphere). Exact and
+  //! cancellation-free: `h^2 (12 rbar^2 - h^2) / (12 rbar (12 rbar^2 + h^2))`.
+  static torch::Tensor radial_face_centroid_shift_(torch::Tensor const& x1f,
+                                                   int nc1);
+
   virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
   virtual std::array<double, 3> vec_from_cartesian(
