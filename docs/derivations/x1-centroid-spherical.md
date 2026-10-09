@@ -61,7 +61,9 @@ $$
 $$
 
 - The window $s_i = \max(\mathrm{lo}, \min(\mathrm{hi}-4, i-2))$ is centred, and kept inside the owned cells at
-  a physical x1 wall ($\mathrm{lo} = i_s$, $\mathrm{hi} = i_u$), inside the whole array at a seam.
+  a physical x1 wall ($\mathrm{lo} = i_s$, $\mathrm{hi} = i_u$), inside the whole array at a seam. The
+  outermost ghosts' windows are off-centre there, so after the conversion the seam ghost rows are replaced
+  by the x1 neighbour's own plain means (`HydroImpl::_x1_ghost_rows`), which is what one block holds.
 - The $5\times5$ moment matrix $\langle x^n\rangle_{s+k}$ is integrated by four-point Gauss-Legendre, exact
   because $x^n r^2$ has degree $\le 6$, and solved once per block (dense, partial pivoting).
 - Exactness to degree 4 makes the conversion error $O(h^5 q^{(5)})$ times an $O(h/r)$ measure factor, i.e.
@@ -90,8 +92,10 @@ $5.7\times10^{-8}$ ($n_z = 64$) and $7.2\times10^{-9}$ ($n_z = 128$).
 ## 4. (iii): the pressure source as the $r$-moment of a quintic
 
 With $\tilde p$ the quintic through the six face pressures nearest cell $i$ (window
-$s = \max(i_s, \min(i_u - 4, i - 2))$, one-sided at the block ends, so it always contains both faces of cell
-$i$), the x1 pressure source is
+$s = \max(\mathrm{lo}, \min(\mathrm{hi} - 5, i - 2))$ over faces; at a physical wall $\mathrm{lo} = i_s$ or
+$\mathrm{hi} = i_u + 1$, so the window is one-sided and still contains both faces of cell $i$; at a seam
+$\mathrm{lo} = i_s - 2$ or $\mathrm{hi} = i_u + 3$, two faces past the seam, whose pressures the x1 neighbour
+supplies, so the window is the centred one of one block), the x1 pressure source is
 
 $$
 S_i = \frac{2}{V_i}\int_{r_{i-1/2}}^{r_{i+1/2}} r\,\tilde p\,dr = \sum_{j=0}^{5} w_{i,j}\, p_{s+j}, \qquad
@@ -176,9 +180,12 @@ $-0.004 \ldots -0.012$, in the replica as in the code: the volume weight carries
 
 ## 7. Scope
 
-- **Seams.** The conversion reads ghost cells at an x1 seam, and the windows of the outermost ghosts and the
-  source windows at block ends are one-sided, so a column split into x1 blocks differs from one block at
-  $O(h^6/r)$. Every block makes the same choice because the switch is read once per process.
+- **Seams.** The windows are one-sided only at physical x1 walls (`x1_neighbors()` is $-1$ there, and on a
+  periodic or unsplit x1 column). At a seam the ghost plain means ($n_g$ cells) and the two ghost face
+  pressures each side come from the x1 neighbour, local or remote, so a column split into x1 blocks keeps the
+  one-block state to round-off (`tests/test_x1_seam_split.cpp`: an isothermal column with a density bump on
+  the seam, 20 steps, full and hydrostatic-split pressure). Every block makes the same choice because the
+  switch is read once per process.
 - **Cubed sphere.** Not implemented: the gnomonic grids store $x_{1v}$ at the mid-radius, and their x1 maps
   would need the same conversion with the panel's own radial measure. The switch does nothing there.
 - **Cartesian.** The switch is inert (no conversion, base source), so Cartesian results are bitwise unchanged.
