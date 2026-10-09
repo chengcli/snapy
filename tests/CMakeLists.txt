@@ -337,8 +337,10 @@ add_test(
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_bryan_balance_ic.cmake
 )
 
+# three bryan runs, 6.4-6.8 s on one 16-core CPU node: three times that
 set_tests_properties(test_bryan_balance_ic PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 21
 )
 
 if (NOT APPLE)
