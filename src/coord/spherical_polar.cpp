@@ -252,8 +252,10 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
     if (face_pressure1.defined() && x1_centroid_exact_enabled()) {
       if (!x1src_ || x1src_->wt.device() != face_pressure1.device() ||
           x1src_->wt.scalar_type() != face_pressure1.scalar_type()) {
+        // ghost faces at a seam are the neighbour's (hydro_forward.cpp)
+        auto [below, above] = pmb->phydro->x1_neighbors();
         x1src_ = std::make_shared<X1PressureSourceStencils>(
-            x1_pressure_source_stencils(x1f, si, ei - 1,
+            x1_pressure_source_stencils(x1f, si, ei - 1, below < 0, above < 0,
                                         face_pressure1.options()));
       }
       exact_x1 = x1src_->usable;

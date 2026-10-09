@@ -172,6 +172,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! the switch is on and acts here: gravity-work: face on a Cartesian or a
   //! spherical-polar grid, grav1 != 0
   bool radial_exact_work() const;
+  //! the x1 neighbour blocks {below, above} across a split, non-periodic x1
+  //! column, -1 where there is none (as the W reference relay pairs them)
+  std::pair<int, int> x1_neighbors() const;
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }
@@ -225,6 +228,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   // call.
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   _hydro_ref_x1(torch::Tensor const& w) const;
+  //! overwrite the m x1 ghost rows of f next to each x1 neighbour with the
+  //! neighbour's own rows of the same cells (faces: the same faces past the
+  //! seam face), so a split column reads the values of one block
+  void _x1_ghost_rows(torch::Tensor f, int m, bool faces, int tag) const;
   torch::Tensor _apply_implicit_correction(torch::Tensor& du,
                                            torch::Tensor const& w, double dt,
                                            Variables const& other);

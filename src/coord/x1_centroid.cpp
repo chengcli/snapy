@@ -182,7 +182,7 @@ torch::Tensor x1_plain_means(X1PlainMeanStencils const& st,
 }
 
 X1PressureSourceStencils x1_pressure_source_stencils(
-    torch::Tensor const& x1f, int is, int iu,
+    torch::Tensor const& x1f, int is, int iu, bool clamp_in, bool clamp_out,
     torch::TensorOptions const& options) {
   X1PressureSourceStencils st;
   auto xf = faces_of(x1f);
@@ -190,10 +190,13 @@ X1PressureSourceStencils x1_pressure_source_stencils(
   st.iu = iu;
   st.usable = iu - is + 2 >= 6;
   if (!st.usable) return st;
+  // a seam keeps the window centred on the neighbour's faces, as one block does
+  int lo = clamp_in ? is : std::max(0, is - 2);
+  int hi = clamp_out ? iu + 1 : std::min((int)xf.size() - 1, iu + 3);
   std::vector<std::vector<int64_t>> si;
   std::vector<std::vector<double>> sw;
   for (int i = is; i <= iu; ++i) {
-    int s = std::max(is, std::min(iu + 1 - 5, i - 2));
+    int s = std::max(lo, std::min(hi - 5, i - 2));
     double c = 0.5 * (xf[i] + xf[i + 1]), h = xf[i + 1] - xf[i];
     std::vector<double> X(6);
     for (int j = 0; j < 6; ++j) X[j] = (xf[s + j] - c) / h;

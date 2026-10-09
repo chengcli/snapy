@@ -46,7 +46,8 @@ torch::Tensor x1_plain_means(X1PlainMeanStencils const& st,
                              bool odd_out);
 
 //! (2/V) int r p~ dr on the owned cells, p~ the quintic through the six
-//! nearest faces of is..iu+1 (one-sided at the block ends)
+//! nearest faces: inside is..iu+1 at a clamped end (a physical wall), two
+//! ghost faces past it elsewhere (filled by the x1 neighbour)
 struct X1PressureSourceStencils {
   int is = 0, iu = -1;
   bool usable = false;
@@ -55,7 +56,7 @@ struct X1PressureSourceStencils {
 };
 
 X1PressureSourceStencils x1_pressure_source_stencils(
-    torch::Tensor const& x1f, int is, int iu,
+    torch::Tensor const& x1f, int is, int iu, bool clamp_in, bool clamp_out,
     torch::TensorOptions const& options);
 
 //! face_pressure1 (..., nc1 + 1) -> the source on the owned cells (..., nown)

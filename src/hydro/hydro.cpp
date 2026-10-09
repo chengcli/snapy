@@ -216,6 +216,50 @@ bool HydroImpl::radial_exact_work() const {
          (type == "cartesian" || type == "spherical-polar");
 }
 
+std::pair<int, int> HydroImpl::x1_neighbors() const {
+  auto layout = pmb->get_layout();
+  if (!layout || layout->options->periodic_z() || layout->options->pz() <= 1)
+    return {-1, -1};
+  auto iloc = layout->loc_of(layout->options->rank());
+  return {layout->neighbor_rank(iloc, {0, 0, -1}),
+          layout->neighbor_rank(iloc, {0, 0, 1})};
+}
+
+void HydroImpl::_x1_ghost_rows(torch::Tensor f, int m, bool faces,
+                               int tag) const {
+  auto [below, above] = x1_neighbors();
+  if (below < 0 && above < 0) return;
+  auto layout = pmb->get_layout();
+  int is = pmb->pcoord->il(), iu = pmb->pcoord->iu(), o = faces ? 1 : 0;
+  std::vector<std::vector<torch::Tensor>> sbufs;
+  std::vector<CommWorkPtr> sends;
+  sbufs.reserve(2);
+  // same board / process-group pairing as the W ghost-row exchange
+  auto post = [&](torch::Tensor rows, int to, int t) {
+    if (layout->is_local_block(to)) {
+      layout->post_to_local_block(to, rows, t);
+    } else {
+      sbufs.push_back({rows.contiguous()});
+      sends.push_back(layout->send_to_block(sbufs.back(), to, t));
+    }
+  };
+  auto take = [&](int from, int t) {
+    if (layout->is_local_block(from))
+      return layout->take_from_local_block(from, t);
+    std::vector<torch::Tensor> rbuf = {
+        torch::empty_like(f.narrow(-1, 0, m).contiguous())};
+    layout->recv_from_block(rbuf, from, t)->wait();
+    return rbuf[0];
+  };
+  // up: my top rows are the above block's lower ghosts; down: my bottom rows
+  // (past the seam face, for faces) are the below block's upper ghosts
+  if (above >= 0) post(f.narrow(-1, iu + 1 - m, m), above, tag);
+  if (below >= 0) post(f.narrow(-1, is + o, m), below, tag + 1);
+  if (below >= 0) f.narrow(-1, is - m, m).copy_(take(below, tag));
+  if (above >= 0) f.narrow(-1, iu + 1 + o, m).copy_(take(above, tag + 1));
+  for (auto& sw : sends) sw->wait();
+}
+
 bool HydroImpl::face_work_in_operator() const {
   auto g = options->grav();
   return g && g->grav1() != 0. && g->gravity_work() == "face" && picorr &&

@@ -260,6 +260,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       wx1 =
           x1_plain_means(*x1pm_, w, IVX, !is_outflow(pmb->options->bfuncs()[0]),
                          !is_outflow(pmb->options->bfuncs()[1]));
+      // seam ghosts: the neighbour's centred plain means, not this block's
+      // off-centre ones
+      _x1_ghost_rows(wx1, pmb->pcoord->il(), false, 0x7724);
     }
     torch::Tensor wtmp;
     if (wb_x1) {
@@ -443,6 +446,15 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       }
     }
 
+    // SNAP_X1_CENTROID_EXACT: the pressure source's six-face window reaches
+    // two faces past a seam; they are the neighbour's
+    if (wx1.data_ptr() != w.data_ptr() && _face_pressure1.defined() &&
+        _face_pressure1.numel() > 0 &&
+        options->eos()->type() != "shallow-water") {
+      _x1_ghost_rows(_face_pressure1, std::min(2, pmb->pcoord->il()), true,
+                     0x7722);
+    }
+
     // SNAP_X1_CENTROID_EXACT: the pressure force is the r^2-weighted
     // (A p*|)/V - (2/V) int r p~ dr (coord/spherical_polar.cpp), so the
     // hydrostatic correction is the same operator on the cell's own face
@@ -457,9 +469,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       int ie = pmb->pcoord->iu() + 1;
       if (!x1src_ || x1src_->wt.device() != w.device() ||
           x1src_->wt.scalar_type() != w.scalar_type()) {
+        auto [below, above] = x1_neighbors();
         x1src_ = std::make_shared<X1PressureSourceStencils>(
-            x1_pressure_source_stencils(pmb->pcoord->x1f, is, ie - 1,
-                                        w.options()));
+            x1_pressure_source_stencils(pmb->pcoord->x1f, is, ie - 1, below < 0,
+                                        above < 0, w.options()));
       }
       if (x1src_->usable) {
         auto area1 = pmb->pcoord->face_area1();
