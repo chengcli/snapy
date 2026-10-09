@@ -80,9 +80,10 @@ $$
 
 On plain means the Leg W reference (`wb-ref4.md`: the filter $F = (-1,4,10,4,-1)/16$ on $\rho/p$ with cubic
 wall extrapolation, the quartic-primitive face value, the range and resolution guards) is exactly the
-Cartesian algorithm, whose $O(\Delta z^4)$ face-density error is derived there. Nothing in `wb_ref4.cpp`
-changes; the switch on a spherical-polar block turns this reference on for the x1 block (`hydro.cpp`), so the
-one switch gives the whole design. Its face density is then fourth order in the interior. At the three faces
+Cartesian algorithm, whose $O(\Delta z^4)$ face-density error is derived there. The switch implies
+`SNAP_WB_REF4`: `wb_ref4_enabled()` is true with either, and the solver (`hydro.cpp`), `balance_column` and the
+tests read that one predicate, so a column balanced outside the solver is at the solver's fixed point
+(ctest `test_balance_column_x1_centroid`, `test_face_floor_x1_centroid`); the one switch gives the whole design. Its face density is then fourth order in the interior. At the three faces
 next to a wall the error is $O(h^3)$, Leg W's own property, the same in Cartesian: the anchor's $O(h^2)$
 constant $c$ enters $\rho' = \rho - p_{\rm ref} F[\rho/p]$ as $-c\,F[\rho/p]$, and the even-parity ghosts of
 $\rho'$ turn its slope into an $O(h c)$ face value. The base clamped binomial is $O(h)$ there; in a Python replica of the x1
@@ -188,5 +189,6 @@ $-0.004 \ldots -0.012$, in the replica as in the code: the volume weight carries
   switch is read once per process.
 - **Cubed sphere.** Not implemented: the gnomonic grids store $x_{1v}$ at the mid-radius, and their x1 maps
   would need the same conversion with the panel's own radial measure. The switch does nothing there.
-- **Cartesian.** The switch is inert (no conversion, base source), so Cartesian results are bitwise unchanged.
+- **Cartesian.** No conversion and the base source; since the switch implies `SNAP_WB_REF4`, a Cartesian block
+  runs exactly as with `SNAP_WB_REF4` alone.
 - **Off.** With the switch off every line of the base runs as before.

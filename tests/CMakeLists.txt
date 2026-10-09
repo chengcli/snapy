@@ -41,6 +41,10 @@ foreach(_t test_balance_column test_face_floor)
   add_test(NAME ${_t}_wb_ref4.${buildl} COMMAND ${_t}.${buildl})
   set_tests_properties(${_t}_wb_ref4.${buildl} PROPERTIES ENVIRONMENT
                                                           "SNAP_WB_REF4=1")
+  # SNAP_X1_CENTROID_EXACT alone implies SNAP_WB_REF4: the same checks hold
+  add_test(NAME ${_t}_x1_centroid.${buildl} COMMAND ${_t}.${buildl})
+  set_tests_properties(${_t}_x1_centroid.${buildl}
+                       PROPERTIES ENVIRONMENT "SNAP_X1_CENTROID_EXACT=1")
 endforeach()
 setup_test(test_netcdf_utils)
 setup_test(test_user_output)

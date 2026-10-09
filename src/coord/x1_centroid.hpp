@@ -17,7 +17,7 @@ namespace snap {
 //!   through the six nearest face pressures, so the pressure force is the r^2
 //!   average of -d_r p~ and a hydrostatic column of r^2 means is at rest.
 //! See docs/derivations/x1-centroid-spherical.md.
-//! Read once per process; off unless it is set.
+//! Read once per process; off unless it is set. Implies SNAP_WB_REF4.
 bool x1_centroid_exact_enabled();
 
 //! plain mean of cell i from the r^2 means of five cells, exact for

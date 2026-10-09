@@ -8,6 +8,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/layout/layout.hpp>
 
 #include "wb_ref4.hpp"
@@ -88,7 +89,9 @@ bool wb_ref4_enabled() {
                    [](unsigned char c) { return std::tolower(c); });
     return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
   }();
-  return on;
+  // SNAP_X1_CENTROID_EXACT implies it: one predicate for the solver,
+  // balance_column and the tests
+  return on || x1_centroid_exact_enabled();
 }
 
 WbRef4Stencils wb_ref4_stencils(torch::Tensor const& x1f, int is, int iu,

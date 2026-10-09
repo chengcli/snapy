@@ -11,7 +11,8 @@ namespace snap {
 //! pressures (the hydrostatic scan) are never changed. Applied after the
 //! kernel (hydro_ref_x1_impl.h); a guarded cell or face keeps the kernel's
 //! value. See docs/derivations/wb-ref4.md.
-//! Read once per process from SNAP_WB_REF4; off unless it is set.
+//! Read once per process from SNAP_WB_REF4; off unless it or
+//! SNAP_X1_CENTROID_EXACT (which implies it) is set.
 bool wb_ref4_enabled();
 
 //! the per-grid stencils, built once on the CPU in double and moved to the
