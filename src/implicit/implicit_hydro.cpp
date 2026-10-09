@@ -203,7 +203,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     auto index = columns.accessor<int64_t, 2>();
     for (int64_t n = 0; n < columns.size(0); ++n)
       std::cerr << "[ImplicitHydro] rank=" << get_rank()
-                << " VIC singular/near-singular or nonfinite solve: column=("
+                << " VIC singular/near-singular or nonfinite value: column=("
                 << index[n][1] + pcoord->kl() << ","
                 << index[n][2] + pcoord->jl()
                 << ") step=" << phydro->pmb->cycle + 1
