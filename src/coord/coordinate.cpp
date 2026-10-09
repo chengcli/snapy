@@ -472,8 +472,8 @@ torch::Tensor CoordinateImpl::radial_face_centroid_shift_(
   auto rbar = 0.5 * (rm + rp);
   // r_v - r_c: the VOLUME centroid (weight r^2 -- where a cell average lives)
   // minus the AREA centroid (weight r -- where the face average lives):
-  //   r_v = (3/4)(rp^4-rm^4)/(rp^3-rm^3) = 3 rbar (4 rbar^2 + h^2)/(12 rbar^2 + h^2)
-  //   r_c = (2/3)(rp^3-rm^3)/(rp^2-rm^2) = (12 rbar^2 + h^2)/(12 rbar)
+  //   r_v = (3/4)(rp^4-rm^4)/(rp^3-rm^3) = 3 rbar (4 rbar^2 + h^2)/(12 rbar^2 +
+  //   h^2) r_c = (2/3)(rp^3-rm^3)/(rp^2-rm^2) = (12 rbar^2 + h^2)/(12 rbar)
   // Both are ~rbar, so subtracting them directly would cancel. Doing the
   // algebra first gives an exact, cancellation-free form:
   //   r_v - r_c = h^2 (12 rbar^2 - h^2) / (12 rbar (12 rbar^2 + h^2))

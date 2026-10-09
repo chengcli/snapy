@@ -599,22 +599,33 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // centroid part), so the geometric pressure source must see the same p*, or
   // a hydrostatic rest state is no longer balanced (derivation 4A.3.2). Only
   // the lateral sources read the cell pressure here; the x1 source uses the
-  // face pressure and is untouched.
-  auto wsrc = w;
-  bool all2 = cov2 || u.size(DIM2) <= 1;
-  bool all3 = cov3 || u.size(DIM3) <= 1;
-  if ((cov2 || cov3) && all2 && all3) {
+  // face pressure and is untouched. The shift is gated per direction: the x2
+  // source (the IVY row) takes p* exactly when the x2 faces are corrected, the
+  // x3 source (IVZ) exactly when the x3 faces are, so e.g. disable_flux_x3 with
+  // nx3 > 1 keeps the x2 balance.
+  bool any2 = u.size(DIM2) > 1, any3 = u.size(DIM3) > 1;
+  if (!cov2 && !cov3) {
+    _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+  } else {
     int n1 = w.size(-1);
     auto dsh = pmb->pcoord->face_centroid_shift_x1()
                    .to(w.device(), w.scalar_type())
                    .narrow(0, 1, n1 - 2);
     auto x1v = pmb->pcoord->x1v.to(w.device(), w.scalar_type());
-    wsrc = w.clone();
+    auto wsrc = w.clone();
     wsrc[IPR].narrow(-1, 1, n1 - 2) -=
         dsh * d1_pressure(w[IPR], x1v, pmb->pcoord->il(), pmb->pcoord->iu());
+    auto div =
+        pmb->pcoord->forward(wsrc, _flux1, _flux2, _flux3, _face_pressure1);
+    // a resolved direction whose faces are NOT corrected keeps the plain p
+    if ((any2 && !cov2) || (any3 && !cov3)) {
+      auto plain =
+          pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1);
+      if (any2 && !cov2) div[IVY].copy_(plain[IVY]);
+      if (any3 && !cov3) div[IVZ].copy_(plain[IVZ]);
+    }
+    _div.set_(div);
   }
-  _div.set_(
-      pmb->pcoord->forward(wsrc, _flux1, _flux2, _flux3, _face_pressure1));
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

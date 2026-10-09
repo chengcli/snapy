@@ -21,6 +21,7 @@ setup_test(test_rectify)
 setup_test(test_flip_zero_count)
 setup_test(test_cubed_sphere_exchange)
 setup_test(test_coordinate)
+setup_test(test_radial_face_moments)
 setup_test(test_hydrostatic)
 setup_test(test_hydro_options)
 setup_test(test_cycle_diagnostics)
@@ -182,6 +183,8 @@ snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 snapy_add_python_test(test_horizontal_flux_covariance TIMEOUT 180 LABELS "python;hydro")
 snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
+                      LABELS "python;hydro;cubed-sphere")
+snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 
 # CUDA variants reuse the same scripts and assertions.

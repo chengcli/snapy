@@ -280,7 +280,7 @@ class CoordinateImpl {
    * ~L/r with L the local gradient scale (issue #289 item 2). It is exactly
    * zero in Cartesian, where the two measures are the same uniform weight.
    *
-   * eturn one value per x1 cell, shaped like `dx1f`
+   * \return one value per x1 cell, shaped like `dx1f`
    */
   virtual torch::Tensor face_centroid_shift_x1() const;
 
