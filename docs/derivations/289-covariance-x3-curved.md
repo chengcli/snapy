@@ -252,6 +252,77 @@ $\mu_1=0$ is the only property of $x_1^c$ used below; everything else follows.
 
 ---
 
+## 1A. The cell values are density-weighted (Favre) -- and this corrects §2A
+
+**This section was added after a defect was found in §2 and §2A, and it changes
+the covariance part of every row. It does not change the centroid part.**
+
+§1.4 and §2 treat each factor of a face flux as an independent **volume average**
+of a primitive. That is wrong for the per-mass primitives. snapy stores the
+conserved densities and divides by the density to get them, at
+`src/eos/ideal_moist_impl.h`:
+
+```cpp
+  // den -> mixr
+  for (int n = 0; n < nmass; ++n) {
+    PRIM(ICY + n) = CONS(ICY + n) / PRIM(IDN);      // :40
+  }
+
+  // mom -> vel
+  PRIM(IVX) = CONS(IVX) / PRIM(IDN);                // :44
+  PRIM(IVY) = CONS(IVY) / PRIM(IDN);                // :45
+  PRIM(IVZ) = CONS(IVZ) / PRIM(IDN);                // :46
+```
+
+The inverse confirms the convention (`src/eos/ideal_moist.cpp:141-150`):
+`cons[IDN] = (1 - sum q) * prim[IDN]`, `cons[ICY+n] = q * prim[IDN]`,
+`cons[IVX..] = v * prim[IDN]`; and `:172-174` builds `prim[IDN]` as dry plus
+species, so it is the **total** density.
+
+So the stored per-mass quantities are **Favre (density-weighted) averages**:
+
+$$
+\bar u=\frac{\langle\rho u\rangle_V}{\langle\rho\rangle_V},\qquad
+\bar q_n=\frac{\langle\rho q_n\rangle_V}{\langle\rho\rangle_V},\qquad
+\bar h=\frac{\langle\rho h\rangle_V}{\langle\rho\rangle_V},
+\tag{1A.1}
+$$
+
+the last because $\rho h=I+p$ is itself a volume-averaged conserved-like density
+(`CONS(IPR)` is $E=I+\mathrm{ke}$, and the kinetic part is dropped by A3).
+Therefore, **identically and not just to $O(h^2)$**,
+
+$$
+\boxed{\;\bar\rho\,\bar u=\langle\rho u\rangle_V,\qquad
+\bar\rho\,\bar q_n=\langle\rho q_n\rangle_V,\qquad
+\bar\rho\,\bar h=\langle\rho h\rangle_V\;}
+\tag{1A.2}
+$$
+
+**Consequence: every covariance pair containing $\rho'$ must be dropped.** The
+product $\bar\rho\bar u$ already *is* the average of $\rho u$; adding
+$\sigma^2\rho'u'$ on top of it double-counts. What survives is the Favre
+covariance between two per-mass quantities. Writing $\{\cdot\}$ for the
+$\rho$-weighted face average,
+
+$$
+\langle\rho\,\phi\,\psi\rangle_A-\bar\rho\,\bar\phi\,\bar\psi
+=\langle\rho\rangle_A\big(\{\phi\psi\}-\{\phi\}\{\psi\}\big)
+=\rho\,\sigma_c^2\,\phi'\psi' + O(h^4),
+\tag{1A.3}
+$$
+
+using that the second central moment of *any* smooth positive weight on an
+interval of width $h$ is $h^2/12+O(h^4)$, so the $\rho$-weighted moment equals
+$\sigma_c^2$ to the order kept.
+
+The corrected rows as coded are collected in Zoey Hu's §4B; §4C records what they superseded and settles the energy row. §4A's row table is **superseded** for
+the covariance column; its centroid column, its telescoping statements and its
+rest-balance proof stand unchanged, because the centroid term $-\delta\,\partial_1F$
+is a property of the *measure*, not of how the factors are averaged.
+
+---
+
 ## 2. Every expansion, written out
 
 ### 2.1 One factor
@@ -1713,3 +1784,134 @@ the switch is read once per process.
   $2\times10^{-3}$ of the covariance-only form at $n_z=16,32,64$. In a dry,
   zero-offset gas $\rho\,D_1[h]=(I+p)\,D_1\ln(p/\rho)+O(h^2)$, so the two agree
   to discretisation error, not bitwise.
+
+---
+
+# 4C. What §4B superseded, and what is excluded
+
+Source of the correction: Xi Zhang's moist form, posted in Slack
+(thread 1791520135.380369, ts 1791537083). Independent check: Zoey Hu's
+derivation at `study/289-moist-verifier` @ `afe9f6b`, which reached the same
+rows from the #289 formula without reading this file. The rows **as coded** are
+§4B; this section is the record of what they replaced and why, because the
+file is the PR's evidence that a defect was found.
+
+## 4C.1 The superseded rows, marked CORRECTED not deleted
+
+| row | §4B, CORRECTED | superseded (§2A/§4A of this file) | why it was wrong |
+|---|---|---|---|
+| total mass | $0$ | $\sigma_c^2\,\rho'u_n'$ | $\bar\rho\bar u=\langle\rho u\rangle$ identically (1A.2); the pair double-counted |
+| tracer $n$ | $\sigma_c^2\,\rho\,\partial_1u_n\,\partial_1q_n$ | $\sigma_c^2(\rho'u_n'q+\rho'q'u_n+u_n'q'\rho)$ | the two $\rho'$ pairs double-counted; the Favre pair survives |
+| dry mass | $-\sum_n$ (tracer covariances), plus its own centroid | the three-factor form in $\rho,r_d,u_n$ | so that dry $+\sum_n$ tracer leaves the total-mass row with **no** covariance |
+| energy | $\sigma_c^2\,\rho\,\partial_1h\,\partial_1u_n$, $h=(I+p)/\rho$ | $\sigma_c^2\,(I+p)\,\partial_1\ln(p/\rho)\,\partial_1u_n$ | §4C.2: equal for constant $\kappa$, wrong once composition varies |
+| momentum | centroid in the face-local frame, $p^\star$ in flux **and** source | derived in §4A.3, not implemented | now implemented |
+
+**Unchanged by the correction:** the centroid term $-\delta\,\partial_1F$ on every
+row, the universal centroid rule (§4A.1.1), the exact hydrostatic rest-balance
+proof and its numbers (§4A.3), and the telescoping statements (§4A.4). The
+centroid term is a property of the *measure*, not of how the factors are
+averaged, so the Favre correction does not touch it.
+
+## 4C.2 The energy row, settled
+
+With $\kappa\equiv(I+p)/p$ and $h=\kappa p/\rho$,
+
+$$
+\boxed{\;\rho\,\partial_1h-(I+p)\,\partial_1\ln(p/\rho)=p\,\partial_1\kappa\;}
+\tag{4C.1}
+$$
+
+identically. So the two forms **agree exactly** for a dry ideal gas and differ by
+$\sigma_c^2\,p\,\partial_1\kappa\,\partial_1u_n$ once the composition varies.
+Quadrature (`docs/derivations/energy_row.py`, 90-point Gauss–Legendre,
+$\bar r=1.4$), relative residual $h=0.1\to0.0125$:
+
+| case | geometry | $\rho\,\partial_1h$ (§4B) | $(I+p)\partial_1\ln(p/\rho)$ |
+|---|---|---|---|
+| $\kappa$ const | Cartesian | 6.582e-03 → 1.038e-04, ratio 4.00 | identical to every digit |
+| $\kappa$ const | curved | 4.507e-02 → 7.226e-04, ratio 4.00 | identical |
+| $\kappa$ varies | Cartesian | 6.678e-03 → 1.054e-04, ratio 4.00 | 2.574e-01 → 2.525e-01, **ratio 1.00, no convergence** |
+| $\kappa$ varies | curved | 4.068e-02 → 6.505e-04, ratio 4.00 | 3.724e-01 → 3.426e-01, **no convergence** |
+
+Measured gap at $h=0.0125$: $+3.176373\times10^{-2}$ against the predicted
+$\sigma_c^2\,\partial_1u\,p\,\partial_1\kappa=+3.176373\times10^{-2}$, every
+printed digit; for constant $\kappa$ the gap is $3.8\times10^{-10}$, the
+finite-difference noise floor, against a predicted exact zero. §4B's form is
+therefore correct and strictly more general.
+
+## 4C.3 Known and excluded
+
+Written here for the first time; no such section existed before.
+
+* **Velocity-squared terms -- OUT OF SCOPE, by Xi's ruling** (Slack ts
+  1791538028). $E+p=\rho h+\tfrac12\rho|\mathbf u|^2$ and §A3 keeps only the
+  enthalpy part, so the dropped covariances are those of the kinetic term,
+  smaller by $O(\mathrm{Ma}^2)$ -- a relative $10^{-8}$ to $10^{-6}$ in #289's
+  $\mathrm{Ma}\sim10^{-4}\!-\!10^{-3}$ regime. The same ruling excludes the
+  $\rho u_\phi^2$ part of the geometric source `m_pp`
+  (`src/coord/spherical_polar.cpp:262-265`) away from rest; it is
+  velocity-bearing and so exactly zero in the rest-balance proof.
+* **The momentum centroid's velocity-squared part is not mirrored in the
+  geometric source -- EXCLUDED, by Xi's ruling** (Slack ts 1791540809). The
+  normal-momentum face flux is $\rho u_n^2+p$ and §4B shifts the whole flux,
+  but only the pressure part $p^\star$ is mirrored into the source. The
+  unmirrored remainder is quadratic in velocity: exactly zero at rest, and zero
+  in the linear onset problem, where it is a product of two perturbations. It is
+  left as it stands.
+* **$J$ -- EXCLUDED, with its bound.** $J$ is the residual metric inconsistency
+  after the exact solid angle and exact radial integral landed in `0486f2c`.
+  **Provenance of the bound:** the *stratification equivalent* of the centroid
+  shift, measured as the "flux only" arm of
+  `docs/derivations/rest_balance.py` -- relative $9.359\times10^{-8}$ on both
+  the spherical and the gnomonic grid, at $\delta=3.306\times10^{-3}$ m,
+  $\partial_rp=-1.641$ Pa m$^{-1}$, $p=5.518\times10^4$ Pa, i.e.
+  $\delta|\partial_rp|/p=9.832\times10^{-8}$. So $\sim6\times10^{-8}$ to
+  $1\times10^{-7}$ at those deck parameters. Zoey Hu's §4B independently
+  estimates the pressure Hessian part at $\sim10^{-3}$ of the energy term.
+  **This is a transcription-based numeric estimate, not a measurement of
+  snapy:** `rest_balance.py` evaluates a transcription of the discrete
+  operators from the cited `file:line`.
+* **The one-sided $x_1$ pressure difference at the first and last interior
+  cell -- a deliberate stencil choice, not an exclusion.** Its reason is in
+  §4B: next to a cubed-sphere panel edge the $x_2$/$x_3$ face states in the
+  $x_1$ ghost rows are not filled for this purpose, so no ghost row is read.
+  It is harmless for the rest balance because the balance argument of §4A.3.2
+  never uses the stencil -- the same scalar multiplies two identical geometric
+  coefficients, so any difference cancels provided the flux and the source use
+  **the same** one. Measured, interior $x_1$ cells only, x2-momentum rest
+  residual relative to $|S\,p|$: base $2.392\times10^{-14}$; flux only
+  $9.592\times10^{-8}$; flux and source together $2.523\times10^{-14}$, and at
+  the two cells where the stencil actually is one-sided
+  $2.523\times10^{-14}$ (first) and $5.574\times10^{-15}$ (last) --
+  machine precision, the same order as base
+  (`docs/derivations/onesided.py`).
+
+## 4C.4 Telescoping, restated
+
+Mass, each tracer and energy are added to the face flux, so they telescope:
+total mass, total tracer mass and $E+PE$ stay exact to round-off, and at a
+closed $x_2$/$x_3$ wall every scalar-row correction is **exactly** zero, because
+each carries either $u_n$ or $\partial_1u_n$ and $u_n\equiv0$ there. The
+momentum row telescopes as a flux but is **not** a pure divergence -- its
+geometric sources are not fluxes -- so no exact momentum invariant exists in
+main either, and none is created or destroyed here. Discrete angular momentum
+remains open (H5).
+
+## 4C.5 Still not established
+
+Carried from §4A.5 (A1-A7, H5-H7), plus:
+
+* **H8.** The Favre argument of §1A is verified at the **cell** level, from
+  `cons2prim`. `src/recon/reconstruct.cpp` reconstructs the primitive array
+  without re-weighting (density `:133-134`, velocity/pressure `:141-142`,
+  species `:151-152`) and the $x_2$/$x_3$ reconstruction does not act along
+  $x_1$, so the value at an $x_1$ index on a horizontal face is still the
+  cell's Favre value -- which is where (1A.2) is needed. Reconstructing $\rho$
+  and $u$ separately **along $x_2$** is a separate, unquantified inconsistency,
+  transverse and higher order in $\Delta x_2$.
+* **H9.** §4B gates the source shift on *both* horizontal directions carrying
+  the correction. If exactly one horizontal flux is disabled while the other is
+  corrected, the flux is shifted and the source is not, and the rest balance
+  would break by $\sim\delta|\partial_1p|/p$. An obscure configuration, and the
+  gate is deliberately conservative, but the asymmetry is real.
+* Nothing in §1A or §4C has been compiled or executed in snapy.
