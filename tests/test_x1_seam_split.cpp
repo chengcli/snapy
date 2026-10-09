@@ -11,9 +11,9 @@
 //
 // SNAP_GRAVITY_WORK_RADIAL_EXACT keeps its slope one-sided at every block
 // edge (its ghost density change is not exchanged), so a split column
-// differs; with that switch set in the environment the second test prints the
-// gap at nz 32/64/128 and checks E + P on the split column
-// (docs/derivations/curved-gravity-work-weight.md sec 7).
+// differs; with that switch set in the environment (1, or 0 for the control)
+// the second test prints the gap at nz 32/64/128 and, on, checks E + P on the
+// split column (docs/derivations/curved-gravity-work-weight.md sec 7).
 
 // external
 #include <gtest/gtest.h>
@@ -221,16 +221,17 @@ TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
 }
 
 TEST(X1SeamSplit, radial_exact_split_gap) {
-  if (!std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
-      !HydroImpl::gravity_work_radial_exact())
-    GTEST_SKIP() << "set SNAP_GRAVITY_WORK_RADIAL_EXACT=1 to measure";
+  if (!std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"))
+    GTEST_SKIP() << "set SNAP_GRAVITY_WORK_RADIAL_EXACT=1 (or 0) to measure";
+  bool on = HydroImpl::gravity_work_radial_exact();
   torch::set_num_threads(1);
   for (int nx1 : {32, 64, 128}) {
     double drift = 0.;
     double gap = split_gap(nx1, 1., "face", 20 * nx1 / 32, &drift);
     std::printf(
-        "nz %d: 2 blocks vs 1, max rel gap %.3e; split E+P drift %.3e\n", nx1,
-        gap, drift);
-    EXPECT_LE(drift, 1e-13) << "nz " << nx1;
+        "switch %d, nz %d: 2 blocks vs 1, max rel gap %.3e; split E+P "
+        "drift %.3e\n",
+        on, nx1, gap, drift);
+    if (on) EXPECT_LE(drift, 1e-13) << "nz " << nx1;
   }
 }
