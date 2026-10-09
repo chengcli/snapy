@@ -1163,3 +1163,163 @@ centroid term (2A.9).
 * **H4.** The $(I+p)$ form of §5 is exact for an ideal gas. For a genuinely
   non-ideal EOS the exact covariance would need that EOS's own expansion, and
   $\ln(p/\rho)$ would no longer be $\ln T$ up to a constant.
+
+## 8. The exact cubed-sphere cell volume
+
+This section covers the follow-on change to `GnomonicEquiangleImpl::cell_volume()` and
+`face_area1()`. Line numbers refer to the commit that adds this section.
+
+### 8.1 The exact radial integral
+
+A gnomonic-equiangle cell is the cone over the cube-face rectangle
+$[x_j, x_{j+1}]\times[y_k, y_{k+1}]$, with $x=\tan\alpha$ and $y=\tan\beta$, cut by
+$r_- \le r \le r_+$. In spherical measure $\mathrm{d}V = r^2\,\mathrm{d}r\,\mathrm{d}\Omega$, and the
+angular and radial integrals separate:
+
+$$
+V_{ijk} = \int_{\Omega_{jk}}\!\mathrm{d}\Omega\int_{r_-}^{r_+} r^2\,\mathrm{d}r
+        = \Omega_{jk}\,\frac{r_+^3-r_-^3}{3}
+        = \Omega_{jk}\,\frac{\Delta r\,(r_+^2+r_+r_-+r_-^2)}{3}. \tag{8.1}
+$$
+
+The last form avoids the cancellation in $r_+^3-r_-^3$ when $\Delta r\ll r$. The radial face at
+$r_f$ has area $A_1 = r_f^2\,\Omega_{jk}$.
+
+The solid angle of the rectangle seen from the centre is
+$\Omega=\iint (1+x^2+y^2)^{-3/2}\,\mathrm{d}x\,\mathrm{d}y$. Since
+$\partial_x\partial_y\arctan\!\big(xy/\sqrt{1+x^2+y^2}\big) = (1+x^2+y^2)^{-3/2}$, it is the corner sum
+
+$$
+\Omega_{jk} = G(x_{j+1},y_{k+1}) - G(x_j,y_{k+1}) - G(x_{j+1},y_k) + G(x_j,y_k),\qquad
+G(x,y)=\arctan\frac{xy}{\sqrt{1+x^2+y^2}}. \tag{8.2}
+$$
+
+Over one panel it telescopes to $4G(1,1)=4\arctan(1/\sqrt3)=2\pi/3$, so the six panels give $4\pi$.
+
+**The previous code** had two approximations:
+- $V = \tfrac12(A_{1,i}+A_{1,i+1})\Delta r$, the trapezoid rule in $r$, with relative error
+  $\Delta r^2/(6\bar r^2)+O(\Delta r^4)$;
+- $\Omega\approx\Delta\alpha_{\rm arc}\,\Delta\beta_{\rm arc}\,\sin\theta$ at the cell centre, a
+  midpoint rule for (8.2) with relative error $O(\Delta\alpha^2)$. Its six-panel sum misses $4\pi$
+  by $8.3\times10^{-4}$, $2.07\times10^{-4}$ and $5.2\times10^{-5}$ at 16, 32 and 64 cells per panel edge.
+
+**What each oracle needs.**
+- For $F=r\hat r$, the $x_2$/$x_3$ faces carry no flux, so the discrete divergence is
+  $(A_{1,i+1}r_+ - A_{1,i}r_-)/V = \Omega_A(r_+^3-r_-^3)/V$. It equals 3 exactly iff $V$ uses
+  (8.1) with **the same** $\Omega$ as $A_1$, whichever $\Omega$ that is. This is oracle (b).
+- The six-panel volume sum equals $4\pi(r_o^3-r_i^3)/3$ only if $\Omega$ is the exact (8.2). This
+  is oracle (a).
+
+So the change uses (8.2) for both (`solid_angle_kj`, built once in `reset()`,
+`src/coord/gnomonic_equiangle.cpp:124-137`), with $A_1=r_f^2\,\Omega$ (`:207-209`) and (8.1)
+for $V$ (`:219-227`). Changing only the radial factor would pass (b) but leave (a) off by the
+midpoint error above.
+
+**Round-off.** (8.2) differences $O(1)$ arctangents to obtain an $O(\Delta\alpha^2)$ number, so its
+relative round-off is about $\epsilon_{\rm mach}/\Delta\alpha^2$. That is $\sim 10^{-13}$ at 32 cells
+per edge and $\sim 10^{-10}$ at 1000.
+
+### 8.2 Uses of `cell_volume()`: which ones need the exact value
+
+The conservation identities need only **consistency**: every caller reads the same
+`cell_volume()`, so the flux divergence and the totals it must telescope into use one $V$, before
+and after this change. **Exactness** matters where $V$ meets a quantity that is not a difference
+of the same face fluxes: geometric source terms, and physical integrals.
+
+| use (file:line at this commit) | what $V$ does there | needs |
+|---|---|---|
+| `coord/coordinate.cpp:513` divergence | $\frac{1}{V}\sum A F$ for every conserved variable | consistency (telescoping); exactness for the free-stream identity (b) |
+| `coord/gnomonic_equiangle.cpp:142-145` `x_ov_rD_kji`, `y_ov_rC_kji` | $\Delta(A_2\sin)/V$, the $x_2$/$x_3$ metric pressure source | consistency with the divergence (rest balance: both divide by the same $V$); exactness makes it the exact cell average of the metric source |
+| `coord/gnomonic_equiangle.cpp:151` `vol` | shape template for the placeholder metric buffers | neither (values unused) |
+| `coord/gnomonic_equiangle.cpp:450-455` radial pressure source | $(A_{1,+}p_+ - A_{1,-}p_-)/V - (p_+-p_-)/\Delta r$ | **exactness**: with (8.1) and constant $p$ it is $3p(r_+^2-r_-^2)/(r_+^3-r_-^3)$, the exact cell average of $2p/r$; $\Omega$ cancels only when $A_1$ and $V$ share it |
+| `hydro/hydro_forward.cpp:572-583` face gravity work | $\frac1V\sum A_1 F_m$ and $\frac1V\sum A_1\phi F_m$ | consistency with continuity's divergence (E+PE telescopes) |
+| `hydro/hydro_forward.cpp:469` positivity severity | cell mass $mV$ vs withheld outflow | consistency (a ratio test) |
+| `hydro/flux_positivity.cpp:66` limiter $\theta$ | available mass $uV$ vs $\Delta t\sum A F$ | consistency: $\theta$ keeps $u\ge0$ only if it uses the divergence's $V$ |
+| `hydro/hydro_forward.cpp:721` E+PE fixer total | $\sum(E+\phi m)V$ | consistency (the fixer compares changes) |
+| `implicit/implicit_hydro.cpp:198-205` VIC operator, `work_lo/hi` | the linearised $x_1$ divergence and face-work weights | consistency with the explicit divergence |
+| `implicit/implicit_hydro.cpp:262, 276, 327` mass-closure and face-work checks | $\sum$ cell change $\times V$ vs face mass differences | consistency (identity checks) |
+| `eos/equation_of_state.cpp:272` column repair | conserve $\sum\rho V$ in a column | consistency |
+| `mesh/meshblock.cpp:671` implicit tracer transfer | $(P-P_{\rm above})/V$ | consistency with the hydro mass transfer |
+| `mesh/meshblock.cpp:849`, `:1025` mass / conserved totals | $\sum uV$ | **exactness** for the physical integral; consistency for drift |
+| `output/load_diag_output_data.cpp:263` column paths | $\sum q V / A_1$ | **exactness** (a physical diagnostic) |
+
+No caller depends on the trapezoid value itself. Changing the angular factor of $A_1$ moves the
+$x_1$ face areas by $O(\Delta\alpha^2)$ relative. Every caller above reads $A_1$ and $V$ together,
+so the consistency identities are unchanged. The hydrostatic rest check (oracle c) is the runtime
+test of that.
+
+### 8.3 What each check tests
+
+- **(a) six-panel volume sum** $=4\pi(r_o^3-r_i^3)/3$: tests (8.1) and (8.2) together.
+- **(b) $\max|\nabla\!\cdot(r\hat r)-3|$:** tests that $V$ and $A_1$ share $\Omega$ and that the radial
+  integral is exact. It is RED at the trapezoid ($O((\Delta r/r)^2)$) and round-off when correct.
+- **(c) hydrostatic rest:** tests that the change keeps the radial and lateral source terms
+  consistent with the divergence.
+- **(d) Cartesian and spherical-polar decks bitwise unchanged:** tests that the change is
+  confined to the gnomonic geometry.
+
+### 8.4 Audit: the other cubed-sphere measures and metric terms
+
+Line numbers refer to `src/coord/gnomonic_equiangle.cpp` at e7f9904. The question is whether any other
+area or metric factor uses the midpoint solid-angle or arc approximation that §8.1 removes from $A_1$ and $V$.
+
+| item (e7f9904) | form | exact? | action |
+|---|---|---|---|
+| `face_area2()` :197-199, angle `dx3f_ang_face2_kj` :119 | $\tfrac12(r_+^2-r_-^2)\,\theta_{x2}$ | **exact** | none |
+| `face_area3()` :201-203, angle `dx2f_ang_face3_kj` :105 | $\tfrac12(r_+^2-r_-^2)\,\theta_{x3}$ | **exact** | none |
+| `x_ov_rD_kji`, `y_ov_rC_kji` :124-130 | $\Delta(A_2\sin\theta_{f2})/V$, $\Delta(A_3\sin\theta_{f3})/V$ | $\sin\theta_f$ taken at the face centre (midpoint along the face) | none: paired with the flux (below) |
+| `sine_face2_kj`, `sine_face3_kj` :84, :87 in `flux2global2_/3_` :343-398 | covariant momentum flux | same midpoint $\sin\theta_f$ | none: paired with the source |
+| `sine_cell_kj`, `cosine_cell_kj` :80-81 in `forward()` :400-458 and `prim2local1_` | velocity-dependent geometric sources $\rho v^2/r$, $\rho v^2\sin^2\theta$ | point values at the cell centre: second-order source quadrature, not a measure | none (they vanish at rest) |
+| radial pressure source :429-440 (face-pressure form, every run with `nx1 > 1`) | $(A_{1,+}p_+-A_{1,-}p_-)/V-(p_+-p_-)/\Delta r$ | exact once $A_1$, $V$ share $\Omega$ (§8.2) | fixed by this change |
+| fallback $2p/r$ :442 (only when `nc1 = 1`, `hydro/hydro.cpp:127-135`) | $2p/x_{1v}$ | midpoint in $r$ | none (single-layer only) |
+| `center_width2/3()` :184-190 | $x_{1v}\times$ arc | CFL length only | none |
+
+**$A_2$ and $A_3$ are already exact.** An $x_2$ face ($\alpha=$ const, $x=\tan\alpha$) lies in a plane through
+the centre. Its two radial edges are the rays along $(1, x_f, y_k)$ and $(1, x_f, y_{k+1})$, and it is bounded by
+$r_\pm$. A planar annular sector has area $\tfrac12(r_+^2-r_-^2)\,\theta$, where $\theta$ is the angle between the
+two rays:
+$\cos\theta = (1+x_f^2+y_ky_{k+1})/(\delta_k\delta_{k+1})$, $\delta=\sqrt{1+x_f^2+y^2}$.
+That is line 119 verbatim, and `x1v*dx1f` $=\tfrac12(r_+^2-r_-^2)$ exactly. The same holds for $A_3$.
+
+**The midpoint $\sin\theta_f$ cancels at rest.** At rest the local $x_2$-face flux is $(p,0)$ in the
+$(x_2, x_3)$ momentum slots. With the face metric ($g_{23}=\cos\theta_f$, $g^{22}=1/\sin^2\theta_f$),
+`flux2global2_` maps it to the contravariant pair $(p/\sin\theta_f,\ -p\cos\theta_f/\sin\theta_f)$. The covariant
+lowering then gives
+$x_2$: $p/\sin\theta_f - p\cos^2\theta_f/\sin\theta_f = p\sin\theta_f$, and $x_3$: $0$.
+So the flux divergence of $x_2$ momentum is $p\,\Delta(A_2\sin\theta_f)/V = p\,x\_ov\_rD$, which is exactly
+`src2`. The two cancel for **any** $V$ and any value of $\sin\theta_f$, as long as flux and source use the same
+product, which they do. Changing $V$ and $A_1$ cannot break the lateral rest balance. The radial balance needs
+$A_1$ and $V$ to share $\Omega$, which they now do.
+
+So the remaining midpoint factors are paired consistently, and I did not change them. Making $\sin\theta_f$ a
+face average would change the moving-flow metric source at $O(\Delta\alpha^2)$. That is a separate accuracy question
+and not needed for any oracle here.
+
+### 8.5 Runtime evidence for the mixed exact-$A_1$ / existing-$A_2,A_3$ geometry
+
+**Hydrostatic shell.** This is the deck of `tests/test_cubed_sphere_cell_volume.yaml`: six panels, $8^3$ cells
+per panel, $r\in[6.0,6.4]\times10^6$, isothermal, discretely balanced per column. The table gives max $|v|/c_s$
+and the relative drift of $\sum\rho V$ and $\sum(E+\rho\phi)V$:
+
+| cycles | build | max $\lvert v\rvert/c_s$ | mass drift | E+PE drift |
+|---|---|---|---|---|
+| 200 | e7f9904 | 1.08772e-11 | −1.21e-14 | −1.19e-14 |
+| 200 | this commit | 1.08764e-11 | −1.20e-14 | −1.19e-14 |
+| 1000 | e7f9904 | 1.30564e-11 | −6.05e-14 | −6.02e-14 |
+| 1000 | this commit | 1.30534e-11 | −6.05e-14 | −6.03e-14 |
+
+**A moving flow.** This is the six-panel solid-body zonal wind of `tests/test_flux_positivity_cubedsphere.yaml`
+(unmodified), $v_\phi = 10\cos(\text{lat})$, 400 cycles. Two errors are tracked:
+- $\delta v=\max|v(t)-v(0)|/\max|v(0)|$;
+- the tracer $L_1$ error against the exact rigid rotation $\Delta\lambda = 10\,t/r$.
+
+| cycle | $\delta v$ e7f9904 | $\delta v$ this commit | $L_1$ e7f9904 | $L_1$ this commit |
+|---|---|---|---|---|
+| 100 | 0.026414 | 0.026351 | 0.013352 | 0.013348 |
+| 200 | 0.026991 | 0.026965 | 0.017929 | 0.017937 |
+| 300 | 0.044127 | 0.044332 | 0.019531 | 0.019557 |
+| 400 | 0.045423 | 0.045116 | 0.021800 | 0.021801 |
+
+The two builds agree to within ±0.7% at every recorded time, and neither is systematically larger. At 12 cells per
+panel edge, this deck's error is dominated by the scheme's own discretisation error, not by the $O(\Delta\alpha^2)$
+change in $A_1$ and $V$.

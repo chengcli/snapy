@@ -14,6 +14,7 @@ class GnomonicEquiangleImpl
   torch::Tensor x_ov_rD_kji, y_ov_rC_kji;
   torch::Tensor dx2f_ang_kj, dx3f_ang_kj;
   torch::Tensor dx2f_ang_face3_kj, dx3f_ang_face2_kj;
+  torch::Tensor solid_angle_kj;
 
   // metric data
   torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
