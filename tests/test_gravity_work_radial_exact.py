@@ -22,7 +22,12 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
   5. the cycle diagnostics (print_cycle_info) log the potential energy the booked work conserves:
      ie= + pe= equals this test's E + P with the switch on and E + PE_d with it off, to the printed digits
      (spherical, Cartesian and 2-D Cartesian, after a few explicit steps);
-  6. on, a gnomonic-equiangle (cubed-sphere) block with gravity-work: face fails at setup.
+  6. on, a gnomonic-equiangle (cubed-sphere) block with gravity-work: face fails at setup;
+  7. on, one VIC solve whose availability clamp binds (a momentum kick, as in
+     test_implicit_stratified_solid.py's clamp_energy), so the solved density change differs from the raw
+     one: its E + P defect is round-off, and the defect the same solve shows if the corrected-PE work had
+     used the raw change instead (the mutation, computed from the two changes) is far above it;
+  8. on, the VIC column with a 4-cell immersed solid block: per-step E + P over the fluid cells <= 1e-14.
 The switch is read once per process, so each arm runs in a child process.
 
   python test_gravity_work_radial_exact.py [--device cpu]
@@ -81,12 +86,25 @@ def interior(shape):
     return tuple(slice(NG, -NG) if n > 1 else slice(None) for n in shape)
 
 
-def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu", ncycle_out=0):
+SOLID = slice(NG + 14, NG + 18)  # the immersed solid block of check 8
+
+
+def isentrope(z):
+    K, ex = P0 / RHO0 ** GAMMA, (GAMMA - 1.) / GAMMA
+    p = (P0 ** ex - ex * G * z / K ** (1. / GAMMA)).clamp(min=1.e-3) ** (1. / ex)
+    return (p / K) ** (1. / GAMMA), p
+
+
+def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu", ncycle_out=0, solid=False):
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
     geometry, scheme, nx2 = CASES[case]
+    cfg = config(geometry, scheme, nx2, recon, ncycle_out)
+    if solid:  # Cartesian: the solid takes the column's state at its lowest cell
+        rho_s, p_s = isentrope(torch.tensor((SOLID.start - NG + 0.5) * DEPTH / NZ))
+        cfg["boundary-condition"]["internal"] = {"solid-density": float(rho_s), "solid-pressure": float(p_s)}
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config(geometry, scheme, nx2, recon, ncycle_out), f)
+        yaml.safe_dump(cfg, f)
         tmp = f.name
     try:
         b = MeshBlock(MeshBlockOptions.from_yaml(tmp))
@@ -95,10 +113,8 @@ def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu", ncycle_o
     b.to(torch.device(device), torch.float64)
     x1f, x1v, x2v = (b.buffer("coord." + k).cpu() for k in ("x1f", "x1v", "x2v"))
     w = b.buffer("hydro.D").clone().zero_().cpu()
-    K, ex = P0 / RHO0 ** GAMMA, (GAMMA - 1.) / GAMMA
     z = x1v - float(x1f[NG])
-    p = (P0 ** ex - ex * G * z / K ** (1. / GAMMA)).clamp(min=1.e-3) ** (1. / ex)
-    w[kIDN], w[kIPR] = (p / K) ** (1. / GAMMA), p
+    w[kIDN], w[kIPR] = isentrope(z)
     if balanced:  # Cartesian columns only
         I = slice(NG, NG + NZ)
         col = w[:kIPR + 1, ..., I].clone()
@@ -113,7 +129,15 @@ def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu", ncycle_o
     if nx2 > 1:
         u1 = u1 * torch.cos(2. * math.pi * x2v / DEPTH)[:, None]
     w[kIV1] = u1.expand_as(w[kIV1])
-    v, _ = b.initialize({"hydro_w": w.to(device)})
+    if not solid:
+        v, _ = b.initialize({"hydro_w": w.to(device)})
+        return b, v
+    mask = torch.zeros_like(w[kIDN], dtype=torch.bool)
+    mask[..., SOLID] = True
+    w[kIV1][mask] = 0.
+    for c, key in ((kIDN, "solid-density"), (kIPR, "solid-pressure")):
+        w[c][mask] = cfg["boundary-condition"]["internal"][key]
+    v, _ = b.initialize({"hydro_w": w.to(device), "solid": mask.to(device)})
     return b, v
 
 
@@ -155,29 +179,34 @@ class Column:
         self.x = b.buffer("coord.x1v").cpu()[NG:NG + NZ]
         self.var = variance(x1f, sph)
 
-    def energies(self, v):
-        """(E + PE_d, E + P) of the interior"""
+    def energies(self, v, fluid=None):
+        """(E + PE_d, E + P) of the interior, or of its fluid cells"""
         from snapy import kIDN, kIPR
         u = v["hydro_u"][self.sl].cpu()
-        E = (u[kIPR] * self.vol).sum()
-        ped = (u[kIDN] * G * self.x * self.vol).sum()
-        return float(E + ped), float(E + ped + G * (self.var * slope(u[kIDN], self.x) * self.vol).sum())
+        vol = self.vol if fluid is None else self.vol * fluid
+        E = (u[kIPR] * vol).sum()
+        ped = (u[kIDN] * G * self.x * vol).sum()
+        return float(E + ped), float(E + ped + G * (self.var * slope(u[kIDN], self.x) * vol).sum())
 
 
-def run(case, steps, seed=0.05, balanced=False, device="cpu"):
+def run(case, steps, seed=0.05, balanced=False, device="cpu", solid=False):
     from snapy import kIDN, kIPR, kIV1
-    b, v = build(case, seed=seed, balanced=balanced, device=device)
+    b, v = build(case, seed=seed, balanced=balanced, device=device, solid=solid)
     col = Column(b, case)
+    fluid = None
+    if solid:
+        fluid = torch.ones(NZ)
+        fluid[SOLID.start - NG:SOLID.stop - NG] = 0.
     dz = DEPTH / NZ
     dt = (0.3 if CASES[case][1] == 0 else 1.2) * dz / math.sqrt(GAMMA * P0 / RHO0)
-    epd0, ep0 = col.energies(v)
+    epd0, ep0 = col.energies(v, fluid)
     dEP = dEPd = umax = 0.
     for _ in range(steps):
         b.inc_cycle()
         for st in range(len(b.module("intg").stages)):
             b.forward(v, dt, st)
         assert b.check_redo(v) == 0
-        epd, ep = col.energies(v)
+        epd, ep = col.energies(v, fluid)
         dEP, dEPd = max(dEP, abs(ep - ep0) / abs(ep0)), max(dEPd, abs(epd - epd0) / abs(epd0))
         epd0, ep0 = epd, ep
         w = b.module("hydro.eos").compute("U->W", [v["hydro_u"]])[col.sl].cpu()
@@ -229,9 +258,44 @@ def cubed_error():
         os.unlink(tmp)
 
 
+def clamp_solve(device="cpu"):
+    """check 7: one VIC solve with a binding availability clamp; per-solve defects, mutation and clamp size"""
+    from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
+    n = 8
+    cfg = config("cartesian", 9, 1, "weno5")
+    cfg["geometry"]["cells"]["nx1"] = n
+    cfg["geometry"]["bounds"]["x1max"] = float(n)
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
+        yaml.safe_dump(cfg, f)
+        tmp = f.name
+    try:
+        b = MeshBlock(MeshBlockOptions.from_yaml(tmp))
+    finally:
+        os.unlink(tmp)
+    b.to(torch.device(device), torch.float64)
+    w = b.buffer("hydro.D").clone().zero_()
+    w[kIDN], w[kIPR] = 1., 1.
+    du = torch.zeros_like(w)
+    du[kIV1, ..., NG + n - 2] = 100.
+    b.module("hydro.icorr").forward(du, w, torch.full_like(w[kIDN], GAMMA), 1.0)
+    sl = (0, 0, slice(NG, NG + n))
+    x, var = torch.arange(n) + 0.5, 1. / 12.
+    drho, dE = du[kIDN][sl].cpu(), du[kIPR][sl].cpu()
+    raw = b.buffer("hydro.icorr.delta").cpu().reshape(n, -1)[:, 0]
+    epd = float((dE + G * x * drho).sum())
+    ep = epd + G * var * float(slope(drho, x).sum())
+    # had the work used the raw change, dE would differ by g1 sigma^2 (s[raw] - s[solved])
+    mut = ep + G * var * float((slope(drho, x) - slope(raw, x)).sum())
+    return {"ep": ep, "epd": epd, "mut": mut, "scale": float(dE.abs().sum()),
+            "solved_raw": float((drho - raw).abs().max()), "drho": float(drho.abs().max()),
+            "clamp": b.buffer("hydro.icorr.dry_clamp_step").item()}
+
+
 def child(out, device):
     res, saved = {}, {}
     res["cubed_error"] = cubed_error()
+    res["clamp_vic"] = clamp_solve(device)
+    res["solid_vic"] = run("cart_vic", NSTEP, device=device, solid=True)[0]
     for case in CASES:
         res[case], saved[case] = run(case, NSTEP, device=device)
     for case in ("cart", "cart_vic"):
@@ -300,6 +364,20 @@ def main():
         failures.append("cubed: switch on, a gnomonic-equiangle block did not fail at setup")
     if "SNAP_GRAVITY_WORK_RADIAL_EXACT" in res["unset"]["cubed_error"]:
         failures.append("cubed: switch unset, the setup check fired")
+    for arm in ("unset", "on"):
+        c, sv = res[arm]["clamp_vic"], res[arm]["solid_vic"]
+        print(f"clamp VIC switch {arm:5s}: dry clamp {c['clamp']:.0f}, max|solved - raw drho| {c['solved_raw']:.2e} "
+              f"(max|drho| {c['drho']:.2e}); E + P defect {c['ep']:.2e}, E + PE_d {c['epd']:.2e}, "
+              f"raw-change mutation {c['mut']:.2e} (sum|dE| {c['scale']:.2e})", flush=True)
+        print(f"solid VIC switch {arm:5s}: fluid max per-step |d(E+P)|/|E+P| {sv['dEP']:.2e}, "
+              f"|d(E+PE_d)|/|E+PE_d| {sv['dEPd']:.2e}", flush=True)
+    c = res["on"]["clamp_vic"]
+    tol = 1.e-13 * c["scale"]
+    if not (c["solved_raw"] >= 1.e-3 * c["drho"] and abs(c["ep"]) <= tol and abs(c["mut"]) >= 1.e3 * tol):
+        failures.append(f"clamp VIC: solved vs raw {c['solved_raw']:.2e}, E + P defect {c['ep']:.2e}, "
+                        f"mutation {c['mut']:.2e}, tolerance {tol:.2e}")
+    if not res["on"]["solid_vic"]["dEP"] <= EP_TOL:
+        failures.append(f"solid VIC: on, fluid per-step E+P change {res['on']['solid_vic']['dEP']:.2e} > {EP_TOL}")
     for case in ("cart", "cart_vic"):
         r_off, r_on = res["unset"]["rest_" + case], res["on"]["rest_" + case]
         print(f"{case:10s} rest, {REST_STEPS} steps, max|u1|/c_s: off {r_off:.3e} on {r_on:.3e}", flush=True)
