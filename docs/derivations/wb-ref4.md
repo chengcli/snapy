@@ -168,6 +168,11 @@ A guarded cell or face keeps the kernel's value. None fires on a resolved smooth
   pressure scale height) is flagged, the flag is dilated by two cells, and ghost cells past a clamped wall do
   not count; flagged cells keep the kernel's reference, and faces next to a flagged cell keep the kernel's
   face value.
+- Seams: each block computes the flag from its own scan pressures, ghost cells included, and the flag is not
+  exchanged. The flag of a cell or a seam face reads $p_{\rm sf}$ at most three cells away, so with nghost
+  $\ge 3$ (checked at setup) the two sides of an x1 seam agree, except at an exact tie
+  $\lvert\ln(p_{{\rm sf},i-1/2}/p_{{\rm sf},i+1/2})\rvert = 0.5$, where the two scans' last-ulp difference can
+  put the cell on either side (`test_x1_seam_split_wb_ref4`: the flag switching on next to a seam).
 - A block with a clamped wall and fewer than four owned cells keeps the kernel's reference.
 
 The threshold, the dilation and the margin are design choices, not derived.

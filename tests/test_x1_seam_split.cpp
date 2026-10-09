@@ -14,6 +14,12 @@
 // differs; with that switch set in the environment (1, or 0 for the control)
 // the second test prints the gap at nz 32/64/128 and, on, checks E + P on the
 // split column (docs/derivations/curved-gravity-work-weight.md sec 7).
+//
+// SNAP_WB_REF4 alone (ctest test_x1_seam_split_wb_ref4): each block computes
+// the resolution flag from its own scan pressures, ghosts included, and only
+// (pref, dref) are exchanged; on a column cold enough that the flag switches
+// on one cell above the seam, the split column must still keep the one-block
+// state (docs/derivations/wb-ref4.md sec 7).
 
 // external
 #include <gtest/gtest.h>
@@ -37,6 +43,7 @@
 #include <snap/coord/x1_centroid.hpp>
 #include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/hydro/wb_ref4.hpp>
 #include <snap/mesh/mesh.hpp>
 
 using namespace snap;
@@ -108,14 +115,19 @@ Mesh make_column(int nb1, int nx1, double nh, char const* gw) {
 }
 
 // isothermal column (g = 1, H = 1) with a density bump on the mid seam and a
-// sin(pi z / Lz) radial wind, ghosts included
-void fill_column(Mesh mesh, MeshVariables& vars) {
+// sin(pi z / Lz) radial wind, ghosts included; cold: T = H = 0.25 e^{1.1 - z}
+// instead, so dz/H = 0.5 at z = 1.1 when nx1 = 16 (hydrostatic in plane
+// parallel: ln p = -int dz / T = -4 (e^{z - 1.1} - e^{-1.1}))
+void fill_column(Mesh mesh, MeshVariables& vars, bool cold = false) {
   for (size_t b = 0; b < mesh->blocks.size(); ++b) {
     auto coord = mesh->blocks[b]->pcoord;
     int nc1 = coord->options->nc1();
     auto z = coord->x1v - kR0;
-    auto p = torch::exp(-z);
-    auto rho = p * (1. + 0.02 * torch::exp(-((z - 0.5 * kLz) / 0.2).square()));
+    auto temp = cold ? 0.25 * torch::exp(1.1 - z) : torch::ones_like(z);
+    auto p = cold ? torch::exp(-4. * (torch::exp(z - 1.1) - std::exp(-1.1)))
+                  : torch::exp(-z);
+    auto rho =
+        p / temp * (1. + 0.02 * torch::exp(-((z - 0.5 * kLz) / 0.2).square()));
     auto in = torch::logical_and(z > 0., z < kLz);
     auto v1 =
         torch::where(in, kSeed * std::sqrt(kGamma) * torch::sin(M_PI * z / kLz),
@@ -175,14 +187,14 @@ double energy_p(Mesh mesh, MeshVariables const& vars) {
 
 // max over rho, rho v1 and E of |split - one| / max|one| after nstep steps
 double split_gap(int nx1, double nh, char const* gw, int nstep,
-                 double* ep_drift = nullptr) {
+                 double* ep_drift = nullptr, bool cold = false) {
   auto one = make_column(1, nx1, nh, gw);
   auto two = make_column(2, nx1, nh, gw);
   EXPECT_EQ(one->blocks.size(), 1u);
   EXPECT_EQ(two->blocks.size(), 2u);
   MeshVariables v1(1), v2(2);
-  fill_column(one, v1);
-  fill_column(two, v2);
+  fill_column(one, v1, cold);
+  fill_column(two, v2, cold);
   one->initialize(v1);
   two->initialize(v2);
   double dt = 0.3 * (kLz / nx1) / std::sqrt(kGamma);
@@ -206,8 +218,9 @@ double split_gap(int nx1, double nh, char const* gw, int nstep,
 }  // namespace
 
 TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
-  if (std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"))
-    GTEST_SKIP() << "run without SNAP_GRAVITY_WORK_RADIAL_EXACT";
+  if (std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
+      std::getenv("SNAP_WB_REF4"))
+    GTEST_SKIP() << "run without SNAP_GRAVITY_WORK_RADIAL_EXACT, SNAP_WB_REF4";
   torch::set_num_threads(1);
   setenv("SNAP_X1_CENTROID_EXACT", "1", 1);
   ASSERT_TRUE(x1_centroid_exact_enabled());
@@ -233,5 +246,21 @@ TEST(X1SeamSplit, radial_exact_split_gap) {
         "drift %.3e\n",
         on, nx1, gap, drift);
     if (on) EXPECT_LE(drift, 1e-13) << "nz " << nx1;
+  }
+}
+
+TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block) {
+  if (!std::getenv("SNAP_WB_REF4") || std::getenv("SNAP_X1_CENTROID_EXACT"))
+    GTEST_SKIP() << "set SNAP_WB_REF4=1 alone";
+  ASSERT_TRUE(wb_ref4_enabled());
+  ASSERT_FALSE(x1_centroid_exact_enabled());
+  torch::set_num_threads(1);
+  for (double nh : {1., 0.}) {
+    double gap = split_gap(16, nh, "cell", 20, nullptr, /*cold=*/true);
+    std::printf(
+        "SNAP_WB_REF4, cold, non-hydrostatic %g: 2 blocks vs 1, max rel gap "
+        "%.3e\n",
+        nh, gap);
+    EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
   }
 }

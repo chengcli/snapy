@@ -33,6 +33,11 @@ setup_test(test_hydro_ref_x1)
 setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
 setup_test(test_x1_seam_split)
+# SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
+add_test(NAME test_x1_seam_split_wb_ref4.${buildl}
+         COMMAND test_x1_seam_split.${buildl})
+set_tests_properties(test_x1_seam_split_wb_ref4.${buildl} PROPERTIES ENVIRONMENT
+                                                                 "SNAP_WB_REF4=1")
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
 # #289: these two pin values of the kernel's x1 reference; run them again with

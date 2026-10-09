@@ -88,6 +88,16 @@ void HydroImpl::reset() {
                   "needs a cartesian or spherical-polar grid, got '",
                   type, "'; unset it");
     }
+    // the wb4 resolution flag is computed per block from scan pressures up to
+    // three cells away, so x1 seam sides agree only with nghost >= 3
+    if (wb_ref4_enabled() && options->grav()->grav1() != 0. && pmb &&
+        pmb->pcoord) {
+      int ng = pmb->pcoord->options->nghost();
+      TORCH_CHECK(ng >= 3,
+                  "SNAP_WB_REF4 (or SNAP_X1_CENTROID_EXACT, which implies "
+                  "it) needs nghost >= 3, got ",
+                  ng, "; unset it");
+    }
   }
 
   //// ---- (6) set up implicit solver ---- ////
