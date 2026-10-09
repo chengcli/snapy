@@ -79,6 +79,15 @@ void HydroImpl::reset() {
                   "boundaries (its potential -grav1 * x1 jumps across a "
                   "periodic x1 face); set it false otherwise");
     }
+    // the switch would otherwise do nothing on a grid it has no form for
+    if (gravity_work_radial_exact() && options->grav()->grav1() != 0. &&
+        gw == "face" && pmb && pmb->pcoord) {
+      auto const& type = pmb->pcoord->options->type();
+      TORCH_CHECK(type == "cartesian" || type == "spherical-polar",
+                  "SNAP_GRAVITY_WORK_RADIAL_EXACT with gravity-work: face "
+                  "needs a cartesian or spherical-polar grid, got '",
+                  type, "'; unset it");
+    }
   }
 
   //// ---- (6) set up implicit solver ---- ////

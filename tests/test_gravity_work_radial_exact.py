@@ -21,7 +21,8 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
      max|u1|/c_s with the switch on no worse than off, explicit and VIC;
   5. the cycle diagnostics (print_cycle_info) log the potential energy the booked work conserves:
      ie= + pe= equals this test's E + P with the switch on and E + PE_d with it off, to the printed digits
-     (spherical, Cartesian and 2-D Cartesian, after a few explicit steps).
+     (spherical, Cartesian and 2-D Cartesian, after a few explicit steps);
+  6. on, a gnomonic-equiangle (cubed-sphere) block with gravity-work: face fails at setup.
 The switch is read once per process, so each arm runs in a child process.
 
   python test_gravity_work_radial_exact.py [--device cpu]
@@ -206,8 +207,31 @@ def diag(case, out, device="cpu"):
     json.dump(col.energies(v), open(os.path.join(out, "diag_%s.json" % case), "w"))
 
 
+def cubed_error():
+    """the setup error of a gnomonic-equiangle block with gravity-work: face, or '' if it builds"""
+    from snapy import MeshBlock, MeshBlockOptions
+    cfg = config("cartesian", 0, 1, "weno5")
+    cfg["geometry"] = {"type": "gnomonic-equiangle",
+                       "bounds": {"x1min": 300., "x1max": 300. + DEPTH, "x2min_pi": -0.25,
+                                  "x2max_pi": 0.25, "x3min_pi": -0.25, "x3max_pi": 0.25},
+                       "cells": {"nx1": NZ, "nx2": 4, "nx3": 4, "nghost": NG}}
+    cfg["boundary-condition"]["external"].update({"x2-inner": "reflecting", "x2-outer": "reflecting",
+                                                  "x3-inner": "reflecting", "x3-outer": "reflecting"})
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
+        yaml.safe_dump(cfg, f)
+        tmp = f.name
+    try:
+        MeshBlock(MeshBlockOptions.from_yaml(tmp))
+        return ""
+    except Exception as e:  # noqa: BLE001 -- the message is checked by the caller
+        return str(e)
+    finally:
+        os.unlink(tmp)
+
+
 def child(out, device):
     res, saved = {}, {}
+    res["cubed_error"] = cubed_error()
     for case in CASES:
         res[case], saved[case] = run(case, NSTEP, device=device)
     for case in ("cart", "cart_vic"):
@@ -269,6 +293,13 @@ def main():
             failures.append(f"{case}: the switch changed nothing")
         if not on["dEP"] <= EP_TOL:
             failures.append(f"{case}: on, per-step E+P change {on['dEP']:.2e} > {EP_TOL}")
+    for arm in ("unset", "on"):
+        msg = res[arm]["cubed_error"]
+        print(f"cubed     switch {arm:5s}: setup {'error: ' + msg.splitlines()[0] if msg else 'ok'}", flush=True)
+    if "SNAP_GRAVITY_WORK_RADIAL_EXACT" not in res["on"]["cubed_error"]:
+        failures.append("cubed: switch on, a gnomonic-equiangle block did not fail at setup")
+    if "SNAP_GRAVITY_WORK_RADIAL_EXACT" in res["unset"]["cubed_error"]:
+        failures.append("cubed: switch unset, the setup check fired")
     for case in ("cart", "cart_vic"):
         r_off, r_on = res["unset"]["rest_" + case], res["on"]["rest_" + case]
         print(f"{case:10s} rest, {REST_STEPS} steps, max|u1|/c_s: off {r_off:.3e} on {r_on:.3e}", flush=True)
