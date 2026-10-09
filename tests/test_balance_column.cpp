@@ -1,5 +1,6 @@
 // C/C++
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 // gtest
@@ -11,6 +12,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/hydro/balance_column.hpp>
 #include <snap/hydro/hydro_dispatch.hpp>
 #include <snap/hydro/wb_ref4.hpp>
@@ -318,6 +320,16 @@ TEST(BalanceColumn, it_refuses_what_it_cannot_deliver) {
   EXPECT_THROW(
       snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, /*max_iter=*/1),
       c10::Error);
+}
+
+// ctest test_balance_column_x1_centroid: SNAP_X1_CENTROID_EXACT alone switches
+// the solver's fourth-order reference on (hydro.cpp), so balance_column must
+// see the same predicate, or it balances a column against the operator the
+// solver no longer applies (RED on 18e48c96, where only the solver keyed on it)
+TEST(BalanceColumn, x1_centroid_switch_implies_the_ref4_predicate) {
+  if (!std::getenv("SNAP_X1_CENTROID_EXACT")) GTEST_SKIP();
+  ASSERT_TRUE(snap::x1_centroid_exact_enabled());
+  EXPECT_TRUE(snap::wb_ref4_enabled());
 }
 
 }  // namespace
