@@ -229,9 +229,11 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   // sum to grav1); scaling by non_hydrostatic() drops the gravity coupling
   // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
   auto grav1 = phydro->options->grav()->grav1();
-  // gravity-work: face books the face work in the energy row (cartesian x1)
+  // gravity-work: face books the metric-weighted work in the energy row
   bool face_work = phydro->face_work_in_operator();
   int adir = face_work ? kVicFaceWork : 0;
+  if (face_work && pcoord->options->type() == "cartesian")
+    adir |= kVicCartesianFaceWork;
   bool diffusive_work =
       grav1 != 0. && phydro->options->grav()->gravity_work() == "cell";
   if (diffusive_work) adir |= kVicDiffusiveCell;
@@ -308,13 +310,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   w[IVY] -= w[IVZ] * cos_theta;
   pcoord->flux2global1_(du);
 
-  // The implicit matrix linearizes gravity as cell-centred work,
-  // dt*grav1*du[IVX]. Replace that contribution with the work done by the
-  // mass the VIC redistribution actually moved through each face (MASS[IVZ])
-  // against the potential difference between that face and the cell centre;
-  // the closed top face lives in the first outer ghost cell and remains zero.
-  // gravity-work: cell keeps the matrix's cell work (no swap, #283), and face
-  // in cartesian x1 already has the face work in the matrix
+  // face-wallc retains its legacy post-solve swap. Face mode already books
+  // the metric-weighted work inside the matrix on every coordinate system.
   if (grav1 != 0. && phydro->options->grav()->gravity_work() != "cell" &&
       !face_work) {
     int is = pcoord->il();

@@ -22,7 +22,8 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     bool solid_lower = false, bool solid_upper = false) {
   bool face_work = dir & kVicFaceWork;
   bool diffusive_cell = dir & kVicDiffusiveCell;
-  dir &= ~(kVicFaceWork | kVicDiffusiveCell);
+  bool cartesian_face = dir & kVicCartesianFaceWork;
+  dir &= ~(kVicFaceWork | kVicDiffusiveCell | kVicCartesianFaceWork);
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -97,11 +98,7 @@ void DISPATCH_MACRO vic_assemble_full_impl(
   b[i] = -(Am + dfdq_prev) * area_i * half_inv_vol;
   c[i] = -(Ap - dfdq_next) * area_ip1 * half_inv_vol;
 
-  // gravity-work: face. Replace the cell work grav*m_i in the energy row by
-  // grav/2 (F_{i-1/2} + F_{i+1/2}), the face work of the linearised mass flux
-  // F_{i+1/2} = (m_i + m_{i+1})/2 - |A|_rho (q_{i+1} - q_i)/2; the weight
-  // A (x1f - x1v) / V is 1/2 at both faces in cartesian x1
-  if (face_work) {
+  if (face_work && cartesian_face) {
     Eigen::Matrix<T, 1, 5> em;
     em.setZero();
     em(IVX + dir) = 1.;
@@ -109,14 +106,17 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     a[i].row(IPR) -= 0.5 * grav * (em + 0.5 * (Ap.row(IDN) - Am.row(IDN)));
     b[i].row(IPR) -= 0.5 * grav * (0.5 * em + 0.5 * Am.row(IDN));
     c[i].row(IPR) -= 0.5 * grav * (0.5 * em - 0.5 * Ap.row(IDN));
-  }
-
-  if (diffusive_cell) {
-    // Face potential differences, area and volume weight the diffusive work.
+  } else if (face_work || diffusive_cell) {
+    // The same face-to-centre potential weights as the mass update.
     T lower = work_lo[i * stride2], upper = work_hi[i * stride2];
     a[i].row(IPR) -= grav * (upper * Ap.row(IDN) - lower * Am.row(IDN));
     b[i].row(IPR) -= grav * lower * Am.row(IDN);
     c[i].row(IPR) += grav * upper * Ap.row(IDN);
+    if (face_work) {
+      a[i](IPR, IVX + dir) += grav * (1. - lower - upper);
+      b[i](IPR, IVX + dir) -= grav * lower;
+      c[i](IPR, IVX + dir) -= grav * upper;
+    }
   }
 
   // Fix boundary conditions for the cells at the ends of the column.

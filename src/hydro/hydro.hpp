@@ -152,7 +152,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! x1 face f (0 inner, 1 outer) of this block is a physical, non-periodic
   //! boundary (a wall whatever installed it, or an open boundary)
   bool is_x1_wall(int f) const;
-  //! gravity-work: face with an implicit scheme in cartesian x1: the implicit
+  //! gravity-work: face with an implicit scheme: the implicit
   //! operator books the face work of the mass it moves (#283)
   bool face_work_in_operator() const;
   //! this block's E+PE defect of the dynamics in the current step (J),
