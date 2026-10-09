@@ -1,5 +1,9 @@
 #pragma once
 
+// C/C++
+#include <cmath>
+#include <limits>
+
 // Eigen
 #include <Eigen/Dense>
 
@@ -18,40 +22,47 @@
 //! \param[out] indx Output vector recording row permutation from partial
 //! pivoting
 //! \return +1 or -1 depending on whether row interchanges were even or odd;
-//!         1 indicates error (singular matrix)
+//!         0 indicates failure (singular/near-singular or nonfinite matrix)
 //!
 //! \note Adapted from Numerical Recipes in C, 2nd Ed., p. 46.
-//! \note Returns 1 if matrix is singular
+//! \note A pivot must exceed 8*N*epsilon times its original row magnitude.
 template <typename T, int N>
 inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
                                  int *indx) {
   int i, imax = 0, j, k, d;
   T big, dum, sum, temp;
-  T vv[N];
+  T vv[N], scale[N];
+  const T tolerance = T(8 * N) * std::numeric_limits<T>::epsilon();
+  for (int row = 0; row < N; ++row)
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a(row, col))) return 0;
 
   d = 1;
   for (i = 0; i < N; i++) {
     big = 0.0;
     for (j = 0; j < N; j++)
       if ((temp = fabs(a(i, j))) > big) big = temp;
-    if (big == 0.0) {
-      printf("Singular matrix in routine ludcmp");
-      return 1;
-    }
+    if (big == 0.0) return 0;
+    scale[i] = big;
     vv[i] = 1.0 / big;
+    if (!std::isfinite(vv[i])) return 0;
   }
   for (j = 0; j < N; j++) {
     for (i = 0; i < j; i++) {
       sum = a(i, j);
       for (k = 0; k < i; k++) sum -= a(i, k) * a(k, j);
+      if (!std::isfinite(sum)) return 0;
       a(i, j) = sum;
     }
     big = 0.0;
     for (i = j; i < N; i++) {
       sum = a(i, j);
       for (k = 0; k < j; k++) sum -= a(i, k) * a(k, j);
+      if (!std::isfinite(sum)) return 0;
       a(i, j) = sum;
-      if ((dum = vv[i] * fabs(sum)) >= big) {
+      dum = vv[i] * fabs(sum);
+      if (!std::isfinite(dum)) return 0;
+      if (dum >= big) {
         big = dum;
         imax = i;
       }
@@ -64,13 +75,20 @@ inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
       }
       d = -d;
       vv[imax] = vv[j];
+      temp = scale[imax];
+      scale[imax] = scale[j];
+      scale[j] = temp;
     }
     indx[j] = imax;
+    if (fabs(a(j, j)) / scale[j] <= tolerance) return 0;
     if (j != N - 1) {
       dum = (1.0 / a(j, j));
       for (i = j + 1; i < N; i++) a(i, j) *= dum;
     }
   }
 
+  for (int row = 0; row < N; ++row)
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a(row, col))) return 0;
   return d;
 }

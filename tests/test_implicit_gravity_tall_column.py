@@ -1,29 +1,15 @@
 #!/usr/bin/env python3
-"""A tall isothermal column at rest must stay at rest under the implicit solver at a large time step.
+"""Time-stepped Cartesian and spherical x1 face-work columns (#288).
 
-The column is 45 cells of dz = 29.9 km (11.3 scale heights; g = 23.1 m/s^2, T = 786 K,
-gamma = 1.403461, Rd = 3515 J/kg/K, p_bot = 100 bar), 8 periodic columns in x2,
-reflecting x1 walls, rk3 + weno5 + lmars, implicit-scheme 9 (vic-full), no
-perturbation. It is put into the scheme's own discrete hydrostatic balance with
-snapy.balance_column and run for NSTEP fixed steps at two rungs:
-  dt = 997 s  (acoustic Courant 65.6, what the implicit solver exists for)
-  dt = 100 s  (acoustic Courant 6.6, control)
-At each rung the run must stay finite with max |w| < W_TOL.
-
-W_TOL = 1e-7 m/s: a column that keeps its balance stays near 5e-9 m/s on the first
-step (the balance residual, rtol 1e-10) and decays to ~1e-12 m/s, at both rungs and
-over 10 days. An unstable one grows by ~2.7x per step from ~1e-6 m/s at step 10 and
-is non-finite or above 1e10 m/s by step 40.
-
-The implicit matrix linearises the cell-centred gravity work (g * rho w in the
-energy row), while the energy equation also receives face-mass-flux gravity work
-terms added after the implicit solve. Those terms are not part of the implicit
-operator, so the large-step rung is unstable.
-
-  python test_implicit_gravity_tall_column.py [--device cpu] [--nstep 40]
+The discretely balanced 11.3H column must remain at rest through the tested
+vertical acoustic Courants up to 250. Results include the first failed rung;
+passing a finite ladder does not establish a universal stability threshold.
+Cartesian retains eight periodic copies; spherical x1 uses one angular cell
+to test a strictly radial column. Angular-mode stability is a separate gate.
 """
 import argparse
 import math
+import json
 import os
 import sys
 import tempfile
@@ -33,13 +19,14 @@ import yaml
 
 GRAV, GAMMA, RD, T0, PS = 23.1, 1.403461, 3515.0, 786.0, 1.0e7
 NZ, DZ, NX2 = 45, 29946.8085106, 8
-RUNGS = (("large step", 997.0), ("control", 100.0))
+COURANTS = (6.6, 65.6, 100.0, 197.0, 250.0)
+RADIUS = 7.e7
 W_TOL = 1.0e-7  # m/s
 
 
-def config():
+def config(geometry="cartesian", default_work=False):
     rgas = 8.31446261815324
-    return {
+    cfg = {
         "geometry": {"type": "cartesian",
                      "bounds": {"x1min": 0.0, "x1max": NZ * DZ, "x2min": 0.0, "x2max": 31415926.53589793,
                                 "x3min": 0.0, "x3max": 3926990.8169872416},
@@ -55,16 +42,32 @@ def config():
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.5, "implicit-scheme": 9, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": {"grav1": -GRAV}},
+        "forcing": {"const-gravity": {"grav1": -GRAV, "gravity-work": "face",
+                                          "gravity-work-fixer": False}},
     }
 
+    if default_work:
+        # Omit both keys to exercise the default cell work + global fixer.
+        cfg["forcing"]["const-gravity"].pop("gravity-work")
+        cfg["forcing"]["const-gravity"].pop("gravity-work-fixer")
 
-def run(dt, nstep, device):
+    if geometry == "spherical-polar":
+        cfg["geometry"]["type"] = geometry
+        cfg["geometry"]["cells"]["nx2"] = 1
+        cfg["geometry"]["bounds"] = {
+            "x1min": RADIUS, "x1max": RADIUS + NZ * DZ,
+            "x2min": math.pi / 2 - 0.2, "x2max": math.pi / 2 + 0.2,
+            "x3min": 0.0, "x3max": 0.05}
+    return cfg
+
+
+def run(dt, nstep, device, geometry="cartesian", default_work=False):
+
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config(), f)
+        yaml.safe_dump(config(geometry, default_work), f)
         tmp = f.name
     try:
         block = MeshBlock(MeshBlockOptions.from_yaml(tmp))
@@ -86,17 +89,24 @@ def run(dt, nstep, device):
         w[c][..., ng + NZ:] = w[c][..., ng + NZ - 1:ng + NZ]
     block_vars, _ = block.initialize({"hydro_w": w})
 
-    interior = (Ellipsis, slice(ng, ng + NX2), slice(ng, ng + NZ))
+    nx2 = config(geometry)["geometry"]["cells"]["nx2"]
+    jl = ng if nx2 > 1 else 0
+    interior = (Ellipsis, slice(jl, jl + nx2), slice(ng, ng + NZ))
     nstage = len(block.module("intg").stages)
     wmax, history = 0.0, []
     for n in range(1, nstep + 1):
         for stage in range(nstage):
             block.forward(block_vars, dt, stage)
+        redo = block.check_redo(block_vars)
+        if redo:
+            return False, n, wmax, history, err
         u = block_vars["hydro_u"][interior]
         if not torch.isfinite(u).all():
             return False, n, wmax, history, err
         wn = (u[kIV1] / u[kIDN]).abs().max().item()
         wmax = max(wmax, wn)
+        if wmax >= W_TOL:
+            return False, n, wmax, history, err
         if n in (1, 10, 20, 30, nstep):
             history.append((n, wn))
     return True, nstep, wmax, history, err
@@ -106,6 +116,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--nstep", type=int, default=40)
+    ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "both"), default="both")
+    ap.add_argument("--courants", type=float, nargs="+", default=COURANTS)
     args = ap.parse_args()
     if args.device.startswith("cuda") and (os.environ.get("SNAPY_BUILD_CUDA", "1") == "0" or not torch.cuda.is_available()):
         print("SKIP: cuda requested but not available")
@@ -114,18 +126,33 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
-    for name, dt in RUNGS:
-        finite, n, wmax, history, err = run(dt, args.nstep, args.device)
-        hist = "  ".join("step %d %.3e" % h for h in history)
-        print("%-10s dt=%6.1f s  acoustic Courant %5.1f  balance err %.1e  %s" % (name, dt, cs * dt / DZ, err, hist))
-        if not finite:
-            failures.append("%s (dt %g s): state non-finite at step %d (max|w| before %.3e m/s)" % (name, dt, n, wmax))
-        elif not wmax < W_TOL:
-            failures.append("%s (dt %g s): max|w| = %.3e m/s over %d steps (tol %.0e)" % (name, dt, wmax, n, W_TOL))
-        else:
-            print("%-10s PASS: max|w| = %.3e m/s over %d steps (tol %.0e)" % (name, wmax, n, W_TOL))
-    for f in failures:
-        print("FAIL", f)
+    geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
+    for geometry in geometries:
+        first_failure = None
+        for courant in args.courants:
+            dt = courant * DZ / cs
+            finite, n, wmax, history, err = run(dt, args.nstep, args.device, geometry)
+            passed = finite and wmax < W_TOL
+            print(json.dumps({"geometry": geometry, "courant": courant, "dt": dt,
+                              "steps": n, "passed": passed, "max_w": wmax,
+                              "balance_error": err, "history": history}), flush=True)
+            if not passed:
+                if first_failure is None:
+                    first_failure = courant
+                failures.append((geometry, courant, n, wmax))
+        print(json.dumps({"geometry": geometry, "first_failing_courant": first_failure,
+                          "tested_courants": args.courants}), flush=True)
+    # Preserve the original Cartesian default-path coverage alongside the
+    # explicitly face-only, fixer-off ladder.
+    for dt in (997.0, 100.0):
+        finite, n, wmax, history, err = run(
+            dt, args.nstep, args.device, default_work=True)
+        passed = finite and wmax < W_TOL
+        print(json.dumps({"arm": "default-cell-global-fixer", "dt": dt,
+                          "steps": n, "passed": passed, "max_w": wmax,
+                          "balance_error": err, "history": history}), flush=True)
+        if not passed:
+            failures.append(("default-cell-global-fixer", dt, n, wmax))
     return 1 if failures else 0
 
 

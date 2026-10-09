@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 // eigen
 #include <Eigen/Dense>
 
@@ -12,12 +14,14 @@
 #include <snap/snap.h>
 #include <snap/utils/print_matrix.h>
 
+#include "vic_solve_failure.h"
+
 #define DU(n, i) du[(n) * stride + (i)]
 #define W(n, i) w[(n) * stride + (i)]
 
 namespace snap {
 template <typename T, int N>
-DISPATCH_MACRO void forward_sweep_impl(
+DISPATCH_MACRO bool forward_sweep_impl(
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *a,
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *b,
     Eigen::Matrix<T, N, N, Eigen::RowMajor> *c, Eigen::Vector<T, N> *delta,
@@ -44,15 +48,23 @@ DISPATCH_MACRO void forward_sweep_impl(
   Eigen::Matrix<T, N, N, Eigen::RowMajor> Y;
 
   if (N > 4) {
-    ludcmp(a[il], indx);
+    if (ludcmp(a[il], indx) == 0) return vic_fail_column(delta, il, iu);
     luminv(a[il], indx, Y);
     a[il] = Y;
-  } else {  // Eigen small matrix inverse (N <= 4)
+  } else {  // check a copy, preserving the original inverse arithmetic
+    Y = a[il];
+    if (ludcmp(Y, indx) == 0) return vic_fail_column(delta, il, iu);
     a[il] = a[il].inverse().eval();
   }
   // printf_matrix("A(%s) = ", a[il], il);
   delta[il] = a[il] * rhs;
   a[il] = a[il] * c[il];
+  for (int row = 0; row < N; ++row) {
+    if (!std::isfinite(delta[il](row))) return vic_fail_column(delta, il, iu);
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a[il](row, col)))
+        return vic_fail_column(delta, il, iu);
+  }
 
   for (int i = il + 1; i <= iu; ++i) {
     rhs(0) = DU(IDN, i);
@@ -72,16 +84,25 @@ DISPATCH_MACRO void forward_sweep_impl(
 
     if (N > 4) {
       a[i] -= b[i] * a[i - 1];
-      ludcmp(a[i], indx);
+      if (ludcmp(a[i], indx) == 0) return vic_fail_column(delta, il, iu);
       luminv(a[i], indx, Y);
       a[i] = Y;
-    } else {  // Eigen small matrix inverse (N <= 4)
+    } else {  // checked small-matrix bypass
+      Y = a[i] - b[i] * a[i - 1];
+      if (ludcmp(Y, indx) == 0) return vic_fail_column(delta, il, iu);
       a[i] = (a[i] - b[i] * a[i - 1]).inverse().eval();
     }
 
     delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
     a[i] = a[i] * c[i];
+    for (int row = 0; row < N; ++row) {
+      if (!std::isfinite(delta[i](row))) return vic_fail_column(delta, il, iu);
+      for (int col = 0; col < N; ++col)
+        if (!std::isfinite(a[i](row, col)))
+          return vic_fail_column(delta, il, iu);
+    }
   }
+  return true;
 }
 
 template <typename T, int N>

@@ -612,7 +612,10 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     phydro->gravity_work_defect().zero_();  // a redone step starts afresh
     phydro->commit_gravity_work_fix();      // the previous step was accepted
     phydro->gravity_work_wall_mass().zero_();
-    if (phydro->picorr) phydro->picorr->reset_dry_clamp_step();
+    if (phydro->picorr) {
+      phydro->picorr->reset_dry_clamp_step();
+      phydro->picorr->reset_solve_failure();
+    }
     phydro->peos->reset_limiter_marks(hydro_u);
     saturation_failures();  // a failure counted before the step is not its own
 
@@ -853,7 +856,9 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
   // the limiter patched a cell or found a NaN: the redo check discards the step
   auto hits = limiter_hits();
-  auto redo = torch::full_like(mwall, hits[0] || hits[1] ? 1. : 0.);
+  bool solve_failure = phydro->picorr && phydro->picorr->solve_failed();
+  auto redo =
+      torch::full_like(mwall, hits[0] || hits[1] || solve_failure ? 1. : 0.);
   return torch::stack({phydro->gravity_work_defect()[0],
                        mv.sum().to(torch::kFloat64),
                        phydro->gravity_work_wall_mass()[0],
@@ -886,6 +891,8 @@ void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
   // bound allows 1e3 eps of the wall cells' mass per step, so it scales with
   // the dtype and the wall area. At large implicit steps, sealed-wall
   // round-off can exceed it; the onset depends on the grid and backend.
+  // Reviewed 11H rest decks first refused near C=2500 (CUDA) / 2750 (CPU),
+  // as recorded in #285; those measurements are not universal thresholds.
   double eps = machine_epsilon(hydro_u.scalar_type());
   double bound = 1.e3 * eps * mwall;
   TORCH_CHECK(wall <= bound, "const-gravity gravity-work-fixer: ", wall,
@@ -1214,13 +1221,15 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
     SINFO(MeshBlock)
         << "Density/pressure at or within 0.1% of the floor, the VIC dry-gas "
            "clamp emptied a cell, the limiter patched one or found a NaN, or "
-           "the saturation adjustment left a cell unadjusted. "
+           "the saturation adjustment left a cell unadjusted, or the VIC "
+           "solve rejected a singular/near-singular or nonfinite column. "
            "Redoing the step with smaller dt (causes:"
         << (causes & 1 ? " floor" : "") << (causes & 2 ? " clamp" : "")
         << (causes & 4 ? " limiter" : "") << (causes & 8 ? " nan" : "")
-        << (causes & 16 ? " saturation" : "") << ")." << std::endl;
+        << (causes & 16 ? " saturation" : "")
+        << (causes & 32 ? " vic-solve" : "") << ")." << std::endl;
     pintg->current_redo += 1;
-    if (pintg->current_redo > pintg->options->max_redo()) {
+    if (pintg->current_redo > pintg->options->max_redo() && !(causes & 32)) {
       SINFO(MeshBlock)
           << "Maximum number of redo attempts exceeded. Terminating."
           << std::endl;
@@ -1240,6 +1249,13 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
     cycle -= 1;
     // decided: floor_hit's and the restore's cons2prim must not mark the redo
     phydro->peos->reset_limiter_marks(vars["hydro_u"]);
+    if (pintg->current_redo > pintg->options->max_redo()) {
+      SINFO(MeshBlock)
+          << "Maximum number of redo attempts exceeded. Terminating after "
+             "restoring the rejected VIC step input."
+          << std::endl;
+      return -1;
+    }
     return 1;  // redo
   }
 
@@ -1249,16 +1265,18 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   return 0;
 }
 
-std::array<bool, 5> MeshBlockImpl::local_redo_flags(Variables const &vars) {
+std::array<bool, 6> MeshBlockImpl::local_redo_flags(Variables const &vars) {
   // floor_hit may mark a limiter repair; read those marks afterwards.
   bool floor = floor_hit(vars);
   auto hits = limiter_hits();
   bool sat = saturation_failures() > 0;  // drains the counter exactly once
-  return {floor, vic_dry_clamp_hit(), hits[0], hits[1], sat};
+  return {floor,   vic_dry_clamp_hit(),
+          hits[0], hits[1],
+          sat,     phydro->picorr && phydro->picorr->solve_failed()};
 }
 
-int MeshBlockImpl::reduce_redo_flags(std::array<bool, 5> const &flags) const {
-  auto flag = torch::zeros({5}, torch::dtype(torch::kFloat64));
+int MeshBlockImpl::reduce_redo_flags(std::array<bool, 6> const &flags) const {
+  auto flag = torch::zeros({6}, torch::dtype(torch::kFloat64));
   auto f = flag.accessor<double, 1>();
   for (size_t i = 0; i < flags.size(); ++i) f[i] = flags[i] ? 1. : 0.;
   std::vector<at::Tensor> reduced = {flag};
