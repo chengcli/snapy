@@ -7,6 +7,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
@@ -453,8 +454,12 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // (and on non-uniform x1 the cell pressure), before the seam exchange below
   // so that the exchanged ghost rows carry it; the face part follows the
   // exchange. psf is never changed, so the rest balance is the kernel's.
+  // SNAP_X1_CENTROID_EXACT on spherical-polar uses this reference too: the
+  // cells read here are then plain means, for which it is fourth order
+  // (docs/derivations/x1-centroid-spherical.md)
   torch::Tensor wb4_flag;
-  if (wb_ref4()) {
+  if (wb_ref4() || (x1_centroid_exact_enabled() &&
+                    pcoord->options->type() == "spherical-polar")) {
     if (!wb_ref4_ || wb_ref4_->fwt.device() != w.device() ||
         wb_ref4_->fwt.scalar_type() != w.scalar_type()) {
       bool clamp = options->wb_wall_clamp();

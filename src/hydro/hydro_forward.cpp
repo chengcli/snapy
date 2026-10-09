@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
@@ -241,14 +242,32 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool wb_x1 =
         grav1 && w.size(0) > IPR && options->eos()->type() != "shallow-water";
 
+    // SNAP_X1_CENTROID_EXACT (spherical-polar): a cell value is the r^2 dr
+    // average, but the reconstruction, the hydrostatic scan and the reference
+    // below are formulas for plain averages. They read the plain means instead
+    // (x1_centroid.hpp, docs/derivations/x1-centroid-spherical.md); the
+    // primitives themselves are not changed.
+    torch::Tensor wx1 = w;
+    if (x1_centroid_exact_enabled() &&
+        pmb->pcoord->options->type() == "spherical-polar") {
+      if (!x1pm_ || x1pm_->wt.device() != w.device() ||
+          x1pm_->wt.scalar_type() != w.scalar_type()) {
+        x1pm_ = std::make_shared<X1PlainMeanStencils>(x1_plain_mean_stencils(
+            pmb->pcoord->x1f, pmb->pcoord->il(), pmb->pcoord->iu(),
+            phys_x1inner, phys_x1outer, w.options()));
+      }
+      wx1 =
+          x1_plain_means(*x1pm_, w, IVX, !is_outflow(pmb->options->bfuncs()[0]),
+                         !is_outflow(pmb->options->bfuncs()[1]));
+    }
     torch::Tensor wtmp;
     if (wb_x1) {
-      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
-      auto pressure = w[IPR].clone();
-      auto density = w[IDN].clone();
+      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(wx1);
+      auto pressure = wx1[IPR].clone();
+      auto density = wx1[IDN].clone();
 
-      w[IPR] -= pref;
-      w[IDN] -= dref;
+      wx1[IPR] -= pref;
+      wx1[IDN] -= dref;
 
       // Even-parity ghost perturbations at the walls: p'(is-m) =
       // p'(is+m-1), rho' likewise. Only apply this at physical x1 walls.
@@ -257,21 +276,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       int iu = pmb->pcoord->iu();
       for (int c : {(int)IPR, (int)IDN}) {
         if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0])) {
-          w[c].narrow(-1, is - ng, ng).copy_(w[c].narrow(-1, is, ng).flip(-1));
+          wx1[c]
+              .narrow(-1, is - ng, ng)
+              .copy_(wx1[c].narrow(-1, is, ng).flip(-1));
         }
 
         if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1])) {
-          w[c].narrow(-1, iu + 1, ng)
-              .copy_(w[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+          wx1[c]
+              .narrow(-1, iu + 1, ng)
+              .copy_(wx1[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
         }
       }
 
       // floor=false: reconstruction-stage floors would clamp legitimately
       // negative perturbations.
-      wtmp = precon1->forward(w, DIM1, /*floor=*/false);
+      wtmp = precon1->forward(wx1, DIM1, /*floor=*/false);
 
-      w[IPR].copy_(pressure);
-      w[IDN].copy_(density);
+      wx1[IPR].copy_(pressure);
+      wx1[IDN].copy_(density);
       // Restore full face pressure/density; floor any nonlinear-WENO overshoot
       // that would go non-positive (the references are tiny near the top) back
       // to the reference. At rest the perturbation is ~0 so the floor never
@@ -298,7 +320,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, rho_below));
       wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, density));
     } else {
-      wtmp = precon1->forward(w, DIM1);
+      wtmp = precon1->forward(wx1, DIM1);
       if (grav1) {
         if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
         if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
@@ -417,6 +439,36 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
           unpack(il, 0.5 * (dn_mine[0] + theirs[0]));
         }
         for (auto& sw : seam_sends) sw->wait();
+      }
+    }
+
+    // SNAP_X1_CENTROID_EXACT: the pressure force is the r^2-weighted
+    // (A p*|)/V - (2/V) int r p~ dr (coord/spherical_polar.cpp), so the
+    // hydrostatic correction is the same operator on the cell's own face
+    // states; at rest (p_L = p_R = p*) the two cancel as the plain
+    // differences do without the switch
+    if (wx1.data_ptr() != w.data_ptr() && options->grav() &&
+        options->grav()->grav1() != 0 &&
+        options->grav()->non_hydrostatic() < 1. &&
+        !options->disable_flux_x1() && _face_pressure1.defined() &&
+        _face_pressure1.numel() > 0) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      if (!x1src_ || x1src_->wt.device() != w.device() ||
+          x1src_->wt.scalar_type() != w.scalar_type()) {
+        x1src_ = std::make_shared<X1PressureSourceStencils>(
+            x1_pressure_source_stencils(pmb->pcoord->x1f, is, ie - 1,
+                                        w.options()));
+      }
+      if (x1src_->usable) {
+        auto area1 = pmb->pcoord->face_area1();
+        auto volume = pmb->pcoord->cell_volume();
+        rho_grav.slice(2, is, ie) =
+            (area1.slice(-1, is + 1, ie + 1) *
+                 wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+             area1.slice(-1, is, ie) * wlr1[IRT][IPR].slice(2, is, ie)) /
+                volume.slice(-1, is, ie) -
+            x1_pressure_source(*x1src_, _face_pressure1);
       }
     }
   }

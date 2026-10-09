@@ -194,6 +194,7 @@ snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
 snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
+snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)
@@ -214,6 +215,9 @@ if(CUDA)
   snapy_add_python_test(test_wb_ref4_order_cuda
     SCRIPT test_wb_ref4_order.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;cuda")
+  snapy_add_python_test(test_x1_centroid_rest_cuda
+    SCRIPT test_x1_centroid_rest.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_check_redo_saturation_cuda_python
@@ -221,6 +225,7 @@ if(CUDA)
     test_flux_positivity_cubedsphere_moist_cuda_python
     test_vic_moist_device_python
     test_wb_ref4_order_cuda_python
+    test_x1_centroid_rest_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 

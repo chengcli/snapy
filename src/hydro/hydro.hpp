@@ -23,6 +23,8 @@ namespace snap {
 
 class MeshBlockImpl;
 struct WbRef4Stencils;
+struct X1PlainMeanStencils;
+struct X1PressureSourceStencils;
 
 struct HydroOptionsImpl {
   static std::shared_ptr<HydroOptionsImpl> create() {
@@ -229,6 +231,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable int x1_uniform_ = -1;
   //! SNAP_WB_REF4 stencils for this block's x1 grid, built on first use
   mutable std::shared_ptr<WbRef4Stencils> wb_ref4_;
+  //! SNAP_X1_CENTROID_EXACT r^2 -> plain-mean stencils, built on first use
+  mutable std::shared_ptr<X1PlainMeanStencils> x1pm_;
+  //! and its pressure-force stencils, for the hydrostatic correction
+  mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
