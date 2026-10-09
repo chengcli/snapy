@@ -177,6 +177,7 @@ The first term is (1); the second couples faces $i-3/2 \dots i+3/2$ (wall cells:
 **Conservation (exact, by construction).** $\sum_iW_iV_i + \dot P = -\sum_i\Delta_i(A\phi F) = 0$ for closed walls,
 for every flux field and every grid. E+P is conserved to round-off; E+PE$_d$ is not (it changes by
 $-g_1\sum_iV_i\sigma_i^2s_i[\dot\rho]$, an $O(h^2)$ amount, which is the point: $\mathrm{PE}_d$ is the wrong target).
+With the switch on, `gravity_work_defect()` and every E+PE$_d$ check therefore measure the wrong invariant; check E+P.
 
 **Accuracy.** The exact cell budget is $g_1V_i\langle F\rangle = -\dot{\mathrm{PE}}_i - \Delta_i(A\phi F)$, so
 $W_iV_i - g_1V_i\langle F\rangle = \frac{d}{dt}(\mathrm{PE}_i - P_i) = O(h^4V)$ by (6). Both curvature terms of (2)
