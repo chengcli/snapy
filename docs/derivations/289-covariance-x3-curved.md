@@ -1323,3 +1323,307 @@ and the relative drift of $\sum\rho V$ and $\sum(E+\rho\phi)V$:
 The two builds agree to within ±0.7% at every recorded time, and neither is systematically larger. At 12 cells per
 panel edge, this deck's error is dominated by the scheme's own discretisation error, not by the $O(\Delta\alpha^2)$
 change in $A_1$ and $V$.
+
+---
+
+# 4A. The remaining rows: mass, momentum and the moist tracers
+
+Mass, the three momentum rows and the moist tracer rows, on a spherical-$x_1$
+column and on a gnomonic cubed-sphere panel. Section 2A derived the **energy**
+row; this section does the rest with the same rigour and the same scripts
+(`docs/derivations/allrows_quadrature.py`, `docs/derivations/rest_balance.py`).
+
+**Implemented here:** the mass row and every tracer row.
+**Derived but NOT implemented:** the momentum rows -- see 4A.3.2, they need the
+geometric pressure source shifted in lockstep, and that has not been compiled
+or run. Doing it blind would put the exact rest balance at risk, which is the
+very property at stake.
+
+## 4A.1 Notation, and the one rule that covers every row
+
+Two measures are in play on the same cell (§1.3, §2A.1 of the main file):
+
+$$
+\underbrace{\mathrm{d}V \propto r^2\,\mathrm{d}r}_{\text{what a cell value averages}}
+\qquad
+\underbrace{\mathrm{d}A_{2,3} \propto r\,\mathrm{d}r}_{\text{what a face flux needs}}
+$$
+
+one power of $r$ apart, hence two different $x_1$ centroids and the offset
+
+$$
+r_c=\frac{12\bar r^2+h^2}{12\bar r},\qquad
+r_v=\frac{3\bar r(4\bar r^2+h^2)}{12\bar r^2+h^2},\qquad
+\boxed{\;\delta=r_v-r_c=\frac{h^2\,(12\bar r^2-h^2)}{12\,\bar r\,(12\bar r^2+h^2)}
+=\frac{h^2}{12\bar r}+O\!\Big(\frac{h^4}{\bar r^3}\Big)}
+\tag{1.1}
+$$
+
+with $h=\Delta r$, $\bar r=\tfrac12(r_-+r_+)$, and
+$\sigma_c^2=\tfrac{h^2}{12}\big(1-\tfrac{h^2}{12\bar r^2}\big)$ the area-weighted
+second central moment. In Cartesian both measures are the same uniform weight,
+so $r_v=r_c$ and $\delta\equiv0$ **exactly**: nothing in this document changes
+any Cartesian result.
+
+### 4A.1.1 The general rule
+
+Let a row's face flux be a product of factors that the code reads from **cell**
+storage, $F=a\,b\,c\cdots$. Expanding each $\bar q = q(r_v)+\tfrac12\sigma_v^2q''$
+about $r_c$, using $\delta=O(h^2)$ so $\delta^2=O(h^4)$, and
+$\sigma_c^2-\sigma_v^2=O(h^4)$ (§2A.5 of the main file), every second-derivative
+group cancels and
+
+$$
+\boxed{\;
+\big\langle F\big\rangle_A-\bar a\,\bar b\,\bar c\cdots
+=\underbrace{\sigma_c^2\!\!\sum_{\text{distinct pairs}(x,y)}\!\! x'\,y'\!\!\prod_{z\neq x,y}\! z}_{\text{covariance, row-specific}}
+\;\underbrace{-\;\delta\,\partial_1 F}_{\text{centroid, universal}}
+\;+\;O(h^4)\;}
+\tag{1.2}
+$$
+
+Two consequences worth stating before any row:
+
+* the **centroid** piece is the *same* for every row — minus $\delta$ times the
+  $x_1$ derivative of that row's own flux. It needs no per-row algebra.
+* a factor that stands **alone** in the flux (the pressure in the normal-momentum
+  row) has no partner, so it contributes **only** a centroid term:
+  $\langle p\rangle_A-\bar p=-\delta\,\partial_1p+O(h^4)$. That single fact drives
+  everything in §3.
+
+---
+
+## 4A.2 Row by row
+
+$u_n$ is the face-normal velocity in the face-local orthonormal frame (`IVY`
+after `prim2local2_` for an $x_2$ face, `IVZ` after `prim2local3_` for an $x_3$
+face; `lmars_impl.h:20`, `lmars.cpp:54-67`). $u_t$ is either tangential
+component. $q$ is any tracer mixing ratio, dry or moist.
+
+| row | face flux $F$ | covariance part $/\sigma_c^2$ | centroid part |
+|---|---|---|---|
+| mass | $\rho u_n$ | $\rho'u_n'$ | $-\delta\,\partial_1(\rho u_n)$ |
+| momentum, normal | $\rho u_n^2+p$ | $2\rho'u_n'u_n+\rho u_n'^2$ | $-\delta\,\partial_1(\rho u_n^2+p)$ |
+| momentum, tangential | $\rho u_nu_t$ | $\rho'u_n'u_t+\rho'u_t'u_n+u_n'u_t'\rho$ | $-\delta\,\partial_1(\rho u_nu_t)$ |
+| tracer (each, incl. moist) | $\rho u_nq$ | $\rho'u_n'q+\rho'q'u_n+u_n'q'\rho$ | $-\delta\,\partial_1(\rho u_nq)$ |
+| energy (§2A, for reference) | $\kappa p\,u_n$ | $\kappa p\,[\ln(p/\rho)]'u_n'$ | $-\delta\,\partial_1(\kappa p\,u_n)$ |
+
+### 4A.2.1 The tracer row, and why a uniform $q$ stays uniform
+
+Expanding the three-factor rule and grouping,
+
+$$
+\Delta F_q=\sigma_c^2\big(\rho'u_n'q+\rho'q'u_n+u_n'q'\rho\big)-\delta\,\partial_1(\rho u_nq)
+= q\,\Delta F_\rho \;+\; \sigma_c^2\,(\rho u_n)'\,q' \;-\;\delta\,\rho u_n\,q' ,
+\tag{2.1}
+$$
+
+using $\Delta F_\rho=\sigma_c^2\rho'u_n'-\delta\partial_1(\rho u_n)$ from the
+mass row. Setting $q'=0$ leaves exactly $q\,\Delta F_\rho$, so a **uniform
+tracer stays exactly uniform**: the corrected tracer flux is the corrected mass
+flux times $q$. That is the property Xi required.
+
+Note, though, that "corrected mass flux $\times\,q$ plus the Cartesian
+$\sigma^2(\rho u_n)'q'$" is **not** the whole curved answer — it omits the third
+term $-\delta\,\rho u_n q'$ of (2.1). That term vanishes for uniform $q$, which
+is why the shorthand passes the uniformity test, but it is $O(h^2)$ and of the
+same order as the rest whenever the tracer has a vertical gradient — i.e. in
+every moist deck with a background vapour profile. **It must be kept.** Each
+tracer row is corrected independently with its own $q$, so vapour and condensate
+rows need no cross terms.
+
+### 4A.2.2 Quadrature verification
+
+`allrows_quadrature.py`, 90-point Gauss–Legendre, generic non-constant
+$\rho,p,u_n,u_t,q_v,q_c$, comparing the exact area average (weight $r$) against
+the product of volume averages (weight $r^2$). Relative residual of
+(covariance only) and (covariance + centroid), and the convergence ratio of the
+latter:
+
+| row | $\bar r$ | rel, cov only | rel, cov+centroid ($h=0.1\to0.0125$) | ratio |
+|---|---|---|---|---|
+| mass | 1.4 | 3.49e-02 (plateaus) | 1.05e-02 → 1.64e-04 | 4.00 |
+| momentum, normal | 1.4 | **1.000** | 3.11e-03 → 4.86e-05 | 4.00 |
+| momentum, tangential | 1.4 | 8.36e-02 | 1.09e-03 → 1.67e-05 | 4.00 |
+| tracer, vapour | 1.4 | 9.40e-02 | 2.12e-02 → 3.33e-04 | 4.00 |
+| tracer, condensate | 1.4 | 1.84e-01 | 4.08e-03 → 6.37e-05 | 4.00 |
+| mass | 6.0 | 2.79e-02 | 1.53e-03 → 2.39e-05 | 4.00 |
+| momentum, normal | 6.0 | **1.004** | 1.59e-03 → 2.48e-05 | 4.00 |
+| momentum, tangential | 6.0 | 3.74e-02 | 4.54e-04 → 7.14e-06 | 4.00 |
+| tracer, vapour | 6.0 | 3.10e-02 | 1.03e-03 → 1.61e-05 | 4.00 |
+| tracer, condensate | 6.0 | 4.95e-02 | 1.33e-03 → 2.10e-05 | 4.00 |
+
+Every row: exactly $4\times$ per halving with both terms, i.e. $O(h^4)$ absolute,
+so (1.2) is the **complete** $O(h^2)$ correction for each. Covariance-only never
+converges. The normal-momentum entry is the sharpest statement in the table: at
+relative $1.000$ and $1.004$ the covariance term explains **none** of that row's
+error, because the error is the pressure's centroid shift, which has no
+covariance structure.
+
+---
+
+## 4A.3 The decisive gate: exact hydrostatic rest balance
+
+### 4A.3.1 What has to cancel
+
+At rest $u\equiv0$, so every velocity-bearing term in §2 vanishes and the only
+surviving correction anywhere is the pressure's centroid shift in the
+**normal-momentum** row:
+
+$$
+p^\star \;\equiv\; p-\delta\,\partial_1 p ,
+\qquad
+\Delta F\big|_{\rm rest}=-\delta\,\partial_1p \;=\; p^\star-p .
+\tag{3.1}
+$$
+
+The other rows are untouched at rest: mass, tangential momentum, tracer and
+energy all carry $u_n$ or $u_n'$ as a factor, exactly zero in floating point.
+The $x_1$ flux is untouched too — an $x_1$ face's in-face coordinates are $x_2$
+and $x_3$, so it has no $x_1$ centroid shift (§3 of the main file). In
+particular the `face_pressure1` well-balanced path
+(`spherical_polar.cpp:246-255`) is **not** modified, so the $x_1$-momentum rest
+balance is untouched by construction.
+
+That leaves one thing to prove: the **lateral** momentum row. At rest it is a
+cancellation of two terms, both **linear in the same cell pressure $p$**:
+
+$$
+\mathrm{div}[{\rm IVY}]\big|_{\rm rest}
+=\underbrace{\frac{A^{(2)}_{j+1}\Phi_{j+1}-A^{(2)}_j\Phi_j}{V}}_{\text{lateral pressure flux, }\Phi=c\,p}
+\;-\;\underbrace{S_{\rm geom}\,p}_{\text{geometric source}} .
+\tag{3.2}
+$$
+
+**Spherical-polar.** $\Phi=p$ and, from `spherical_polar.cpp:262-266`,
+$S_{\rm geom}=$ `coord_src1_i * coord_src1_j`. With
+$\texttt{radial}=\tfrac12(r_+^2-r_-^2)$,
+$\texttt{radial\_volume}=\tfrac13(r_+^3-r_-^3)$,
+$\texttt{polar\_volume}=|\cos\theta_-\!-\!\cos\theta_+|$ (`:186-187`, `:201-208`),
+$A^{(2)}=\texttt{radial}\,|\sin\theta_f|\,\Delta\phi$ (`:188-190`) and
+$V=\texttt{radial\_volume}\cdot\texttt{polar\_volume}\cdot\Delta\phi$ (`:210`):
+
+$$
+\frac{A^{(2)}_{j+1}-A^{(2)}_j}{V}
+=\frac{\texttt{radial}\,(\sin\theta_+-\sin\theta_-)}{\texttt{radial\_volume}\cdot\texttt{polar\_volume}}
+=\underbrace{\frac{\texttt{radial}}{\texttt{radial\_volume}}}_{\texttt{coord\_src1\_i}}
+\cdot\underbrace{\frac{\sin\theta_+-\sin\theta_-}{\texttt{polar\_volume}}}_{\texttt{coord\_src1\_j}}
+= S_{\rm geom}.
+\tag{3.3}
+$$
+
+An identity. The source exists precisely to cancel the lateral pressure flux.
+
+**Gnomonic cubed sphere.** After `flux2global2_`
+(`gnomonic_equiangle.cpp:341-350`) the rest flux is
+$\Phi=p\,\texttt{sine\_face2\_kj}$ — the $\cos\vartheta$ terms cancel between
+the two covariant lines — so the lateral term is $p\,(f_{j+1}-f_j)/V$ with
+$f=\texttt{face\_area2}\cdot\texttt{sine\_face2\_kj}$. And `:136-138` *defines*
+`x_ov_rD_kji` as exactly $(f_{j+1}-f_j)/\texttt{cell\_volume()}$, which `:445-452`
+then uses as the source. So here (3.3) is not merely true, it is the **same
+floating-point expression** on both sides.
+
+### 4A.3.2 The proof
+
+Both sides of (3.2) are the same geometric coefficient times the same scalar
+$p$, and at rest $p$ is a function of $r$ only, so $\Phi_j$ and $\Phi_{j+1}$
+carry the *same* $p_i$. Replace $p\to p^\star$ in the flux **and in the source**:
+the scalar factors out of both terms identically and
+
+$$
+\mathrm{div}[{\rm IVY}]\big|_{\rm rest}
+= S_{\rm geom}\,p^\star - S_{\rm geom}\,p^\star = 0
+\tag{3.4}
+$$
+
+**exactly, in floating point, for any metric** — the argument never touches the
+value of $S_{\rm geom}$. Replace $p$ in the flux only, and the residual is
+$-\,S_{\rm geom}\,\delta\,\partial_1p$, i.e. a relative error
+$\delta|\partial_1p|/p$.
+
+So the balance **holds**, on one condition:
+
+> **The geometric pressure source must carry the same centroid-shifted pressure
+> $p^\star$ as the lateral face flux.** This is the source weight Xi anticipated:
+> the source inherits the measure mismatch because it is built from the cell
+> pressure, and shifting it in lockstep restores exactness.
+
+The same argument covers the $x_3$ row and the `use_x2_fluxes == false` branch
+(`spherical_polar.cpp:285-288`), whose source term $\rho u_\phi u_\theta$ is
+velocity-bearing and therefore zero at rest.
+
+### 4A.3.3 Numeric check at machine precision
+
+`rest_balance.py` transcribes the discrete operators from the cited lines,
+builds an isothermal hydrostatic column ($R=7\times10^7$ m, depth $4\times10^4$ m,
+$g=11$, $R_d=3700$, $T_0=100$ K), and evaluates (3.2) in three arms.
+
+| grid | geometric coefficient identity (3.3) | base | flux only | flux + source |
+|---|---|---|---|---|
+| spherical-polar | $1.38\times10^{-22}$ abs, coef scale $5.35\times10^{-9}$ → rel $\sim\!2.6\times10^{-14}$ | $1.28\times10^{-17}$ (rel $2.39\times10^{-14}$) | $5.01\times10^{-11}$ (rel $\mathbf{9.359\times10^{-8}}$) | $1.24\times10^{-17}$ (rel $2.32\times10^{-14}$) |
+| gnomonic panel | **exactly 0** (same expression) | $9.76\times10^{-19}$ (rel $8.39\times10^{-16}$) | $1.09\times10^{-10}$ (rel $\mathbf{9.359\times10^{-8}}$) | $9.76\times10^{-19}$ (rel $8.39\times10^{-16}$) |
+
+At the column mid-point $\delta=3.306\times10^{-3}$ m,
+$\partial_rp=-1.641$ Pa m$^{-1}$, so $\delta\,\partial_rp=-5.425\times10^{-3}$ Pa
+against $p=5.518\times10^4$ Pa — a relative shift of $9.832\times10^{-8}$, which
+is exactly the "flux only" break on both grids. Confirmed:
+
+* **base** is balanced at machine precision on both grids;
+* **flux only** breaks it by precisely the relative pressure shift;
+* **flux + source** restores it to machine precision — on the cubed sphere
+  bitwise identical to base.
+
+**VERDICT: the balance proof HOLDS**, with the source-shift condition of §3.2.
+
+---
+
+## 4A.4 Telescoping, row by row
+
+Every correction is added to the **face flux**, before the divergence
+(`coordinate.cpp:492-496`, `:504`), so it telescopes in the $x_2$/$x_3$ sums
+exactly like the flux it corrects. What that buys differs per row:
+
+| row | telescopes? | discrete invariant |
+|---|---|---|
+| mass | yes | total mass **exact** to round-off; the correction cancels pairwise across interior faces, and $u_n=0$ at a wall so it vanishes there |
+| tracer (each, incl. moist) | yes | total tracer mass **exact**; and a uniform $q$ stays uniform exactly, by (2.1) |
+| energy | yes | $E+PE$ **exact** (§3.1 of the main file) |
+| momentum, tangential | yes as a flux, **but** | the row is not a pure divergence — the geometric sources at `spherical_polar.cpp:266-288` are not fluxes — so no momentum component is a telescoping invariant *in main either*. The conserved quantity is angular momentum, a different combination; whether the corrected scheme conserves it discretely is **not** established here (§5, H5) |
+| momentum, normal | same | same, plus the source-shift coupling of §3.2 |
+
+So: **the three scalar-transport invariants stay exact; the momentum rows gain
+no new invariant and lose none.** No limit sentence is needed or offered —
+the corrections are exact to $O(h^4)$ on every row and every grid covered here.
+
+---
+
+## 4A.5 Assumptions and what is *not* established
+
+Carried from the main file: A1 smoothness ($C^4$ across the face), A2 ideal gas
+for naming $\ln(p/\rho)$ as $\ln T$, A3 enthalpy-only energy flux, A4 the
+reconstructed face state read as the face average, A5 the transverse in-face
+covariance dropped as perturbation-quadratic, A6 per-cell $\sigma_c^2$ and
+$\delta$ so non-uniform $x_1$ needs no extra assumption.
+
+Newly relevant, and labelled as such:
+
+* **H5 (open).** Discrete *angular*-momentum conservation under the corrected
+  momentum rows is not proved here. §4 establishes only that nothing is made
+  worse: no momentum invariant exists in main to break.
+* **H6 (open).** §3 proves the **rest** state exactly. A moving balanced state
+  (e.g. geostrophic or cyclostrophic) is not covered; the cancellation of §3.2
+  uses $u\equiv0$ to kill every other term.
+* **H7 (open).** The source shift is derived for the *pressure* in the geometric
+  source. `spherical_polar.cpp:262-265` also puts $\rho u_\phi^2$ into `m_pp`;
+  that part is velocity-bearing so it is irrelevant at rest, but whether it needs
+  its own shift away from rest is not settled here.
+* **A7.** The frame transform `flux2global2_`/`flux2global3_` is linear in the
+  flux vector, so the correction may equivalently be applied to the local-frame
+  flux before it or transformed with the same matrix after it. The implementation
+  must pick one and be consistent; the derivation is stated in the **local**
+  frame.
+* Nothing in this document has been **compiled or executed in snapy**. The
+  evidence is symbolic plus the two quadrature/transcription scripts. No library
+  has ever linked on this branch (62/104 objects, ~80/104, then a CMake configure
+  that did not finish), and the build, `ctest -j1`, the lifted x2cov GREEN and the
+  cell-volume test are owned by Xi's cluster worker.

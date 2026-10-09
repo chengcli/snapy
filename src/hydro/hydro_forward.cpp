@@ -96,10 +96,47 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   auto dhflx =
       (hflx.narrow(-1, 2, n1 - 2) - hflx.narrow(-1, 0, n1 - 2)) / dx1;
 
-  auto dflx = torch::zeros_like(p);
-  dflx.narrow(-1, 1, n1 - 2) =
+  // ---- the scalar-transport rows (#289 all-rows, see the derivation) --------
+  // For a face flux the solver builds as a product of CELL values, the exact
+  // area average is short by
+  //    sigma1^2 * (sum over distinct pairs of first derivatives)
+  //      - delta * d_1(that row's own flux).
+  // The covariance part is row-specific; the centroid part is the SAME rule for
+  // every row. Only the MASS and TRACER rows are corrected here; the momentum
+  // rows are derived in the file but deliberately not implemented, because they
+  // additionally require the geometric pressure source to carry the same
+  // shifted pressure or the discrete hydrostatic rest balance breaks -- see
+  // docs/derivations/289-covariance-x3-curved.md section 4A.3.
+  int ny = wl.size(0) - ICY;  // species rows, dry mass fraction is 1 - sum
+  auto cell = [&](torch::Tensor const& q) { return q.narrow(-1, 1, n1 - 2); };
+  auto d1 = [&](torch::Tensor const& q) {
+    return (q.narrow(-1, 2, n1 - 2) - q.narrow(-1, 0, n1 - 2)) / dx1;
+  };
+  // sigma1^2 (a'b'c + a'c'b + b'c'a) - delta d_1(abc), all at the face
+  auto three = [&](torch::Tensor const& a, torch::Tensor const& b,
+                   torch::Tensor const& c) {
+    auto da = d1(a), db = d1(b), dc = d1(c);
+    return cell(s2) * (da * db * cell(c) + da * dc * cell(b) +
+                       db * dc * cell(a)) -
+           cell(ds) * d1(a * b * c);
+  };
+
+  auto rho = wbar[IDN];
+  // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
+  auto rd = torch::ones_like(rho);
+  for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
+
+  auto dflx = torch::zeros_like(wl);
+  // energy row
+  dflx[IPR].narrow(-1, 1, n1 - 2) =
       enth.narrow(-1, 1, n1 - 2) * s2.narrow(-1, 1, n1 - 2) * dlnt * dun -
       ds.narrow(-1, 1, n1 - 2) * dhflx;
+  // dry-mass row
+  dflx[IDN].narrow(-1, 1, n1 - 2) = three(rho, rd, un);
+  // one tracer row per species, each with its own q: a uniform q then stays
+  // exactly uniform, because the row collapses to q times the mass-row term
+  for (int n = 0; n < ny; ++n)
+    dflx[ICY + n].narrow(-1, 1, n1 - 2) = three(rho, wbar[ICY + n], un);
   return dflx;
 }
 
@@ -408,7 +445,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                       ? _flux_covariance(wlr2[ILT], wlr2[IRT], DIM2)
                       : torch::Tensor();
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
-      if (dcov.defined()) _flux2[IPR] += dcov;
+      if (dcov.defined()) _flux2 += dcov;
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -430,7 +467,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                       ? _flux_covariance(wlr3[ILT], wlr3[IRT], DIM3)
                       : torch::Tensor();
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
-      if (dcov.defined()) _flux3[IPR] += dcov;
+      if (dcov.defined()) _flux3 += dcov;
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
