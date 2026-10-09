@@ -2,6 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -308,7 +309,11 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     auto lhs = (cell * pcoord->cell_volume()).slice(-1, is, ie);
     auto rhs = Ml - Mu;
     // per cell: a column max would hide a binding in a low-flux layer
-    auto scale = torch::maximum(Ml.abs(), Mu.abs()).clamp_min(1.e-300);
+    // Keep the double floor unchanged; 1e-300 is zero in float32.
+    const double floor = Ml.scalar_type() == torch::kFloat32
+                             ? std::numeric_limits<float>::min()
+                             : 1.e-300;
+    auto scale = torch::maximum(Ml.abs(), Mu.abs()).clamp_min(floor);
     _clamp_residual.copy_(torch::maximum(
         _clamp_residual, ((lhs - rhs).abs() / scale).max().detach()));
   }

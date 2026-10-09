@@ -296,3 +296,61 @@ TEST(lu_failure, cuda_finite_near_singular_forward_masked) {
   if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
   retry_case(9, false, false, torch::kCUDA, true);
 }
+
+namespace {
+void rest_column_clamp(torch::Dtype dtype) {
+  using namespace snap;
+  auto opts = MeshBlockOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
+  opts->coord()->nx1(8);
+  opts->coord()->nx2(2);
+  opts->coord()->nx3(1);
+  opts->coord()->nghost(3);
+  opts->coord()->global_nx1(8);
+  opts->coord()->global_nx2(2);
+  opts->coord()->global_nx3(1);
+  opts->coord()->x2max(1.);
+  opts->coord()->x3max(1.);
+  opts->layout()->px(1);
+  opts->layout()->py(1);
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(0.);
+  gravity->gravity_work("face");
+  gravity->gravity_work_fixer(false);
+  opts->hydro()->grav() = gravity;
+  auto implicit = ImplicitOptionsImpl::create();
+  implicit->scheme(9);
+  opts->hydro()->icorr() = implicit;
+  auto block = MeshBlock(opts);
+  block->to(dtype);
+  auto coord = block->pcoord;
+  auto w = torch::zeros(
+      {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      dtype);
+  w[IDN].fill_(1.);
+  w[IPR].fill_(1.);
+  Variables vars{{"hydro_w", w}};
+  block->initialize(vars);
+  auto prim = vars.at("hydro_w").clone();
+  auto before = prim.clone();
+  auto du = torch::zeros_like(prim);
+  auto gamma = torch::full_like(prim[IDN], 1.4);
+  for (int step = 0; step < 2; ++step) {
+    auto correction = block->phydro->picorr->forward_masked(du, prim, gamma, 1.,
+                                                            torch::Tensor());
+    ASSERT_FALSE(block->phydro->picorr->solve_failed());
+    EXPECT_TRUE(torch::equal(du, torch::zeros_like(du)));
+    EXPECT_TRUE(torch::equal(correction, torch::zeros_like(correction)));
+    EXPECT_TRUE(torch::equal(prim, before));
+    auto residual = block->phydro->picorr->clamp_residual();
+    EXPECT_TRUE(torch::isfinite(residual).all().item<bool>());
+    EXPECT_EQ(residual.item<double>(), 0.);
+  }
+}
+}  // namespace
+
+TEST(lu_failure, float_rest_column_finite_vicclamp) {
+  rest_column_clamp(torch::kFloat32);
+}
+TEST(lu_failure, double_rest_column_finite_vicclamp) {
+  rest_column_clamp(torch::kFloat64);
+}
