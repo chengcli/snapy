@@ -46,6 +46,7 @@ class GnomonicEquiangleImpl
   torch::Tensor face_area3() const override;
 
   torch::Tensor cell_volume() const override;
+  torch::Tensor face_moment2_x1() const override;
 
   void interp_ghost(torch::Tensor var,
                     std::tuple<int, int, int> const& offset) const override;

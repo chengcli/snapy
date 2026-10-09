@@ -209,6 +209,14 @@ torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
          dx1f.unsqueeze(0).unsqueeze(1);
 }
 
+torch::Tensor GnomonicEquiangleImpl::face_moment2_x1() const {
+  // face_area2 = (x1v * dx1f) * (angular arc) = 0.5 (rp^2 - rm^2) * arc, and
+  // face_area3 likewise: both are the r-weighted radial measure times an
+  // angular factor that does not vary along x1 on one face. The angular factor
+  // carries the non-orthogonal metric and sqrt(g) and cancels in the average.
+  return radial_face_moment2_(x1f, options->nc1());
+}
+
 void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   auto [dy, dx, dz] = offset;

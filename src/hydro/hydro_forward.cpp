@@ -12,6 +12,73 @@
 
 namespace snap {
 
+torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
+                                          torch::Tensor const& wr,
+                                          int dim) const {
+  // #289: the finite-volume flux through an x2/x3 face is the FACE AVERAGE of
+  // the point flux, but the solver evaluates the flux FROM face-averaged
+  // states. Expanding p, m and rho about the face's area centroid, the u rho_1
+  // and u p_1 cross terms cancel and the enthalpy flux is left short by
+  //
+  //   dF = gamma/(gamma-1) sigma1^2 p [ln(p/rho)]_1 (u_n)_1 ,
+  //
+  // where sigma1^2 is the x1 second central moment of the face's own area
+  // measure (dx1^2/12 in cartesian, face_moment2_x1() in general) and u_n is
+  // the face-normal velocity. gamma/(gamma-1) p is the enthalpy density, so
+  // (I + p) from the EOS is used instead of a gamma: it is the same number for
+  // an ideal gas and does not assume one.
+  //
+  // The covariance along the OTHER in-face coordinate is dropped: only x1
+  // carries an O(1) background gradient, so the horizontal one is quadratic in
+  // the perturbation.
+  //
+  // dF is zero at rest and zero for an isothermal state, by construction: both
+  // differences below vanish identically there, so a balanced state keeps its
+  // exact zero tendency. It is added to the FACE FLUX, so it telescopes in the
+  // x2/x3 sums exactly like the flux it corrects.
+  auto pcoord = pmb->pcoord;
+  int n1 = wl.size(-1);
+  // a centred x1 difference needs both neighbours; nghost >= 1 gives them to
+  // every interior cell of a resolved x1 axis, and an unresolved one has no
+  // vertical gradient to correct for
+  if (n1 < 3) return torch::Tensor();
+  // shallow water carries no internal energy row to correct
+  if (peos->options->type() == "shallow-water") return torch::Tensor();
+
+  auto wbar = 0.5 * (wl + wr);
+  auto p = wbar[IPR];
+  // ln(p/rho) = ln(R T); the derivation gives p/rho, which is T up to the
+  // composition's gas constant
+  auto lnt = (p / wbar[IDN]).log();
+  auto enth = peos->compute("W->I", {wbar}) + p;
+
+  // the face-normal velocity in the face-local orthonormal frame -- the
+  // component the energy flux actually carries. Projected on our own copy:
+  // whether the Riemann solver projects its inputs in place is the solver's
+  // business (roe does not), so do not read that side effect.
+  if (dim == 2) {
+    pcoord->prim2local2_(wbar);
+  } else {
+    pcoord->prim2local3_(wbar);
+  }
+  auto un = wbar[dim == 2 ? IVY : IVZ];
+
+  auto x1v = pcoord->x1v.to(p.device(), p.scalar_type());
+  auto s2 = pcoord->face_moment2_x1()
+                .to(p.device(), p.scalar_type())
+                .unsqueeze(0)
+                .unsqueeze(1);
+  auto dx1 = (x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2));
+  auto dlnt =
+      (lnt.narrow(-1, 2, n1 - 2) - lnt.narrow(-1, 0, n1 - 2)) / dx1;
+  auto dun = (un.narrow(-1, 2, n1 - 2) - un.narrow(-1, 0, n1 - 2)) / dx1;
+
+  auto dflx = torch::zeros_like(p);
+  dflx.narrow(-1, 1, n1 - 2) = enth.narrow(-1, 1, n1 - 2) *
+                               s2.narrow(-1, 1, n1 - 2) * dlnt * dun;
+  return dflx;
+}
+
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
@@ -311,7 +378,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wlr2 =
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
     if (!options->disable_flux_x2()) {
+      // #289: built from the face states BEFORE the solver may project them
+      // into the face-local frame, added to the flux after
+      auto dcov = flux_covariance()
+                      ? _flux_covariance(wlr2[ILT], wlr2[IRT], DIM2)
+                      : torch::Tensor();
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
+      if (dcov.defined()) _flux2[IPR] += dcov;
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -326,7 +399,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto wlr3 =
         has_solid ? pmb->pib->forward(wtmp3, DIM3, other.at("solid")) : wtmp3;
     if (!options->disable_flux_x3()) {
+      // #289: the same term on the x3 faces -- the covariance is taken along
+      // x1 there too, because x1 is the stratified direction whichever
+      // horizontal face it crosses
+      auto dcov = flux_covariance()
+                      ? _flux_covariance(wlr3[ILT], wlr3[IRT], DIM3)
+                      : torch::Tensor();
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
+      if (dcov.defined()) _flux3[IPR] += dcov;
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;

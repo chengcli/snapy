@@ -2,6 +2,7 @@
 
 // C/C++
 #include <algorithm>
+#include <cctype>
 
 // snap
 #include <snap/snap.h>
@@ -178,6 +179,18 @@ bool HydroImpl::gravity_work_fixer() const {
   auto g = options->grav();
   return g && g->grav1() != 0. && g->gravity_work() == "cell" &&
          g->gravity_work_fixer();
+}
+
+bool HydroImpl::flux_covariance() {
+  // read once: the term is a scheme choice for the whole run, and every block
+  // must make the same one or the shared faces stop being single-valued
+  static const bool on = [] {
+    auto v = get_env("SNAP_FLUX_COVARIANCE", "0");
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
+  }();
+  return on;
 }
 
 bool HydroImpl::face_work_in_operator() const {

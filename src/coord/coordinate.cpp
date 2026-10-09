@@ -439,6 +439,25 @@ torch::Tensor CoordinateImpl::cell_volume() const {
                        {dx3f.unsqueeze(1), dx2f.outer(dx1f).unsqueeze(0)});
 }
 
+torch::Tensor CoordinateImpl::face_moment2_x1() const {
+  return dx1f.square() / 12.;
+}
+
+torch::Tensor CoordinateImpl::radial_face_moment2_(torch::Tensor const& x1f,
+                                                   int nc1) {
+  auto rm = x1f.slice(0, 0, nc1);
+  auto rp = x1f.slice(0, 1, nc1 + 1);
+  auto h = rp - rm;
+  auto rbar = 0.5 * (rm + rp);
+  // rbar <= h/2 is a degenerate face (an x1 ghost that reaches r <= 0): the
+  // r-weighted moment is not defined there, and neither is the rest of the
+  // metric. Drop the correction rather than divide by a vanishing radius.
+  auto frac = torch::where(
+      rbar > 0.5 * h, h.square() / (12. * rbar.square().clamp_min(1.e-300)),
+      torch::zeros_like(h));
+  return h.square() / 12. * (1. - frac);
+}
+
 torch::Tensor CoordinateImpl::find_cell_index(
     torch::Tensor const& coords) const {
   torch::Tensor index = torch::zeros_like(coords, torch::dtype(torch::kInt64));

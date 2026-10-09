@@ -239,6 +239,36 @@ class CoordinateImpl {
 
   virtual torch::Tensor cell_volume() const;
 
+  //! x1 second central moment of an x2/x3 face's own area measure
+  /*!
+   * The finite-volume flux through an x2 (or x3) face is the FACE AVERAGE of
+   * the point flux, and that average is weighted by the face's area measure.
+   * For a product of two fields, the average of the product exceeds the
+   * product of the averages by `sigma1^2 a_1 b_1` (issue #289), with
+   * `sigma1^2` the second central moment of the face measure along x1, taken
+   * about the face's area centroid. A Cartesian x2/x3 face carries a uniform
+   * x1 weight, so `sigma1^2 = dx1^2/12`; curved grids override this.
+   *
+   * \return one value per x1 cell, shaped like `dx1f`
+   */
+  virtual torch::Tensor face_moment2_x1() const;
+
+  //! `face_moment2_x1` for an x2/x3 face whose area density grows like r
+  /*!
+   * On the spherical-polar and cubed-sphere grids an x2 or x3 face spans
+   * `dA = r dr x (angular)`, so its x1 weight is `w(r) = r` -- the
+   * non-orthogonal and `sqrt(g)` factors live in the angular part, are
+   * constant along x1 on one face, and cancel between the numerator and the
+   * denominator of the average. With `h = rp - rm` and `rbar = (rm+rp)/2`,
+   * the r-weighted moments are exact:
+   *   r_c      = (3 rbar^2 + h^2/4) / (3 rbar)
+   *   sigma1^2 = <r^2> - r_c^2 = (h^2/12) (1 - h^2/(12 rbar^2)) .
+   * The second, cancellation-free form is what is evaluated here, so the
+   * metric only shifts the Cartesian `h^2/12` by a relative `h^2/(12 rbar^2)`
+   * and recovers it exactly as `h/rbar -> 0`.
+   */
+  static torch::Tensor radial_face_moment2_(torch::Tensor const& x1f, int nc1);
+
   virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
   virtual std::array<double, 3> vec_from_cartesian(
