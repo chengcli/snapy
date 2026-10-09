@@ -22,7 +22,8 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     bool solid_lower = false, bool solid_upper = false) {
   bool face_work = dir & kVicFaceWork;
   bool diffusive_cell = dir & kVicDiffusiveCell;
-  dir &= ~(kVicFaceWork | kVicDiffusiveCell);
+  bool cartesian_face = dir & kVicCartesianFaceWork;
+  dir &= ~(kVicFaceWork | kVicDiffusiveCell | kVicCartesianFaceWork);
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
   Eigen::Matrix<T, 5, 1> Lambda;
@@ -97,7 +98,15 @@ void DISPATCH_MACRO vic_assemble_full_impl(
   b[i] = -(Am + dfdq_prev) * area_i * half_inv_vol;
   c[i] = -(Ap - dfdq_next) * area_ip1 * half_inv_vol;
 
-  if (face_work || diffusive_cell) {
+  if (face_work && cartesian_face) {
+    Eigen::Matrix<T, 1, 5> em;
+    em.setZero();
+    em(IVX + dir) = 1.;
+    a[i](IPR, IVX + dir) += grav;
+    a[i].row(IPR) -= 0.5 * grav * (em + 0.5 * (Ap.row(IDN) - Am.row(IDN)));
+    b[i].row(IPR) -= 0.5 * grav * (0.5 * em + 0.5 * Am.row(IDN));
+    c[i].row(IPR) -= 0.5 * grav * (0.5 * em - 0.5 * Ap.row(IDN));
+  } else if (face_work || diffusive_cell) {
     // The same face-to-centre potential weights as the mass update.
     T lower = work_lo[i * stride2], upper = work_hi[i * stride2];
     a[i].row(IPR) -= grav * (upper * Ap.row(IDN) - lower * Am.row(IDN));

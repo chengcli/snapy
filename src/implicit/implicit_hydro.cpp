@@ -232,6 +232,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   // gravity-work: face books the metric-weighted work in the energy row
   bool face_work = phydro->face_work_in_operator();
   int adir = face_work ? kVicFaceWork : 0;
+  if (face_work && pcoord->options->type() == "cartesian")
+    adir |= kVicCartesianFaceWork;
   bool diffusive_work =
       grav1 != 0. && phydro->options->grav()->gravity_work() == "cell";
   if (diffusive_work) adir |= kVicDiffusiveCell;
