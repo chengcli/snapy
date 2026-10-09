@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The x1 covariance of the x2 face energy flux (study switch SNAPY_X2COV).
+"""The x1 covariance of the x2 face energy flux (study switch SNAP_FLUX_COVARIANCE).
 
 The x2/x3 face energy flux is formed from x1-averaged face states. On an isentropic
 background (T0 = 1 - z/Cp, R = g = 1, gamma = 1.4) a convective roll
@@ -12,7 +12,7 @@ The physical value is 0 here. Face gravity work keeps the cell form's own O(dz^2
 (-0.05 / nz^2 at nz 16 with the term on) out of the number. Checked (Cartesian, nz = 16, 32):
   1. term off: eps_eff nz^2 in [-0.32, -0.20] (the defect is there);
   2. term on:  |eps_eff nz^2| < 0.03;
-  3. switch unset and SNAPY_X2COV=0 give the same step bit for bit, and on differs from off;
+  3. switch unset and SNAP_FLUX_COVARIANCE=0 give the same step bit for bit, and on differs from off;
   4. E+PE = sum (E + rho g z) dV of the seeded box, term on, closes over NSTEP steps.
 The switch is read once per process, so each arm runs in a child process (ARMS); with a
 YAML key in its place, the arms can run in one process.
@@ -176,9 +176,9 @@ def main():
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp:
         for arm, value in ARMS.items():
             env = dict(os.environ)
-            env.pop("SNAPY_X2COV", None)
+            env.pop("SNAP_FLUX_COVARIANCE", None)
             if value is not None:
-                env["SNAPY_X2COV"] = value
+                env["SNAP_FLUX_COVARIANCE"] = value
             out = os.path.join(tmp, arm)
             os.makedirs(out)
             subprocess.run([sys.executable, os.path.abspath(__file__), "--device", a.device,
