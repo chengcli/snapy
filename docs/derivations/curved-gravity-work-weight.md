@@ -3,7 +3,7 @@
 Scope: the x1 face-form gravity work (`gravity-work: face`) on a spherical-polar grid, explicit path
 (`src/hydro/hydro_forward.cpp`, the `face_gravity_work` block) and implicit path (`src/implicit/implicit_hydro.cpp`,
 `work_lo`/`work_hi`, which carry the same weights times 1/2 for the face average of the two cell momenta).
-Base: 8cea3ae. Every closed form below is checked by `curved_gravity_work_weight.py` (sympy + numpy;
+Base: 8cea3ae (the pre-rebase head of #293, merged to main as aea71ed). Every closed form below is checked by `curved_gravity_work_weight.py` (sympy + numpy;
 `python docs/derivations/curved_gravity_work_weight.py` prints every number quoted; "replica" below).
 
 **Result.** The exact $r^2$-measure weights remove both $O(h^2/\bar r)$ error terms, but they do **not** conserve

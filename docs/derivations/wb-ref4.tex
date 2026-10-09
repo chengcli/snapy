@@ -229,7 +229,7 @@ linear order and every measured $\delta s$ is scheme error, at every depth.
 \section*{9. Results}
 
 Code at the commit that adds this file (src unchanged since 1454878), CPU Release build. "off" = switch
-unset, bitwise equal to 8cea3ae; "on" = \texttt{SNAP\_WB\_REF4=1}. $N^2_{\rm eff}n_z^2$ at $n_z$ = 64 / 128 / 256 and the
+unset, bitwise equal to 8cea3ae (the pre-rebase head of \#293, merged to main as aea71ed); "on" = \texttt{SNAP\_WB\_REF4=1}. $N^2_{\rm eff}n_z^2$ at $n_z$ = 64 / 128 / 256 and the
 observed order $p$ of $\lvert N^2_{\rm eff}\rvert$:
 
 \begin{longtable}{llllll}
@@ -246,7 +246,7 @@ depth & off (RED) & $p$ off & on (GREEN) & $p$ on & spec, on \\
 Off, $N^2_{\rm eff}n_z^2$ tends to a constant (order 2); on, it falls like $\Delta z$ (order of $N^2_{\rm eff}$
 about 3). The base column agrees with the spec's base column to the printed digits at 1 e-fold (+0.109 / +0.087 /
 +0.076), within 2\% at 2 and 3 e-folds, and within 7\% at 5 e-folds ($n_z$ 64: +1.560 against +1.458); the
-differences are not diagnosed (the spec's base is main 117e449, this one 8cea3ae).
+differences are not diagnosed (the spec's base is main 117e449, this one 8cea3ae, \#293 before its rebase to main aea71ed).
 
 Split into the 3 cells at each wall ("band") and the rest ("interior"), same denominator, on:
 
