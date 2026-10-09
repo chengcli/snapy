@@ -7,14 +7,18 @@ species:
     composition: {O: 0.4200039819342909, N: 1.560014790041652, Ar: 0.01}
     cv_R: 2.5
 
+  # Bryan & Fritsch (2002, MWR 130) appendix, p. 2928: c_pv = 1885, c_pl = 4186
+  # J/kg/K, with R_v = R/0.018015 = 461.53 here. c_pl - c_pv stays 2301 (was
+  # 2301.19), so L(T) with u0_R is unchanged to 0.002 %; c_vv = c_pv - R_v is
+  # 1423.5, not the paper's 1424 (0.04 %), because the paper uses R_v = 461.
   - name: H2O
     composition: {H: 2, O: 1}
-    cv_R: 1.534301
+    cv_R: 3.08424
     u0_R: 0.
 
   - name: H2O(l)
     composition: {H: 2, O: 1}
-    cv_R: 7.52031
+    cv_R: 9.06984
     u0_R: -6786.6602
 
 geometry:
