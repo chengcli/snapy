@@ -52,13 +52,13 @@ namespace {
 
 constexpr double kR0 = 5.0, kLz = 2.0, kGamma = 1.4, kSeed = 0.05;
 
-std::string column_yaml(int nx1, double nh, char const* gw) {
+std::string column_yaml(int nx1, double nh, char const* gw, int ng = 3) {
   char buf[2048];
   std::snprintf(buf, sizeof(buf), R"(
 geometry:
   type: spherical-polar
   bounds: {x1min: %g, x1max: %g, x2min: 1.5207963267948966, x2max: 1.6207963267948966, x3min: 0., x3max: 0.1}
-  cells: {nx1: %d, nx2: 1, nx3: 1, nghost: 3}
+  cells: {nx1: %d, nx2: 1, nx3: 1, nghost: %d}
 dynamics:
   equation-of-state:
     type: ideal-gas
@@ -88,17 +88,17 @@ boundary-condition:
     x3-inner: periodic
     x3-outer: periodic
 )",
-                kR0, kR0 + kLz, nx1, nh, gw);
+                kR0, kR0 + kLz, nx1, ng, nh, gw);
   return buf;
 }
 
-Mesh make_column(int nb1, int nx1, double nh, char const* gw) {
+Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3) {
   char fname[] = "/tmp/x1-seam-split-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
   std::ofstream out(fname);
-  out << column_yaml(nx1, nh, gw);
+  out << column_yaml(nx1, nh, gw, ng);
   out.close();
   auto block_opts = MeshBlockOptionsImpl::from_yaml(fname);
   std::remove(fname);
@@ -262,5 +262,14 @@ TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block) {
         "%.3e\n",
         nh, gap);
     EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
+  }
+  // the flag reads scan pressures three cells away: fewer ghosts is an error
+  try {
+    make_column(2, 16, 1., "cell", 2);
+    ADD_FAILURE() << "nghost 2 accepted";
+  } catch (c10::Error const& e) {
+    EXPECT_NE(std::string(e.what()).find("needs nghost >= 3"),
+              std::string::npos)
+        << e.what();
   }
 }
