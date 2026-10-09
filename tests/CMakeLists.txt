@@ -32,6 +32,7 @@ setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
 setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
+setup_test(test_x1_seam_split)
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
 # #289: these two pin values of the kernel's x1 reference; run them again with
