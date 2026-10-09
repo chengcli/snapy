@@ -156,8 +156,9 @@ void vic_solve_cpu(at::TensorIterator& iter, double dt, double grav, int dir) {
             auto c = reinterpret_cast<Matrix*>(data[8] + col * strides[8]);
             auto delta = reinterpret_cast<Vector*>(data[9] + col * strides[9]);
 
-            ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
-                         stride1, stride2, first_block, last_block);
+            if (!ForwardSweep(a, b, c, delta, du, dt, 0, nlayer - 1, dir, ny,
+                              stride1, stride2, first_block, last_block))
+              continue;
             vic_backward_substitute(a, delta, 0, nlayer - 1);
           }
         },

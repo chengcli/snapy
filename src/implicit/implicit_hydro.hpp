@@ -92,8 +92,13 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor dry_clamp_step() const { return _dry_clamp_step; }
   void reset_dry_clamp_step() { _dry_clamp_step.zero_(); }
 
+  //! Latched until the next step, including later RK stages.
+  bool solve_failed() const { return _solve_failed; }
+  void reset_solve_failure() { _solve_failed = false; }
+
  private:
   void ensure_workspace(torch::Tensor const& w);
+  bool _solve_failed = false;
 
   torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual,
       _dry_clamp_step;

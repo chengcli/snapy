@@ -27,6 +27,9 @@ template <typename T, int N>
 void DISPATCH_MACRO vic_backward_substitute(Eigen::Matrix<T, N, N>* a,
                                             Eigen::Matrix<T, N, 1>* delta,
                                             int il, int iu) {
+  // CUDA uses the shared failed-column sentinel instead of a second status
+  // buffer. Do not back-substitute a rejected forward sweep on either device.
+  if (!delta[il].allFinite()) return;
   for (int i = iu - 1; i >= il; --i) delta[i] -= a[i] * delta[i + 1];
 }
 

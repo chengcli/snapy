@@ -1,16 +1,17 @@
 #include <gtest/gtest.h>
+#include <snap/implicit/forward_sweep_impl.h>
+#include <snap/implicit/tridiag_thomas_impl.h>
 #include <torch/torch.h>
 #include <yaml-cpp/yaml.h>
 
-#include <fstream>
-
 #include <cmath>
+#include <fstream>
 #include <limits>
+#include <snap/mesh/mesh.hpp>
+#include <snap/mesh/meshblock.hpp>
 #include <type_traits>
 
-#include <snap/implicit/forward_sweep_impl.h>
-#include <snap/implicit/tridiag_thomas_impl.h>
-#include <snap/mesh/meshblock.hpp>
+#include "cuda_test_gate.hpp"
 
 namespace {
 
@@ -69,8 +70,8 @@ bool completed(F&& f) {
 
 template <typename T, int N, bool Legacy>
 void sweep_cases() {
-  using Mat = Eigen::Matrix<T, N, N,
-                            Legacy ? Eigen::RowMajor : Eigen::ColMajor>;
+  using Mat =
+      Eigen::Matrix<T, N, N, Legacy ? Eigen::RowMajor : Eigen::ColMajor>;
   using Vec = Eigen::Matrix<T, N, 1>;
   for (int badcell = 0; badcell < 2; ++badcell) {
     for (int kind = 0; kind < 5; ++kind) {
@@ -90,20 +91,19 @@ void sweep_cases() {
         if (kind == 2)
           a[badcell](1, 1) = T(4) * std::numeric_limits<T>::epsilon();
       }
-      if (kind == 3)
-        a[badcell](0, 0) = std::numeric_limits<T>::infinity();
+      if (kind == 3) a[badcell](0, 0) = std::numeric_limits<T>::infinity();
       if (kind == 4)
         du[snap::IPR * 2 + badcell] = std::numeric_limits<T>::infinity();
       bool ok = completed([&]() {
         if constexpr (Legacy)
-          return snap::forward_sweep_impl(a, b, c, delta, corr, du, 1., 0,
-                                           2, 0, 1);
+          return snap::forward_sweep_impl(a, b, c, delta, corr, du, 1., 0, 2, 0,
+                                          1);
         else
-          return snap::ForwardSweep(a, b, c, delta, du, 1., 0, 1, 0, 0, 2,
-                                      1, true, true);
+          return snap::ForwardSweep(a, b, c, delta, du, 1., 0, 1, 0, 0, 2, 1,
+                                    true, true);
       });
       EXPECT_EQ(ok, kind == 0) << "N=" << N << " legacy=" << Legacy
-                              << " cell=" << badcell << " kind=" << kind;
+                               << " cell=" << badcell << " kind=" << kind;
       if (ok) {
         EXPECT_TRUE(delta[0].allFinite());
         EXPECT_TRUE(delta[1].allFinite());
@@ -112,7 +112,8 @@ void sweep_cases() {
   }
 }
 
-void retry_case(int scheme, bool stop) {
+void retry_case(int scheme, bool stop, bool assembly_failure = false,
+                torch::Device device = torch::kCPU) {
   using namespace snap;
   auto node = YAML::Load(R"(
 geometry:
@@ -143,9 +144,11 @@ boundary-condition:
   auto opts = MeshBlockOptionsImpl::from_yaml(path);
   std::remove(path.c_str());
   auto block = MeshBlock(opts);
+  block->to(device);
   auto coord = block->pcoord;
-  auto w = torch::zeros({5, coord->options->nc3(), coord->options->nc2(),
-                          coord->options->nc1()}, torch::kFloat64);
+  auto w = torch::zeros(
+      {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      torch::TensorOptions().dtype(torch::kFloat64).device(device));
   w[IDN].fill_(1);
   w[IPR].fill_(1.e5);
   Variables vars{{"hydro_w", w}};
@@ -157,15 +160,15 @@ boundary-condition:
   vars.at("hydro_u")[IPR].mul_(1.01);
   auto du = torch::ones_like(w);
   auto before = du.clone();
-  auto gamma = torch::full_like(w[IDN],
-                                 std::numeric_limits<double>::quiet_NaN());
+  auto gamma = torch::full_like(
+      w[IDN],
+      assembly_failure ? 1.4 : std::numeric_limits<double>::quiet_NaN());
   auto prim = vars.at("hydro_w").clone();
   auto prim0 = prim.clone();
-  block->phydro->picorr->forward(du, prim, gamma, 1.);
+  block->phydro->picorr->forward(du, prim, gamma, assembly_failure ? 0. : 1.);
   EXPECT_TRUE(torch::equal(du, before));
   EXPECT_TRUE(torch::equal(prim, prim0));
-  if (stop)
-    block->pintg->current_redo = block->pintg->options->max_redo();
+  if (stop) block->pintg->current_redo = block->pintg->options->max_redo();
   EXPECT_EQ(block->check_redo(vars), stop ? -1 : 1);
   EXPECT_TRUE(torch::equal(vars.at("hydro_u"), saved));
 }
@@ -188,3 +191,81 @@ TEST(lu_failure, partial_retry_restores_step) { retry_case(1, false); }
 TEST(lu_failure, full_retry_restores_step) { retry_case(9, false); }
 TEST(lu_failure, partial_stop_restores_step) { retry_case(1, true); }
 TEST(lu_failure, full_stop_restores_step) { retry_case(9, true); }
+TEST(lu_failure, partial_assembly_retry_restores_step) {
+  retry_case(1, false, true);
+}
+TEST(lu_failure, full_assembly_retry_restores_step) {
+  retry_case(9, false, true);
+}
+TEST(lu_failure, partial_assembly_stop_restores_step) {
+  retry_case(1, true, true);
+}
+TEST(lu_failure, full_assembly_stop_restores_step) {
+  retry_case(9, true, true);
+}
+
+TEST(lu_failure, cuda_partial_assembly_retry_restores_step) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
+  retry_case(1, false, true, torch::kCUDA);
+}
+TEST(lu_failure, cuda_full_assembly_retry_restores_step) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
+  retry_case(9, false, true, torch::kCUDA);
+}
+TEST(lu_failure, cuda_partial_assembly_stop_restores_step) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
+  retry_case(1, true, true, torch::kCUDA);
+}
+TEST(lu_failure, cuda_full_assembly_stop_restores_step) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
+  retry_case(9, true, true, torch::kCUDA);
+}
+
+TEST(lu_failure, mesh_terminal_failure_restores_all_blocks) {
+  using namespace snap;
+  auto opts = MeshBlockOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
+  opts->coord()->nx1(8);
+  opts->coord()->nghost(3);
+  opts->layout()->px(2);
+  opts->layout()->py(1);
+  auto gravity = ConstGravityOptionsImpl::create();
+  gravity->grav1(-1.);
+  gravity->gravity_work("face");
+  gravity->gravity_work_fixer(false);
+  opts->hydro()->grav() = gravity;
+  auto implicit = ImplicitOptionsImpl::create();
+  implicit->scheme(9);
+  opts->hydro()->icorr() = implicit;
+  auto mo = MeshOptionsImpl::create();
+  mo->block(opts);
+  mo->blocks_per_process(2);
+  auto mesh = Mesh(mo);
+  ASSERT_EQ(mesh->blocks.size(), 2);
+  MeshVariables vars(2);
+  for (int n = 0; n < 2; ++n) {
+    auto coord = mesh->blocks[n]->pcoord;
+    auto w = torch::zeros({5, coord->options->nc3(), coord->options->nc2(),
+                           coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.);
+    w[IPR].fill_(1.e5);
+    vars[n]["hydro_w"] = w;
+  }
+  mesh->initialize(vars);
+  std::vector<torch::Tensor> saved;
+  for (int n = 0; n < 2; ++n) {
+    saved.push_back(vars[n].at("hydro_u").clone());
+    mesh->blocks[n]->named_buffers()["u0"].copy_(saved.back());
+    vars[n].at("hydro_u")[IPR].mul_(1.01);
+    mesh->blocks[n]->pintg->current_redo =
+        mesh->blocks[n]->pintg->options->max_redo();
+  }
+  auto prim = vars[1].at("hydro_w").clone();
+  auto du = torch::ones_like(prim);
+  auto gamma = torch::full_like(prim[IDN], 1.4);
+  mesh->blocks[1]->phydro->picorr->forward(du, prim, gamma, 0.);
+  EXPECT_EQ(mesh->check_redo(vars), -1);
+  for (int n = 0; n < 2; ++n)
+    EXPECT_TRUE(torch::equal(vars[n].at("hydro_u"), saved[n]))
+        << "local block " << n << " was not restored on terminal failure";
+}

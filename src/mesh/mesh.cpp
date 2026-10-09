@@ -429,7 +429,7 @@ int MeshImpl::check_redo(MeshVariables& vars) {
   }
 
   // A hit in any local block rolls back every block on every process.
-  std::array<bool, 5> flags{};
+  std::array<bool, 6> flags{};
   for (size_t i = 0; i < blocks.size(); ++i) {
     auto local = blocks[i]->local_redo_flags(vars[i]);
     for (size_t j = 0; j < flags.size(); ++j) flags[j] = flags[j] || local[j];
@@ -439,8 +439,14 @@ int MeshImpl::check_redo(MeshVariables& vars) {
   int out = 0;
   for (int i = 0; i < blocks.size(); ++i) {
     int err = blocks[i]->apply_redo(vars[i], causes);
-    if (err < 0) return -1;
-    out = std::max(out, err);
+    if (err < 0) {
+      // A globally rejected VIC step must restore every local block even
+      // when the first block has already exhausted its retry budget.
+      if (!(causes & 32)) return -1;
+      out = -1;
+    } else if (out >= 0) {
+      out = std::max(out, err);
+    }
   }
   return out;
 }

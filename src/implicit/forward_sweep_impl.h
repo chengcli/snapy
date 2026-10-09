@@ -11,6 +11,8 @@
 #include <snap/math/luminv.h>
 #include <snap/snap.h>
 
+#include "vic_solve_failure.h"
+
 #define DU(n, i) du[(n) * stride1 + (i) * stride2]
 #define W(n, i) w[(n) * stride1 + (i) * stride2]
 #define VOL(n) vol[(n) * stride2]
@@ -18,7 +20,7 @@
 namespace snap {
 
 template <typename T, int N>
-void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
+bool DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
                                  Eigen::Matrix<T, N, N>* b,
                                  Eigen::Matrix<T, N, N>* c,
                                  Eigen::Matrix<T, N, 1>* delta, T* du,
@@ -56,17 +58,22 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
   if constexpr (N > 4) {
     A = a[il];
     for (int n = 0; n < N; ++n) indx[n] = n;
-    ludcmp(A, indx);
+    if (ludcmp(A, indx) == 0) return vic_fail_column(delta, il, iu);
     solved.template leftCols<N>() = c[il];
     solved.col(N) = rhs;
     lubksb(A, indx, solved);
+    if (!solved.allFinite()) return vic_fail_column(delta, il, iu);
     a[il] = solved.template leftCols<N>();
     delta[il] = solved.col(N);
-  } else {  // small matrix
+  } else {  // retain the nonsingular small-matrix arithmetic
+    A = a[il];
+    if (ludcmp(A, indx) == 0) return vic_fail_column(delta, il, iu);
     a[il] = a[il].inverse().eval();
     delta[il] = a[il] * rhs;
     a[il] = a[il] * c[il];
   }
+  if (!a[il].allFinite() || !delta[il].allFinite())
+    return vic_fail_column(delta, il, iu);
   //}
 
   for (int i = il + 1; i <= iu; ++i) {
@@ -91,21 +98,27 @@ void DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
     if constexpr (N > 4) {
       A = a[i];
       for (int n = 0; n < N; ++n) indx[n] = n;
-      ludcmp(A, indx);
+      if (ludcmp(A, indx) == 0) return vic_fail_column(delta, il, iu);
       solved.template leftCols<N>() = c[i];
       solved.col(N) = rhs - b[i] * delta[i - 1];
       lubksb(A, indx, solved);
+      if (!solved.allFinite()) return vic_fail_column(delta, il, iu);
       a[i] = solved.template leftCols<N>();
       delta[i] = solved.col(N);
-    } else {  // small matrix
+    } else {  // checked bypass path, retaining its original inverse
+      A = a[i];
+      if (ludcmp(A, indx) == 0) return vic_fail_column(delta, il, iu);
       a[i] = a[i].inverse().eval();
       delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
       a[i] = a[i] * c[i];
     }
+    if (!a[i].allFinite() || !delta[i].allFinite())
+      return vic_fail_column(delta, il, iu);
   }
 
   // SaveCoefficients(a, delta, il, iu);
   // if (!last_block) SendBuffer(a[iu], delta[iu], tblock);
+  return true;
 }
 
 }  // namespace snap

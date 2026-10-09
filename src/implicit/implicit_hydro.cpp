@@ -12,6 +12,7 @@
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
+#include <snap/utils/log.hpp>
 
 #include "implicit_dispatch.hpp"
 #include "implicit_hydro.hpp"
@@ -169,6 +170,13 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     return _corr;
   }
 
+  // Once a stage fails, later stages cannot turn the step into a success.
+  if (_solve_failed) {
+    _corr.zero_();
+    _mass_corr.zero_();
+    return _corr;
+  }
+
   TORCH_CHECK(phydro->options->grav(),
               "[ImplicitHydro] forcing does not have const-gravity");
 
@@ -184,6 +192,34 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   ensure_workspace(w);
   _du0.copy_(du);
   _mass_corr.zero_();
+
+  auto w0 = w.clone();  // restore exactly if this solve is rejected
+
+  auto reject = [&](torch::Tensor const& bad_columns) {
+    _solve_failed = true;
+    auto columns = bad_columns.nonzero().cpu();
+    auto index = columns.accessor<int64_t, 2>();
+    for (int64_t n = 0; n < columns.size(0); ++n)
+      std::cerr << "[ImplicitHydro] rank=" << get_rank()
+                << " VIC singular/near-singular or nonfinite solve: column=("
+                << index[n][1] + pcoord->kl() << ","
+                << index[n][2] + pcoord->jl()
+                << ") step=" << phydro->pmb->cycle + 1
+                << " stage=" << phydro->rk_stage
+                << " retry=" << phydro->pmb->pintg->current_redo
+                << "; check_redo will restore step input." << std::endl;
+    du.copy_(_du0);
+    w.copy_(w0);
+    _corr.zero_();
+    _mass_corr.zero_();
+    return _corr;
+  };
+  auto finite_columns = [&](torch::Tensor const& values) {
+    return torch::isfinite(values.index(interior)).all(0).all(-1).unsqueeze(0);
+  };
+  auto bad_inputs = torch::logical_not(finite_columns(du) & finite_columns(w) &
+                                       finite_columns(gamma.unsqueeze(0)));
+  if (bad_inputs.any().item<bool>()) return reject(bad_inputs);
 
   /// (1) Project to local orthonormal frame
   w[IVY] += w[IVZ] * cos_theta;
@@ -241,15 +277,23 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, adir);
     at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
-    at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
+
   } else {
     // Match the full-VIC pipeline: assemble coefficients, run the column
     // solve + reductions, then apply the per-cell redistribution map.
     at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, adir);
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
+  }
+
+  // Both dispatches share the same rejection sentinel. This also catches
+  // nonfinite backward-substitution results, before redistribution sees them.
+  auto bad_columns = torch::logical_not(torch::isfinite(_delta).all(-1));
+  if (bad_columns.any().item<bool>()) return reject(bad_columns);
+  if ((options->scheme() >> 3) & 1)
+    at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
+  else
     at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
                                          0);
-  }
 
   // only the availability clamp breaks sum_ch MASS*VOL == M(i) - M(i+1)
   {
@@ -335,12 +379,15 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     du[IPR].slice(-1, is, ie) += swap;
   }
 
+  auto bad_results =
+      torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
+  if (bad_results.any().item<bool>()) return reject(bad_results);
+
   _corr.copy_(du);
   _corr.sub_(_du0);
 
-  /*if (torch::isnan(du.index(interior)).any().item<bool>()) {
-    TORCH_CHECK(false, "[ImplicitHydro] NaN encountered after implicit solve");
-  }*/
+  auto bad_correction = torch::logical_not(finite_columns(_corr));
+  if (bad_correction.any().item<bool>()) return reject(bad_correction);
 
   return _corr;
 }
