@@ -33,7 +33,9 @@ inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
   T big, dum, sum, temp;
   T vv[N], scale[N];
   const T tolerance = T(8 * N) * std::numeric_limits<T>::epsilon();
-  if (!a.allFinite()) return 0;
+  for (int row = 0; row < N; ++row)
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a(row, col))) return 0;
 
   d = 1;
   for (i = 0; i < N; i++) {
@@ -85,5 +87,8 @@ inline DISPATCH_MACRO int ludcmp(Eigen::Matrix<T, N, N, Eigen::RowMajor> &a,
     }
   }
 
-  return a.allFinite() ? d : 0;
+  for (int row = 0; row < N; ++row)
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a(row, col))) return 0;
+  return d;
 }

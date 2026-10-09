@@ -1,5 +1,8 @@
 #pragma once
 
+// C/C++
+#include <cmath>
+
 // eigen
 #include <Eigen/Dense>
 
@@ -62,7 +65,10 @@ bool DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
     solved.template leftCols<N>() = c[il];
     solved.col(N) = rhs;
     lubksb(A, indx, solved);
-    if (!solved.allFinite()) return vic_fail_column(delta, il, iu);
+    for (int row = 0; row < N; ++row)
+      for (int col = 0; col < N + 1; ++col)
+        if (!std::isfinite(solved(row, col)))
+          return vic_fail_column(delta, il, iu);
     a[il] = solved.template leftCols<N>();
     delta[il] = solved.col(N);
   } else {  // retain the nonsingular small-matrix arithmetic
@@ -72,8 +78,12 @@ bool DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
     delta[il] = a[il] * rhs;
     a[il] = a[il] * c[il];
   }
-  if (!a[il].allFinite() || !delta[il].allFinite())
-    return vic_fail_column(delta, il, iu);
+  for (int row = 0; row < N; ++row) {
+    if (!std::isfinite(delta[il](row))) return vic_fail_column(delta, il, iu);
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a[il](row, col)))
+        return vic_fail_column(delta, il, iu);
+  }
   //}
 
   for (int i = il + 1; i <= iu; ++i) {
@@ -102,7 +112,10 @@ bool DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
       solved.template leftCols<N>() = c[i];
       solved.col(N) = rhs - b[i] * delta[i - 1];
       lubksb(A, indx, solved);
-      if (!solved.allFinite()) return vic_fail_column(delta, il, iu);
+      for (int row = 0; row < N; ++row)
+        for (int col = 0; col < N + 1; ++col)
+          if (!std::isfinite(solved(row, col)))
+            return vic_fail_column(delta, il, iu);
       a[i] = solved.template leftCols<N>();
       delta[i] = solved.col(N);
     } else {  // checked bypass path, retaining its original inverse
@@ -112,8 +125,12 @@ bool DISPATCH_MACRO ForwardSweep(Eigen::Matrix<T, N, N>* a,
       delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
       a[i] = a[i] * c[i];
     }
-    if (!a[i].allFinite() || !delta[i].allFinite())
-      return vic_fail_column(delta, il, iu);
+    for (int row = 0; row < N; ++row) {
+      if (!std::isfinite(delta[i](row))) return vic_fail_column(delta, il, iu);
+      for (int col = 0; col < N; ++col)
+        if (!std::isfinite(a[i](row, col)))
+          return vic_fail_column(delta, il, iu);
+    }
   }
 
   // SaveCoefficients(a, delta, il, iu);
