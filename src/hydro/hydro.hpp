@@ -22,6 +22,7 @@
 namespace snap {
 
 class MeshBlockImpl;
+struct WbRef4Stencils;
 
 struct HydroOptionsImpl {
   static std::shared_ptr<HydroOptionsImpl> create() {
@@ -158,6 +159,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! add the O(dx1^2) covariance term to the x2/x3 energy flux (#289)?
   //! read once from SNAP_FLUX_COVARIANCE; off unless it is set
   static bool flux_covariance();
+  //! fourth-order, cell/face-consistent x1 reference density (and on
+  //! non-uniform x1 the reference cell pressure) for the well-balanced
+  //! reconstruction (#289); read once from SNAP_WB_REF4, off unless it is set
+  static bool wb_ref4();
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }
@@ -222,6 +227,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! x1 grid uniformity (-1 unknown, 0 non-uniform, 1 uniform), probed once;
   //! selects the six-face vs log-mean cell-pressure reference
   mutable int x1_uniform_ = -1;
+  //! SNAP_WB_REF4 stencils for this block's x1 grid, built on first use
+  mutable std::shared_ptr<WbRef4Stencils> wb_ref4_;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;

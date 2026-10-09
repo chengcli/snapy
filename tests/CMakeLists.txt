@@ -34,6 +34,13 @@ setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
+# #289: these two pin values of the kernel's x1 reference; run them again with
+# SNAP_WB_REF4 set, where each checks the switched reference instead
+foreach(_t test_balance_column test_face_floor)
+  add_test(NAME ${_t}_wb_ref4.${buildl} COMMAND ${_t}.${buildl})
+  set_tests_properties(${_t}_wb_ref4.${buildl} PROPERTIES ENVIRONMENT
+                                                          "SNAP_WB_REF4=1")
+endforeach()
 setup_test(test_netcdf_utils)
 setup_test(test_user_output)
 setup_test(test_process_group)

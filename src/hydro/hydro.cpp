@@ -12,6 +12,7 @@
 
 #include "hydro.hpp"
 #include "hydro_dispatch.hpp"
+#include "wb_ref4.hpp"
 
 namespace snap {
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
@@ -192,6 +193,8 @@ bool HydroImpl::flux_covariance() {
   }();
   return on;
 }
+
+bool HydroImpl::wb_ref4() { return wb_ref4_enabled(); }
 
 bool HydroImpl::face_work_in_operator() const {
   auto g = options->grav();
@@ -446,6 +449,22 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
       w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
       g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
 
+  // #289 (SNAP_WB_REF4): the cell part of the fourth-order density reference
+  // (and on non-uniform x1 the cell pressure), before the seam exchange below
+  // so that the exchanged ghost rows carry it; the face part follows the
+  // exchange. psf is never changed, so the rest balance is the kernel's.
+  torch::Tensor wb4_flag;
+  if (wb_ref4()) {
+    if (!wb_ref4_ || wb_ref4_->fwt.device() != w.device() ||
+        wb_ref4_->fwt.scalar_type() != w.scalar_type()) {
+      bool clamp = options->wb_wall_clamp();
+      wb_ref4_ = std::make_shared<WbRef4Stencils>(
+          wb_ref4_stencils(pcoord->x1f, is, iu, x1_uniform_ == 1,
+                           clamp && phys_in, clamp && phys_out, w.options()));
+    }
+    wb4_flag = wb_ref4_cells(*wb_ref4_, w, psf_lo, psf_hi, pref, dref);
+  }
+
   if (below >= 0) {
     layout->pass_x1_anchor(below, psf_lo.narrow(-1, is, 1), kWbRefTag);
   }
@@ -510,6 +529,11 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     }
     for (auto& sw : sends) sw->wait();
   }
+
+  // #289 (SNAP_WB_REF4): the face density is the fourth-order face value of
+  // the (exchanged) cell density reference, so a split column gets the same
+  // faces as one block
+  if (wb4_flag.defined()) wb_ref4_faces(*wb_ref4_, dref, dsf, wb4_flag);
 
   return {psf_lo, pref, dsf, dref};
 }

@@ -13,6 +13,7 @@
 
 #include <snap/hydro/balance_column.hpp>
 #include <snap/hydro/hydro_dispatch.hpp>
+#include <snap/hydro/wb_ref4.hpp>
 
 namespace {
 
@@ -111,9 +112,22 @@ Column padded(Column const& c, int ng) {
 //! iteration can report convergence against something other than what it
 //! returned: a stale residual, a gauge read at the wrong cell, a `uniform`
 //! flag decided differently from the solver's rule.
+//! #289, SNAP_WB_REF4 (ctest test_balance_column_wb_ref4): on a non-uniform
+//! grid the switch replaces the kernel's log-mean cell pressure by the cell
+//! average of the cubic through four face pressures, so the solver's fixed
+//! point moves by O(dz^2) and balance_column finds the switched one. The audit
+//! applies the same switched cell pressure; against the kernel's alone the
+//! balanced stretched column reads 1.6e-3 instead of < 1e-10.
 double residual(Column const& c, bool uniform) {
   int nx1 = c.w.size(-1);
   auto r = reference(c.w, c.dx1f, nx1 - 1, uniform, true, true, true);
+  if (snap::wb_ref4_enabled() && !uniform) {
+    auto x1f =
+        torch::cat({torch::zeros({1}, c.dx1f.options()), c.dx1f.cumsum(0)});
+    auto st = snap::wb_ref4_stencils(x1f, 0, nx1 - 1, uniform, true, true,
+                                     c.w.options());
+    snap::wb_ref4_cells(st, c.w, r.psf_lo, r.psf_hi, r.pref, r.dref);
+  }
   auto pp = c.w[snap::IPR] - r.pref;
   auto gauge = pp.narrow(-1, nx1 - 1, 1);
   return ((pp - gauge).abs() / (c.w[snap::IDN] * kGrav * c.dx1f))

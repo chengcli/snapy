@@ -13,6 +13,7 @@
 #include <snap/snap.h>
 
 #include <snap/forcing/forcing.hpp>
+#include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 using namespace snap;
@@ -67,8 +68,19 @@ void face_floor_uses_adjacent_density(torch::Device device) {
   // The column is not in balance, so a face away from the dip still carries
   // an O(1) mass flux. A run that dropped every flux would not pass.
   EXPECT_NEAR(lower_mass, 4.07888, 1.e-3);
-  EXPECT_LT(std::abs(dipped_mass), 1.e-9);
-  EXPECT_GT(dipped_mom, 0.03042);
+  if (!HydroImpl::wb_ref4()) {
+    EXPECT_LT(std::abs(dipped_mass), 1.e-9);
+    EXPECT_GT(dipped_mom, 0.03042);
+  } else {
+    // #289, SNAP_WB_REF4 (ctest test_face_floor_wb_ref4): the fourth-order
+    // density reference follows the dip (the kernel's binomial-smoothed one
+    // does not), so rho' stays small, the reconstructed face densities either
+    // side of the dipped cell stay positive and the floor does not fire here.
+    // The face then carries its reconstructed mass flux, not the floor's
+    // ~1e-11: these are the switched values, not a floor check.
+    EXPECT_NEAR(dipped_mass, -1.1874e-7, 1.e-3 * 1.1874e-7);
+    EXPECT_NEAR(dipped_mom, 0.0303467, 1.e-6);
+  }
 }
 
 }  // namespace
