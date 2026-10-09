@@ -165,6 +165,13 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! non-uniform x1 the reference cell pressure) for the well-balanced
   //! reconstruction (#289); read once from SNAP_WB_REF4, off unless it is set
   static bool wb_ref4();
+  //! book the x1 gravity work of the corrected potential energy (derivation
+  //! curved-gravity-work-weight.md sec 7)? read once from
+  //! SNAP_GRAVITY_WORK_RADIAL_EXACT; off unless it is set
+  static bool gravity_work_radial_exact();
+  //! the switch is on and acts here: gravity-work: face on a Cartesian or a
+  //! spherical-polar grid, grav1 != 0
+  bool radial_exact_work() const;
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }

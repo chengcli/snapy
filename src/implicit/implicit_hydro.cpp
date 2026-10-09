@@ -10,6 +10,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/coord_utils.hpp>
+#include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -382,6 +383,21 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
       if (phydro->is_x1_wall(1)) swap.select(-1, ie - is - 1).zero_();
     }
     du[IPR].slice(-1, is, ie) += swap;
+  }
+
+  // SNAP_GRAVITY_WORK_RADIAL_EXACT: the matrix books the face form for the
+  // mass this solve moved; add the corrected potential energy's remainder
+  // (derivation sec 7), so E + P closes over the explicit and implicit parts
+  if (phydro->radial_exact_work()) {
+    int is = pcoord->il(), ie = pcoord->iu() + 1;
+    auto moved = du[IDN] - _du0[IDN];
+    if (du.size(0) > ICY)
+      moved += (du.narrow(0, ICY, du.size(0) - ICY) -
+                _du0.narrow(0, ICY, du.size(0) - ICY))
+                   .sum(0);
+    du[IPR].slice(-1, is, ie) += corrected_pe_work(
+        moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is, ie, grav1,
+        pcoord->options->type() == "spherical-polar");
   }
 
   auto bad_results =

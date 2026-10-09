@@ -9,6 +9,7 @@
 #include <snap/utils/log.hpp>
 
 #include "flux_positivity.hpp"
+#include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 
 namespace snap {
@@ -744,12 +745,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         dt *
         (phi_cell.slice(0, is, ie) * vertical_mass_div - potential_flux_div);
 
+    // SNAP_GRAVITY_WORK_RADIAL_EXACT: add the work of the corrected potential
+    // energy for this stage's x1 density change (derivation sec 7); it
+    // already removes the dx^2/12 m'' part, so the curvature flux below stays
+    // off
+    bool radial_exact = !gw_cell && radial_exact_work();
+    if (radial_exact) {
+      face_gravity_work += corrected_pe_work(
+          -dt * vertical_mass_div, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie,
+          grav1, pmb->pcoord->options->type() == "spherical-polar");
+    }
+
     // cp3/cp5/weno5 faces: the face average exceeds m = rho*v by
     // dx^2/12 (m'' + rho'v'); remove the m'' part as div H,
     // H = dx/12 (m_i - m_{i-1}), zeroed at every physical x1 boundary
     // (walls, outflow and periodic alike); rho'v' is no divergence
     auto type1 = precon1->pinterp1->options->type();
-    if (!gw_cell && (type1 == "cp3" || type1 == "cp5" || type1 == "weno5")) {
+    if (!gw_cell && !radial_exact &&
+        (type1 == "cp3" || type1 == "cp5" || type1 == "weno5")) {
       int n = ie - is;
       auto x1v = pmb->pcoord->x1v;
       auto rhov = w[IDN] * w[IVX];
