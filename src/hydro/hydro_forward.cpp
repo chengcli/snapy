@@ -16,11 +16,16 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
                                           torch::Tensor const& wr,
                                           int dim) const {
   // #289: the finite-volume flux through an x2/x3 face is the FACE AVERAGE of
-  // the point flux, but the solver evaluates the flux FROM face-averaged
-  // states. Expanding p, m and rho about the face's area centroid, the u rho_1
-  // and u p_1 cross terms cancel and the enthalpy flux is left short by
+  // the point flux, but the solver evaluates the flux FROM the cell values.
+  // Expanding about the face's AREA centroid, with r_v the centroid of the
+  // CELL measure and r_c that of the FACE measure, the enthalpy flux is left
+  // short by TWO terms of the same order:
   //
-  //   dF = gamma/(gamma-1) sigma1^2 p [ln(p/rho)]_1 (u_n)_1 ,
+  //   dF = gamma/(gamma-1) [ sigma1^2 p [ln(p/rho)]_1 (u_n)_1
+  //                          - (r_v - r_c) d_1( p u_n ) ] ,
+  //
+  // the first a covariance, the second a centroid offset that vanishes
+  // identically in Cartesian and is of relative size ~L/r on a curved grid.
   //
   // where sigma1^2 is the x1 second central moment of the face's own area
   // measure (dx1^2/12 in cartesian, face_moment2_x1() in general) and u_n is
@@ -32,10 +37,13 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   // carries an O(1) background gradient, so the horizontal one is quadratic in
   // the perturbation.
   //
-  // dF is zero at rest and zero for an isothermal state, by construction: both
-  // differences below vanish identically there, so a balanced state keeps its
-  // exact zero tendency. It is added to the FACE FLUX, so it telescopes in the
-  // x2/x3 sums exactly like the flux it corrects.
+  // dF is zero at rest by construction: every term below carries a factor of
+  // the face-normal velocity or its x1 difference, both exactly zero there, so
+  // a balanced state keeps its exact zero tendency bitwise. The COVARIANCE
+  // term is also zero for an isothermal state; the CENTROID term is not, so
+  // that second exact zero holds in Cartesian only. dF is added to the FACE
+  // FLUX, so both terms telescope in the x2/x3 sums exactly like the flux they
+  // correct.
   auto pcoord = pmb->pcoord;
   int n1 = wl.size(-1);
   // a centred x1 difference needs both neighbours; nghost >= 1 gives them to
@@ -68,14 +76,30 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
                 .to(p.device(), p.scalar_type())
                 .unsqueeze(0)
                 .unsqueeze(1);
+  // Second O(dx1^2) term, nonzero on curved grids only: a cell stores the
+  // average over the CELL measure, whose x1 centroid is r_v, while the flux
+  // needs the average over the FACE measure, whose centroid is r_c. The
+  // offset r_v - r_c costs (r_v - r_c) d_1(enthalpy flux). It is identically
+  // zero in Cartesian and is NOT small on a curved grid -- its ratio to the
+  // covariance term is ~L/r with L the local gradient scale. See
+  // docs/derivations/289-covariance-x3-curved.md.
+  auto ds = pcoord->face_centroid_shift_x1()
+                .to(p.device(), p.scalar_type())
+                .unsqueeze(0)
+                .unsqueeze(1);
+  auto hflx = enth * un;  // the enthalpy flux the face average is taken of
+
   auto dx1 = (x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2));
   auto dlnt =
       (lnt.narrow(-1, 2, n1 - 2) - lnt.narrow(-1, 0, n1 - 2)) / dx1;
   auto dun = (un.narrow(-1, 2, n1 - 2) - un.narrow(-1, 0, n1 - 2)) / dx1;
+  auto dhflx =
+      (hflx.narrow(-1, 2, n1 - 2) - hflx.narrow(-1, 0, n1 - 2)) / dx1;
 
   auto dflx = torch::zeros_like(p);
-  dflx.narrow(-1, 1, n1 - 2) = enth.narrow(-1, 1, n1 - 2) *
-                               s2.narrow(-1, 1, n1 - 2) * dlnt * dun;
+  dflx.narrow(-1, 1, n1 - 2) =
+      enth.narrow(-1, 1, n1 - 2) * s2.narrow(-1, 1, n1 - 2) * dlnt * dun -
+      ds.narrow(-1, 1, n1 - 2) * dhflx;
   return dflx;
 }
 

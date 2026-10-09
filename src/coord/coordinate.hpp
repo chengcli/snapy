@@ -269,6 +269,27 @@ class CoordinateImpl {
    */
   static torch::Tensor radial_face_moment2_(torch::Tensor const& x1f, int nc1);
 
+  //! x1 offset between where a CELL average lives and where a FACE average does
+  /*!
+   * A finite-volume cell stores the average over the CELL measure, whose x1
+   * centroid is `r_v`; the exact flux through an x2/x3 face is the average
+   * over the FACE measure, whose x1 centroid is `r_c`. On a curved grid the
+   * two measures carry different powers of r, so `r_v != r_c` and evaluating
+   * the flux from the cell value misses `(r_v - r_c) d_1(p u)` -- a SECOND
+   * O(dx1^2) term, of the same order as the covariance and of relative size
+   * ~L/r with L the local gradient scale (issue #289 item 2). It is exactly
+   * zero in Cartesian, where the two measures are the same uniform weight.
+   *
+   * eturn one value per x1 cell, shaped like `dx1f`
+   */
+  virtual torch::Tensor face_centroid_shift_x1() const;
+
+  //! `face_centroid_shift_x1` when the cell measure is r^2 dr and the face
+  //! measure is r dr (spherical-polar and cubed-sphere). Exact and
+  //! cancellation-free: `h^2 (12 rbar^2 - h^2) / (12 rbar (12 rbar^2 + h^2))`.
+  static torch::Tensor radial_face_centroid_shift_(torch::Tensor const& x1f,
+                                                   int nc1);
+
   virtual torch::Tensor find_cell_index(torch::Tensor const& coords) const;
 
   virtual std::array<double, 3> vec_from_cartesian(

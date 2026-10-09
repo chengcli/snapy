@@ -458,6 +458,34 @@ torch::Tensor CoordinateImpl::radial_face_moment2_(torch::Tensor const& x1f,
   return h.square() / 12. * (1. - frac);
 }
 
+torch::Tensor CoordinateImpl::face_centroid_shift_x1() const {
+  // Cartesian: the cell measure and the x2/x3 face measure are the same
+  // uniform weight, so the two centroids coincide and the shift is exactly 0.
+  return torch::zeros_like(dx1f);
+}
+
+torch::Tensor CoordinateImpl::radial_face_centroid_shift_(
+    torch::Tensor const& x1f, int nc1) {
+  auto rm = x1f.slice(0, 0, nc1);
+  auto rp = x1f.slice(0, 1, nc1 + 1);
+  auto h = rp - rm;
+  auto rbar = 0.5 * (rm + rp);
+  // r_v - r_c: the VOLUME centroid (weight r^2 -- where a cell average lives)
+  // minus the AREA centroid (weight r -- where the face average lives):
+  //   r_v = (3/4)(rp^4-rm^4)/(rp^3-rm^3) = 3 rbar (4 rbar^2 + h^2)/(12 rbar^2 + h^2)
+  //   r_c = (2/3)(rp^3-rm^3)/(rp^2-rm^2) = (12 rbar^2 + h^2)/(12 rbar)
+  // Both are ~rbar, so subtracting them directly would cancel. Doing the
+  // algebra first gives an exact, cancellation-free form:
+  //   r_v - r_c = h^2 (12 rbar^2 - h^2) / (12 rbar (12 rbar^2 + h^2))
+  //             = h^2/(12 rbar) + O(h^4/rbar^3)
+  auto h2 = h.square();
+  auto twelve_r2 = 12. * rbar.square();
+  auto shift = h2 * (twelve_r2 - h2) /
+               (12. * rbar * (twelve_r2 + h2)).clamp_min(1.e-300);
+  // degenerate face (an x1 ghost reaching r <= 0): no meaningful centroid
+  return torch::where(rbar > 0.5 * h, shift, torch::zeros_like(h));
+}
+
 torch::Tensor CoordinateImpl::find_cell_index(
     torch::Tensor const& coords) const {
   torch::Tensor index = torch::zeros_like(coords, torch::dtype(torch::kInt64));

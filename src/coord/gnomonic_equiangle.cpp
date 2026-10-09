@@ -217,6 +217,16 @@ torch::Tensor GnomonicEquiangleImpl::face_moment2_x1() const {
   return radial_face_moment2_(x1f, options->nc1());
 }
 
+torch::Tensor GnomonicEquiangleImpl::face_centroid_shift_x1() const {
+  // Same two geometric measures as spherical-polar: the cell is r^2 dr times
+  // an angular factor and an x2/x3 face is r dr times one, so the shift is
+  // the same. NOTE: cell_volume() above is the TRAPEZOID rule for that
+  // integral, 0.5(A1_i + A1_{i+1}) dx1f against the exact (rp^3-rm^3)/3, a
+  // separate relative O((dx1/r)^2) metric inconsistency on this grid. It is
+  // smaller than this term by (L/r)^2 and is not addressed here.
+  return radial_face_centroid_shift_(x1f, options->nc1());
+}
+
 void GnomonicEquiangleImpl::interp_ghost(
     torch::Tensor var, std::tuple<int, int, int> const& offset) const {
   auto [dy, dx, dz] = offset;
