@@ -48,7 +48,7 @@ void bind_hydro(py::module& m) {
 
   m.def("balance_column", &snap::balance_column, py::arg("w"), py::arg("dx1f"),
         py::arg("grav"), py::arg("wall_clamp") = true, py::arg("rtol") = 1.e-10,
-        py::arg("max_iter") = 120,
+        py::arg("max_iter") = 120, py::arg("geometry") = "",
         R"(Project a ghost-free x1 column onto the well-balanced scheme's own
 discrete hydrostatic balance, holding p/rho -- the temperature -- fixed per
 cell. Returns (w, residual, sweeps); the residual is max|p'-C|/(rho*g*dz), the
@@ -60,5 +60,6 @@ does not converge. `wall_clamp` must be true and must match
 `dynamics/wb-wall-clamp` in the card that will run the result, so a card that
 turns the clamp off cannot use this primitive. See
 src/hydro/balance_column.hpp for the caller's two obligations (physical x1
-boundaries; >= 5 x1 cells per block).)");
+boundaries; >= 5 x1 cells per block). Under SNAP_X1_CENTROID_EXACT pass
+geometry='cartesian'; any other geometry is refused.)");
 }

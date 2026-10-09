@@ -4,6 +4,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
+
 #include "balance_column.hpp"
 #include "hydro_dispatch.hpp"
 #include "wb_ref4.hpp"
@@ -12,7 +14,7 @@ namespace snap {
 
 std::tuple<torch::Tensor, double, int> balance_column(
     torch::Tensor const& w, torch::Tensor const& dx1f, double grav,
-    bool wall_clamp, double rtol, int max_iter) {
+    bool wall_clamp, double rtol, int max_iter, std::string const& geometry) {
   TORCH_CHECK(grav > 0., "balance_column: grav is a downward magnitude (> 0)");
   TORCH_CHECK(w.dim() == 4, "balance_column: w must be (nvar, nc3, nc2, nx1)");
   TORCH_CHECK(w.size(0) > IPR, "balance_column: w has no pressure channel");
@@ -29,6 +31,13 @@ std::tuple<torch::Tensor, double, int> balance_column(
               "balance_column needs dynamics/wb-wall-clamp: without it the "
               "reference reads faces outside the column at each wall, so the "
               "balance found here is not the one the solver would enforce.");
+  // no r^2 -> plain-mean conversion here (balance_column.hpp)
+  TORCH_CHECK(!x1_centroid_exact_enabled() || geometry == "cartesian",
+              "balance_column: under SNAP_X1_CENTROID_EXACT only a column "
+              "declared geometry='cartesian' is balanced here, got '",
+              geometry,
+              "'; a spherical-polar column's rest state is the solver's own "
+              "reference");
 
   int nc1 = w.size(-1);
   // below five the kernel's own thin-block fallback takes over and the answer,

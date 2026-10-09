@@ -25,6 +25,16 @@ constexpr double kCp = 3.5 * kRd;
 constexpr double kTs = 300.0;
 constexpr double kPs = 1.0e5;
 
+// these columns are planar, declared so for SNAP_X1_CENTROID_EXACT
+std::tuple<torch::Tensor, double, int> balance(torch::Tensor const& w,
+                                               torch::Tensor const& dx1f,
+                                               double grav, bool clamp = true,
+                                               double rtol = 1.e-10,
+                                               int max_iter = 120) {
+  return snap::balance_column(w, dx1f, grav, clamp, rtol, max_iter,
+                              "cartesian");
+}
+
 struct Column {
   torch::Tensor w;     // (nvar, 1, 1, nx1), ghost-free
   torch::Tensor dx1f;  // (nx1,)
@@ -207,7 +217,7 @@ TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
         << "the fixture is not the defect: uniform=" << uniform;
 
     auto [wb, err, sweeps] =
-        snap::balance_column(c.w, c.dx1f, kGrav, /*wall_clamp=*/true, rtol);
+        balance(c.w, c.dx1f, kGrav, /*wall_clamp=*/true, rtol);
     Column balanced{wb, c.dx1f};
     double actual = residual(balanced, uniform);
     EXPECT_LT(actual, rtol) << "uniform=" << uniform;
@@ -221,15 +231,15 @@ TEST(BalanceColumn, the_last_allowed_update_can_converge) {
   constexpr double rtol = 1.e-10;
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   auto [expected, expected_err, sweeps] =
-      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol);
+      balance(c.w, c.dx1f, kGrav, true, rtol);
   ASSERT_GT(sweeps, 0);
 
   torch::Tensor actual;
   double actual_err = 0.;
   int actual_sweeps = 0;
   EXPECT_NO_THROW(std::tie(actual, actual_err, actual_sweeps) =
-                      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol,
-                                           /*max_iter=*/sweeps));
+                      balance(c.w, c.dx1f, kGrav, true, rtol,
+                              /*max_iter=*/sweeps));
   if (actual.defined()) {
     EXPECT_TRUE(torch::equal(actual, expected));
     EXPECT_DOUBLE_EQ(actual_err, expected_err);
@@ -243,7 +253,7 @@ TEST(BalanceColumn, the_temperature_and_every_other_channel_stay_put) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   auto rt0 = c.w[snap::IPR] / c.w[snap::IDN];
 
-  auto [wb, err, sweeps] = snap::balance_column(c.w, c.dx1f, kGrav);
+  auto [wb, err, sweeps] = balance(c.w, c.dx1f, kGrav);
   auto rt1 = wb[snap::IPR] / wb[snap::IDN];
 
   EXPECT_LT(((rt1 - rt0).abs() / rt0).max().item<double>(), 1.e-14);
@@ -260,8 +270,8 @@ TEST(BalanceColumn, the_temperature_and_every_other_channel_stay_put) {
 
 TEST(BalanceColumn, a_balanced_column_is_a_fixed_point) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
-  auto [w1, e1, n1] = snap::balance_column(c.w, c.dx1f, kGrav);
-  auto [w2, e2, n2] = snap::balance_column(w1, c.dx1f, kGrav);
+  auto [w1, e1, n1] = balance(c.w, c.dx1f, kGrav);
+  auto [w2, e2, n2] = balance(w1, c.dx1f, kGrav);
 
   EXPECT_EQ(n2, 0);
   EXPECT_TRUE(torch::equal(w1, w2));
@@ -308,18 +318,15 @@ TEST(BalanceColumn, a_block_thinner_than_its_ghosts_keeps_its_columns_apart) {
 TEST(BalanceColumn, it_refuses_what_it_cannot_deliver) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   // a column too short for the reference's own wall rows
-  EXPECT_THROW(snap::balance_column(c.w.narrow(-1, 0, 4),
-                                    c.dx1f.narrow(-1, 0, 4), kGrav),
+  EXPECT_THROW(balance(c.w.narrow(-1, 0, 4), c.dx1f.narrow(-1, 0, 4), kGrav),
                c10::Error);
   // no clamp: the reference would read outside the column at each wall
-  EXPECT_THROW(snap::balance_column(c.w, c.dx1f, kGrav, /*wall_clamp=*/false),
-               c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, kGrav, /*wall_clamp=*/false), c10::Error);
   // a gravity sign, not a magnitude
-  EXPECT_THROW(snap::balance_column(c.w, c.dx1f, -kGrav), c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, -kGrav), c10::Error);
   // and an unconverged sweep budget is an error, never a quiet return
-  EXPECT_THROW(
-      snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, /*max_iter=*/1),
-      c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, kGrav, true, 1.e-10, /*max_iter=*/1),
+               c10::Error);
 }
 
 // ctest test_balance_column_x1_centroid: SNAP_X1_CENTROID_EXACT alone switches
@@ -327,9 +334,34 @@ TEST(BalanceColumn, it_refuses_what_it_cannot_deliver) {
 // see the same predicate, or it balances a column against the operator the
 // solver no longer applies (RED on 18e48c96, where only the solver keyed on it)
 TEST(BalanceColumn, x1_centroid_switch_implies_the_ref4_predicate) {
-  if (!std::getenv("SNAP_X1_CENTROID_EXACT")) GTEST_SKIP();
-  ASSERT_TRUE(snap::x1_centroid_exact_enabled());
-  EXPECT_TRUE(snap::wb_ref4_enabled());
+  bool g = std::getenv("SNAP_X1_CENTROID_EXACT"),
+       w = std::getenv("SNAP_WB_REF4");
+  ASSERT_EQ(snap::x1_centroid_exact_enabled(), g);
+  EXPECT_EQ(snap::wb_ref4_enabled(), g || w);
+}
+
+// under SNAP_X1_CENTROID_EXACT a spherical-polar column's reference converts
+// r^2 means to plain means, which this planar column does not model: only a
+// column declared cartesian is balanced, anything else is refused
+TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column) {
+  auto c = marched_column(64, 3.0e5, /*uniform=*/true);
+  auto run = [&](char const* geometry) {
+    snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, 120, geometry);
+  };
+  EXPECT_NO_THROW(run("cartesian"));
+  if (!snap::x1_centroid_exact_enabled()) {
+    EXPECT_NO_THROW(run(""));
+    EXPECT_NO_THROW(run("spherical-polar"));
+    return;
+  }
+  for (char const* geometry : {"", "spherical-polar"}) try {
+      run(geometry);
+      ADD_FAILURE() << "geometry '" << geometry << "' balanced";
+    } catch (c10::Error const& e) {
+      EXPECT_NE(std::string(e.what()).find("SNAP_X1_CENTROID_EXACT"),
+                std::string::npos)
+          << e.what();
+    }
 }
 
 }  // namespace
