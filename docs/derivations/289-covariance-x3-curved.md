@@ -1796,6 +1796,63 @@ rows from the #289 formula without reading this file. The rows **as coded** are
 §4B; this section is the record of what they replaced and why, because the
 file is the PR's evidence that a defect was found.
 
+**Second independent check.** `UCzhangxi/snapy`, branch
+`claude/focused-hawking-e5j8zv`, commit
+`e2c3f57120d772e5e861d8bf9674e4f7ab447e35`, directory `study/289-allrows/`
+(`derivation.md` plus `symbolic_rows.py`, `quad_source.py`, `rest_balance.py`
+and their committed `.out` files). It reaches the same two-term form for every
+$x_2$/$x_3$ row, $\sigma_c^2\rho\,\partial_1u_n\,\partial_1\varphi
+-\delta\,\partial_1(\rho u_n\varphi)$ with $-\delta\,\partial_1p$ added in the
+normal-momentum row and no covariance in the mass row (its §0, eqs. 2.3-2.9),
+and its symbolic run reproduces the closed forms for $\delta$ and $\sigma_c^2$
+used here with difference exactly $0$, and
+$\sigma_c^2-\sigma_v^2=11h^4/(720\bar r^2)+O(h^6)$ -- the same value as §2A.5's
+$h^4(1/45-1/144)/\bar r^2$.
+
+**Numbers below are that study's, on its own deck ($R_0=1$ or $10$,
+$H_p=0.1$), not ours.** Flux-only breaks the rest state by
+$+\delta D_1p$ times the source coefficient, $7.97\times10^{-4}$ at
+$h=0.0312$ falling to $1.26\times10^{-5}$ at $h=0.0039$, a factor $4$ per
+halving, and matching that prediction to $2.6\times10^{-12}$; with
+$p\to p-\delta D_1p$ in the geometric source the residual returns to round-off,
+$\sim\!2\times10^{-15}$ in the spherical $\theta$ row and
+$\sim\!1\times10^{-14}$ in the gnomonic $\alpha$ and $\beta$ rows. Correcting
+the mass row without the tracer rows drifts a uniform $q$ at $O(\delta)$,
+$6.34\times10^{-5}$; with both rows it holds at
+$4.00\times10^{-16}$/$3.10\times10^{-16}$. Its corrections that carry $u_n$ are
+bitwise zero at rest. Because its deck differs from the one in §4A.3.3, these
+confirm the mechanism and the $h^2$ scaling, **not** the magnitudes measured
+there.
+
+**Three things it adds or sharpens, recorded rather than buried:**
+
+1. **snapy's present geometric sources already carry the same $O(h^2)$
+   mismatch** (its §4.5): the exact lateral pressure source wants
+   $\langle p\rangle_A$ and snapy multiplies $\bar p_V$, so *today's* rest
+   balance holds only because the flux and the source make the **same** error.
+   This does not contradict §4A.3.2 -- the identity proved there is precisely
+   that both sides carry the same cell pressure -- but it is a sharpening this
+   file did not state, and it means the corrected pair is genuinely more
+   accurate **in motion**, not merely equally balanced at rest. Its symbolic
+   S3 makes the same point exactly: the exact $\theta$ source minus
+   $\langle p\rangle_A(A_+-A_-)$ is $0$, while with $\bar p_V$ it is not.
+2. **On the gnomonic grid `x1v` is the arithmetic mid-radius, not $r_v$**
+   (`gnomonic_equiangle.cpp:36`), so the identification of $r_v$ with snapy's
+   `x1v` in §2A.1 holds on **spherical-polar only**. $\delta$ is defined by the
+   two measures, not by `x1v`, so (1.1)/(2A.3) stand on both grids and the
+   rest-state result does not depend on $\delta$'s value at all; but a gnomonic
+   initial condition sampled at `x1v` is a point value at $\bar r$, not a cell
+   average, and the gnomonic $\delta$ is the right correction only under the
+   cell-average reading of the stored state.
+3. **A caution on §4C.3's velocity-squared exclusion.** Its symbolic S2e finds
+   that when $p$ is recovered through `cons2prim` the face defect vanishes
+   through $O(h^3)$ only if the kinetic term is kept; dropped, it leaves an
+   $O(h^2)$ residual with coefficients as large as $-5h^2/6$ in its draws. The
+   exclusion in §4C.3 still stands for the rest state (the term is exactly
+   zero) and for the linear onset problem (it is quadratic in the
+   perturbation), but it is **not** negligible in general, and §4C.3 should not
+   be read as unconditional. Settling it is open.
+
 ## 4C.1 The superseded rows, marked CORRECTED not deleted
 
 | row | §4B, CORRECTED | superseded (§2A/§4A of this file) | why it was wrong |
