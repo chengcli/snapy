@@ -169,8 +169,28 @@ torch::Tensor face_scaled_coefficient(torch::Tensor value, torch::Tensor scale,
                                       Coordinate const& coord, int idir,
                                       Region start, Region end, bool wall_lower,
                                       bool wall_upper) {
-  return face_coefficient(value * scale.view({1, 1, -1}), coord, idir, start,
-                          end, wall_lower, wall_upper);
+  if (idir == 0) {
+    return face_coefficient(value * scale.view({1, 1, -1}), coord, idir, start,
+                            end, wall_lower, wall_upper);
+  }
+  // x2/x3 faces: both cells share the x1 profile, so the mean of the products
+  // equals the product of the means; keep that form, bitwise as before
+  auto out = face_average(value, idir, start, end) *
+             scale.slice(0, start[2], end[2]).view({1, 1, -1});
+  auto dim = kSpatialDims[idir] - 1;
+  auto nface = end[dim] - start[dim];
+  if (nface < 3 || (!wall_lower && !wall_upper)) return out;
+
+  auto product = value * scale.view({1, 1, -1});
+  if (wall_lower) {
+    out.narrow(dim, 0, 1).copy_(
+        extrapolate_to_wall(product, coord, idir, start, end, false));
+  }
+  if (wall_upper) {
+    out.narrow(dim, nface - 1, 1)
+        .copy_(extrapolate_to_wall(product, coord, idir, start, end, true));
+  }
+  return out;
 }
 
 //! a (2, n) table of x1 knots and scale: n >= 2, finite, x1 strictly

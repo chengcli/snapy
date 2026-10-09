@@ -79,10 +79,12 @@ at the same rate, and the difference shows only where a balance should be exact.
 
 ## 2. The fix
 
-`face_scaled_coefficient(value, scale, ...)` now returns
+On x1 faces `face_scaled_coefficient(value, scale, ...)` now returns
 `face_coefficient(value * scale, ...)`: the same two-cell average and wall
 extrapolation that the unscaled coefficient already uses, applied to the
-product. A profile of ones gives the coefficient of no profile bit for bit
+product. On x2 and x3 faces the two forms agree only up to round-off
+($\tfrac12(a s + b s)$ against $\tfrac12(a + b)\,s$), so those faces keep the
+base expression and stay bit for bit. A profile of ones gives the coefficient of no profile bit for bit
 ($q \times 1 = q$). Without a profile the code path is not entered, so every
 case that sets neither `nu_scale_x1` nor `kappa_scale_x1` is unchanged.
 
