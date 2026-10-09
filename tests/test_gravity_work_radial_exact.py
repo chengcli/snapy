@@ -18,7 +18,10 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
   3. on, one explicit plm stage (plm has no curvature flux): the energy change on - off is
      g1 sigma^2 s[drho] cell by cell (option F's eq. 7), to round-off of the energy;
   4. rest: a discretely balanced Cartesian column (snapy.balance_column), unseeded, keeps
-     max|u1|/c_s with the switch on no worse than off, explicit and VIC.
+     max|u1|/c_s with the switch on no worse than off, explicit and VIC;
+  5. the cycle diagnostics (print_cycle_info) log the potential energy the booked work conserves:
+     ie= + pe= equals this test's E + P with the switch on and E + PE_d with it off, to the printed digits
+     (spherical, Cartesian and 2-D Cartesian, after a few explicit steps).
 The switch is read once per process, so each arm runs in a child process.
 
   python test_gravity_work_radial_exact.py [--device cpu]
@@ -27,6 +30,7 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -36,6 +40,7 @@ import yaml
 
 GAMMA, P0, RHO0, G, DEPTH, NZ, NG = 1.4, 100., 1., 1., 100., 32, 3
 NSTEP, EP_TOL, REST_STEPS = 20, 1.e-14, 50
+DIAG_STEPS, DIAG_TOL, DIAG_CASES = 5, 1.e-11, ("sph", "cart", "cart2d")
 ARMS = {"unset": None, "zero": "0", "on": "1"}
 CASES = {  # name: (geometry, implicit scheme, nx2)
     "sph": ("spherical-polar", 0, 1), "sph_vic": ("spherical-polar", 9, 1),
@@ -43,7 +48,7 @@ CASES = {  # name: (geometry, implicit scheme, nx2)
     "cart2d": ("cartesian", 0, 16), "cart2d_vic": ("cartesian", 9, 16)}
 
 
-def config(geometry, scheme, nx2, recon):
+def config(geometry, scheme, nx2, recon, ncycle_out=0):
     if geometry == "spherical-polar":
         x1min, x2 = 300., (0.5 * math.pi - 0.05, 0.5 * math.pi + 0.05)
         bounds = {"x1min": x1min, "x1max": x1min + DEPTH, "x2min": x2[0], "x2max": x2[1],
@@ -65,7 +70,8 @@ def config(geometry, scheme, nx2, recon):
         "boundary-condition": {"external": {"x1-inner": "reflecting", "x1-outer": "reflecting",
                                             "x2-inner": x2bc, "x2-outer": x2bc,
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
-        "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9},
+        "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9,
+                        "ncycle_out": ncycle_out},
         "forcing": {"const-gravity": {"grav1": -G, "gravity-work": "face"}},
     }
 
@@ -74,12 +80,12 @@ def interior(shape):
     return tuple(slice(NG, -NG) if n > 1 else slice(None) for n in shape)
 
 
-def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu"):
+def build(case, seed=0.05, recon="weno5", balanced=False, device="cpu", ncycle_out=0):
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
     geometry, scheme, nx2 = CASES[case]
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config(geometry, scheme, nx2, recon), f)
+        yaml.safe_dump(config(geometry, scheme, nx2, recon, ncycle_out), f)
         tmp = f.name
     try:
         b = MeshBlock(MeshBlockOptions.from_yaml(tmp))
@@ -187,6 +193,19 @@ def stage(case, device="cpu"):
     return {"u0": u0, "u1": v["hydro_u"][col.sl].cpu().clone(), "var": col.var, "x": col.x}
 
 
+def diag(case, out, device="cpu"):
+    """a few explicit steps, then the cycle diagnostics on stdout; this test's (E + PE_d, E + P) to out"""
+    b, v = build(case, device=device, ncycle_out=1)
+    col = Column(b, case)
+    dt = 0.3 * DEPTH / NZ / math.sqrt(GAMMA * P0 / RHO0)
+    for _ in range(DIAG_STEPS):
+        b.inc_cycle()
+        for st in range(len(b.module("intg").stages)):
+            b.forward(v, dt, st)
+    b.print_cycle_info(v, 0., dt)
+    json.dump(col.energies(v), open(os.path.join(out, "diag_%s.json" % case), "w"))
+
+
 def child(out, device):
     res, saved = {}, {}
     for case in CASES:
@@ -203,8 +222,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--child", default=None)
+    ap.add_argument("--diag", default=None)
     a = ap.parse_args()
     torch.set_default_dtype(torch.float64)
+    if a.diag:
+        diag(a.diag, a.child, a.device)
+        return
     if a.child:
         child(a.child, a.device)
         return
@@ -222,6 +245,20 @@ def main():
                             "--child", out], env=env, check=True)
             res[arm] = json.load(open(os.path.join(out, "res.json")))
             u[arm] = torch.load(os.path.join(out, "u.pt"))
+            if arm == "zero":
+                continue
+            for case in DIAG_CASES:  # one process each: the log is flushed at exit
+                log = subprocess.run([sys.executable, os.path.abspath(__file__), "--device", a.device,
+                                      "--diag", case, "--child", out], env=env, check=True,
+                                     capture_output=True, text=True).stdout
+                ie, pe = (float(re.search(r" %s=(\S+)" % k, log).group(1)) for k in ("ie", "pe"))
+                epd, ep = json.load(open(os.path.join(out, "diag_%s.json" % case)))
+                want, name = (ep, "E + P") if arm == "on" else (epd, "E + PE_d")
+                err = abs(ie + pe - want) / abs(want)
+                print(f"{case:10s} switch {arm:5s}: logged ie + pe vs {name}: rel diff {err:.2e} "
+                      f"(E + P vs E + PE_d: {abs(ep - epd) / abs(ep):.2e})", flush=True)
+                if not err <= DIAG_TOL:
+                    failures.append(f"{case}: switch {arm}, logged ie + pe is not {name} (rel diff {err:.2e})")
     for case in CASES:
         off, on = res["unset"][case], res["on"][case]
         print(f"{case:10s} max per-step |d(E+P)|/|E+P|: off {off['dEP']:.2e} on {on['dEP']:.2e}   "
