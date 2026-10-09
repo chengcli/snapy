@@ -12,6 +12,24 @@
 
 namespace snap {
 
+// #289: the x1 derivative of the pressure for the cells with both x1
+// neighbours, centred, but one-sided at the first and last interior cell so
+// that no x1 ghost row is read. The pressure part of the centroid term and the
+// geometric source must use the SAME difference for the rest balance to stay
+// exact, and x2/x3 face states in the x1 ghost rows are not reliable next to a
+// cubed-sphere panel edge.
+static torch::Tensor d1_pressure(torch::Tensor const& p,
+                                 torch::Tensor const& x1v, int is, int ie) {
+  int n1 = p.size(-1);
+  auto dx1 = x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2);
+  auto d = (p.narrow(-1, 2, n1 - 2) - p.narrow(-1, 0, n1 - 2)) / dx1;
+  d.select(-1, is - 1) =
+      (p.select(-1, is + 1) - p.select(-1, is)) / (x1v[is + 1] - x1v[is]);
+  d.select(-1, ie - 1) =
+      (p.select(-1, ie) - p.select(-1, ie - 1)) / (x1v[ie] - x1v[ie - 1]);
+  return d;
+}
+
 torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
                                           torch::Tensor const& wr,
                                           int dim) const {
@@ -21,17 +39,18 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   // CELL measure and r_c that of the FACE measure, the enthalpy flux is left
   // short by TWO terms of the same order:
   //
-  //   dF = gamma/(gamma-1) [ sigma1^2 p [ln(p/rho)]_1 (u_n)_1
-  //                          - (r_v - r_c) d_1( p u_n ) ] ,
+  //   dF = sigma1^2 rho h_1 (u_n)_1 - (r_v - r_c) d_1( rho h u_n ) ,
   //
   // the first a covariance, the second a centroid offset that vanishes
   // identically in Cartesian and is of relative size ~L/r on a curved grid.
   //
   // where sigma1^2 is the x1 second central moment of the face's own area
   // measure (dx1^2/12 in cartesian, face_moment2_x1() in general) and u_n is
-  // the face-normal velocity. gamma/(gamma-1) p is the enthalpy density, so
-  // (I + p) from the EOS is used instead of a gamma: it is the same number for
-  // an ideal gas and does not assume one.
+  // the face-normal velocity, and h = (W->I + p)/rho is the solver's own
+  // specific enthalpy (every species' energy offset included). Differencing h
+  // is exact for any p = rho Pi(e, y), and offset-invariant together with the
+  // tracer rows below; for a dry ideal gas with zero offset it equals the
+  // earlier gamma/(gamma-1) p [ln(p/rho)]_1 form.
   //
   // The covariance along the OTHER in-face coordinate is dropped: only x1
   // carries an O(1) background gradient, so the horizontal one is quadratic in
@@ -55,9 +74,8 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
 
   auto wbar = 0.5 * (wl + wr);
   auto p = wbar[IPR];
-  // ln(p/rho) = ln(R T); the derivation gives p/rho, which is T up to the
-  // composition's gas constant
-  auto lnt = (p / wbar[IDN]).log();
+  // rho h: the solver's own enthalpy density, W->I (with every species'
+  // energy offset) plus p
   auto enth = peos->compute("W->I", {wbar}) + p;
 
   // the face-normal velocity in the face-local orthonormal frame -- the
@@ -87,56 +105,72 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
                 .to(p.device(), p.scalar_type())
                 .unsqueeze(0)
                 .unsqueeze(1);
-  auto hflx = enth * un;  // the enthalpy flux the face average is taken of
-
+  auto rho = wbar[IDN];
   auto dx1 = (x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2));
-  auto dlnt =
-      (lnt.narrow(-1, 2, n1 - 2) - lnt.narrow(-1, 0, n1 - 2)) / dx1;
-  auto dun = (un.narrow(-1, 2, n1 - 2) - un.narrow(-1, 0, n1 - 2)) / dx1;
-  auto dhflx =
-      (hflx.narrow(-1, 2, n1 - 2) - hflx.narrow(-1, 0, n1 - 2)) / dx1;
 
-  // ---- the scalar-transport rows (#289 all-rows, see the derivation) --------
-  // For a face flux the solver builds as a product of CELL values, the exact
-  // area average is short by
-  //    sigma1^2 * (sum over distinct pairs of first derivatives)
-  //      - delta * d_1(that row's own flux).
-  // The covariance part is row-specific; the centroid part is the SAME rule for
-  // every row. Only the MASS and TRACER rows are corrected here; the momentum
-  // rows are derived in the file but deliberately not implemented, because they
-  // additionally require the geometric pressure source to carry the same
-  // shifted pressure or the discrete hydrostatic rest balance breaks -- see
-  // docs/derivations/289-covariance-x3-curved.md section 4A.3.
+  // ---- every row (#289 all-rows, see the derivation, section 4B) -----------
+  // Cell values are DENSITY-WEIGHTED: q = (rho q)/rho, u = m/rho
+  // (ideal_moist_impl.h:40,44), so the face-average gap of a flux rho u_n q is
+  // sigma1^2 rho (u_n)_1 q_1 and no pair contains rho'; the total mass flux m_n
+  // is linear in the stored state and has no covariance at all. Every row also
+  // keeps its centroid part -delta d_1(F). The covariance parts:
+  //   - total mass: 0;
+  //   - tracer n: sigma1^2 rho D1[u_n] D1[q_n];
+  //   - dry mass: minus the sum of the tracer parts;
+  //   - energy: sigma1^2 rho D1[h] D1[u_n], h = (W->I + p)/rho (no KE);
+  //   - momentum: none; the centroid part is taken in the face-local frame,
+  //     and its pressure part p* = p - delta d_1 p is mirrored in the
+  //     geometric source (forward(), step 5), so rest stays exact.
+  // The velocity-squared parts of the momentum and energy gaps are the scheme's
+  // ordinary second-order truncation and are left out, as is the pressure's J
+  // (Hessian of p/rho along the gradient; ~1e-3 of the energy term).
   int ny = wl.size(0) - ICY;  // species rows, dry mass fraction is 1 - sum
   auto cell = [&](torch::Tensor const& q) { return q.narrow(-1, 1, n1 - 2); };
   auto d1 = [&](torch::Tensor const& q) {
     return (q.narrow(-1, 2, n1 - 2) - q.narrow(-1, 0, n1 - 2)) / dx1;
   };
-  // sigma1^2 (a'b'c + a'c'b + b'c'a) - delta d_1(abc), all at the face
-  auto three = [&](torch::Tensor const& a, torch::Tensor const& b,
-                   torch::Tensor const& c) {
-    auto da = d1(a), db = d1(b), dc = d1(c);
-    return cell(s2) * (da * db * cell(c) + da * dc * cell(b) +
-                       db * dc * cell(a)) -
-           cell(ds) * d1(a * b * c);
+  // sigma1^2 rho a_1 b_1 : the covariance of a density-weighted product
+  auto cov = [&](torch::Tensor const& a, torch::Tensor const& b) {
+    return cell(s2) * cell(rho) * d1(a) * d1(b);
   };
+  // -delta d_1(F) : the centroid part, the same rule for every row
+  auto ctr = [&](torch::Tensor const& f) { return -cell(ds) * d1(f); };
 
-  auto rho = wbar[IDN];
   // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
   auto rd = torch::ones_like(rho);
   for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
 
   auto dflx = torch::zeros_like(wl);
+  auto mflx = rho * un;
   // energy row
-  dflx[IPR].narrow(-1, 1, n1 - 2) =
-      enth.narrow(-1, 1, n1 - 2) * s2.narrow(-1, 1, n1 - 2) * dlnt * dun -
-      ds.narrow(-1, 1, n1 - 2) * dhflx;
-  // dry-mass row
-  dflx[IDN].narrow(-1, 1, n1 - 2) = three(rho, rd, un);
-  // one tracer row per species, each with its own q: a uniform q then stays
-  // exactly uniform, because the row collapses to q times the mass-row term
-  for (int n = 0; n < ny; ++n)
-    dflx[ICY + n].narrow(-1, 1, n1 - 2) = three(rho, wbar[ICY + n], un);
+  auto h = enth / rho;
+  dflx[IPR].narrow(-1, 1, n1 - 2) = cov(h, un) + ctr(enth * un);
+  // tracer rows, each with its own q; the dry row carries minus their sum
+  auto dry = ctr(mflx * rd);
+  for (int n = 0; n < ny; ++n) {
+    auto q = wbar[ICY + n];
+    auto c = cov(un, q);
+    dflx[ICY + n].narrow(-1, 1, n1 - 2) = c + ctr(mflx * q);
+    dry = dry - c;
+  }
+  dflx[IDN].narrow(-1, 1, n1 - 2) = dry;
+
+  // momentum rows in the face-local frame, then to the solver's global frame
+  // like the Riemann flux (lmars.cpp): normal rho u_n^2 + p, tangential
+  // rho u_n u_t
+  int ivn = dim == 2 ? IVY : IVZ;
+  for (int v = IVX; v <= IVZ; ++v) {
+    dflx[v].narrow(-1, 1, n1 - 2) = ctr(mflx * wbar[v]);
+  }
+  // the pressure part: p* - p = -delta d_1 p, with the difference step 5 of
+  // forward() also uses for the geometric source
+  dflx[ivn].narrow(-1, 1, n1 - 2) -=
+      cell(ds) * d1_pressure(p, x1v, pcoord->il(), pcoord->iu());
+  if (dim == 2) {
+    pcoord->flux2global2_(dflx);
+  } else {
+    pcoord->flux2global3_(dflx);
+  }
   return dflx;
 }
 
@@ -435,6 +469,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   //// ------------ (4.A) Calculate dimension 2 flux ------------ ////
+  // #289: whether the x2 / x3 face fluxes carry the covariance correction; the
+  // geometric pressure source then takes the same shifted pressure (step 5)
+  bool cov2 = false, cov3 = false;
   if (u.size(DIM2) > 1) {
     auto wlr2 =
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
@@ -446,6 +483,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                       : torch::Tensor();
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
       if (dcov.defined()) _flux2 += dcov;
+      cov2 = dcov.defined();
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -468,6 +506,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                       : torch::Tensor();
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
       if (dcov.defined()) _flux3 += dcov;
+      cov3 = dcov.defined();
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
@@ -556,7 +595,26 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   }
 
   //// ------------ (5) Calculate flux divergence ------------ ////
-  _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+  // #289: the normal-momentum face flux carries p* = p - delta d_1 p (its
+  // centroid part), so the geometric pressure source must see the same p*, or
+  // a hydrostatic rest state is no longer balanced (derivation 4A.3.2). Only
+  // the lateral sources read the cell pressure here; the x1 source uses the
+  // face pressure and is untouched.
+  auto wsrc = w;
+  bool all2 = cov2 || u.size(DIM2) <= 1;
+  bool all3 = cov3 || u.size(DIM3) <= 1;
+  if ((cov2 || cov3) && all2 && all3) {
+    int n1 = w.size(-1);
+    auto dsh = pmb->pcoord->face_centroid_shift_x1()
+                   .to(w.device(), w.scalar_type())
+                   .narrow(0, 1, n1 - 2);
+    auto x1v = pmb->pcoord->x1v.to(w.device(), w.scalar_type());
+    wsrc = w.clone();
+    wsrc[IPR].narrow(-1, 1, n1 - 2) -=
+        dsh * d1_pressure(w[IPR], x1v, pmb->pcoord->il(), pmb->pcoord->iu());
+  }
+  _div.set_(
+      pmb->pcoord->forward(wsrc, _flux1, _flux2, _flux3, _face_pressure1));
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;

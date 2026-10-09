@@ -181,6 +181,8 @@ snapy_add_python_test(test_dry_carry_zero_base TIMEOUT 60 LABELS "python;forcing
 snapy_add_python_test(test_local_horizontal_cells TIMEOUT 60 LABELS "python;mesh;coordinate")
 snapy_add_python_test(test_diffusion_x1_scale TIMEOUT 120 LABELS "python;forcing")
 snapy_add_python_test(test_horizontal_flux_covariance TIMEOUT 180 LABELS "python;hydro")
+snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
+                      LABELS "python;hydro;cubed-sphere")
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)

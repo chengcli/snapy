@@ -1627,3 +1627,89 @@ Newly relevant, and labelled as such:
   has ever linked on this branch (62/104 objects, ~80/104, then a CMake configure
   that did not finish), and the build, `ctest -j1`, the lifted x2cov GREEN and the
   cell-volume test are owned by Xi's cluster worker.
+
+# 4B. The implemented rows (density-weighted pairs, energy in h)
+
+This section supersedes the covariance column of the 4A.2 table, and the
+energy row of §5, for what is coded. The centroid rule of 4A.1.1 and the
+balance proof of 4A.3 stand unchanged.
+
+## 4B.1 Why no pair contains $\rho'$
+
+A cell stores the conserved state. The solver's primitives are ratios of cell
+averages: $q=\overline{\rho q}/\bar\rho$ and $u=\bar m/\bar\rho$
+(`ideal_moist_impl.h:40,44`). A flux $\rho\,u_n\,q$ rebuilt from them is
+$\bar m_n\,\overline{\rho q}/\bar\rho$, not $\bar\rho\,\bar u_n\,\bar q$.
+Expanding that quotient about the face gives, for every such row,
+
+$$
+\langle\rho u_n q\rangle-\bar m_n\,\overline{\rho q}/\bar\rho
+=\sigma_c^2\,\rho\,\partial_1u_n\,\partial_1q+O(h^4),
+$$
+
+and the total mass flux $\bar m_n$ is linear in the stored state, so its gap is
+zero. The three-factor pairs of 4A.2 treat $\rho$, $u_n$ and $q$ as independent
+cell averages, which they are not.
+
+The same algebra with $p=\rho\,\Pi(e,y)$ and the W→I energy offsets gives the
+energy row $\sigma_c^2\rho\,\partial_1h\,\partial_1u_n$ with
+$h=(\text{W→I}+p)/\rho$ (no KE), to linear order in the velocity. Two things are
+left out of it:
+- the velocity-squared parts, which are the scheme's ordinary second-order
+  truncation in nonlinear flow and vanish in the linear problem;
+- the pressure term $\rho J$, where $J=\tfrac{\sigma^2}{2}\psi_1^{\mathsf T}\Pi_{\psi\psi}\psi_1$.
+  It is about $10^{-3}$ of the energy term.
+
+This is the independent symbolic and quadrature derivation in
+`docs/derivations/issue289_moist_covariance_verifier.md` on zoeyzyhu/snapy
+`study/289-moist-verifier` (afe9f6b827df51c6af5d3857e8cbd8d225db9b83).
+
+## 4B.2 The rows as coded
+
+All rows are in `src/hydro/hydro_forward.cpp`, `_flux_covariance()`, behind
+`SNAP_FLUX_COVARIANCE`. $D_1$ is the centred $x_1$ difference, and
+$\delta=$ `face_centroid_shift_x1()`.
+
+| row | covariance part | centroid part |
+|---|---|---|
+| energy | $\sigma^2\rho\,D_1[h]\,D_1[u_n]$ | $-\delta\,D_1[\rho h\,u_n]$ |
+| tracer $n$ | $\sigma^2\rho\,D_1[u_n]\,D_1[q_n]$ | $-\delta\,D_1[\rho u_n q_n]$ |
+| dry mass (`IDN`) | $-\sum_n$ of the tracer parts | $-\delta\,D_1[\rho u_n q_d]$ |
+| total mass (dry + tracers) | $0$ | $-\delta\,D_1[\rho u_n]$ |
+| momentum, every component (face-local frame) | none | $-\delta\,D_1[\rho u_n u_v]$, plus $-\delta\,D_1^{\rm p}[p]$ on the normal one |
+
+The momentum corrections are formed in the face-local frame and mapped with
+`flux2global2_`/`flux2global3_`, as the Riemann flux is (`lmars.cpp`). The
+pressure part uses $D_1^{\rm p}$, which is centred but one-sided at the first and
+last interior cell (`d1_pressure`). The geometric pressure source is evaluated
+with the same $p^\star=p-\delta\,D_1^{\rm p}[p]$ in step 5 of `forward()`, and
+only when every resolved horizontal face carries the correction.
+
+**Why $D_1^{\rm p}$ is one-sided at the ends.** The balance argument of 4A.3.2
+needs the flux and the source to see the *same* pressure difference. Next to a
+cubed-sphere panel edge, the $x_2$/$x_3$ face states in the $x_1$ ghost rows do not
+match the cell ghost values: the corner ghosts are not filled for that purpose.
+A centred difference reaching into those rows broke the rest state there
+(max $|v|/c_s$ $2.2\times10^{-7}$ after 20 steps, located at the panel edges in the
+first and last interior $x_1$ cell). The one-sided ends read no ghost row and
+restore it to the switch-off value. The cost is a first-order difference inside
+an $O(h^2)$ term on one boundary cell row.
+
+## 4B.3 What the checks test
+
+`tests/test_flux_covariance_rows.py` runs each arm in its own process, because
+the switch is read once per process.
+
+- **Rest.** A balanced isothermal shell stays at rest with the switch on, on a
+  spherical-polar block and on six gnomonic panels. This tests the
+  $p^\star$-in-flux-and-source rule and the one-sided ends.
+- **Uniform tracer.** On the moist six-panel shell under a solid-body wind, a
+  uniform vapor stays uniform to round-off. With $D_1[q]=0$, the tracer row is
+  $q$ times the total-mass row.
+- **Offset invariance.** Shifting the vapor $u_0$ changes no primitive beyond
+  round-off. The h-differenced energy row moves by exactly $c\,\cdot$ (tracer
+  rows), while $(I+p)\,D_1\ln(p/\rho)$ does not.
+- **Dry Cartesian limit.** One-step $\varepsilon_{\rm eff}n_z^2$ stays within
+  $2\times10^{-3}$ of the covariance-only form at $n_z=16,32,64$. In a dry,
+  zero-offset gas $\rho\,D_1[h]=(I+p)\,D_1\ln(p/\rho)+O(h^2)$, so the two agree
+  to discretisation error, not bitwise.
