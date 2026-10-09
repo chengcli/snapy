@@ -11,6 +11,7 @@
 // snap
 #include <snap/coord/coord_utils.hpp>
 #include <snap/hydro/flux_positivity.hpp>
+#include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/input/read_restart_file.hpp>
 #include <snap/output/output_formats.hpp>
 #include <snap/utils/log.hpp>
@@ -1042,7 +1043,16 @@ void print_cycle_diagnostics(
       auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, true) / rho;
       add(ke_sum, (ke * vol).index(interior).sum({1, 2, 3}));
       if (hydro->options->grav() && hydro->options->grav()->grav1() != 0.) {
-        auto pe = rho * (-hydro->options->grav()->grav1() * coord->x1v);
+        auto grav1 = hydro->options->grav()->grav1();
+        auto pe = rho * (-grav1 * coord->x1v);
+        // SNAP_GRAVITY_WORK_RADIAL_EXACT books the work of the corrected
+        // potential energy P, so log P: E + P is what that work conserves
+        if (hydro->radial_exact_work()) {
+          int is = coord->il(), ie = coord->iu() + 1;
+          pe.slice(-1, is, ie) -= corrected_pe_work(
+              rho.slice(-1, is, ie), coord->x1f, coord->x1v, is, ie, grav1,
+              coord->options->type() == "spherical-polar");
+        }
         add(pe_sum, (pe * vol).index(interior).sum({1, 2, 3}));
       }
     }
