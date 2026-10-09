@@ -54,3 +54,18 @@ also defers a rejected step to redo instead of applying its thermal correction.
 The shared code expresses the intended CPU/CUDA policy. Independent device
 RED/GREEN and the full CUDA CTest gate remain Zoey's agent's responsibility;
 CPU evidence alone does not establish their outcome.
+
+## Float32 VIC conditioning limitation
+
+VIC permits float32 through `AT_DISPATCH_FLOATING_TYPES` in the CPU and
+CUDA dispatches. The guard is substantially stricter in float32: poorly
+conditioned columns around condition number 1e6 and above can be refused.
+Xi supplied the independent review's random 3x3 conditioning probe: **166/5000
+rejections at condition number 1e6** and **4915/5000 at 1e8**, while its double
+probe found no rejections in 5000 matrices per level from 1e4 through 1e14.
+These are attributed independent measurements, not measurements by this
+implementer, and not a universal condition-number cutoff. Row-scaled pivot
+ratios depend on matrix structure and scaling as well as condition number.
+A rejected float32 VIC column enters the same redo/stop policy; reducing the
+time step is not guaranteed to cure conditioning due to variable scales.
+Use float64 when float32 conditioning prevents progress.

@@ -59,7 +59,7 @@ void factor_cases() {
 // Allows the regression to execute against the old void API: normal return
 // there means successful completion, which must fail the rejection checks.
 template <typename F>
-bool completed(F&& f) {
+bool completed(F &&f) {
   if constexpr (std::is_void_v<decltype(f())>) {
     f();
     return true;
@@ -78,7 +78,7 @@ void sweep_cases() {
       Mat a[2], b[2], c[2];
       Vec delta[2], corr[2];
       T du[10];
-      for (auto& x : du) x = 1;
+      for (auto &x : du) x = 1;
       for (int i = 0; i < 2; ++i) {
         a[i].setIdentity();
         b[i].setZero();
@@ -113,7 +113,8 @@ void sweep_cases() {
 }
 
 void retry_case(int scheme, bool stop, bool assembly_failure = false,
-                torch::Device device = torch::kCPU) {
+                torch::Device device = torch::kCPU,
+                bool near_singular = false) {
   using namespace snap;
   auto node = YAML::Load(R"(
 geometry:
@@ -145,10 +146,13 @@ boundary-condition:
   std::remove(path.c_str());
   auto block = MeshBlock(opts);
   block->to(device);
+  if (near_singular) block->to(torch::kFloat32);
   auto coord = block->pcoord;
   auto w = torch::zeros(
       {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
-      torch::TensorOptions().dtype(torch::kFloat64).device(device));
+      torch::TensorOptions()
+          .dtype(near_singular ? torch::kFloat32 : torch::kFloat64)
+          .device(device));
   w[IDN].fill_(1);
   w[IPR].fill_(1.e5);
   Variables vars{{"hydro_w", w}};
@@ -160,12 +164,26 @@ boundary-condition:
   vars.at("hydro_u")[IPR].mul_(1.01);
   auto du = torch::ones_like(w);
   auto before = du.clone();
-  auto gamma = torch::full_like(
-      w[IDN],
-      assembly_failure ? 1.4 : std::numeric_limits<double>::quiet_NaN());
+  auto gamma =
+      torch::full_like(w[IDN], (assembly_failure || near_singular)
+                                   ? 1.4
+                                   : std::numeric_limits<double>::quiet_NaN());
   auto prim = vars.at("hydro_w").clone();
+  if (near_singular)
+    prim[IPR].mul_(1. + 0.01 * torch::arange(prim.size(-1), prim.options()));
   auto prim0 = prim.clone();
-  block->phydro->picorr->forward(du, prim, gamma, assembly_failure ? 0. : 1.);
+  if (near_singular) {
+    ASSERT_TRUE(torch::isfinite(du).all().item<bool>());
+    ASSERT_TRUE(torch::isfinite(prim).all().item<bool>());
+    ASSERT_TRUE(torch::isfinite(gamma).all().item<bool>());
+    // Finite float32 assembly with a long, positive time step: rejection
+    // must come from the relative pivot guard, not a NaN or dt=0 input.
+    block->phydro->picorr->forward_masked(du, prim, gamma, 1.e4,
+                                          torch::Tensor());
+    EXPECT_TRUE(block->phydro->picorr->solve_failed());
+  } else {
+    block->phydro->picorr->forward(du, prim, gamma, assembly_failure ? 0. : 1.);
+  }
   EXPECT_TRUE(torch::equal(du, before));
   EXPECT_TRUE(torch::equal(prim, prim0));
   if (stop) block->pintg->current_redo = block->pintg->options->max_redo();
@@ -268,4 +286,13 @@ TEST(lu_failure, mesh_terminal_failure_restores_all_blocks) {
   for (int n = 0; n < 2; ++n)
     EXPECT_TRUE(torch::equal(vars[n].at("hydro_u"), saved[n]))
         << "local block " << n << " was not restored on terminal failure";
+}
+
+TEST(lu_failure, finite_near_singular_forward_masked) {
+  retry_case(9, false, false, torch::kCPU, true);
+}
+
+TEST(lu_failure, cuda_finite_near_singular_forward_masked) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CPU build or no CUDA device";
+  retry_case(9, false, false, torch::kCUDA, true);
 }

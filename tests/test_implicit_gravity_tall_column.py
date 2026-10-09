@@ -24,7 +24,7 @@ RADIUS = 7.e7
 W_TOL = 1.0e-7  # m/s
 
 
-def config(geometry="cartesian"):
+def config(geometry="cartesian", default_work=False):
     rgas = 8.31446261815324
     cfg = {
         "geometry": {"type": "cartesian",
@@ -46,6 +46,11 @@ def config(geometry="cartesian"):
                                           "gravity-work-fixer": False}},
     }
 
+    if default_work:
+        # Omit both keys to exercise the default cell work + global fixer.
+        cfg["forcing"]["const-gravity"].pop("gravity-work")
+        cfg["forcing"]["const-gravity"].pop("gravity-work-fixer")
+
     if geometry == "spherical-polar":
         cfg["geometry"]["type"] = geometry
         cfg["geometry"]["cells"]["nx2"] = 1
@@ -56,13 +61,13 @@ def config(geometry="cartesian"):
     return cfg
 
 
-def run(dt, nstep, device, geometry="cartesian"):
+def run(dt, nstep, device, geometry="cartesian", default_work=False):
 
     import snapy
     from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR, kIV1
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config(geometry), f)
+        yaml.safe_dump(config(geometry, default_work), f)
         tmp = f.name
     try:
         block = MeshBlock(MeshBlockOptions.from_yaml(tmp))
@@ -137,6 +142,17 @@ def main():
                 failures.append((geometry, courant, n, wmax))
         print(json.dumps({"geometry": geometry, "first_failing_courant": first_failure,
                           "tested_courants": args.courants}), flush=True)
+    # Preserve the original Cartesian default-path coverage alongside the
+    # explicitly face-only, fixer-off ladder.
+    for dt in (997.0, 100.0):
+        finite, n, wmax, history, err = run(
+            dt, args.nstep, args.device, default_work=True)
+        passed = finite and wmax < W_TOL
+        print(json.dumps({"arm": "default-cell-global-fixer", "dt": dt,
+                          "steps": n, "passed": passed, "max_w": wmax,
+                          "balance_error": err, "history": history}), flush=True)
+        if not passed:
+            failures.append(("default-cell-global-fixer", dt, n, wmax))
     return 1 if failures else 0
 
 

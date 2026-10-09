@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 // eigen
 #include <Eigen/Dense>
 
@@ -57,8 +59,12 @@ DISPATCH_MACRO bool forward_sweep_impl(
   // printf_matrix("A(%s) = ", a[il], il);
   delta[il] = a[il] * rhs;
   a[il] = a[il] * c[il];
-  if (!a[il].allFinite() || !delta[il].allFinite())
-    return vic_fail_column(delta, il, iu);
+  for (int row = 0; row < N; ++row) {
+    if (!std::isfinite(delta[il](row))) return vic_fail_column(delta, il, iu);
+    for (int col = 0; col < N; ++col)
+      if (!std::isfinite(a[il](row, col)))
+        return vic_fail_column(delta, il, iu);
+  }
 
   for (int i = il + 1; i <= iu; ++i) {
     rhs(0) = DU(IDN, i);
@@ -89,8 +95,12 @@ DISPATCH_MACRO bool forward_sweep_impl(
 
     delta[i] = a[i] * (rhs - b[i] * delta[i - 1]);
     a[i] = a[i] * c[i];
-    if (!a[i].allFinite() || !delta[i].allFinite())
-      return vic_fail_column(delta, il, iu);
+    for (int row = 0; row < N; ++row) {
+      if (!std::isfinite(delta[i](row))) return vic_fail_column(delta, il, iu);
+      for (int col = 0; col < N; ++col)
+        if (!std::isfinite(a[i](row, col)))
+          return vic_fail_column(delta, il, iu);
+    }
   }
   return true;
 }
