@@ -44,9 +44,9 @@ dex = sp.simplify(S_exact - need)
 say("exact:", dex)
 say("exact, series in h:", sp.series(dex, h, 0, 6).removeO().expand())
 say("exact, relative to need, series:", sp.series(sp.simplify(dex / need), h, 0, 5).removeO().expand())
-# leading error terms of the face form (face - exact average), F = F0 + F1 s + F2 s^2/2 about rbar
-s, F0, F1, F2, rb = sp.symbols("s F0 F1 F2 rbar")
-Fs = F0 + F1 * s + F2 * s**2 / 2
+# leading error terms of the face form (face - exact average), F = F0 + F1 s + ... + F4 s^4/24 about rbar
+s, F0, F1, F2, F3, F4, rb = sp.symbols("s F0 F1 F2 F3 F4 rbar")
+Fs = F0 + F1 * s + F2 * s**2 / 2 + F3 * s**3 / 6 + F4 * s**4 / 24
 rm, rp = rb - h / 2, rb + h / 2
 V = sp.integrate((rb + s)**2, (s, -h / 2, h / 2))
 rc = sp.integrate((rb + s)**3, (s, -h / 2, h / 2)) / V
@@ -56,7 +56,7 @@ face = (rp**2 * (rp - rc) * Fp + rm**2 * (rc - rm) * Fm) / V
 exw = ((rc - rm) * Fp + (rp - rc) * Fm) / h
 say("== leading error terms (booked - exact average) / grav1 ==")
 say("face :", sp.series(sp.simplify(face - avg), h, 0, 4).removeO().expand())
-say("exact:", sp.series(sp.simplify(exw - avg), h, 0, 5).removeO().expand())
+say("exact:", sp.collect(sp.series(sp.simplify(exw - avg), h, 0, 6).removeO().expand(), h))
 # conservative family s_f = r_f + lam h^2 / r_f: leading F and F' coefficients
 lam = sp.symbols("lam")
 sp_, sm_ = rp + lam * h**2 / rp, rm + lam * h**2 / rm

@@ -8,7 +8,7 @@ Base: 8cea3ae. Every closed form below is checked by `curved_gravity_work_weight
 
 **Result.** The exact $r^2$-measure weights remove both $O(h^2/\bar r)$ error terms, but they do **not** conserve
 discrete E+PE: the per-face defect is $h^3/3$ (relative $h^2/(3R^2)$), the same order as the terms they remove.
-No weight choice that keeps the face form's conservation removes both terms; one or the other, not both.
+No two-point weight choice that keeps the face form's conservation of E+PE$_d$ removes both terms; one or the other, not both.
 
 ## 1. Setup
 
@@ -48,8 +48,9 @@ A two-point booking $W = g_1(a F_+ + b F_-)$ that is exact for $F \in \{1, r\}$ 
 $a + b = 1$ and $a r_+ + b r_- = \langle r\rangle_V = r_c$. The solution is unique:
 $$a = \frac{r_c - r_-}{h},\qquad b = \frac{r_+ - r_c}{h}. \tag{3}$$
 Note that (3) puts the weight $(r_c - r_-)$ on $F_+$, where (1) puts $(r_+ - r_c)r_+^2/V$ on $F_+$: the roles
-of the two offsets are swapped. Its error (replica §1, exact to the printed order):
-$$\frac{W_{\rm exact} - g_1\langle F\rangle_V}{g_1} = \frac{h^2}{12}F'' - \frac{h^4}{360\,\bar r^2}F'' + O(h^5).\tag{4}$$
+of the two offsets are swapped. Its error (replica §1, $F$ expanded to $s^4$; the odd orders vanish):
+$$\frac{W_{\rm exact} - g_1\langle F\rangle_V}{g_1} = \frac{h^2}{12}F''
+  + h^4\Big(-\frac{F''}{360\,\bar r^2} + \frac{F'''}{360\,\bar r} + \frac{F''''}{480}\Big) + O(h^6).\tag{4}$$
 Both curvature terms of (2) are gone; the Cartesian term stays. Cartesian limit: $r_c = \bar r$, so
 $a = b = 1/2$, and (1) gives $(h/2)\cdot A/V = 1/2$ as well, so (3) reduces to the old weights there.
 
@@ -96,8 +97,11 @@ because only a constant shift keeps $s_+ - s_- = h$.
 common Cartesian term books the exact total work, and
 $\sum_i g_1\!\int_i G\,dr + \sum_i\phi_{c,i}\dot M_i = -g_1\sum_i\int_i (r - r_{c,i})\,G'\,dr$, whose curvature part is
 $+g_1\frac{h^2}{6}\int G'/r\,dr = g_1\frac{h^2}{6}\int F\,dr$ for closed walls. This is a column integral, not a sum of
-local face differences, so no local telescoping correction cancels it. The Cartesian part, $(h^2/12)[G']_{\rm walls}$, is
-the same conflict the face form already resolves in Cartesian (it gives up the trapezoid error to conserve).
+local face differences, so no local telescoping correction of the *weights* cancels it (the potential is held at
+$\mathrm{PE}_d$ here). The Cartesian part, $(h^2/12)[G']_{\rm walls}$, is a pure wall term, so it is no real conflict:
+a wall closure plus a modified discrete PE removes it with exact conservation (the corrected-PE work behind
+`SNAP_GRAVITY_WORK_RADIAL_EXACT`, and an independent four-point booking that is $O(h^4)$ in every cell including the
+walls). Only the face form with $\mathrm{PE}_d$ pays the trapezoid error to conserve.
 
 ## 5. Numbers (replica §2, §3)
 
@@ -110,7 +114,8 @@ One step, closed column, random interior $F_f$, $g_1 = -10$, column $3H$, $\rho 
 | 1000 | 4.7e-5 | -6.5e-13 | **+1.2e-10** | -6.5e-13 | +2.8e-14 |
 | 1 | 9.4e-2 | 3.1e-15 | **+2.0e-4** | 3.2e-15 | +2.2e-5 |
 
-The face form and both $\lambda$ variants stay at round-off; the exact weights fail a 1e-14 relative gate
+The face form and both $\lambda$ variants stay at the floor of these sums ($\le 4\times10^{-15}$ for $R \le 5H$; $6.5\times10^{-13}$
+at $R = 1000H$, where the $r^2$-weighted terms span a wide range: a cancellation floor, not shown to be round-off); the exact weights fail a 1e-14 relative gate
 at every $R$ tested, by both measures (at $R = 1000H$: 2.8e-14 of $E{+}PE$, 1.2e-10 of the step's work).
 
 Convergence against the exact $r^2$-measure cell average, $F = e^{-(r-r_0)/H}\sin(\pi(r-r_0)/4H)$:
