@@ -33,11 +33,27 @@ setup_test(test_hydro_ref_x1)
 setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
 setup_test(test_x1_seam_split)
+# one arm per entry: its environment, its one test, which must run and pass (a
+# skip or an empty filter prints "PASSED ] 0 tests" and fails the entry)
+function(seam_arm name env test)
+  set(_n test_x1_seam_split${name}.${buildl})
+  if(name)
+    add_test(NAME ${_n} COMMAND test_x1_seam_split.${buildl})
+  endif()
+  set_tests_properties(
+    ${_n} PROPERTIES ENVIRONMENT "GTEST_FILTER=X1SeamSplit.${test};${env}"
+                     PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
+endfunction()
+seam_arm("" "" switches_off_nghost_1_sets_up)
+seam_arm(_x1_centroid "SNAP_X1_CENTROID_EXACT=1"
+         centroid_exact_split_matches_one_block)
+seam_arm(_radial_exact "SNAP_GRAVITY_WORK_RADIAL_EXACT=1" radial_exact_split_gap)
+# the control: the face form without the corrected work
+seam_arm(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
+         radial_exact_split_gap)
 # SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
-add_test(NAME test_x1_seam_split_wb_ref4.${buildl}
-         COMMAND test_x1_seam_split.${buildl})
-set_tests_properties(test_x1_seam_split_wb_ref4.${buildl} PROPERTIES ENVIRONMENT
-                                                                 "SNAP_WB_REF4=1")
+seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
+         wb_ref4_flag_at_the_seam_split_matches_one_block)
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
 # #289: these two pin values of the kernel's x1 reference; run them again with

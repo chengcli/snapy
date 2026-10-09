@@ -20,6 +20,9 @@
 // (pref, dref) are exchanged; on a column cold enough that the flag switches
 // on one cell above the seam, the split column must still keep the one-block
 // state (docs/derivations/wb-ref4.md sec 7).
+//
+// Each ctest entry (tests/CMakeLists.txt) runs one test with its switch set,
+// and passes only if that test ran and passed: a missing switch is a failure.
 
 // external
 #include <gtest/gtest.h>
@@ -217,12 +220,20 @@ double split_gap(int nx1, double nh, char const* gw, int nstep,
 
 }  // namespace
 
+TEST(X1SeamSplit, switches_off_nghost_1_sets_up) {
+  ASSERT_FALSE(std::getenv("SNAP_X1_CENTROID_EXACT") ||
+               std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
+               std::getenv("SNAP_WB_REF4"));
+  // the nghost >= 3 check is the switches' own: the default nghost is 1
+  EXPECT_NO_THROW(make_column(1, 16, 1., "cell", 1));
+  EXPECT_NO_THROW(make_column(2, 16, 1., "cell", 1));
+}
+
 TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
-  if (std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
-      std::getenv("SNAP_WB_REF4"))
-    GTEST_SKIP() << "run without SNAP_GRAVITY_WORK_RADIAL_EXACT, SNAP_WB_REF4";
+  ASSERT_TRUE(std::getenv("SNAP_X1_CENTROID_EXACT"));
+  ASSERT_FALSE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
+               std::getenv("SNAP_WB_REF4"));
   torch::set_num_threads(1);
-  setenv("SNAP_X1_CENTROID_EXACT", "1", 1);
   ASSERT_TRUE(x1_centroid_exact_enabled());
   for (double nh : {1., 0.}) {
     double gap = split_gap(32, nh, "cell", 20);
@@ -234,8 +245,7 @@ TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
 }
 
 TEST(X1SeamSplit, radial_exact_split_gap) {
-  if (!std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"))
-    GTEST_SKIP() << "set SNAP_GRAVITY_WORK_RADIAL_EXACT=1 (or 0) to measure";
+  ASSERT_TRUE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"));  // 1, or 0
   bool on = HydroImpl::gravity_work_radial_exact();
   torch::set_num_threads(1);
   for (int nx1 : {32, 64, 128}) {
@@ -250,8 +260,8 @@ TEST(X1SeamSplit, radial_exact_split_gap) {
 }
 
 TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block) {
-  if (!std::getenv("SNAP_WB_REF4") || std::getenv("SNAP_X1_CENTROID_EXACT"))
-    GTEST_SKIP() << "set SNAP_WB_REF4=1 alone";
+  ASSERT_TRUE(std::getenv("SNAP_WB_REF4"));
+  ASSERT_FALSE(std::getenv("SNAP_X1_CENTROID_EXACT"));
   ASSERT_TRUE(wb_ref4_enabled());
   ASSERT_FALSE(x1_centroid_exact_enabled());
   torch::set_num_threads(1);
@@ -264,12 +274,12 @@ TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block) {
     EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
   }
   // the flag reads scan pressures three cells away: fewer ghosts is an error
-  try {
-    make_column(2, 16, 1., "cell", 2);
-    ADD_FAILURE() << "nghost 2 accepted";
-  } catch (c10::Error const& e) {
-    EXPECT_NE(std::string(e.what()).find("needs nghost >= 3"),
-              std::string::npos)
-        << e.what();
-  }
+  for (int ng : {1, 2}) try {
+      make_column(2, 16, 1., "cell", ng);
+      ADD_FAILURE() << "nghost " << ng << " accepted";
+    } catch (c10::Error const& e) {
+      EXPECT_NE(std::string(e.what()).find("needs nghost >= 3"),
+                std::string::npos)
+          << e.what();
+    }
 }
