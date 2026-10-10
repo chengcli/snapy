@@ -59,20 +59,44 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
   }
 }
 
-//! rho/p smoothed by a clamped 5-point binomial along x1: the reference must
+//! rho/p smoothed by a 5-point binomial along x1: the reference must
 //! track the column profile at LARGE scales only. An unsmoothed local rho/p
 //! makes rho' degenerate with the pressure perturbation, so entropy/buoyancy
 //! anomalies bypass the high-order reconstruction; a bottom-anchored
 //! isentrope reference errs by orders of magnitude on a stratified column.
+//! Past a clamped wall (ext_lo/ext_hi: the wall side owns at least two cells)
+//! the stencil continues rho/p linearly from the two cells next to the wall
+//! instead of repeating the wall cell. The binomial reproduces a linear profile
+//! exactly, so the wall cells keep the interior's O(dz^2) bias; a repeated wall
+//! cell is exact only for constant rho/p and leaves an O(dz) error at the
+//! first faces (docs/derivations/wb-ref-wall.md). A continuation that is not
+//! positive falls back to the wall cell. Only owned cells are read.
 template <typename T>
 inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
                                                 int flat, int nc1, int i,
-                                                int jlo, int jhi) {
+                                                int jlo, int jhi, bool ext_lo,
+                                                bool ext_hi) {
+  auto rop = [&](int j) {
+    return w[IDN * ncells + flat + j] / w[IPR * ncells + flat + j];
+  };
   T v[5];
   for (int m = -2; m <= 2; ++m) {
     int j = i + m;
-    j = j < jlo ? jlo : (j > jhi ? jhi : j);
-    v[m + 2] = w[IDN * ncells + flat + j] / w[IPR * ncells + flat + j];
+    if (j < jlo) {
+      v[m + 2] = rop(jlo);
+      if (ext_lo) {
+        T e = v[m + 2] + T(jlo - j) * (v[m + 2] - rop(jlo + 1));
+        if (e > T(0)) v[m + 2] = e;
+      }
+    } else if (j > jhi) {
+      v[m + 2] = rop(jhi);
+      if (ext_hi) {
+        T e = v[m + 2] + T(j - jhi) * (v[m + 2] - rop(jhi - 1));
+        if (e > T(0)) v[m + 2] = e;
+      }
+    } else {
+      v[m + 2] = rop(j);
+    }
   }
   return (v[0] + T(4) * v[1] + T(6) * v[2] + T(4) * v[3] + v[4]) / T(16);
 }
@@ -158,9 +182,12 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   pref[flat + i] = cell_pref;
   int jlo = (wall_clamp && phys_in) ? il : 0;
   int jhi = (wall_clamp && phys_out) ? iu : nc1 - 1;
-  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi);
+  bool ext_lo = wall_clamp && phys_in && il + 1 <= iu;
+  bool ext_hi = wall_clamp && phys_out && iu - 1 >= il;
+  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi, ext_lo,
+                                 ext_hi);
   T rf = i > 0 ? T(0.5) * (hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1,
-                                                   jlo, jhi) +
+                                                   jlo, jhi, ext_lo, ext_hi) +
                            rs)
                : rs;
   dref[flat + i] = cell_pref * rs;

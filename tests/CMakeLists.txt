@@ -56,6 +56,7 @@ seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
          wb_ref4_flag_at_the_seam_split_matches_one_block)
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
+setup_test(test_wb_ref_wall)
 # #289: these two pin values of the kernel's x1 reference; run them again with
 # SNAP_WB_REF4 set, where each checks the switched reference instead
 foreach(_t test_balance_column test_face_floor)
