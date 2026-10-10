@@ -24,10 +24,11 @@ inline X1Measure x1_measure(std::string const& type) {
   return X1Measure::none;
 }
 
-//! <(x1 - x1v)^2> over each cell, from its x1 faces (n + 1 of them), on the
-//! cell's own x1 measure: dx1^2/12 on a Cartesian grid, the r^2 measure on a
-//! radial one (spherical-polar or gnomonic-equiangle; the variance is about
-//! the r^2 centroid, docs/derivations/curved-gravity-work-weight.md, sec 7).
+//! <(x1 - r_c)^2> over each cell, r_c the centroid of the cell's own x1
+//! measure, from its x1 faces (n + 1 of them): dx1^2/12 on a Cartesian grid,
+//! the r^2 measure on a radial one (spherical-polar or gnomonic-equiangle;
+//! r_c is x1v except on gnomonic-equiangle, docs/derivations/
+//! curved-gravity-work-weight.md, secs 7, 12).
 //! The r^2 form is written about the face midpoint so it does not cancel at
 //! large r.
 inline torch::Tensor x1_variance(torch::Tensor const& x1f, bool spherical) {
@@ -37,7 +38,7 @@ inline torch::Tensor x1_variance(torch::Tensor const& x1f, bool spherical) {
   if (!spherical) return h2 / 12.;
   auto rb = .5 * (x1f.narrow(0, 1, n) + x1f.narrow(0, 0, n));
   auto vol = rb * rb * h + h * h2 / 12.;  // (r+^3 - r-^3) / 3
-  auto shift = rb * h * h2 / (6. * vol);  // x1v - rb
+  auto shift = rb * h * h2 / (6. * vol);  // r_c - rb
   return (rb * rb * h * h2 / 12. + h * h2 * h2 / 80.) / vol - shift * shift;
 }
 

@@ -685,8 +685,8 @@ face part is the face form of the total flux, so steps 6–7 hold unchanged.
 | #296 post-solve remainder | `src/implicit/implicit_hydro.cpp:466-467`: `corrected_pe_work(moved, ..., x1_measure(type))`, minus `rx_tri(raw - rx_mass0)` at `:473`, added at `:476-477` | |
 | logged `pe=` | | `src/mesh/meshblock.cpp:1047` ($P^d$, $\phi(x_{1v})$) and `:1052-1054`: `pe -= corrected_pe_work(rho, ..., x1_measure(type))` $= P^d + P^\sigma + P^\delta$ |
 
-(The logged `pe=` is computed in `print_cycle_diagnostics`, `src/mesh/meshblock.cpp`; `src/hydro/hydro.hpp:167-172`
-holds the switch declarations, not the diagnostic.)
+(The logged `pe=` is computed in `print_cycle_diagnostics`, `src/mesh/meshblock.cpp`; `src/hydro/hydro.hpp:172-180`
+declares the switch, `gravity_work_radial_exact()` and `radial_exact_work()`, not the diagnostic.)
 
 ### 12.6 Conservation
 
@@ -708,9 +708,12 @@ conservation cannot tell the two apart; accuracy can.
 *Lateral directions and panel seams.* $\sigma^2$, $\delta$, $s$ and $V_r$ depend on $r$ only and $V = \Omega_{kj}V_r$,
 so $\sum_{\rm columns}P = \sum_iV_{r,i}[\phi(x_{1v,i})\bar M_i - g_1\delta_i\bar M_i - g_1\sigma_i^2s_i[\bar M]]$, with
 $\bar M_i = \sum_{kj}\Omega_{kj}\rho_{kji}$ the shell's mass per unit $V_r$. The x2/x3 fluxes book no gravity work
-and move mass at fixed radius, so $E + P$ stays exact as long as they conserve each shell's mass, which they do
-on one block with closed lateral walls (tested, §12.9) and across panel seams where the seam fluxes are
-single-valued (#222). $x_1$ is never split on the cubed sphere (the layout requires one block in $x_1$), so the
+and move mass at fixed radius, so $E + P$ stays exact as long as they conserve each shell's mass. They do on
+the six panels, whose seam fluxes are single-valued (#222): with lateral flow across the seams $E + P$ closes to
+$1.9\times10^{-15}$ per step (§12.10). A lone face block with reflecting x2/x3 walls does not: under lateral flow
+it loses mass at up to $\sim6\times10^{-11}$ per step, with the switch on or off (#301, present at e894700), so the
+single-block cases of `test_gravity_work_radial_exact.py` use radial flow only and the lateral directions are tested
+on six panels. $x_1$ is never split on the cubed sphere (the layout requires one block in $x_1$), so the
 one-sided slope sits only at the two physical walls and the seam limitation of §7 does not arise.
 
 ### 12.7 Accuracy
@@ -803,6 +806,6 @@ builds (explicit: order 5.0), so no booking can integrate it to fourth order. Th
 **E + P from the code's own log** (`Mesh.print_cycle_info` after every step: `energy=` + `pe=`), six panels, ten
 steps, $n_z$ 16, lateral flow $u_1(1 + 0.5\sin 4x_2)$ so x2/x3 fluxes cross the panel seams, both x1 walls closed:
 max per-step $|\Delta(E + P)|/|E + P|$ = $1.9\times10^{-15}$ (explicit) and $3.1\times10^{-15}$ (VIC); the log prints
-14 significant digits. With the switch's work but $P$ without $\delta$ the same runs drift by $1.3\times10^{-10}$
+15 significant digits. With the switch's work but $P$ without $\delta$ the same runs drift by $1.3\times10^{-10}$
 (explicit) and $2.6\times10^{-10}$ (VIC) per step (recomputed $P$). E+P alone does not measure the order: e894700
 closes its own $E + \mathrm{PE}_d$ to $2.1\times10^{-15}$ and $2.5\times10^{-15}$ on the same runs.
