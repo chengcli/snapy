@@ -304,10 +304,17 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     // S[k][i]: the weight of cell k in the slope of cell i
     auto S = centroid_slope(torch::eye(nx1, w.options()),
                             pcoord->x1v.slice(0, is, ie).to(w.options()));
+    auto measure = x1_measure(pcoord->options->type());
     auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
-                                  pcoord->options->type() == "spherical-polar")
+                                  measure != X1Measure::plain)
                           .to(w.options());
     rx_mid = gv * S.diagonal();
+    // gnomonic-equiangle: x1v is not the r^2 centroid, and the work carries
+    // g1 (r_c - x1v) drho as well (sec 12), a diagonal term
+    if (measure == X1Measure::radial_mid)
+      rx_mid += grav1 * x1_centroid_offset(pcoord->x1f.slice(0, is, ie + 1),
+                                           pcoord->x1v.slice(0, is, ie))
+                            .to(w.options());
     rx_lo = torch::zeros_like(rx_mid);
     rx_hi = torch::zeros_like(rx_mid);
     rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
@@ -455,9 +462,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
       moved += (du.narrow(0, ICY, du.size(0) - ICY) -
                 _du0.narrow(0, ICY, du.size(0) - ICY))
                    .sum(0);
-    auto work = corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f,
-                                  pcoord->x1v, is, ie, grav1,
-                                  pcoord->options->type() == "spherical-polar");
+    auto work =
+        corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is,
+                          ie, grav1, x1_measure(pcoord->options->type()));
     if (rx_mass0.defined()) {
       int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
       auto raw = _delta.view({nx3, nx2, nx1, options->size()}).select(-1, 0);

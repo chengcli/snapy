@@ -11,6 +11,7 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
+#include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 #include "hydro_dispatch.hpp"
 #include "wb_ref4.hpp"
@@ -83,7 +84,7 @@ void HydroImpl::reset() {
     if (gravity_work_radial_exact() && options->grav()->grav1() != 0. &&
         gw == "face" && pmb && pmb->pcoord) {
       auto const& type = pmb->pcoord->options->type();
-      if (type != "cartesian" && type != "spherical-polar")
+      if (x1_measure(type) == X1Measure::none)
         TORCH_WARN_ONCE(
             "SNAP_GRAVITY_WORK_RADIAL_EXACT (on by default with "
             "gravity-work: face) has no form on a '",
@@ -254,8 +255,7 @@ bool HydroImpl::radial_exact_work() const {
   auto g = options->grav();
   auto const& type = pmb->pcoord->options->type();
   return gravity_work_radial_exact() && g && g->grav1() != 0. &&
-         g->gravity_work() == "face" &&
-         (type == "cartesian" || type == "spherical-polar");
+         g->gravity_work() == "face" && x1_measure(type) != X1Measure::none;
 }
 
 std::pair<int, int> HydroImpl::x1_neighbors() const {

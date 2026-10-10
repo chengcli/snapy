@@ -190,8 +190,9 @@ double energy_p(Mesh mesh, MeshVariables const& vars) {
     auto u = vars[b].at("hydro_u");
     auto rho = u[IDN];
     auto pe = rho * coord->x1v;
-    pe.slice(-1, is, ie) -= corrected_pe_work(rho.slice(-1, is, ie), coord->x1f,
-                                              coord->x1v, is, ie, -1., true);
+    pe.slice(-1, is, ie) -=
+        corrected_pe_work(rho.slice(-1, is, ie), coord->x1f, coord->x1v, is, ie,
+                          -1., X1Measure::radial);
     auto vol = coord->cell_volume();
     total += ((u[IPR] + pe) * vol).slice(-1, is, ie).sum().item<double>();
   }

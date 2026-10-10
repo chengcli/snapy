@@ -22,7 +22,8 @@ every place that computes a PE under the switch `SNAP_GRAVITY_WORK_RADIAL_EXACT`
 Per steradian (the polar and azimuthal factors are common to $A$ and $V$ and cancel):
 $$A(r) = r^2,\qquad V_i = \tfrac13\left(r_{i+1/2}^3 - r_{i-1/2}^3\right),\qquad
 r_{c,i} = \frac{\int_i r^3\,dr}{\int_i r^2\,dr} = \frac34\,\frac{r_{i+1/2}^4 - r_{i-1/2}^4}{r_{i+1/2}^3 - r_{i-1/2}^3},$$
-where $r_c$ is `x1v` (`radial_centers` in `src/coord/spherical_polar.cpp`), the volume centroid. Gravity is
+where $r_c$ is `x1v` (`radial_centers` in `src/coord/spherical_polar.cpp`), the volume centroid (on a
+gnomonic-equiangle grid `x1v` is the face midpoint instead; §12 adds the one term that changes). Gravity is
 $g_1 = $ `grav1` $< 0$ and the potential is $\phi = -g_1 r$, so $\langle\phi\rangle_{V_i} = \phi(r_{c,i})$ exactly.
 $F_f$ is the x1 mass-flux density at face $f$ and $G = A F = r^2 F$ the mass flow per steradian. Write
 $r_\pm$ for a cell's faces, $h = r_+ - r_-$, $\bar r = (r_+ + r_-)/2$, $\delta = r_c - \bar r$.
@@ -425,7 +426,7 @@ Searched: `src/`, `python/`, `tests/`.
 | cycle diagnostics `pe=` (`print_cycle_diagnostics`, `meshblock.cpp`) | $P$ | logs $P$ via `corrected_pe_work` with the same per-block one-sided slope stencil, so the logged `ie=` + `pe=` is the conserved $E + P$ (it logged $\mathrm{PE}_d$ before; the test's check 5 failed on that at $\sim2\times10^{-5}$ relative and passes at $\le 3\times10^{-14}$) |
 | netCDF outputs | none | no PE field is written |
 | E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct for plain face work: the explicit ones, and the values `test_flux_covariance_rows` recorded with it, run with the switch set to 0 in their ctest entries; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
-| face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they read the switch as `hydro.cpp` does (a gnomonic-equiangle face block keeps the plain face work) and then measure $E + P$ on the final state; ctest runs each twice, with the switch `=0` and `=1` (#296) |
+| face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they read the switch as `hydro.cpp` does and then measure $E + P$ on the final state ($P$ with the centroid term of §12 on a gnomonic-equiangle block); ctest runs each twice, with the switch `=0` and `=1` (#296) |
 
 **The work inside the implicit operator (#296).** Booked only after the solve, the implicit part of (7) is explicit,
 and it is not small where it matters: for a grid-scale density change the slope term is not $O(h^2)$ below the face
@@ -475,7 +476,7 @@ bit as before. The tests that pinned values of the old wall reference were re-pi
 
 ### 11.2 Why F is on by default with `gravity-work: face`
 
-With `gravity-work: face` on a Cartesian or spherical-polar grid and $g_1 \ne 0$, `SNAP_GRAVITY_WORK_RADIAL_EXACT`
+With `gravity-work: face` on a Cartesian, spherical-polar or gnomonic-equiangle grid and $g_1 \ne 0$, `SNAP_GRAVITY_WORK_RADIAL_EXACT`
 is on unless it is set to 0/false/off/no, which remains for A/B runs. Plain face work is first order in the two
 x1 wall cells (§8), and it shows:
 - in the dry Cartesian onset box with `SNAP_FLUX_COVARIANCE` and `SNAP_WB_REF4` on (cell-average initial state),
@@ -484,7 +485,8 @@ x1 wall cells (§8), and it shows:
 - on a coarse polytrope the kinetic energy runs away to $3.1\times10^{-4}$ without F, $5.4\times10^{-5}$ with F, and
   $8.5\times10^{-5}$ with `gravity-work: cell`.
 
-A gnomonic-equiangle (cubed-sphere) grid has no form for F: there the setup warns once and the plain face work is
+On a gnomonic-equiangle (cubed-sphere) grid F carries one more term, because `x1v` is not the $r^2$ centroid
+there (§12). Other grids (cylindrical) have no form for F: there the setup warns once and the plain face work is
 kept. `gravity-work: cell`, the default, is unchanged bit for bit. The explicit E+PE$_d$ oracles of §10 that test the
 plain face form run with the switch set to 0.
 
@@ -553,3 +555,254 @@ initial state, on the build of §11.3 with the switch, in jobs 644220, 644132 an
 - face minus cell is $+3.418\times10^{-3}$, $+2.165\times10^{-4}$ and $+1.369\times10^{-5}$. That falls by 15.79
   and 15.81 per doubling of $n_z$, an order of 3.98, so the two forms agree through $\Delta z^3$. Without x1 the gap
   is $+1.608\times10^{-2}$, $+2.577\times10^{-3}$ and $+5.511\times10^{-4}$, falling by only 6.2 and 4.7.
+
+## 12. Option F on a gnomonic-equiangle (cubed-sphere) grid: the centroid term (#300)
+
+Base: e894700. Every closed form and number in §§12.1–12.7 is checked or printed by
+`cubed_sphere_centroid_term.py` (sympy + numpy; `python docs/derivations/cubed_sphere_centroid_term.py`, "CS-replica"
+below). The code numbers in §12.9 come from the ctests named there.
+
+### 12.1 Geometry
+
+On a gnomonic-equiangle block $x_1$ is the radius. `face_area1` is $\Omega_{kj}\,r^2$ and `cell_volume` is
+$\Omega_{kj}\,(r_+^3 - r_-^3)/3$ (`src/coord/gnomonic_equiangle.cpp`), with the same exact gnomonic solid angle
+$\Omega_{kj}$ in both, constant along $x_1$. So, per steradian, $A$, $V$, $\sigma^2$ and $r_c$ are those of §1, and
+$\Omega_{kj}$ cancels per column as it does on spherical-polar. Gravity is along $x_1$ (`const-gravity` adds
+`grav1` to the $x_1$ momentum), and $x_1$ is metrically orthogonal to the panel coordinates ($g_{11} = 1$, only
+$g_{23} \ne 0$), so $\phi = -g_1 r$.
+
+The one difference from §1: `x1v` is the face midpoint, $x_{1v} = \bar r = (r_+ + r_-)/2$
+(`gnomonic_equiangle.cpp`, `x1v = 0.5 (x1f_i + x1f_{i+1})`), not the $r^2$ centroid. With $h = r_+ - r_-$ and
+$V_r = (r_+^3 - r_-^3)/3 = \bar r^2h + h^3/12$, the centroid sits at
+$$
+r_c = \bar r + \delta,\qquad
+\delta = \frac{\bar r\,h^3}{6\,V_r} = \frac{h^2}{6\bar r} - \frac{h^4}{72\,\bar r^3} + O(h^6/\bar r^5)
+\tag{12.1}
+$$
+(CS-replica §1). On spherical-polar $\delta$ is zero by construction (`x1v` $= r_c$); on the cubed sphere it is
+$O(h^2/R)$.
+
+### 12.2 The exact cell potential energy when `x1v` is the midpoint
+
+The expansion of §7 is about the centroid and does not depend on where `x1v` is:
+$$
+\int_i\rho\phi\,dV = -g_1\Big[r_c\,M_i + \int_i\rho\,(r - r_c)\,dV\Big]
+ = V_i\big[\rho_i\,\phi(r_{c,i}) - g_1\,\sigma_i^2\,\rho'(r_{c,i})\big] + O(h^4V),
+$$
+with $\sigma_i^2 = \langle(r - r_c)^2\rangle_{V_i}$ (the $r^2$-measure variance about $r_c$; `x1_variance` with the
+radial measure computes exactly this, whatever `x1v` is). Now write the potential at `x1v`:
+$\phi(r_c) = \phi(x_{1v} + \delta) = \phi(x_{1v}) - g_1\delta$, exactly, because $\phi$ is linear. So
+$$
+\int_i\rho\phi\,dV = V_i\big[\rho_i\,\phi(x_{1v,i}) - g_1\,\delta_i\,\rho_i - g_1\,\sigma_i^2\,\rho'(r_{c,i})\big] + O(h^4V).
+\tag{12.2}
+$$
+CS-replica §1 checks (12.2) with sympy for a quartic $\rho = \sum_k c_k(r - \bar r)^k$: the residual is
+$g_1h^4(4c_2 - 3\bar r c_3)/(240\bar r)$ per unit volume, $O(h^4)$. Without the $\delta$ term the residual is
+$-g_1c_0h^2/(6\bar r)$, i.e. $-g_1\delta\rho$ to leading order, $O(h^2/R)$.
+
+### 12.3 The slope on the `x1v` nodes
+
+The code takes $s_i[\rho]$, the slope at $x_{1v,i}$ of the quadratic through $(x_{1v,k}, \rho_k)$
+(`centroid_slope`). The cell values are the $r^2$ means, which sit at $r_c$ up to a smooth $O(h^2)$ amount. If every
+node were shifted by the same $\delta$, the quadratic through the shifted nodes would be the translate of the
+quadratic through the centroids, and its slope at $x_{1v,i}$ would equal the centroid quadratic's slope at
+$r_{c,i}$ exactly. $\delta$ varies across the 3-cell stencil by $O(h^3/R^2)$, so the two slopes differ by a relative
+$O(h^2/R^2)$, and $\sigma^2 s$ by $O(h^4/R^2)$ absolute: below the $O(h^4)$ of (12.2). Measured (CS-replica §5,
+$\rho = e^{-(r - r_0)}$, relative to $\max|\sigma^2 s|$): $3.9\times10^{-4} \to 6.5\times10^{-6}$ at $R = 5H$ and
+$2.9\times10^{-6} \to 4.5\times10^{-8}$ at $R = 60H$ over $n_z$ 16 → 128, order 2.0 relative to a term that is
+itself $O(h^2)$, with a coefficient falling as $1/R^2$. So $s$ stays on the `x1v` nodes, as on the other grids.
+
+### 12.4 The functional
+
+From (12.2) and §12.3,
+$$
+P[\rho] = \sum_i V_i\big[\rho_i\,\phi(x_{1v,i}) - g_1\,\delta_i\,\rho_i - g_1\,\sigma_i^2\,s_i[\rho]\big]
+ = \int\rho\phi\,dV + O(h^4).
+\tag{12.3}
+$$
+It is §7's (6) with one more diagonal, linear term. On spherical-polar and Cartesian grids $\delta \equiv 0$ and (12.3)
+is (6) itself.
+
+### 12.5 The work
+
+Define the booked work as in §7 and §8.5, $W_iV_i := -\dot P_i - (A_+\phi_+F_+ - A_-\phi_-F_-)$, with $\dot\rho$ from
+$V\dot\rho = -(A_+F_+ - A_-F_-)$. $P_i$ is linear in $\rho$, so
+$$
+\dot P_i = V_i\big[\dot\rho_i\,\phi(x_{1v,i}) - g_1\,\delta_i\,\dot\rho_i - g_1\,\sigma_i^2\,s_i[\dot\rho]\big],
+\tag{12.4}
+$$
+and since the face form with $\phi_c = \phi(x_{1v})$ is $W_{\rm face}V = -V\dot\rho\,\phi(x_{1v}) - \Delta(A\phi F)$ (§2
+with $r_c \to x_{1v}$; the code's `phi_cell = -grav1 * x1v`),
+$$
+\boxed{\;W_i = W_{{\rm face},i} + g_1\,\sigma_i^2\,s_i[\dot\rho] + g_1\,\delta_i\,\dot\rho_i\;}
+\tag{12.5}
+$$
+The new term is diagonal: it uses only the cell's own density change.
+
+### 12.5a The change of $P$ equals the booked work, step by step
+
+Per RK stage, with $\Delta\rho_i$ the stage's x1 density change (the code's `-dt * vertical_mass_div`):
+
+1. **The functional, in three parts.** From (12.3),
+   $P_i[\rho] = \underbrace{V_i\rho_i\phi(x_{1v,i})}_{P^d_i} \;\underbrace{-\,g_1V_i\delta_i\rho_i}_{P^\delta_i}\;
+   \underbrace{-\,g_1V_i\sigma_i^2s_i[\rho]}_{P^\sigma_i}$.
+2. **Its change is exact, not a truncation.** $P_i$ is linear in $\rho$ ($\phi$, $\delta$, $\sigma^2$, $V$ depend on the grid
+   only, and $s$ is a fixed linear stencil), so
+   $\Delta P_i = V_i\big[\Delta\rho_i\,\phi(x_{1v,i}) - g_1\delta_i\,\Delta\rho_i - g_1\sigma_i^2\,s_i[\Delta\rho]\big]$.
+3. **Continuity.** $V_i\Delta\rho_i = -\Delta t\,\big[(AF)_{i+1/2} - (AF)_{i-1/2}\big] \equiv -\Delta t\,\Delta_i(AF)$.
+4. **The face part that the code books.** `face_gravity_work = dt * (phi_cell * div - div(phi_face * F))` with
+   `div` $= \Delta_i(AF)/V_i = -\Delta\rho_i/\Delta t$ and `phi_cell` $= \phi(x_{1v})$, so
+   $\Delta t\,W^{\rm face}_iV_i = -V_i\Delta\rho_i\,\phi(x_{1v,i}) - \Delta t\,\Delta_i(A\phi F)$.
+5. **The corrected part that the code books.** `corrected_pe_work(drho = Δρ, ..., radial_mid)` returns
+   $g_1\sigma_i^2s_i[\Delta\rho] + g_1\delta_i\Delta\rho_i$ per unit volume, so
+   $\Delta t\,W_iV_i = \Delta t\,W^{\rm face}_iV_i + g_1V_i\sigma_i^2s_i[\Delta\rho] + g_1V_i\delta_i\Delta\rho_i$.
+6. **Add 2 and 5, term by term.**
+   $\Delta t\,W_iV_i + \Delta P_i = -\Delta t\,\Delta_i(A\phi F)
+   + \underbrace{\big[-V\Delta\rho\,\phi(x_{1v}) + V\Delta\rho\,\phi(x_{1v})\big]_i}_{P^d\text{ vs face form}}
+   + \underbrace{\big[g_1V\delta\Delta\rho - g_1V\delta\Delta\rho\big]_i}_{P^\delta\text{ vs centroid term}}
+   + \underbrace{\big[g_1V\sigma^2s[\Delta\rho] - g_1V\sigma^2s[\Delta\rho]\big]_i}_{P^\sigma\text{ vs slope term}}
+   = -\Delta t\,\Delta_i(A\phi F).$
+   The centroid term of the work cancels exactly the change of $P^\delta$; with it in the work but not in $P$ (or the
+   reverse) the bracket would leave $\pm g_1V_i\delta_i\Delta\rho_i$, an $O(h^2/R)$ defect per cell.
+7. **Sum over the column.** $\sum_i\Delta_i(A\phi F)$ telescopes to the two x1 wall faces, where $F = 0$, so the
+   booked gravity work and the change of $P$ cancel: $\Delta E_{\rm grav} + \Delta P = 0$ per stage, hence per step.
+
+**The implicit (VIC) path.** The explicit part books step 5 for its own change $\Delta\rho_0$. The energy row books
+$g_1(\sigma^2\tilde s + \delta)[\delta\rho_{\rm raw} - \Delta\rho_0]$ ($\tilde s$ the tridiagonal stencil; $\delta$ is
+diagonal, so it is not lumped). The post-solve term books $g_1(\sigma^2s + \delta)[\Delta\rho_{\rm moved}]$ minus that
+row's $g_1(\sigma^2\tilde s + \delta)[\delta\rho_{\rm raw} - \Delta\rho_0]$, with $\Delta\rho_{\rm moved}$ = `du - du0`.
+The sum is $g_1(\sigma^2s + \delta)[\Delta\rho_0 + \Delta\rho_{\rm moved}]$, step 5 for the stage's total change, and the
+face part is the face form of the total flux, so steps 6–7 hold unchanged.
+
+**Where the term sits.** Line numbers in this commit's tree; at the branch head only `hydro_forward.cpp` moves, by
+−2 lines (the #298 commit), given second.
+
+| site | booked work | $P$ |
+|---|---|---|
+| shared helper | `src/hydro/gravity_work_radial.hpp:100`: `work += grav1 * x1_centroid_offset(...) * drho` (`radial_mid` only); $\delta$ itself at `:76-84` | the same helper, called on $\rho$ instead of $\Delta\rho$ |
+| explicit face work | `src/hydro/hydro_forward.cpp:819-821` (head `:817-819`): `corrected_pe_work(-dt * vertical_mass_div, ..., x1_measure(type))`; face part `phi_cell = -grav1 * x1v` at `:795` (head `:793`) | |
+| implicit energy row | `src/implicit/implicit_hydro.cpp:315`: `rx_mid += grav1 * x1_centroid_offset(...)`; into the matrix at `:333`, the right side at `:339` | |
+| #296 post-solve remainder | `src/implicit/implicit_hydro.cpp:466-467`: `corrected_pe_work(moved, ..., x1_measure(type))`, minus `rx_tri(raw - rx_mass0)` at `:473`, added at `:476-477` | |
+| logged `pe=` | | `src/mesh/meshblock.cpp:1047` ($P^d$, $\phi(x_{1v})$) and `:1052-1054`: `pe -= corrected_pe_work(rho, ..., x1_measure(type))` $= P^d + P^\sigma + P^\delta$ |
+
+(The logged `pe=` is computed in `print_cycle_diagnostics`, `src/mesh/meshblock.cpp`; `src/hydro/hydro.hpp:167-172`
+holds the switch declarations, not the diagnostic.)
+
+### 12.6 Conservation
+
+Sum (12.5)$\cdot V_i$ over a closed column with the definition of 12.5:
+$\sum_iW_iV_i + \dot P = -\sum_i\Delta_i(A\phi F) = -(A\phi F)\big|_{\rm walls} = 0$. As in §8.6 nothing else is used,
+so $E + P$ is conserved per stage and per RK step to round-off, for any $\delta$. The same holds with $\delta$ dropped
+from both $P$ and $W$ (the gate lifted with no other change conserves its own functional): CS-replica §2, one
+step with random interior fluxes, $R/H$ = 5, 60, 1000:
+
+| $R/H$ | with $\delta$, against (12.3) | without $\delta$, against $P$ without $\delta$ | with $\delta$, against $P$ without $\delta$ |
+|---|---|---|---|
+| 5 | $-3.9\times10^{-15}$ | $-7.5\times10^{-15}$ | $+5.8\times10^{-7}$ |
+| 60 | $+5.1\times10^{-14}$ | $+2.3\times10^{-14}$ | $-2.2\times10^{-8}$ |
+| 1000 | $-3.5\times10^{-13}$ | $-6.3\times10^{-13}$ | $-2.6\times10^{-11}$ |
+
+(entries are $(\Delta E + \Delta P)/\sum|WV|$; the $R = 1000H$ floor is the cancellation floor of §5). So
+conservation cannot tell the two apart; accuracy can.
+
+*Lateral directions and panel seams.* $\sigma^2$, $\delta$, $s$ and $V_r$ depend on $r$ only and $V = \Omega_{kj}V_r$,
+so $\sum_{\rm columns}P = \sum_iV_{r,i}[\phi(x_{1v,i})\bar M_i - g_1\delta_i\bar M_i - g_1\sigma_i^2s_i[\bar M]]$, with
+$\bar M_i = \sum_{kj}\Omega_{kj}\rho_{kji}$ the shell's mass per unit $V_r$. The x2/x3 fluxes book no gravity work
+and move mass at fixed radius, so $E + P$ stays exact as long as they conserve each shell's mass, which they do
+on one block with closed lateral walls (tested, §12.9) and across panel seams where the seam fluxes are
+single-valued (#222). $x_1$ is never split on the cubed sphere (the layout requires one block in $x_1$), so the
+one-sided slope sits only at the two physical walls and the seam limitation of §7 does not arise.
+
+### 12.7 Accuracy
+
+The exact cell budget is $g_1V_i\langle F\rangle_i = -\tfrac{d}{dt}\int_i\rho\phi\,dV - \Delta_i(A\phi F)$; subtract the
+definition of $W_i$:
+$$
+W_iV_i - g_1V_i\langle F\rangle_i = \frac{d}{dt}\Big(\int_i\rho\phi\,dV - P_i\Big) = O(h^4V)
+\tag{12.6}
+$$
+by (12.3), in every cell, wall cells included. Without the $\delta$ term ("gate lifted only") the same identity
+gives an error of $-g_1\delta\dot\rho = g_1\frac{h^2}{6\bar r}\big(F' + \frac{2F}{r}\big) + O(h^4)$
+(using $\dot\rho = -r^{-2}(r^2F)'$): second order with a $1/R$ coefficient, in every cell. The plain face form on
+this grid, $\phi_c = \phi(\bar r)$, is (2) shifted by the same amount: its error is
+$\frac{h^2}{12}F'' + \frac{h^2}{3r}F' + \frac{h^2}{6r^2}F$; the cp3/cp5/weno5 curvature flux H removes
+$\frac{h^2}{12}(F'' + 2F'/r)$ in the interior, which leaves $\frac{h^2}{6r}F' + \frac{h^2}{6r^2}F$ there, and
+H $= 0$ at the walls leaves the wall cells first order (§7). Measured against the exact $r^2$ cell average
+(CS-replica §3; $F = e^{-(r - r_0)/H}\sin(\pi(r - r_0)/4H)$, closed walls, $\max|W - g_1\langle F\rangle|/|g_1|$,
+"wall" = the two cells at each wall):
+
+| $R = 60H$ (the six-panel shell of #300) | $n_z$ 16 | 32 | 64 | 128 | 256 | observed orders |
+|---|---|---|---|---|---|---|
+| face + H (today, weno5), wall | 1.64e-2 | 8.16e-3 | 4.08e-3 | 2.04e-3 | 1.02e-3 | 1.00, 1.00, 1.00, 1.00 |
+| face + H, interior | 5.62e-5 | 1.89e-5 | 6.25e-6 | 1.82e-6 | 4.93e-7 | 1.57, 1.60, 1.78, 1.89 |
+| gate lifted only, wall | 1.27e-4 | 2.73e-5 | 7.53e-6 | 2.04e-6 | 5.23e-7 | 2.22, 1.86, 1.89, 1.96 |
+| gate lifted only, interior | 8.80e-5 | 2.12e-5 | 6.40e-6 | 1.83e-6 | 4.93e-7 | 2.06, 1.73, 1.80, 1.89 |
+| (12.5), wall | 1.25e-4 | 7.82e-6 | 4.80e-7 | 2.95e-8 | 1.83e-9 | 4.00, 4.03, 4.02, 4.01 |
+| (12.5), interior | 6.58e-5 | 4.48e-6 | 2.81e-7 | 1.76e-8 | 1.10e-9 | 3.88, 4.00, 4.00, 4.00 |
+
+At $R = 5H$ the same ordering holds: face + H wall order 0.92–0.99, gate lifted only 1.77–1.98 (wall) and
+0.93–1.89 (interior), (12.5) 4.35–4.57 (wall) and 3.99–4.00 (interior). R-ladder at $n_z$ 64 (CS-replica §4): the
+gate-lifted interior error times $R$ is $3.81\times10^{-4}$, $3.81\times10^{-4}$, $5.13\times10^{-4}$ at
+$R/H$ = 5, 50, 500 (the $h^2/R$ term, until the $h^4$ floor takes over), while (12.5) stays at
+$1.3$–$3.0\times10^{-7}$ (interior) and $1.0$–$5.0\times10^{-7}$ (wall) for $R/H$ = 5 to 5000.
+
+### 12.8 The implicit energy row (#296)
+
+§10's coupling puts $-g_1\sigma^2\tilde s[\delta\rho]/\Delta t$ in the energy row's total-mass column and books the
+remainder after the solve. (12.5) adds $g_1\delta_i\dot\rho_i$, which is diagonal, so the matrix holds it exactly (no
+lumping): the diagonal weight `rx_mid` gains $g_1\delta_i$, and the row then books
+$g_1(\sigma^2\tilde s + \delta)[\delta\rho - \Delta\rho_0]$. The post-solve term calls `corrected_pe_work`, which
+carries the $\delta$ term, minus the same tridiagonal operator, so the total is
+$g_1(\sigma^2 s + \delta)[\Delta\rho]$ with $\Delta\rho$ the solved change, and $E + P$ closes over the explicit and
+implicit parts as before.
+
+### 12.9 The code
+
+- `src/hydro/gravity_work_radial.hpp`: `X1Measure` (`plain` Cartesian, `radial` spherical-polar, `radial_mid`
+  gnomonic-equiangle, `none` otherwise) and `x1_measure(type)`, which replace the four `type == "spherical-polar"`
+  tests; `x1_centroid_offset(x1f, x1v)`, $\delta$ written about the midpoint, $\bar r h^3/(6V_r) + (\bar r - x_{1v})$,
+  so it does not cancel at large $r$; `corrected_pe_work(..., X1Measure)` adds $g_1\delta\,\Delta\rho$ on `radial_mid`
+  only, so Cartesian and spherical-polar evaluate exactly the expressions they did before.
+- `src/hydro/hydro.cpp`: `radial_exact_work()` admits every grid with a measure; the warn-once fires only where
+  there is none (cylindrical).
+- The explicit face work (`hydro_forward.cpp`), the post-solve implicit term (`implicit_hydro.cpp`) and the logged
+  `pe=` (`meshblock.cpp`) call `corrected_pe_work` with `x1_measure(type)`; the implicit row adds $g_1\delta$ to
+  `rx_mid` (§12.8).
+
+### 12.10 Measured in the code (CPU)
+
+The deck is `tests/test_cubed_sphere_cell_volume.yaml` (six panels, shell $6.0$–$6.4\times10^6$ m, weno5, rk3,
+reflecting x1 walls, `gravity-work: face`, switch on), with $8\times8$ columns per panel. Every number below compares
+a CPU build of this branch with one of e894700.
+
+**Work error against the exact cell average, one RK stage** from radial flow $u_1 = 0.05c_s\sin(\pi z/L)$. The
+mass flow per face is recovered from the stage's own density change, $(AF)_{i+1/2} = (AF)_{i-1/2} - V_i\Delta\rho_i/\Delta t$
+(closed walls; it agrees with the code's x1 mass flux to $2.4\times10^{-14}$). The reference is $g_1\int_i AF\,dr/V_i$, with $AF$ the quintic
+through the six nearest faces ($O(h^6)$). Explicit: the booked work is read from the code's energy change,
+$W = \Delta E/\Delta t + {\rm div}_1(F_{1,E})$. VIC: the energy row cannot be separated from the solve's other terms,
+so $W$ is the per-cell budget of §12.5a evaluated on the solved $\Delta\rho$ (e894700: $\mathrm{PE}_d$ plus the curvature
+flux H), at the explicit $\Delta t$. Error = $\max|W - W_{\rm exact}|/\max|W_{\rm exact}|$:
+
+| | $n_z$ 16 | 32 | 64 | 128 | observed orders |
+|---|---|---|---|---|---|
+| explicit, e894700, wall cells | 6.18e-2 | 3.09e-2 | 1.54e-2 | 7.72e-3 | 1.00, 1.00, 1.00 |
+| explicit, e894700, interior | 1.70e-4 | 6.92e-5 | 2.35e-5 | 6.88e-6 | 1.30, 1.56, 1.77 |
+| explicit, this branch, wall cells | 4.90e-4 | 3.00e-5 | 1.82e-6 | 1.12e-7 | 4.03, 4.04, 4.03 |
+| explicit, this branch, interior | 2.47e-4 | 1.69e-5 | 1.06e-6 | 6.63e-8 | 3.87, 3.99, 4.00 |
+| VIC, e894700, wall cells | 5.78e-2 | 2.96e-2 | 1.51e-2 | 7.63e-3 | 0.96, 0.97, 0.98 |
+| VIC, e894700, interior | 7.98e-4 | 2.69e-4 | 7.29e-5 | 1.88e-5 | 1.57, 1.89, 1.95 |
+| VIC, this branch, wall cells | 5.62e-4 | 2.17e-4 | 5.81e-5 | 1.47e-5 | 1.37, 1.90, 1.99 |
+| VIC, this branch, interior | 1.60e-4 | 4.54e-5 | 1.42e-5 | 3.73e-6 | 1.82, 1.67, 1.93 |
+
+The explicit rows are the booked work itself: first order at the walls before, fourth order everywhere after. The
+VIC rows are second order after the change. This is not the booking. The solve's effective mass flux is not smooth
+at the grid scale: its fifth difference, relative to $\max|AF|$, falls at order 1.3–2.0 from $n_z$ 32 to 128 on both
+builds (explicit: order 5.0), so no booking can integrate it to fourth order. The booking is the formula of
+§12.5a on that flux. Within the VIC rows, the change still removes the first-order wall error.
+
+**E + P from the code's own log** (`Mesh.print_cycle_info` after every step: `energy=` + `pe=`), six panels, ten
+steps, $n_z$ 16, lateral flow $u_1(1 + 0.5\sin 4x_2)$ so x2/x3 fluxes cross the panel seams, both x1 walls closed:
+max per-step $|\Delta(E + P)|/|E + P|$ = $1.9\times10^{-15}$ (explicit) and $3.1\times10^{-15}$ (VIC); the log prints
+14 significant digits. With the switch's work but $P$ without $\delta$ the same runs drift by $1.3\times10^{-10}$
+(explicit) and $2.6\times10^{-10}$ (VIC) per step (recomputed $P$). E+P alone does not measure the order: e894700
+closes its own $E + \mathrm{PE}_d$ to $2.1\times10^{-15}$ and $2.5\times10^{-15}$ on the same runs.
