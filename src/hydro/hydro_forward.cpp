@@ -32,6 +32,34 @@ static torch::Tensor d1_pressure(torch::Tensor const& p,
   return d;
 }
 
+// SNAP_X1_MASS_COVARIANCE (read once): the x1 reconstruction treats the cell
+// velocity m1/rho as the cell average of w; in a stratified column that adds
+// dz^2/12 rho_z w_z to the face mass flux. Subtract it from the reconstructed
+// velocity (the x1 analogue of SNAP_FLUX_COVARIANCE).
+static bool x1_mass_covariance() {
+  static const bool on = [] {
+    auto v = get_env("SNAP_X1_MASS_COVARIANCE", "0");
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
+  }();
+  return on;
+}
+
+// centred x1 derivative over x1v for every cell that has both neighbours; the
+// first and last array cells copy their neighbour's value
+static torch::Tensor d1_centred(torch::Tensor const& a,
+                                torch::Tensor const& x1v) {
+  int n1 = a.size(-1);
+  auto dx = x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2);
+  auto d = torch::empty_like(a);
+  d.narrow(-1, 1, n1 - 2)
+      .copy_((a.narrow(-1, 2, n1 - 2) - a.narrow(-1, 0, n1 - 2)) / dx);
+  d.select(-1, 0).copy_(d.select(-1, 1));
+  d.select(-1, n1 - 1).copy_(d.select(-1, n1 - 2));
+  return d;
+}
+
 torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
                                           torch::Tensor const& wr,
                                           int dim) const {
@@ -292,12 +320,45 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         }
       }
 
+      torch::Tensor velocity;
+      if (x1_mass_covariance()) {
+        velocity = wx1[IVX].clone();
+        auto x1v = pmb->pcoord->x1v.to(w.device(), w.scalar_type());
+        auto dx1f = pmb->pcoord->dx1f.to(w.device(), w.scalar_type());
+        auto rho_1 = d1_centred(density, x1v);
+        // next to a reflecting wall the even ghost density is not the
+        // stratified column: one-sided second order in the first/last cell
+        auto one_sided = [&](int i, int s) {
+          auto h = x1v[i + s] - x1v[i];
+          return s *
+                 (-3. * density.select(-1, i) + 4. * density.select(-1, i + s) -
+                  density.select(-1, i + 2 * s)) /
+                 (2. * s * h);
+        };
+        if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0]))
+          rho_1.select(-1, is).copy_(one_sided(is, 1));
+        if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1]))
+          rho_1.select(-1, iu).copy_(one_sided(iu, -1));
+        auto w_1 = d1_centred(velocity, x1v);
+        wx1[IVX] -= dx1f * dx1f / 12. * rho_1 * w_1 / density;
+        // ghosts at reflecting walls: odd mirror of the corrected interior
+        if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0]))
+          wx1[IVX]
+              .narrow(-1, is - ng, ng)
+              .copy_(-wx1[IVX].narrow(-1, is, ng).flip(-1));
+        if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1]))
+          wx1[IVX]
+              .narrow(-1, iu + 1, ng)
+              .copy_(-wx1[IVX].narrow(-1, iu + 1 - ng, ng).flip(-1));
+      }
+
       // floor=false: reconstruction-stage floors would clamp legitimately
       // negative perturbations.
       wtmp = precon1->forward(wx1, DIM1, /*floor=*/false);
 
       wx1[IPR].copy_(pressure);
       wx1[IDN].copy_(density);
+      if (velocity.defined()) wx1[IVX].copy_(velocity);
       // Restore full face pressure/density; floor any nonlinear-WENO overshoot
       // that would go non-positive (the references are tiny near the top) back
       // to the reference. At rest the perturbation is ~0 so the floor never
