@@ -16,6 +16,7 @@
 #include <snap/hydro/balance_column.hpp>
 #include <snap/hydro/hydro_dispatch.hpp>
 #include <snap/hydro/wb_ref4.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 namespace {
 
@@ -362,6 +363,138 @@ TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column) {
                 std::string::npos)
           << e.what();
     }
+}
+
+// ONE CONDENSABLE, MOISTURE ON. The dry air / H2O / H2O(l) set of
+// test_wall_saturation through kintera (ideal-moist, h2o_bryan), in a 10 km
+// column under the same kGrav. The vapour falls off with height, so the
+// mixture's p/rho differs cell by cell from the dry column's; that ratio is
+// the only way moisture reaches balance_column, which holds it fixed, and the
+// primitive density the reference scans is the total (dry + vapour +
+// condensate) one. So the dry bounds carry over unchanged: the audit < rtol,
+// the temperature to 1e-14, the species rows bit-for-bit. The solver's x1
+// momentum row is then checked the way test_x1_centroid_rest checks a dry
+// column, max |v1| / (g dt) after one RK3 step from rest, against the same
+// 1e-10 (TOL_ON there, rtol here: both bound |a|/g).
+constexpr char kMoistCard[] = "test_balance_column_moist.yaml";
+constexpr double kMoistTs = 300.0;  // surface temperature [K]
+constexpr double kLapse = 6.5e-3;   // [K/m], subsaturated aloft
+constexpr double kVapor0 = 1.0e-2;  // surface vapour mass fraction
+constexpr double kVaporH = 1.5e3;   // vapour scale height [m]
+
+//! The marched moist column of the card: T(z) linear, vapour q(z), condensate
+//! zero, and p/rho = R_mix T with R_mix from the solver's own EOS ("W->T" at
+//! rho = p = 1), marched by the same forward Euler as marched_column.
+Column moist_marched_column(snap::MeshBlock const& b) {
+  auto pc = b->pcoord;
+  int il = pc->il(), nx1 = pc->iu() - il + 1;
+  int nvar = b->phydro->peos->nvar();
+  auto opt = torch::TensorOptions().dtype(torch::kFloat64);
+  auto dx1f = pc->dx1f.narrow(0, il, nx1).to(opt).clone();
+  auto zc = pc->x1v.narrow(0, il, nx1).to(opt).clone();
+
+  auto w = torch::zeros({nvar, 1, 1, nx1}, opt);
+  w[snap::ICY].copy_((kVapor0 * torch::exp(-zc / kVaporH)).view({1, 1, -1}));
+  auto unit = w.clone();
+  unit[snap::IDN].fill_(1.);
+  unit[snap::IPR].fill_(1.);
+  auto rmix_t = (1. / b->phydro->peos->compute("W->T", {unit})).contiguous();
+  auto rmix = rmix_t.accessor<double, 3>();
+  auto zt = zc.accessor<double, 1>();
+
+  auto rho_t = w[snap::IDN], prs_t = w[snap::IPR];
+  auto rho = rho_t.accessor<double, 3>();
+  auto prs = prs_t.accessor<double, 3>();
+  double p = kPs;
+  for (int i = 0; i < nx1; ++i) {
+    double t = kMoistTs - kLapse * zt[i];
+    if (i > 0) {
+      double tp = kMoistTs - kLapse * zt[i - 1];
+      p -= kGrav * (p / (rmix[0][0][i - 1] * tp)) * (zt[i] - zt[i - 1]);
+    } else {
+      p -= kGrav * (kPs / (rmix[0][0][0] * kMoistTs)) * zt[0];
+    }
+    prs[0][0][i] = p;
+    rho[0][0][i] = p / (rmix[0][0][i] * t);
+  }
+  return {w, dx1f};
+}
+
+//! The solver's x1 momentum row: one RK3 step from rest of the column, as the
+//! card's block, and max |v1| / (g dt) over the owned cells, with the end
+//! state's condensable rows so a phase change cannot pass unseen.
+std::pair<double, torch::Tensor> moist_row_force(torch::Tensor const& col) {
+  auto b = snap::MeshBlock(snap::MeshBlockOptionsImpl::from_yaml(kMoistCard));
+  b->to(torch::kCPU, torch::kFloat64);
+  auto pc = b->pcoord;
+  int il = pc->il(), iu = pc->iu(), nx1 = iu - il + 1;
+  auto w = torch::zeros(
+      {col.size(0), pc->options->nc3(), pc->options->nc2(), pc->options->nc1()},
+      col.options());
+  w.narrow(-1, il, nx1).copy_(col.expand({-1, w.size(1), w.size(2), -1}));
+  for (int m = 0; m < il; ++m) {  // overwritten by the reflecting walls
+    w.narrow(-1, m, 1).copy_(w.narrow(-1, il, 1));
+    w.narrow(-1, iu + 1 + m, 1).copy_(w.narrow(-1, iu, 1));
+  }
+  snap::Variables v{{"hydro_w", w}};
+  b->initialize(v);
+  double dt = b->max_time_step(v);
+  for (int stage = 0; stage < b->pintg->stages.size(); ++stage)
+    b->forward(v, dt, stage);
+  auto end =
+      b->phydro->peos->compute("U->W", {v.at("hydro_u")}).narrow(-1, il, nx1);
+  double f = (end[snap::IVX].abs().max() / (kGrav * dt)).item<double>();
+  return {f, end.narrow(0, snap::ICY, end.size(0) - snap::ICY).clone()};
+}
+
+TEST(BalanceColumn, a_moist_column_with_one_condensable_comes_out_at_rest) {
+  constexpr double rtol = 1.e-10;
+  torch::set_num_threads(1);
+  auto b = snap::MeshBlock(snap::MeshBlockOptionsImpl::from_yaml(kMoistCard));
+  b->to(torch::kCPU, torch::kFloat64);
+  int ny = b->phydro->peos->nvar() - snap::ICY;
+  ASSERT_EQ(ny, 2) << "one condensable: a vapour row and a condensate row";
+  auto c = moist_marched_column(b);
+  auto eos = b->phydro->peos;
+
+  // the moisture is real: the column's R_mix moves by more than 1e-3 ...
+  auto rt = c.w[snap::IPR] / c.w[snap::IDN];
+  auto temp0 = eos->compute("W->T", {c.w});
+  auto rmix = rt / temp0;
+  EXPECT_GT(((rmix.max() - rmix.min()) / rmix.min()).item<double>(), 1.e-3);
+  // ... and the fixture is the defect
+  double before = residual(c, /*uniform=*/true);
+  EXPECT_GT(before, 1.e-4);
+
+  auto [wb, err, sweeps] = balance(c.w, c.dx1f, kGrav, true, rtol);
+  double actual = residual({wb, c.dx1f}, /*uniform=*/true);
+  std::cout << std::scientific << "moist column: audit before " << before
+            << ", after " << actual << " (rtol " << rtol << "), " << sweeps
+            << " sweeps\n";
+  EXPECT_LT(actual, rtol);
+  EXPECT_DOUBLE_EQ(actual, err);
+  EXPECT_GT(sweeps, 0);
+
+  // only p and rho move: the condensable rows ride through, T stays put
+  EXPECT_TRUE(
+      torch::equal(wb.narrow(0, snap::ICY, ny), c.w.narrow(0, snap::ICY, ny)));
+  auto temp1 = eos->compute("W->T", {wb});
+  EXPECT_LT(((temp1 - temp0).abs() / temp0).max().item<double>(), 1.e-14);
+
+  // the solver's x1 momentum row, with the condensable pair live
+  auto [f_balanced, y_balanced] = moist_row_force(wb);
+  auto [f_marched, y_marched] = moist_row_force(c.w);
+  std::cout << "moist column: max |v1|/(g dt) after one step, balanced "
+            << f_balanced << ", marched " << f_marched << '\n';
+  EXPECT_LT(f_balanced, rtol);
+  // the control: the same check sees the marched column's defect
+  EXPECT_GT(f_marched, 1.e-6);
+  // subsaturated throughout, so nothing condensed and the vapour stayed put
+  EXPECT_TRUE(torch::equal(y_balanced[1], torch::zeros_like(y_balanced[1])));
+  EXPECT_LT(((y_balanced[0] - wb[snap::ICY]).abs() / wb[snap::ICY])
+                .max()
+                .item<double>(),
+            1.e-12);
 }
 
 }  // namespace
