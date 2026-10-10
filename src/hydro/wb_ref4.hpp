@@ -37,6 +37,12 @@ struct WbRef4Stencils {
   torch::Tensor aidx, awt;
   //! true for the cells that count for the resolution flag
   torch::Tensor counted;
+  //! rebuild for a reference of another device or dtype; an unusable cache
+  //! has no weights to move and is never stale (#298)
+  bool stale(torch::Tensor const& ref) const {
+    return usable && (fwt.device() != ref.device() ||
+                      fwt.scalar_type() != ref.scalar_type());
+  }
 };
 
 //! x1f: the nc1 + 1 face positions; is/iu: first/last owned cell

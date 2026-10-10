@@ -270,6 +270,8 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# #298: the x1 stencil caches on blocks with too few x1 cells
+snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
 # corrected work, on by default with gravity-work: face, conserves E+P instead
 set_tests_properties(
