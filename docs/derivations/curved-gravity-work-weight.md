@@ -425,7 +425,7 @@ Searched: `src/`, `python/`, `tests/`.
 | cycle diagnostics `pe=` (`print_cycle_diagnostics`, `meshblock.cpp`) | $P$ | logs $P$ via `corrected_pe_work` with the same per-block one-sided slope stencil, so the logged `ie=` + `pe=` is the conserved $E + P$ (it logged $\mathrm{PE}_d$ before; the test's check 5 failed on that at $\sim2\times10^{-5}$ relative and passes at $\le 3\times10^{-14}$) |
 | netCDF outputs | none | no PE field is written |
 | E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct as written: they run with the switch unset; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
-| face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they detect the switch (a gnomonic-equiangle face block is refused at setup) and then measure $E + P$ on the final state; ctest runs each twice, unset and `=1` (#296) |
+| face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they read the switch as `hydro.cpp` does (a gnomonic-equiangle face block keeps the plain face work) and then measure $E + P$ on the final state; ctest runs each twice, with the switch `=0` and `=1` (#296) |
 
 **The work inside the implicit operator (#296).** Booked only after the solve, the implicit part of (7) is explicit,
 and it is not small where it matters: for a grid-scale density change the slope term is not $O(h^2)$ below the face

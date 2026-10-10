@@ -3,7 +3,7 @@
 With SNAP_GRAVITY_WORK_RADIAL_EXACT on (tall.radial_exact()) every face-work energy check
 measures E + P, the energy that switch conserves (P the corrected PE of
 docs/derivations/curved-gravity-work-weight.md sec 7), on the final state; a
-gnomonic-equiangle face block must then be refused at setup (#296)."""
+gnomonic-equiangle face block keeps the plain face work (it warns at setup)."""
 import json
 import math
 import sys
@@ -205,7 +205,7 @@ def curved_energy(scheme, geometry, work):
     expected=0. if work=='face' else -dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
     final=((du[kIPR][sl]+z*du[kIDN][sl]-du0[kIPR][sl])*vol).sum()
     error=max((observed-expected).abs().item(),(final-expected).abs().item())
-    if work=='face' and tall.radial_exact():
+    if work=='face' and geometry!='gnomonic-equiangle' and tall.radial_exact():
         # E + P on the final state: the solve books part of the corrected-PE work,
         # the post-solve term the rest, so the raw solve closes neither form alone
         final=final+(tall.corrected_pe(du[kIDN][sl],b.buffer('coord.x1f')[3:12],z,-1.,
@@ -292,16 +292,6 @@ if __name__ == '__main__':
     for scheme in (1, 9):
         for geometry in ('gnomonic-equiangle', 'spherical-polar'):
             for work in ('cell', 'face'):
-                if geometry == 'gnomonic-equiangle' and work == 'face' and tall.radial_exact():
-                    try:
-                        curved_energy(scheme, geometry, work)
-                        failures.append(f'curved implicit energy: {geometry} face built with SNAP_GRAVITY_WORK_RADIAL_EXACT on')
-                    except RuntimeError as e:
-                        if 'SNAP_GRAVITY_WORK_RADIAL_EXACT' not in str(e):
-                            raise
-                        print(json.dumps({'geometry': geometry, 'scheme': scheme, 'work': work,
-                                          'refused': 'SNAP_GRAVITY_WORK_RADIAL_EXACT'}), flush=True)
-                    continue
                 out = curved_energy(scheme, geometry, work)
                 if not out['finite'] or not out['relative'] <= 1.e-12:
                     failures.append(f'curved implicit energy: {out}')

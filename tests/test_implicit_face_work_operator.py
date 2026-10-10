@@ -9,7 +9,7 @@ discrete hydrostatic balance with snapy.balance_column, run with gravity-work: f
 w0 = 10 m/s, 1 m/s at Courant 657 to keep the advective Courant number below 1):
   every run finite with |E+PE drift| < EPE_TOL (E+PE the interior sum of E + rho g z);
   at rest also max |w| < W_TOL.
-With SNAP_GRAVITY_WORK_RADIAL_EXACT on (detected from the build, radial_exact()) the
+With SNAP_GRAVITY_WORK_RADIAL_EXACT on (the default with face work, radial_exact()) the
 conserved energy is E + P, P the corrected PE of
 docs/derivations/curved-gravity-work-weight.md sec 7, and the drift is measured on it
 (E+PE then drifts by the O(dz^2) error of PE itself, ~1e-10 here); the same runs blew up
@@ -65,29 +65,9 @@ def config(scheme):
 
 @functools.lru_cache(maxsize=None)
 def radial_exact():
-    """SNAP_GRAVITY_WORK_RADIAL_EXACT acts in this process: it refuses a gnomonic-equiangle
-    block with gravity-work: face at setup (however the switch was turned on)"""
-    from snapy import MeshBlock, MeshBlockOptions
-    cfg = config(9)
-    cfg["geometry"] = {"type": "gnomonic-equiangle",
-                       "bounds": {"x1min": 300., "x1max": 400., "x2min_pi": -0.25, "x2max_pi": 0.25,
-                                  "x3min_pi": -0.25, "x3max_pi": 0.25},
-                       "cells": {"nx1": 8, "nx2": 4, "nx3": 4, "nghost": 3}}
-    cfg["boundary-condition"]["external"].update({
-        "x2-inner": "reflecting", "x2-outer": "reflecting",
-        "x3-inner": "reflecting", "x3-outer": "reflecting"})
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(cfg, f)
-        tmp = f.name
-    try:
-        MeshBlock(MeshBlockOptions.from_yaml(tmp))
-        return False
-    except RuntimeError as e:
-        if "SNAP_GRAVITY_WORK_RADIAL_EXACT" in str(e):
-            return True
-        raise
-    finally:
-        os.unlink(tmp)
+    """SNAP_GRAVITY_WORK_RADIAL_EXACT as hydro.cpp reads it: on unless 0/false/off/no"""
+    v = os.environ.get("SNAP_GRAVITY_WORK_RADIAL_EXACT", "1").lower()
+    return v not in ("0", "false", "off", "no")
 
 
 def corrected_pe(rho, x1f, x1v, grav1, spherical=False):

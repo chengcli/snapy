@@ -79,14 +79,17 @@ void HydroImpl::reset() {
                   "boundaries (its potential -grav1 * x1 jumps across a "
                   "periodic x1 face); set it false otherwise");
     }
-    // the switch would otherwise do nothing on a grid it has no form for
+    // the corrected-PE work has no form on other grids: plain face work there
     if (gravity_work_radial_exact() && options->grav()->grav1() != 0. &&
         gw == "face" && pmb && pmb->pcoord) {
       auto const& type = pmb->pcoord->options->type();
-      TORCH_CHECK(type == "cartesian" || type == "spherical-polar",
-                  "SNAP_GRAVITY_WORK_RADIAL_EXACT with gravity-work: face "
-                  "needs a cartesian or spherical-polar grid, got '",
-                  type, "'; unset it");
+      if (type != "cartesian" && type != "spherical-polar")
+        TORCH_WARN_ONCE(
+            "SNAP_GRAVITY_WORK_RADIAL_EXACT (on by default with "
+            "gravity-work: face) has no form on a '",
+            type,
+            "' grid: the x1 wall cells keep the first-order plain "
+            "face work");
     }
     // the wb4 resolution flag is computed per block from scan pressures up to
     // three cells away, so x1 seam sides agree only with nghost >= 3
@@ -218,11 +221,12 @@ bool HydroImpl::wb_ref4() { return wb_ref4_enabled(); }
 
 bool HydroImpl::gravity_work_radial_exact() {
   // read once, like SNAP_FLUX_COVARIANCE: every block must make the same choice
+  // on unless set to 0/false/off/no (it acts with gravity-work: face only)
   static const bool on = [] {
-    auto v = get_env("SNAP_GRAVITY_WORK_RADIAL_EXACT", "0");
+    auto v = get_env("SNAP_GRAVITY_WORK_RADIAL_EXACT", "1");
     std::transform(v.begin(), v.end(), v.begin(),
                    [](unsigned char c) { return std::tolower(c); });
-    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
+    return !(v == "0" || v == "false" || v == "off" || v == "no");
   }();
   return on;
 }

@@ -248,6 +248,16 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# these check the plain face work (E+PE_d, or values recorded with it); the
+# corrected work, on by default with gravity-work: face, conserves E+P instead
+set_tests_properties(
+  test_forcing.${buildl} test_gravity_work_fixer_python
+  test_horizontal_flux_covariance_python test_flux_covariance_rows_python
+  PROPERTIES ENVIRONMENT "SNAP_GRAVITY_WORK_RADIAL_EXACT=0")
+# their switch-off arms; the _radial_exact entries run them with it on
+set_tests_properties(
+  test_implicit_face_work_operator_python test_implicit_stratified_solid_python
+  PROPERTIES ENVIRONMENT "SNAP_GRAVITY_WORK_RADIAL_EXACT=0")
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)

@@ -167,9 +167,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   static bool wb_ref4();
   //! book the x1 gravity work of the corrected potential energy (derivation
   //! curved-gravity-work-weight.md sec 7)? read once from
-  //! SNAP_GRAVITY_WORK_RADIAL_EXACT; off unless it is set. On, E+P is the
-  //! conserved invariant: gravity_work_defect() and E+PE_d checks measure the
-  //! wrong one
+  //! SNAP_GRAVITY_WORK_RADIAL_EXACT; on unless set to 0/false/off/no. On, E+P
+  //! is the conserved invariant: gravity_work_defect() and E+PE_d checks
+  //! measure the wrong one
   static bool gravity_work_radial_exact();
   //! the switch is on and acts here: gravity-work: face on a Cartesian or a
   //! spherical-polar grid, grav1 != 0

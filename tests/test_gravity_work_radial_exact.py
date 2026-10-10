@@ -11,7 +11,7 @@ is the exact potential energy to O(dx^4). E + PE_d (PE_d = sum V rho phi(x1v)) i
 conserved with the switch on; its drift is printed. Isentropic column (p0 100, rho0 1, R 1,
 g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(pi z / L)
 (2-D: times cos(2 pi x2 / L)), weno5, lmars, rk3. Checked:
-  1. switch unset and 0 give the same states bit for bit; on differs from off;
+  1. switch unset and 1 give the same states bit for bit (on by default); 0 (off) differs from on;
   2. on: |d(E + P)| / |E + P| per step <= 1e-14 on a spherical-polar column (x1 in [300, 400])
      and a Cartesian column, explicit and VIC (implicit-scheme 9), and on a 2-D Cartesian
      box with nx3 = 1, explicit and VIC;
@@ -22,7 +22,8 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
   5. the cycle diagnostics (print_cycle_info) log the potential energy the booked work conserves:
      ie= + pe= equals this test's E + P with the switch on and E + PE_d with it off, to the printed digits
      (spherical, Cartesian and 2-D Cartesian, after a few explicit steps);
-  6. on, a gnomonic-equiangle (cubed-sphere) block with gravity-work: face fails at setup;
+  6. a gnomonic-equiangle (cubed-sphere) block with gravity-work: face sets up; on, it warns that
+     the switch has no form there, off it does not;
   7. on, one VIC solve whose availability clamp binds (a momentum kick, as in
      test_implicit_stratified_solid.py's clamp_energy), so the solved density change differs from the raw
      one: its E + P defect is round-off, and the defect the same solve shows if the corrected-PE work had
@@ -237,7 +238,8 @@ def diag(case, out, device="cpu"):
 
 
 def cubed_error():
-    """the setup error of a gnomonic-equiangle block with gravity-work: face, or '' if it builds"""
+    """the setup error of a gnomonic-equiangle block with gravity-work: face, or '' if it builds,
+    and what the setup wrote to stderr"""
     from snapy import MeshBlock, MeshBlockOptions
     cfg = config("cartesian", 0, 1, "weno5")
     cfg["geometry"] = {"type": "gnomonic-equiangle",
@@ -249,13 +251,21 @@ def cubed_error():
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
         yaml.safe_dump(cfg, f)
         tmp = f.name
+    log, fd = tempfile.TemporaryFile("w+"), os.dup(2)
+    sys.stderr.flush()
+    os.dup2(log.fileno(), 2)  # the C++ warning goes to fd 2
     try:
         MeshBlock(MeshBlockOptions.from_yaml(tmp))
-        return ""
+        msg = ""
     except Exception as e:  # noqa: BLE001 -- the message is checked by the caller
-        return str(e)
+        msg = str(e)
     finally:
+        sys.stderr.flush()
+        os.dup2(fd, 2)
+        os.close(fd)
         os.unlink(tmp)
+    log.seek(0)
+    return msg, log.read()
 
 
 def clamp_solve(device="cpu"):
@@ -336,7 +346,7 @@ def main():
                             "--child", out], env=env, check=True)
             res[arm] = json.load(open(os.path.join(out, "res.json")))
             u[arm] = torch.load(os.path.join(out, "u.pt"))
-            if arm == "zero":
+            if arm == "unset":  # the same states as on, checked bit for bit below
                 continue
             for case in DIAG_CASES:  # one process each: the log is flushed at exit
                 log = subprocess.run([sys.executable, os.path.abspath(__file__), "--device", a.device,
@@ -351,22 +361,24 @@ def main():
                 if not err <= DIAG_TOL:
                     failures.append(f"{case}: switch {arm}, logged ie + pe is not {name} (rel diff {err:.2e})")
     for case in CASES:
-        off, on = res["unset"][case], res["on"][case]
+        off, on = res["zero"][case], res["on"][case]
         print(f"{case:10s} max per-step |d(E+P)|/|E+P|: off {off['dEP']:.2e} on {on['dEP']:.2e}   "
               f"|d(E+PE_d)|/|E+PE_d|: off {off['dEPd']:.2e} on {on['dEPd']:.2e}", flush=True)
-        if not torch.equal(u["unset"][case], u["zero"][case]):
-            failures.append(f"{case}: switch unset and 0 differ")
-        if torch.equal(u["unset"][case], u["on"][case]):
+        if not torch.equal(u["unset"][case], u["on"][case]):
+            failures.append(f"{case}: switch unset and 1 differ (it is on by default)")
+        if torch.equal(u["zero"][case], u["on"][case]):
             failures.append(f"{case}: the switch changed nothing")
         if not on["dEP"] <= EP_TOL:
             failures.append(f"{case}: on, per-step E+P change {on['dEP']:.2e} > {EP_TOL}")
-    for arm in ("unset", "on"):
-        msg = res[arm]["cubed_error"]
-        print(f"cubed     switch {arm:5s}: setup {'error: ' + msg.splitlines()[0] if msg else 'ok'}", flush=True)
-    if "SNAP_GRAVITY_WORK_RADIAL_EXACT" not in res["on"]["cubed_error"]:
-        failures.append("cubed: switch on, a gnomonic-equiangle block did not fail at setup")
-    if "SNAP_GRAVITY_WORK_RADIAL_EXACT" in res["unset"]["cubed_error"]:
-        failures.append("cubed: switch unset, the setup check fired")
+    for arm in ARMS:
+        msg, log = res[arm]["cubed_error"]
+        warned = "SNAP_GRAVITY_WORK_RADIAL_EXACT" in log
+        print(f"cubed     switch {arm:5s}: setup {'error: ' + msg.splitlines()[0] if msg else 'ok'}, "
+              f"warning {'yes' if warned else 'no'}", flush=True)
+        if msg:
+            failures.append(f"cubed: switch {arm}, a gnomonic-equiangle block failed at setup")
+        if warned != (arm != "zero"):
+            failures.append(f"cubed: switch {arm}, the no-form warning {'fired' if warned else 'is missing'}")
     for arm in ("unset", "on"):
         c, sv = res[arm]["clamp_vic"], res[arm]["solid_vic"]
         print(f"clamp VIC switch {arm:5s}: dry clamp {c['clamp']:.0f}, max|solved - raw drho| {c['solved_raw']:.2e} "
@@ -382,12 +394,12 @@ def main():
     if not res["on"]["solid_vic"]["dEP"] <= EP_TOL:
         failures.append(f"solid VIC: on, fluid per-step E+P change {res['on']['solid_vic']['dEP']:.2e} > {EP_TOL}")
     for case in ("cart", "cart_vic"):
-        r_off, r_on = res["unset"]["rest_" + case], res["on"]["rest_" + case]
+        r_off, r_on = res["zero"]["rest_" + case], res["on"]["rest_" + case]
         print(f"{case:10s} rest, {REST_STEPS} steps, max|u1|/c_s: off {r_off:.3e} on {r_on:.3e}", flush=True)
         if not r_on <= 1.05 * r_off + 1.e-14:
             failures.append(f"{case}: rest max|u1|/c_s on {r_on:.3e} worse than off {r_off:.3e}")
     for case in ("sph", "cart"):
-        off, on = u["unset"]["stage_" + case], u["on"]["stage_" + case]
+        off, on = u["zero"]["stage_" + case], u["on"]["stage_" + case]
         if not torch.equal(on["u1"][kIDN], off["u1"][kIDN]):
             failures.append(f"{case}: the switch changed the stage's density")
         dE = on["u1"][kIPR] - off["u1"][kIPR]

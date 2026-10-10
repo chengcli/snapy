@@ -8,7 +8,7 @@ Cartesian retains eight periodic copies; spherical x1 uses one angular cell
 to test a strictly radial column. Angular-mode stability is a separate gate.
 
 The face ladder runs twice, each in a child process (the switch is read once per
-process): with SNAP_GRAVITY_WORK_RADIAL_EXACT unset, and with it on (the corrected-PE
+process): with SNAP_GRAVITY_WORK_RADIAL_EXACT=0, and with it on (the corrected-PE
 work of docs/derivations/curved-gravity-work-weight.md sec 7, booked inside the
 implicit operator, #296). Every rung must stay below W_TOL, end the run below
 W_SETTLED, and, with the switch on, peak at most ON_OFF times its switch-off rung.
@@ -139,7 +139,7 @@ def main():
     failures = []
     if not args.ladder:
         ladder = {}
-        for value in (None, "1"):  # SNAP_GRAVITY_WORK_RADIAL_EXACT unset, on
+        for value in ("0", "1"):  # SNAP_GRAVITY_WORK_RADIAL_EXACT off, on (on by default)
             env = dict(os.environ)
             env.pop("SNAP_GRAVITY_WORK_RADIAL_EXACT", None)
             if value is not None:
@@ -152,11 +152,11 @@ def main():
                 if not line.startswith("{"):
                     continue
                 row = json.loads(line)
-                row["radial_exact"] = value is not None
+                row["radial_exact"] = value == "1"
                 print(json.dumps(row), flush=True)
                 if "passed" not in row:
                     continue
-                arm = "radial-exact" if value else "face"
+                arm = "radial-exact" if value == "1" else "face"
                 ladder[arm, row["geometry"], row["courant"]] = row
                 if not row["passed"]:
                     failures.append((arm, row["geometry"], row["courant"], row["steps"], row["max_w"]))
