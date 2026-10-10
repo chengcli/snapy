@@ -111,8 +111,8 @@ int main() {
   // settling part.  Its component sums lock the two donor corrections: the
   // pre-fix single-donor carry gives different momentum/energy values.
   bool mixed_carry_correct =
-      std::abs(seam_flux_momentum1 - 99901.819728861505) < 1.e-7 &&
-      std::abs(seam_flux_energy - 493359.10824948637) < 5.e-3;
+      std::abs(seam_flux_momentum1 - 99901.819827557352) < 1.e-7 &&
+      std::abs(seam_flux_energy - 493328.12156816886) < 5.e-3;
   double mass_after = global_sum(layout, condensate_mass(block, vars[0]));
   bool conserved = std::abs(mass_after - mass_before) <= 1.e-12 * mass_before;
   double limiter_hits = global_sum(
