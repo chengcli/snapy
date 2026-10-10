@@ -455,7 +455,7 @@ e.g. the spherical implicit energy check gives $E + \mathrm{PE}_d = -0.166$ but 
 (scale 2119), and the moving tall columns drift by $\le 4.1\times10^{-15}$ in $E + P$ against up to
 $3.9\times10^{-9}$ in $E + \mathrm{PE}_d$.
 
-## 11. The default reference at the walls, F on by default with `gravity-work: face`, and the remaining error
+## 11. The default reference at the walls, F on by default with `gravity-work: face`, the remaining error, and the x1 mass-flux covariance
 
 ### 11.1 The wall closure of the default x1 reference
 
@@ -495,3 +495,25 @@ that face and cell work share, so it does not separate the two forms.
 
 > **TABLE PLACEHOLDER** -- convergence table nz 16-128, fit $c_2\,\Delta z^2 + c_3\,\Delta z^3$: to be filled by the
 > lead.
+
+### 11.4 The x1 mass-flux covariance (`SNAP_X1_MASS_COVARIANCE`, default off)
+
+The x1 reconstruction takes the cell velocity $w_c = \overline{m_1}/\bar\rho$ as if it were the cell average
+$\bar w$. Expanding the product over a cell of width $\Delta z$,
+$$
+\overline{\rho w} = \bar\rho\,\bar w + \frac{\Delta z^2}{12}\,\rho_z w_z + O(\Delta z^4),
+\qquad
+w_c = \bar w + \frac{\Delta z^2}{12}\,\frac{\rho_z w_z}{\bar\rho} + O(\Delta z^4),
+$$
+so in a stratified column the face mass flux carries an extra $\frac{\Delta z^2}{12}\rho_z w_z$, the x1 analogue of
+the horizontal term that `SNAP_FLUX_COVARIANCE` removes. With the switch on, the cell velocity handed to the
+reconstruction is $w_c - \frac{\Delta z^2}{12}\rho_1 w_1/\bar\rho$, with $\rho_1$ and $w_1$ centred differences in
+$x_1$, and the full cell velocity is restored after the reconstruction. Two details at a reflecting wall:
+- the even ghost density is not the stratified column, so $\rho_1$ in the first and last interior cells is the
+  one-sided second-order difference $\mp(-3\rho_0 + 4\rho_{\pm1} - \rho_{\pm2})/(2h)$ over interior cells;
+- the ghost velocities are refilled as the odd mirror of the corrected interior, so the wall face still carries
+  zero mass flux.
+
+At rest $w_1 = 0$ and the correction vanishes, so rest balance is unchanged; with the switch off nothing changes.
+
+> **ONSET PLACEHOLDER** -- onset numbers with the switch: filled by the lead.
