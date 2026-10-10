@@ -495,8 +495,12 @@ that face and cell work share, so it does not separate the two forms.
 
 The deck is the T1L box, 1 H tall with superadiabatic excess $\varepsilon = 10^{-3}$, started from the point-value
 initial state; the entry is the relative error of the fitted onset growth rate against the linear eigenvalue rate,
-so $\Delta z = H/n_z$. The build is 37dce4e with the x1 covariance of §11.4 (build job 644122), with the
-switches named per column: cov = `SNAP_FLUX_COVARIANCE`, W = `SNAP_WB_REF4`, F, and x1 = `SNAP_X1_MASS_COVARIANCE`.
+so $\Delta z = H/n_z$. The runs used 37dce4e plus the x1 covariance code that this branch commits as e04b783 (the
+same hunks). All of them have `SNAP_WB_REF4` on, where the default-reference wall closure of §11.1 is a bitwise
+no-op, and all are explicit, where f256ab5 (the implicit path) changes nothing. So the numbers hold at this head,
+but they do not exercise the default-reference wall closure; its own order test is `test_hydro_ref_x1`
+(`wb-ref-wall.md`). The switches are named per column: cov = `SNAP_FLUX_COVARIANCE`, W = `SNAP_WB_REF4`, F, and
+x1 = `SNAP_X1_MASS_COVARIANCE`.
 The runs are jobs 644220 (nz 16, and every column without x1), 644132 (nz 32 with x1) and 644133 (nz 64 with x1):
 
 | $n_z$ | face cov+W+F+x1 | face cov+W+F | cell cov+W+x1 | cell cov+W |
@@ -526,14 +530,17 @@ the horizontal term that `SNAP_FLUX_COVARIANCE` removes. With the switch on, the
 reconstruction is $w_c - \frac{\Delta z^2}{12}\rho_1 w_1/\bar\rho$, with $\rho_1$ and $w_1$ centred differences in
 $x_1$, and the full cell velocity is restored after the reconstruction. Two details at a reflecting wall:
 - the even ghost density is not the stratified column, so $\rho_1$ in the first and last interior cells is the
-  one-sided second-order difference $\mp(-3\rho_0 + 4\rho_{\pm1} - \rho_{\pm2})/(2h)$ over interior cells;
+  one-sided second-order difference $\pm(-3\rho_0 + 4\rho_{\pm1} - \rho_{\pm2})/(2h)$ over interior cells, upper
+  signs at the lower wall and $h$ the cell-centre spacing;
 - the ghost velocities are refilled as the odd mirror of the corrected interior, so the wall face still carries
   zero mass flux.
 
 At rest $w_1 = 0$ and the correction vanishes, so rest balance is unchanged; with the switch off nothing changes.
+The correction acts on the total mass flux: species mass fractions are still advected with the corrected velocity,
+so their split between species keeps an $O(\Delta z^2)$ error, which this switch does not remove.
 
 The onset test uses the deck, build and runs of §11.3: T1L 1 H with $\varepsilon = 10^{-3}$ from the point-value
-initial state, on 37dce4e with the switch, in jobs 644220, 644132 and 644133. These are the measured values:
+initial state, on the build of §11.3 with the switch, in jobs 644220, 644132 and 644133. These are the measured values:
 - cell cov+W+x1 is $+1.1004\times10^{-2}$, $+3.5997\times10^{-3}$ and $+9.5205\times10^{-4}$ at nz 16, 32, 64.
   Without x1 (job 644220) the values are $-1.662\times10^{-3}$, $+1.239\times10^{-3}$ and $+4.144\times10^{-4}$. The
   values predicted from the face-flux error, $+2.63$ to $+4.03\times10^{-3}$ at nz 32 and $+0.80$ to
