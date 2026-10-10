@@ -59,19 +59,30 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
   }
 }
 
+//! rho/p k cells past a wall, from the wall cell r0 and its neighbour r1:
+//! linear, r0 + k (r0 - r1), where rho/p falls towards the wall (r1 <= r0),
+//! and ln-linear, r0 (r0 / r1)^k, where it rises (r1 > r0). Each is the
+//! branch that stays closer to r0, so the continuation lies within
+//! [r0 (r0 / r1)^k, r0 (1 + k)] for r1 >= 0: positive, and bounded above when
+//! r1 is nearly empty. A non-positive value keeps the wall cell.
+template <typename T>
+inline DISPATCH_MACRO T hydro_ref_x1_wall_rop(T r0, T r1, int k) {
+  T e = r1 > r0 ? r0 * pow(r0 / r1, T(k)) : r0 + T(k) * (r0 - r1);
+  return e > T(0) ? e : r0;
+}
+
 //! rho/p smoothed by a 5-point binomial along x1: the reference must
 //! track the column profile at LARGE scales only. An unsmoothed local rho/p
 //! makes rho' degenerate with the pressure perturbation, so entropy/buoyancy
 //! anomalies bypass the high-order reconstruction; a bottom-anchored
 //! isentrope reference errs by orders of magnitude on a stratified column.
 //! Past a clamped wall (ext_lo/ext_hi: the wall side owns at least two cells)
-//! the stencil continues ln(rho/p) linearly from the two cells next to the
-//! wall, r_{-k} = r_0 (r_0 / r_1)^k, instead of repeating the wall cell. That
-//! is linear in index to O(dz^2), so the wall cells keep the interior's
-//! O(dz^2) bias; a repeated wall cell is exact only for constant rho/p and
-//! leaves an O(dz) error at the first faces (docs/derivations/wb-ref-wall.md).
-//! The continuation stays positive; a non-positive ratio keeps the wall cell.
-//! Only owned cells are read.
+//! the stencil continues rho/p from the two cells next to the wall instead of
+//! repeating the wall cell (hydro_ref_x1_wall_rop). Either continuation is
+//! linear in index to O(dz^2), so the wall cells keep the interior's O(dz^2)
+//! bias; a repeated wall cell is exact only for constant rho/p and leaves an
+//! O(dz) error at the first faces (docs/derivations/wb-ref-wall.md). Only
+//! owned cells are read.
 template <typename T>
 inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
                                                 int flat, int nc1, int i,
@@ -84,13 +95,11 @@ inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
   for (int m = -2; m <= 2; ++m) {
     int j = i + m;
     if (j < jlo) {
-      v[m + 2] = rop(jlo);
-      T q = ext_lo ? v[m + 2] / rop(jlo + 1) : T(0);
-      if (q > T(0)) v[m + 2] *= pow(q, T(jlo - j));
+      v[m + 2] = ext_lo ? hydro_ref_x1_wall_rop(rop(jlo), rop(jlo + 1), jlo - j)
+                        : rop(jlo);
     } else if (j > jhi) {
-      v[m + 2] = rop(jhi);
-      T q = ext_hi ? v[m + 2] / rop(jhi - 1) : T(0);
-      if (q > T(0)) v[m + 2] *= pow(q, T(j - jhi));
+      v[m + 2] = ext_hi ? hydro_ref_x1_wall_rop(rop(jhi), rop(jhi - 1), j - jhi)
+                        : rop(jhi);
     } else {
       v[m + 2] = rop(j);
     }
