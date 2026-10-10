@@ -65,12 +65,13 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
 //! anomalies bypass the high-order reconstruction; a bottom-anchored
 //! isentrope reference errs by orders of magnitude on a stratified column.
 //! Past a clamped wall (ext_lo/ext_hi: the wall side owns at least two cells)
-//! the stencil continues rho/p linearly from the two cells next to the wall
-//! instead of repeating the wall cell. The binomial reproduces a linear profile
-//! exactly, so the wall cells keep the interior's O(dz^2) bias; a repeated wall
-//! cell is exact only for constant rho/p and leaves an O(dz) error at the
-//! first faces (docs/derivations/wb-ref-wall.md). A continuation that is not
-//! positive falls back to the wall cell. Only owned cells are read.
+//! the stencil continues ln(rho/p) linearly from the two cells next to the
+//! wall, r_{-k} = r_0 (r_0 / r_1)^k, instead of repeating the wall cell. That
+//! is linear in index to O(dz^2), so the wall cells keep the interior's
+//! O(dz^2) bias; a repeated wall cell is exact only for constant rho/p and
+//! leaves an O(dz) error at the first faces (docs/derivations/wb-ref-wall.md).
+//! The continuation stays positive; a non-positive ratio keeps the wall cell.
+//! Only owned cells are read.
 template <typename T>
 inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
                                                 int flat, int nc1, int i,
@@ -84,16 +85,12 @@ inline DISPATCH_MACRO T hydro_ref_x1_rop_smooth(T const* w, int ncells,
     int j = i + m;
     if (j < jlo) {
       v[m + 2] = rop(jlo);
-      if (ext_lo) {
-        T e = v[m + 2] + T(jlo - j) * (v[m + 2] - rop(jlo + 1));
-        if (e > T(0)) v[m + 2] = e;
-      }
+      T q = ext_lo ? v[m + 2] / rop(jlo + 1) : T(0);
+      if (q > T(0)) v[m + 2] *= pow(q, T(jlo - j));
     } else if (j > jhi) {
       v[m + 2] = rop(jhi);
-      if (ext_hi) {
-        T e = v[m + 2] + T(j - jhi) * (v[m + 2] - rop(jhi - 1));
-        if (e > T(0)) v[m + 2] = e;
-      }
+      T q = ext_hi ? v[m + 2] / rop(jhi - 1) : T(0);
+      if (q > T(0)) v[m + 2] *= pow(q, T(j - jhi));
     } else {
       v[m + 2] = rop(j);
     }
