@@ -1051,7 +1051,7 @@ void print_cycle_diagnostics(
           int is = coord->il(), ie = coord->iu() + 1;
           pe.slice(-1, is, ie) -= corrected_pe_work(
               rho.slice(-1, is, ie), coord->x1f, coord->x1v, is, ie, grav1,
-              coord->options->type() == "spherical-polar");
+              x1_measure(coord->options->type()));
         }
         add(pe_sum, (pe * vol).index(interior).sum({1, 2, 3}));
       }

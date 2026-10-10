@@ -2,8 +2,8 @@
 
 With SNAP_GRAVITY_WORK_RADIAL_EXACT on (tall.radial_exact()) every face-work energy check
 measures E + P, the energy that switch conserves (P the corrected PE of
-docs/derivations/curved-gravity-work-weight.md sec 7), on the final state; a
-gnomonic-equiangle face block keeps the plain face work (it warns at setup)."""
+docs/derivations/curved-gravity-work-weight.md sec 7), on the final state; on a
+gnomonic-equiangle face block P also carries the centroid term of sec 12."""
 import json
 import math
 import sys
@@ -205,11 +205,11 @@ def curved_energy(scheme, geometry, work):
     expected=0. if work=='face' else -dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
     final=((du[kIPR][sl]+z*du[kIDN][sl]-du0[kIPR][sl])*vol).sum()
     error=max((observed-expected).abs().item(),(final-expected).abs().item())
-    if work=='face' and geometry!='gnomonic-equiangle' and tall.radial_exact():
+    if work=='face' and tall.radial_exact():
         # E + P on the final state: the solve books part of the corrected-PE work,
         # the post-solve term the rest, so the raw solve closes neither form alone
-        final=final+(tall.corrected_pe(du[kIDN][sl],b.buffer('coord.x1f')[3:12],z,-1.,
-                                       geometry=='spherical-polar')*vol).sum()
+        final=final+(tall.corrected_pe(du[kIDN][sl],b.buffer('coord.x1f')[3:12],z,-1.,True,
+                                       geometry=='gnomonic-equiangle')*vol).sum()
         error=(final-expected).abs().item()
     scale=(du0[kIPR][sl]*vol).abs().sum().item()
     out={'device':device,'geometry':geometry,'scheme':scheme,'work':work,'observed':observed.item(),'final':final.item(),'expected':float(expected),'error':error,'relative':error/scale,'finite':bool(torch.isfinite(du).all())}

@@ -6,6 +6,9 @@ vertical acoustic Courants up to 250. Results include the first failed rung;
 passing a finite ladder does not establish a universal stability threshold.
 Cartesian retains eight periodic copies; spherical x1 uses one angular cell
 to test a strictly radial column. Angular-mode stability is a separate gate.
+--geometry gnomonic-equiangle runs the same ladder on one cubed-sphere face block of
+4 x 4 columns at the spherical radius, where the corrected-PE work carries the
+centroid term of the derivation's sec 12 (#300).
 
 The face ladder runs twice, each in a child process (the switch is read once per
 process): with SNAP_GRAVITY_WORK_RADIAL_EXACT=0, and with it on (the corrected-PE
@@ -67,6 +70,14 @@ def config(geometry="cartesian", default_work=False):
             "x1min": RADIUS, "x1max": RADIUS + NZ * DZ,
             "x2min": math.pi / 2 - 0.2, "x2max": math.pi / 2 + 0.2,
             "x3min": 0.0, "x3max": 0.05}
+    elif geometry == "gnomonic-equiangle":
+        cfg["geometry"]["type"] = geometry
+        cfg["geometry"]["cells"].update(nx2=4, nx3=4)
+        cfg["geometry"]["bounds"] = {
+            "x1min": RADIUS, "x1max": RADIUS + NZ * DZ,
+            "x2min_pi": -0.25, "x2max_pi": 0.25, "x3min_pi": -0.25, "x3max_pi": 0.25}
+        for side in ("x2-inner", "x2-outer", "x3-inner", "x3-outer"):
+            cfg["boundary-condition"]["external"][side] = "reflecting"
     return cfg
 
 
@@ -98,9 +109,11 @@ def run(dt, nstep, device, geometry="cartesian", default_work=False):
         w[c][..., ng + NZ:] = w[c][..., ng + NZ - 1:ng + NZ]
     block_vars, _ = block.initialize({"hydro_w": w})
 
-    nx2 = config(geometry)["geometry"]["cells"]["nx2"]
+    cells = config(geometry)["geometry"]["cells"]
+    nx2, nx3 = cells["nx2"], cells["nx3"]
     jl = ng if nx2 > 1 else 0
-    interior = (Ellipsis, slice(jl, jl + nx2), slice(ng, ng + NZ))
+    kl = ng if nx3 > 1 else 0
+    interior = (slice(None), slice(kl, kl + nx3), slice(jl, jl + nx2), slice(ng, ng + NZ))
     nstage = len(block.module("intg").stages)
     wmax, history = 0.0, []
     for n in range(1, nstep + 1):
@@ -125,7 +138,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--nstep", type=int, default=40)
-    ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "both"), default="both")
+    ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "gnomonic-equiangle", "both"),
+                    default="both")
     ap.add_argument("--courants", type=float, nargs="+", default=COURANTS)
     ap.add_argument("--ladder", action="store_true",
                     help="child: the face ladder only, under the inherited switch")

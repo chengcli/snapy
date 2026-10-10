@@ -818,7 +818,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (radial_exact) {
       face_gravity_work += corrected_pe_work(
           -dt * vertical_mass_div, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie,
-          grav1, pmb->pcoord->options->type() == "spherical-polar");
+          grav1, x1_measure(pmb->pcoord->options->type()));
     }
 
     // cp3/cp5/weno5 faces: the face average exceeds m = rho*v by

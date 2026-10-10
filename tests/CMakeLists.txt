@@ -228,6 +228,11 @@ snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;e
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
+# the same ladder on one cubed-sphere face block, where the corrected-PE work carries the
+# centroid term (#300)
+snapy_add_python_test(test_implicit_gravity_tall_column_cubed SCRIPT test_implicit_gravity_tall_column.py
+                      ARGS --geometry gnomonic-equiangle TIMEOUT 120
+                      LABELS "python;hydro;implicit;gravity;cubed-sphere")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 # the same two tests with the corrected-PE work on (#296): they detect the switch and
