@@ -213,6 +213,14 @@ snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydr
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
+# the same two tests with the corrected-PE work on (#296): they detect the switch and
+# measure E + P; the tall column runs both arms itself
+foreach(_t test_implicit_face_work_operator test_implicit_stratified_solid)
+  snapy_add_python_test(${_t}_radial_exact SCRIPT ${_t}.py TIMEOUT 300
+                        LABELS "python;hydro;implicit;gravity")
+  set_tests_properties(${_t}_radial_exact_python PROPERTIES ENVIRONMENT
+                       "SNAP_GRAVITY_WORK_RADIAL_EXACT=1")
+endforeach()
 snapy_add_python_test(test_gravity_work_fixer TIMEOUT 120 LABELS "python;hydro;gravity;energy")
 snapy_add_python_test(test_gravity_work_radial_exact TIMEOUT 300 LABELS "python;hydro;gravity")
 snapy_add_python_test(test_implicit_options_type TIMEOUT 60 LABELS "python;implicit")

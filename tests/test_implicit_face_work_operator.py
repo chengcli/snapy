@@ -9,6 +9,11 @@ discrete hydrostatic balance with snapy.balance_column, run with gravity-work: f
 w0 = 10 m/s, 1 m/s at Courant 657 to keep the advective Courant number below 1):
   every run finite with |E+PE drift| < EPE_TOL (E+PE the interior sum of E + rho g z);
   at rest also max |w| < W_TOL.
+With SNAP_GRAVITY_WORK_RADIAL_EXACT on (detected from the build, radial_exact()) the
+conserved energy is E + P, P the corrected PE of
+docs/derivations/curved-gravity-work-weight.md sec 7, and the drift is measured on it
+(E+PE then drifts by the O(dz^2) error of PE itself, ~1e-10 here); the same runs blew up
+at Courant 197 and 657 before that switch's work was coupled into the operator (#296).
 
 Face work booked after the implicit solve, outside the operator that linearises the
 cell work, blows the column up at Courant 65.6 by step 27 (chengcli/snapy#283). With
@@ -18,6 +23,7 @@ the face work inside the operator the column stays near 5e-9 m/s and E+PE drifts
   python test_implicit_face_work_operator.py [--device cpu] [--nstep 40]
 """
 import argparse
+import functools
 import math
 import os
 import sys
@@ -57,6 +63,40 @@ def config(scheme):
     }
 
 
+@functools.lru_cache(maxsize=None)
+def radial_exact():
+    """SNAP_GRAVITY_WORK_RADIAL_EXACT acts in this process: it refuses a gnomonic-equiangle
+    block with gravity-work: face at setup (however the switch was turned on)"""
+    from snapy import MeshBlock, MeshBlockOptions
+    cfg = config(9)
+    cfg["geometry"] = {"type": "gnomonic-equiangle",
+                       "bounds": {"x1min": 300., "x1max": 400., "x2min_pi": -0.25, "x2max_pi": 0.25,
+                                  "x3min_pi": -0.25, "x3max_pi": 0.25},
+                       "cells": {"nx1": 8, "nx2": 4, "nx3": 4, "nghost": 3}}
+    cfg["boundary-condition"]["external"].update({
+        "x2-inner": "reflecting", "x2-outer": "reflecting",
+        "x3-inner": "reflecting", "x3-outer": "reflecting"})
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
+        yaml.safe_dump(cfg, f)
+        tmp = f.name
+    try:
+        MeshBlock(MeshBlockOptions.from_yaml(tmp))
+        return False
+    except RuntimeError as e:
+        if "SNAP_GRAVITY_WORK_RADIAL_EXACT" in str(e):
+            return True
+        raise
+    finally:
+        os.unlink(tmp)
+
+
+def corrected_pe(rho, x1f, x1v, grav1, spherical=False):
+    """per-cell -grav1 sigma^2 s[rho] (times the cell volume by the caller): what P adds
+    to PE_d with SNAP_GRAVITY_WORK_RADIAL_EXACT on, rho along the last dimension"""
+    from test_gravity_work_radial_exact import slope, variance
+    return -grav1 * variance(x1f, spherical).to(rho) * slope(rho, x1v.to(rho))
+
+
 def run(scheme, dt, w0, nstep, device):
     """Returns (finite, steps run, max |w|, relative E+PE drift)."""
     import snapy
@@ -89,9 +129,15 @@ def run(scheme, dt, w0, nstep, device):
     interior = (Ellipsis, slice(ng, ng + NX2), slice(ng, ng + NZ))
     zz = z.to(w)
 
+    x1f = torch.arange(NZ + 1, dtype=torch.float64) * DZ
+    exact = radial_exact()
+
     def epe():
         u = block_vars["hydro_u"][interior]
-        return (u[kIPR] + u[kIDN] * GRAV * zz).sum().item()
+        e = u[kIPR] + u[kIDN] * GRAV * zz
+        if exact:
+            e = e + corrected_pe(u[kIDN], x1f, zz, -GRAV)
+        return e.sum().item()
 
     e0 = epe()
     nstage = len(block.module("intg").stages)
@@ -118,6 +164,8 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
+    print("SNAP_GRAVITY_WORK_RADIAL_EXACT %s: E+PE is E + %s" % (
+        ("on", "P") if radial_exact() else ("off", "PE_d")), flush=True)
     for scheme, sname in SCHEMES:
         for dt, w0_moving in RUNGS:
             for w0 in (0.0, w0_moving):

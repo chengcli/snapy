@@ -318,7 +318,8 @@ summand of (8.5). Because $P_i$ is linear in $\rho$, $\dot P_i = h_i[\dot\rho_i\
 and comparing with (8.2),
 $$W_i = W^{\rm face}_i + g_1\,\sigma_i^2\,s_i[\dot\rho],\qquad \dot\rho \text{ from (8.1)}. \tag{8.6}$$
 This is all the switch adds (`corrected_pe_work`; explicit: in `hydro_forward.cpp` on `-dt*vertical_mass_div`;
-VIC: in `implicit_hydro.cpp` on the solve's own density change `du - du0`, rows IDN and the condensates). It changes
+VIC: in `implicit_hydro.cpp` on the solve's own density change `du - du0`, rows IDN and the condensates, partly inside
+the operator, §10). It changes
 only the energy row: mass and momentum are untouched, so a state at rest ($F \equiv 0$, $\dot\rho = 0$) gets exactly
 zero from it.
 *Uniform-grid closed forms* (substitute (8.1) into (8.4); F-replica §7 checks them against the matrix form to
@@ -370,7 +371,7 @@ Against plm decks (no H) the change is the $O(h^2)$ trapezoid term in every cell
 **8.8 Porting checklist.** (i) The sum of mass rows that the x1 mass flux carries, as $\dot\rho$. (ii) $\sigma^2 = h^2/12$
 per cell. (iii) The 3-point slope (8.4), one-sided at both x1 ends of every block. (iv) Add $g_1\sigma^2s[\Delta\rho]$ to
 the energy row after the face work, where $\Delta\rho$ is that stage's x1 density change (implicit solvers: the solved
-change). (v) Turn H off (F already removes the $F''$ term; F + H is $O(h^2)$ again). (vi) Test: closed column, any
+change, and the term inside the implicit operator, §10). (v) Turn H off (F already removes the $F''$ term; F + H is $O(h^2)$ again). (vi) Test: closed column, any
 flow, $\Delta(E + P)$ per step at round-off with $P$ from (8.5).
 
 ## 9. F against the $\bar r$ potential form
@@ -419,8 +420,37 @@ Searched: `src/`, `python/`, `tests/`.
 | site | PE used | under the switch |
 |---|---|---|
 | explicit face work, `hydro_forward.cpp` | $P$ | the booked work (7); the reference |
-| implicit face work: the matrix's work rows and the projection/clamp work in `implicit_hydro.cpp` | $\mathrm{PE}_d$ increments | consistent: the post-solve term adds $g_1\sigma^2s[\Delta\rho]$ with $\Delta\rho$ the solved change `du - du0`, which includes the redistributed and projected mass; $\Delta(E + P)$ per step $\le 4\times10^{-16}$ on the implicit cases of the test |
+| implicit face work: the matrix's work rows and the projection/clamp work in `implicit_hydro.cpp` | $\mathrm{PE}_d$ increments | consistent: the energy row books $g_1\sigma^2\tilde s[\delta\rho_{\rm raw} - \Delta\rho_0]$ (below) and the post-solve term the rest, so the total is $g_1\sigma^2s[\Delta\rho]$ with $\Delta\rho$ the solved change `du - du0`, which includes the redistributed and projected mass; $\Delta(E + P)$ per step $\le 4\times10^{-16}$ on the implicit cases of the test |
 | gravity-work fixer (`gwfix_stage` in `hydro_forward.cpp`, the implicit `epe` lambda) and its `fixgrav=` printout | $\mathrm{PE}_d$ | consistent by construction: the fixer runs only with `gravity-work: cell` (`hydro.cpp`), the switch acts only with `gravity-work: face` (`radial_exact_work()`); they never meet |
 | cycle diagnostics `pe=` (`print_cycle_diagnostics`, `meshblock.cpp`) | $P$ | logs $P$ via `corrected_pe_work` with the same per-block one-sided slope stencil, so the logged `ie=` + `pe=` is the conserved $E + P$ (it logged $\mathrm{PE}_d$ before; the test's check 5 failed on that at $\sim2\times10^{-5}$ relative and passes at $\le 3\times10^{-14}$) |
 | netCDF outputs | none | no PE field is written |
-| E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_implicit_stratified_solid`, `test_implicit_face_work_operator`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct as written: they run with the switch unset; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
+| E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct as written: they run with the switch unset; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
+| face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they detect the switch (a gnomonic-equiangle face block is refused at setup) and then measure $E + P$ on the final state; ctest runs each twice, unset and `=1` (#296) |
+
+**The work inside the implicit operator (#296).** Booked only after the solve, the implicit part of (7) is explicit,
+and it is not small where it matters: for a grid-scale density change the slope term is not $O(h^2)$ below the face
+work (by the closed forms of §8.5, a quarter of it for a face-flux wave of wavelength $3h$). A discretely balanced 11.3H rest column (`test_implicit_gravity_tall_column.py`,
+implicit-scheme 9) then grew from round-off: max $w$ $1.3\times10^{-7}$ m/s at step 13 for vertical acoustic Courant
+197 and step 9 for 250, Cartesian and spherical-polar alike, against $\le 4.9\times10^{-9}$ with the switch off.
+Dropping only the post-solve term made every rung pass at the switch-off level; dropping only the explicit term did not.
+So the energy row now carries the term. With $\delta\rho$ the solve's total-mass unknown and $\Delta\rho_0$ the explicit
+density change it starts from (`du0`), the row gains $-g_1\sigma_i^2\tilde s_i[\delta\rho]/\Delta t$ and its right side
+$-g_1\sigma_i^2\tilde s_i[\Delta\rho_0]/\Delta t$, so it books $g_1\sigma^2\tilde s[\delta\rho - \Delta\rho_0]$, the work of
+the mass the solve moves. $\tilde s$ is $s$ of (8.4) where the matrix can hold it: the interior 3-point stencil is
+tridiagonal as it is, and at each end the one-sided slope's third weight is lumped onto the neighbour (it still
+annihilates a constant). After the solve the term $g_1\sigma^2(s[\Delta\rho] - \tilde s[\delta\rho_{\rm raw} -
+\Delta\rho_0])$ is added, $\Delta\rho$ the solved change after redistribution and clamps, so the booked total and the
+E + P identity are what they were: only how much of the work the solve sees changes. Measured on a CPU build:
+every rung of the tall column passes in both geometries with the switch on, max $w$ $4.69$–$4.89\times10^{-9}$, at or
+below its switch-off rung, settled to $\le 7.4\times10^{-13}$ at step 40; $\Delta(E + P)$ per step
+$\le 3.9\times10^{-16}$ of $E + P$ there, on the implicit cases of `test_gravity_work_radial_exact.py`, and on its
+column under partial VIC (implicit-scheme 1); switch-off states and switch-on explicit states are bitwise unchanged.
+The same defect failed `test_implicit_face_work_operator` with the switch on (rest column at Courant 197: max $w$
+0.37 m/s; non-finite at steps 16-22 at Courant 197 and 657, full and partial VIC) and the face-work tall columns of
+`test_implicit_stratified_solid` (nz 120/140/150 rolled back after 13/11/9 of 300 steps); with the term in the
+operator they run to the end (rest columns $\le 4.9\times10^{-9}$ m/s at Courant 197 and 657; the stratified columns
+$\le 4.4\times10^{-6}$ m/s, the level cell work reaches on them). Their remaining switch-on
+"failures" were $E + \mathrm{PE}_d$ oracles, which measure the wrong invariant here: on the same runs $E + P$ closes,
+e.g. the spherical implicit energy check gives $E + \mathrm{PE}_d = -0.166$ but $E + P = 3.5\times10^{-14}$
+(scale 2119), and the moving tall columns drift by $\le 4.1\times10^{-15}$ in $E + P$ against up to
+$3.9\times10^{-9}$ in $E + \mathrm{PE}_d$.
