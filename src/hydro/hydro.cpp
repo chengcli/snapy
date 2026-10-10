@@ -564,8 +564,7 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // fourth order (docs/derivations/x1-centroid-spherical.md)
   torch::Tensor wb4_flag;
   if (wb_ref4()) {
-    if (!wb_ref4_ || wb_ref4_->fwt.device() != w.device() ||
-        wb_ref4_->fwt.scalar_type() != w.scalar_type()) {
+    if (!wb_ref4_ || wb_ref4_->stale(w)) {
       bool clamp = options->wb_wall_clamp();
       wb_ref4_ = std::make_shared<WbRef4Stencils>(
           wb_ref4_stencils(pcoord->x1f, is, iu, x1_uniform_ == 1,
