@@ -28,7 +28,9 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
      test_implicit_stratified_solid.py's clamp_energy), so the solved density change differs from the raw
      one: its E + P defect is round-off, and the defect the same solve shows if the corrected-PE work had
      used the raw change instead (the mutation, computed from the two changes) is far above it;
-  8. on, the VIC column with a 4-cell immersed solid block: per-step E + P over the fluid cells <= 1e-14.
+  8. on, the VIC column with a 4-cell immersed solid block: per-step E + P over the fluid cells <= 1e-14,
+     and every solve's energy correction in the solid cells is exactly zero, while the corrected-PE work
+     g1 sigma^2 s[drho] there, which the solid gate removes, is not.
 The switch is read once per process, so each arm runs in a child process.
 
   python test_gravity_work_radial_exact.py [--device cpu|cuda]
@@ -201,18 +203,23 @@ def run(case, steps, seed=0.05, balanced=False, device="cpu", solid=False):
     dz = DEPTH / NZ
     dt = (0.3 if CASES[case][1] == 0 else 1.2) * dz / math.sqrt(GAMMA * P0 / RHO0)
     epd0, ep0 = col.energies(v, fluid)
-    dEP = dEPd = umax = 0.
+    dEP = dEPd = umax = gate = ungated = 0.
     for _ in range(steps):
         b.inc_cycle()
         for st in range(len(b.module("intg").stages)):
             b.forward(v, dt, st)
+            if solid:  # check 8: this solve's correction, and the work the gate keeps out of the solid
+                corr = b.buffer("hydro.icorr.corr").cpu()
+                gate = max(gate, float(corr[kIPR][..., SOLID].abs().max()))
+                work = G * col.var * slope(corr[kIDN][..., NG:NG + NZ], col.x)
+                ungated = max(ungated, float(work[..., SOLID.start - NG:SOLID.stop - NG].abs().max()))
         assert b.check_redo(v) == 0
         epd, ep = col.energies(v, fluid)
         dEP, dEPd = max(dEP, abs(ep - ep0) / abs(ep0)), max(dEPd, abs(epd - epd0) / abs(epd0))
         epd0, ep0 = epd, ep
         w = b.module("hydro.eos").compute("U->W", [v["hydro_u"]])[col.sl].cpu()
         umax = max(umax, float((w[kIV1].abs() / torch.sqrt(GAMMA * w[kIPR] / w[kIDN])).max()))
-    return {"dEP": dEP, "dEPd": dEPd, "umax": umax}, v["hydro_u"].cpu().clone()
+    return {"dEP": dEP, "dEPd": dEPd, "umax": umax, "gate": gate, "ungated": ungated}, v["hydro_u"].cpu().clone()
 
 
 def stage(case, device="cpu"):
@@ -385,7 +392,8 @@ def main():
               f"(max|drho| {c['drho']:.2e}); E + P defect {c['ep']:.2e}, E + PE_d {c['epd']:.2e}, "
               f"raw-change mutation {c['mut']:.2e} (sum|dE| {c['scale']:.2e})", flush=True)
         print(f"solid VIC switch {arm:5s}: fluid max per-step |d(E+P)|/|E+P| {sv['dEP']:.2e}, "
-              f"|d(E+PE_d)|/|E+PE_d| {sv['dEPd']:.2e}", flush=True)
+              f"|d(E+PE_d)|/|E+PE_d| {sv['dEPd']:.2e}; solid max|dE| {sv['gate']:.2e} "
+              f"(ungated work {sv['ungated']:.2e})", flush=True)
     c = res["on"]["clamp_vic"]
     tol = 1.e-13 * c["scale"]
     if not (c["solved_raw"] >= 1.e-3 * c["drho"] and abs(c["ep"]) <= tol and abs(c["mut"]) >= 1.e3 * tol):
@@ -393,6 +401,10 @@ def main():
                         f"mutation {c['mut']:.2e}, tolerance {tol:.2e}")
     if not res["on"]["solid_vic"]["dEP"] <= EP_TOL:
         failures.append(f"solid VIC: on, fluid per-step E+P change {res['on']['solid_vic']['dEP']:.2e} > {EP_TOL}")
+    sv = res["on"]["solid_vic"]  # fluid E+P closes either way: the solid is refilled every step
+    if not (sv["gate"] == 0. and sv["ungated"] > 0.):
+        failures.append(f"solid VIC: on, solid-cell energy correction {sv['gate']:.2e} (ungated work "
+                        f"{sv['ungated']:.2e}); the gate must book none")
     for case in ("cart", "cart_vic"):
         r_off, r_on = res["zero"]["rest_" + case], res["on"]["rest_" + case]
         print(f"{case:10s} rest, {REST_STEPS} steps, max|u1|/c_s: off {r_off:.3e} on {r_on:.3e}", flush=True)
