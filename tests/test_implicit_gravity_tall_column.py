@@ -15,6 +15,7 @@ process): with SNAP_GRAVITY_WORK_RADIAL_EXACT=0, and with it on (the corrected-P
 work of docs/derivations/curved-gravity-work-weight.md sec 7, booked inside the
 implicit operator, #296). Every rung must stay below W_TOL, end the run below
 W_SETTLED, and, with the switch on, peak at most ON_OFF times its switch-off rung.
+A child that exits non-zero or prints an incomplete ladder fails the parent (#299).
 """
 import argparse
 import math
@@ -151,6 +152,7 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
+    geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
     if not args.ladder:
         ladder = {}
         for value in ("0", "1"):  # SNAP_GRAVITY_WORK_RADIAL_EXACT off, on (on by default)
@@ -162,14 +164,18 @@ def main():
                    "--nstep", str(args.nstep), "--geometry", args.geometry,
                    "--courants"] + [str(c) for c in args.courants]
             out = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            rungs, summaries = set(), set()
             for line in out.stdout.splitlines():
                 if not line.startswith("{"):
                     continue
                 row = json.loads(line)
                 row["radial_exact"] = value == "1"
                 print(json.dumps(row), flush=True)
+                if "first_failing_courant" in row:
+                    summaries.add(row["geometry"])
                 if "passed" not in row:
                     continue
+                rungs.add((row["geometry"], row["courant"]))
                 arm = "radial-exact" if value == "1" else "face"
                 ladder[arm, row["geometry"], row["courant"]] = row
                 if not row["passed"]:
@@ -177,14 +183,17 @@ def main():
                 elif row["history"][-1][1] > W_SETTLED:
                     failures.append((arm, row["geometry"], row["courant"], "not settled",
                                      row["history"][-1]))
-            if out.returncode not in (0, 1):
+            # a child exits 1 for a failing rung (already listed above) and for an
+            # exception alike, so any non-zero exit fails, and the ladder must be complete
+            missing = [(g, c) for g in geometries for c in args.courants if (g, c) not in rungs]
+            missing += [(g, "summary") for g in geometries if g not in summaries]
+            if out.returncode != 0 or missing:
                 print(out.stderr[-2000:], flush=True)
-                failures.append(("child", value, out.returncode))
+                failures.append(("child", value, out.returncode, "missing rows", missing))
         for (arm, geometry, courant), on in ladder.items():
             off = ladder.get(("face", geometry, courant))
             if arm == "radial-exact" and off and on["max_w"] > ON_OFF * off["max_w"]:
                 failures.append((arm, geometry, courant, "max w", on["max_w"], "off", off["max_w"]))
-    geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
     for geometry in (geometries if args.ladder else ()):
         first_failure = None
         for courant in args.courants:

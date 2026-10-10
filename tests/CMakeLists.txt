@@ -233,6 +233,8 @@ snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "pyth
 snapy_add_python_test(test_implicit_gravity_tall_column_cubed SCRIPT test_implicit_gravity_tall_column.py
                       ARGS --geometry gnomonic-equiangle TIMEOUT 120
                       LABELS "python;hydro;implicit;gravity;cubed-sphere")
+# #299: the runner above fails when a ladder child dies or prints an incomplete ladder
+snapy_add_python_test(test_tall_column_runner_child_failure TIMEOUT 120 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 # the same two tests with the corrected-PE work on (#296): they detect the switch and
