@@ -176,7 +176,7 @@ The first term is (1); the second couples faces $i-3/2 \dots i+3/2$ (wall cells:
 
 **Conservation (exact, by construction).** $\sum_iW_iV_i + \dot P = -\sum_i\Delta_i(A\phi F) = 0$ for closed walls,
 for every flux field and every grid. E+P is conserved to round-off; E+PE$_d$ is not (it changes by
-$-g_1\sum_iV_i\sigma_i^2s_i[\dot\rho]$, an $O(h^2)$ amount, which is the point: $\mathrm{PE}_d$ is the wrong target).
+$+g_1\sum_iV_i\sigma_i^2s_i[\dot\rho]$, an $O(h^2)$ amount, which is the point: $\mathrm{PE}_d$ is the wrong target).
 With the switch on, `gravity_work_defect()` and every E+PE$_d$ check therefore measure the wrong invariant; check E+P.
 
 **Accuracy.** The exact cell budget is $g_1V_i\langle F\rangle = -\dot{\mathrm{PE}}_i - \Delta_i(A\phi F)$, so
@@ -340,7 +340,7 @@ definition in 8.5: $\sum_iW_ih_i + \dot P = -\sum_i(\phi_{i+1/2}F_{i+1/2} - \phi
 spacing, not the size of $F$. The energy fluxes other than gravity work telescope as before. So in exact arithmetic
 $E + P$ is constant per stage; every RK stage is $u \leftarrow a u_0 + b u + c\,dt\,\dot u$ and $E + P$ is linear in $u$,
 so it is constant per step too, to round-off. $E + \mathrm{PE}_d$ is not conserved any more: it changes by
-$-g_1\sum_ih_i\sigma_i^2s_i[\Delta\rho]$ per stage, an $O(h^2)$ amount that is the error of $\mathrm{PE}_d$ itself.
+$+g_1\sum_ih_i\sigma_i^2s_i[\Delta\rho]$ per stage, an $O(h^2)$ amount that is the error of $\mathrm{PE}_d$ itself.
 *Horizontal directions.* In 2-D/3-D, x2/x3 fluxes move mass between columns at the same level $i$ and book no
 gravity work. $\sigma_i^2$, $h_i$ and the stencil (8.4) are the same in every column and $s$ is linear, so
 $\sum_{\rm columns}P = \sum_ih_i[\phi(z_i)\bar M_i - g_1\sigma_i^2s_i[\bar M]]$ with $\bar M_i$ the level's total mass,
