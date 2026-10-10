@@ -536,8 +536,10 @@ $x_1$, and the full cell velocity is restored after the reconstruction. Two deta
   zero mass flux.
 
 At rest $w_1 = 0$ and the correction vanishes, so rest balance is unchanged; with the switch off nothing changes.
-The correction acts on the total mass flux: species mass fractions are still advected with the corrected velocity,
-so their split between species keeps an $O(\Delta z^2)$ error, which this switch does not remove.
+The correction uses the total density, so it removes the covariance from the total mass flux only. Each species
+flux is that face mass flux times the species mass fraction reconstructed from the cell values (LMARS:
+$\bar u\,\rho\,q$ from the upwind side), so where $q$ varies along $x_1$ the split between species keeps an
+$O(\Delta z^2)$ error, which this switch does not remove.
 
 The onset test uses the deck, build and runs of §11.3: T1L 1 H with $\varepsilon = 10^{-3}$ from the point-value
 initial state, on the build of §11.3 with the switch, in jobs 644220, 644132 and 644133. These are the measured values:
