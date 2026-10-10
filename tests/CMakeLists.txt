@@ -54,6 +54,8 @@ seam_arm(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
 # SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
 seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
          wb_ref4_flag_at_the_seam_split_matches_one_block)
+# SNAP_WB_REF4 with grav1 = 0 on nghost 1: no reference, so no nghost check
+seam_arm(_wb_ref4_gravity_0 "SNAP_WB_REF4=1" wb_ref4_gravity_0_nghost_1_steps)
 if(CUDA)
   # the same arms on the GPU; without one the test skips and so does the entry
   seam_arm(_x1_centroid_cuda "SNAP_X1_CENTROID_EXACT=1"

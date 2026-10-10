@@ -100,7 +100,7 @@ boundary-condition:
 }
 
 Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3,
-                 torch::Device device = torch::kCPU) {
+                 torch::Device device = torch::kCPU, double g1 = -1.) {
   char fname[] = "/tmp/x1-seam-split-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
@@ -110,6 +110,11 @@ Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3,
   out.close();
   auto block_opts = MeshBlockOptionsImpl::from_yaml(fname);
   std::remove(fname);
+  block_opts->hydro()->grav()->grav1(g1);
+  if (g1 == 0.) {  // donor cell: the one scheme that runs on nghost 1
+    block_opts->hydro()->recon1()->interp()->type("dc");
+    block_opts->hydro()->recon23()->interp()->type("dc");
+  }
   if (nb1 > 1) {
     block_opts->layout()->type() = "cubed";
     block_opts->layout()->pz(nb1);
@@ -317,4 +322,24 @@ TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block_cuda) {
   if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
   wb_ref4_flag_at_the_seam_split_matches_one_block(
       torch::Device(torch::kCUDA, 0));
+}
+
+// SNAP_WB_REF4 with grav1 = 0: no reference is built, so the nghost >= 3
+// check stays off and a donor-cell column on nghost 1 must set up and step
+TEST(X1SeamSplit, wb_ref4_gravity_0_nghost_1_steps) {
+  ASSERT_TRUE(std::getenv("SNAP_WB_REF4"));
+  ASSERT_TRUE(wb_ref4_enabled());
+  torch::set_num_threads(1);
+  for (int nb1 : {1, 2}) {
+    Mesh mesh = nullptr;
+    ASSERT_NO_THROW(mesh =
+                        make_column(nb1, 16, 1., "cell", 1, torch::kCPU, 0.));
+    MeshVariables vars(nb1);
+    fill_column(mesh, vars);
+    mesh->initialize(vars);
+    double dt = 0.3 * (kLz / 16) / std::sqrt(kGamma);
+    for (int n = 0; n < 5; ++n) ASSERT_NO_THROW(step(mesh, vars, dt));
+    EXPECT_TRUE(torch::isfinite(column_state(mesh, vars)).all().item<bool>())
+        << "nb1 " << nb1;
+  }
 }
