@@ -10,6 +10,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/coord_utils.hpp>
+#include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/check_keys.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -202,7 +203,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     auto index = columns.accessor<int64_t, 2>();
     for (int64_t n = 0; n < columns.size(0); ++n)
       std::cerr << "[ImplicitHydro] rank=" << get_rank()
-                << " VIC singular/near-singular or nonfinite solve: column=("
+                << " VIC singular/near-singular or nonfinite value: column=("
                 << index[n][1] + pcoord->kl() << ","
                 << index[n][2] + pcoord->jl()
                 << ") step=" << phydro->pmb->cycle + 1
@@ -275,14 +276,72 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
       grav1 != 0. && phydro->options->grav()->gravity_work() == "cell";
   if (diffusive_work) adir |= kVicDiffusiveCell;
 
+  // SNAP_GRAVITY_WORK_RADIAL_EXACT: the energy row also carries the corrected
+  // potential energy's work g1 sigma^2 s[drho] of the mass this solve moves
+  // (derivation sec 7, eq. 7). Booked only after the solve, that work is
+  // explicit in a fixed fraction of the face work of a grid-scale density
+  // change, and a rest column grows from round-off at vertical acoustic
+  // Courant ~200 (#296). The matrix holds s as a tridiagonal stencil (the
+  // one-sided wall slope's third point lumped onto the neighbour), coupled to
+  // the solved minus the explicit density change; the post-solve term books
+  // the rest, so the total stays g1 sigma^2 s[du - du0].
+  bool radial_exact = phydro->radial_exact_work();
+  auto in3 =
+      phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  int nx1 = pcoord->options->nx1();
+  torch::Tensor rx_lo, rx_mid, rx_hi, rx_fluid, rx_mass0;
+  auto rx_tri = [&](torch::Tensor const& q) {  // q: [nx3, nx2, nx1]
+    auto s = rx_mid * q;
+    s.narrow(-1, 1, nx1 - 1) +=
+        rx_lo.narrow(-1, 1, nx1 - 1) * q.narrow(-1, 0, nx1 - 1);
+    s.narrow(-1, 0, nx1 - 1) +=
+        rx_hi.narrow(-1, 0, nx1 - 1) * q.narrow(-1, 1, nx1 - 1);
+    return rx_fluid * s;
+  };
+  auto couple_radial_exact = [&]() {
+    if (!radial_exact || nx1 < 3) return;
+    int is = pcoord->il(), ie = pcoord->iu() + 1, m = options->size();
+    // S[k][i]: the weight of cell k in the slope of cell i
+    auto S = centroid_slope(torch::eye(nx1, w.options()),
+                            pcoord->x1v.slice(0, is, ie).to(w.options()));
+    auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
+                                  pcoord->options->type() == "spherical-polar")
+                          .to(w.options());
+    rx_mid = gv * S.diagonal();
+    rx_lo = torch::zeros_like(rx_mid);
+    rx_hi = torch::zeros_like(rx_mid);
+    rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
+    rx_hi.narrow(0, 0, nx1 - 1).copy_(S.diagonal(-1));
+    rx_hi[0] += S[2][0];
+    rx_lo[nx1 - 1] += S[nx1 - 3][nx1 - 1];
+    rx_lo *= gv;
+    rx_hi *= gv;
+    rx_fluid = (mask.index(in3) == 0).to(w.options());
+    // row IPR, column 0 (the total mass) of each cell's blocks; Eigen stores
+    // them column-major
+    int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
+    auto entry = [&](torch::Tensor const& t) {
+      return t.view({nx3, nx2, nx1, m, m}).select(-2, 0).select(-1, m - 1);
+    };
+    entry(_a).sub_(rx_fluid * rx_mid / dt);
+    entry(_b).sub_(rx_fluid * rx_lo / dt);
+    entry(_c).sub_(rx_fluid * rx_hi / dt);
+    rx_mass0 = _du0[IDN].index(in3).clone();
+    if (du.size(0) > ICY)
+      rx_mass0 += _du0.narrow(0, ICY, du.size(0) - ICY).sum(0).index(in3);
+    du[IPR].index(in3).sub_(rx_tri(rx_mass0));
+  };
+
   if ((options->scheme() >> 3) & 1) {
     at::native::vic_assemble_full(du.device().type(), iter, dt, grav1, adir);
+    couple_radial_exact();
     at::native::vic_solve_full(du.device().type(), iter, dt, grav1, 0);
 
   } else {
     // Match the full-VIC pipeline: assemble coefficients, run the column
     // solve + reductions, then apply the per-cell redistribution map.
     at::native::vic_assemble_partial(du.device().type(), iter, dt, grav1, adir);
+    couple_radial_exact();
     at::native::vic_solve_partial(du.device().type(), iter, dt, grav1, 0);
   }
 
@@ -382,6 +441,33 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
       if (phydro->is_x1_wall(1)) swap.select(-1, ie - is - 1).zero_();
     }
     du[IPR].slice(-1, is, ie) += swap;
+  }
+
+  // SNAP_GRAVITY_WORK_RADIAL_EXACT: the matrix books the face form for the
+  // mass this solve moved and the tridiagonal part of the corrected potential
+  // energy's remainder (derivation sec 7) for its raw density change; add the
+  // rest, so the remainder is g1 sigma^2 s[du - du0] and E + P closes over the
+  // explicit and implicit parts
+  if (radial_exact) {
+    int is = pcoord->il(), ie = pcoord->iu() + 1;
+    auto moved = du[IDN] - _du0[IDN];
+    if (du.size(0) > ICY)
+      moved += (du.narrow(0, ICY, du.size(0) - ICY) -
+                _du0.narrow(0, ICY, du.size(0) - ICY))
+                   .sum(0);
+    auto work = corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f,
+                                  pcoord->x1v, is, ie, grav1,
+                                  pcoord->options->type() == "spherical-polar");
+    if (rx_mass0.defined()) {
+      int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
+      auto raw = _delta.view({nx3, nx2, nx1, options->size()}).select(-1, 0);
+      work.slice(-2, pcoord->jl(), pcoord->ju() + 1)
+          .slice(-3, pcoord->kl(), pcoord->ku() + 1)
+          .sub_(rx_tri(raw - rx_mass0));
+    }
+    // solid cells get none: their slope stencil reads fluid neighbours
+    du[IPR].slice(-1, is, ie) +=
+        torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
   }
 
   auto bad_results =

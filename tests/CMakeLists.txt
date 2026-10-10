@@ -32,8 +32,76 @@ setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
 setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
+setup_test(test_x1_seam_split)
+# one arm per entry: its environment, its one test, which must run and pass (a
+# skip or an empty filter prints "PASSED ] 0 tests" and fails the entry)
+function(seam_arm name env test)
+  set(_n test_x1_seam_split${name}.${buildl})
+  if(name)
+    add_test(NAME ${_n} COMMAND test_x1_seam_split.${buildl})
+  endif()
+  set_tests_properties(
+    ${_n} PROPERTIES ENVIRONMENT "GTEST_FILTER=X1SeamSplit.${test};${env}"
+                     PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
+endfunction()
+seam_arm("" "" switches_off_nghost_1_sets_up)
+seam_arm(_x1_centroid "SNAP_X1_CENTROID_EXACT=1"
+         centroid_exact_split_matches_one_block)
+seam_arm(_radial_exact "SNAP_GRAVITY_WORK_RADIAL_EXACT=1" radial_exact_split_gap)
+# the control: the face form without the corrected work
+seam_arm(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
+         radial_exact_split_gap)
+# SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
+seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
+         wb_ref4_flag_at_the_seam_split_matches_one_block)
+# SNAP_WB_REF4 with grav1 = 0 on nghost 1: no reference, so no nghost check
+seam_arm(_wb_ref4_gravity_0 "SNAP_WB_REF4=1" wb_ref4_gravity_0_nghost_1_steps)
+# SNAP_X1_MASS_COVARIANCE refuses a block with fewer than 3 x1 cells
+seam_arm(_x1_mass_covariance "SNAP_X1_MASS_COVARIANCE=1"
+         x1_mass_covariance_needs_3_x1_cells)
+if(CUDA)
+  # the same arms on the GPU; without one the test skips and so does the entry
+  seam_arm(_x1_centroid_cuda "SNAP_X1_CENTROID_EXACT=1"
+           centroid_exact_split_matches_one_block_cuda)
+  seam_arm(_radial_exact_cuda "SNAP_GRAVITY_WORK_RADIAL_EXACT=1"
+           radial_exact_split_gap_cuda)
+  seam_arm(_radial_exact_off_cuda "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
+           radial_exact_split_gap_cuda)
+  seam_arm(_wb_ref4_cuda "SNAP_WB_REF4=1"
+           wb_ref4_flag_at_the_seam_split_matches_one_block_cuda)
+  foreach(_a _x1_centroid_cuda _radial_exact_cuda _radial_exact_off_cuda
+             _wb_ref4_cuda)
+    set_tests_properties(
+      test_x1_seam_split${_a}.${buildl}
+      PROPERTIES SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\] 1 test")
+  endforeach()
+endif()
+# the same column with its two x1 blocks on two ranks; the arm is the env
+setup_parallel_test(test_x1_seam_split_mp 2)
+function(seam_arm_mp name env)
+  set(_n test_x1_seam_split_mp${name}.${buildl})
+  add_test(NAME ${_n} COMMAND torchrun --no-python --nproc-per-node=2
+                              $<TARGET_FILE:test_x1_seam_split_mp.${buildl}>)
+  set_tests_properties(${_n} PROPERTIES ENVIRONMENT "${env}")
+endfunction()
+seam_arm_mp(_x1_centroid "SNAP_X1_CENTROID_EXACT=1")
+seam_arm_mp(_radial_exact "SNAP_GRAVITY_WORK_RADIAL_EXACT=1")
+seam_arm_mp(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0")
+seam_arm_mp(_wb_ref4 "SNAP_WB_REF4=1")
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
+setup_test(test_wb_ref_wall)
+# #289: these two pin values of the kernel's x1 reference; run them again with
+# SNAP_WB_REF4 set, where each checks the switched reference instead
+foreach(_t test_balance_column test_face_floor)
+  add_test(NAME ${_t}_wb_ref4.${buildl} COMMAND ${_t}.${buildl})
+  set_tests_properties(${_t}_wb_ref4.${buildl} PROPERTIES ENVIRONMENT
+                                                          "SNAP_WB_REF4=1")
+  # SNAP_X1_CENTROID_EXACT alone implies SNAP_WB_REF4: the same checks hold
+  add_test(NAME ${_t}_x1_centroid.${buildl} COMMAND ${_t}.${buildl})
+  set_tests_properties(${_t}_x1_centroid.${buildl}
+                       PROPERTIES ENVIRONMENT "SNAP_X1_CENTROID_EXACT=1")
+endforeach()
 setup_test(test_netcdf_utils)
 setup_test(test_user_output)
 setup_test(test_process_group)
@@ -162,7 +230,16 @@ snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydr
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
+# the same two tests with the corrected-PE work on (#296): they detect the switch and
+# measure E + P; the tall column runs both arms itself
+foreach(_t test_implicit_face_work_operator test_implicit_stratified_solid)
+  snapy_add_python_test(${_t}_radial_exact SCRIPT ${_t}.py TIMEOUT 300
+                        LABELS "python;hydro;implicit;gravity")
+  set_tests_properties(${_t}_radial_exact_python PROPERTIES ENVIRONMENT
+                       "SNAP_GRAVITY_WORK_RADIAL_EXACT=1")
+endforeach()
 snapy_add_python_test(test_gravity_work_fixer TIMEOUT 120 LABELS "python;hydro;gravity;energy")
+snapy_add_python_test(test_gravity_work_radial_exact TIMEOUT 300 LABELS "python;hydro;gravity")
 snapy_add_python_test(test_implicit_options_type TIMEOUT 60 LABELS "python;implicit")
 snapy_add_python_test(test_shear_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo")
@@ -186,6 +263,18 @@ snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
+snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
+snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# these check the plain face work (E+PE_d, or values recorded with it); the
+# corrected work, on by default with gravity-work: face, conserves E+P instead
+set_tests_properties(
+  test_forcing.${buildl} test_gravity_work_fixer_python
+  test_horizontal_flux_covariance_python test_flux_covariance_rows_python
+  PROPERTIES ENVIRONMENT "SNAP_GRAVITY_WORK_RADIAL_EXACT=0")
+# their switch-off arms; the _radial_exact entries run them with it on
+set_tests_properties(
+  test_implicit_face_work_operator_python test_implicit_stratified_solid_python
+  PROPERTIES ENVIRONMENT "SNAP_GRAVITY_WORK_RADIAL_EXACT=0")
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)
@@ -203,12 +292,24 @@ if(CUDA)
     TIMEOUT 300 LABELS "python;positivity;cubed-sphere;cuda")
   snapy_add_python_test(test_vic_moist_device
     TIMEOUT 120 LABELS "python;implicit;cuda")
+  snapy_add_python_test(test_wb_ref4_order_cuda
+    SCRIPT test_wb_ref4_order.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;cuda")
+  snapy_add_python_test(test_x1_centroid_rest_cuda
+    SCRIPT test_x1_centroid_rest.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;cuda")
+  snapy_add_python_test(test_gravity_work_radial_exact_cuda
+    SCRIPT test_gravity_work_radial_exact.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;gravity;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_check_redo_saturation_cuda_python
     test_flux_positivity_cubedsphere_cuda_python
     test_flux_positivity_cubedsphere_moist_cuda_python
     test_vic_moist_device_python
+    test_wb_ref4_order_cuda_python
+    test_x1_centroid_rest_cuda_python
+    test_gravity_work_radial_exact_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 
@@ -293,8 +394,10 @@ add_test(
           -P ${CMAKE_CURRENT_SOURCE_DIR}/run_bryan_balance_ic.cmake
 )
 
+# three bryan runs, 6.4-6.8 s on one 16-core CPU node: three times that
 set_tests_properties(test_bryan_balance_ic PROPERTIES
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+  TIMEOUT 21
 )
 
 if (NOT APPLE)

@@ -1,4 +1,9 @@
-"""Tall columns, solid-wall mass closure, and clamped face-work energy (#283)."""
+"""Tall columns, solid-wall mass closure, and clamped face-work energy (#283).
+
+With SNAP_GRAVITY_WORK_RADIAL_EXACT on (tall.radial_exact()) every face-work energy check
+measures E + P, the energy that switch conserves (P the corrected PE of
+docs/derivations/curved-gravity-work-weight.md sec 7), on the final state; a
+gnomonic-equiangle face block keeps the plain face work (it warns at setup)."""
 import json
 import math
 import sys
@@ -49,7 +54,16 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
 
     m0 = u0[kIDN].sum().item()
     phi = tall.GRAV * z.to(u0)
-    e0 = (u0[kIPR] + phi * u0[kIDN]).sum().item()
+    exact = work == 'face' and tall.radial_exact()
+    x1f = torch.arange(nz + 1) * dz
+
+    def energy(u):
+        e = u[kIPR] + phi * u[kIDN]
+        if exact:
+            e = e + tall.corrected_pe(u[kIDN], x1f, z, -tall.GRAV)
+        return e.sum().item()
+
+    e0 = energy(u0)
     dt = dt or 657 * dz / math.sqrt(tall.GAMMA * tall.RD * tall.T0)
     out = {'nz': nz, 'H': heights, 'scheme': scheme, 'work': work, 'fixer': fixer, 'dt': dt, 'device': device}
     wmax = 0.0
@@ -75,7 +89,7 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
     rho = u[kIDN]
     vel = u[kIV1] / rho
     temp = (tall.GAMMA - 1) * (u[kIPR] - 0.5 * rho * vel ** 2) / (rho * tall.RD)
-    out['epe_drift'] = (u[kIPR] + phi * u[kIDN]).sum().item() / e0 - 1
+    out['epe_drift'] = energy(u) / e0 - 1
     out.update(steps=completed, attempted_steps=n + 1, redos=redos, redo_status=redo_status, rolled_back=rolled_back, finite=bool(torch.isfinite(u).all()), mass=rho.sum().item() / m0 - 1, top_rho=rho[..., -1].mean().item() / u0[kIDN, ..., -1].mean().item() - 1, top_T=temp[..., -1].mean().item(), wmax=wmax)
     buf = dict(b.named_buffers())
     out['clamp'] = next((v for (k, v) in buf.items() if k.endswith('.dry_clamp_step'))).item()
@@ -142,6 +156,8 @@ def clamp_energy(scheme, work):
     sl = (Ellipsis, slice(3, 11))
     phi = (torch.arange(8) + 0.5).to(w)
     defect = (du[kIPR][sl] + phi * du[kIDN][sl]).sum().item()
+    if work == 'face' and tall.radial_exact():
+        defect += tall.corrected_pe(du[kIDN][sl], torch.arange(9.), phi, -1.).sum().item()
     raw = b.buffer('hydro.icorr.delta').reshape(8, 5 if scheme == 9 else 3)
     raw_epe = (raw[:, -1] + phi * raw[:, 0]).sum().item()
     error = defect - (raw_epe if work == 'cell' else 0.0)
@@ -189,6 +205,12 @@ def curved_energy(scheme, geometry, work):
     expected=0. if work=='face' else -dt*((momentum*vol).sum()-(faces*(z[1:]-z[:-1])*adv).sum())
     final=((du[kIPR][sl]+z*du[kIDN][sl]-du0[kIPR][sl])*vol).sum()
     error=max((observed-expected).abs().item(),(final-expected).abs().item())
+    if work=='face' and geometry!='gnomonic-equiangle' and tall.radial_exact():
+        # E + P on the final state: the solve books part of the corrected-PE work,
+        # the post-solve term the rest, so the raw solve closes neither form alone
+        final=final+(tall.corrected_pe(du[kIDN][sl],b.buffer('coord.x1f')[3:12],z,-1.,
+                                       geometry=='spherical-polar')*vol).sum()
+        error=(final-expected).abs().item()
     scale=(du0[kIPR][sl]*vol).abs().sum().item()
     out={'device':device,'geometry':geometry,'scheme':scheme,'work':work,'observed':observed.item(),'final':final.item(),'expected':float(expected),'error':error,'relative':error/scale,'finite':bool(torch.isfinite(du).all())}
     print(json.dumps(out),flush=True)

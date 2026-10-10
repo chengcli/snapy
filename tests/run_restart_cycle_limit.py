@@ -15,10 +15,32 @@ except Exception as exc:  # pragma: no cover - dependency guard
   sys.exit(SKIP_CODE)
 
 
-def run(cmd, cwd: Path, log_path: Path) -> None:
+def run(cmd, cwd: Path, log_path: Path, rank_dir: Path) -> Path:
+  """Run torchrun with each rank's stdout and stderr in its own file.
+
+  With the ranks on one shared stream, another rank's output (a rank-1 UCX
+  warning, which UCX writes to stdout) could land inside a rank-0 cycle line
+  and cut it, e.g. "ener<warning>gy=", which read as KeyError 'energy'. Here
+  the ranks share no stream. Returns rank 0's stdout, which holds the cycle
+  and termination lines; log_path gets the console output and every rank's
+  streams, for reading.
+  """
+  if rank_dir.exists():
+    shutil.rmtree(rank_dir)
+  cmd = cmd[:1] + ["--log-dir", str(rank_dir), "--redirects", "3"] + cmd[1:]
   print(f"+ (cd {cwd} && {' '.join(cmd)})")
   with log_path.open("w") as log:
-    subprocess.run(cmd, cwd=cwd, check=True, stdout=log, stderr=subprocess.STDOUT)
+    proc = subprocess.run(cmd, cwd=cwd, stdout=log, stderr=subprocess.STDOUT)
+    for path in sorted(rank_dir.glob("*/attempt_*/*/std*.log")):
+      log.write(f"\n==== {path.relative_to(rank_dir)} ====\n")
+      log.write(path.read_text())
+  if proc.returncode != 0:
+    raise subprocess.CalledProcessError(proc.returncode, cmd)
+  rank0 = sorted(rank_dir.glob("*/attempt_*/0/stdout.log"))
+  if len(rank0) != 1:
+    raise FileNotFoundError(f"expected one rank-0 stdout under {rank_dir}, "
+                            f"found {len(rank0)}")
+  return rank0[0]
 
 
 def make_case_yaml(target: Path) -> None:
@@ -109,7 +131,7 @@ def main() -> int:
 
   make_case_yaml(base_dir / "straka.yaml")
   base_log = tests_dir / "restart_cycle_limit_base.log"
-  run(
+  base_out = run(
       [
           torchrun,
           "--no-python",
@@ -119,6 +141,7 @@ def main() -> int:
       ],
       cwd=base_dir,
       log_path=base_log,
+      rank_dir=tests_dir / "restart_cycle_limit_base_ranks",
   )
 
   restart_file = base_dir / "straka.00001.restart"
@@ -127,7 +150,7 @@ def main() -> int:
 
   shutil.copy2(base_dir / "straka.yaml", restart_dir / "straka.yaml")
   restart_log = tests_dir / "restart_cycle_limit_restart.log"
-  run(
+  restart_out = run(
       [
           torchrun,
           "--no-python",
@@ -139,10 +162,11 @@ def main() -> int:
       ],
       cwd=restart_dir,
       log_path=restart_log,
+      rank_dir=tests_dir / "restart_cycle_limit_restart_ranks",
   )
 
-  base_cycles = parse_cycle_lines(base_log)
-  restart_cycles = parse_cycle_lines(restart_log)
+  base_cycles = parse_cycle_lines(base_out)
+  restart_cycles = parse_cycle_lines(restart_out)
 
   first_restart = restart_cycles[0]
   matched = next(
@@ -163,8 +187,8 @@ def main() -> int:
     assert_close(first_restart[key], matched[key],
                  f"first resumed cycle {key}")
 
-  base_term = parse_termination(base_log)
-  restart_term = parse_termination(restart_log)
+  base_term = parse_termination(base_out)
+  restart_term = parse_termination(restart_out)
   assert_close(restart_term[0], base_term[0], "termination time", atol=1.0e-9)
   if base_term[1] != 120:
     raise AssertionError(

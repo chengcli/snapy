@@ -243,7 +243,26 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
   auto src1 =
       coord_src1_i * prim[IDN] * (prim[IVY].square() + prim[IVZ].square());
   if (eos_type != "shallow-water") {
-    if (face_pressure1.defined()) {
+    // SNAP_X1_CENTROID_EXACT: with the face pressures in the flux, the pressure
+    // force is -(1/V) int r^2 d_r p~ dr when the source is (2/V) int r p~ dr,
+    // p~ the quintic through the six nearest faces: the r^2 average of the
+    // gradient, which a hydrostatic column of r^2 means balances against
+    // g rho. The plain difference below balances g <rho> instead.
+    bool exact_x1 = false;
+    if (face_pressure1.defined() && x1_centroid_exact_enabled()) {
+      if (!x1src_ || x1src_->wt.device() != face_pressure1.device() ||
+          x1src_->wt.scalar_type() != face_pressure1.scalar_type()) {
+        // ghost faces at a seam are the neighbour's (hydro_forward.cpp)
+        auto [below, above] = pmb->phydro->x1_neighbors();
+        x1src_ = std::make_shared<X1PressureSourceStencils>(
+            x1_pressure_source_stencils(x1f, si, ei - 1, below < 0, above < 0,
+                                        face_pressure1.options()));
+      }
+      exact_x1 = x1src_->usable;
+    }
+    if (exact_x1) {
+      src1.slice(-1, si, ei) += x1_pressure_source(*x1src_, face_pressure1);
+    } else if (face_pressure1.defined()) {
       auto pressure_gradient = (face_pressure1.slice(-1, si + 1, ei + 1) -
                                 face_pressure1.slice(-1, si, ei)) /
                                dx1f.slice(0, si, ei);

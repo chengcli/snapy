@@ -4,10 +4,12 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
 #include "flux_positivity.hpp"
+#include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 
 namespace snap {
@@ -27,6 +29,25 @@ static torch::Tensor d1_pressure(torch::Tensor const& p,
       (p.select(-1, is + 1) - p.select(-1, is)) / (x1v[is + 1] - x1v[is]);
   d.select(-1, ie - 1) =
       (p.select(-1, ie) - p.select(-1, ie - 1)) / (x1v[ie] - x1v[ie - 1]);
+  return d;
+}
+
+// SNAP_X1_MASS_COVARIANCE (HydroImpl::x1_mass_covariance): the x1
+// reconstruction treats the cell velocity m1/rho as the cell average of w; in a
+// stratified column that adds dz^2/12 rho_z w_z to the face mass flux. Subtract
+// it from the reconstructed velocity (the x1 analogue of SNAP_FLUX_COVARIANCE).
+
+// centred x1 derivative over x1v for every cell that has both neighbours; the
+// first and last array cells copy their neighbour's value
+static torch::Tensor d1_centred(torch::Tensor const& a,
+                                torch::Tensor const& x1v) {
+  int n1 = a.size(-1);
+  auto dx = x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2);
+  auto d = torch::empty_like(a);
+  d.narrow(-1, 1, n1 - 2)
+      .copy_((a.narrow(-1, 2, n1 - 2) - a.narrow(-1, 0, n1 - 2)) / dx);
+  d.select(-1, 0).copy_(d.select(-1, 1));
+  d.select(-1, n1 - 1).copy_(d.select(-1, n1 - 2));
   return d;
 }
 
@@ -241,14 +262,35 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     bool wb_x1 =
         grav1 && w.size(0) > IPR && options->eos()->type() != "shallow-water";
 
+    // SNAP_X1_CENTROID_EXACT (spherical-polar): a cell value is the r^2 dr
+    // average, but the reconstruction, the hydrostatic scan and the reference
+    // below are formulas for plain averages. They read the plain means instead
+    // (x1_centroid.hpp, docs/derivations/x1-centroid-spherical.md); the
+    // primitives themselves are not changed.
+    torch::Tensor wx1 = w;
+    if (x1_centroid_exact_enabled() &&
+        pmb->pcoord->options->type() == "spherical-polar") {
+      if (!x1pm_ || x1pm_->wt.device() != w.device() ||
+          x1pm_->wt.scalar_type() != w.scalar_type()) {
+        x1pm_ = std::make_shared<X1PlainMeanStencils>(x1_plain_mean_stencils(
+            pmb->pcoord->x1f, pmb->pcoord->il(), pmb->pcoord->iu(),
+            phys_x1inner, phys_x1outer, w.options()));
+      }
+      wx1 =
+          x1_plain_means(*x1pm_, w, IVX, !is_outflow(pmb->options->bfuncs()[0]),
+                         !is_outflow(pmb->options->bfuncs()[1]));
+      // seam ghosts: the neighbour's centred plain means, not this block's
+      // off-centre ones
+      _x1_ghost_rows(wx1, pmb->pcoord->il(), false, 0x7724);
+    }
     torch::Tensor wtmp;
     if (wb_x1) {
-      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(w);
-      auto pressure = w[IPR].clone();
-      auto density = w[IDN].clone();
+      auto [psf_lo, pref, dsf, dref] = _hydro_ref_x1(wx1);
+      auto pressure = wx1[IPR].clone();
+      auto density = wx1[IDN].clone();
 
-      w[IPR] -= pref;
-      w[IDN] -= dref;
+      wx1[IPR] -= pref;
+      wx1[IDN] -= dref;
 
       // Even-parity ghost perturbations at the walls: p'(is-m) =
       // p'(is+m-1), rho' likewise. Only apply this at physical x1 walls.
@@ -257,21 +299,57 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       int iu = pmb->pcoord->iu();
       for (int c : {(int)IPR, (int)IDN}) {
         if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0])) {
-          w[c].narrow(-1, is - ng, ng).copy_(w[c].narrow(-1, is, ng).flip(-1));
+          wx1[c]
+              .narrow(-1, is - ng, ng)
+              .copy_(wx1[c].narrow(-1, is, ng).flip(-1));
         }
 
         if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1])) {
-          w[c].narrow(-1, iu + 1, ng)
-              .copy_(w[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
+          wx1[c]
+              .narrow(-1, iu + 1, ng)
+              .copy_(wx1[c].narrow(-1, iu + 1 - ng, ng).flip(-1));
         }
+      }
+
+      torch::Tensor velocity;
+      if (x1_mass_covariance()) {
+        velocity = wx1[IVX].clone();
+        auto x1v = pmb->pcoord->x1v.to(w.device(), w.scalar_type());
+        auto dx1f = pmb->pcoord->dx1f.to(w.device(), w.scalar_type());
+        auto rho_1 = d1_centred(density, x1v);
+        // next to a reflecting wall the even ghost density is not the
+        // stratified column: one-sided second order in the first/last cell
+        auto one_sided = [&](int i, int s) {
+          auto h = x1v[i + s] - x1v[i];
+          return s *
+                 (-3. * density.select(-1, i) + 4. * density.select(-1, i + s) -
+                  density.select(-1, i + 2 * s)) /
+                 (2. * s * h);
+        };
+        if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0]))
+          rho_1.select(-1, is).copy_(one_sided(is, 1));
+        if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1]))
+          rho_1.select(-1, iu).copy_(one_sided(iu, -1));
+        auto w_1 = d1_centred(velocity, x1v);
+        wx1[IVX] -= dx1f * dx1f / 12. * rho_1 * w_1 / density;
+        // ghosts at reflecting walls: odd mirror of the corrected interior
+        if (phys_x1inner && !is_outflow(pmb->options->bfuncs()[0]))
+          wx1[IVX]
+              .narrow(-1, is - ng, ng)
+              .copy_(-wx1[IVX].narrow(-1, is, ng).flip(-1));
+        if (phys_x1outer && !is_outflow(pmb->options->bfuncs()[1]))
+          wx1[IVX]
+              .narrow(-1, iu + 1, ng)
+              .copy_(-wx1[IVX].narrow(-1, iu + 1 - ng, ng).flip(-1));
       }
 
       // floor=false: reconstruction-stage floors would clamp legitimately
       // negative perturbations.
-      wtmp = precon1->forward(w, DIM1, /*floor=*/false);
+      wtmp = precon1->forward(wx1, DIM1, /*floor=*/false);
 
-      w[IPR].copy_(pressure);
-      w[IDN].copy_(density);
+      wx1[IPR].copy_(pressure);
+      wx1[IDN].copy_(density);
+      if (velocity.defined()) wx1[IVX].copy_(velocity);
       // Restore full face pressure/density; floor any nonlinear-WENO overshoot
       // that would go non-positive (the references are tiny near the top) back
       // to the reference. At rest the perturbation is ~0 so the floor never
@@ -298,7 +376,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       wtmp[ILT][IDN].copy_(torch::where(dl > 0., dl, rho_below));
       wtmp[IRT][IDN].copy_(torch::where(dr > 0., dr, density));
     } else {
-      wtmp = precon1->forward(w, DIM1);
+      wtmp = precon1->forward(wx1, DIM1);
       if (grav1) {
         if (phys_x1inner) _revise_x1inner_lr(wtmp[ILT], wtmp[IRT]);
         if (phys_x1outer) _revise_x1outer_lr(wtmp[ILT], wtmp[IRT]);
@@ -417,6 +495,46 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
           unpack(il, 0.5 * (dn_mine[0] + theirs[0]));
         }
         for (auto& sw : seam_sends) sw->wait();
+      }
+    }
+
+    // SNAP_X1_CENTROID_EXACT: the pressure source's six-face window reaches
+    // two faces past a seam; they are the neighbour's
+    if (wx1.data_ptr() != w.data_ptr() && _face_pressure1.defined() &&
+        _face_pressure1.numel() > 0 &&
+        options->eos()->type() != "shallow-water") {
+      _x1_ghost_rows(_face_pressure1, std::min(2, pmb->pcoord->il()), true,
+                     0x7722);
+    }
+
+    // SNAP_X1_CENTROID_EXACT: the pressure force is the r^2-weighted
+    // (A p*|)/V - (2/V) int r p~ dr (coord/spherical_polar.cpp), so the
+    // hydrostatic correction is the same operator on the cell's own face
+    // states; at rest (p_L = p_R = p*) the two cancel as the plain
+    // differences do without the switch
+    if (wx1.data_ptr() != w.data_ptr() && options->grav() &&
+        options->grav()->grav1() != 0 &&
+        options->grav()->non_hydrostatic() < 1. &&
+        !options->disable_flux_x1() && _face_pressure1.defined() &&
+        _face_pressure1.numel() > 0) {
+      int is = pmb->pcoord->il();
+      int ie = pmb->pcoord->iu() + 1;
+      if (!x1src_ || x1src_->wt.device() != w.device() ||
+          x1src_->wt.scalar_type() != w.scalar_type()) {
+        auto [below, above] = x1_neighbors();
+        x1src_ = std::make_shared<X1PressureSourceStencils>(
+            x1_pressure_source_stencils(pmb->pcoord->x1f, is, ie - 1, below < 0,
+                                        above < 0, w.options()));
+      }
+      if (x1src_->usable) {
+        auto area1 = pmb->pcoord->face_area1();
+        auto volume = pmb->pcoord->cell_volume();
+        rho_grav.slice(2, is, ie) =
+            (area1.slice(-1, is + 1, ie + 1) *
+                 wlr1[ILT][IPR].slice(2, is + 1, ie + 1) -
+             area1.slice(-1, is, ie) * wlr1[IRT][IPR].slice(2, is, ie)) /
+                volume.slice(-1, is, ie) -
+            x1_pressure_source(*x1src_, _face_pressure1);
       }
     }
   }
@@ -692,12 +810,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         dt *
         (phi_cell.slice(0, is, ie) * vertical_mass_div - potential_flux_div);
 
+    // SNAP_GRAVITY_WORK_RADIAL_EXACT: add the work of the corrected potential
+    // energy for this stage's x1 density change (derivation sec 7); it
+    // already removes the dx^2/12 m'' part, so the curvature flux below stays
+    // off
+    bool radial_exact = !gw_cell && radial_exact_work();
+    if (radial_exact) {
+      face_gravity_work += corrected_pe_work(
+          -dt * vertical_mass_div, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie,
+          grav1, pmb->pcoord->options->type() == "spherical-polar");
+    }
+
     // cp3/cp5/weno5 faces: the face average exceeds m = rho*v by
     // dx^2/12 (m'' + rho'v'); remove the m'' part as div H,
     // H = dx/12 (m_i - m_{i-1}), zeroed at every physical x1 boundary
     // (walls, outflow and periodic alike); rho'v' is no divergence
     auto type1 = precon1->pinterp1->options->type();
-    if (!gw_cell && (type1 == "cp3" || type1 == "cp5" || type1 == "weno5")) {
+    if (!gw_cell && !radial_exact &&
+        (type1 == "cp3" || type1 == "cp5" || type1 == "weno5")) {
       int n = ie - is;
       auto x1v = pmb->pcoord->x1v;
       auto rhov = w[IDN] * w[IVX];

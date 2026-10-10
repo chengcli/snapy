@@ -1,4 +1,5 @@
 // C/C++
+#include <array>
 #include <cmath>
 #include <functional>
 #include <iomanip>
@@ -142,6 +143,54 @@ torch::Tensor column_tendency(Mesh const& mesh, torch::Device device,
     parts.push_back(tendency(block.ptr(), w, temp).slice(-1, il, iu + 1));
   }
   return torch::cat(parts, -1);
+}
+
+//! a density falling ~10x over x1 in [0, 1], fastest at the top
+torch::Tensor stratified_rho(torch::Tensor const& x) {
+  return torch::pow(1.25 - x, 1.5);
+}
+
+//! test_diffusion.yaml's column (reflecting x1 walls) on nx1 cells over
+//! [0, 1], both kinematic coefficients scaled by `scale` of the x1 centres;
+//! on a CUDA device it is moved there in double precision
+std::shared_ptr<MeshBlockImpl> scaled_column(
+    int nx1, std::function<torch::Tensor(torch::Tensor const&)> const& scale,
+    torch::Device device = torch::kCPU) {
+  auto options = base_options();
+  options->coord()->global_nx1() = nx1;
+  options->coord()->nx1() = nx1;
+  options->coord()->global_x1max() = 1.;
+  options->coord()->x1max() = 1.;
+  auto s = scale(build(options)->pcoord->x1v.to(torch::kFloat64));
+  options->hydro()->diffusion()->nu_scale_x1(s);
+  options->hydro()->diffusion()->kappa_scale_x1(s.clone());
+  auto block = build(options);
+  if (device.is_cuda()) block->to(device, torch::kFloat64);
+  return block;
+}
+
+//! interior tendency (dt = 1) of the stratified column, at rest with
+//! temperature `field` (heat) or at 300 K with v2 = `field` (shear); cv out;
+//! the tendency is returned on the CPU
+torch::Tensor stratified_tendency(std::shared_ptr<MeshBlockImpl> const& block,
+                                  torch::Tensor const& field, bool heat,
+                                  double* cv) {
+  auto coord = block->pcoord;
+  auto peos = block->phydro->peos;
+  auto x = coord->x1v.to(torch::kFloat64).view({1, 1, -1});
+  auto w = torch::zeros(
+      {5, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()},
+      x.options());
+  w[IDN] = stratified_rho(x);
+  auto temp = (heat ? field : 300. + 0. * x).expand_as(w[IDN]).clone();
+  if (!heat) w[IVY] = field;
+  auto Rd = 8.31446261815324 / peos->options->weight();
+  w[IPR] = w[IDN] * Rd * temp;
+  *cv = peos->specific_heat_cv(w, temp).max().item<double>();
+  auto du = torch::zeros_like(w);
+  block->phydro->pdiffusion->forward(du, w, temp, 1.);
+  auto interior = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  return du[heat ? IPR : IVY].index(interior).reshape(-1).cpu();
 }
 
 }  // namespace
@@ -317,6 +366,101 @@ TEST(diffusion_x1_scale, linear_profile_gives_the_analytic_tendency) {
   auto shear = run(false, nullptr);
   EXPECT_TRUE(torch::allclose(shear, 0.05 * shape, 1.e-12, 0.)) << shear;
   EXPECT_TRUE(torch::allclose(heat, 0.025 * cv * shape, 1.e-12, 0.)) << heat;
+}
+
+namespace {
+
+// A constant DYNAMIC coefficient over a stratified column: s = 1/rho makes
+// mu = nu s rho and k = kappa s rho cv uniform, so a linear T at rest and a
+// linear v2 carry a uniform flux and no tendency in any cell. The face
+// coefficient is the mean of the two cells' products s rho, exact here. The
+// product of the means, mean(s) mean(rho) = 1 + (drho)^2 / (4 rho_a rho_b),
+// gives an O(dx^2) tendency inside and an O(dx) one in the wall cells, whose
+// extrapolated wall face is exact (docs/derivations/
+// diffusion-face-coefficient.md).
+void constant_dynamic_coefficient_column_has_no_tendency(torch::Device device) {
+  for (int nx1 : {16, 64}) {
+    auto block = scaled_column(
+        nx1, [](torch::Tensor const& x) { return 1. / stratified_rho(x); },
+        device);
+    auto x = block->pcoord->x1v.to(torch::kFloat64).view({1, 1, -1});
+    auto dx = 1. / nx1;
+    double cv;
+    auto heat = stratified_tendency(block, 300. + 50. * x, true, &cv);
+    // |flux| / dx: kappa cv 50 / dx and nu 1 / dx
+    auto heat_scale = 0.25 * cv * 50. / dx;
+    auto shear = stratified_tendency(block, x, false, &cv);
+    auto shear_scale = 0.5 / dx;
+    EXPECT_LT(heat.abs().max().item<double>(), 1.e-12 * heat_scale)
+        << "nx1 = " << nx1 << ": " << heat / heat_scale;
+    EXPECT_LT(shear.abs().max().item<double>(), 1.e-12 * shear_scale)
+        << "nx1 = " << nx1 << ": " << shear / shear_scale;
+  }
+}
+
+}  // namespace
+
+TEST(diffusion_x1_scale, constant_dynamic_coefficient_column_has_no_tendency) {
+  constant_dynamic_coefficient_column_has_no_tendency(torch::kCPU);
+}
+
+TEST(diffusion_x1_scale,
+     constant_dynamic_coefficient_column_has_no_tendency_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  constant_dynamic_coefficient_column_has_no_tendency(
+      torch::Device(torch::kCUDA, 0));
+}
+
+namespace {
+
+// A smooth variable coefficient, s = 1 + cos(3 x) / 2 on the stratified rho:
+// the face fluxes, recovered from the tendency by summing up from the lower
+// wall (F_{i+1/2} - F_{1/2} = -dx sum_{j <= i} du_j at dt = 1), converge to the
+// exact flux at second order, every face measured, the wall faces included.
+void smooth_profile_flux_converges_at_second_order(torch::Device device) {
+  auto s_of = [](torch::Tensor const& x) {
+    return 1. + 0.5 * torch::cos(3. * x);
+  };
+  double prev[2] = {0., 0.};
+  for (int nx1 : {32, 64, 128}) {
+    auto block = scaled_column(nx1, s_of, device);
+    auto x = block->pcoord->x1v.to(torch::kFloat64).view({1, 1, -1});
+    auto dx = 1. / nx1;
+    auto xf = torch::arange(nx1 + 1, torch::kFloat64) * dx;
+    auto c = s_of(xf) * stratified_rho(xf);
+    double cv;
+    auto heat =
+        stratified_tendency(block, 300. + 50. * torch::sin(2. * x), true, &cv);
+    auto shear = stratified_tendency(block, torch::sin(2. * x), false, &cv);
+    // exact fluxes: -kappa cv c T' and -nu c v2'
+    std::array<torch::Tensor, 2> exact = {
+        -0.25 * cv * c * 100. * torch::cos(2. * xf),
+        -0.5 * c * 2. * torch::cos(2. * xf)};
+    std::array<torch::Tensor, 2> du = {heat, shear};
+    for (int k = 0; k < 2; ++k) {
+      auto got = -dx * torch::cumsum(du[k], 0);
+      auto want = exact[k].slice(0, 1) - exact[k][0];
+      auto err =
+          ((got - want).abs().max() / exact[k].abs().max()).item<double>();
+      if (prev[k] > 0.) {
+        EXPECT_GT(std::log2(prev[k] / err), 1.85)
+            << (k ? "shear" : "heat") << " nx1 = " << nx1 << ": " << prev[k]
+            << " -> " << err;
+      }
+      prev[k] = err;
+    }
+  }
+}
+
+}  // namespace
+
+TEST(diffusion_x1_scale, smooth_profile_flux_converges_at_second_order) {
+  smooth_profile_flux_converges_at_second_order(torch::kCPU);
+}
+
+TEST(diffusion_x1_scale, smooth_profile_flux_converges_at_second_order_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  smooth_profile_flux_converges_at_second_order(torch::Device(torch::kCUDA, 0));
 }
 
 // YAML knots on the cell centres give the profile set as a tensor, bit for bit

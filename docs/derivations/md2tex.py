@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the LaTeX twin of 289-covariance-x3-curved.md from the Markdown.
+"""Generate the LaTeX twin of a derivation's Markdown (default
+289-covariance-x3-curved.md).
 
 The twin is GENERATED, never hand-edited, so the two files cannot drift. Run
-    python3 docs/derivations/md2tex.py
-from the repository root after editing the Markdown.
+    python3 docs/derivations/md2tex.py [stem]
+from the repository root after editing the Markdown; stem.md -> stem.tex. A
+stem other than the default takes its title from its first "# " heading.
 """
 import re
 import sys
@@ -130,9 +132,22 @@ def convert(md: str) -> str:
     return "\n".join(out)
 
 
+def preamble(stem: str, md: str) -> str:
+    if stem == SRC.stem:
+        return PREAMBLE
+    title = next((ln[2:].strip() for ln in md.split("\n") if ln.startswith("# ")), stem)
+    head, rest = PREAMBLE.split(r"\title{", 1)
+    head = head.replace(SRC.name, stem + ".md")
+    return (head + r"\title{" + esc(title) + "}\n" + r"\author{snapy --- derivation}"
+            + rest.split(r"\author{", 1)[1].split("\n", 1)[1])
+
+
 def main() -> int:
-    DST.write_text(PREAMBLE + convert(SRC.read_text()) + "\n\\end{document}\n")
-    print("wrote", DST.name, len(DST.read_text().splitlines()), "lines")
+    stem = sys.argv[1] if len(sys.argv) > 1 else SRC.stem
+    src, dst = HERE / (stem + ".md"), HERE / (stem + ".tex")
+    md = src.read_text()
+    dst.write_text(preamble(stem, md) + convert(md) + "\n\\end{document}\n")
+    print("wrote", dst.name, len(dst.read_text().splitlines()), "lines")
     return 0
 
 

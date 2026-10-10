@@ -2,6 +2,7 @@
 
 // snap
 #include "coordinate.hpp"
+#include "x1_centroid.hpp"
 
 namespace snap {
 
@@ -40,6 +41,10 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
       torch::Tensor prim, torch::Tensor flux1, torch::Tensor flux2,
       torch::Tensor flux3,
       torch::Tensor face_pressure1 = torch::Tensor()) override;
+
+ private:
+  //! SNAP_X1_CENTROID_EXACT: the (2/V) int r p~ dr weights, built on first use
+  mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
 };
 TORCH_MODULE(SphericalPolar);
 

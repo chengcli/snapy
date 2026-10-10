@@ -1,6 +1,7 @@
 #pragma once
 
 // C/C++
+#include <string>
 #include <tuple>
 
 // torch
@@ -94,8 +95,14 @@ namespace snap {
 //! the bottom-most cell only, because its one-sided fallback keys on the
 //! absolute index i > 0 rather than on i > il. `dsf` plays no part in the
 //! fixed point, so the balance is unaffected; nothing else here depends on it.
+//!
+//! Under SNAP_X1_CENTROID_EXACT a spherical-polar block's reference works on
+//! plain means converted from its r^2 means, which this column does not model:
+//! the caller then passes geometry "cartesian", and anything else (unknown, or
+//! spherical-polar, whose rest state is the solver's own) is refused.
 std::tuple<torch::Tensor, double, int> balance_column(
     torch::Tensor const& w, torch::Tensor const& dx1f, double grav,
-    bool wall_clamp = true, double rtol = 1.e-10, int max_iter = 120);
+    bool wall_clamp = true, double rtol = 1.e-10, int max_iter = 120,
+    std::string const& geometry = "");
 
 }  // namespace snap

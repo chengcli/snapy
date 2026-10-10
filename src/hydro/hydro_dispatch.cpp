@@ -157,16 +157,37 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
   }
 
   auto rop = (rho / w[IPR]).clone();
-  if (wall_clamp && phys_in) {  // clamp the smoothing to interior cells
-    rop.narrow(-1, 0, il).copy_(rop.narrow(-1, il, 1).expand({-1, -1, il}));
-  }
-  if (wall_clamp && phys_out) {
-    rop.narrow(-1, iu + 1, nc1 - 1 - iu)
-        .copy_(rop.narrow(-1, iu, 1).expand({-1, -1, nc1 - 1 - iu}));
-  }
   auto lo_edge = rop.narrow(-1, 0, 1);
   auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
   auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);
+  // past a clamped wall: rho/p continued from the two cells next to it,
+  // linearly where it rises towards the wall and ln-linearly where it falls,
+  // else the wall cell (hydro_ref_x1_wall_rop); pad index p holds cell p - 2
+  auto wall_rop = [](torch::Tensor const& r0, torch::Tensor const& r1, int k) {
+    auto e = torch::where(r1 > r0, r0 * (r0 / r1).pow(double(k)),
+                          r0 + double(k) * (r0 - r1));
+    return torch::where(e > 0., e, r0);
+  };
+  if (wall_clamp && phys_in) {
+    auto r0 = rop.narrow(-1, il, 1);
+    for (int j = -2; j < il; ++j) {
+      auto v = r0;
+      if (il + 1 <= iu) {
+        v = wall_rop(r0, rop.narrow(-1, il + 1, 1), il - j);
+      }
+      pad.narrow(-1, j + 2, 1).copy_(v);
+    }
+  }
+  if (wall_clamp && phys_out) {
+    auto r0 = rop.narrow(-1, iu, 1);
+    for (int j = iu + 1; j < nc1 + 2; ++j) {
+      auto v = r0;
+      if (iu - 1 >= il) {
+        v = wall_rop(r0, rop.narrow(-1, iu - 1, 1), j - iu);
+      }
+      pad.narrow(-1, j + 2, 1).copy_(v);
+    }
+  }
   auto rs = (pad.narrow(-1, 0, nc1) + 4. * pad.narrow(-1, 1, nc1) +
              6. * pad.narrow(-1, 2, nc1) + 4. * pad.narrow(-1, 3, nc1) +
              pad.narrow(-1, 4, nc1)) /

@@ -6,11 +6,18 @@ vertical acoustic Courants up to 250. Results include the first failed rung;
 passing a finite ladder does not establish a universal stability threshold.
 Cartesian retains eight periodic copies; spherical x1 uses one angular cell
 to test a strictly radial column. Angular-mode stability is a separate gate.
+
+The face ladder runs twice, each in a child process (the switch is read once per
+process): with SNAP_GRAVITY_WORK_RADIAL_EXACT=0, and with it on (the corrected-PE
+work of docs/derivations/curved-gravity-work-weight.md sec 7, booked inside the
+implicit operator, #296). Every rung must stay below W_TOL, end the run below
+W_SETTLED, and, with the switch on, peak at most ON_OFF times its switch-off rung.
 """
 import argparse
 import math
 import json
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -22,6 +29,8 @@ NZ, DZ, NX2 = 45, 29946.8085106, 8
 COURANTS = (6.6, 65.6, 100.0, 197.0, 250.0)
 RADIUS = 7.e7
 W_TOL = 1.0e-7  # m/s
+W_SETTLED = 1.0e-10  # m/s, max w at the last step: the column has settled
+ON_OFF = 1.1  # switch on: max w at most this times the switch-off rung's
 
 
 def config(geometry="cartesian", default_work=False):
@@ -118,6 +127,8 @@ def main():
     ap.add_argument("--nstep", type=int, default=40)
     ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "both"), default="both")
     ap.add_argument("--courants", type=float, nargs="+", default=COURANTS)
+    ap.add_argument("--ladder", action="store_true",
+                    help="child: the face ladder only, under the inherited switch")
     args = ap.parse_args()
     if args.device.startswith("cuda") and (os.environ.get("SNAPY_BUILD_CUDA", "1") == "0" or not torch.cuda.is_available()):
         print("SKIP: cuda requested but not available")
@@ -126,8 +137,41 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
+    if not args.ladder:
+        ladder = {}
+        for value in ("0", "1"):  # SNAP_GRAVITY_WORK_RADIAL_EXACT off, on (on by default)
+            env = dict(os.environ)
+            env.pop("SNAP_GRAVITY_WORK_RADIAL_EXACT", None)
+            if value is not None:
+                env["SNAP_GRAVITY_WORK_RADIAL_EXACT"] = value
+            cmd = [sys.executable, os.path.abspath(__file__), "--ladder", "--device", args.device,
+                   "--nstep", str(args.nstep), "--geometry", args.geometry,
+                   "--courants"] + [str(c) for c in args.courants]
+            out = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            for line in out.stdout.splitlines():
+                if not line.startswith("{"):
+                    continue
+                row = json.loads(line)
+                row["radial_exact"] = value == "1"
+                print(json.dumps(row), flush=True)
+                if "passed" not in row:
+                    continue
+                arm = "radial-exact" if value == "1" else "face"
+                ladder[arm, row["geometry"], row["courant"]] = row
+                if not row["passed"]:
+                    failures.append((arm, row["geometry"], row["courant"], row["steps"], row["max_w"]))
+                elif row["history"][-1][1] > W_SETTLED:
+                    failures.append((arm, row["geometry"], row["courant"], "not settled",
+                                     row["history"][-1]))
+            if out.returncode not in (0, 1):
+                print(out.stderr[-2000:], flush=True)
+                failures.append(("child", value, out.returncode))
+        for (arm, geometry, courant), on in ladder.items():
+            off = ladder.get(("face", geometry, courant))
+            if arm == "radial-exact" and off and on["max_w"] > ON_OFF * off["max_w"]:
+                failures.append((arm, geometry, courant, "max w", on["max_w"], "off", off["max_w"]))
     geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
-    for geometry in geometries:
+    for geometry in (geometries if args.ladder else ()):
         first_failure = None
         for courant in args.courants:
             dt = courant * DZ / cs
@@ -144,7 +188,7 @@ def main():
                           "tested_courants": args.courants}), flush=True)
     # Preserve the original Cartesian default-path coverage alongside the
     # explicitly face-only, fixer-off ladder.
-    for dt in (997.0, 100.0):
+    for dt in (() if args.ladder else (997.0, 100.0)):
         finite, n, wmax, history, err = run(
             dt, args.nstep, args.device, default_work=True)
         passed = finite and wmax < W_TOL
@@ -153,6 +197,8 @@ def main():
                           "balance_error": err, "history": history}), flush=True)
         if not passed:
             failures.append(("default-cell-global-fixer", dt, n, wmax))
+    for failure in failures:
+        print("FAIL", failure, flush=True)
     return 1 if failures else 0
 
 

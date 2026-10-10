@@ -22,6 +22,9 @@
 namespace snap {
 
 class MeshBlockImpl;
+struct WbRef4Stencils;
+struct X1PlainMeanStencils;
+struct X1PressureSourceStencils;
 
 struct HydroOptionsImpl {
   static std::shared_ptr<HydroOptionsImpl> create() {
@@ -158,6 +161,26 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! add the O(dx1^2) covariance term to the x2/x3 energy flux (#289)?
   //! read once from SNAP_FLUX_COVARIANCE; off unless it is set
   static bool flux_covariance();
+  //! fourth-order, cell/face-consistent x1 reference density (and on
+  //! non-uniform x1 the reference cell pressure) for the well-balanced
+  //! reconstruction (#289); read once from SNAP_WB_REF4, off unless it is set
+  static bool wb_ref4();
+  //! subtract the x1 rho-w covariance dz^2/12 rho_1 w_1 / rho from the
+  //! reconstructed cell velocity? read once from SNAP_X1_MASS_COVARIANCE; off
+  //! unless it is set
+  static bool x1_mass_covariance();
+  //! book the x1 gravity work of the corrected potential energy (derivation
+  //! curved-gravity-work-weight.md sec 7)? read once from
+  //! SNAP_GRAVITY_WORK_RADIAL_EXACT; on unless set to 0/false/off/no. On, E+P
+  //! is the conserved invariant: gravity_work_defect() and E+PE_d checks
+  //! measure the wrong one
+  static bool gravity_work_radial_exact();
+  //! the switch is on and acts here: gravity-work: face on a Cartesian or a
+  //! spherical-polar grid, grav1 != 0
+  bool radial_exact_work() const;
+  //! the x1 neighbour blocks {below, above} across a split, non-periodic x1
+  //! column, -1 where there is none (as the W reference relay pairs them)
+  std::pair<int, int> x1_neighbors() const;
   //! this block's E+PE defect of the dynamics in the current step (J),
   //! accumulated over the stages with their weight in the step
   torch::Tensor gravity_work_defect() const { return _gwfix_d; }
@@ -211,6 +234,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   // call.
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   _hydro_ref_x1(torch::Tensor const& w) const;
+  //! overwrite the m x1 ghost rows of f next to each x1 neighbour with the
+  //! neighbour's own rows of the same cells (faces: the same faces past the
+  //! seam face), so a split column reads the values of one block
+  void _x1_ghost_rows(torch::Tensor f, int m, bool faces, int tag) const;
   torch::Tensor _apply_implicit_correction(torch::Tensor& du,
                                            torch::Tensor const& w, double dt,
                                            Variables const& other);
@@ -222,6 +249,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! x1 grid uniformity (-1 unknown, 0 non-uniform, 1 uniform), probed once;
   //! selects the six-face vs log-mean cell-pressure reference
   mutable int x1_uniform_ = -1;
+  //! SNAP_WB_REF4 stencils for this block's x1 grid, built on first use
+  mutable std::shared_ptr<WbRef4Stencils> wb_ref4_;
+  //! SNAP_X1_CENTROID_EXACT r^2 -> plain-mean stencils, built on first use
+  mutable std::shared_ptr<X1PlainMeanStencils> x1pm_;
+  //! and its pressure-force stencils, for the hydrostatic correction
+  mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;

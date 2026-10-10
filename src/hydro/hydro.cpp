@@ -7,11 +7,13 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
 #include "hydro_dispatch.hpp"
+#include "wb_ref4.hpp"
 
 namespace snap {
 HydroImpl::HydroImpl(const HydroOptions& options_, torch::nn::Module* p)
@@ -76,6 +78,37 @@ void HydroImpl::reset() {
                   "const-gravity gravity-work-fixer needs non-periodic x1 "
                   "boundaries (its potential -grav1 * x1 jumps across a "
                   "periodic x1 face); set it false otherwise");
+    }
+    // the corrected-PE work has no form on other grids: plain face work there
+    if (gravity_work_radial_exact() && options->grav()->grav1() != 0. &&
+        gw == "face" && pmb && pmb->pcoord) {
+      auto const& type = pmb->pcoord->options->type();
+      if (type != "cartesian" && type != "spherical-polar")
+        TORCH_WARN_ONCE(
+            "SNAP_GRAVITY_WORK_RADIAL_EXACT (on by default with "
+            "gravity-work: face) has no form on a '",
+            type,
+            "' grid: the x1 wall cells keep the first-order plain "
+            "face work");
+    }
+    // the wb4 resolution flag is computed per block from scan pressures up to
+    // three cells away, so x1 seam sides agree only with nghost >= 3
+    if (wb_ref4_enabled() && options->grav()->grav1() != 0. && pmb &&
+        pmb->pcoord) {
+      int ng = pmb->pcoord->options->nghost();
+      TORCH_CHECK(ng >= 3,
+                  "SNAP_WB_REF4 (or SNAP_X1_CENTROID_EXACT, which implies "
+                  "it) needs nghost >= 3, got ",
+                  ng, "; unset it");
+    }
+    // the one-sided rho_1 at a wall spans three cells: fewer reads the ghost
+    if (x1_mass_covariance() && options->grav()->grav1() != 0. && pmb &&
+        pmb->pcoord) {
+      int nx1 = pmb->pcoord->options->nx1();
+      TORCH_CHECK(nx1 >= 3,
+                  "SNAP_X1_MASS_COVARIANCE needs at least 3 x1 cells per "
+                  "block, got ",
+                  nx1, "; unset it");
     }
   }
 
@@ -191,6 +224,82 @@ bool HydroImpl::flux_covariance() {
     return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
   }();
   return on;
+}
+
+bool HydroImpl::wb_ref4() { return wb_ref4_enabled(); }
+
+bool HydroImpl::x1_mass_covariance() {
+  static const bool on = [] {
+    auto v = get_env("SNAP_X1_MASS_COVARIANCE", "0");
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
+  }();
+  return on;
+}
+
+bool HydroImpl::gravity_work_radial_exact() {
+  // read once, like SNAP_FLUX_COVARIANCE: every block must make the same choice
+  // on unless set to 0/false/off/no (it acts with gravity-work: face only)
+  static const bool on = [] {
+    auto v = get_env("SNAP_GRAVITY_WORK_RADIAL_EXACT", "1");
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return !(v == "0" || v == "false" || v == "off" || v == "no");
+  }();
+  return on;
+}
+
+bool HydroImpl::radial_exact_work() const {
+  auto g = options->grav();
+  auto const& type = pmb->pcoord->options->type();
+  return gravity_work_radial_exact() && g && g->grav1() != 0. &&
+         g->gravity_work() == "face" &&
+         (type == "cartesian" || type == "spherical-polar");
+}
+
+std::pair<int, int> HydroImpl::x1_neighbors() const {
+  auto layout = pmb->get_layout();
+  if (!layout || layout->options->periodic_z() || layout->options->pz() <= 1)
+    return {-1, -1};
+  auto iloc = layout->loc_of(layout->options->rank());
+  return {layout->neighbor_rank(iloc, {0, 0, -1}),
+          layout->neighbor_rank(iloc, {0, 0, 1})};
+}
+
+void HydroImpl::_x1_ghost_rows(torch::Tensor f, int m, bool faces,
+                               int tag) const {
+  auto [below, above] = x1_neighbors();
+  if (below < 0 && above < 0) return;
+  auto layout = pmb->get_layout();
+  int is = pmb->pcoord->il(), iu = pmb->pcoord->iu(), o = faces ? 1 : 0;
+  std::vector<std::vector<torch::Tensor>> sbufs;
+  std::vector<CommWorkPtr> sends;
+  sbufs.reserve(2);
+  // same board / process-group pairing as the W ghost-row exchange
+  auto post = [&](torch::Tensor rows, int to, int t) {
+    if (layout->is_local_block(to)) {
+      layout->post_to_local_block(to, rows, t);
+    } else {
+      sbufs.push_back({rows.contiguous()});
+      sends.push_back(layout->send_to_block(sbufs.back(), to, t));
+    }
+  };
+  auto take = [&](int from, int t) {
+    if (layout->is_local_block(from))
+      return layout->take_from_local_block(from, t);
+    std::vector<torch::Tensor> rbuf = {
+        torch::empty_like(f.narrow(-1, 0, m).contiguous())};
+    layout->recv_from_block(rbuf, from, t)->wait();
+    return rbuf[0];
+  };
+  // up: my top rows are the above block's lower ghosts; down: my bottom rows
+  // (past the seam face, for faces) are the below block's upper ghosts
+  if (above >= 0) post(f.narrow(-1, iu + 1 - m, m), above, tag);
+  if (below >= 0) post(f.narrow(-1, is + o, m), below, tag + 1);
+  if (below >= 0) f.narrow(-1, is - m, m).copy_(take(below, tag));
+  if (above >= 0) f.narrow(-1, iu + 1 + o, m).copy_(take(above, tag + 1));
+  for (auto& sw : sends) sw->wait();
 }
 
 bool HydroImpl::face_work_in_operator() const {
@@ -446,6 +555,25 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
       w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
       g, x1_uniform_ == 1, phys_in, phys_out, options->wb_wall_clamp());
 
+  // #289 (SNAP_WB_REF4): the cell part of the fourth-order density reference
+  // (and on non-uniform x1 the cell pressure), before the seam exchange below
+  // so that the exchanged ghost rows carry it; the face part follows the
+  // exchange. psf is never changed, so the rest balance is the kernel's.
+  // SNAP_X1_CENTROID_EXACT implies the switch (wb_ref4_enabled()): on
+  // spherical-polar the cells read here are then plain means, for which it is
+  // fourth order (docs/derivations/x1-centroid-spherical.md)
+  torch::Tensor wb4_flag;
+  if (wb_ref4()) {
+    if (!wb_ref4_ || wb_ref4_->fwt.device() != w.device() ||
+        wb_ref4_->fwt.scalar_type() != w.scalar_type()) {
+      bool clamp = options->wb_wall_clamp();
+      wb_ref4_ = std::make_shared<WbRef4Stencils>(
+          wb_ref4_stencils(pcoord->x1f, is, iu, x1_uniform_ == 1,
+                           clamp && phys_in, clamp && phys_out, w.options()));
+    }
+    wb4_flag = wb_ref4_cells(*wb_ref4_, w, psf_lo, psf_hi, pref, dref);
+  }
+
   if (below >= 0) {
     layout->pass_x1_anchor(below, psf_lo.narrow(-1, is, 1), kWbRefTag);
   }
@@ -510,6 +638,11 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
     }
     for (auto& sw : sends) sw->wait();
   }
+
+  // #289 (SNAP_WB_REF4): the face density is the fourth-order face value of
+  // the (exchanged) cell density reference, so a split column gets the same
+  // faces as one block
+  if (wb4_flag.defined()) wb_ref4_faces(*wb_ref4_, dref, dsf, wb4_flag);
 
   return {psf_lo, pref, dsf, dref};
 }

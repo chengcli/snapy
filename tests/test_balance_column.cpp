@@ -1,9 +1,12 @@
 // C/C++
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 // gtest
 #include <gtest/gtest.h>
+
+#include "cuda_test_gate.hpp"
 
 // torch
 #include <torch/torch.h>
@@ -11,8 +14,11 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/x1_centroid.hpp>
 #include <snap/hydro/balance_column.hpp>
 #include <snap/hydro/hydro_dispatch.hpp>
+#include <snap/hydro/wb_ref4.hpp>
+#include <snap/mesh/meshblock.hpp>
 
 namespace {
 
@@ -21,6 +27,16 @@ constexpr double kRd = 3777.0;
 constexpr double kCp = 3.5 * kRd;
 constexpr double kTs = 300.0;
 constexpr double kPs = 1.0e5;
+
+// these columns are planar, declared so for SNAP_X1_CENTROID_EXACT
+std::tuple<torch::Tensor, double, int> balance(torch::Tensor const& w,
+                                               torch::Tensor const& dx1f,
+                                               double grav, bool clamp = true,
+                                               double rtol = 1.e-10,
+                                               int max_iter = 120) {
+  return snap::balance_column(w, dx1f, grav, clamp, rtol, max_iter,
+                              "cartesian");
+}
 
 struct Column {
   torch::Tensor w;     // (nvar, 1, 1, nx1), ghost-free
@@ -111,9 +127,22 @@ Column padded(Column const& c, int ng) {
 //! iteration can report convergence against something other than what it
 //! returned: a stale residual, a gauge read at the wrong cell, a `uniform`
 //! flag decided differently from the solver's rule.
+//! #289, SNAP_WB_REF4 (ctest test_balance_column_wb_ref4): on a non-uniform
+//! grid the switch replaces the kernel's log-mean cell pressure by the cell
+//! average of the cubic through four face pressures, so the solver's fixed
+//! point moves by O(dz^2) and balance_column finds the switched one. The audit
+//! applies the same switched cell pressure; against the kernel's alone the
+//! balanced stretched column reads 1.6e-3 instead of < 1e-10.
 double residual(Column const& c, bool uniform) {
   int nx1 = c.w.size(-1);
   auto r = reference(c.w, c.dx1f, nx1 - 1, uniform, true, true, true);
+  if (snap::wb_ref4_enabled() && !uniform) {
+    auto x1f =
+        torch::cat({torch::zeros({1}, c.dx1f.options()), c.dx1f.cumsum(0)});
+    auto st = snap::wb_ref4_stencils(x1f, 0, nx1 - 1, uniform, true, true,
+                                     c.w.options());
+    snap::wb_ref4_cells(st, c.w, r.psf_lo, r.psf_hi, r.pref, r.dref);
+  }
   auto pp = c.w[snap::IPR] - r.pref;
   auto gauge = pp.narrow(-1, nx1 - 1, 1);
   return ((pp - gauge).abs() / (c.w[snap::IDN] * kGrav * c.dx1f))
@@ -182,16 +211,21 @@ TEST(BalanceColumn, without_the_clamp_the_two_references_disagree) {
   EXPECT_FALSE(torch::equal(free_ref.pref, blk_ref.pref.narrow(-1, 3, nx1)));
 }
 
-TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
+//! the column on `device`
+Column on(Column const& c, torch::Device device) {
+  return {c.w.to(device), c.dx1f.to(device)};
+}
+
+void a_marched_column_comes_out_at_rest(torch::Device device) {
   constexpr double rtol = 1.e-10;
   for (bool uniform : {true, false}) {
-    auto c = marched_column(64, 3.0e5, uniform);
+    auto c = on(marched_column(64, 3.0e5, uniform), device);
     double before = residual(c, uniform);
     EXPECT_GT(before, 1.e-4)
         << "the fixture is not the defect: uniform=" << uniform;
 
     auto [wb, err, sweeps] =
-        snap::balance_column(c.w, c.dx1f, kGrav, /*wall_clamp=*/true, rtol);
+        balance(c.w, c.dx1f, kGrav, /*wall_clamp=*/true, rtol);
     Column balanced{wb, c.dx1f};
     double actual = residual(balanced, uniform);
     EXPECT_LT(actual, rtol) << "uniform=" << uniform;
@@ -200,20 +234,29 @@ TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
   }
 }
 
+TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
+  a_marched_column_comes_out_at_rest(torch::kCPU);
+}
+
+TEST(BalanceColumn, a_marched_column_comes_out_at_rest_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  a_marched_column_comes_out_at_rest(torch::Device(torch::kCUDA, 0));
+}
+
 // The final permitted update must be checked before declaring non-convergence.
 TEST(BalanceColumn, the_last_allowed_update_can_converge) {
   constexpr double rtol = 1.e-10;
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   auto [expected, expected_err, sweeps] =
-      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol);
+      balance(c.w, c.dx1f, kGrav, true, rtol);
   ASSERT_GT(sweeps, 0);
 
   torch::Tensor actual;
   double actual_err = 0.;
   int actual_sweeps = 0;
   EXPECT_NO_THROW(std::tie(actual, actual_err, actual_sweeps) =
-                      snap::balance_column(c.w, c.dx1f, kGrav, true, rtol,
-                                           /*max_iter=*/sweeps));
+                      balance(c.w, c.dx1f, kGrav, true, rtol,
+                              /*max_iter=*/sweeps));
   if (actual.defined()) {
     EXPECT_TRUE(torch::equal(actual, expected));
     EXPECT_DOUBLE_EQ(actual_err, expected_err);
@@ -227,7 +270,7 @@ TEST(BalanceColumn, the_temperature_and_every_other_channel_stay_put) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   auto rt0 = c.w[snap::IPR] / c.w[snap::IDN];
 
-  auto [wb, err, sweeps] = snap::balance_column(c.w, c.dx1f, kGrav);
+  auto [wb, err, sweeps] = balance(c.w, c.dx1f, kGrav);
   auto rt1 = wb[snap::IPR] / wb[snap::IDN];
 
   EXPECT_LT(((rt1 - rt0).abs() / rt0).max().item<double>(), 1.e-14);
@@ -244,8 +287,8 @@ TEST(BalanceColumn, the_temperature_and_every_other_channel_stay_put) {
 
 TEST(BalanceColumn, a_balanced_column_is_a_fixed_point) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
-  auto [w1, e1, n1] = snap::balance_column(c.w, c.dx1f, kGrav);
-  auto [w2, e2, n2] = snap::balance_column(w1, c.dx1f, kGrav);
+  auto [w1, e1, n1] = balance(c.w, c.dx1f, kGrav);
+  auto [w2, e2, n2] = balance(w1, c.dx1f, kGrav);
 
   EXPECT_EQ(n2, 0);
   EXPECT_TRUE(torch::equal(w1, w2));
@@ -292,18 +335,192 @@ TEST(BalanceColumn, a_block_thinner_than_its_ghosts_keeps_its_columns_apart) {
 TEST(BalanceColumn, it_refuses_what_it_cannot_deliver) {
   auto c = marched_column(64, 3.0e5, /*uniform=*/true);
   // a column too short for the reference's own wall rows
-  EXPECT_THROW(snap::balance_column(c.w.narrow(-1, 0, 4),
-                                    c.dx1f.narrow(-1, 0, 4), kGrav),
+  EXPECT_THROW(balance(c.w.narrow(-1, 0, 4), c.dx1f.narrow(-1, 0, 4), kGrav),
                c10::Error);
   // no clamp: the reference would read outside the column at each wall
-  EXPECT_THROW(snap::balance_column(c.w, c.dx1f, kGrav, /*wall_clamp=*/false),
-               c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, kGrav, /*wall_clamp=*/false), c10::Error);
   // a gravity sign, not a magnitude
-  EXPECT_THROW(snap::balance_column(c.w, c.dx1f, -kGrav), c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, -kGrav), c10::Error);
   // and an unconverged sweep budget is an error, never a quiet return
-  EXPECT_THROW(
-      snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, /*max_iter=*/1),
-      c10::Error);
+  EXPECT_THROW(balance(c.w, c.dx1f, kGrav, true, 1.e-10, /*max_iter=*/1),
+               c10::Error);
+}
+
+// ctest test_balance_column_x1_centroid: SNAP_X1_CENTROID_EXACT alone switches
+// the solver's fourth-order reference on (hydro.cpp), so balance_column must
+// see the same predicate, or it balances a column against the operator the
+// solver no longer applies (RED on 18e48c96, where only the solver keyed on it)
+TEST(BalanceColumn, x1_centroid_switch_implies_the_ref4_predicate) {
+  bool g = std::getenv("SNAP_X1_CENTROID_EXACT"),
+       w = std::getenv("SNAP_WB_REF4");
+  ASSERT_EQ(snap::x1_centroid_exact_enabled(), g);
+  EXPECT_EQ(snap::wb_ref4_enabled(), g || w);
+}
+
+// under SNAP_X1_CENTROID_EXACT a spherical-polar column's reference converts
+// r^2 means to plain means, which this planar column does not model: only a
+// column declared cartesian is balanced, anything else is refused
+void x1_centroid_switch_balances_only_a_cartesian_column(torch::Device device) {
+  auto c = on(marched_column(64, 3.0e5, /*uniform=*/true), device);
+  auto run = [&](char const* geometry) {
+    snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, 120, geometry);
+  };
+  EXPECT_NO_THROW(run("cartesian"));
+  if (!snap::x1_centroid_exact_enabled()) {
+    EXPECT_NO_THROW(run(""));
+    EXPECT_NO_THROW(run("spherical-polar"));
+    return;
+  }
+  for (char const* geometry : {"", "spherical-polar"}) try {
+      run(geometry);
+      ADD_FAILURE() << "geometry '" << geometry << "' balanced";
+    } catch (c10::Error const& e) {
+      EXPECT_NE(std::string(e.what()).find("SNAP_X1_CENTROID_EXACT"),
+                std::string::npos)
+          << e.what();
+    }
+}
+
+// ONE CONDENSABLE, MOISTURE ON. The dry air / H2O / H2O(l) set of
+// test_wall_saturation through kintera (ideal-moist, h2o_bryan), in a 10 km
+// column under the same kGrav. The vapour falls off with height, so the
+// mixture's p/rho differs cell by cell from the dry column's; that ratio is
+// the only way moisture reaches balance_column, which holds it fixed, and the
+// primitive density the reference scans is the total (dry + vapour +
+// condensate) one. So the dry bounds carry over unchanged: the audit < rtol,
+// the temperature to 1e-14, the species rows bit-for-bit. The solver's x1
+// momentum row is then checked the way test_x1_centroid_rest checks a dry
+// column, max |v1| / (g dt) after one RK3 step from rest, against the same
+// 1e-10 (TOL_ON there, rtol here: both bound |a|/g).
+constexpr char kMoistCard[] = "test_balance_column_moist.yaml";
+constexpr double kMoistTs = 300.0;  // surface temperature [K]
+constexpr double kLapse = 6.5e-3;   // [K/m], subsaturated aloft
+constexpr double kVapor0 = 1.0e-2;  // surface vapour mass fraction
+constexpr double kVaporH = 1.5e3;   // vapour scale height [m]
+
+//! The marched moist column of the card: T(z) linear, vapour q(z), condensate
+//! zero, and p/rho = R_mix T with R_mix from the solver's own EOS ("W->T" at
+//! rho = p = 1), marched by the same forward Euler as marched_column.
+Column moist_marched_column(snap::MeshBlock const& b) {
+  auto pc = b->pcoord;
+  int il = pc->il(), nx1 = pc->iu() - il + 1;
+  int nvar = b->phydro->peos->nvar();
+  auto opt = torch::TensorOptions().dtype(torch::kFloat64);
+  auto dx1f = pc->dx1f.narrow(0, il, nx1).to(opt).clone();
+  auto zc = pc->x1v.narrow(0, il, nx1).to(opt).clone();
+
+  auto w = torch::zeros({nvar, 1, 1, nx1}, opt);
+  w[snap::ICY].copy_((kVapor0 * torch::exp(-zc / kVaporH)).view({1, 1, -1}));
+  auto unit = w.clone();
+  unit[snap::IDN].fill_(1.);
+  unit[snap::IPR].fill_(1.);
+  auto rmix_t = (1. / b->phydro->peos->compute("W->T", {unit})).contiguous();
+  auto rmix = rmix_t.accessor<double, 3>();
+  auto zt = zc.accessor<double, 1>();
+
+  auto rho_t = w[snap::IDN], prs_t = w[snap::IPR];
+  auto rho = rho_t.accessor<double, 3>();
+  auto prs = prs_t.accessor<double, 3>();
+  double p = kPs;
+  for (int i = 0; i < nx1; ++i) {
+    double t = kMoistTs - kLapse * zt[i];
+    if (i > 0) {
+      double tp = kMoistTs - kLapse * zt[i - 1];
+      p -= kGrav * (p / (rmix[0][0][i - 1] * tp)) * (zt[i] - zt[i - 1]);
+    } else {
+      p -= kGrav * (kPs / (rmix[0][0][0] * kMoistTs)) * zt[0];
+    }
+    prs[0][0][i] = p;
+    rho[0][0][i] = p / (rmix[0][0][i] * t);
+  }
+  return {w, dx1f};
+}
+
+//! The solver's x1 momentum row: one RK3 step from rest of the column, as the
+//! card's block, and max |v1| / (g dt) over the owned cells, with the end
+//! state's condensable rows so a phase change cannot pass unseen.
+std::pair<double, torch::Tensor> moist_row_force(torch::Tensor const& col) {
+  auto b = snap::MeshBlock(snap::MeshBlockOptionsImpl::from_yaml(kMoistCard));
+  b->to(torch::kCPU, torch::kFloat64);
+  auto pc = b->pcoord;
+  int il = pc->il(), iu = pc->iu(), nx1 = iu - il + 1;
+  auto w = torch::zeros(
+      {col.size(0), pc->options->nc3(), pc->options->nc2(), pc->options->nc1()},
+      col.options());
+  w.narrow(-1, il, nx1).copy_(col.expand({-1, w.size(1), w.size(2), -1}));
+  for (int m = 0; m < il; ++m) {  // overwritten by the reflecting walls
+    w.narrow(-1, m, 1).copy_(w.narrow(-1, il, 1));
+    w.narrow(-1, iu + 1 + m, 1).copy_(w.narrow(-1, iu, 1));
+  }
+  snap::Variables v{{"hydro_w", w}};
+  b->initialize(v);
+  double dt = b->max_time_step(v);
+  for (int stage = 0; stage < b->pintg->stages.size(); ++stage)
+    b->forward(v, dt, stage);
+  auto end =
+      b->phydro->peos->compute("U->W", {v.at("hydro_u")}).narrow(-1, il, nx1);
+  double f = (end[snap::IVX].abs().max() / (kGrav * dt)).item<double>();
+  return {f, end.narrow(0, snap::ICY, end.size(0) - snap::ICY).clone()};
+}
+
+TEST(BalanceColumn, a_moist_column_with_one_condensable_comes_out_at_rest) {
+  constexpr double rtol = 1.e-10;
+  torch::set_num_threads(1);
+  auto b = snap::MeshBlock(snap::MeshBlockOptionsImpl::from_yaml(kMoistCard));
+  b->to(torch::kCPU, torch::kFloat64);
+  int ny = b->phydro->peos->nvar() - snap::ICY;
+  ASSERT_EQ(ny, 2) << "one condensable: a vapour row and a condensate row";
+  auto c = moist_marched_column(b);
+  auto eos = b->phydro->peos;
+
+  // the moisture is real: the column's R_mix moves by more than 1e-3 ...
+  auto rt = c.w[snap::IPR] / c.w[snap::IDN];
+  auto temp0 = eos->compute("W->T", {c.w});
+  auto rmix = rt / temp0;
+  EXPECT_GT(((rmix.max() - rmix.min()) / rmix.min()).item<double>(), 1.e-3);
+  // ... and the fixture is the defect
+  double before = residual(c, /*uniform=*/true);
+  EXPECT_GT(before, 1.e-4);
+
+  auto [wb, err, sweeps] = balance(c.w, c.dx1f, kGrav, true, rtol);
+  double actual = residual({wb, c.dx1f}, /*uniform=*/true);
+  std::cout << std::scientific << "moist column: audit before " << before
+            << ", after " << actual << " (rtol " << rtol << "), " << sweeps
+            << " sweeps\n";
+  EXPECT_LT(actual, rtol);
+  EXPECT_DOUBLE_EQ(actual, err);
+  EXPECT_GT(sweeps, 0);
+
+  // only p and rho move: the condensable rows ride through, T stays put
+  EXPECT_TRUE(
+      torch::equal(wb.narrow(0, snap::ICY, ny), c.w.narrow(0, snap::ICY, ny)));
+  auto temp1 = eos->compute("W->T", {wb});
+  EXPECT_LT(((temp1 - temp0).abs() / temp0).max().item<double>(), 1.e-14);
+
+  // the solver's x1 momentum row, with the condensable pair live
+  auto [f_balanced, y_balanced] = moist_row_force(wb);
+  auto [f_marched, y_marched] = moist_row_force(c.w);
+  std::cout << "moist column: max |v1|/(g dt) after one step, balanced "
+            << f_balanced << ", marched " << f_marched << '\n';
+  EXPECT_LT(f_balanced, rtol);
+  // the control: the same check sees the marched column's defect
+  EXPECT_GT(f_marched, 1.e-6);
+  // subsaturated throughout, so nothing condensed and the vapour stayed put
+  EXPECT_TRUE(torch::equal(y_balanced[1], torch::zeros_like(y_balanced[1])));
+  EXPECT_LT(((y_balanced[0] - wb[snap::ICY]).abs() / wb[snap::ICY])
+                .max()
+                .item<double>(),
+            1.e-12);
+}
+
+TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column) {
+  x1_centroid_switch_balances_only_a_cartesian_column(torch::kCPU);
+}
+
+TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  x1_centroid_switch_balances_only_a_cartesian_column(
+      torch::Device(torch::kCUDA, 0));
 }
 
 }  // namespace

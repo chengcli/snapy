@@ -13,8 +13,8 @@ source. Checked, each arm in its own process because the switch is read once per
      stratified moist box unchanged to round-off with the term on (the energy row's shift is then
      exactly the offset times the tracer rows');
   4. dry Cartesian limit: with the term on, the one-step eps_eff nz^2 of
-     test_horizontal_flux_covariance stays within 2e-3 of the covariance-only form it replaces
-     (recorded at e7f9904) at nz 16, 32, 64.
+     test_horizontal_flux_covariance stays within 2e-3 of its value recorded with the x1 wall
+     continuation of the default reference at nz 16, 32, 64.
 
   python test_flux_covariance_rows.py [--device cpu]
 """
@@ -34,8 +34,8 @@ REST_TOL = 1e-9       # max |v| / c_s after NREST steps
 UNIFORM_TOL = 1e-13   # max |q - q0|
 OFFSET_TOL = 1e-10    # max relative primitive difference between the two offsets
 NREST, NFLOW = 20, 20
-# eps_eff nz^2 of the dry Cartesian one-step test with the covariance-only energy term (e7f9904)
-CART_REF = {16: -0.012989245130996795, 32: -0.00492854912907752, 64: 0.0002522684000292447}
+# eps_eff nz^2 of the dry Cartesian one-step test, term on, with the x1 wall continuation
+CART_REF = {16: 0.034750, 32: 0.021184, 64: 0.013718}
 CART_TOL = 2e-3
 P0, RHO0, G = 1.0e5, 0.1, 10.0
 
@@ -303,7 +303,7 @@ def main():
         eps = json.load(open(run("cartesian", "1", a.device, tmp)))
         for nz, ref in CART_REF.items():
             got = eps[str(nz)]
-            print(f"dry cartesian nz {nz:3d} eps_eff nz^2 on: {got:+.6f}  (covariance-only form "
+            print(f"dry cartesian nz {nz:3d} eps_eff nz^2 on: {got:+.6f}  (recorded "
                   f"{ref:+.6f}, diff {got - ref:+.1e})", flush=True)
             if not abs(got - ref) < CART_TOL:
                 failures.append(f"dry cartesian nz {nz}: {got:+.6f} vs {ref:+.6f}")

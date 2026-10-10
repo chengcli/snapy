@@ -158,24 +158,25 @@ torch::Tensor face_coefficient(torch::Tensor value, Coordinate const& coord,
   return out;
 }
 
-//! x1 profile at the faces of direction `idir`, broadcastable against a face
-//! field
-torch::Tensor scale_at_faces(torch::Tensor scale, int idir, Region const& start,
-                             Region const& end) {
-  if (idir != 0) return scale.slice(0, start[2], end[2]).view({1, 1, -1});
-  return (0.5 * (scale.slice(0, start[2], end[2]) +
-                 scale.slice(0, start[2] - 1, end[2] - 1)))
-      .view({1, 1, -1});
-}
-
-//! value times an x1 profile at the faces; a wall face extrapolates their
-//! product
+//! value times an x1 profile at the faces: the coefficient of their product,
+//! so an interior face takes the mean of the two cells' products. The product
+//! of the two means is not the mean of the products: for a uniform product
+//! (a constant dynamic coefficient over a stratified density) it adds
+//! (dvalue)^2 / (4 value_a value_b) to each face, and the flux of a conductive
+//! or viscous equilibrium is no longer divergence-free
+//! (docs/derivations/diffusion-face-coefficient.md).
 torch::Tensor face_scaled_coefficient(torch::Tensor value, torch::Tensor scale,
                                       Coordinate const& coord, int idir,
                                       Region start, Region end, bool wall_lower,
                                       bool wall_upper) {
+  if (idir == 0) {
+    return face_coefficient(value * scale.view({1, 1, -1}), coord, idir, start,
+                            end, wall_lower, wall_upper);
+  }
+  // x2/x3 faces: both cells share the x1 profile, so the mean of the products
+  // equals the product of the means; keep that form, bitwise as before
   auto out = face_average(value, idir, start, end) *
-             scale_at_faces(scale, idir, start, end);
+             scale.slice(0, start[2], end[2]).view({1, 1, -1});
   auto dim = kSpatialDims[idir] - 1;
   auto nface = end[dim] - start[dim];
   if (nface < 3 || (!wall_lower && !wall_upper)) return out;

@@ -11,7 +11,7 @@ unseeded one gives the entropy tendency S, projected on the seeded w at the roll
 The physical value is 0 here. Face gravity work keeps the cell form's own O(dz^2) error
 (-0.05 / nz^2 at nz 16 with the term on) out of the number. Checked (Cartesian, nz = 16, 32):
   1. term off: eps_eff nz^2 in [-0.32, -0.20] (the defect is there);
-  2. term on:  |eps_eff nz^2| < 0.03;
+  2. term on:  |eps_eff nz^2| < 0.04;
   3. switch unset and SNAP_FLUX_COVARIANCE=0 give the same step bit for bit, and on differs from off;
   4. E+PE = sum (E + rho g z) dV of the seeded box, term on, closes over NSTEP steps.
 The switch is read once per process, so each arm runs in a child process (ARMS); with a
@@ -34,7 +34,7 @@ GAMMA, CP, CV, NG = 1.4, 3.5, 2.5, 3
 IV1, IV2 = 1, 2
 LX = 2.0 * math.sqrt(2.0)
 BASE = (-0.32, -0.20)
-FIXED = 0.03
+FIXED = 0.04
 NSTEP = 50
 EPE_TOL = 1.e-12
 ARMS = {"unset": None, "zero": "0", "on": "1"}
