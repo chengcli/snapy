@@ -101,6 +101,15 @@ void HydroImpl::reset() {
                   "it) needs nghost >= 3, got ",
                   ng, "; unset it");
     }
+    // the one-sided rho_1 at a wall spans three cells: fewer reads the ghost
+    if (x1_mass_covariance() && options->grav()->grav1() != 0. && pmb &&
+        pmb->pcoord) {
+      int nx1 = pmb->pcoord->options->nx1();
+      TORCH_CHECK(nx1 >= 3,
+                  "SNAP_X1_MASS_COVARIANCE needs at least 3 x1 cells per "
+                  "block, got ",
+                  nx1, "; unset it");
+    }
   }
 
   //// ---- (6) set up implicit solver ---- ////
@@ -218,6 +227,16 @@ bool HydroImpl::flux_covariance() {
 }
 
 bool HydroImpl::wb_ref4() { return wb_ref4_enabled(); }
+
+bool HydroImpl::x1_mass_covariance() {
+  static const bool on = [] {
+    auto v = get_env("SNAP_X1_MASS_COVARIANCE", "0");
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
+  }();
+  return on;
+}
 
 bool HydroImpl::gravity_work_radial_exact() {
   // read once, like SNAP_FLUX_COVARIANCE: every block must make the same choice

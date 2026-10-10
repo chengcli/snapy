@@ -32,19 +32,10 @@ static torch::Tensor d1_pressure(torch::Tensor const& p,
   return d;
 }
 
-// SNAP_X1_MASS_COVARIANCE (read once): the x1 reconstruction treats the cell
-// velocity m1/rho as the cell average of w; in a stratified column that adds
-// dz^2/12 rho_z w_z to the face mass flux. Subtract it from the reconstructed
-// velocity (the x1 analogue of SNAP_FLUX_COVARIANCE).
-static bool x1_mass_covariance() {
-  static const bool on = [] {
-    auto v = get_env("SNAP_X1_MASS_COVARIANCE", "0");
-    std::transform(v.begin(), v.end(), v.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
-  }();
-  return on;
-}
+// SNAP_X1_MASS_COVARIANCE (HydroImpl::x1_mass_covariance): the x1
+// reconstruction treats the cell velocity m1/rho as the cell average of w; in a
+// stratified column that adds dz^2/12 rho_z w_z to the face mass flux. Subtract
+// it from the reconstructed velocity (the x1 analogue of SNAP_FLUX_COVARIANCE).
 
 // centred x1 derivative over x1v for every cell that has both neighbours; the
 // first and last array cells copy their neighbour's value

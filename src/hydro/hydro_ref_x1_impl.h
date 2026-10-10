@@ -60,8 +60,8 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
 }
 
 //! rho/p k cells past a wall, from the wall cell r0 and its neighbour r1:
-//! linear, r0 + k (r0 - r1), where rho/p falls towards the wall (r1 <= r0),
-//! and ln-linear, r0 (r0 / r1)^k, where it rises (r1 > r0). Each is the
+//! linear, r0 + k (r0 - r1), where rho/p rises towards the wall (r1 <= r0),
+//! and ln-linear, r0 (r0 / r1)^k, where it falls (r1 > r0). Each is the
 //! branch that stays closer to r0, so the continuation lies within
 //! [r0 (r0 / r1)^k, r0 (1 + k)] for r1 >= 0: positive, and bounded above when
 //! r1 is nearly empty. A non-positive value keeps the wall cell.

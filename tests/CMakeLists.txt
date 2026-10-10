@@ -56,6 +56,9 @@ seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
          wb_ref4_flag_at_the_seam_split_matches_one_block)
 # SNAP_WB_REF4 with grav1 = 0 on nghost 1: no reference, so no nghost check
 seam_arm(_wb_ref4_gravity_0 "SNAP_WB_REF4=1" wb_ref4_gravity_0_nghost_1_steps)
+# SNAP_X1_MASS_COVARIANCE refuses a block with fewer than 3 x1 cells
+seam_arm(_x1_mass_covariance "SNAP_X1_MASS_COVARIANCE=1"
+         x1_mass_covariance_needs_3_x1_cells)
 if(CUDA)
   # the same arms on the GPU; without one the test skips and so does the entry
   seam_arm(_x1_centroid_cuda "SNAP_X1_CENTROID_EXACT=1"

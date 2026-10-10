@@ -161,7 +161,7 @@ void hydro_ref_x1_mps(torch::Tensor const& w, torch::Tensor const& dx1f,
   auto hi_edge = rop.narrow(-1, nc1 - 1, 1);
   auto pad = torch::cat({lo_edge, lo_edge, rop, hi_edge, hi_edge}, -1);
   // past a clamped wall: rho/p continued from the two cells next to it,
-  // linearly where it falls towards the wall and ln-linearly where it rises,
+  // linearly where it rises towards the wall and ln-linearly where it falls,
   // else the wall cell (hydro_ref_x1_wall_rop); pad index p holds cell p - 2
   auto wall_rop = [](torch::Tensor const& r0, torch::Tensor const& r1, int k) {
     auto e = torch::where(r1 > r0, r0 * (r0 / r1).pow(double(k)),

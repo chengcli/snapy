@@ -462,8 +462,8 @@ $3.9\times10^{-9}$ in $E + \mathrm{PE}_d$.
 With `SNAP_WB_REF4` off, the default well-balanced reference repeated the wall cell's $r = \rho/p$ in the ghosts
 past a clamped physical wall, which makes the face density reference first order at the three faces next to each
 wall. It now continues $r$ past the wall (`wb-ref-wall.md` §4): linearly, $r_{-k} = r_0 + k(r_0 - r_1)$, where $r$
-falls away from the wall, and ln-linearly, $r_{-k} = r_0(r_0/r_1)^k$, where it rises. Neither form alone is
-bounded:
+rises towards the wall ($r_1 \le r_0$), and ln-linearly, $r_{-k} = r_0(r_0/r_1)^k$, where it falls ($r_1 > r_0$).
+Neither form alone is bounded:
 - linear in $r$ everywhere reaches zero, $r_{-3} = r_0(1 - 3d)$ with $d = (r_1 - r_0)/r_0$, and goes negative past
   $d = 1/3$; `test_straka_redo` (CFL 1.6, nx1 64) then fails at 31.67 s with $p < 0$ below the top wall;
 - ln-linear everywhere grows without bound next to a nearly empty cell: in `test_face_floor`'s unresolved column it

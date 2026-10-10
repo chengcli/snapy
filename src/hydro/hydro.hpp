@@ -165,6 +165,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! non-uniform x1 the reference cell pressure) for the well-balanced
   //! reconstruction (#289); read once from SNAP_WB_REF4, off unless it is set
   static bool wb_ref4();
+  //! subtract the x1 rho-w covariance dz^2/12 rho_1 w_1 / rho from the
+  //! reconstructed cell velocity? read once from SNAP_X1_MASS_COVARIANCE; off
+  //! unless it is set
+  static bool x1_mass_covariance();
   //! book the x1 gravity work of the corrected potential energy (derivation
   //! curved-gravity-work-weight.md sec 7)? read once from
   //! SNAP_GRAVITY_WORK_RADIAL_EXACT; on unless set to 0/false/off/no. On, E+P
