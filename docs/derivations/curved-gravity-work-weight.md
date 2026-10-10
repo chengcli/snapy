@@ -424,7 +424,7 @@ Searched: `src/`, `python/`, `tests/`.
 | gravity-work fixer (`gwfix_stage` in `hydro_forward.cpp`, the implicit `epe` lambda) and its `fixgrav=` printout | $\mathrm{PE}_d$ | consistent by construction: the fixer runs only with `gravity-work: cell` (`hydro.cpp`), the switch acts only with `gravity-work: face` (`radial_exact_work()`); they never meet |
 | cycle diagnostics `pe=` (`print_cycle_diagnostics`, `meshblock.cpp`) | $P$ | logs $P$ via `corrected_pe_work` with the same per-block one-sided slope stencil, so the logged `ie=` + `pe=` is the conserved $E + P$ (it logged $\mathrm{PE}_d$ before; the test's check 5 failed on that at $\sim2\times10^{-5}$ relative and passes at $\le 3\times10^{-14}$) |
 | netCDF outputs | none | no PE field is written |
-| E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct as written: they run with the switch unset; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
+| E+PE$_d$ oracles in other tests (`test_horizontal_flux_covariance`, `test_gravity_work_fixer`, `test_forcing.cpp`) | $\mathrm{PE}_d$ | correct for plain face work: the explicit ones, and the values `test_flux_covariance_rows` recorded with it, run with the switch set to 0 in their ctest entries; the switch-on oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
 | face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $\mathrm{PE}_d$, or $P$ with the switch on | they read the switch as `hydro.cpp` does (a gnomonic-equiangle face block keeps the plain face work) and then measure $E + P$ on the final state; ctest runs each twice, with the switch `=0` and `=1` (#296) |
 
 **The work inside the implicit operator (#296).** Booked only after the solve, the implicit part of (7) is explicit,
@@ -454,3 +454,44 @@ $\le 4.4\times10^{-6}$ m/s, the level cell work reaches on them). Their remainin
 e.g. the spherical implicit energy check gives $E + \mathrm{PE}_d = -0.166$ but $E + P = 3.5\times10^{-14}$
 (scale 2119), and the moving tall columns drift by $\le 4.1\times10^{-15}$ in $E + P$ against up to
 $3.9\times10^{-9}$ in $E + \mathrm{PE}_d$.
+
+## 11. The default reference at the walls, F on by default with `gravity-work: face`, and the remaining error
+
+### 11.1 The wall closure of the default x1 reference
+
+With `SNAP_WB_REF4` off, the default well-balanced reference repeated the wall cell's $r = \rho/p$ in the ghosts
+past a clamped physical wall, which makes the face density reference first order at the three faces next to each
+wall. It now continues $r$ past the wall (`wb-ref-wall.md` §4): linearly, $r_{-k} = r_0 + k(r_0 - r_1)$, where $r$
+falls away from the wall, and ln-linearly, $r_{-k} = r_0(r_0/r_1)^k$, where it rises. Neither form alone is
+bounded:
+- linear in $r$ everywhere reaches zero, $r_{-3} = r_0(1 - 3d)$ with $d = (r_1 - r_0)/r_0$, and goes negative past
+  $d = 1/3$; `test_straka_redo` (CFL 1.6, nx1 64) then fails at 31.67 s with $p < 0$ below the top wall;
+- ln-linear everywhere grows without bound next to a nearly empty cell: in `test_face_floor`'s unresolved column it
+  gives a dipped-face mass flux of $3.36\times10^{-7}$, against $2.83\times10^{-8}$ for the linear form.
+
+Taking per column the branch that stays closer to $r_0$ keeps the continuation in $[r_0(r_0/r_1)^k, r_0(1+k)]$. The
+observed order at faces 1-2 of both walls is 1.81-2.12 (nz 32 to 64), and every interior face and cell is bit for
+bit as before. The tests that pinned values of the old wall reference were re-pinned with it.
+
+### 11.2 Why F is on by default with `gravity-work: face`
+
+With `gravity-work: face` on a Cartesian or spherical-polar grid and $g_1 \ne 0$, `SNAP_GRAVITY_WORK_RADIAL_EXACT`
+is on unless it is set to 0/false/off/no, which remains for A/B runs. Plain face work is first order in the two
+x1 wall cells (§8), and it shows:
+- in the dry Cartesian onset box with `SNAP_FLUX_COVARIANCE` and `SNAP_WB_REF4` on (cell-average initial state),
+  the one-step $\varepsilon_{\rm eff}\,n_z^2$ at $n_z$ 16, 32, 64 is $+0.0306$, $+0.0158$, $+0.0080$ without F and
+  $-0.00092$, $-0.00020$, $-0.00004$ with F;
+- on a coarse polytrope the kinetic energy runs away to $3.1\times10^{-4}$ without F, $5.4\times10^{-5}$ with F, and
+  $8.5\times10^{-5}$ with `gravity-work: cell`.
+
+A gnomonic-equiangle (cubed-sphere) grid has no form for F: there the setup warns once and the plain face work is
+kept. `gravity-work: cell`, the default, is unchanged bit for bit. The explicit E+PE$_d$ oracles of §10 that test the
+plain face form run with the switch set to 0.
+
+### 11.3 The remaining error
+
+With the wall closure and F, the convective onset (linear growth) rate keeps a second-order truncation error
+that face and cell work share, so it does not separate the two forms.
+
+> **TABLE PLACEHOLDER** -- convergence table nz 16-128, fit $c_2\,\Delta z^2 + c_3\,\Delta z^3$: to be filled by the
+> lead.
