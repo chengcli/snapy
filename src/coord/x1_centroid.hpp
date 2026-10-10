@@ -30,6 +30,12 @@ struct X1PlainMeanStencils {
   bool usable = false;
   //! (nc1, 5) cell indices and weights
   torch::Tensor idx, wt;
+  //! rebuild for a state of another device or dtype; an unusable cache has
+  //! no weights to move and is never stale (#298)
+  bool stale(torch::Tensor const& ref) const {
+    return usable && (wt.device() != ref.device() ||
+                      wt.scalar_type() != ref.scalar_type());
+  }
 };
 
 X1PlainMeanStencils x1_plain_mean_stencils(torch::Tensor const& x1f, int is,
@@ -53,6 +59,11 @@ struct X1PressureSourceStencils {
   bool usable = false;
   //! (nown, 6) face indices and weights
   torch::Tensor idx, wt;
+  //! as X1PlainMeanStencils::stale (#298)
+  bool stale(torch::Tensor const& ref) const {
+    return usable && (wt.device() != ref.device() ||
+                      wt.scalar_type() != ref.scalar_type());
+  }
 };
 
 X1PressureSourceStencils x1_pressure_source_stencils(

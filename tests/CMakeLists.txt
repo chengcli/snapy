@@ -228,6 +228,13 @@ snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;e
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
+# the same ladder on one cubed-sphere face block, where the corrected-PE work carries the
+# centroid term (#300)
+snapy_add_python_test(test_implicit_gravity_tall_column_cubed SCRIPT test_implicit_gravity_tall_column.py
+                      ARGS --geometry gnomonic-equiangle TIMEOUT 120
+                      LABELS "python;hydro;implicit;gravity;cubed-sphere")
+# #299: the runner above fails when a ladder child dies or prints an incomplete ladder
+snapy_add_python_test(test_tall_column_runner_child_failure TIMEOUT 120 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 # the same two tests with the corrected-PE work on (#296): they detect the switch and
@@ -265,6 +272,8 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# #298: the x1 stencil caches on blocks with too few x1 cells
+snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
 # corrected work, on by default with gravity-work: face, conserves E+P instead
 set_tests_properties(

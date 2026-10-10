@@ -194,3 +194,7 @@ $-0.004 \ldots -0.012$, in the replica as in the code: the volume weight carries
 - **Cartesian.** No conversion and the base source; since the switch implies `SNAP_WB_REF4`, a Cartesian block
   runs exactly as with `SNAP_WB_REF4` alone.
 - **Off.** With the switch off every line of the base runs as before.
+- **Small blocks.** With fewer than five cells to fit (the plain means) or six faces (the pressure source) the
+  stencils are not usable and the base maps stay. Such a cache holds no weights, and its device/dtype check
+  (`stale()`) does not read them (#298; before, the second RK stage threw at nx1 2–4;
+  `tests/test_stencil_cache_small_block.py`).

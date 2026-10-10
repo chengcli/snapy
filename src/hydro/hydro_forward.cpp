@@ -270,8 +270,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     torch::Tensor wx1 = w;
     if (x1_centroid_exact_enabled() &&
         pmb->pcoord->options->type() == "spherical-polar") {
-      if (!x1pm_ || x1pm_->wt.device() != w.device() ||
-          x1pm_->wt.scalar_type() != w.scalar_type()) {
+      if (!x1pm_ || x1pm_->stale(w)) {
         x1pm_ = std::make_shared<X1PlainMeanStencils>(x1_plain_mean_stencils(
             pmb->pcoord->x1f, pmb->pcoord->il(), pmb->pcoord->iu(),
             phys_x1inner, phys_x1outer, w.options()));
@@ -519,8 +518,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         _face_pressure1.numel() > 0) {
       int is = pmb->pcoord->il();
       int ie = pmb->pcoord->iu() + 1;
-      if (!x1src_ || x1src_->wt.device() != w.device() ||
-          x1src_->wt.scalar_type() != w.scalar_type()) {
+      if (!x1src_ || x1src_->stale(w)) {
         auto [below, above] = x1_neighbors();
         x1src_ = std::make_shared<X1PressureSourceStencils>(
             x1_pressure_source_stencils(pmb->pcoord->x1f, is, ie - 1, below < 0,
@@ -818,7 +816,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (radial_exact) {
       face_gravity_work += corrected_pe_work(
           -dt * vertical_mass_div, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie,
-          grav1, pmb->pcoord->options->type() == "spherical-polar");
+          grav1, x1_measure(pmb->pcoord->options->type()));
     }
 
     // cp3/cp5/weno5 faces: the face average exceeds m = rho*v by

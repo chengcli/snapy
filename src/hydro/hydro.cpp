@@ -11,6 +11,7 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
+#include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 #include "hydro_dispatch.hpp"
 #include "wb_ref4.hpp"
@@ -83,7 +84,7 @@ void HydroImpl::reset() {
     if (gravity_work_radial_exact() && options->grav()->grav1() != 0. &&
         gw == "face" && pmb && pmb->pcoord) {
       auto const& type = pmb->pcoord->options->type();
-      if (type != "cartesian" && type != "spherical-polar")
+      if (x1_measure(type) == X1Measure::none)
         TORCH_WARN_ONCE(
             "SNAP_GRAVITY_WORK_RADIAL_EXACT (on by default with "
             "gravity-work: face) has no form on a '",
@@ -254,8 +255,7 @@ bool HydroImpl::radial_exact_work() const {
   auto g = options->grav();
   auto const& type = pmb->pcoord->options->type();
   return gravity_work_radial_exact() && g && g->grav1() != 0. &&
-         g->gravity_work() == "face" &&
-         (type == "cartesian" || type == "spherical-polar");
+         g->gravity_work() == "face" && x1_measure(type) != X1Measure::none;
 }
 
 std::pair<int, int> HydroImpl::x1_neighbors() const {
@@ -564,8 +564,7 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   // fourth order (docs/derivations/x1-centroid-spherical.md)
   torch::Tensor wb4_flag;
   if (wb_ref4()) {
-    if (!wb_ref4_ || wb_ref4_->fwt.device() != w.device() ||
-        wb_ref4_->fwt.scalar_type() != w.scalar_type()) {
+    if (!wb_ref4_ || wb_ref4_->stale(w)) {
       bool clamp = options->wb_wall_clamp();
       wb_ref4_ = std::make_shared<WbRef4Stencils>(
           wb_ref4_stencils(pcoord->x1f, is, iu, x1_uniform_ == 1,

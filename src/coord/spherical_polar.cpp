@@ -250,8 +250,7 @@ torch::Tensor SphericalPolarImpl::forward(torch::Tensor prim,
     // g rho. The plain difference below balances g <rho> instead.
     bool exact_x1 = false;
     if (face_pressure1.defined() && x1_centroid_exact_enabled()) {
-      if (!x1src_ || x1src_->wt.device() != face_pressure1.device() ||
-          x1src_->wt.scalar_type() != face_pressure1.scalar_type()) {
+      if (!x1src_ || x1src_->stale(face_pressure1)) {
         // ghost faces at a seam are the neighbour's (hydro_forward.cpp)
         auto [below, above] = pmb->phydro->x1_neighbors();
         x1src_ = std::make_shared<X1PressureSourceStencils>(

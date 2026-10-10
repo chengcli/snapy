@@ -6,12 +6,16 @@ vertical acoustic Courants up to 250. Results include the first failed rung;
 passing a finite ladder does not establish a universal stability threshold.
 Cartesian retains eight periodic copies; spherical x1 uses one angular cell
 to test a strictly radial column. Angular-mode stability is a separate gate.
+--geometry gnomonic-equiangle runs the same ladder on one cubed-sphere face block of
+4 x 4 columns at the spherical radius, where the corrected-PE work carries the
+centroid term of the derivation's sec 12 (#300).
 
 The face ladder runs twice, each in a child process (the switch is read once per
 process): with SNAP_GRAVITY_WORK_RADIAL_EXACT=0, and with it on (the corrected-PE
 work of docs/derivations/curved-gravity-work-weight.md sec 7, booked inside the
 implicit operator, #296). Every rung must stay below W_TOL, end the run below
 W_SETTLED, and, with the switch on, peak at most ON_OFF times its switch-off rung.
+A child that exits non-zero or prints an incomplete ladder fails the parent (#299).
 """
 import argparse
 import math
@@ -67,6 +71,14 @@ def config(geometry="cartesian", default_work=False):
             "x1min": RADIUS, "x1max": RADIUS + NZ * DZ,
             "x2min": math.pi / 2 - 0.2, "x2max": math.pi / 2 + 0.2,
             "x3min": 0.0, "x3max": 0.05}
+    elif geometry == "gnomonic-equiangle":
+        cfg["geometry"]["type"] = geometry
+        cfg["geometry"]["cells"].update(nx2=4, nx3=4)
+        cfg["geometry"]["bounds"] = {
+            "x1min": RADIUS, "x1max": RADIUS + NZ * DZ,
+            "x2min_pi": -0.25, "x2max_pi": 0.25, "x3min_pi": -0.25, "x3max_pi": 0.25}
+        for side in ("x2-inner", "x2-outer", "x3-inner", "x3-outer"):
+            cfg["boundary-condition"]["external"][side] = "reflecting"
     return cfg
 
 
@@ -98,9 +110,11 @@ def run(dt, nstep, device, geometry="cartesian", default_work=False):
         w[c][..., ng + NZ:] = w[c][..., ng + NZ - 1:ng + NZ]
     block_vars, _ = block.initialize({"hydro_w": w})
 
-    nx2 = config(geometry)["geometry"]["cells"]["nx2"]
+    cells = config(geometry)["geometry"]["cells"]
+    nx2, nx3 = cells["nx2"], cells["nx3"]
     jl = ng if nx2 > 1 else 0
-    interior = (Ellipsis, slice(jl, jl + nx2), slice(ng, ng + NZ))
+    kl = ng if nx3 > 1 else 0
+    interior = (slice(None), slice(kl, kl + nx3), slice(jl, jl + nx2), slice(ng, ng + NZ))
     nstage = len(block.module("intg").stages)
     wmax, history = 0.0, []
     for n in range(1, nstep + 1):
@@ -125,7 +139,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--nstep", type=int, default=40)
-    ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "both"), default="both")
+    ap.add_argument("--geometry", choices=("cartesian", "spherical-polar", "gnomonic-equiangle", "both"),
+                    default="both")
     ap.add_argument("--courants", type=float, nargs="+", default=COURANTS)
     ap.add_argument("--ladder", action="store_true",
                     help="child: the face ladder only, under the inherited switch")
@@ -137,6 +152,7 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
+    geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
     if not args.ladder:
         ladder = {}
         for value in ("0", "1"):  # SNAP_GRAVITY_WORK_RADIAL_EXACT off, on (on by default)
@@ -148,14 +164,18 @@ def main():
                    "--nstep", str(args.nstep), "--geometry", args.geometry,
                    "--courants"] + [str(c) for c in args.courants]
             out = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            rungs, summaries = set(), set()
             for line in out.stdout.splitlines():
                 if not line.startswith("{"):
                     continue
                 row = json.loads(line)
                 row["radial_exact"] = value == "1"
                 print(json.dumps(row), flush=True)
+                if "first_failing_courant" in row:
+                    summaries.add(row["geometry"])
                 if "passed" not in row:
                     continue
+                rungs.add((row["geometry"], row["courant"]))
                 arm = "radial-exact" if value == "1" else "face"
                 ladder[arm, row["geometry"], row["courant"]] = row
                 if not row["passed"]:
@@ -163,14 +183,17 @@ def main():
                 elif row["history"][-1][1] > W_SETTLED:
                     failures.append((arm, row["geometry"], row["courant"], "not settled",
                                      row["history"][-1]))
-            if out.returncode not in (0, 1):
+            # a child exits 1 for a failing rung (already listed above) and for an
+            # exception alike, so any non-zero exit fails, and the ladder must be complete
+            missing = [(g, c) for g in geometries for c in args.courants if (g, c) not in rungs]
+            missing += [(g, "summary") for g in geometries if g not in summaries]
+            if out.returncode != 0 or missing:
                 print(out.stderr[-2000:], flush=True)
-                failures.append(("child", value, out.returncode))
+                failures.append(("child", value, out.returncode, "missing rows", missing))
         for (arm, geometry, courant), on in ladder.items():
             off = ladder.get(("face", geometry, courant))
             if arm == "radial-exact" and off and on["max_w"] > ON_OFF * off["max_w"]:
                 failures.append((arm, geometry, courant, "max w", on["max_w"], "off", off["max_w"]))
-    geometries = ("cartesian", "spherical-polar") if args.geometry == "both" else (args.geometry,)
     for geometry in (geometries if args.ladder else ()):
         first_failure = None
         for courant in args.courants:
