@@ -23,6 +23,8 @@
 //
 // Each ctest entry (tests/CMakeLists.txt) runs one test with its switch set,
 // and passes only if that test ran and passed: a missing switch is a failure.
+// The _cuda tests are the same checks on the GPU; their entries report a skip
+// when CUDA is not available.
 
 // external
 #include <gtest/gtest.h>
@@ -39,6 +41,8 @@
 // torch
 #include <torch/torch.h>
 #include <unistd.h>
+
+#include "cuda_test_gate.hpp"
 
 // snap
 #include <snap/snap.h>
@@ -95,7 +99,8 @@ boundary-condition:
   return buf;
 }
 
-Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3) {
+Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3,
+                 torch::Device device = torch::kCPU) {
   char fname[] = "/tmp/x1-seam-split-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
@@ -113,7 +118,7 @@ Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3) {
   mesh_opts->block(block_opts);
   mesh_opts->blocks_per_process(nb1);
   auto mesh = Mesh(mesh_opts);
-  mesh->to(torch::kCPU, torch::kFloat64);
+  mesh->to(device, torch::kFloat64);
   return mesh;
 }
 
@@ -137,7 +142,7 @@ void fill_column(Mesh mesh, MeshVariables& vars, bool cold = false) {
                      torch::zeros_like(z));
     auto w = torch::zeros({mesh->blocks[b]->phydro->peos->nvar(),
                            coord->options->nc3(), coord->options->nc2(), nc1},
-                          torch::kFloat64);
+                          coord->x1v.options());
     w[IDN].copy_(rho.view({1, 1, nc1}));
     w[IPR].copy_(p.view({1, 1, nc1}));
     w[IVX].copy_(v1.view({1, 1, nc1}));
@@ -190,9 +195,10 @@ double energy_p(Mesh mesh, MeshVariables const& vars) {
 
 // max over rho, rho v1 and E of |split - one| / max|one| after nstep steps
 double split_gap(int nx1, double nh, char const* gw, int nstep,
-                 double* ep_drift = nullptr, bool cold = false) {
-  auto one = make_column(1, nx1, nh, gw);
-  auto two = make_column(2, nx1, nh, gw);
+                 double* ep_drift = nullptr, bool cold = false,
+                 torch::Device device = torch::kCPU) {
+  auto one = make_column(1, nx1, nh, gw, 3, device);
+  auto two = make_column(2, nx1, nh, gw, 3, device);
   EXPECT_EQ(one->blocks.size(), 1u);
   EXPECT_EQ(two->blocks.size(), 2u);
   MeshVariables v1(1), v2(2);
@@ -218,6 +224,62 @@ double split_gap(int nx1, double nh, char const* gw, int nstep,
   return gap;
 }
 
+void centroid_exact_split_matches_one_block(torch::Device device) {
+  ASSERT_TRUE(std::getenv("SNAP_X1_CENTROID_EXACT"));
+  ASSERT_FALSE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
+               std::getenv("SNAP_WB_REF4"));
+  torch::set_num_threads(1);
+  ASSERT_TRUE(x1_centroid_exact_enabled());
+  for (double nh : {1., 0.}) {
+    double gap = split_gap(32, nh, "cell", 20, nullptr, false, device);
+    std::printf("non-hydrostatic %g: 2 blocks vs 1, max rel gap %.3e\n", nh,
+                gap);
+    // round-off: 20 steps of a 32-cell column
+    EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
+  }
+}
+
+void radial_exact_split_gap(torch::Device device) {
+  ASSERT_TRUE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"));  // 1, or 0
+  bool on = HydroImpl::gravity_work_radial_exact();
+  torch::set_num_threads(1);
+  for (int nx1 : {32, 64, 128}) {
+    double drift = 0.;
+    double gap =
+        split_gap(nx1, 1., "face", 20 * nx1 / 32, &drift, false, device);
+    std::printf(
+        "switch %d, nz %d: 2 blocks vs 1, max rel gap %.3e; split E+P "
+        "drift %.3e\n",
+        on, nx1, gap, drift);
+    if (on) EXPECT_LE(drift, 1e-13) << "nz " << nx1;
+  }
+}
+
+void wb_ref4_flag_at_the_seam_split_matches_one_block(torch::Device device) {
+  ASSERT_TRUE(std::getenv("SNAP_WB_REF4"));
+  ASSERT_FALSE(std::getenv("SNAP_X1_CENTROID_EXACT"));
+  ASSERT_TRUE(wb_ref4_enabled());
+  ASSERT_FALSE(x1_centroid_exact_enabled());
+  torch::set_num_threads(1);
+  for (double nh : {1., 0.}) {
+    double gap = split_gap(16, nh, "cell", 20, nullptr, /*cold=*/true, device);
+    std::printf(
+        "SNAP_WB_REF4, cold, non-hydrostatic %g: 2 blocks vs 1, max rel gap "
+        "%.3e\n",
+        nh, gap);
+    EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
+  }
+  // the flag reads scan pressures three cells away: fewer ghosts is an error
+  for (int ng : {1, 2}) try {
+      make_column(2, 16, 1., "cell", ng, device);
+      ADD_FAILURE() << "nghost " << ng << " accepted";
+    } catch (c10::Error const& e) {
+      EXPECT_NE(std::string(e.what()).find("needs nghost >= 3"),
+                std::string::npos)
+          << e.what();
+    }
+}
+
 }  // namespace
 
 TEST(X1SeamSplit, switches_off_nghost_1_sets_up) {
@@ -230,56 +292,29 @@ TEST(X1SeamSplit, switches_off_nghost_1_sets_up) {
 }
 
 TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
-  ASSERT_TRUE(std::getenv("SNAP_X1_CENTROID_EXACT"));
-  ASSERT_FALSE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT") ||
-               std::getenv("SNAP_WB_REF4"));
-  torch::set_num_threads(1);
-  ASSERT_TRUE(x1_centroid_exact_enabled());
-  for (double nh : {1., 0.}) {
-    double gap = split_gap(32, nh, "cell", 20);
-    std::printf("non-hydrostatic %g: 2 blocks vs 1, max rel gap %.3e\n", nh,
-                gap);
-    // round-off: 20 steps of a 32-cell column
-    EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
-  }
+  centroid_exact_split_matches_one_block(torch::kCPU);
 }
 
 TEST(X1SeamSplit, radial_exact_split_gap) {
-  ASSERT_TRUE(std::getenv("SNAP_GRAVITY_WORK_RADIAL_EXACT"));  // 1, or 0
-  bool on = HydroImpl::gravity_work_radial_exact();
-  torch::set_num_threads(1);
-  for (int nx1 : {32, 64, 128}) {
-    double drift = 0.;
-    double gap = split_gap(nx1, 1., "face", 20 * nx1 / 32, &drift);
-    std::printf(
-        "switch %d, nz %d: 2 blocks vs 1, max rel gap %.3e; split E+P "
-        "drift %.3e\n",
-        on, nx1, gap, drift);
-    if (on) EXPECT_LE(drift, 1e-13) << "nz " << nx1;
-  }
+  radial_exact_split_gap(torch::kCPU);
 }
 
 TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block) {
-  ASSERT_TRUE(std::getenv("SNAP_WB_REF4"));
-  ASSERT_FALSE(std::getenv("SNAP_X1_CENTROID_EXACT"));
-  ASSERT_TRUE(wb_ref4_enabled());
-  ASSERT_FALSE(x1_centroid_exact_enabled());
-  torch::set_num_threads(1);
-  for (double nh : {1., 0.}) {
-    double gap = split_gap(16, nh, "cell", 20, nullptr, /*cold=*/true);
-    std::printf(
-        "SNAP_WB_REF4, cold, non-hydrostatic %g: 2 blocks vs 1, max rel gap "
-        "%.3e\n",
-        nh, gap);
-    EXPECT_LE(gap, 1e-13) << "non-hydrostatic " << nh;
-  }
-  // the flag reads scan pressures three cells away: fewer ghosts is an error
-  for (int ng : {1, 2}) try {
-      make_column(2, 16, 1., "cell", ng);
-      ADD_FAILURE() << "nghost " << ng << " accepted";
-    } catch (c10::Error const& e) {
-      EXPECT_NE(std::string(e.what()).find("needs nghost >= 3"),
-                std::string::npos)
-          << e.what();
-    }
+  wb_ref4_flag_at_the_seam_split_matches_one_block(torch::kCPU);
+}
+
+TEST(X1SeamSplit, centroid_exact_split_matches_one_block_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  centroid_exact_split_matches_one_block(torch::Device(torch::kCUDA, 0));
+}
+
+TEST(X1SeamSplit, radial_exact_split_gap_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  radial_exact_split_gap(torch::Device(torch::kCUDA, 0));
+}
+
+TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  wb_ref4_flag_at_the_seam_split_matches_one_block(
+      torch::Device(torch::kCUDA, 0));
 }

@@ -264,6 +264,27 @@ TEST(WbRefWall, faces_next_to_the_walls_are_second_order_cuda) {
   faces_next_to_the_walls_are_second_order(torch::Device(torch::kCUDA, 0));
 }
 
+// The order table on the GPU: every face error the CPU reports, both profiles
+// and every resolution, to round-off
+TEST(WbRefWall, order_table_cuda_matches_cpu) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  for (double beta : {0.5, 0.}) {
+    Profile prof{beta};
+    for (int nz : {16, 32, 64, 128}) {
+      auto a = face_errors(nz, prof);
+      auto b = face_errors(nz, prof, torch::Device(torch::kCUDA, 0));
+      for (auto [what, ea, eb] :
+           {std::tuple{"dsf", a.dsf, b.dsf}, std::tuple{"rho_L", a.rl, b.rl},
+            std::tuple{"rho_R", a.rr, b.rr}}) {
+        double d = (ea - eb).abs().max().item<double>();
+        std::printf("beta %g nz %3d %-5s max |CUDA - CPU| %.2e\n", beta, nz,
+                    what, d);
+        EXPECT_LE(d, 1.e-13) << "beta " << beta << " nz " << nz << " " << what;
+      }
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

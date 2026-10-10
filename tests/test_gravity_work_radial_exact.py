@@ -30,7 +30,7 @@ g 1, depth 100) between closed (reflecting) x1 walls, seeded u1 = 0.05 c_s sin(p
   8. on, the VIC column with a 4-cell immersed solid block: per-step E + P over the fluid cells <= 1e-14.
 The switch is read once per process, so each arm runs in a child process.
 
-  python test_gravity_work_radial_exact.py [--device cpu]
+  python test_gravity_work_radial_exact.py [--device cpu|cuda]
 """
 import argparse
 import json
@@ -308,10 +308,13 @@ def child(out, device):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     ap.add_argument("--child", default=None)
     ap.add_argument("--diag", default=None)
     a = ap.parse_args()
+    if a.device == "cuda" and not torch.cuda.is_available():
+        print("CUDA is not available")
+        sys.exit(125)
     torch.set_default_dtype(torch.float64)
     if a.diag:
         diag(a.diag, a.child, a.device)

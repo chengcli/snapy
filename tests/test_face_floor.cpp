@@ -121,3 +121,21 @@ TEST(hydro, face_floor_uses_adjacent_density_cuda) {
   if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
   face_floor_uses_adjacent_density(torch::Device(torch::kCUDA, 0));
 }
+
+// the unresolved column on the GPU floors the same face: its mass flux is the
+// CPU's, to the CPU check's relative tolerance (the CPU value is pinned above)
+TEST(hydro, face_floor_fires_on_an_unresolved_column_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  auto dipped_mass = [](torch::Device device) {
+    auto block = dipped_column(device, 10.);
+    int dipped = block->pcoord->iu() - 1;
+    return block->phydro->flux1()[IDN].select(-1, dipped).item<double>();
+  };
+  double cpu = dipped_mass(torch::kCPU);
+  double cuda = dipped_mass(torch::Device(torch::kCUDA, 0));
+  std::printf(
+      "wb_ref4 %d, p = 10 e^{-x/2}: dipped face mass flux %.4e (CUDA)"
+      ", %.4e (CPU)\n",
+      static_cast<int>(HydroImpl::wb_ref4()), cuda, cpu);
+  EXPECT_NEAR(cuda, cpu, 1.e-5 * std::abs(cpu));
+}

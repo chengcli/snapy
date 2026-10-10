@@ -54,6 +54,23 @@ seam_arm(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
 # SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
 seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
          wb_ref4_flag_at_the_seam_split_matches_one_block)
+if(CUDA)
+  # the same arms on the GPU; without one the test skips and so does the entry
+  seam_arm(_x1_centroid_cuda "SNAP_X1_CENTROID_EXACT=1"
+           centroid_exact_split_matches_one_block_cuda)
+  seam_arm(_radial_exact_cuda "SNAP_GRAVITY_WORK_RADIAL_EXACT=1"
+           radial_exact_split_gap_cuda)
+  seam_arm(_radial_exact_off_cuda "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
+           radial_exact_split_gap_cuda)
+  seam_arm(_wb_ref4_cuda "SNAP_WB_REF4=1"
+           wb_ref4_flag_at_the_seam_split_matches_one_block_cuda)
+  foreach(_a _x1_centroid_cuda _radial_exact_cuda _radial_exact_off_cuda
+             _wb_ref4_cuda)
+    set_tests_properties(
+      test_x1_seam_split${_a}.${buildl}
+      PROPERTIES SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\] 1 test")
+  endforeach()
+endif()
 setup_test(test_wb_wall_corner)
 setup_test(test_face_floor)
 setup_test(test_wb_ref_wall)
@@ -246,6 +263,9 @@ if(CUDA)
   snapy_add_python_test(test_x1_centroid_rest_cuda
     SCRIPT test_x1_centroid_rest.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;cuda")
+  snapy_add_python_test(test_gravity_work_radial_exact_cuda
+    SCRIPT test_gravity_work_radial_exact.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;gravity;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_check_redo_saturation_cuda_python
@@ -254,6 +274,7 @@ if(CUDA)
     test_vic_moist_device_python
     test_wb_ref4_order_cuda_python
     test_x1_centroid_rest_cuda_python
+    test_gravity_work_radial_exact_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 

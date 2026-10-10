@@ -6,6 +6,8 @@
 // gtest
 #include <gtest/gtest.h>
 
+#include "cuda_test_gate.hpp"
+
 // torch
 #include <torch/torch.h>
 
@@ -209,10 +211,15 @@ TEST(BalanceColumn, without_the_clamp_the_two_references_disagree) {
   EXPECT_FALSE(torch::equal(free_ref.pref, blk_ref.pref.narrow(-1, 3, nx1)));
 }
 
-TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
+//! the column on `device`
+Column on(Column const& c, torch::Device device) {
+  return {c.w.to(device), c.dx1f.to(device)};
+}
+
+void a_marched_column_comes_out_at_rest(torch::Device device) {
   constexpr double rtol = 1.e-10;
   for (bool uniform : {true, false}) {
-    auto c = marched_column(64, 3.0e5, uniform);
+    auto c = on(marched_column(64, 3.0e5, uniform), device);
     double before = residual(c, uniform);
     EXPECT_GT(before, 1.e-4)
         << "the fixture is not the defect: uniform=" << uniform;
@@ -225,6 +232,15 @@ TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
     EXPECT_DOUBLE_EQ(actual, err) << "uniform=" << uniform;
     EXPECT_GT(sweeps, 0);
   }
+}
+
+TEST(BalanceColumn, a_marched_column_comes_out_at_rest) {
+  a_marched_column_comes_out_at_rest(torch::kCPU);
+}
+
+TEST(BalanceColumn, a_marched_column_comes_out_at_rest_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  a_marched_column_comes_out_at_rest(torch::Device(torch::kCUDA, 0));
 }
 
 // The final permitted update must be checked before declaring non-convergence.
@@ -344,8 +360,8 @@ TEST(BalanceColumn, x1_centroid_switch_implies_the_ref4_predicate) {
 // under SNAP_X1_CENTROID_EXACT a spherical-polar column's reference converts
 // r^2 means to plain means, which this planar column does not model: only a
 // column declared cartesian is balanced, anything else is refused
-TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column) {
-  auto c = marched_column(64, 3.0e5, /*uniform=*/true);
+void x1_centroid_switch_balances_only_a_cartesian_column(torch::Device device) {
+  auto c = on(marched_column(64, 3.0e5, /*uniform=*/true), device);
   auto run = [&](char const* geometry) {
     snap::balance_column(c.w, c.dx1f, kGrav, true, 1.e-10, 120, geometry);
   };
@@ -495,6 +511,16 @@ TEST(BalanceColumn, a_moist_column_with_one_condensable_comes_out_at_rest) {
                 .max()
                 .item<double>(),
             1.e-12);
+}
+
+TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column) {
+  x1_centroid_switch_balances_only_a_cartesian_column(torch::kCPU);
+}
+
+TEST(BalanceColumn, x1_centroid_switch_balances_only_a_cartesian_column_cuda) {
+  if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
+  x1_centroid_switch_balances_only_a_cartesian_column(
+      torch::Device(torch::kCUDA, 0));
 }
 
 }  // namespace
