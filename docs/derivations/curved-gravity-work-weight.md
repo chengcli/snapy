@@ -493,8 +493,24 @@ plain face form run with the switch set to 0.
 With the wall closure and F, the convective onset (linear growth) rate keeps a second-order truncation error
 that face and cell work share, so it does not separate the two forms.
 
-> **TABLE PLACEHOLDER** -- convergence table nz 16-128, fit $c_2\,\Delta z^2 + c_3\,\Delta z^3$: to be filled by the
-> lead.
+The deck is the T1L box, 1 H tall with superadiabatic excess $\varepsilon = 10^{-3}$, started from the point-value
+initial state; the entry is the relative error of the fitted onset growth rate against the linear eigenvalue rate,
+so $\Delta z = H/n_z$. The build is 37dce4e with the x1 covariance of §11.4 (build job 644122), with the
+switches named per column: cov = `SNAP_FLUX_COVARIANCE`, W = `SNAP_WB_REF4`, F, and x1 = `SNAP_X1_MASS_COVARIANCE`.
+The runs are jobs 644220 (nz 16, and every column without x1), 644132 (nz 32 with x1) and 644133 (nz 64 with x1):
+
+| $n_z$ | face cov+W+F+x1 | face cov+W+F | cell cov+W+x1 | cell cov+W |
+|---|---|---|---|---|
+| 16 | $+1.4423\times10^{-2}$ | $+1.4421\times10^{-2}$ | $+1.1004\times10^{-2}$ | $-1.662\times10^{-3}$ |
+| 32 | $+3.8163\times10^{-3}$ | $+3.8155\times10^{-3}$ | $+3.5997\times10^{-3}$ | $+1.239\times10^{-3}$ |
+| 64 | $+9.6574\times10^{-4}$ | $+9.6548\times10^{-4}$ | $+9.5205\times10^{-4}$ | $+4.144\times10^{-4}$ |
+
+With x1 on, face and cell share this error (§11.4), so the cell cov+W+x1 column stands for it. Its least-squares fit
+to the three points is $4.518\,\Delta z^2 - 27.22\,\Delta z^3$ ($\Delta z$ in H), with residuals
+$-1.5\times10^{-6}$, $+1.8\times10^{-5}$, $-4.7\times10^{-5}$ at nz 16, 32, 64. The $\Delta z^2$ term carries
+the error: at nz 64 it is 1.16 times the measured value. With three points, $c_3$ also absorbs the higher orders.
+The observed orders are 1.61 and 1.92 for cell cov+W+x1, and 1.92 and 1.98 for face cov+W+F+x1.
+So a second-order truncation error remains with either form. nz 128 is not in this table.
 
 ### 11.4 The x1 mass-flux covariance (`SNAP_X1_MASS_COVARIANCE`, default off)
 
@@ -516,4 +532,15 @@ $x_1$, and the full cell velocity is restored after the reconstruction. Two deta
 
 At rest $w_1 = 0$ and the correction vanishes, so rest balance is unchanged; with the switch off nothing changes.
 
-> **ONSET PLACEHOLDER** -- onset numbers with the switch: filled by the lead.
+The onset test uses the deck, build and runs of §11.3: T1L 1 H with $\varepsilon = 10^{-3}$ from the point-value
+initial state, on 37dce4e with the switch, in jobs 644220, 644132 and 644133. These are the measured values:
+- cell cov+W+x1 is $+1.1004\times10^{-2}$, $+3.5997\times10^{-3}$ and $+9.5205\times10^{-4}$ at nz 16, 32, 64.
+  Without x1 (job 644220) the values are $-1.662\times10^{-3}$, $+1.239\times10^{-3}$ and $+4.144\times10^{-4}$. The
+  values predicted from the face-flux error, $+2.63$ to $+4.03\times10^{-3}$ at nz 32 and $+0.80$ to
+  $+1.11\times10^{-3}$ at nz 64, contain the measured ones; there is no prediction at nz 16.
+- face cov+W+F+x1 is $+1.4423\times10^{-2}$, $+3.8163\times10^{-3}$ and $+9.6574\times10^{-4}$. The switch moves face
+  cov+W+F by only $+2.1\times10^{-6}$, $+7.5\times10^{-7}$ and $+2.7\times10^{-7}$, because F's work already carries
+  this covariance.
+- face minus cell is $+3.418\times10^{-3}$, $+2.165\times10^{-4}$ and $+1.369\times10^{-5}$. That falls by 15.79
+  and 15.81 per doubling of $n_z$, an order of 3.98, so the two forms agree through $\Delta z^3$. Without x1 the gap
+  is $+1.608\times10^{-2}$, $+2.577\times10^{-3}$ and $+5.511\times10^{-4}$, falling by only 6.2 and 4.7.
