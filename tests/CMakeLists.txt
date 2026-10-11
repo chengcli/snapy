@@ -274,6 +274,13 @@ set_tests_properties(test_flux_positivity_python
                      PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+# with the covariance on (the default) the donor limiter runs in the base arm
+# too; this arm keeps the unlimited base arm covered
+snapy_add_python_test(test_flux_positivity_cubedsphere_cov_off
+                      SCRIPT test_flux_positivity_cubedsphere.py TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere")
+set_tests_properties(test_flux_positivity_cubedsphere_cov_off_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 # UCzhangxi/snapy#44 (B1): the six-panel scalar seam test with the x2/x3
 # face-flux covariance on, whose x1 differences read the cross-panel face
 # states' x1 ghost rows next to the radial walls
