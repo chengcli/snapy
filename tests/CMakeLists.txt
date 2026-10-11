@@ -293,6 +293,10 @@ snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
 # #289: a passive scalar and the same tracer as a hydro species, covariance on and off
 snapy_add_python_test(test_scalar_flux_covariance TIMEOUT 300 LABELS "python;hydro;scalar")
+# #289: the same, on a column split in x1, four blocks in one process vs one
+snapy_add_python_test(test_scalar_cov_x1_split TIMEOUT 300 LABELS "python;hydro;scalar")
+set_tests_properties(test_scalar_cov_x1_split_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=1")
 # #298: the x1 stencil caches on blocks with too few x1 cells
 snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
