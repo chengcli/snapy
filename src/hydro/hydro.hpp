@@ -134,6 +134,26 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor flux1() const { return _flux1; }
   torch::Tensor flux2() const { return _flux2; }
   torch::Tensor flux3() const { return _flux3; }
+
+  //! SNAP_FLUX_COVARIANCE (#289): the face-flux covariance rows a passive
+  //! scalar carries on this stage's x2 (dim 2) or x3 (dim 1) faces, the rows a
+  //! hydro tracer with the same mass fraction gets in _flux_covariance, built
+  //! from the same face states
+  /*!
+   * \param[in] rl,rr  the scalar's reconstructed ratio to the DRY density on
+   *                   each side of the face, (nscalar, nc3, nc2, nc1)
+   * \param[in] dim    the solver's direction tag: 2 for x2, 1 for x3
+   * \return           the scalar flux increments, shaped like rl; undefined
+   *                   when this stage's faces carried no covariance
+   */
+  torch::Tensor scalar_flux_covariance(torch::Tensor const& rl,
+                                       torch::Tensor const& rr, int dim) const;
+  //! the dry-mass row of this stage's covariance increment on the x2 (dim 2)
+  //! or x3 (dim 1) faces, which flux2()/flux3()[IDN] carry; undefined when
+  //! those faces carried none
+  torch::Tensor flux_covariance_dry(int dim) const {
+    return _cov_dry[dim == 2 ? 0 : 1];
+  }
   torch::Tensor face_pressure1() const { return _face_pressure1; }
   torch::Tensor implicit_mass_correction() const;
 
@@ -259,6 +279,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
   torch::Tensor _lim_cut, _lim_flux;
+  //! this stage's x2 [0] / x3 [1] face states the covariance was built from
+  //! and the dry-mass row it added (undefined when the switch is off)
+  torch::Tensor _cov_wl[2], _cov_wr[2], _cov_dry[2];
   torch::Tensor _gwfix_d, _gwfix_total, _gwfix_pending, _gwfix_wall;
 };
 

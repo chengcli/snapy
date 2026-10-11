@@ -291,6 +291,8 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# #289: a passive scalar and the same tracer as a hydro species, covariance on and off
+snapy_add_python_test(test_scalar_flux_covariance TIMEOUT 300 LABELS "python;hydro;scalar")
 # #298: the x1 stencil caches on blocks with too few x1 cells
 snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
@@ -329,6 +331,9 @@ if(CUDA)
   snapy_add_python_test(test_gravity_work_radial_exact_cuda
     SCRIPT test_gravity_work_radial_exact.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;gravity;cuda")
+  snapy_add_python_test(test_scalar_flux_covariance_cuda
+    SCRIPT test_scalar_flux_covariance.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;scalar;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_check_redo_saturation_cuda_python
@@ -338,6 +343,7 @@ if(CUDA)
     test_wb_ref4_order_cuda_python
     test_x1_centroid_rest_cuda_python
     test_gravity_work_radial_exact_cuda_python
+    test_scalar_flux_covariance_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 

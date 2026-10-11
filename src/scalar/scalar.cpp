@@ -124,19 +124,35 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
       pmb->finalize_exchange(send_vars3, sync_opts.dim(DIM3), works3);
   }
 
+  // SNAP_FLUX_COVARIANCE (#289): a scalar carries the tracer row of the face
+  // covariance (HydroImpl::scalar_flux_covariance), not r times the dry-mass
+  // row that the hydro's mass flux carries, so it rides on the mass flux
+  // without that row and adds its own: the flux of a hydro species with the
+  // same mass fraction
+  bool cov = false;
+  auto lateral = [&](torch::Tensor const& rlr, int dim,
+                     torch::Tensor const& mass) {
+    auto dcov = pmb->phydro->scalar_flux_covariance(rlr[ILT], rlr[IRT], dim);
+    if (!dcov.defined())
+      return priemann->forward(rlr[ILT], rlr[IRT], dim, mass);
+    cov = true;
+    auto vel = mass - pmb->phydro->flux_covariance_dry(dim);
+    return priemann->forward(rlr[ILT], rlr[IRT], dim, vel) + dcov;
+  };
+
   if (_flux2.defined()) {
-    _flux2.set_(priemann->forward(rtmp2[ILT], rtmp2[IRT], DIM2,
-                                  pmb->phydro->flux2()[IDN]));
+    _flux2.set_(lateral(rtmp2, DIM2, pmb->phydro->flux2()[IDN]));
   }
 
   if (_flux3.defined()) {
-    _flux3.set_(priemann->forward(rtmp3[ILT], rtmp3[IRT], DIM3,
-                                  pmb->phydro->flux3()[IDN]));
+    _flux3.set_(lateral(rtmp3, DIM3, pmb->phydro->flux3()[IDN]));
   }
 
   // Tracer flux positivity limiter: same scheme (and same rationale) as the
   // hydro species channels -- see flux_positivity.hpp and hydro_forward.cpp
-  // step (4.C). It follows the existing EOS limiter setting.
+  // step (4.C). It follows the existing EOS limiter setting, and runs whenever
+  // the scalar carries its covariance row, which can export tracer a cell
+  // does not have.
   auto sync_theta = [&](torch::Tensor theta) {
     Variables tvars;
     tvars["scalar_theta"] = theta;
@@ -155,7 +171,7 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   };
 
   auto cells = pmb->part({0, 0, 0}, PartOptions().exterior(false));
-  if (pmb->phydro->options->eos()->limiter()) {
+  if (pmb->phydro->options->eos()->limiter() || cov) {
     auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
     _positivity_hits += (theta.index(cells) < 1.).sum();
     flux_positivity_scale_(sync_theta(theta), _flux1, _flux2, _flux3, pcoord);
