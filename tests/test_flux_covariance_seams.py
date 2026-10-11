@@ -132,23 +132,23 @@ def main():
     failures = []
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp:
         fps = {}
-        for sw in (None, "1"):
+        for sw in ("0", "1"):
             c = run("conservation", sw, a.device, tmp)
             fps[sw] = c["fp"]
-            print(f"six panels, closed walls, {NSTEP} steps, switch {sw or 'unset'}: relative drift "
+            print(f"six panels, closed walls, {NSTEP} steps, switch {sw}: relative drift "
                   f"mass {c['mass']:.3e}  vapor {c['vapor']:.3e}  E+PE {c['e_plus_pe']:.3e}  "
                   f"(max|v| {c['vmax']:.2f})", flush=True)
             if sw == "1":
                 for k in ("mass", "vapor", "e_plus_pe"):
                     if not c[k] < DRIFT_TOL:
                         failures.append(f"{k} drift {c[k]:.3e} >= {DRIFT_TOL} with the term on")
-        dc = abs(fps["1"] - fps[None]) / abs(fps[None])
+        dc = abs(fps["1"] - fps["0"]) / abs(fps["0"])
         print(f"conservation case: switch on vs off, relative difference of the final state {dc:.3e}",
               flush=True)
         if not dc > DIFF_TOL:
             failures.append(f"conservation case: on and off agree ({dc:.3e} <= {DIFF_TOL}), the switch "
                             "did not act")
-        g_off = run("gating", None, a.device, tmp)
+        g_off = run("gating", "0", a.device, tmp)
         g_on = run("gating", "1", a.device, tmp)
         off, on = g_off["vmax"], g_on["vmax"]
         print(f"spherical-polar rest, x3 flux disabled (nx3 > 1), {rows.NREST} steps: max|v|/c_s "

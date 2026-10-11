@@ -26,6 +26,10 @@ setup_test(test_hydrostatic)
 setup_test(test_hydro_options)
 setup_test(test_cycle_diagnostics)
 setup_test(test_flux_positivity_carry)
+# its limiter-off arm must run without the step 4.C donor limiter, which the
+# face-flux covariance (on by default, #289) also switches on
+set_tests_properties(test_flux_positivity_carry.${buildl}
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 setup_test(test_yaml_keys)
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
@@ -264,8 +268,19 @@ snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo"
 snapy_add_python_test(test_check_redo_saturation TIMEOUT 60 LABELS "python;mesh;redo;eos")
 snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
+# the base arm is the unlimited scheme and must go negative; with the face-flux
+# covariance on (the default, #289) the donor limiter runs in every arm
+set_tests_properties(test_flux_positivity_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+# with the covariance on (the default) the donor limiter runs in the base arm
+# too; this arm keeps the unlimited base arm covered
+snapy_add_python_test(test_flux_positivity_cubedsphere_cov_off
+                      SCRIPT test_flux_positivity_cubedsphere.py TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere")
+set_tests_properties(test_flux_positivity_cubedsphere_cov_off_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 # UCzhangxi/snapy#44 (B1): the six-panel scalar seam test with the x2/x3
 # face-flux covariance on, whose x1 differences read the cross-panel face
 # states' x1 ghost rows next to the radial walls
@@ -291,6 +306,12 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# #289: a passive scalar and the same tracer as a hydro species, covariance on and off
+snapy_add_python_test(test_scalar_flux_covariance TIMEOUT 300 LABELS "python;hydro;scalar")
+# #289: the same, on a column split in x1, four blocks in one process vs one
+snapy_add_python_test(test_scalar_cov_x1_split TIMEOUT 300 LABELS "python;hydro;scalar")
+set_tests_properties(test_scalar_cov_x1_split_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=1")
 # #298: the x1 stencil caches on blocks with too few x1 cells
 snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
@@ -329,6 +350,9 @@ if(CUDA)
   snapy_add_python_test(test_gravity_work_radial_exact_cuda
     SCRIPT test_gravity_work_radial_exact.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;gravity;cuda")
+  snapy_add_python_test(test_scalar_flux_covariance_cuda
+    SCRIPT test_scalar_flux_covariance.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;scalar;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_check_redo_saturation_cuda_python
@@ -338,6 +362,7 @@ if(CUDA)
     test_wb_ref4_order_cuda_python
     test_x1_centroid_rest_cuda_python
     test_gravity_work_radial_exact_cuda_python
+    test_scalar_flux_covariance_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 

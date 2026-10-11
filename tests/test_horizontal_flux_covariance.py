@@ -12,7 +12,8 @@ The physical value is 0 here. Face gravity work keeps the cell form's own O(dz^2
 (-0.05 / nz^2 at nz 16 with the term on) out of the number. Checked (Cartesian, nz = 16, 32):
   1. term off: eps_eff nz^2 in [-0.32, -0.20] (the defect is there);
   2. term on:  |eps_eff nz^2| < 0.04;
-  3. switch unset and SNAP_FLUX_COVARIANCE=0 give the same step bit for bit, and on differs from off;
+  3. switch unset and SNAP_FLUX_COVARIANCE=1 give the same step bit for bit (the default is on), and
+     SNAP_FLUX_COVARIANCE=0 differs from it;
   4. E+PE = sum (E + rho g z) dV of the seeded box, term on, closes over NSTEP steps.
 The switch is read once per process, so each arm runs in a child process (ARMS); with a
 YAML key in its place, the arms can run in one process.
@@ -186,15 +187,15 @@ def main():
             res[arm] = json.load(open(os.path.join(out, "res.json")))
             res[arm]["u"] = {nz: torch.load(os.path.join(out, f"u{nz}.pt")) for nz in (16, 32)}
     for nz in (16, 32):
-        base, fixed = res["unset"][str(nz)], res["on"][str(nz)]
+        base, fixed = res["zero"][str(nz)], res["on"][str(nz)]
         print(f"nz {nz:3d}  eps_eff nz^2: off {base:+.5f}  on {fixed:+.5f}", flush=True)
         if not BASE[0] <= base <= BASE[1]:
             failures.append(f"nz {nz}: off {base:+.5f} not in {BASE}")
         if not abs(fixed) < FIXED:
             failures.append(f"nz {nz}: on {fixed:+.5f}, |.| >= {FIXED}")
-        if not torch.equal(res["unset"]["u"][nz], res["zero"]["u"][nz]):
-            failures.append(f"nz {nz}: switch unset and 0 differ")
-        if torch.equal(res["on"]["u"][nz], res["unset"]["u"][nz]):
+        if not torch.equal(res["unset"]["u"][nz], res["on"]["u"][nz]):
+            failures.append(f"nz {nz}: switch unset and 1 differ (the default is on)")
+        if torch.equal(res["on"]["u"][nz], res["zero"]["u"][nz]):
             failures.append(f"nz {nz}: the switch changed nothing")
     drift = res["on"]["drift"]
     print(f"nz  16  E+PE drift over {NSTEP} steps, term on: {drift:.2e}", flush=True)

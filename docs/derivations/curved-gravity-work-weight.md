@@ -680,13 +680,13 @@ row's $g_1(\sigma^2\tilde s + \delta)[\delta\rho_{\rm raw} - \Delta\rho_0]$, wit
 The sum is $g_1(\sigma^2s + \delta)[\Delta\rho_0 + \Delta\rho_{\rm moved}]$, step 5 for the stage's total change, and the
 face part is the face form of the total flux, so steps 6–7 hold unchanged.
 
-**Where the term sits.** Line numbers in this commit's tree; at the branch head `hydro_forward.cpp` moves by
-−2 lines (the #298 commit) and `gravity_work_radial.hpp` by +1 (the review commit), given second.
+**Where the term sits.** `hydro_forward.cpp` line numbers are those of the current tree; the other sites keep the
+numbers of the tree this section was written against (the second number, where given, was that branch's head).
 
 | site | booked work | $P$ |
 |---|---|---|
 | shared helper | `src/hydro/gravity_work_radial.hpp:100` (head `:101`): `work += grav1 * x1_centroid_offset(...) * drho` (`radial_mid` only); $\delta$ itself at `:76-84` (head `:77-85`) | the same helper, called on $\rho$ instead of $\Delta\rho$ |
-| explicit face work | `src/hydro/hydro_forward.cpp:819-821` (head `:817-819`): `corrected_pe_work(-dt * vertical_mass_div, ..., x1_measure(type))`; face part `phi_cell = -grav1 * x1v` at `:795` (head `:793`) | |
+| explicit face work | `src/hydro/hydro_forward.cpp:918-919`: `corrected_pe_work(drho, ..., measure)` with `drho = -dt * vertical_mass_div` (`:910`), or `corrected_pe_work_seam` at `:929-930` across an x1 seam; face part `phi_cell = -grav1 * x1v` at `:886` | |
 | implicit energy row | `src/implicit/implicit_hydro.cpp:315`: `rx_mid += grav1 * x1_centroid_offset(...)`; into the matrix at `:333`, the right side at `:339` | |
 | #296 post-solve remainder | `src/implicit/implicit_hydro.cpp:466-467`: `corrected_pe_work(moved, ..., x1_measure(type))`, minus `rx_tri(raw - rx_mass0)` at `:473`, added at `:476-477` | |
 | logged `pe=` | | `src/mesh/meshblock.cpp:1047` ($P^d$, $\phi(x_{1v})$) and `:1056-1058`: `pe -= corrected_pe_work_seam(rho, ..., x1_measure(type), below >= 0, above >= 0)` $= P^d + P^\sigma + P^\delta$ |
