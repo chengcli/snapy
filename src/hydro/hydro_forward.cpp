@@ -218,7 +218,17 @@ torch::Tensor HydroImpl::scalar_flux_covariance(torch::Tensor const& rl,
     for (int n = 0; n < ny; ++n) rd = rd - w[ICY + n];
     return rd;
   };
-  auto q = 0.5 * (rl * dry_fraction(wl) + rr * dry_fraction(wr));
+  // past an x1 seam wl/wr hold the neighbour's rows (x1_seam_rows in
+  // forward()); the scalar's own face states take the same rows
+  auto seam = [&](torch::Tensor const& f, int tag) {
+    auto [below, above] = x1_neighbors();
+    if (below < 0 && above < 0) return f;
+    auto g = f.clone();
+    _x1_ghost_rows(g, 1, false, tag);
+    return g;
+  };
+  auto q = 0.5 * (seam(rl, 0x7740 + 4 * k) * dry_fraction(wl) +
+                  seam(rr, 0x7742 + 4 * k) * dry_fraction(wr));
 
   // the face-normal velocity and the geometry, as in _flux_covariance
   auto wbar = 0.5 * (wl + wr);
