@@ -306,31 +306,43 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto couple_radial_exact = [&]() {
     if (!radial_exact || nx1 < 3) return;
     int is = pcoord->il(), ie = pcoord->iu() + 1, m = options->size();
-    // S[k][i]: the weight of cell k in the slope of cell i. One-sided only at
-    // the column's two physical walls: an implicit scheme refuses an x1
-    // split (HydroImpl::_apply_implicit_correction), so a VIC block has no
-    // internal x1 seam and this per-block slope is the one-block slope
-    auto S = centroid_slope(torch::eye(nx1, w.options()),
-                            pcoord->x1v.slice(0, is, ie).to(w.options()));
     auto measure = x1_measure(pcoord->options->type());
-    auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
-                                  measure != X1Measure::plain)
-                          .to(w.options());
-    rx_mid = gv * S.diagonal();
-    // gnomonic-equiangle: x1v is not the r^2 centroid, and the work carries
-    // g1 (r_c - x1v) drho as well (sec 12), a diagonal term
-    if (measure == X1Measure::radial_mid)
-      rx_mid += grav1 * x1_centroid_offset(pcoord->x1f.slice(0, is, ie + 1),
-                                           pcoord->x1v.slice(0, is, ie))
+    // the rows depend on the grid and gravity only: build them once (#291)
+    X1GridKey key(pcoord->x1f, pcoord->x1v, is, ie, is, ie, grav1, measure);
+    if (!(_rx_key == key) || _rx_mid.scalar_type() != w.scalar_type() ||
+        _rx_mid.device() != w.device()) {
+      // S[k][i]: the weight of cell k in the slope of cell i. One-sided only
+      // at the column's two physical walls: an implicit scheme refuses an x1
+      // split (HydroImpl::_apply_implicit_correction), so a VIC block has no
+      // internal x1 seam and this per-block slope is the one-block slope
+      auto S = centroid_slope(torch::eye(nx1, w.options()),
+                              pcoord->x1v.slice(0, is, ie).to(w.options()));
+      auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
+                                    measure != X1Measure::plain)
                             .to(w.options());
-    rx_lo = torch::zeros_like(rx_mid);
-    rx_hi = torch::zeros_like(rx_mid);
-    rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
-    rx_hi.narrow(0, 0, nx1 - 1).copy_(S.diagonal(-1));
-    rx_hi[0] += S[2][0];
-    rx_lo[nx1 - 1] += S[nx1 - 3][nx1 - 1];
-    rx_lo *= gv;
-    rx_hi *= gv;
+      rx_mid = gv * S.diagonal();
+      // gnomonic-equiangle: x1v is not the r^2 centroid, and the work carries
+      // g1 (r_c - x1v) drho as well (sec 12), a diagonal term
+      if (measure == X1Measure::radial_mid)
+        rx_mid += grav1 * x1_centroid_offset(pcoord->x1f.slice(0, is, ie + 1),
+                                             pcoord->x1v.slice(0, is, ie))
+                              .to(w.options());
+      rx_lo = torch::zeros_like(rx_mid);
+      rx_hi = torch::zeros_like(rx_mid);
+      rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
+      rx_hi.narrow(0, 0, nx1 - 1).copy_(S.diagonal(-1));
+      rx_hi[0] += S[2][0];
+      rx_lo[nx1 - 1] += S[nx1 - 3][nx1 - 1];
+      rx_lo *= gv;
+      rx_hi *= gv;
+      _rx_key = key;
+      _rx_lo = rx_lo;
+      _rx_mid = rx_mid;
+      _rx_hi = rx_hi;
+    }
+    rx_lo = _rx_lo;
+    rx_mid = _rx_mid;
+    rx_hi = _rx_hi;
     rx_fluid = (mask.index(in3) == 0).to(w.options());
     // row IPR, column 0 (the total mass) of each cell's blocks; Eigen stores
     // them column-major
@@ -481,9 +493,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                    .sum(0);
     // the whole column (no x1 split under an implicit scheme, see above), so
     // the slope is one-sided only at the two walls
-    auto work =
-        corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is,
-                          ie, grav1, x1_measure(pcoord->options->type()));
+    auto work = corrected_pe_work(
+        moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is, ie, grav1,
+        x1_measure(pcoord->options->type()), &_rx_work);
     if (rx_mass0.defined()) {
       int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
       auto raw = _delta.view({nx3, nx2, nx1, options->size()}).select(-1, 0);
