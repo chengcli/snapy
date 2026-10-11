@@ -202,7 +202,7 @@ minus (2).
    (before: $8.0\times10^{-7}$, $6.3\times10^{-8}$, $2.3\times10^{-9}$), and the split E+P drift is
    $\le 4.4\times10^{-15}$. An implicit scheme refuses any x1 split and a periodic x1
    column: it requires both x1 faces of a block to be physical (`hydro.cpp:413-416`), and a block next to an x1
-   seam or on a periodic x1 column has its x1 boundary functions nulled (`meshblock.cpp:142-147`). So a VIC
+   seam or on a periodic x1 column has its x1 boundary functions nulled (`meshblock.cpp:142-148`). So a VIC
    block always holds the whole column between two walls, and the per-block slope of the VIC row and of its
    post-solve term (`implicit_hydro.cpp`) is the one-block slope; they never meet a seam
    (`test_x1_seam_split_vic_refuses_split` pins the refusal). **Limit: periodic x1.** The explicit work finds

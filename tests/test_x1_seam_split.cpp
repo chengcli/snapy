@@ -266,8 +266,13 @@ void radial_exact_split_gap(torch::Device device) {
         "drift %.3e\n",
         on, nx1, gap, drift);
     if (on) EXPECT_LE(drift, 1e-13) << "nz " << nx1;
-    // the seam cells take one block's slope (#303): no gap either way
-    EXPECT_EQ(gap, 0.) << "nz " << nx1;
+    // switch on: the seam cells take one block's slope (#303), no gap; switch
+    // off: no corrected-PE work, the gap is round-off only (1.9e-14 at nz 128
+    // on CUDA), bounded as in the tests above
+    if (on)
+      EXPECT_EQ(gap, 0.) << "nz " << nx1;
+    else
+      EXPECT_LE(gap, 1e-13) << "nz " << nx1;
   }
 }
 
