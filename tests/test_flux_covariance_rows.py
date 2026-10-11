@@ -280,7 +280,7 @@ def main():
     failures = []
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp:
         for geom in ("spherical-polar", "gnomonic-equiangle"):
-            off = json.load(open(run(f"rest:{geom}", None, a.device, tmp)))
+            off = json.load(open(run(f"rest:{geom}", "0", a.device, tmp)))
             on = json.load(open(run(f"rest:{geom}", "1", a.device, tmp)))
             print(f"rest {geom:20s} max|v|/c_s after {NREST} steps: off {off:.3e}  on {on:.3e}",
                   flush=True)
@@ -291,12 +291,12 @@ def main():
               flush=True)
         if not dq < UNIFORM_TOL:
             failures.append(f"uniform tracer drifted: {dq:.3e}")
-        for sw in (None, "1"):
+        for sw in ("0", "1"):
             wa = torch.load(run("offset:0", sw, a.device, tmp))
             wb = torch.load(run("offset:2000", sw, a.device, tmp))
             scale = wa.abs().amax(dim=tuple(range(1, wa.dim())), keepdim=True).clamp_min(1e-300)
             rel = float(((wa - wb).abs() / scale).max())
-            print(f"offset u0_R 0 vs 2000, switch {sw or 'unset'}: max rel primitive diff {rel:.3e}",
+            print(f"offset u0_R 0 vs 2000, switch {sw}: max rel primitive diff {rel:.3e}",
                   flush=True)
             if sw == "1" and not rel < OFFSET_TOL:
                 failures.append(f"offset invariance broken with the term on: {rel:.3e}")

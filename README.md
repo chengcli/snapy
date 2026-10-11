@@ -140,6 +140,11 @@ Simulations are configured using YAML files that specify:
 
 Example configuration files (`.yaml`) are provided alongside the examples.
 
+Run-wide scheme switches are read once from the environment. The x2/x3
+face-flux covariance correction (`SNAP_FLUX_COVARIANCE`, #289;
+`docs/derivations/289-covariance-x3-curved.md`) is on by default; set
+`SNAP_FLUX_COVARIANCE=0` (or `false`, `off`, `no`) to turn it off.
+
 ## Development
 
 ### Testing

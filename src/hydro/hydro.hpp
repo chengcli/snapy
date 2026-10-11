@@ -179,7 +179,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! operator books the face work of the mass it moves (#283)
   bool face_work_in_operator() const;
   //! add the O(dx1^2) covariance term to the x2/x3 energy flux (#289)?
-  //! read once from SNAP_FLUX_COVARIANCE; off unless it is set
+  //! read once from SNAP_FLUX_COVARIANCE; on unless set to 0/false/off/no
+  //! (or empty)
   static bool flux_covariance();
   //! fourth-order, cell/face-consistent x1 reference density (and on
   //! non-uniform x1 the reference cell pressure) for the well-balanced

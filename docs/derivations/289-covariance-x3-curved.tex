@@ -1128,7 +1128,7 @@ disturb the solver.
 \begin{lstlisting}
 bool HydroImpl::flux_covariance() {              // src/hydro/hydro.cpp
   static const bool on = [] {
-    auto v = get_env("SNAP_FLUX_COVARIANCE", "0");
+    auto v = get_env("SNAP_FLUX_COVARIANCE", "1");
     std::transform(v.begin(), v.end(), v.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
@@ -1138,9 +1138,9 @@ bool HydroImpl::flux_covariance() {              // src/hydro/hydro.cpp
 \end{lstlisting}
 
 \begin{itemize}
-\item \textbf{Name:} \texttt{SNAP\_FLUX\_COVARIANCE}. \textbf{Default: OFF.} Unset, or any of
-  \texttt{0}, \texttt{false}, \texttt{off}, \texttt{no}, or empty (case-insensitive) leaves the term out and
-  the code path bit-identical to \texttt{117e449}.
+\item \textbf{Name:} \texttt{SNAP\_FLUX\_COVARIANCE}. \textbf{Default: ON} (it was OFF when this note
+  was written). Any of \texttt{0}, \texttt{false}, \texttt{off}, \texttt{no}, or empty (case-insensitive)
+  leaves the term out, and that path is bit-identical to \texttt{117e449}.
 \item Read \textbf{once} into a function-local \texttt{static}, for the reason in §3.1: every
   block of every rank must make the same choice or a shared face stops being
   single-valued. \texttt{get\_env} is the tree's existing helper

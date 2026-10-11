@@ -26,6 +26,10 @@ setup_test(test_hydrostatic)
 setup_test(test_hydro_options)
 setup_test(test_cycle_diagnostics)
 setup_test(test_flux_positivity_carry)
+# its limiter-off arm must run without the step 4.C donor limiter, which the
+# face-flux covariance (on by default, #289) also switches on
+set_tests_properties(test_flux_positivity_carry.${buildl}
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 setup_test(test_yaml_keys)
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
@@ -264,6 +268,10 @@ snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo"
 snapy_add_python_test(test_check_redo_saturation TIMEOUT 60 LABELS "python;mesh;redo;eos")
 snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
+# the base arm is the unlimited scheme and must go negative; with the face-flux
+# covariance on (the default, #289) the donor limiter runs in every arm
+set_tests_properties(test_flux_positivity_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 # UCzhangxi/snapy#44 (B1): the six-panel scalar seam test with the x2/x3

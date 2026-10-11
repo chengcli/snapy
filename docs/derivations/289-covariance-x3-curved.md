@@ -1094,7 +1094,7 @@ disturb the solver.
 ```cpp
 bool HydroImpl::flux_covariance() {              // src/hydro/hydro.cpp
   static const bool on = [] {
-    auto v = get_env("SNAP_FLUX_COVARIANCE", "0");
+    auto v = get_env("SNAP_FLUX_COVARIANCE", "1");
     std::transform(v.begin(), v.end(), v.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return !(v.empty() || v == "0" || v == "false" || v == "off" || v == "no");
@@ -1103,9 +1103,9 @@ bool HydroImpl::flux_covariance() {              // src/hydro/hydro.cpp
 }
 ```
 
-* **Name:** `SNAP_FLUX_COVARIANCE`. **Default: OFF.** Unset, or any of
-  `0`, `false`, `off`, `no`, or empty (case-insensitive) leaves the term out and
-  the code path bit-identical to `117e449`.
+* **Name:** `SNAP_FLUX_COVARIANCE`. **Default: ON** (it was OFF when this note
+  was written). Any of `0`, `false`, `off`, `no`, or empty (case-insensitive)
+  leaves the term out, and that path is bit-identical to `117e449`.
 * Read **once** into a function-local `static`, for the reason in §3.1: every
   block of every rank must make the same choice or a shared face stops being
   single-valued. `get_env` is the tree's existing helper

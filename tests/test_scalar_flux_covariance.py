@@ -136,7 +136,7 @@ def main():
         return
     failures = []
     for geometry in CASES:
-        for switch in ("1", None):
+        for switch in ("1", "0"):
             env = dict(os.environ)
             env.pop("SNAP_FLUX_COVARIANCE", None)
             if switch:
