@@ -195,7 +195,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   _du0.copy_(du);
   _mass_corr.zero_();
 
-  auto w0 = w.clone();  // restore exactly if this solve is rejected
+  // restore exactly if this solve is rejected; the solve changes only these
+  // two rows of w in place (the frame projection)
+  auto w0 = w.narrow(0, IVY, 2).clone();
 
   auto reject = [&](torch::Tensor const& bad_columns) {
     _solve_failed = true;
@@ -211,7 +213,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                 << " retry=" << phydro->pmb->pintg->current_redo
                 << "; check_redo will restore step input." << std::endl;
     du.copy_(_du0);
-    w.copy_(w0);
+    w.narrow(0, IVY, 2).copy_(w0);
     _corr.zero_();
     _mass_corr.zero_();
     return _corr;
@@ -219,9 +221,12 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto finite_columns = [&](torch::Tensor const& values) {
     return torch::isfinite(values.index(interior)).all(0).all(-1).unsqueeze(0);
   };
-  auto bad_inputs = torch::logical_not(finite_columns(du) & finite_columns(w) &
-                                       finite_columns(gamma.unsqueeze(0)));
-  if (bad_inputs.any().item<bool>()) return reject(bad_inputs);
+  // two device-to-host reads per stage (#291): the sum of each checked tensor
+  // is nonfinite if any of its values is; only then are the columns found,
+  // in the order the checks would have met them
+  std::vector<torch::Tensor> screen = {
+      du.index(interior).sum(), w.index(interior).sum(),
+      gamma.unsqueeze(0).index(interior).sum()};
 
   /// (1) Project to local orthonormal frame
   w[IVY] += w[IVZ] * cos_theta;
@@ -357,8 +362,17 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
 
   // Both dispatches share the same rejection sentinel. This also catches
   // nonfinite backward-substitution results, before redistribution sees them.
-  auto bad_columns = torch::logical_not(torch::isfinite(_delta).all(-1));
-  if (bad_columns.any().item<bool>()) return reject(bad_columns);
+  screen.push_back(_delta.sum());
+  if (!std::isfinite(torch::stack(screen).sum().item<double>())) {
+    auto w_in = w.clone();  // the inputs, then the solve
+    w_in.narrow(0, IVY, 2).copy_(w0);
+    auto bad_inputs =
+        torch::logical_not(finite_columns(_du0) & finite_columns(w_in) &
+                           finite_columns(gamma.unsqueeze(0)));
+    if (bad_inputs.any().item<bool>()) return reject(bad_inputs);
+    auto bad_columns = torch::logical_not(torch::isfinite(_delta).all(-1));
+    if (bad_columns.any().item<bool>()) return reject(bad_columns);
+  }
   if ((options->scheme() >> 3) & 1)
     at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
   else
@@ -482,17 +496,21 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
         torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
   }
 
-  auto bad_results =
-      torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
-
   _corr.copy_(du);
   _corr.sub_(_du0);
 
-  // one device-to-host read for both checks; reject() resets _corr
-  auto bad_correction = torch::logical_not(finite_columns(_corr));
-  if ((bad_results | bad_correction).any().item<bool>()) {
-    return reject(bad_results.any().item<bool>() ? bad_results
-                                                 : bad_correction);
+  auto results =
+      torch::stack({du.index(interior).sum(), _mass_corr.index(interior).sum(),
+                    _corr.index(interior).sum()});
+  if (!std::isfinite(results.sum().item<double>())) {
+    // reject() resets _corr
+    auto bad_results =
+        torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
+    auto bad_correction = torch::logical_not(finite_columns(_corr));
+    if ((bad_results | bad_correction).any().item<bool>()) {
+      return reject(bad_results.any().item<bool>() ? bad_results
+                                                   : bad_correction);
+    }
   }
 
   return _corr;
