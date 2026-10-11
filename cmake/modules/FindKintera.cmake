@@ -127,7 +127,7 @@ find_package_handle_standard_args(
   REQUIRED_VARS ${kintera_required_vars}
   VERSION_VAR KINTERA_VERSION
   REASON_FAILURE_MESSAGE
-    "snapy requires kintera >= ${Kintera_FIND_VERSION} (the h2o_bryan liquid beta of kintera #144, which examples/bryan.yaml's H2O(l) u0_R follows), found ${KINTERA_VERSION}")
+    "snapy requires kintera >= ${Kintera_FIND_VERSION} (SpeciesThermo names()/mu() from kintera #121, ThermoY take_saturation_adjustment_failures() from kintera #131, and the h2o_bryan liquid beta of kintera #144, which examples/bryan.yaml's H2O(l) u0_R follows), found ${KINTERA_VERSION}")
 
 unset(kintera_lib_dir)
 unset(kintera_include_dir)

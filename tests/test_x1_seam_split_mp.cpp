@@ -8,7 +8,8 @@
 // (tests/CMakeLists.txt): switches off checks the cross-rank split against
 // the in-process split only; SNAP_GRAVITY_WORK_RADIAL_EXACT (1, or 0 for the
 // control; its seam slope is centred across ranks, #303),
-// SNAP_X1_CENTROID_EXACT and SNAP_WB_REF4 check it against one block as well.
+// SNAP_X1_CENTROID_EXACT and SNAP_WB_REF4 check it against the in-process
+// split and against one block.
 // The radial arm, on, also checks the split E + P summed over the two ranks.
 //
 // Run: torchrun --no-python --nproc-per-node=2 test_x1_seam_split_mp.<build>

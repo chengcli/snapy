@@ -480,6 +480,8 @@ bit as before. The tests that pinned values of the old wall reference were re-pi
 
 ### 11.2 Why F is on by default with `gravity-work: face`
 
+`gravity-work: face` is the default x1 gravity-work form (const_gravity.cpp:28, forcing.hpp:61); `cell` (with its global fixer) must now be set explicitly.
+
 With `gravity-work: face` on a Cartesian, spherical-polar or gnomonic-equiangle grid and $g_1 \ne 0$, `SNAP_GRAVITY_WORK_RADIAL_EXACT`
 is on unless it is set to 0/false/off/no, which remains for A/B runs. Plain face work is first order in the two
 x1 wall cells (§8), and it shows:
@@ -687,7 +689,7 @@ face part is the face form of the total flux, so steps 6–7 hold unchanged.
 | explicit face work | `src/hydro/hydro_forward.cpp:819-821` (head `:817-819`): `corrected_pe_work(-dt * vertical_mass_div, ..., x1_measure(type))`; face part `phi_cell = -grav1 * x1v` at `:795` (head `:793`) | |
 | implicit energy row | `src/implicit/implicit_hydro.cpp:315`: `rx_mid += grav1 * x1_centroid_offset(...)`; into the matrix at `:333`, the right side at `:339` | |
 | #296 post-solve remainder | `src/implicit/implicit_hydro.cpp:466-467`: `corrected_pe_work(moved, ..., x1_measure(type))`, minus `rx_tri(raw - rx_mass0)` at `:473`, added at `:476-477` | |
-| logged `pe=` | | `src/mesh/meshblock.cpp:1047` ($P^d$, $\phi(x_{1v})$) and `:1052-1054`: `pe -= corrected_pe_work(rho, ..., x1_measure(type))` $= P^d + P^\sigma + P^\delta$ |
+| logged `pe=` | | `src/mesh/meshblock.cpp:1047` ($P^d$, $\phi(x_{1v})$) and `:1056-1058`: `pe -= corrected_pe_work_seam(rho, ..., x1_measure(type), below >= 0, above >= 0)` $= P^d + P^\sigma + P^\delta$ |
 
 (The logged `pe=` is computed in `print_cycle_diagnostics`, `src/mesh/meshblock.cpp`; `src/hydro/hydro.hpp:172-180`
 declares the switch, `gravity_work_radial_exact()` and `radial_exact_work()`, not the diagnostic.)
