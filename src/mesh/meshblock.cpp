@@ -856,10 +856,11 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   if (phydro->is_x1_wall(0)) mwall += mv.select(-1, 0).sum();
   if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
   // the limiter patched a cell or found a NaN: the redo check discards the step
-  auto hits = limiter_hits();
+  // (the marks ride in the one device-to-host copy below)
   bool solve_failure = phydro->picorr && phydro->picorr->solve_failed();
-  auto redo =
-      torch::full_like(mwall, hits[0] || hits[1] || solve_failure ? 1. : 0.);
+  auto const &marks = phydro->peos->limiter_marks();
+  auto redo = torch::full_like(mwall, solve_failure ? 1. : 0.);
+  if (marks.defined()) redo = torch::maximum(redo, marks.any().to(redo));
   return torch::stack({phydro->gravity_work_defect()[0],
                        mv.sum().to(torch::kFloat64),
                        phydro->gravity_work_wall_mass()[0],
@@ -876,10 +877,14 @@ void MeshBlockImpl::apply_gravity_work_fixer(Variables &vars,
   // immersed solid cells are refilled each step: they take no share of -D
   if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
   auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-  double D = global[0].item<double>(), mass = global[1].item<double>();
-  double wall = global[2].item<double>(), mwall = global[3].item<double>();
-  if (global[4].item<double>() > 0. ||
-      !torch::isfinite(global).all().item<bool>()) {
+  // global is on the host: read it through one accessor, not five .item()s
+  auto g = global.to(torch::kCPU, torch::kFloat64).contiguous();
+  auto ga = g.accessor<double, 1>();
+  double D = ga[0], mass = ga[1], wall = ga[2], mwall = ga[3];
+  bool finite = true;
+  for (int64_t i = 0; i < g.size(0); ++i)
+    finite = finite && std::isfinite(ga[i]);
+  if (ga[4] > 0. || !finite) {
     // a step the redo check will discard (limiter repair, NaN, non-finite
     // sums) is left to it, as with the fixer off
     phydro->gravity_work_defect().zero_();
@@ -1279,14 +1284,58 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   return 0;
 }
 
+torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
+  // floor_hit's test, kept on the device
+  auto hydro_u = vars.at("hydro_u");
+  auto interior = part({0, 0, 0}, PartOptions().exterior(false));
+  TORCH_CHECK(vars.count("hydro_w"),
+              "MeshBlock::check_redo needs hydro_w to restore the primitives");
+  // hydro_w is one stage stale: test the primitives as they stand
+  auto w = phydro->peos->forward(hydro_u.clone()).index(interior);
+  auto const &eos = phydro->peos->options;
+  // negated so a NaN, which fails every comparison, counts as a hit
+  auto floor = (w[IDN].min() > 1.001 * eos->density_floor()).logical_not();
+  if (w.size(0) > IPR) {  // shallow water carries no pressure row
+    floor = floor.logical_or(
+        (w[IPR].min() > 1.001 * eos->pressure_floor()).logical_not());
+  }
+  auto opts = hydro_u.options().dtype(torch::kFloat64);
+  auto zero = torch::zeros({}, opts);
+
+  auto clamp = phydro->picorr
+                   ? (phydro->picorr->dry_clamp_step()[0] > 0.).to(opts)
+                   : zero;
+
+  // floor's cons2prim may mark a limiter repair: stacked after it, in order
+  auto const &m = phydro->peos->limiter_marks();
+  auto marks = m.defined() ? m.to(opts) : torch::zeros({2}, opts);
+
+  // drains kintera's count exactly once, as saturation_failures() does
+  auto sat = zero;
+  auto modules = named_modules();
+  auto mt = modules.find("hydro.eos.thermo");
+  auto pthermo =
+      mt ? std::dynamic_pointer_cast<kintera::ThermoYImpl>(*mt) : nullptr;
+  if (pthermo && pthermo->nfail_.defined()) {
+    sat = (pthermo->nfail_ > 0).to(opts).reshape({});
+    pthermo->nfail_ = torch::Tensor();
+  }
+
+  bool solve = phydro->picorr && phydro->picorr->solve_failed();
+  return torch::stack({floor.to(opts), clamp, marks[0], marks[1], sat,
+                       torch::full({}, solve ? 1. : 0., opts)});
+}
+
+std::array<bool, 6> MeshBlockImpl::read_redo_flags(torch::Tensor const &flags) {
+  auto c = flags.to(torch::kCPU);  // the one device-to-host read
+  auto a = c.accessor<double, 1>();
+  std::array<bool, 6> out;
+  for (size_t i = 0; i < out.size(); ++i) out[i] = a[i] > 0.;
+  return out;
+}
+
 std::array<bool, 6> MeshBlockImpl::local_redo_flags(Variables const &vars) {
-  // floor_hit may mark a limiter repair; read those marks afterwards.
-  bool floor = floor_hit(vars);
-  auto hits = limiter_hits();
-  bool sat = saturation_failures() > 0;  // drains the counter exactly once
-  return {floor,   vic_dry_clamp_hit(),
-          hits[0], hits[1],
-          sat,     phydro->picorr && phydro->picorr->solve_failed()};
+  return read_redo_flags(local_redo_flag_tensor(vars));
 }
 
 int MeshBlockImpl::reduce_redo_flags(std::array<bool, 6> const &flags) const {
