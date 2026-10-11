@@ -588,6 +588,17 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // #289: whether the x2 / x3 face fluxes carry the covariance correction; the
   // geometric pressure source then takes the same shifted pressure (step 5)
   bool cov2 = false, cov3 = false;
+  // #44: the x1 differences of _flux_covariance read one row past an x1 seam;
+  // there a split column's face states must be the neighbour's own (its
+  // interior row), so a seam cell takes the stencil of one block. Physical x1
+  // walls and an unsplit column keep their rows and the same tensor.
+  auto x1_seam_rows = [&](torch::Tensor const& f, int tag) {
+    auto [below, above] = x1_neighbors();
+    if (below < 0 && above < 0) return f;
+    auto g = f.clone();
+    _x1_ghost_rows(g, 1, false, tag);
+    return g;
+  };
   if (u.size(DIM2) > 1) {
     auto wlr2 =
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
@@ -595,7 +606,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       // #289: built from the face states BEFORE the solver may project them
       // into the face-local frame, added to the flux after
       auto dcov = flux_covariance()
-                      ? _flux_covariance(wlr2[ILT], wlr2[IRT], DIM2)
+                      ? _flux_covariance(x1_seam_rows(wlr2[ILT], 0x7730),
+                                         x1_seam_rows(wlr2[IRT], 0x7732), DIM2)
                       : torch::Tensor();
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
       if (dcov.defined()) _flux2 += dcov;
@@ -618,7 +630,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       // x1 there too, because x1 is the stratified direction whichever
       // horizontal face it crosses
       auto dcov = flux_covariance()
-                      ? _flux_covariance(wlr3[ILT], wlr3[IRT], DIM3)
+                      ? _flux_covariance(x1_seam_rows(wlr3[ILT], 0x7734),
+                                         x1_seam_rows(wlr3[IRT], 0x7736), DIM3)
                       : torch::Tensor();
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
       if (dcov.defined()) _flux3 += dcov;
