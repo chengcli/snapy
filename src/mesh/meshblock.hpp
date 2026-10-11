@@ -55,8 +55,11 @@ struct MeshBlockOptionsImpl {
   bool is_physical_boundary(int dy, int dx, int dz) const;
 
   //! true if the face carries a physical wall, i.e. a boundary function whose
-  //! ghost is NOT a real neighbour state. Periodic is a physical boundary by
-  //! is_physical_boundary but is not a wall.
+  //! ghost is NOT a real neighbour state. A periodic boundary function (a block
+  //! wrapping onto itself) counts as physical for is_physical_boundary but is
+  //! not a wall; with the layout's periodic x1 (periodic_z) the x1 boundary
+  //! functions are nulled (meshblock.cpp), so is_physical_boundary is false on
+  //! both x1 faces there, as at an internal x1 seam.
   bool is_wall_boundary(int dy, int dx, int dz) const;
 
   //! Replace every boundary function at once. The names describe the functions

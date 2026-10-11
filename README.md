@@ -44,9 +44,9 @@ pkill -9 XXXXX
 
 **Requirements:**
 - Python 3.9 or higher
-- PyTorch 2.7.x
+- PyTorch 2.10.x
 - NumPy
-- kintera >= 2.5.13
+- kintera >= 2.6.2
 
 ### Build from Source (Advanced)
 
@@ -60,9 +60,9 @@ Building from source is recommended only for advanced users who need to:
 - CMake 3.20+
 - C++17 compatible compiler
 - Autoconf, Automake, Libtool, and pkg-config on Linux (for fetched UCX)
-- PyTorch 2.7.x with C++ libraries
+- PyTorch 2.10.x with C++ libraries
 - NetCDF C library
-- kintera >= 2.5.13
+- kintera >= 2.6.2
 
 **Build steps:**
 
@@ -74,7 +74,7 @@ cd snapy
 
 2. Install dependencies:
 ```bash
-pip install numpy kintera torch==2.7.1
+pip install numpy "kintera>=2.6.2" torch==2.10.0
 ```
 
 3. Install NetCDF:

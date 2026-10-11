@@ -173,7 +173,10 @@ A guarded cell or face keeps the kernel's value. None fires on a resolved smooth
   $\ge 3$ (checked at setup) the two sides of an x1 seam agree, except at an exact tie
   $\lvert\ln(p_{{\rm sf},i-1/2}/p_{{\rm sf},i+1/2})\rvert = 0.5$, where the two scans' last-ulp difference can
   put the cell on either side (`test_x1_seam_split_wb_ref4`: the flag switching on next to a seam).
-- A block with a clamped wall and fewer than four owned cells keeps the kernel's reference.
+- A block with a clamped wall and fewer than four owned cells keeps the kernel's reference. Its stencil cache
+  is then "not usable" and holds no weights, so the check that rebuilds the cache for another device or dtype
+  (`WbRef4Stencils::stale`) never reads them; before #298 it read the device of the undefined weight tensor and
+  the second RK stage threw (`tests/test_stencil_cache_small_block.py`: nx1 2–5 per block now run).
 
 The threshold, the dilation and the margin are design choices, not derived.
 

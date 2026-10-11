@@ -32,6 +32,15 @@ setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
 setup_test(test_uranus_cycle1_abort)
 setup_test(test_pref_local_seam)
+# UCzhangxi/snapy#44: the same 4-vs-1 x1-block comparison (200 steps, 1e-12)
+# with the x2/x3 face-flux covariance on; it must run and pass
+add_test(NAME test_pref_local_seam_flux_covariance.${buildl}
+         COMMAND test_pref_local_seam.${buildl})
+set_tests_properties(
+  test_pref_local_seam_flux_covariance.${buildl}
+  PROPERTIES ENVIRONMENT
+             "GTEST_FILTER=HydroRefX1.in_process_split_matches_one_block_after_200_steps;SNAP_FLUX_COVARIANCE=1"
+             PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
 setup_test(test_x1_seam_split)
 # one arm per entry: its environment, its one test, which must run and pass (a
 # skip or an empty filter prints "PASSED ] 0 tests" and fails the entry)
@@ -51,6 +60,8 @@ seam_arm(_radial_exact "SNAP_GRAVITY_WORK_RADIAL_EXACT=1" radial_exact_split_gap
 # the control: the face form without the corrected work
 seam_arm(_radial_exact_off "SNAP_GRAVITY_WORK_RADIAL_EXACT=0"
          radial_exact_split_gap)
+# the VIC row's per-block slope relies on an implicit scheme refusing an x1 split
+seam_arm(_vic_refuses_split "" vic_refuses_x1_split)
 # SNAP_WB_REF4 alone: its resolution flag switching on next to the seam
 seam_arm(_wb_ref4 "SNAP_WB_REF4=1"
          wb_ref4_flag_at_the_seam_split_matches_one_block)
@@ -228,6 +239,13 @@ snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;e
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
+# the same ladder on one cubed-sphere face block, where the corrected-PE work carries the
+# centroid term (#300)
+snapy_add_python_test(test_implicit_gravity_tall_column_cubed SCRIPT test_implicit_gravity_tall_column.py
+                      ARGS --geometry gnomonic-equiangle TIMEOUT 120
+                      LABELS "python;hydro;implicit;gravity;cubed-sphere")
+# #299: the runner above fails when a ladder child dies or prints an incomplete ladder
+snapy_add_python_test(test_tall_column_runner_child_failure TIMEOUT 120 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 # the same two tests with the corrected-PE work on (#296): they detect the switch and
@@ -248,6 +266,14 @@ snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+# UCzhangxi/snapy#44 (B1): the six-panel scalar seam test with the x2/x3
+# face-flux covariance on, whose x1 differences read the cross-panel face
+# states' x1 ghost rows next to the radial walls
+snapy_add_python_test(test_flux_positivity_cubedsphere_flux_covariance
+                      SCRIPT test_flux_positivity_cubedsphere.py TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere")
+set_tests_properties(test_flux_positivity_cubedsphere_flux_covariance_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=1")
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 snapy_add_python_test(test_cubed_sphere_cell_volume TIMEOUT 120
@@ -265,6 +291,8 @@ snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
+# #298: the x1 stencil caches on blocks with too few x1 cells
+snapy_add_python_test(test_stencil_cache_small_block TIMEOUT 300 LABELS "python;hydro")
 # these check the plain face work (E+PE_d, or values recorded with it); the
 # corrected work, on by default with gravity-work: face, conserves E+P instead
 set_tests_properties(

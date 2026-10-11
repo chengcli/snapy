@@ -1049,9 +1049,13 @@ void print_cycle_diagnostics(
         // potential energy P, so log P: E + P is what that work conserves
         if (hydro->radial_exact_work()) {
           int is = coord->il(), ie = coord->iu() + 1;
-          pe.slice(-1, is, ie) -= corrected_pe_work(
-              rho.slice(-1, is, ie), coord->x1f, coord->x1v, is, ie, grav1,
-              coord->options->type() == "spherical-polar");
+          // across an x1 seam the ghost rho (exchanged after every stage) is
+          // the neighbour's: P of a split column is one block's (#303); a
+          // periodic x1 column keeps the one-sided slope (hydro_forward.cpp)
+          auto [below, above] = hydro->x1_neighbors();
+          pe.slice(-1, is, ie) -= corrected_pe_work_seam(
+              rho, coord->x1f, coord->x1v, is, ie, grav1,
+              x1_measure(coord->options->type()), below >= 0, above >= 0);
         }
         add(pe_sum, (pe * vol).index(interior).sum({1, 2, 3}));
       }

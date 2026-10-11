@@ -5,7 +5,7 @@ A moving isentropic column (gamma 1.4, Rd 287, g 9.8, Ts 300 K, density ratio e^
 into the scheme's discrete balance with snapy.balance_column, w = w0 sin(pi z / Lz),
 w0/c = 1e-2) runs NSTEP explicit rk3 steps (weno5, lmars) between reflecting x1 walls.
 E+PE = sum (E + rho g z) dV must stay constant:
-  gravity-work: cell + gravity-work-fixer (the default)   |d(E+PE)| / |E+PE| <= TOL, explicit and
+  gravity-work: cell + gravity-work-fixer (its default)  |d(E+PE)| / |E+PE| <= TOL, explicit and
                                                          implicit (vic-partial)
   gravity-work: face-wallc                                 reported only: its two wall cells keep the
                                                          cell work, so E+PE is not exact there
@@ -56,7 +56,8 @@ def config(gravity, x1bc="reflecting", scheme=0):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": dict({"grav1": -GRAV}, **gravity)},
+        # cell unless an arm says otherwise (the default is face)
+        "forcing": {"const-gravity": dict({"grav1": -GRAV, "gravity-work": "cell"}, **gravity)},
     }
 
 
@@ -253,17 +254,23 @@ def main():
 
     # the keys from Python, and the grav2 refusal on that path
     from snapy import MeshBlock, MeshBlockOptions
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
-        yaml.safe_dump(config({}), f)
-        tmp = f.name
-    try:
-        opts = MeshBlockOptions.from_yaml(tmp)
-    finally:
-        os.unlink(tmp)
-    g = opts.hydro().grav()
-    print("python options: gravity_work=%s gravity_work_fixer=%s" % (g.gravity_work(), g.gravity_work_fixer()))
-    if g.gravity_work() != "cell" or g.gravity_work_fixer() is not True:
-        failures.append("python options do not read the defaults")
+
+    def options(cfg):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
+            yaml.safe_dump(cfg, f)
+            tmp = f.name
+        try:
+            return MeshBlockOptions.from_yaml(tmp)
+        finally:
+            os.unlink(tmp)
+
+    nokey = config({})
+    del nokey["forcing"]["const-gravity"]["gravity-work"]
+    for want, opts in (("face", options(nokey)), ("cell", options(config({})))):
+        g = opts.hydro().grav()
+        print("python options: gravity_work=%s gravity_work_fixer=%s" % (g.gravity_work(), g.gravity_work_fixer()))
+        if g.gravity_work() != want or g.gravity_work_fixer() is not (want == "cell"):
+            failures.append("python options do not read the defaults (%s)" % want)
     g.grav2(1.0)
     try:
         MeshBlock(opts)

@@ -98,7 +98,8 @@ find_package(Harp REQUIRED)
 # read by the EOS cloud-parent cache and sedimentation (snapy #234)
 # >= 2.5.13: ThermoY take_saturation_adjustment_failures() (kintera #131),
 # read by check_redo
-find_package(Kintera 2.5.13 REQUIRED)
+# >= 2.6.2: h2o_bryan beta of kintera #144, needed by examples/bryan.yaml (#295)
+find_package(Kintera 2.6.2 REQUIRED)
 #include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)

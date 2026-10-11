@@ -25,7 +25,7 @@ ConstGravityOptions ConstGravityOptionsImpl::from_yaml(
   op->non_hydrostatic() = node["non-hydrostatic"].as<double>(1.);
   TORCH_CHECK(op->non_hydrostatic() >= 0. && op->non_hydrostatic() <= 1.);
 
-  op->gravity_work() = node["gravity-work"].as<std::string>("cell");
+  op->gravity_work() = node["gravity-work"].as<std::string>("face");
   TORCH_CHECK(op->gravity_work() == "cell" ||
                   op->gravity_work() == "face-wallc" ||
                   op->gravity_work() == "face",

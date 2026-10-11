@@ -68,6 +68,14 @@
 
 namespace snap {
 
+//! x1 extent of the cross-panel x2/x3 face-state exchange beyond the interior
+//! rows: the ghost rows too, which the face-flux covariance's x1 differences
+//! read in the wall-adjacent cells (0 on an x1 axis of one cell)
+static int face_state_x1_extent(MeshBlockImpl const* pmb) {
+  auto const& coord = pmb->options->coord();
+  return coord->nc1() > 1 ? coord->nghost() : 0;
+}
+
 namespace {
 
 std::mutex g_cubed_sphere_comm_mutex;
@@ -668,9 +676,11 @@ void CubedSphereLayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
       // Get the interior part for this direction
       auto part_opts = PartOptions().exterior(false);
       if (opts.dim() == SyncOptions::DIM2) {
-        part_opts.depth(1).exterior(dx > 0);
+        part_opts.depth(1).exterior(dx > 0).extend_x1(
+            face_state_x1_extent(pmb));
       } else if (opts.dim() == SyncOptions::DIM3) {
-        part_opts.depth(1).exterior(dy > 0);
+        part_opts.depth(1).exterior(dy > 0).extend_x1(
+            face_state_x1_extent(pmb));
       }
 
       // interpolating receiver: widen by cs_interp_margin (halo is fresh only
@@ -886,9 +896,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
       // Get the exterior (ghost zone) part for this direction
       auto part_opts = PartOptions().exterior(true);
       if (opts.dim() == SyncOptions::DIM2) {
-        part_opts.depth(1).exterior(dx > 0);
+        part_opts.depth(1).exterior(dx > 0).extend_x1(
+            face_state_x1_extent(pmb));
       } else if (opts.dim() == SyncOptions::DIM3) {
-        part_opts.depth(1).exterior(dy > 0);
+        part_opts.depth(1).exterior(dy > 0).extend_x1(
+            face_state_x1_extent(pmb));
       }
 
       auto sub = pmb->part(offset, part_opts);
@@ -901,9 +913,11 @@ void CubedSphereLayoutImpl::deserialize(MeshBlockImpl const* pmb,
       // whole strip is still in the neighbour's frame.
       auto part_opts_w = PartOptions().exterior(true);
       if (opts.dim() == SyncOptions::DIM2) {
-        part_opts_w.depth(1).exterior(dx > 0);
+        part_opts_w.depth(1).exterior(dx > 0).extend_x1(
+            face_state_x1_extent(pmb));
       } else if (opts.dim() == SyncOptions::DIM3) {
-        part_opts_w.depth(1).exterior(dy > 0);
+        part_opts_w.depth(1).exterior(dy > 0).extend_x1(
+            face_state_x1_extent(pmb));
       }
       if (opts.interpolate()) {
         int margin = cs_interp_margin(pmb->options->coord()->nghost());

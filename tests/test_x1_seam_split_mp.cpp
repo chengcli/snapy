@@ -5,10 +5,11 @@
 // rank 0: max over rho, rho v1 and E of |split - ref| / max|ref|.
 //
 // The arm is read from the environment, one ctest entry each
-// (tests/CMakeLists.txt): switches off and SNAP_GRAVITY_WORK_RADIAL_EXACT (1,
-// or 0 for the control) check the cross-rank split against the in-process
-// split only, since there the split differs from one block (printed);
-// SNAP_X1_CENTROID_EXACT and SNAP_WB_REF4 check it against one block as well.
+// (tests/CMakeLists.txt): switches off checks the cross-rank split against
+// the in-process split only; SNAP_GRAVITY_WORK_RADIAL_EXACT (1, or 0 for the
+// control; its seam slope is centred across ranks, #303),
+// SNAP_X1_CENTROID_EXACT and SNAP_WB_REF4 check it against the in-process
+// split and against one block.
 // The radial arm, on, also checks the split E + P summed over the two ranks.
 //
 // Run: torchrun --no-python --nproc-per-node=2 test_x1_seam_split_mp.<build>
@@ -173,8 +174,12 @@ double energy_p(Mesh mesh, MeshVariables const& vars) {
     auto u = vars[b].at("hydro_u");
     auto rho = u[IDN];
     auto pe = rho * coord->x1v;
-    pe.slice(-1, is, ie) -= corrected_pe_work(rho.slice(-1, is, ie), coord->x1f,
-                                              coord->x1v, is, ie, -1., true);
+    // across the seam the ghost rho is the neighbour's (exchanged after every
+    // stage), so this is the P of one block (#303)
+    auto [below, above] = mesh->blocks[b]->phydro->x1_neighbors();
+    pe.slice(-1, is, ie) -=
+        corrected_pe_work_seam(rho, coord->x1f, coord->x1v, is, ie, -1.,
+                               X1Measure::radial, below >= 0, above >= 0);
     auto vol = coord->cell_volume();
     total += ((u[IPR] + pe) * vol).slice(-1, is, ie).sum().item<double>();
   }
@@ -278,6 +283,9 @@ TEST(X1SeamSplitMp, split_across_two_ranks_matches_one_process) {
             "drift %.3e\n",
             arm, nx1, g.two, g.one, g.drift);
         EXPECT_LE(g.two, 1e-13) << "nz " << nx1;
+        // the seam takes one block's centred slope (#303): one block's state,
+        // to the round-off of the other arms
+        EXPECT_LE(g.one, 1e-13) << "nz " << nx1;
       }
       if (on) EXPECT_LE(g.drift, 1e-13) << "rank " << rank << ", nz " << nx1;
     }

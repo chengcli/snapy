@@ -327,6 +327,9 @@ TEST(HydroRefX1, in_process_split_matches_one_block_after_200_steps) {
   double pres = rel_diff(a, b, IPR, 0.);
   double vx = rel_diff(a, b, IVX, 1.);
   double state = std::max(rho, std::max(pres, vx));
+  std::printf(
+      "4 x1 blocks vs 1 after 200 steps: rel diff rho %.3e p %.3e vx %.3e\n",
+      rho, pres, vx);
   // round-off of the chained in-process anchor scan: vx 5.4e-14, 200 steps
   EXPECT_LE(state, 1e-12) << "rho " << rho << " p " << pres << " vx " << vx;
 }

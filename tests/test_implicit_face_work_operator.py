@@ -70,11 +70,16 @@ def radial_exact():
     return v not in ("0", "false", "off", "no")
 
 
-def corrected_pe(rho, x1f, x1v, grav1, spherical=False):
+def corrected_pe(rho, x1f, x1v, grav1, spherical=False, centroid=False):
     """per-cell -grav1 sigma^2 s[rho] (times the cell volume by the caller): what P adds
-    to PE_d with SNAP_GRAVITY_WORK_RADIAL_EXACT on, rho along the last dimension"""
-    from test_gravity_work_radial_exact import slope, variance
-    return -grav1 * variance(x1f, spherical).to(rho) * slope(rho, x1v.to(rho))
+    to PE_d with SNAP_GRAVITY_WORK_RADIAL_EXACT on, rho along the last dimension;
+    centroid (gnomonic-equiangle, where x1v is not the r^2 centroid r_c): also
+    -grav1 (r_c - x1v) rho (derivation sec 12)"""
+    from test_gravity_work_radial_exact import centroid_offset, slope, variance
+    pe = -grav1 * variance(x1f, spherical).to(rho) * slope(rho, x1v.to(rho))
+    if centroid:
+        pe = pe - grav1 * centroid_offset(x1f, x1v).to(rho) * rho
+    return pe
 
 
 def run(scheme, dt, w0, nstep, device):

@@ -57,6 +57,8 @@ def arm_conservation(device):
     import snapy
     from snapy import kIPR
     cfg = rows.card("gnomonic-equiangle", moist=True)
+    # E+PE above is the invariant of cell work + fixer; face work conserves E+P (corrected PE)
+    cfg["forcing"]["const-gravity"]["gravity-work"] = "cell"
     mesh, blocks = rows.blocks_of(cfg, device)
     nx1 = cfg["geometry"]["cells"]["nx1"]
     r0 = float(cfg["geometry"]["bounds"]["x1min"])
