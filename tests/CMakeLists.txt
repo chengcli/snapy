@@ -266,6 +266,14 @@ snapy_add_python_test(test_eos_temp2inteng TIMEOUT 60 LABELS "python;eos")
 snapy_add_python_test(test_flux_positivity TIMEOUT 300 LABELS "python;positivity")
 snapy_add_python_test(test_flux_positivity_cubedsphere TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
+# UCzhangxi/snapy#44 (B1): the six-panel scalar seam test with the x2/x3
+# face-flux covariance on, whose x1 differences read the cross-panel face
+# states' x1 ghost rows next to the radial walls
+snapy_add_python_test(test_flux_positivity_cubedsphere_flux_covariance
+                      SCRIPT test_flux_positivity_cubedsphere.py TIMEOUT 300
+                      LABELS "python;positivity;cubed-sphere")
+set_tests_properties(test_flux_positivity_cubedsphere_flux_covariance_python
+                     PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=1")
 snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 snapy_add_python_test(test_cubed_sphere_cell_volume TIMEOUT 120
