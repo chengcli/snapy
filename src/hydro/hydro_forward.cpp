@@ -111,10 +111,29 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   auto un = wbar[dim == 2 ? IVY : IVZ];
 
   auto x1v = pcoord->x1v.to(p.device(), p.scalar_type());
-  auto s2 = pcoord->face_moment2_x1()
-                .to(p.device(), p.scalar_type())
-                .unsqueeze(0)
-                .unsqueeze(1);
+  // face_moment2_x1() is grid-only; cache it by the
+  // dx1f tensor identity, version, device and dtype
+  static thread_local struct {
+    c10::TensorImpl const* impl = nullptr;
+    int64_t ver = -1;
+    torch::Device dev = torch::kCPU;
+    c10::ScalarType st = torch::kDouble;
+    torch::Tensor val;
+  } s2c;
+  auto const& dx1f_ = pcoord->dx1f;
+  if (s2c.impl != dx1f_.unsafeGetTensorImpl() || s2c.ver != dx1f_._version() ||
+      s2c.dev != p.device() || s2c.st != p.scalar_type() ||
+      !s2c.val.defined()) {
+    s2c.val = pcoord->face_moment2_x1()
+                  .to(p.device(), p.scalar_type())
+                  .unsqueeze(0)
+                  .unsqueeze(1);
+    s2c.impl = dx1f_.unsafeGetTensorImpl();
+    s2c.ver = dx1f_._version();
+    s2c.dev = p.device();
+    s2c.st = p.scalar_type();
+  }
+  auto s2 = s2c.val;
   // Second O(dx1^2) term, nonzero on curved grids only: a cell stores the
   // average over the CELL measure, whose x1 centroid is r_v, while the flux
   // needs the average over the FACE measure, whose centroid is r_c. The
