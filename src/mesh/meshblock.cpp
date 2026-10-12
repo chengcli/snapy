@@ -966,6 +966,24 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
         if (!fns[f] || is_outflow(fns[f])) continue;
         int spatial = 3 - f / 2;
         if (field.size(spatial) == 1) continue;
+        // a reflecting wall is row-local (each x1 row
+        // mirrors its own interior), so when every tangential face is
+        // exchange-owned one full-extent call writes the slabs' corner values
+        // and rewrites the other rows with the same bits
+        {
+          bool any_orth = false, all_owned = true;
+          for (int orth = 1; orth <= 3; ++orth) {
+            if (orth == spatial || field.size(orth) <= 1) continue;
+            any_orth = true;
+            int inner = (3 - orth) * 2;
+            if (physical(inner) || physical(inner + 1)) all_owned = false;
+          }
+          if (any_orth && all_owned && static_cast<size_t>(f) < names.size() &&
+              names[f].compare(0, 10, "reflecting") == 0) {
+            fns[f](field, spatial, op);
+            continue;
+          }
+        }
         for (int orth = 1; orth <= 3; ++orth) {
           if (orth == spatial || field.size(orth) <= 1) continue;
           int n = static_cast<int>(field.size(orth));
