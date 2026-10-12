@@ -213,6 +213,14 @@ torch::Tensor IdealMoistImpl::_prim2intEng(torch::Tensor prim) {
   auto gammad =
       (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
 
+  // a dry gas has f_sig = f_eps = 1 and yd = 1 exactly, and
+  // the empty species matmul adds rho * 0; skip those launches
+  if (ny == 0) {
+    auto ie0 = prim[IPR] / (gammad - 1);
+    ie0 += prim[IDN] * u0[0];
+    return ie0;
+  }
+
   // TODO(cli) iteration needed here
   auto ie = prim[IPR] * f_sig(yfrac) / f_eps(yfrac) / (gammad - 1);
 
