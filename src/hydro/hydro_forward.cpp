@@ -793,13 +793,35 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // severe: theta < 0.9 AND the withheld mass is above round-off of the
     // cell's gas mass. An empty cell drained by a round-off face flux has
     // theta = 0 at any dt; its withheld mass is ~1e-20 of the cell's (#256).
-    auto cell_mass = (u[IDN] + uy.sum(0)) * pmb->pcoord->cell_volume();
+    // the cell volume depends on the grid only
+    static thread_local struct {
+      c10::TensorImpl const *f1 = nullptr, *f2 = nullptr, *f3 = nullptr;
+      int64_t v1 = -1, v2 = -1, v3 = -1;
+      torch::Tensor val;
+    } vc;
+    auto pc = pmb->pcoord;
+    if (!(vc.f1 == pc->x1f.unsafeGetTensorImpl() &&
+          vc.f2 == pc->x2f.unsafeGetTensorImpl() &&
+          vc.f3 == pc->x3f.unsafeGetTensorImpl() &&
+          vc.v1 == pc->x1f._version() && vc.v2 == pc->x2f._version() &&
+          vc.v3 == pc->x3f._version() && vc.val.defined() &&
+          vc.val.device() == u.device() &&
+          vc.val.scalar_type() == u.scalar_type())) {
+      vc.val = pc->cell_volume();
+      vc.f1 = pc->x1f.unsafeGetTensorImpl();
+      vc.f2 = pc->x2f.unsafeGetTensorImpl();
+      vc.f3 = pc->x3f.unsafeGetTensorImpl();
+      vc.v1 = pc->x1f._version();
+      vc.v2 = pc->x2f._version();
+      vc.v3 = pc->x3f._version();
+    }
+    auto cell_mass = (u[IDN] + uy.sum(0)) * vc.val;
     auto withheld = ((1. - theta) * drain).index(cells).to(torch::kFloat64);
     auto above =
         withheld > positivity_roundoff(u.scalar_type()) *
                        cell_mass.unsqueeze(0).index(cells).to(torch::kFloat64);
     _positivity_severe += ((ti < 0.9) & above).sum();
-    _positivity_min.copy_(torch::minimum(_positivity_min, ti.min()));
+    torch::minimum_out(_positivity_min, _positivity_min, ti.min());
 
     // Raw copy, never interpolated: the donor of a panel-seam face is the
     // neighbour's edge cell, and an interpolated ghost is not its factor.

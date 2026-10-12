@@ -233,11 +233,35 @@ torch::Tensor IdealMoistImpl::_prim2intEng(torch::Tensor prim) {
 }
 
 torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
+  // the same prim, unchanged since the last call
+  // (same storage, offset, shape and version), gives the same T; return a
+  // copy of the memo so a caller may still write its result
+  static thread_local struct {
+    IdealMoistImpl const* self = nullptr;
+    c10::TensorImpl const* impl = nullptr;
+    void const* data = nullptr;
+    int64_t ver = -1;
+    std::vector<int64_t> shape, stride;
+    torch::Tensor val;
+  } memo;
+  if (memo.self == this && memo.impl == prim.unsafeGetTensorImpl() &&
+      memo.data == prim.data_ptr() && memo.ver == prim._version() &&
+      memo.shape == prim.sizes().vec() && memo.stride == prim.strides().vec() &&
+      memo.val.defined())
+    return memo.val.clone();
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
   auto Rd = kintera::constants::Rgas / options->weight();
   auto yfrac = prim.narrow(0, ICY, ny);
-  return prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
+  auto t = prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
+  memo.self = this;
+  memo.impl = prim.unsafeGetTensorImpl();
+  memo.data = prim.data_ptr();
+  memo.ver = prim._version();
+  memo.shape = prim.sizes().vec();
+  memo.stride = prim.strides().vec();
+  memo.val = t;
+  return t.clone();
 }
 
 torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
@@ -275,8 +299,27 @@ torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
 
   // the per-species split of the flux enthalpy rho*(W->I/rho + KE + p/rho):
   // u0 + cv T + KE, plus R T for a vapour (a cloud has no pressure share)
-  auto c = (cv_ratio_m1 + 1.) * cvd;
-  c.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
+  // c depends only on the species table buffers
+  static thread_local struct {
+    IdealMoistImpl const* self = nullptr;
+    c10::TensorImpl const *a = nullptr, *b = nullptr;
+    int64_t va = -1, vb = -1;
+    torch::Tensor val;
+  } cc;
+  if (!(cc.self == this && cc.a == cv_ratio_m1.unsafeGetTensorImpl() &&
+        cc.b == inv_mu_ratio_m1.unsafeGetTensorImpl() &&
+        cc.va == cv_ratio_m1._version() &&
+        cc.vb == inv_mu_ratio_m1._version() && cc.val.defined())) {
+    auto c0 = (cv_ratio_m1 + 1.) * cvd;
+    c0.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
+    cc.self = this;
+    cc.a = cv_ratio_m1.unsafeGetTensorImpl();
+    cc.b = inv_mu_ratio_m1.unsafeGetTensorImpl();
+    cc.va = cv_ratio_m1._version();
+    cc.vb = inv_mu_ratio_m1._version();
+    cc.val = c0;
+  }
+  auto c = cc.val;
 
   auto vel = prim.narrow(0, IVX, 3).clone();
   coord_vec_lower_(vel, pcoord->cosine_cell_kj);
