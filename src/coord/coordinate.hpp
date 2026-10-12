@@ -377,6 +377,8 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
     reset();
   }
   void reset() override {}
+  //! r-weighted faces, and the base shift needs dx1f, which is not built here
+  bool face_centroid_shift_zero() const override { return false; }
   void pretty_print(std::ostream& stream) const override {
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);
