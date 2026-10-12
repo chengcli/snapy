@@ -594,9 +594,21 @@ void MeshBlockImpl::finalize_exchange(Variables &vars, SyncOptions const &opts,
   _playout->finalize(this, vars, opts, works);
 }
 
+namespace {
+// the CUDA vapor repair counts its failures on the device while in scope
+struct DeferVaporCheck {
+  EquationOfStateImpl *eos;
+  explicit DeferVaporCheck(EquationOfStateImpl *e) : eos(e) {
+    eos->defer_vapor_check(true);
+  }
+  ~DeferVaporCheck() { eos->defer_vapor_check(false); }
+};
+}  // namespace
+
 void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
+  DeferVaporCheck defer(phydro->peos.get());
 
   // Publish the stage: the vertical implicit correction is nonlinear in dt and
   // must weight dt INSIDE the solve, so it needs to know which stage it is in.
@@ -623,6 +635,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     }
     phydro->peos->reset_limiter_marks(hydro_u);
     saturation_failures();  // a failure counted before the step is not its own
+    if (phydro->peos->vapor_failures().defined())
+      phydro->peos->vapor_failures().zero_();  // nor is a vapor failure
 
     if (pscalar->nvar() > 0) {
       _scalar_s0.copy_(scalar_s);
@@ -1314,7 +1328,11 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
   TORCH_CHECK(vars.count("hydro_w"),
               "MeshBlock::check_redo needs hydro_w to restore the primitives");
   // hydro_w is one stage stale: test the primitives as they stand
-  auto w = phydro->peos->forward(hydro_u.clone()).index(interior);
+  torch::Tensor w;
+  {
+    DeferVaporCheck defer(phydro->peos.get());
+    w = phydro->peos->forward(hydro_u.clone()).index(interior);
+  }
   auto const &eos = phydro->peos->options;
   // negated so a NaN, which fails every comparison, counts as a hit
   auto floor = (w[IDN].min() > 1.001 * eos->density_floor()).logical_not();
@@ -1347,12 +1365,22 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
   // the VIC failure latch, read in the one copy below
   auto solve =
       phydro->picorr ? phydro->picorr->solve_failed_tensor(opts) : zero;
-  return torch::stack({floor.to(opts), clamp, marks[0], marks[1], sat, solve});
+  // 7th: the step's deferred vapor-repair failures, raised by read_redo_flags
+  auto const &nfv = phydro->peos->vapor_failures();
+  auto vapor = nfv.defined() ? (nfv > 0).to(opts) : zero;
+  auto out = torch::stack(
+      {floor.to(opts), clamp, marks[0], marks[1], sat, solve, vapor});
+  if (nfv.defined()) nfv.zero_();  // read once: after the stack, in order
+  return out;
 }
 
 std::array<bool, 6> MeshBlockImpl::read_redo_flags(torch::Tensor const &flags) {
   auto c = flags.to(torch::kCPU);  // the one device-to-host read
   auto a = c.accessor<double, 1>();
+  TORCH_CHECK(c.size(0) <= 6 || !(a[6] > 0.),
+              "[EquationOfState] apply_conserved_limiter_: "
+              "Failed to fix vapor mass fractions (counted on the device in "
+              "the step, reported at check_redo).");
   std::array<bool, 6> out;
   for (size_t i = 0; i < out.size(); ++i) out[i] = a[i] > 0.;
   return out;

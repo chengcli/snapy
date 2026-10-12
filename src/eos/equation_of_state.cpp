@@ -293,8 +293,14 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
                       .add_owned_input(cmajor.expand_as(repaired))
                       .add_owned_input(cvol.expand_as(repaired))
                       .build();
-      int err = at::native::call_fix_vapor(cons.device().type(), iter,
-                                           require_success);
+      // deferred: the CUDA count stays on the device until check_redo
+      bool defer = require_success && defer_vapor_check_ && cons.is_cuda();
+      if (defer && (!vapor_failures_.defined() ||
+                    vapor_failures_.device() != cons.device()))
+        vapor_failures_ = torch::zeros({}, cons.options().dtype(torch::kInt));
+      int err = at::native::call_fix_vapor(
+          cons.device().type(), iter, require_success,
+          defer ? vapor_failures_ : torch::Tensor());
       TORCH_CHECK(!require_success || err == 0,
                   "[EquationOfState] apply_conserved_limiter_: "
                   "Failed to fix vapor mass fractions.");

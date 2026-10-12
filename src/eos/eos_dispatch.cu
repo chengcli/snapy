@@ -49,13 +49,17 @@ void ideal_gas_cons2prim_cuda(at::TensorIterator& iter, double gammad) {
   });
 }*/
 
-int call_fix_vapor_cuda(at::TensorIterator& iter, bool count) {
+int call_fix_vapor_cuda(at::TensorIterator& iter, bool count,
+                        at::Tensor const& sink) {
   at::cuda::CUDAGuard device_guard(iter.device());
 
   // count failures on the device (a host int captured by value never reported)
-  // only when the caller reads them: the read synchronises the device
-  auto nerr = count ? at::zeros({1}, at::TensorOptions().dtype(at::kInt).device(iter.device()))
-                    : at::Tensor();
+  // only when the caller reads them: the read synchronises the device. A
+  // defined sink takes the count instead, read later by the caller.
+  bool read = count && !sink.defined();
+  auto nerr = !count ? at::Tensor()
+              : read ? at::zeros({1}, at::TensorOptions().dtype(at::kInt).device(iter.device()))
+                     : sink;
   int* nerr_ptr = count ? nerr.data_ptr<int>() : nullptr;
 
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cuda", [&] {
@@ -71,7 +75,7 @@ int call_fix_vapor_cuda(at::TensorIterator& iter, bool count) {
         });
   });
 
-  return count ? nerr.item<int>() : 0;
+  return read ? nerr.item<int>() : 0;
 }
 
 }  // namespace snap
