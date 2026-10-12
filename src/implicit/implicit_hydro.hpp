@@ -93,13 +93,27 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor dry_clamp_step() const { return _dry_clamp_step; }
   void reset_dry_clamp_step() { _dry_clamp_step.zero_(); }
 
-  //! Latched until the next step, including later RK stages.
-  bool solve_failed() const { return _solve_failed; }
-  void reset_solve_failure() { _solve_failed = false; }
+  //! Latched until the next step, including later RK stages. A failure
+  //! found after the solve is latched on the device; this reads it back.
+  bool solve_failed() const {
+    return _solve_failed || (_failed_dev.defined() && _failed_dev.item<bool>());
+  }
+  void reset_solve_failure() {
+    _solve_failed = false;
+    if (_failed_dev.defined()) _failed_dev.zero_();
+  }
+
+  //! solve_failed() as a 0-d tensor (1 or 0) with `opts`, without a host read
+  torch::Tensor solve_failed_tensor(torch::TensorOptions const& opts) const {
+    auto flag = torch::full({}, _solve_failed ? 1. : 0., opts);
+    return _failed_dev.defined() ? torch::maximum(flag, _failed_dev.to(opts))
+                                 : flag;
+  }
 
  private:
   void ensure_workspace(torch::Tensor const& w);
   bool _solve_failed = false;
+  torch::Tensor _failed_dev;  // 0-d bool: a failure found after the solve
 
   torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual,
       _dry_clamp_step;

@@ -192,6 +192,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   }*/
 
   ensure_workspace(w);
+  if (!_failed_dev.defined() || _failed_dev.device() != du.device())
+    _failed_dev = torch::zeros({}, du.options().dtype(torch::kBool));
   _du0.copy_(du);
   _mass_corr.zero_();
 
@@ -201,7 +203,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
 
   auto reject = [&](torch::Tensor const& bad_columns) {
     _solve_failed = true;
-    auto columns = bad_columns.nonzero().cpu();
+    // no columns: the previous stage failed after its solve
+    auto columns = bad_columns.defined() ? bad_columns.nonzero().cpu()
+                                         : torch::zeros({0, 3}, torch::kInt64);
     auto index = columns.accessor<int64_t, 2>();
     for (int64_t n = 0; n < columns.size(0); ++n)
       std::cerr << "[ImplicitHydro] rank=" << get_rank()
@@ -221,12 +225,15 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto finite_columns = [&](torch::Tensor const& values) {
     return torch::isfinite(values.index(interior)).all(0).all(-1).unsqueeze(0);
   };
-  // two device-to-host reads per stage (#291): the sum of each checked tensor
+  // one device-to-host read per stage (#291): the sum of each checked tensor
   // is nonfinite if any of its values is; only then are the columns found,
-  // in the order the checks would have met them
+  // in the order the checks would have met them. The read also carries the
+  // previous stage's post-solve failure, latched on the device.
   std::vector<torch::Tensor> screen = {
       du.index(interior).sum(), w.index(interior).sum(),
-      gamma.unsqueeze(0).index(interior).sum()};
+      gamma.unsqueeze(0).index(interior).sum(),
+      torch::zeros({}, du.options())
+          .masked_fill(_failed_dev, std::numeric_limits<double>::quiet_NaN())};
 
   /// (1) Project to local orthonormal frame
   w[IVY] += w[IVZ] * cos_theta;
@@ -410,6 +417,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   // nonfinite backward-substitution results, before redistribution sees them.
   screen.push_back(_delta.sum());
   if (!std::isfinite(torch::stack(screen).sum().item<double>())) {
+    // a stage after a failed one stops here
+    if (_failed_dev.item<bool>()) return reject(torch::Tensor());
     auto w_in = w.clone();  // the inputs, then the solve
     w_in.narrow(0, IVY, 2).copy_(w0);
     auto bad_inputs =
@@ -425,7 +434,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     at::native::vic_redistribute_partial(du.device().type(), iter, dt, grav1,
                                          0);
 
-  // only the availability clamp breaks sum_ch MASS*VOL == M(i) - M(i+1)
+  // only the availability clamp breaks sum_ch MASS*VOL == M(i) - M(i+1);
+  // the meters are committed below, unless the stage fails
+  torch::Tensor clamp_next;
   {
     int is = pcoord->il();
     int ie = pcoord->iu() + 1;
@@ -444,11 +455,11 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                              ? std::numeric_limits<float>::min()
                              : 1.e-300;
     auto scale = torch::maximum(Ml.abs(), Mu.abs()).clamp_min(floor);
-    torch::maximum_out(_clamp_residual, _clamp_residual,
-                       ((lhs - rhs).abs() / scale).max().detach());
+    clamp_next = torch::maximum(_clamp_residual,
+                                ((lhs - rhs).abs() / scale).max().detach());
   }
-  torch::maximum_out(_dry_clamp_step, _dry_clamp_step,
-                     _mass_corr[IPR].max().detach());
+  auto dry_next =
+      torch::maximum(_dry_clamp_step, _mass_corr[IPR].max().detach());
 
   if (face_work || diffusive_work) {
     int is = pcoord->il(), ie = pcoord->iu() + 1;
@@ -554,17 +565,18 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto results =
       torch::stack({du.index(interior).sum(), _mass_corr.index(interior).sum(),
                     _corr.index(interior).sum()});
-  if (!std::isfinite(results.sum().item<double>())) {
-    // reject() resets _corr
-    auto bad_results =
-        torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
-    auto bad_correction = torch::logical_not(finite_columns(_corr));
-    if ((bad_results | bad_correction).any().item<bool>()) {
-      return reject(bad_results.any().item<bool>() ? bad_results
-                                                   : bad_correction);
-    }
-  }
-
+  // no host read: a nonfinite result is latched on the device, undone here
+  // with masks (on success they select the values as they are) and stops
+  // the next stage at its screen; check_redo reads the latch
+  auto fail = torch::isfinite(results.sum()).logical_not();
+  _failed_dev.logical_or_(fail);
+  du.copy_(torch::where(fail, _du0, du));
+  w.narrow(0, IVY, 2).copy_(torch::where(fail, w0, w.narrow(0, IVY, 2)));
+  _corr.masked_fill_(fail, 0.);
+  _mass_corr.masked_fill_(fail, 0.);
+  // a failed stage leaves the meters as they were
+  _clamp_residual.copy_(torch::where(fail, _clamp_residual, clamp_next));
+  _dry_clamp_step.copy_(torch::where(fail, _dry_clamp_step, dry_next));
   return _corr;
 }
 

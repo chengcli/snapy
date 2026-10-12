@@ -861,9 +861,10 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
   // the limiter patched a cell or found a NaN: the redo check discards the step
   // (the marks ride in the one device-to-host copy below)
-  bool solve_failure = phydro->picorr && phydro->picorr->solve_failed();
   auto const &marks = phydro->peos->limiter_marks();
-  auto redo = torch::full_like(mwall, solve_failure ? 1. : 0.);
+  auto redo = phydro->picorr
+                  ? phydro->picorr->solve_failed_tensor(mwall.options())
+                  : torch::zeros_like(mwall);
   if (marks.defined()) redo = torch::maximum(redo, marks.any().to(redo));
   return torch::stack({phydro->gravity_work_defect()[0],
                        mv.sum().to(torch::kFloat64),
@@ -1343,9 +1344,10 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
     pthermo->nfail_ = torch::Tensor();
   }
 
-  bool solve = phydro->picorr && phydro->picorr->solve_failed();
-  return torch::stack({floor.to(opts), clamp, marks[0], marks[1], sat,
-                       torch::full({}, solve ? 1. : 0., opts)});
+  // the VIC failure latch, read in the one copy below
+  auto solve =
+      phydro->picorr ? phydro->picorr->solve_failed_tensor(opts) : zero;
+  return torch::stack({floor.to(opts), clamp, marks[0], marks[1], sat, solve});
 }
 
 std::array<bool, 6> MeshBlockImpl::read_redo_flags(torch::Tensor const &flags) {
