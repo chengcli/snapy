@@ -305,6 +305,8 @@ snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
+# which flux rows the covariance changes: Cartesian vs curved, dry vs moist
+snapy_add_python_test(test_flux_covariance_rowset TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
 # #289: a passive scalar and the same tracer as a hydro species, covariance on and off
