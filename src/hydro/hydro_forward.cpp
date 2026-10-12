@@ -173,49 +173,63 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   auto d1 = [&](torch::Tensor const& q) {
     return (q.narrow(-1, 2, n1 - 2) - q.narrow(-1, 0, n1 - 2)) / dx1;
   };
-  // sigma1^2 rho a_1 b_1 : the covariance of a density-weighted product
-  auto cov = [&](torch::Tensor const& a, torch::Tensor const& b) {
-    return cell(s2) * cell(rho) * d1(a) * d1(b);
-  };
+  // sigma1^2 rho a_1 b_1 : the covariance of a density-weighted product;
+  // sigma1^2 rho and D1[u_n] are shared by every row, so formed once
+  auto s2rho = cell(s2) * cell(rho);
+  auto dun = d1(un);
   // -delta d_1(F) : the centroid part, the same rule for every row
   auto ctr = [&](torch::Tensor const& f) { return -cell(ds) * d1(f); };
 
+  auto h = enth / rho;
+  auto ys = wbar.narrow(0, ICY, ny);
+
+  // Cartesian: only the IPR row and, with species, the ICY.. and IDN rows are
+  // nonzero, and only on the x1-interior cells; write just those, stacked as
+  // (IPR, ICY.., IDN), for forward()'s add_cov (no zero-filled full flux)
+  if (!centroid) {
+    auto rows = torch::empty(
+        {ny > 0 ? ny + 2 : 1, rho.size(0), rho.size(1), n1 - 2}, rho.options());
+    auto ce = rows[0];
+    torch::mul_out(ce, s2rho * d1(h), dun);
+    if (ny > 0) {
+      // tracer rows, all species at once, each with its own q
+      auto cy = rows.narrow(0, 1, ny);
+      torch::mul_out(cy, s2rho * dun, d1(ys));
+      // the dry row carries minus the sum of the tracer rows
+      auto dry = rows[ny + 1];
+      torch::neg_out(dry, cy[0]);
+      for (int n = 1; n < ny; ++n) torch::sub_out(dry, dry, cy[n]);
+    }
+    return rows;
+  }
+
   auto dflx = torch::zeros_like(wl);
   // energy row
-  auto h = enth / rho;
-  auto ce = cov(h, un);
-  dflx[IPR].narrow(-1, 1, n1 - 2) = centroid ? ce + ctr(enth * un) : ce;
-  // tracer rows, each with its own q; the dry row carries minus their sum
-  torch::Tensor mflx, dry;
-  if (centroid) {
-    mflx = rho * un;
-    // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
-    auto rd = torch::ones_like(rho);
-    for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
-    dry = ctr(mflx * rd);
+  dflx[IPR].narrow(-1, 1, n1 - 2) = s2rho * d1(h) * dun + ctr(enth * un);
+  // tracer rows, all species at once; the dry row carries minus their sum
+  auto mflx = rho * un;
+  // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
+  auto rd = torch::ones_like(rho);
+  for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
+  auto dry = ctr(mflx * rd);
+  if (ny > 0) {
+    auto cy = s2rho * dun * d1(ys);
+    dflx.narrow(0, ICY, ny).narrow(-1, 1, n1 - 2) = cy + ctr(mflx * ys);
+    for (int n = 0; n < ny; ++n) dry = dry - cy[n];
   }
-  for (int n = 0; n < ny; ++n) {
-    auto q = wbar[ICY + n];
-    auto c = cov(un, q);
-    dflx[ICY + n].narrow(-1, 1, n1 - 2) = centroid ? c + ctr(mflx * q) : c;
-    dry = dry.defined() ? dry - c : -c;
-  }
-  if (dry.defined()) dflx[IDN].narrow(-1, 1, n1 - 2) = dry;
+  dflx[IDN].narrow(-1, 1, n1 - 2) = dry;
 
-  // the momentum rows are centroid parts only
-  if (centroid) {
-    // momentum rows in the face-local frame, then to the solver's global frame
-    // like the Riemann flux (lmars.cpp): normal rho u_n^2 + p, tangential
-    // rho u_n u_t
-    int ivn = dim == 2 ? IVY : IVZ;
-    for (int v = IVX; v <= IVZ; ++v) {
-      dflx[v].narrow(-1, 1, n1 - 2) = ctr(mflx * wbar[v]);
-    }
-    // the pressure part: p* - p = -delta d_1 p, with the difference step 5 of
-    // forward() also uses for the geometric source
-    dflx[ivn].narrow(-1, 1, n1 - 2) -=
-        cell(ds) * d1_pressure(p, x1v, pcoord->il(), pcoord->iu());
+  // the momentum rows are centroid parts only: momentum rows in the
+  // face-local frame, then to the solver's global frame like the Riemann flux
+  // (lmars.cpp): normal rho u_n^2 + p, tangential rho u_n u_t
+  int ivn = dim == 2 ? IVY : IVZ;
+  for (int v = IVX; v <= IVZ; ++v) {
+    dflx[v].narrow(-1, 1, n1 - 2) = ctr(mflx * wbar[v]);
   }
+  // the pressure part: p* - p = -delta d_1 p, with the difference step 5 of
+  // forward() also uses for the geometric source
+  dflx[ivn].narrow(-1, 1, n1 - 2) -=
+      cell(ds) * d1_pressure(p, x1v, pcoord->il(), pcoord->iu());
   if (dim == 2) {
     pcoord->flux2global2_(dflx);
   } else {
@@ -703,6 +717,28 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     _x1_ghost_rows(g, 1, false, tag);
     return g;
   };
+  // the covariance increment of _flux_covariance into a face flux: the whole
+  // flux on a curved grid, only the nonzero rows' x1 interior in Cartesian
+  bool cov_rows = pmb->pcoord->face_centroid_shift_zero();
+  auto add_cov = [&](torch::Tensor& flx, torch::Tensor const& dcov) {
+    if (!cov_rows) {
+      flx += dcov;
+      return;
+    }
+    auto f = flx.narrow(-1, 1, flx.size(-1) - 2);
+    f[IPR] += dcov[0];
+    if (ny > 0) {
+      f.narrow(0, ICY, ny) += dcov.narrow(0, 1, ny);
+      f[IDN] += dcov[ny + 1];
+    }
+  };
+  // its dry-mass row, shaped like one flux row, for the passive scalars
+  auto cov_dry = [&](torch::Tensor const& dcov, torch::Tensor const& like) {
+    if (!cov_rows) return dcov[IDN].clone();
+    auto d = torch::zeros_like(like[IDN]);
+    if (ny > 0) d.narrow(-1, 1, d.size(-1) - 2).copy_(dcov[ny + 1]);
+    return d;
+  };
   if (u.size(DIM2) > 1) {
     auto wlr2 =
         has_solid ? pmb->pib->forward(wtmp2, DIM2, other.at("solid")) : wtmp2;
@@ -721,10 +757,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       if (dcov.defined() && has_scalars) {
         _cov_wl[0] = cwl.clone();
         _cov_wr[0] = cwr.clone();
-        _cov_dry[0] = dcov[IDN].clone();
+        _cov_dry[0] = cov_dry(dcov, cwl);
       }
       priemann->forward(wlr2[ILT], wlr2[IRT], DIM2, _flux2);
-      if (dcov.defined()) _flux2 += dcov;
+      if (dcov.defined()) add_cov(_flux2, dcov);
       cov2 = dcov.defined();
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();
@@ -753,10 +789,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       if (dcov.defined() && has_scalars) {
         _cov_wl[1] = cwl.clone();
         _cov_wr[1] = cwr.clone();
-        _cov_dry[1] = dcov[IDN].clone();
+        _cov_dry[1] = cov_dry(dcov, cwl);
       }
       priemann->forward(wlr3[ILT], wlr3[IRT], DIM3, _flux3);
-      if (dcov.defined()) _flux3 += dcov;
+      if (dcov.defined()) add_cov(_flux3, dcov);
       cov3 = dcov.defined();
       if (options->verbose()) {
         auto end = std::chrono::high_resolution_clock::now();

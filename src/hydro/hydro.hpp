@@ -243,8 +243,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
    * \param[in] wl,wr  reconstructed states at the face, BEFORE the Riemann
    *                   solver projects them into the face-local frame
    * \param[in] dim    the solver's direction tag: 2 for x2, 1 for x3
-   * \return           the flux increment, shaped like one flux row; undefined
-   *                   when the x1 axis is too thin to difference
+   * \return           the flux increment, shaped like the flux; in Cartesian
+   *                   only its nonzero rows on the x1-interior cells, stacked
+   *                   (IPR, ICY.., IDN); undefined when the x1 axis is too
+   *                   thin to difference
    */
   torch::Tensor _flux_covariance(torch::Tensor const& wl,
                                  torch::Tensor const& wr, int dim) const;
