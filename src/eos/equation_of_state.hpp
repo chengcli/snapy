@@ -165,11 +165,23 @@ class EquationOfStateImpl {
   //! A side channel: the limiter calls set the marks as a side effect; the
   //! MeshBlock resets them at stage 0 and after a redo decision, and reads them
   //! in check_redo (MeshBlock and Mesh).
-  torch::Tensor const& limiter_marks() const { return limiter_marks_; }
+  // the calls queue their 0-d any() results and the
+  // read folds them, one stack + any + or per row instead of one or per call
+  torch::Tensor const& limiter_marks() const {
+    for (int i = 0; i < 2; ++i) {
+      if (pending_marks_[i].empty()) continue;
+      if (limiter_marks_.defined())
+        limiter_marks_[i].logical_or_(torch::stack(pending_marks_[i]).any());
+      pending_marks_[i].clear();
+    }
+    return limiter_marks_;
+  }
+  void push_mark_(int i, torch::Tensor t) { pending_marks_[i].push_back(t); }
 
  private:
   // not a buffer: stage forcings get named_buffers()
   torch::Tensor limiter_marks_;
+  mutable std::vector<torch::Tensor> pending_marks_[2];
 
   //! Parent vapor slots and normalized stoichiometric mass fractions by cloud.
   std::vector<std::vector<std::pair<int, double>>> cloud_parent_cache_;
