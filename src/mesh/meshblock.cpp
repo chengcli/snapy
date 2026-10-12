@@ -610,9 +610,13 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (1) save initial state --------
   if (stage == 0) {
     _hydro_u0.copy_(hydro_u);
-    phydro->gravity_work_defect().zero_();  // a redone step starts afresh
-    phydro->commit_gravity_work_fix();      // the previous step was accepted
-    phydro->gravity_work_wall_mass().zero_();
+    // the fixer buffers are only written under the
+    // fixer; with it off they stay zero, so skip three launches
+    if (phydro->gravity_work_fixer()) {
+      phydro->gravity_work_defect().zero_();  // a redone step starts afresh
+      phydro->commit_gravity_work_fix();      // the previous step was accepted
+      phydro->gravity_work_wall_mass().zero_();
+    }
     if (phydro->picorr) {
       phydro->picorr->reset_dry_clamp_step();
       phydro->picorr->reset_solve_failure();
