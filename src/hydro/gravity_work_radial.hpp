@@ -166,10 +166,14 @@ inline CorrectedPEFactors corrected_pe_factors(X1GridKey const& key) {
   return f;
 }
 
-//! the factors for key, from cache when it holds them (else rebuilt into it)
+//! the factors for key, from cache when it holds them (else rebuilt into it).
+//! Module::to keeps the x1f identity and version, so check dtype and device
 inline CorrectedPEFactors const& corrected_pe_factors(
     X1GridKey const& key, CorrectedPEFactors* cache) {
-  if (!(cache->key == key)) *cache = corrected_pe_factors(key);
+  if (!(cache->key == key) ||
+      cache->gvar.scalar_type() != key.x1f.scalar_type() ||
+      cache->gvar.device() != key.x1f.device())
+    *cache = corrected_pe_factors(key);
   return *cache;
 }
 
