@@ -109,6 +109,25 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   X1GridKey _rx_key;
   torch::Tensor _rx_lo, _rx_mid, _rx_hi;
   CorrectedPEFactors _rx_work;
+
+  // grid-only factors of forward_masked, rebuilt only
+  // when a coordinate face tensor, the device, dtype, shape or grav1 changes
+  struct GeoKey {
+    c10::TensorImpl const *f1 = nullptr, *f2 = nullptr, *f3 = nullptr;
+    int64_t v1 = -1, v2 = -1, v3 = -1;
+    torch::Device dev = torch::kCPU;
+    c10::ScalarType st = torch::kDouble;
+    std::vector<int64_t> shape;
+    double grav1 = 0.;
+    bool operator==(GeoKey const& o) const {
+      return f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && v1 == o.v1 &&
+             v2 == o.v2 && v3 == o.v3 && dev == o.dev && st == o.st &&
+             shape == o.shape && grav1 == o.grav1;
+    }
+  };
+  GeoKey _g_key;
+  torch::Tensor _g_area, _g_volume, _g_work_lo, _g_work_hi, _g_mask0, _g_phi,
+      _g_dp_lo, _g_dp_hi;
 };
 TORCH_MODULE(ImplicitHydro);
 

@@ -235,38 +235,66 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   coord_vec_raise_(du.narrow(0, IVX, 3), cos_theta);
   pcoord->prim2local1_(du);
 
-  auto mask = solid.defined() ? solid.to(w.options()).contiguous()
-                              : torch::zeros_like(gamma);
+  // the geometry below depends on the grid only
+  bool no_solid = !solid.defined();
+  {
+    GeoKey key;
+    key.f1 = pcoord->x1f.unsafeGetTensorImpl();
+    key.f2 = pcoord->x2f.unsafeGetTensorImpl();
+    key.f3 = pcoord->x3f.unsafeGetTensorImpl();
+    key.v1 = pcoord->x1f._version();
+    key.v2 = pcoord->x2f._version();
+    key.v3 = pcoord->x3f._version();
+    key.dev = w.device();
+    key.st = w.scalar_type();
+    key.shape = gamma.sizes().vec();
+    key.grav1 = phydro->options->grav()->grav1();
+    if (!(_g_key == key) || !_g_area.defined()) {
+      _g_area = pcoord->face_area1().contiguous();
+      _g_volume = pcoord->cell_volume().contiguous();
+      int nc1g = w.size(-1);
+      _g_work_lo = .5 * _g_area.narrow(-1, 0, nc1g) *
+                   (pcoord->x1v - pcoord->x1f.narrow(0, 0, nc1g)) / _g_volume;
+      _g_work_hi = .5 * _g_area.narrow(-1, 1, nc1g) *
+                   (pcoord->x1f.narrow(0, 1, nc1g) - pcoord->x1v) / _g_volume;
+      _g_work_lo = _g_work_lo.unsqueeze(0).contiguous();
+      _g_work_hi = _g_work_hi.unsqueeze(0).contiguous();
+      _g_mask0 = torch::zeros_like(gamma);
+      int isg = pcoord->il(), ieg = pcoord->iu() + 1;
+      double g1 = key.grav1;
+      _g_phi = -g1 * pcoord->x1v.slice(0, isg, ieg);
+      auto zg = pcoord->x1v.slice(0, isg, ieg);
+      _g_dp_lo = -g1 * (pcoord->x1f.slice(0, isg, ieg) - zg);
+      _g_dp_hi = -g1 * (pcoord->x1f.slice(0, isg + 1, ieg + 1) - zg);
+      _g_key = key;
+    }
+  }
+  auto mask = solid.defined() ? solid.to(w.options()).contiguous() : _g_mask0;
 
-  auto area = pcoord->face_area1().contiguous();
-  auto volume = pcoord->cell_volume().contiguous();
+  auto area = _g_area;
+  auto volume = _g_volume;
   int nc1 = w.size(-1);
-  auto work_lo = .5 * area.narrow(-1, 0, nc1) *
-                 (pcoord->x1v - pcoord->x1f.narrow(0, 0, nc1)) / volume;
-  auto work_hi = .5 * area.narrow(-1, 1, nc1) *
-                 (pcoord->x1f.narrow(0, 1, nc1) - pcoord->x1v) / volume;
 
   //// -------- Solve block-tridiagonal matrix --------- ////
-  auto iter =
-      at::TensorIteratorConfig()
-          .resize_outputs(false)
-          .check_all_same_dtype(true)
-          .declare_static_shape(du.index(interior).sizes(),
-                                /*squash_dims=*/{0, 3})
-          .add_owned_output(du.index(interior))
-          .add_owned_output(_mass_corr.index(interior))
-          .add_owned_input(w.index(interior))
-          .add_owned_input(gamma.unsqueeze(0).index(interior))
-          .add_owned_input(area.unsqueeze(0).index(interior))
-          .add_owned_input(volume.unsqueeze(0).index(interior))
-          .add_input(_a)
-          .add_input(_b)
-          .add_input(_c)
-          .add_input(_delta)
-          .add_owned_input(mask.unsqueeze(0).index(interior))
-          .add_owned_input(work_lo.unsqueeze(0).contiguous().index(interior))
-          .add_owned_input(work_hi.unsqueeze(0).contiguous().index(interior))
-          .build();
+  auto iter = at::TensorIteratorConfig()
+                  .resize_outputs(false)
+                  .check_all_same_dtype(true)
+                  .declare_static_shape(du.index(interior).sizes(),
+                                        /*squash_dims=*/{0, 3})
+                  .add_owned_output(du.index(interior))
+                  .add_owned_output(_mass_corr.index(interior))
+                  .add_owned_input(w.index(interior))
+                  .add_owned_input(gamma.unsqueeze(0).index(interior))
+                  .add_owned_input(area.unsqueeze(0).index(interior))
+                  .add_owned_input(volume.unsqueeze(0).index(interior))
+                  .add_input(_a)
+                  .add_input(_b)
+                  .add_input(_c)
+                  .add_input(_delta)
+                  .add_owned_input(mask.unsqueeze(0).index(interior))
+                  .add_owned_input(_g_work_lo.index(interior))
+                  .add_owned_input(_g_work_hi.index(interior))
+                  .build();
 
   // Linearize the FULL gravity: du always carries it (body force + rho_grav
   // sum to grav1); scaling by non_hydrostatic() drops the gravity coupling
@@ -301,7 +329,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
         rx_lo.narrow(-1, 1, nx1 - 1) * q.narrow(-1, 0, nx1 - 1);
     s.narrow(-1, 0, nx1 - 1) +=
         rx_hi.narrow(-1, 0, nx1 - 1) * q.narrow(-1, 1, nx1 - 1);
-    return rx_fluid * s;
+    return no_solid ? s : rx_fluid * s;  // 1 * s == s
   };
   auto couple_radial_exact = [&]() {
     if (!radial_exact || nx1 < 3) return;
@@ -343,16 +371,22 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     rx_lo = _rx_lo;
     rx_mid = _rx_mid;
     rx_hi = _rx_hi;
-    rx_fluid = (mask.index(in3) == 0).to(w.options());
+    if (!no_solid) rx_fluid = (mask.index(in3) == 0).to(w.options());
     // row IPR, column 0 (the total mass) of each cell's blocks; Eigen stores
     // them column-major
     int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
     auto entry = [&](torch::Tensor const& t) {
       return t.view({nx3, nx2, nx1, m, m}).select(-2, 0).select(-1, m - 1);
     };
-    entry(_a).sub_(rx_fluid * rx_mid / dt);
-    entry(_b).sub_(rx_fluid * rx_lo / dt);
-    entry(_c).sub_(rx_fluid * rx_hi / dt);
+    if (no_solid) {  // 1 * x == x
+      entry(_a).sub_(rx_mid / dt);
+      entry(_b).sub_(rx_lo / dt);
+      entry(_c).sub_(rx_hi / dt);
+    } else {
+      entry(_a).sub_(rx_fluid * rx_mid / dt);
+      entry(_b).sub_(rx_fluid * rx_lo / dt);
+      entry(_c).sub_(rx_fluid * rx_hi / dt);
+    }
     rx_mass0 = _du0[IDN].index(in3).clone();
     if (du.size(0) > ICY)
       rx_mass0 += _du0.narrow(0, ICY, du.size(0) - ICY).sum(0).index(in3);
@@ -396,12 +430,13 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     int is = pcoord->il();
     int ie = pcoord->iu() + 1;
     int nyc = du.size(0) - ICY;
-    auto cell = _mass_corr[IDN].clone();
+    // no copy when there is nothing to add
+    auto cell = nyc > 0 ? _mass_corr[IDN].clone() : _mass_corr[IDN];
     for (int n = 0; n < nyc; ++n) cell += _mass_corr[ICY + n];
     auto M = _mass_corr[IVX];
     auto Ml = M.slice(-1, is, ie);
     auto Mu = M.slice(-1, is + 1, ie + 1);
-    auto lhs = (cell * pcoord->cell_volume()).slice(-1, is, ie);
+    auto lhs = (cell * volume).slice(-1, is, ie);  // cached
     auto rhs = Ml - Mu;
     // per cell: a column max would hide a binding in a low-flux layer
     // Keep the double floor unchanged; 1e-300 is zero in float32.
@@ -409,17 +444,17 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                              ? std::numeric_limits<float>::min()
                              : 1.e-300;
     auto scale = torch::maximum(Ml.abs(), Mu.abs()).clamp_min(floor);
-    _clamp_residual.copy_(torch::maximum(
-        _clamp_residual, ((lhs - rhs).abs() / scale).max().detach()));
+    torch::maximum_out(_clamp_residual, _clamp_residual,
+                       ((lhs - rhs).abs() / scale).max().detach());
   }
-  _dry_clamp_step.copy_(
-      torch::maximum(_dry_clamp_step, _mass_corr[IPR].max().detach()));
+  torch::maximum_out(_dry_clamp_step, _dry_clamp_step,
+                     _mass_corr[IPR].max().detach());
 
   if (face_work || diffusive_work) {
     int is = pcoord->il(), ie = pcoord->iu() + 1;
     auto in3 =
         phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-    auto volume = pcoord->cell_volume().index(in3);
+    auto volume = _g_volume.index(in3);  // cached
     auto requested = _mass_corr[IVX];
     auto moved = _mass_corr[IVZ] - requested;
     auto projected =
@@ -434,19 +469,21 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     auto explicit_mass = _du0[IDN].clone();
     if (w.size(0) > ICY)
       explicit_mass += _du0.narrow(0, ICY, w.size(0) - ICY).sum(0);
-    auto phi = -grav1 * pcoord->x1v.slice(0, is, ie);
+    auto phi = _g_phi;  // cached grid-only potentials
     auto projection_work =
         phi * (raw_mass - explicit_mass.index(in3) - projected);
-    auto z = pcoord->x1v.slice(0, is, ie);
-    auto dp_lo = -grav1 * (pcoord->x1f.slice(0, is, ie) - z);
-    auto dp_hi = -grav1 * (pcoord->x1f.slice(0, is + 1, ie + 1) - z);
+    auto dp_lo = _g_dp_lo;
+    auto dp_hi = _g_dp_hi;
     auto clamp_work = -(dp_hi * moved.slice(-1, is + 1, ie + 1) -
                         dp_lo * moved.slice(-1, is, ie))
                            .slice(-2, pcoord->jl(), pcoord->ju() + 1)
                            .slice(-3, pcoord->kl(), pcoord->ku() + 1) /
                       volume;
-    du[IPR].index(in3).add_(
-        torch::where(mask.index(in3) == 0, projection_work + clamp_work, 0.));
+    if (no_solid)  // where(true, x, 0) == x
+      du[IPR].index(in3).add_(projection_work + clamp_work);
+    else
+      du[IPR].index(in3).add_(
+          torch::where(mask.index(in3) == 0, projection_work + clamp_work, 0.));
   }
 
   /// (3) De-project from local orthonormal frame
@@ -504,8 +541,11 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
           .sub_(rx_tri(raw - rx_mass0));
     }
     // solid cells get none: their slope stencil reads fluid neighbours
-    du[IPR].slice(-1, is, ie) +=
-        torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
+    if (no_solid)
+      du[IPR].slice(-1, is, ie) += work;
+    else
+      du[IPR].slice(-1, is, ie) +=
+          torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
   }
 
   _corr.copy_(du);
