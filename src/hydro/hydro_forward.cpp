@@ -122,10 +122,14 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   // zero in Cartesian and is NOT small on a curved grid -- its ratio to the
   // covariance term is ~L/r with L the local gradient scale. See
   // docs/derivations/289-covariance-x3-curved.md.
-  auto ds = pcoord->face_centroid_shift_x1()
-                .to(p.device(), p.scalar_type())
-                .unsqueeze(0)
-                .unsqueeze(1);
+  // Cartesian (face_centroid_shift_zero): the shift is identically zero, so
+  // every centroid part below is an exact zero and is not computed
+  bool centroid = !pcoord->face_centroid_shift_zero();
+  auto ds = centroid ? pcoord->face_centroid_shift_x1()
+                           .to(p.device(), p.scalar_type())
+                           .unsqueeze(0)
+                           .unsqueeze(1)
+                     : torch::Tensor();
   auto rho = wbar[IDN];
   auto dx1 = (x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2));
 
@@ -157,36 +161,42 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   // -delta d_1(F) : the centroid part, the same rule for every row
   auto ctr = [&](torch::Tensor const& f) { return -cell(ds) * d1(f); };
 
-  // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
-  auto rd = torch::ones_like(rho);
-  for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
-
   auto dflx = torch::zeros_like(wl);
-  auto mflx = rho * un;
   // energy row
   auto h = enth / rho;
-  dflx[IPR].narrow(-1, 1, n1 - 2) = cov(h, un) + ctr(enth * un);
+  auto ce = cov(h, un);
+  dflx[IPR].narrow(-1, 1, n1 - 2) = centroid ? ce + ctr(enth * un) : ce;
   // tracer rows, each with its own q; the dry row carries minus their sum
-  auto dry = ctr(mflx * rd);
+  torch::Tensor mflx, dry;
+  if (centroid) {
+    mflx = rho * un;
+    // dry mass fraction: LMARS carries FLX(IDN) = ubar * rho * rd
+    auto rd = torch::ones_like(rho);
+    for (int n = 0; n < ny; ++n) rd = rd - wbar[ICY + n];
+    dry = ctr(mflx * rd);
+  }
   for (int n = 0; n < ny; ++n) {
     auto q = wbar[ICY + n];
     auto c = cov(un, q);
-    dflx[ICY + n].narrow(-1, 1, n1 - 2) = c + ctr(mflx * q);
-    dry = dry - c;
+    dflx[ICY + n].narrow(-1, 1, n1 - 2) = centroid ? c + ctr(mflx * q) : c;
+    dry = dry.defined() ? dry - c : -c;
   }
-  dflx[IDN].narrow(-1, 1, n1 - 2) = dry;
+  if (dry.defined()) dflx[IDN].narrow(-1, 1, n1 - 2) = dry;
 
-  // momentum rows in the face-local frame, then to the solver's global frame
-  // like the Riemann flux (lmars.cpp): normal rho u_n^2 + p, tangential
-  // rho u_n u_t
-  int ivn = dim == 2 ? IVY : IVZ;
-  for (int v = IVX; v <= IVZ; ++v) {
-    dflx[v].narrow(-1, 1, n1 - 2) = ctr(mflx * wbar[v]);
+  // the momentum rows are centroid parts only
+  if (centroid) {
+    // momentum rows in the face-local frame, then to the solver's global frame
+    // like the Riemann flux (lmars.cpp): normal rho u_n^2 + p, tangential
+    // rho u_n u_t
+    int ivn = dim == 2 ? IVY : IVZ;
+    for (int v = IVX; v <= IVZ; ++v) {
+      dflx[v].narrow(-1, 1, n1 - 2) = ctr(mflx * wbar[v]);
+    }
+    // the pressure part: p* - p = -delta d_1 p, with the difference step 5 of
+    // forward() also uses for the geometric source
+    dflx[ivn].narrow(-1, 1, n1 - 2) -=
+        cell(ds) * d1_pressure(p, x1v, pcoord->il(), pcoord->iu());
   }
-  // the pressure part: p* - p = -delta d_1 p, with the difference step 5 of
-  // forward() also uses for the geometric source
-  dflx[ivn].narrow(-1, 1, n1 - 2) -=
-      cell(ds) * d1_pressure(p, x1v, pcoord->il(), pcoord->iu());
   if (dim == 2) {
     pcoord->flux2global2_(dflx);
   } else {
@@ -243,10 +253,12 @@ torch::Tensor HydroImpl::scalar_flux_covariance(torch::Tensor const& rl,
                 .to(un.device(), un.scalar_type())
                 .unsqueeze(0)
                 .unsqueeze(1);
-  auto ds = pcoord->face_centroid_shift_x1()
-                .to(un.device(), un.scalar_type())
-                .unsqueeze(0)
-                .unsqueeze(1);
+  bool centroid = !pcoord->face_centroid_shift_zero();
+  auto ds = centroid ? pcoord->face_centroid_shift_x1()
+                           .to(un.device(), un.scalar_type())
+                           .unsqueeze(0)
+                           .unsqueeze(1)
+                     : torch::Tensor();
   auto rho = wbar[IDN];
   auto dx1 = (x1v.narrow(0, 2, n1 - 2) - x1v.narrow(0, 0, n1 - 2));
   auto cell = [&](torch::Tensor const& a) { return a.narrow(-1, 1, n1 - 2); };
@@ -258,9 +270,9 @@ torch::Tensor HydroImpl::scalar_flux_covariance(torch::Tensor const& rl,
   };
   auto ctr = [&](torch::Tensor const& f) { return -cell(ds) * d1(f); };
 
-  auto mflx = rho * un;
   auto dflx = torch::zeros_like(q);
-  dflx.narrow(-1, 1, n1 - 2) = cov(un, q) + ctr(mflx * q);
+  auto c = cov(un, q);
+  dflx.narrow(-1, 1, n1 - 2) = centroid ? c + ctr(rho * un * q) : c;
   return dflx;
 }
 
@@ -660,6 +672,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // #289: whether the x2 / x3 face fluxes carry the covariance correction; the
   // geometric pressure source then takes the same shifted pressure (step 5)
   bool cov2 = false, cov3 = false;
+  bool has_scalars = pmb->pscalar && pmb->pscalar->nvar() > 0;
   // #44: the x1 differences of _flux_covariance read one row past an x1 seam;
   // there a split column's face states must be the neighbour's own (its
   // interior row), so a seam cell takes the stencil of one block. Physical x1
@@ -686,7 +699,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                     : torch::Tensor();
       // the passive scalars' rows are built from the same face states
       // (scalar_flux_covariance), taken before the solver may project them
-      if (dcov.defined()) {
+      if (dcov.defined() && has_scalars) {
         _cov_wl[0] = cwl.clone();
         _cov_wr[0] = cwr.clone();
         _cov_dry[0] = dcov[IDN].clone();
@@ -718,7 +731,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       }
       auto dcov = flux_covariance() ? _flux_covariance(cwl, cwr, DIM3)
                                     : torch::Tensor();
-      if (dcov.defined()) {
+      if (dcov.defined() && has_scalars) {
         _cov_wl[1] = cwl.clone();
         _cov_wr[1] = cwr.clone();
         _cov_dry[1] = dcov[IDN].clone();
@@ -823,7 +836,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // x3 source (IVZ) exactly when the x3 faces are, so e.g. disable_flux_x3 with
   // nx3 > 1 keeps the x2 balance.
   bool any2 = u.size(DIM2) > 1, any3 = u.size(DIM3) > 1;
-  if (!cov2 && !cov3) {
+  // a zero centroid shift (Cartesian) leaves p* == p, the plain source
+  if ((!cov2 && !cov3) || pmb->pcoord->face_centroid_shift_zero()) {
     _div.set_(pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
   } else {
     int n1 = w.size(-1);
@@ -879,7 +893,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     if (ny > 0) {
       vertical_mass_flux1 += _flux1.narrow(0, ICY, ny).sum(0);
     }
-    auto total_mass_flux1 = vertical_mass_flux1.clone();
+    auto total_mass_flux1 =
+        gw_cell ? vertical_mass_flux1.clone() : torch::Tensor();
     // cell: the cell work rho g v (const-gravity forcing) stays; only F - F^R
     // is booked as face work
     if (gw_cell) {
@@ -925,8 +940,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       // face), so the corrected PE is not defined there in any case
       auto [below, above] = x1_neighbors();
       if (below < 0 && above < 0) {
-        face_gravity_work += corrected_pe_work(
-            drho, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie, grav1, measure);
+        face_gravity_work +=
+            corrected_pe_work(drho, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie,
+                              grav1, measure, &_pe_work);
       } else {
         // x1 seam: the neighbour's drho one cell past it, so a seam cell
         // takes the centred slope of one block (#303)
@@ -935,9 +951,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         auto full = torch::zeros(shape, drho.options());
         full.slice(-1, is, ie).copy_(drho);
         _x1_ghost_rows(full, 1, false, 0x7726);
-        face_gravity_work +=
-            corrected_pe_work_seam(full, pmb->pcoord->x1f, pmb->pcoord->x1v, is,
-                                   ie, grav1, measure, below >= 0, above >= 0);
+        face_gravity_work += corrected_pe_work_seam(
+            full, pmb->pcoord->x1f, pmb->pcoord->x1v, is, ie, grav1, measure,
+            below >= 0, above >= 0, &_pe_work);
       }
     }
 

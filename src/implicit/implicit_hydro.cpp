@@ -195,7 +195,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   _du0.copy_(du);
   _mass_corr.zero_();
 
-  auto w0 = w.clone();  // restore exactly if this solve is rejected
+  // restore exactly if this solve is rejected; the solve changes only these
+  // two rows of w in place (the frame projection)
+  auto w0 = w.narrow(0, IVY, 2).clone();
 
   auto reject = [&](torch::Tensor const& bad_columns) {
     _solve_failed = true;
@@ -211,7 +213,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                 << " retry=" << phydro->pmb->pintg->current_redo
                 << "; check_redo will restore step input." << std::endl;
     du.copy_(_du0);
-    w.copy_(w0);
+    w.narrow(0, IVY, 2).copy_(w0);
     _corr.zero_();
     _mass_corr.zero_();
     return _corr;
@@ -219,9 +221,12 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto finite_columns = [&](torch::Tensor const& values) {
     return torch::isfinite(values.index(interior)).all(0).all(-1).unsqueeze(0);
   };
-  auto bad_inputs = torch::logical_not(finite_columns(du) & finite_columns(w) &
-                                       finite_columns(gamma.unsqueeze(0)));
-  if (bad_inputs.any().item<bool>()) return reject(bad_inputs);
+  // two device-to-host reads per stage (#291): the sum of each checked tensor
+  // is nonfinite if any of its values is; only then are the columns found,
+  // in the order the checks would have met them
+  std::vector<torch::Tensor> screen = {
+      du.index(interior).sum(), w.index(interior).sum(),
+      gamma.unsqueeze(0).index(interior).sum()};
 
   /// (1) Project to local orthonormal frame
   w[IVY] += w[IVZ] * cos_theta;
@@ -301,31 +306,43 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   auto couple_radial_exact = [&]() {
     if (!radial_exact || nx1 < 3) return;
     int is = pcoord->il(), ie = pcoord->iu() + 1, m = options->size();
-    // S[k][i]: the weight of cell k in the slope of cell i. One-sided only at
-    // the column's two physical walls: an implicit scheme refuses an x1
-    // split (HydroImpl::_apply_implicit_correction), so a VIC block has no
-    // internal x1 seam and this per-block slope is the one-block slope
-    auto S = centroid_slope(torch::eye(nx1, w.options()),
-                            pcoord->x1v.slice(0, is, ie).to(w.options()));
     auto measure = x1_measure(pcoord->options->type());
-    auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
-                                  measure != X1Measure::plain)
-                          .to(w.options());
-    rx_mid = gv * S.diagonal();
-    // gnomonic-equiangle: x1v is not the r^2 centroid, and the work carries
-    // g1 (r_c - x1v) drho as well (sec 12), a diagonal term
-    if (measure == X1Measure::radial_mid)
-      rx_mid += grav1 * x1_centroid_offset(pcoord->x1f.slice(0, is, ie + 1),
-                                           pcoord->x1v.slice(0, is, ie))
+    // the rows depend on the grid and gravity only: build them once (#291)
+    X1GridKey key(pcoord->x1f, pcoord->x1v, is, ie, is, ie, grav1, measure);
+    if (!(_rx_key == key) || _rx_mid.scalar_type() != w.scalar_type() ||
+        _rx_mid.device() != w.device()) {
+      // S[k][i]: the weight of cell k in the slope of cell i. One-sided only
+      // at the column's two physical walls: an implicit scheme refuses an x1
+      // split (HydroImpl::_apply_implicit_correction), so a VIC block has no
+      // internal x1 seam and this per-block slope is the one-block slope
+      auto S = centroid_slope(torch::eye(nx1, w.options()),
+                              pcoord->x1v.slice(0, is, ie).to(w.options()));
+      auto gv = grav1 * x1_variance(pcoord->x1f.slice(0, is, ie + 1),
+                                    measure != X1Measure::plain)
                             .to(w.options());
-    rx_lo = torch::zeros_like(rx_mid);
-    rx_hi = torch::zeros_like(rx_mid);
-    rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
-    rx_hi.narrow(0, 0, nx1 - 1).copy_(S.diagonal(-1));
-    rx_hi[0] += S[2][0];
-    rx_lo[nx1 - 1] += S[nx1 - 3][nx1 - 1];
-    rx_lo *= gv;
-    rx_hi *= gv;
+      rx_mid = gv * S.diagonal();
+      // gnomonic-equiangle: x1v is not the r^2 centroid, and the work carries
+      // g1 (r_c - x1v) drho as well (sec 12), a diagonal term
+      if (measure == X1Measure::radial_mid)
+        rx_mid += grav1 * x1_centroid_offset(pcoord->x1f.slice(0, is, ie + 1),
+                                             pcoord->x1v.slice(0, is, ie))
+                              .to(w.options());
+      rx_lo = torch::zeros_like(rx_mid);
+      rx_hi = torch::zeros_like(rx_mid);
+      rx_lo.narrow(0, 1, nx1 - 1).copy_(S.diagonal(1));
+      rx_hi.narrow(0, 0, nx1 - 1).copy_(S.diagonal(-1));
+      rx_hi[0] += S[2][0];
+      rx_lo[nx1 - 1] += S[nx1 - 3][nx1 - 1];
+      rx_lo *= gv;
+      rx_hi *= gv;
+      _rx_key = key;
+      _rx_lo = rx_lo;
+      _rx_mid = rx_mid;
+      _rx_hi = rx_hi;
+    }
+    rx_lo = _rx_lo;
+    rx_mid = _rx_mid;
+    rx_hi = _rx_hi;
     rx_fluid = (mask.index(in3) == 0).to(w.options());
     // row IPR, column 0 (the total mass) of each cell's blocks; Eigen stores
     // them column-major
@@ -357,8 +374,17 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
 
   // Both dispatches share the same rejection sentinel. This also catches
   // nonfinite backward-substitution results, before redistribution sees them.
-  auto bad_columns = torch::logical_not(torch::isfinite(_delta).all(-1));
-  if (bad_columns.any().item<bool>()) return reject(bad_columns);
+  screen.push_back(_delta.sum());
+  if (!std::isfinite(torch::stack(screen).sum().item<double>())) {
+    auto w_in = w.clone();  // the inputs, then the solve
+    w_in.narrow(0, IVY, 2).copy_(w0);
+    auto bad_inputs =
+        torch::logical_not(finite_columns(_du0) & finite_columns(w_in) &
+                           finite_columns(gamma.unsqueeze(0)));
+    if (bad_inputs.any().item<bool>()) return reject(bad_inputs);
+    auto bad_columns = torch::logical_not(torch::isfinite(_delta).all(-1));
+    if (bad_columns.any().item<bool>()) return reject(bad_columns);
+  }
   if ((options->scheme() >> 3) & 1)
     at::native::vic_redistribute_full(du.device().type(), iter, dt, grav1, 0);
   else
@@ -467,9 +493,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
                    .sum(0);
     // the whole column (no x1 split under an implicit scheme, see above), so
     // the slope is one-sided only at the two walls
-    auto work =
-        corrected_pe_work(moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is,
-                          ie, grav1, x1_measure(pcoord->options->type()));
+    auto work = corrected_pe_work(
+        moved.slice(-1, is, ie), pcoord->x1f, pcoord->x1v, is, ie, grav1,
+        x1_measure(pcoord->options->type()), &_rx_work);
     if (rx_mass0.defined()) {
       int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
       auto raw = _delta.view({nx3, nx2, nx1, options->size()}).select(-1, 0);
@@ -482,17 +508,21 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
         torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
   }
 
-  auto bad_results =
-      torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
-
   _corr.copy_(du);
   _corr.sub_(_du0);
 
-  // one device-to-host read for both checks; reject() resets _corr
-  auto bad_correction = torch::logical_not(finite_columns(_corr));
-  if ((bad_results | bad_correction).any().item<bool>()) {
-    return reject(bad_results.any().item<bool>() ? bad_results
-                                                 : bad_correction);
+  auto results =
+      torch::stack({du.index(interior).sum(), _mass_corr.index(interior).sum(),
+                    _corr.index(interior).sum()});
+  if (!std::isfinite(results.sum().item<double>())) {
+    // reject() resets _corr
+    auto bad_results =
+        torch::logical_not(finite_columns(du) & finite_columns(_mass_corr));
+    auto bad_correction = torch::logical_not(finite_columns(_corr));
+    if ((bad_results | bad_correction).any().item<bool>()) {
+      return reject(bad_results.any().item<bool>() ? bad_results
+                                                   : bad_correction);
+    }
   }
 
   return _corr;

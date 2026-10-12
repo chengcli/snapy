@@ -284,6 +284,11 @@ class CoordinateImpl {
    */
   virtual torch::Tensor face_centroid_shift_x1() const;
 
+  //! true when `face_centroid_shift_x1` is identically zero (the base
+  //! measure, Cartesian), a host constant of the coordinate type: the flux
+  //! covariance then skips its centroid parts without touching the device
+  virtual bool face_centroid_shift_zero() const { return true; }
+
   //! `face_centroid_shift_x1` when the cell measure is r^2 dr and the face
   //! measure is r dr (spherical-polar and cubed-sphere). Exact and
   //! cancellation-free: `h^2 (12 rbar^2 - h^2) / (12 rbar (12 rbar^2 + h^2))`.
@@ -372,6 +377,8 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
     reset();
   }
   void reset() override {}
+  //! r-weighted faces, and the base shift needs dx1f, which is not built here
+  bool face_centroid_shift_zero() const override { return false; }
   void pretty_print(std::ostream& stream) const override {
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);

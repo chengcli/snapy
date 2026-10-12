@@ -220,6 +220,45 @@ TEST(SphericalPolar, geometry_matches_athena_reference_formulas) {
       torch::allclose(pcoord->coord_src3_j, expected_src1_j, 1.e-12, 1.e-12));
 }
 
+// The flux covariance skips its centroid parts when face_centroid_shift_zero()
+// is true, a host constant of the coordinate type that is never checked
+// against the device. It must agree with face_centroid_shift_x1() for every
+// coordinate type that builds the shift (cylindrical builds none and is not
+// zero-shift), on a curved-radius grid and after a dtype change, so a new
+// type that overrides the shift without the flag fails here.
+TEST(Coordinate, face_centroid_shift_zero_matches_the_shift) {
+  struct {
+    std::string type;
+    char const* config;
+    bool zero;
+  } cases[] = {{"cartesian", spherical_polar_config, true},
+               {"cylindrical", spherical_polar_config, false},
+               {"spherical-polar", spherical_polar_config, false},
+               {"gnomonic-equiangle", gnomonic_radial_config, false}};
+  for (auto const& c : cases) {
+    std::string config = c.config;
+    std::string from = "type: spherical-polar";
+    auto at = config.find(from);
+    if (at != std::string::npos)
+      config.replace(at, from.size(), "type: " + c.type);
+    auto fname = write_temp_config(config.c_str());
+    auto block = MeshBlock(MeshBlockOptionsImpl::from_yaml(fname));
+    std::remove(fname.c_str());
+    auto pcoord = block->pcoord;
+    ASSERT_EQ(pcoord->options->type(), c.type);
+
+    for (auto dtype : {torch::kFloat64, torch::kFloat32}) {
+      block->to(dtype);
+      EXPECT_EQ(pcoord->face_centroid_shift_zero(), c.zero) << c.type;
+      // cylindrical builds no dx1f, so it has no shift to compare with
+      if (c.type == "cylindrical") continue;
+      auto shift = pcoord->face_centroid_shift_x1();
+      ASSERT_EQ(shift.scalar_type(), dtype) << c.type;
+      EXPECT_EQ(shift.eq(0).all().item<bool>(), c.zero) << c.type;
+    }
+  }
+}
+
 TEST(GnomonicEquiangle, l2g) {
   CSVel l2g[6][3];
   populate_cs_l2g_vel(l2g);

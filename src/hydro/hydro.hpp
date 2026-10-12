@@ -276,6 +276,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable std::shared_ptr<X1PlainMeanStencils> x1pm_;
   //! and its pressure-force stencils, for the hydrostatic correction
   mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
+  //! SNAP_GRAVITY_WORK_RADIAL_EXACT grid-only work factors, built on first use
+  CorrectedPEFactors _pe_work;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;
