@@ -114,18 +114,28 @@ torch::Tensor HydroImpl::_flux_covariance(torch::Tensor const& wl,
   // face_moment2_x1() is grid-only; cache it per block, keyed on the x1f
   // tensor it is built from, its version, the device and the dtype
   auto const& x1f_ = pcoord->x1f;
-  if (!(_s2.x1f.defined() && _s2.x1f.is_same(x1f_) &&
-        _s2.ver == X1GridKey::version(x1f_) && _s2.val.defined() &&
-        _s2.val.device() == p.device() &&
-        _s2.val.scalar_type() == p.scalar_type())) {
-    _s2.val = pcoord->face_moment2_x1()
-                  .to(p.device(), p.scalar_type())
-                  .unsqueeze(0)
-                  .unsqueeze(1);
-    _s2.x1f = x1f_;
-    _s2.ver = X1GridKey::version(x1f_);
+  // an inference x1f keeps no version counter, so an in-place edit of it
+  // could not be detected: it is not cached (#308)
+  bool s2_cacheable = cacheable_key(x1f_);
+  torch::Tensor s2;
+  if (s2_cacheable && _s2.x1f.defined() && _s2.x1f.is_same(x1f_) &&
+      _s2.ver == key_version(x1f_) && _s2.val.defined() &&
+      _s2.val.device() == p.device() &&
+      _s2.val.scalar_type() == p.scalar_type()) {
+    s2 = _s2.val;
+  } else {
+    s2 = pcoord->face_moment2_x1()
+             .to(p.device(), p.scalar_type())
+             .unsqueeze(0)
+             .unsqueeze(1);
+    if (s2_cacheable) {
+      _s2.val = s2;
+      _s2.x1f = x1f_;
+      _s2.ver = key_version(x1f_);
+    } else {
+      _s2 = FaceMoment2();
+    }
   }
-  auto s2 = _s2.val;
   // Second O(dx1^2) term, nonzero on curved grids only: a cell stores the
   // average over the CELL measure, whose x1 centroid is r_v, while the flux
   // needs the average over the FACE measure, whose centroid is r_c. The
@@ -824,20 +834,33 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     // the cell volume depends on the grid only
     auto& vc = _cell_vol;
     auto pc = pmb->pcoord;
-    if (!(vc.f1.defined() && vc.f1.is_same(pc->x1f) && vc.f2.is_same(pc->x2f) &&
-          vc.f3.is_same(pc->x3f) && vc.v1 == pc->x1f._version() &&
-          vc.v2 == pc->x2f._version() && vc.v3 == pc->x3f._version() &&
-          vc.val.defined() && vc.val.device() == u.device() &&
-          vc.val.scalar_type() == u.scalar_type())) {
-      vc.val = pc->cell_volume();
-      vc.f1 = pc->x1f;
-      vc.f2 = pc->x2f;
-      vc.f3 = pc->x3f;
-      vc.v1 = pc->x1f._version();
-      vc.v2 = pc->x2f._version();
-      vc.v3 = pc->x3f._version();
+    // an inference face tensor keeps no version counter, so an in-place edit
+    // of it could not be detected: it is not cached (#308)
+    bool vol_cacheable = cacheable_key(pc->x1f) && cacheable_key(pc->x2f) &&
+                         cacheable_key(pc->x3f);
+    torch::Tensor volume;
+    if (vol_cacheable && vc.f1.defined() && vc.f1.is_same(pc->x1f) &&
+        vc.f2.is_same(pc->x2f) && vc.f3.is_same(pc->x3f) &&
+        vc.v1 == key_version(pc->x1f) && vc.v2 == key_version(pc->x2f) &&
+        vc.v3 == key_version(pc->x3f) && vc.val.defined() &&
+        vc.val.device() == u.device() &&
+        vc.val.scalar_type() == u.scalar_type()) {
+      volume = vc.val;
+    } else {
+      volume = pc->cell_volume();
+      if (vol_cacheable) {
+        vc.val = volume;
+        vc.f1 = pc->x1f;
+        vc.f2 = pc->x2f;
+        vc.f3 = pc->x3f;
+        vc.v1 = key_version(pc->x1f);
+        vc.v2 = key_version(pc->x2f);
+        vc.v3 = key_version(pc->x3f);
+      } else {
+        vc = CellVolume();
+      }
     }
-    auto cell_mass = (u[IDN] + uy.sum(0)) * vc.val;
+    auto cell_mass = (u[IDN] + uy.sum(0)) * volume;
     auto withheld = ((1. - theta) * drain).index(cells).to(torch::kFloat64);
     auto above =
         withheld > positivity_roundoff(u.scalar_type()) *

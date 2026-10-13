@@ -430,9 +430,13 @@ torch::Tensor CoordinateImpl::center_distance3() const {
 // grid-only geometry is built once and rebuilt only when its inputs change
 torch::Tensor CoordinateImpl::cached_geometry_(
     GeomCache& c, std::function<torch::Tensor()> const& build) const {
-  auto version = [](torch::Tensor const& t) {
-    return t.is_inference() ? int64_t(0) : int64_t(t._version());
-  };
+  // an inference tensor keeps no version counter, so an in-place edit of it
+  // could not be detected: nothing is cached on such a grid (#308)
+  if (!cacheable_key(dx1f) || !cacheable_key(dx2f) || !cacheable_key(dx3f)) {
+    c = GeomCache();
+    return build();
+  }
+  auto version = [](torch::Tensor const& t) { return key_version(t); };
   // same dx1f/dx2f/dx3f objects, device, dtype and versions; value unedited
   if (!c.value.defined() || c.device != dx1f.device() ||
       c.dtype != dx1f.scalar_type() || !c.dx1.is_same(dx1f) ||

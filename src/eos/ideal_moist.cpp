@@ -237,8 +237,11 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
   // (same storage, offset, shape and version), gives the same T; return a
   // copy of the memo so a caller may still write its result
   auto& memo = _temp_memo;
-  if (memo.prim.defined() && memo.prim.is_same(prim) &&
-      memo.data == prim.data_ptr() && memo.ver == prim._version() &&
+  // an inference prim keeps no version counter, so an in-place edit of it
+  // could not be detected: it is not memoised (#308)
+  bool memoable = cacheable_key(prim);
+  if (memoable && memo.prim.defined() && memo.prim.is_same(prim) &&
+      memo.data == prim.data_ptr() && memo.ver == key_version(prim) &&
       memo.shape == prim.sizes().vec() && memo.stride == prim.strides().vec() &&
       memo.val.defined() && memo.val.device() == prim.device() &&
       memo.val.scalar_type() == prim.scalar_type())
@@ -248,9 +251,13 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
   auto Rd = kintera::constants::Rgas / options->weight();
   auto yfrac = prim.narrow(0, ICY, ny);
   auto t = prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
+  if (!memoable) {
+    memo = TempMemo();
+    return t;
+  }
   memo.prim = prim;
   memo.data = prim.data_ptr();
-  memo.ver = prim._version();
+  memo.ver = key_version(prim);
   memo.shape = prim.sizes().vec();
   memo.stride = prim.strides().vec();
   memo.val = t;
@@ -294,20 +301,31 @@ torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
   // u0 + cv T + KE, plus R T for a vapour (a cloud has no pressure share)
   // c depends only on the species table buffers, the device and the dtype
   auto& cc = _cc;
-  if (!(cc.a.defined() && cc.a.is_same(cv_ratio_m1) &&
-        cc.b.is_same(inv_mu_ratio_m1) && cc.va == cv_ratio_m1._version() &&
-        cc.vb == inv_mu_ratio_m1._version() && cc.val.defined() &&
-        cc.val.device() == prim.device() &&
-        cc.val.scalar_type() == cv_ratio_m1.scalar_type())) {
+  // an inference species table keeps no version counter, so an in-place edit
+  // of it could not be detected: it is not cached (#308)
+  bool cc_cacheable =
+      cacheable_key(cv_ratio_m1) && cacheable_key(inv_mu_ratio_m1);
+  torch::Tensor c;
+  if (cc_cacheable && cc.a.defined() && cc.a.is_same(cv_ratio_m1) &&
+      cc.b.is_same(inv_mu_ratio_m1) && cc.va == key_version(cv_ratio_m1) &&
+      cc.vb == key_version(inv_mu_ratio_m1) && cc.val.defined() &&
+      cc.val.device() == prim.device() &&
+      cc.val.scalar_type() == cv_ratio_m1.scalar_type()) {
+    c = cc.val;
+  } else {
     auto c0 = (cv_ratio_m1 + 1.) * cvd;
     c0.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
-    cc.a = cv_ratio_m1;
-    cc.b = inv_mu_ratio_m1;
-    cc.va = cv_ratio_m1._version();
-    cc.vb = inv_mu_ratio_m1._version();
-    cc.val = c0;
+    c = c0;
+    if (cc_cacheable) {
+      cc.a = cv_ratio_m1;
+      cc.b = inv_mu_ratio_m1;
+      cc.va = key_version(cv_ratio_m1);
+      cc.vb = key_version(inv_mu_ratio_m1);
+      cc.val = c0;
+    } else {
+      cc = SpeciesCoeff();
+    }
   }
-  auto c = cc.val;
 
   auto vel = prim.narrow(0, IVX, 3).clone();
   coord_vec_lower_(vel, pcoord->cosine_cell_kj);

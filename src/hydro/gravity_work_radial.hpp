@@ -6,6 +6,9 @@
 // torch
 #include <torch/torch.h>
 
+// snap
+#include <snap/utils/cache_lifecycle.hpp>
+
 namespace snap {
 
 //! the x1 cell measure the corrected-PE work integrates over, and where x1v
@@ -128,13 +131,17 @@ struct X1GridKey {
         grav1(grav1_),
         measure(measure_) {}
 
-  static int64_t version(torch::Tensor const& t) {
-    return t.is_inference() ? 0 : t._version();
-  }
+  static int64_t version(torch::Tensor const& t) { return key_version(t); }
+
+  //! an inference tensor keeps no version counter, so an in-place edit of it
+  //! could not be detected: such a key never matches and nothing is reused
+  bool cacheable() const { return cacheable_key(x1f) && cacheable_key(x1v); }
+
   bool operator==(X1GridKey const& o) const {
-    return x1f.defined() && x1f.is_same(o.x1f) && x1v.is_same(o.x1v) &&
-           vf == o.vf && vv == o.vv && is == o.is && ie == o.ie && lo == o.lo &&
-           hi == o.hi && grav1 == o.grav1 && measure == o.measure;
+    return cacheable() && o.cacheable() && x1f.is_same(o.x1f) &&
+           x1v.is_same(o.x1v) && vf == o.vf && vv == o.vv && is == o.is &&
+           ie == o.ie && lo == o.lo && hi == o.hi && grav1 == o.grav1 &&
+           measure == o.measure;
   }
 };
 

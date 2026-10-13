@@ -170,8 +170,13 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
     c10::ScalarType st = torch::kDouble;
     std::vector<int64_t> shape;
     double grav1 = 0.;
+    //! an inference tensor keeps no version counter, so an in-place edit of it
+    //! could not be detected: such a key never matches and nothing is reused
+    bool cacheable() const {
+      return cacheable_key(f1) && cacheable_key(f2) && cacheable_key(f3);
+    }
     bool operator==(GeoKey const& o) const {
-      return f1.defined() && o.f1.defined() && f1.is_same(o.f1) &&
+      return cacheable() && o.cacheable() && f1.is_same(o.f1) &&
              f2.is_same(o.f2) && f3.is_same(o.f3) && v1 == o.v1 &&
              v2 == o.v2 && v3 == o.v3 && dev == o.dev && st == o.st &&
              shape == o.shape && grav1 == o.grav1;

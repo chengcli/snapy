@@ -249,9 +249,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
     key.f1 = pcoord->x1f;
     key.f2 = pcoord->x2f;
     key.f3 = pcoord->x3f;
-    key.v1 = pcoord->x1f._version();
-    key.v2 = pcoord->x2f._version();
-    key.v3 = pcoord->x3f._version();
+    key.v1 = key_version(pcoord->x1f);
+    key.v2 = key_version(pcoord->x2f);
+    key.v3 = key_version(pcoord->x3f);
     key.dev = w.device();
     key.st = w.scalar_type();
     key.shape = gamma.sizes().vec();

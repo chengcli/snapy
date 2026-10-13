@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 // torch
+#include <c10/core/InferenceMode.h>
 #include <torch/torch.h>
 
 // snap
@@ -317,4 +318,55 @@ TEST(CacheLifecycleTo, temperature_memo_needs_no_lifecycle_hook) {
   block->to(torch::kFloat64);
   auto again = eos->compute("W->T", {w});   // same float64 caller tensor
   EXPECT_TRUE(torch::equal(first, again));
+}
+
+// ---------------------------------------------------------------------------
+// Inference tensors as cache keys (#308/#309)
+// ---------------------------------------------------------------------------
+//
+// A tensor made under InferenceMode keeps NO version counter. Reading
+// `_version()` on one throws, and mapping it to a constant instead lets an
+// in-place write through unnoticed -- a silent stale value, which is worse
+// than the throw. Such a key is simply uncacheable: the value has to be
+// rebuilt on every call.
+
+// Mapping an inference tensor's version to a constant hides a real edit.
+TEST(CacheLifecycleInference, cache_follows_an_in_place_edit_of_an_inference_grid) {
+  c10::InferenceMode guard;
+  auto block = make_block();
+  auto coord = block->pcoord;
+  ASSERT_TRUE(coord->dx1f.is_inference());
+
+  auto before = coord->cell_volume().clone();
+  coord->dx1f.mul_(2.0);                      // the grid really moved
+  auto after = coord->cell_volume();
+
+  EXPECT_FALSE(torch::equal(before, after))
+      << "the cell volume did not follow an in-place edit of dx1f";
+}
+
+// The control: the same edit on an ordinary (non-inference) grid is followed,
+// so the test above is about inference tensors and not about the cache in
+// general.
+TEST(CacheLifecycleInference, cache_follows_an_in_place_edit_of_an_ordinary_grid) {
+  auto block = make_block();
+  auto coord = block->pcoord;
+  ASSERT_FALSE(coord->dx1f.is_inference());
+
+  auto before = coord->cell_volume().clone();
+  coord->dx1f.mul_(2.0);
+  auto after = coord->cell_volume();
+
+  EXPECT_FALSE(torch::equal(before, after));
+}
+
+// A step with a block built under InferenceMode reaches the raw _version()
+// calls of #309 (hydro_forward, implicit_hydro, ideal_moist), which throw.
+// Inference mode is a supported way to run a model, so the step must work.
+TEST(CacheLifecycleInference, a_step_runs_with_an_inference_built_block) {
+  c10::InferenceMode guard;
+  auto block = make_block();
+  ASSERT_TRUE(block->pcoord->x1f.is_inference());
+  auto vars = initial_state(block, torch::kFloat64);
+  EXPECT_NO_THROW(block->phydro->forward(1.e-3, vars.at("hydro_u"), vars));
 }

@@ -34,6 +34,31 @@
 //!   SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<MyImpl>,
 //!                                invalidate_my_caches())
 //! \endcode
+namespace snap {
+
+//! \brief Can this tensor be used as a cache key at all?
+/*!
+ * A tensor made under `InferenceMode` keeps NO version counter: reading
+ * `_version()` on one throws, and mapping it to a constant instead would let
+ * an in-place write through unnoticed, which is a silent stale value and worse
+ * than the throw. Such a key is uncacheable, and the value it guards has to be
+ * rebuilt on every call.
+ */
+inline bool cacheable_key(torch::Tensor const& t) {
+  return t.defined() && !t.is_inference();
+}
+
+//! \brief The version of a cache key, or -1 when it has none.
+/*!
+ * Safe on an inference tensor, which `cacheable_key` rejects anyway, so the
+ * returned -1 is never used to decide that a cache is still valid.
+ */
+inline int64_t key_version(torch::Tensor const& t) {
+  return cacheable_key(t) ? t._version() : -1;
+}
+
+}  // namespace snap
+
 #define SNAP_INVALIDATE_CACHES_ON_TO(BaseModule, invalidate_expr)         \
   void to(torch::Device device, torch::Dtype dtype,                       \
           bool non_blocking = false) override {                           \
