@@ -47,6 +47,13 @@ set_tests_properties(
              PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
 setup_test(test_gravity_work_cache_to)
 setup_test(test_cache_lifecycle_to)
+# a conversion or a reset of the coordinate child alone reaches the Hydro,
+# ImplicitHydro and layout caches; the _x1_centroid arm adds the #297 stencils
+setup_test(test_cache_child_conversion)
+add_test(NAME test_cache_child_conversion_x1_centroid.${buildl}
+         COMMAND test_cache_child_conversion.${buildl})
+set_tests_properties(test_cache_child_conversion_x1_centroid.${buildl}
+                     PROPERTIES ENVIRONMENT "SNAP_X1_CENTROID_EXACT=1")
 setup_test(test_x1_seam_split)
 # one arm per entry: its environment, its one test, which must run and pass (a
 # skip or an empty filter prints "PASSED ] 0 tests" and fails the entry)
@@ -243,6 +250,8 @@ snapy_add_python_test(test_cubed_sphere_vertical_velocity_exchange
 snapy_add_python_test(test_jit_user_forcing TIMEOUT 30 LABELS "python;forcing")
 snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;eos;positivity")
 snapy_add_python_test(test_fix_vapor_stale_count TIMEOUT 60 LABELS "python;eos;positivity;redo")
+# derived caches after a conversion of a child module, and memos under autograd
+snapy_add_python_test(test_cache_child_conversion TIMEOUT 300 LABELS "python;cache;cubed-sphere;eos")
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
@@ -361,6 +370,9 @@ if(CUDA)
   snapy_add_python_test(test_scalar_flux_covariance_cuda
     SCRIPT test_scalar_flux_covariance.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;scalar;cuda")
+  snapy_add_python_test(test_cache_child_conversion_cuda
+    SCRIPT test_cache_child_conversion.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;cache;cubed-sphere;eos;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
     test_fix_vapor_stale_count_cuda_python
@@ -372,6 +384,7 @@ if(CUDA)
     test_x1_centroid_rest_cuda_python
     test_gravity_work_radial_exact_cuda_python
     test_scalar_flux_covariance_cuda_python
+    test_cache_child_conversion_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
 
