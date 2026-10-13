@@ -59,17 +59,17 @@ inline int64_t key_version(torch::Tensor const& t) {
 
 }  // namespace snap
 
-#define SNAP_INVALIDATE_CACHES_ON_TO(BaseModule, invalidate_expr)         \
-  void to(torch::Device device, torch::Dtype dtype,                       \
-          bool non_blocking = false) override {                           \
-    BaseModule::to(device, dtype, non_blocking);                          \
-    invalidate_expr;                                                      \
-  }                                                                       \
-  void to(torch::Dtype dtype, bool non_blocking = false) override {       \
-    BaseModule::to(dtype, non_blocking);                                  \
-    invalidate_expr;                                                      \
-  }                                                                       \
-  void to(torch::Device device, bool non_blocking = false) override {     \
-    BaseModule::to(device, non_blocking);                                 \
-    invalidate_expr;                                                      \
+#define SNAP_INVALIDATE_CACHES_ON_TO(BaseModule, invalidate_expr)              \
+  void to(torch::Device device, torch::Dtype dtype, bool non_blocking = false) \
+      override {                                                               \
+    BaseModule::to(device, dtype, non_blocking);                               \
+    invalidate_expr;                                                           \
+  }                                                                            \
+  void to(torch::Dtype dtype, bool non_blocking = false) override {            \
+    BaseModule::to(dtype, non_blocking);                                       \
+    invalidate_expr;                                                           \
+  }                                                                            \
+  void to(torch::Device device, bool non_blocking = false) override {          \
+    BaseModule::to(device, non_blocking);                                      \
+    invalidate_expr;                                                           \
   }

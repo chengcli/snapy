@@ -10,9 +10,9 @@
 #include <snap/hydro/gravity_work_radial.hpp>
 
 // arg
-#include <snap/utils/cache_lifecycle.hpp>
-
 #include <snap/add_arg.h>
+
+#include <snap/utils/cache_lifecycle.hpp>
 
 namespace snap {
 
@@ -177,9 +177,9 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
     }
     bool operator==(GeoKey const& o) const {
       return cacheable() && o.cacheable() && f1.is_same(o.f1) &&
-             f2.is_same(o.f2) && f3.is_same(o.f3) && v1 == o.v1 &&
-             v2 == o.v2 && v3 == o.v3 && dev == o.dev && st == o.st &&
-             shape == o.shape && grav1 == o.grav1;
+             f2.is_same(o.f2) && f3.is_same(o.f3) && v1 == o.v1 && v2 == o.v2 &&
+             v3 == o.v3 && dev == o.dev && st == o.st && shape == o.shape &&
+             grav1 == o.grav1;
     }
   };
   GeoKey _g_key;

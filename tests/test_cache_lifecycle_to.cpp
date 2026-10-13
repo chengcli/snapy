@@ -36,12 +36,13 @@
 #include <torch/torch.h>
 
 // snap
+#include <snap/snap.h>
+
 #include <snap/coord/coordinate.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/mesh/meshblock.hpp>
-#include <snap/snap.h>
 
 // tests
 #include "cuda_test_gate.hpp"
@@ -144,7 +145,8 @@ void expect_all_equal(std::vector<torch::Tensor> const& got,
                       char const* what) {
   ASSERT_EQ(got.size(), want.size());
   for (size_t i = 0; i < got.size(); ++i) {
-    EXPECT_EQ(got[i].scalar_type(), want[i].scalar_type()) << what << " [" << i << "]";
+    EXPECT_EQ(got[i].scalar_type(), want[i].scalar_type())
+        << what << " [" << i << "]";
     EXPECT_EQ(got[i].device(), want[i].device()) << what << " [" << i << "]";
     double diff = (got[i].to(torch::kFloat64) - want[i].to(torch::kFloat64))
                       .abs()
@@ -165,13 +167,13 @@ void expect_all_equal(std::vector<torch::Tensor> const& got,
 // the same float32-rounded grid with no cache populated beforehand.
 TEST(CacheLifecycleTo, geometry_survives_f64_f32_f64_round_trip) {
   auto variable = make_block();
-  geometry(variable->pcoord);          // populate at the original float64 grid
+  geometry(variable->pcoord);  // populate at the original float64 grid
   variable->to(torch::kFloat32);
   variable->to(torch::kFloat64);
 
   auto control = make_block();
   control->to(torch::kFloat32);
-  control->to(torch::kFloat64);        // same final grid, cache never populated
+  control->to(torch::kFloat64);  // same final grid, cache never populated
 
   // the grids themselves must agree -- otherwise the test is not comparing
   // like with like
@@ -186,7 +188,7 @@ TEST(CacheLifecycleTo, geometry_survives_f64_f32_f64_round_trip) {
 TEST(CacheLifecycleTo, geometry_survives_noop_conversion) {
   auto variable = make_block();
   auto before = geometry(variable->pcoord);
-  variable->to(torch::kFloat64);       // already float64: a no-op
+  variable->to(torch::kFloat64);  // already float64: a no-op
   expect_all_equal(geometry(variable->pcoord), before, "no-op conversion");
 }
 
@@ -271,8 +273,8 @@ TEST(CacheLifecycleTo, step_after_round_trip_matches_control) {
   auto const& got = vvars.at("hydro_u");
   auto const& want = cvars.at("hydro_u");
   double diff = (got - want).abs().max().item<double>();
-  EXPECT_TRUE(torch::equal(got, want)) << "step after round trip: max|diff| = "
-                                       << diff;
+  EXPECT_TRUE(torch::equal(got, want))
+      << "step after round trip: max|diff| = " << diff;
 }
 
 // IdealMoistImpl::_cc is keyed on the species-table BUFFERS, which Module::to
@@ -326,7 +328,7 @@ TEST(CacheLifecycleTo, temperature_memo_follows_a_converted_species_table) {
   auto variable = make_block();
   auto vvars = initial_state(variable, torch::kFloat64);
   auto w = vvars.at("hydro_w");
-  variable->phydro->peos->compute("W->T", {w});   // memoise against this w
+  variable->phydro->peos->compute("W->T", {w});  // memoise against this w
   variable->to(torch::kFloat32);
   variable->to(torch::kFloat64);
   // the SAME caller tensor: the key still matches, but inv_mu_ratio_m1 has
@@ -357,14 +359,15 @@ TEST(CacheLifecycleTo, temperature_memo_follows_a_converted_species_table) {
 // rebuilt on every call.
 
 // Mapping an inference tensor's version to a constant hides a real edit.
-TEST(CacheLifecycleInference, cache_follows_an_in_place_edit_of_an_inference_grid) {
+TEST(CacheLifecycleInference,
+     cache_follows_an_in_place_edit_of_an_inference_grid) {
   c10::InferenceMode guard;
   auto block = make_block();
   auto coord = block->pcoord;
   ASSERT_TRUE(coord->dx1f.is_inference());
 
   auto before = coord->cell_volume().clone();
-  coord->dx1f.mul_(2.0);                      // the grid really moved
+  coord->dx1f.mul_(2.0);  // the grid really moved
   auto after = coord->cell_volume();
 
   EXPECT_FALSE(torch::equal(before, after))
@@ -374,7 +377,8 @@ TEST(CacheLifecycleInference, cache_follows_an_in_place_edit_of_an_inference_gri
 // The control: the same edit on an ordinary (non-inference) grid is followed,
 // so the test above is about inference tensors and not about the cache in
 // general.
-TEST(CacheLifecycleInference, cache_follows_an_in_place_edit_of_an_ordinary_grid) {
+TEST(CacheLifecycleInference,
+     cache_follows_an_in_place_edit_of_an_ordinary_grid) {
   auto block = make_block();
   auto coord = block->pcoord;
   ASSERT_FALSE(coord->dx1f.is_inference());
@@ -406,7 +410,7 @@ TEST(CacheLifecycleInference, a_step_runs_with_an_inference_built_block) {
 TEST(CacheLifecycleTo, geometry_survives_f32_f64_f32_round_trip) {
   auto variable = make_block();
   variable->to(torch::kFloat32);
-  geometry(variable->pcoord);            // populate at float32
+  geometry(variable->pcoord);  // populate at float32
   variable->to(torch::kFloat64);
   variable->to(torch::kFloat32);
 
@@ -421,8 +425,8 @@ TEST(CacheLifecycleTo, geometry_survives_f32_f64_f32_round_trip) {
 
 // A CPU build of snapy must not enter a CUDA test just because a GPU is
 // visible: snapy_cuda_test_enabled() checks the BUILD, not only the device.
-#define SKIP_WITHOUT_CUDA()                                              \
-  if (!snapy_cuda_test_enabled())                                        \
+#define SKIP_WITHOUT_CUDA()       \
+  if (!snapy_cuda_test_enabled()) \
   GTEST_SKIP() << "snapy was not built with CUDA, or no device"
 
 // A DEVICE round trip, CPU -> CUDA -> CPU. Module::to keeps the buffers'
