@@ -154,6 +154,19 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   ~MeshBlockImpl() override;
   void reset() override;
 
+  //! \brief Drop what the layout cached from the coordinate's buffers.
+  /*!
+   * The submodules (coordinate, hydro, implicit, EOS) carry their own `to()`
+   * hooks and are reached by `Module::to_impl`'s recursion. The layout is not
+   * a module, so it is announced from here. See src/utils/cache_lifecycle.hpp.
+   */
+  void invalidate_cached_geometry() {
+    if (_playout) _playout->invalidate_cached_geometry();
+  }
+
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<MeshBlockImpl>,
+                               invalidate_cached_geometry())
+
   //! \brief return an index tensor for part of the meshblock
   /*!
    * \param offset: tuple of (x1_offset, x2_offset, x3_offset)

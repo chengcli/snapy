@@ -191,6 +191,15 @@ class LayoutImpl {
   //! options with which this `Layout` was constructed
   LayoutOptions options;
 
+  //! \brief Drop anything this layout cached from the coordinate's buffers.
+  /*!
+   * Default: nothing. `CubedSphereLayoutImpl` overrides it. Called when the
+   * owning block is converted, because `Module::to` replaces the values of the
+   * coordinate buffers a layout may have built a transform from while keeping
+   * their identity and version. See src/utils/cache_lifecycle.hpp.
+   */
+  virtual void invalidate_cached_geometry() {}
+
   LayoutImpl() : options(LayoutOptionsImpl::create()) {}
   LayoutImpl(const LayoutOptions& opts, MeshBlockImpl* owner = nullptr)
       : comm(nullptr), options(opts), _owner(owner) {
