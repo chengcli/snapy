@@ -240,8 +240,20 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
   // an inference prim keeps no version counter, so an in-place edit of it
   // could not be detected: it is not memoised (#308). Nor is a prim that
   // needs gradients: the memo would hand this call's graph to a later one.
-  bool memoable = cacheable_key(prim) && !needs_grad(prim);
-  if (memoable && memo.prim.defined() && memo.prim.is_same(prim) &&
+  auto const& species = inv_mu_ratio_m1;
+  int nvapor = pthermo->options->vapor_ids().size() - 1;
+  int ncloud = pthermo->options->cloud_ids().size();
+  bool memoable = cacheable_key(prim) && !needs_grad(prim) &&
+                  cacheable_key(species) && !needs_grad(species);
+  if (memoable && memo.species.defined() &&
+      memo.species.data_ptr() == species.data_ptr() &&
+      memo.species_ver == key_version(species) &&
+      memo.species.sizes() == species.sizes() &&
+      memo.species.strides() == species.strides() &&
+      memo.species.scalar_type() == species.scalar_type() &&
+      memo.species.device() == species.device() &&
+      memo.weight == options->weight() && memo.nvapor == nvapor &&
+      memo.ncloud == ncloud && memo.prim.defined() && memo.prim.is_same(prim) &&
       memo.data == prim.data_ptr() && memo.ver == key_version(prim) &&
       memo.shape == prim.sizes().vec() && memo.stride == prim.strides().vec() &&
       memo.val.defined() && memo.val.device() == prim.device() &&
@@ -256,6 +268,13 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
     memo = TempMemo();
     return t;
   }
+  // A detached alias pins the old storage across set_data/to conversions;
+  // retaining the buffer itself would follow set_data and lose that evidence.
+  memo.species = species.detach();
+  memo.species_ver = key_version(species);
+  memo.weight = options->weight();
+  memo.nvapor = nvapor;
+  memo.ncloud = ncloud;
   memo.prim = prim;
   memo.data = prim.data_ptr();
   memo.ver = key_version(prim);
@@ -304,12 +323,14 @@ torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
   auto& cc = _cc;
   // an inference species table keeps no version counter, so an in-place edit
   // of it could not be detected: it is not cached (#308)
-  bool cc_cacheable =
-      cacheable_key(cv_ratio_m1) && cacheable_key(inv_mu_ratio_m1);
+  bool cc_cacheable = cacheable_key(cv_ratio_m1) &&
+                      cacheable_key(inv_mu_ratio_m1) &&
+                      !needs_grad(cv_ratio_m1) && !needs_grad(inv_mu_ratio_m1);
   torch::Tensor c;
   if (cc_cacheable && cc.a.defined() && cc.a.is_same(cv_ratio_m1) &&
       cc.b.is_same(inv_mu_ratio_m1) && cc.va == key_version(cv_ratio_m1) &&
-      cc.vb == key_version(inv_mu_ratio_m1) && cc.val.defined() &&
+      cc.vb == key_version(inv_mu_ratio_m1) && cc.rd == Rd && cc.cvd == cvd &&
+      cc.nvapor == nvapor && cc.val.defined() &&
       cc.val.device() == prim.device() &&
       cc.val.scalar_type() == cv_ratio_m1.scalar_type()) {
     c = cc.val;
@@ -322,6 +343,9 @@ torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
       cc.b = inv_mu_ratio_m1;
       cc.va = key_version(cv_ratio_m1);
       cc.vb = key_version(inv_mu_ratio_m1);
+      cc.rd = Rd;
+      cc.cvd = cvd;
+      cc.nvapor = nvapor;
       cc.val = c0;
     } else {
       cc = SpeciesCoeff();

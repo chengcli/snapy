@@ -64,11 +64,13 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
    * a buffer and is left as it is. After a float64 -> float32 -> float64 round
    * trip the cache would return float32-rounded values, and after a one-way
    * conversion values of the old dtype. See src/utils/cache_lifecycle.hpp.
-   * The thermo submodule converted on its own is not seen here.
+   * Thermo-child-only conversions are detected by the pinned dependency key.
    */
   void invalidate_cached_prim() {
     cached_prim_.reset();
     cached_prim_version_ = -1;
+    cached_inv_mu_.reset();
+    cached_thermo_.reset();
   }
 
   SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<MoistMixtureImpl>,
@@ -144,6 +146,7 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
                                         torch::Tensor dens);
 
   //! \brief Check/update cached thermodynamics for a primitive tensor.
+  bool _thermo_cache_matches() const;
   bool _cache_matches(torch::Tensor const& prim) const;
   void _mark_cache(torch::Tensor const& prim);
   void _ensure_cache(torch::Tensor const& prim);
@@ -152,6 +155,9 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
   // former full-field cache copy and device reduction.
   torch::Tensor cached_prim_;
   int64_t cached_prim_version_ = -1;
+  torch::Tensor cached_inv_mu_;
+  int64_t cached_inv_mu_version_ = -1;
+  kintera::ThermoOptions cached_thermo_;
 };
 TORCH_MODULE(MoistMixture);
 

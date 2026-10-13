@@ -271,24 +271,59 @@ torch::Tensor MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor V,
   return ct;
 }
 
+bool MoistMixtureImpl::_thermo_cache_matches() const {
+  auto const& mu = pthermo->inv_mu;
+  if (!cached_thermo_ || !cacheable_key(mu) || needs_grad(mu) ||
+      !cached_inv_mu_.defined() || cached_inv_mu_.data_ptr() != mu.data_ptr() ||
+      cached_inv_mu_version_ != key_version(mu) ||
+      cached_inv_mu_.sizes() != mu.sizes() ||
+      cached_inv_mu_.strides() != mu.strides() ||
+      cached_inv_mu_.scalar_type() != mu.scalar_type() ||
+      cached_inv_mu_.device() != mu.device())
+    return false;
+  // PV->T consumes these options through the Newton solve and eval_czh/cp/cv.
+  // Compare host values; no field reduction or device synchronization.
+  auto const& a = cached_thermo_;
+  auto const& b = pthermo->options;
+  return a->vapor_ids() == b->vapor_ids() && a->cloud_ids() == b->cloud_ids() &&
+         a->cref_R() == b->cref_R() &&
+         a->intEng_R_extra() == b->intEng_R_extra() &&
+         a->cp_R_extra() == b->cp_R_extra() && a->czh() == b->czh() &&
+         a->names() == b->names() && a->nasa9_low() == b->nasa9_low() &&
+         a->nasa9_high() == b->nasa9_high() &&
+         a->nasa9_Tmid() == b->nasa9_Tmid() &&
+         a->use_nasa9_cp() == b->use_nasa9_cp() &&
+         a->use_h2_cp() == b->use_h2_cp() &&
+         a->h2_cp_mode() == b->h2_cp_mode() &&
+         a->gas_floor() == b->gas_floor() && a->max_iter() == b->max_iter() &&
+         a->ftol() == b->ftol();
+}
+
 bool MoistMixtureImpl::_cache_matches(torch::Tensor const& prim) const {
   // an inference prim keeps no version counter, so an in-place edit of it
   // could not be detected and reading the counter throws: never a cache hit.
   // A prim that needs gradients is never served from the cache either: the
   // cached values would carry the autograd graph of an earlier call.
-  return cacheable_key(prim) && !needs_grad(prim) && cached_prim_.defined() &&
-         cached_prim_.is_same(prim) &&
+  return cacheable_key(prim) && !needs_grad(prim) && _thermo_cache_matches() &&
+         cached_prim_.defined() && cached_prim_.is_same(prim) &&
          cached_prim_version_ == key_version(prim) && temp.defined() &&
          temp.scalar_type() == prim.scalar_type() &&
          temp.device() == prim.device();
 }
 
 void MoistMixtureImpl::_mark_cache(torch::Tensor const& prim) {
-  if (!cacheable_key(prim) || needs_grad(prim)) {
+  if (!cacheable_key(prim) || needs_grad(prim) ||
+      !cacheable_key(pthermo->inv_mu) || needs_grad(pthermo->inv_mu)) {
     cached_prim_ = torch::Tensor();
     cached_prim_version_ = -1;
     return;
   }
+  // detach retains the previous storage even when Module::to uses set_data.
+  // That storage cannot be recycled while this cache entry exists.
+  cached_inv_mu_ = pthermo->inv_mu.detach();
+  cached_inv_mu_version_ = key_version(pthermo->inv_mu);
+  cached_thermo_ =
+      std::make_shared<kintera::ThermoOptionsImpl>(*pthermo->options);
   cached_prim_ = prim;
   cached_prim_version_ = key_version(prim);
 }

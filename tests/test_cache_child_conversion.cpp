@@ -154,7 +154,7 @@ forcing:
 std::shared_ptr<MeshBlockImpl> make_block(char const* config,
                                           torch::Device device,
                                           torch::Dtype dtype) {
-  char fname[] = "/tmp/test-cache-child-XXXXXX";
+  char fname[] = "./test-cache-child-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
@@ -322,4 +322,53 @@ TEST(CoordChildConversion, spherical_regrid_cuda_f64) {
   SKIP_WITHOUT_CUDA();
   regrid_case(spherical_polar, torch::kCUDA, torch::kFloat64,
               "spherical-polar, CUDA, f64, reset_coordinates");
+}
+
+namespace {
+void species_graph_case(torch::Device device) {
+  auto b = make_block(cartesian_implicit, device, torch::kFloat64);
+  auto vars = make_state(b, device, torch::kFloat64);
+  auto w = vars.at("hydro_w");
+  auto table = b->named_buffers()["hydro.eos.cv_ratio_m1"];
+  table.requires_grad_(true);
+  b->phydro->peos->species_enthalpy(w).sum().backward();
+  table.mutable_grad() = torch::Tensor();
+  b->phydro->peos->species_enthalpy(w).sum().backward();
+  auto got = table.grad().clone();
+  auto fresh = make_block(cartesian_implicit, device, torch::kFloat64);
+  auto fv = make_state(fresh, device, torch::kFloat64);
+  auto ft = fresh->named_buffers()["hydro.eos.cv_ratio_m1"];
+  ft.requires_grad_(true);
+  fresh->phydro->peos->species_enthalpy(fv.at("hydro_w")).sum().backward();
+  EXPECT_TRUE(torch::equal(got, ft.grad()));
+}
+}  // namespace
+
+TEST(SpeciesMemo, enthalpy_graph_cpu) { species_graph_case(torch::kCPU); }
+TEST(SpeciesMemo, enthalpy_graph_cuda) {
+  SKIP_WITHOUT_CUDA();
+  species_graph_case(torch::kCUDA);
+}
+
+namespace {
+void species_options_case(torch::Device device) {
+  auto b = make_block(cartesian_implicit, device, torch::kFloat64);
+  auto vars = make_state(b, device, torch::kFloat64);
+  auto eos = b->phydro->peos;
+  eos->species_enthalpy(vars.at("hydro_w"));
+  eos->options->weight(eos->options->weight() * 1.01);
+  eos->options->thermo()->cref_R()[0] *= 1.02;
+  auto got = eos->species_enthalpy(vars.at("hydro_w"));
+  auto fresh = make_block(cartesian_implicit, device, torch::kFloat64);
+  auto fv = make_state(fresh, device, torch::kFloat64);
+  auto feos = fresh->phydro->peos;
+  feos->options->weight(feos->options->weight() * 1.01);
+  feos->options->thermo()->cref_R()[0] *= 1.02;
+  EXPECT_TRUE(torch::equal(got, feos->species_enthalpy(fv.at("hydro_w"))));
+}
+}  // namespace
+TEST(SpeciesMemo, enthalpy_options_cpu) { species_options_case(torch::kCPU); }
+TEST(SpeciesMemo, enthalpy_options_cuda) {
+  SKIP_WITHOUT_CUDA();
+  species_options_case(torch::kCUDA);
 }

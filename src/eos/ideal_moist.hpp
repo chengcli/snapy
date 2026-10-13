@@ -141,7 +141,10 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   //! _prim2temp's memo of the last primitive, held per instance. Keeps prim
   //! itself, so the key tensor cannot be freed and its address reused
   struct TempMemo {
-    torch::Tensor prim, val;
+    torch::Tensor prim, val, species;
+    int64_t species_ver = -1;
+    double weight = 0.;
+    int nvapor = -1, ncloud = -1;
     void const* data = nullptr;
     int64_t ver = -1;
     std::vector<int64_t> shape, stride;
@@ -153,6 +156,8 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   struct SpeciesCoeff {
     torch::Tensor a, b, val;
     int64_t va = -1, vb = -1;
+    double rd = 0., cvd = 0.;
+    int nvapor = -1;
   };
   SpeciesCoeff _cc;
 };

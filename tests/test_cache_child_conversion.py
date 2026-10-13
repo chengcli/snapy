@@ -59,7 +59,7 @@ def other(dtype):
 
 def same(a, b):
     if isinstance(a, list):
-        return all(torch.equal(x, y) for x, y in zip(a, b))
+        return len(a) == len(b) and all(torch.equal(x, y) for x, y in zip(a, b))
     return torch.equal(a, b)
 
 
@@ -154,6 +154,44 @@ def mixture_case(device, dtype, ab):
     return got, want
 
 
+def dependency_case(device, dtype, eos_name, operation):
+    b = eos_block(device, dtype, eos_name)
+    eos = b.module("hydro.eos")
+    w = prim(b, device, dtype)
+    eos.compute("W->T", [w])
+    if operation == "thermo_round_trip":
+        thermo = b.module("hydro.eos.thermo")
+        thermo.to(other(dtype))
+        thermo.to(dtype)
+    elif operation == "weight_edit":
+        eos.options.weight(eos.options.weight() * 1.01)
+    elif operation == "thermo_edit":
+        b.buffer("hydro.eos.thermo.inv_mu").mul_(1.01)
+    else:
+        b.buffer("hydro.eos.inv_mu_ratio_m1").add_(0.01)
+    got = eos.compute("W->T", [w]).clone()
+    # An equal but distinct primitive forces recomputation with the same final
+    # dependency buffers. No tolerance or baseline numerical value is changed.
+    want = eos.compute("W->T", [w.clone()]).clone()
+    return got, want
+
+
+def species_grad_case(device, dtype):
+    b = eos_block(device, dtype, "ideal-moist")
+    eos = b.module("hydro.eos")
+    w = prim(b, device, dtype)
+    eos.compute("W->T", [w])  # warm before enabling the dependency's gradient
+    table = b.buffer("hydro.eos.inv_mu_ratio_m1").requires_grad_(True)
+    eos.compute("W->T", [w]).sum().backward()
+    table.grad = None
+    eos.compute("W->T", [w]).sum().backward()
+    got = table.grad.clone()
+    f = eos_block(device, dtype, "ideal-moist")
+    ft = f.buffer("hydro.eos.inv_mu_ratio_m1").requires_grad_(True)
+    f.module("hydro.eos").compute("W->T", [prim(f, device, dtype)]).sum().backward()
+    return got, ft.grad.clone()
+
+
 def grad_case(device, dtype):
     b = eos_block(device, dtype, "ideal-moist")
     eos = b.module("hydro.eos")
@@ -174,7 +212,7 @@ def mixture_grad_is_explicit(device, dtype):
     try:
         b.module("hydro.eos").compute("W->T", [w]).sum().backward()
     except RuntimeError as e:
-        return True, str(e).splitlines()[0]
+        return "derivative for set_ is not implemented" in str(e), str(e).splitlines()[0]
     return False, "no error"
 
 
@@ -207,6 +245,13 @@ def main():
         check("cubed coord %s %s" % (a.device, tag), lambda: cubed_case(device, dtype, ("coord",)))
         for ab in ("W->A", "W->T"):
             check("mixture %s %s %s" % (ab, a.device, tag), lambda: mixture_case(device, dtype, ab))
+        for eos_name, operation in (("moist-mixture", "thermo_round_trip"),
+                                    ("moist-mixture", "thermo_edit"),
+                                    ("ideal-moist", "species_edit"),
+                                    ("ideal-moist", "weight_edit")):
+            check("%s %s %s %s" % (eos_name, operation, a.device, tag),
+                  lambda: dependency_case(device, dtype, eos_name, operation))
+        check("species gradient %s %s" % (a.device, tag), lambda: species_grad_case(device, dtype))
         name = dtype == F64 and "f64" or "f32"
         check("grad ideal-moist W->T %s %s" % (a.device, name), lambda: grad_case(device, dtype))
         raised, why = mixture_grad_is_explicit(device, dtype)
