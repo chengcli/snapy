@@ -272,13 +272,21 @@ torch::Tensor MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor V,
 }
 
 bool MoistMixtureImpl::_cache_matches(torch::Tensor const& prim) const {
-  return cached_prim_.defined() && cached_prim_.is_same(prim) &&
-         cached_prim_version_ == prim._version();
+  // an inference prim keeps no version counter, so an in-place edit of it
+  // could not be detected and reading the counter throws: never a cache hit
+  return cacheable_key(prim) && cached_prim_.defined() &&
+         cached_prim_.is_same(prim) &&
+         cached_prim_version_ == key_version(prim);
 }
 
 void MoistMixtureImpl::_mark_cache(torch::Tensor const& prim) {
+  if (!cacheable_key(prim)) {
+    cached_prim_ = torch::Tensor();
+    cached_prim_version_ = -1;
+    return;
+  }
   cached_prim_ = prim;
-  cached_prim_version_ = prim._version();
+  cached_prim_version_ = key_version(prim);
 }
 
 void MoistMixtureImpl::_ensure_cache(torch::Tensor const& prim) {

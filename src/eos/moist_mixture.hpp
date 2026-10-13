@@ -1,6 +1,8 @@
 #pragma once
 
 // snap
+#include <snap/utils/cache_lifecycle.hpp>
+
 #include "equation_of_state.hpp"
 
 namespace snap {
