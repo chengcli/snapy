@@ -245,14 +245,13 @@ TEST(CacheLifecycleTo, geometry_round_trip_applied_to_the_child_module) {
 }
 
 // ---------------------------------------------------------------------------
-// The hydro, implicit and EOS caches, through a real step
-// (HydroImpl::_s2/_cell_vol/_pe_work/wb_ref4_/x1pm_/x1src_,
-//  ImplicitHydroImpl::_g_*/_rx_*, IdealMoistImpl::_cc)
+// Cartesian default explicit hydro and EOS checks across dtype/device
+// conversions; step controls compare the returned hydro increment.
 // ---------------------------------------------------------------------------
 
-// Step once to populate every per-step cache, round trip, then step again from
-// an identical freshly initialised state. The control block round-trips first
-// and takes the same step with no cache carried across the conversion.
+// CPU float64 -> float32 -> float64 with the Cartesian default explicit fixture.
+// Returned-du warm/fresh equality also passed on bd787c91 (retained evidence):
+// this is a control, not a RED reproduction.
 TEST(CacheLifecycleTo, step_after_round_trip_matches_control) {
   auto variable = make_block();
   {
@@ -488,7 +487,9 @@ TEST(CacheLifecycleToCuda, species_enthalpy_after_round_trip_on_device) {
       << "species_enthalpy on device after round trip: max|diff| = " << diff;
 }
 
-// A real step on the device after a round trip.
+// CUDA float64 -> float32 -> float64 with the Cartesian default explicit fixture.
+// Returned-du warm/fresh equality also passed on bd787c91 (retained evidence):
+// this is a control, not a RED reproduction.
 TEST(CacheLifecycleToCuda, step_after_round_trip_matches_control_on_device) {
   SKIP_WITHOUT_CUDA();
   auto variable = make_block();
