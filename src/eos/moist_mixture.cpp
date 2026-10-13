@@ -318,12 +318,15 @@ void MoistMixtureImpl::_mark_cache(torch::Tensor const& prim) {
     cached_prim_version_ = -1;
     return;
   }
-  // detach retains the previous storage even when Module::to uses set_data.
-  // That storage cannot be recycled while this cache entry exists.
-  cached_inv_mu_ = pthermo->inv_mu.detach();
-  cached_inv_mu_version_ = key_version(pthermo->inv_mu);
-  cached_thermo_ =
-      std::make_shared<kintera::ThermoOptionsImpl>(*pthermo->options);
+  // A primitive-only miss can reuse the matching thermo snapshot.
+  if (!_thermo_cache_matches()) {
+    // detach retains the previous storage even when Module::to uses set_data.
+    // That storage cannot be recycled while this cache entry exists.
+    cached_inv_mu_ = pthermo->inv_mu.detach();
+    cached_inv_mu_version_ = key_version(pthermo->inv_mu);
+    cached_thermo_ =
+        std::make_shared<kintera::ThermoOptionsImpl>(*pthermo->options);
+  }
   cached_prim_ = prim;
   cached_prim_version_ = key_version(prim);
 }

@@ -191,6 +191,116 @@ TEST_P(MoistMixtureCache, matching_unsupported_derivative) {
   EXPECT_EQ(attempt(e, w), fresh_error);
 }
 
+// Repeated primitive misses must not hide a later dependency change. The
+// control always receives a distinct equal primitive, forcing fresh evaluation.
+TEST_P(MoistMixtureCache, primitive_refresh_then_dependency_transitions) {
+  auto b = block(), f = block();
+  auto e = eos(b), fe = eos(f);
+  auto w = prim(b);
+  auto &vapor_ids = e->pthermo->options->vapor_ids();
+  e->compute("W->T", {w});
+  for (int i = 0; i < 3; ++i) {
+    w[IPR].mul_(1.001);
+    equal_outputs(e, w, fe, w.clone());
+  }
+
+  // This reference predates all the primitive-version misses above.
+  auto id = vapor_ids.back();
+  vapor_ids.pop_back();
+  e->pthermo->options->cloud_ids().insert(
+      e->pthermo->options->cloud_ids().begin(), id);
+  auto &fresh_ids = fe->pthermo->options->vapor_ids();
+  auto fresh_id = fresh_ids.back();
+  fresh_ids.pop_back();
+  fe->pthermo->options->cloud_ids().insert(
+      fe->pthermo->options->cloud_ids().begin(), fresh_id);
+  equal_outputs(e, w, fe, w.clone());
+
+  w[IPR].mul_(1.001);
+  equal_outputs(e, w, fe, w.clone());
+  e->pthermo->inv_mu.mul_(1.01);
+  fe->pthermo->inv_mu.mul_(1.01);
+  equal_outputs(e, w, fe, w.clone());
+
+  auto other = dtype() == torch::kFloat64 ? torch::kFloat32 : torch::kFloat64;
+  e->pthermo->to(other);
+  e->pthermo->to(dtype());
+  fe->pthermo->to(other);
+  fe->pthermo->to(dtype());
+  equal_outputs(e, w, fe, w.clone());
+  e->to(other);
+  e->to(dtype());
+  fe->to(other);
+  fe->to(dtype());
+  equal_outputs(e, w, fe, w.clone());
+
+  {
+    c10::InferenceMode guard;
+    auto iw = w.clone();
+    ASSERT_TRUE(iw.is_inference());
+    e->compute("W->T", {iw});
+    iw[IPR].mul_(1.001);
+    equal_outputs(e, iw, fe, iw.clone());
+  }
+  w[IPR].mul_(1.001);
+  equal_outputs(e, w, fe, w.clone());
+
+  // The same warmed module now sees a grad-enabled key. Derivatives remain
+  // unsupported; compare errors to fresh evaluation and repeat the attempt.
+  w.requires_grad_(true);
+  auto fw = w.detach().clone().requires_grad_(true);
+  auto attempt = [](std::shared_ptr<MoistMixtureImpl> m, torch::Tensor x) {
+    try {
+      m->compute("W->T", {x}).sum().backward();
+    } catch (c10::Error const &err) {
+      return std::string(err.what_without_backtrace());
+    }
+    return std::string("NO ERROR");
+  };
+  auto expected = attempt(fe, fw);
+  ASSERT_NE(expected.find("derivative for set_ is not implemented"),
+            std::string::npos)
+      << expected;
+  EXPECT_EQ(attempt(e, w), expected);
+  EXPECT_EQ(attempt(e, w), expected);
+  w.requires_grad_(false);
+  {
+    torch::NoGradGuard guard;
+    w[IPR].mul_(1.001);
+    equal_outputs(e, w, fe, w.clone());
+  }
+}
+
+// With the limiter disabled U->W marks its freshly computed values directly,
+// so it also reaches _mark_cache without going through _ensure_cache.
+TEST_P(MoistMixtureCache, conserved_refresh_then_dependency_edits) {
+  auto b = block(), f = block();
+  auto e = eos(b), fe = eos(f);
+  ASSERT_FALSE(e->options->limiter());
+  auto u = e->compute("W->U", {prim(b)}).clone();
+  auto &coefficients = e->pthermo->options->cref_R();
+  torch::Tensor w;
+  for (int i = 0; i < 3; ++i) {
+    u[IPR].mul_(1.001);
+    w = e->compute("U->W", {u.clone()});
+    f = block();
+    fe = eos(f);
+    auto fw = fe->compute("U->W", {u.clone()});
+    EXPECT_TRUE(torch::equal(w, fw));
+    equal_outputs(e, w, fe, fw);
+  }
+  coefficients[0] *= 1.02;
+  fe->pthermo->options->cref_R()[0] *= 1.02;
+  e->pthermo->inv_mu.mul_(1.01);
+  fe->pthermo->inv_mu.mul_(1.01);
+  equal_outputs(e, w, fe, w.clone());
+  // Exercise direct cache marking again after the dependency edits.
+  w = e->compute("U->W", {u.clone()});
+  auto fw = fe->compute("U->W", {u.clone()});
+  EXPECT_TRUE(torch::equal(w, fw));
+  equal_outputs(e, w, fe, fw);
+}
+
 INSTANTIATE_TEST_SUITE_P(CpuCudaFloat64Float32, MoistMixtureCache,
                          ::testing::Values(0, 1, 2, 3));
 }  // namespace
