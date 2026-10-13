@@ -112,11 +112,12 @@ std::shared_ptr<MeshBlockImpl> make_block() {
 
 // a resting moist state, identical for every block
 Variables initial_state(std::shared_ptr<MeshBlockImpl> const& block,
-                        torch::Dtype dtype) {
+                        torch::Dtype dtype,
+                        torch::Device device = torch::kCPU) {
   auto coord = block->pcoord;
   auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
                          coord->options->nc2(), coord->options->nc1()},
-                        dtype);
+                        torch::TensorOptions().dtype(dtype).device(device));
   w[IDN].fill_(1.);
   w[IPR].fill_(1.e5);
   w[ICY].fill_(0.01);
@@ -294,30 +295,52 @@ TEST(CacheLifecycleTo, species_enthalpy_after_round_trip_matches_control) {
       << "species_enthalpy after round trip: max|diff| = " << diff;
 }
 
-// IdealMoistImpl::_temp_memo is deliberately NOT part of this fix: its key is
-// the caller's primitive state, a transient tensor that Module::to never
-// converts (it is not a parameter or a buffer of the EOS). It must keep
-// working across a conversion through its own dtype/device guard, with no
-// lifecycle hook. This pins that, so the exclusion stays honest.
-TEST(CacheLifecycleTo, temperature_memo_needs_no_lifecycle_hook) {
+// IdealMoistImpl::_temp_memo: its KEY is the caller's primitive state, which
+// Module::to never converts, so the dtype/device mechanism that applies to the
+// other caches does not apply to the key. Its VALUE, however, is
+// prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac)), and f_eps multiplies by
+// inv_mu_ratio_m1 -- a registered BUFFER that Module::to does convert. So the
+// memo still has to be dropped when the EOS is converted, for a reason that
+// has nothing to do with its key.
+//
+// Both halves are pinned here: the key really is not a module buffer, and the
+// memoised value must follow a conversion of the species table.
+TEST(CacheLifecycleTo, temperature_memo_key_is_not_a_module_buffer) {
   auto block = make_block();
   auto eos = block->phydro->peos;
   auto vars = initial_state(block, torch::kFloat64);
   auto w = vars.at("hydro_w");
 
-  // the memo's key is the caller's tensor, not a module buffer
   auto moist = std::dynamic_pointer_cast<IdealMoistImpl>(eos);
   ASSERT_NE(moist, nullptr) << "ideal-moist EOS expected";
   for (auto const& named : moist->named_buffers(/*recurse=*/true))
     EXPECT_FALSE(named.value().is_same(w))
         << "the primitive state is a registered buffer named " << named.key()
-        << "; the temperature memo would then need a lifecycle hook too";
+        << "; the memo's KEY would then be converted too";
+}
 
-  auto first = eos->compute("W->T", {w});
-  block->to(torch::kFloat32);
-  block->to(torch::kFloat64);
-  auto again = eos->compute("W->T", {w});   // same float64 caller tensor
-  EXPECT_TRUE(torch::equal(first, again));
+TEST(CacheLifecycleTo, temperature_memo_follows_a_converted_species_table) {
+  auto variable = make_block();
+  auto vvars = initial_state(variable, torch::kFloat64);
+  auto w = vvars.at("hydro_w");
+  variable->phydro->peos->compute("W->T", {w});   // memoise against this w
+  variable->to(torch::kFloat32);
+  variable->to(torch::kFloat64);
+  // the SAME caller tensor: the key still matches, but inv_mu_ratio_m1 has
+  // been through float32 and the memoised temperature was built before that
+  auto got = variable->phydro->peos->compute("W->T", {w});
+
+  auto control = make_block();
+  control->to(torch::kFloat32);
+  control->to(torch::kFloat64);
+  auto cvars = initial_state(control, torch::kFloat64);
+  auto want = control->phydro->peos->compute("W->T", {cvars.at("hydro_w")});
+
+  ASSERT_TRUE(torch::equal(w, cvars.at("hydro_w")));
+  double diff = (got - want).abs().max().item<double>();
+  EXPECT_TRUE(torch::equal(got, want))
+      << "memoised temperature after a species-table round trip: max|diff| = "
+      << diff;
 }
 
 // ---------------------------------------------------------------------------
@@ -369,4 +392,119 @@ TEST(CacheLifecycleInference, a_step_runs_with_an_inference_built_block) {
   ASSERT_TRUE(block->pcoord->x1f.is_inference());
   auto vars = initial_state(block, torch::kFloat64);
   EXPECT_NO_THROW(block->phydro->forward(1.e-3, vars.at("hydro_u"), vars));
+}
+
+// ---------------------------------------------------------------------------
+// The other direction on CPU, and the same thing on real CUDA
+// ---------------------------------------------------------------------------
+
+// Starting from float32 and coming back: the dtype term of every key returns
+// to float32 just as it returns to float64 the other way round.
+TEST(CacheLifecycleTo, geometry_survives_f32_f64_f32_round_trip) {
+  auto variable = make_block();
+  variable->to(torch::kFloat32);
+  geometry(variable->pcoord);            // populate at float32
+  variable->to(torch::kFloat64);
+  variable->to(torch::kFloat32);
+
+  auto control = make_block();
+  control->to(torch::kFloat32);
+  control->to(torch::kFloat64);
+  control->to(torch::kFloat32);
+
+  expect_all_equal(geometry(variable->pcoord), geometry(control->pcoord),
+                   "f32 round trip");
+}
+
+#define SKIP_WITHOUT_CUDA()                                              \
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "no CUDA device"
+
+// A DEVICE round trip, CPU -> CUDA -> CPU. Module::to keeps the buffers'
+// identity and version here too, and the device term of the key comes back to
+// where it started.
+TEST(CacheLifecycleToCuda, geometry_survives_cpu_cuda_cpu_round_trip) {
+  SKIP_WITHOUT_CUDA();
+  auto variable = make_block();
+  geometry(variable->pcoord);
+  variable->to(torch::kCUDA);
+  variable->to(torch::kCPU);
+
+  auto control = make_block();
+  control->to(torch::kCUDA);
+  control->to(torch::kCPU);
+
+  expect_all_equal(geometry(variable->pcoord), geometry(control->pcoord),
+                   "device round trip");
+}
+
+// A dtype round trip performed while the block lives on the device.
+TEST(CacheLifecycleToCuda, geometry_survives_dtype_round_trip_on_device) {
+  SKIP_WITHOUT_CUDA();
+  auto variable = make_block();
+  variable->to(torch::kCUDA);
+  geometry(variable->pcoord);
+  variable->to(torch::kFloat32);
+  variable->to(torch::kFloat64);
+
+  auto control = make_block();
+  control->to(torch::kCUDA);
+  control->to(torch::kFloat32);
+  control->to(torch::kFloat64);
+
+  auto got = geometry(variable->pcoord);
+  for (auto const& g : got) ASSERT_TRUE(g.is_cuda());
+  expect_all_equal(got, geometry(control->pcoord), "device dtype round trip");
+}
+
+// The EOS species table, on the device.
+TEST(CacheLifecycleToCuda, species_enthalpy_after_round_trip_on_device) {
+  SKIP_WITHOUT_CUDA();
+  auto variable = make_block();
+  variable->to(torch::kCUDA);
+  auto vvars = initial_state(variable, torch::kFloat64, torch::kCUDA);
+  variable->phydro->peos->species_enthalpy(vvars.at("hydro_w"));
+  variable->to(torch::kFloat32);
+  variable->to(torch::kFloat64);
+  auto vvars2 = initial_state(variable, torch::kFloat64, torch::kCUDA);
+  auto got = variable->phydro->peos->species_enthalpy(vvars2.at("hydro_w"));
+
+  auto control = make_block();
+  control->to(torch::kCUDA);
+  control->to(torch::kFloat32);
+  control->to(torch::kFloat64);
+  auto cvars = initial_state(control, torch::kFloat64, torch::kCUDA);
+  auto want = control->phydro->peos->species_enthalpy(cvars.at("hydro_w"));
+
+  ASSERT_TRUE(got.is_cuda());
+  double diff = (got - want).abs().max().item<double>();
+  EXPECT_TRUE(torch::equal(got, want))
+      << "species_enthalpy on device after round trip: max|diff| = " << diff;
+}
+
+// A real step on the device after a round trip.
+TEST(CacheLifecycleToCuda, step_after_round_trip_matches_control_on_device) {
+  SKIP_WITHOUT_CUDA();
+  auto variable = make_block();
+  variable->to(torch::kCUDA);
+  {
+    auto warm = initial_state(variable, torch::kFloat64, torch::kCUDA);
+    variable->phydro->forward(1.e-3, warm.at("hydro_u"), warm);
+  }
+  variable->to(torch::kFloat32);
+  variable->to(torch::kFloat64);
+  auto vvars = initial_state(variable, torch::kFloat64, torch::kCUDA);
+  variable->phydro->forward(1.e-3, vvars.at("hydro_u"), vvars);
+
+  auto control = make_block();
+  control->to(torch::kCUDA);
+  control->to(torch::kFloat32);
+  control->to(torch::kFloat64);
+  auto cvars = initial_state(control, torch::kFloat64, torch::kCUDA);
+  control->phydro->forward(1.e-3, cvars.at("hydro_u"), cvars);
+
+  auto const& got = vvars.at("hydro_u");
+  auto const& want = cvars.at("hydro_u");
+  double diff = (got - want).abs().max().item<double>();
+  EXPECT_TRUE(torch::equal(got, want))
+      << "device step after round trip: max|diff| = " << diff;
 }

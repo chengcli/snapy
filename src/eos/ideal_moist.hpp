@@ -38,19 +38,27 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
   torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const override;
   torch::Tensor species_enthalpy(torch::Tensor prim) override;
 
-  //! \brief Drop the species-table coefficient cached by species_enthalpy.
+  //! \brief Drop what this EOS caches from its own species-table buffers.
   /*!
    * `_cc` is built from the cv_ratio_m1 and inv_mu_ratio_m1 BUFFERS, which
    * `Module::to` converts with `set_data`: identity and version are unchanged,
    * and a float64 -> float32 -> float64 round trip restores the dtype too, so
    * the key cannot see the conversion. See src/utils/cache_lifecycle.hpp.
    *
-   * `_temp_memo` is deliberately NOT dropped here: its key is the caller's
-   * primitive state, which is neither a parameter nor a buffer of this module
-   * and is therefore never converted by `Module::to`. Its own dtype/device
-   * guard against the caller remains the right and only check it needs.
+   * `_temp_memo` is dropped here too, for a different reason. Its KEY is the
+   * caller's primitive state, which is neither a parameter nor a buffer of
+   * this module and so is never converted -- the dtype/device mechanism does
+   * not reach its key, and the guard it already has against the caller is the
+   * right one. But its VALUE is
+   * prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac)), and f_eps multiplies by
+   * inv_mu_ratio_m1, which IS converted. Memoised against an unchanged caller
+   * tensor, it would keep returning a temperature computed from the species
+   * table as it was before the conversion.
    */
-  void invalidate_cached_species() { _cc = SpeciesCoeff(); }
+  void invalidate_cached_species() {
+    _cc = SpeciesCoeff();
+    _temp_memo = TempMemo();
+  }
 
   SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<IdealMoistImpl>,
                                invalidate_cached_species())
