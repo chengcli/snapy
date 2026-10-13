@@ -199,7 +199,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
   auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
   bool mark = limiter_marks_.defined();
   auto nan = torch::isnan(cons);
-  if (mark) limiter_marks_[1].logical_or_(nan.index(interior).any());
+  if (mark) push_mark_(1, nan.index(interior).any());
   cons.masked_fill_(nan, 0.);
   auto dens_energy = [&] {  // density only where the EOS has no energy row
     auto u = cons.index(interior);
@@ -232,7 +232,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     auto min_ie = compute("UT->I", {cons, min_temp});
     cons[IPR].clamp_min_(ke + min_ie);
   }
-  if (mark) limiter_marks_[0].logical_or_(dens_energy().ne(before).any());
+  if (mark) push_mark_(0, dens_energy().ne(before).any());
 
   if (options->thermo() && ny > 0) {
     auto nghost = pcoord->options->nghost();
@@ -293,8 +293,14 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
                       .add_owned_input(cmajor.expand_as(repaired))
                       .add_owned_input(cvol.expand_as(repaired))
                       .build();
-      int err = at::native::call_fix_vapor(cons.device().type(), iter,
-                                           require_success);
+      // deferred: the CUDA count stays on the device until check_redo
+      bool defer = require_success && defer_vapor_check_ && cons.is_cuda();
+      if (defer && (!vapor_failures_.defined() ||
+                    vapor_failures_.device() != cons.device()))
+        vapor_failures_ = torch::zeros({}, cons.options().dtype(torch::kInt));
+      int err = at::native::call_fix_vapor(
+          cons.device().type(), iter, require_success,
+          defer ? vapor_failures_ : torch::Tensor());
       TORCH_CHECK(!require_success || err == 0,
                   "[EquationOfState] apply_conserved_limiter_: "
                   "Failed to fix vapor mass fractions.");
@@ -317,8 +323,7 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     if (mark) {
       auto rho = cons.index(interior)[IDN] + species().sum(0);
       auto tol = positivity_roundoff(cons.scalar_type()) * rho.abs();
-      limiter_marks_[0].logical_or_(
-          ((species() - species_before).abs() > tol).any());
+      push_mark_(0, ((species() - species_before).abs() > tol).any());
     }
   }
 }
@@ -328,7 +333,7 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
   auto nan = torch::isnan(prim);
   if (limiter_marks_.defined()) {  // floors on a prim are floor_hit's to judge
     auto interior = phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
-    limiter_marks_[1].logical_or_(nan.index(interior).any());
+    push_mark_(1, nan.index(interior).any());
   }
   prim.masked_fill_(nan, 0.);
   prim[IDN].clamp_min_(options->density_floor());
@@ -340,9 +345,9 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
       auto interior =
           phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false));
       // mass fractions: the same round-off bound as the conserved repair
-      limiter_marks_[0].logical_or_((prim.index(interior).narrow(0, ICY, ny) <
-                                     -positivity_roundoff(prim.scalar_type()))
-                                        .any());
+      push_mark_(0, (prim.index(interior).narrow(0, ICY, ny) <
+                     -positivity_roundoff(prim.scalar_type()))
+                        .any());
     }
     prim.narrow(0, ICY, ny).clamp_min_(0.);
   }
@@ -352,6 +357,8 @@ void EquationOfStateImpl::apply_primitive_limiter_(torch::Tensor const& prim) {
 
 void EquationOfStateImpl::reset_limiter_marks(torch::Tensor const& like) {
   limiter_marks_ = torch::zeros({2}, like.options().dtype(torch::kBool));
+  pending_marks_[0].clear();
+  pending_marks_[1].clear();
 }
 
 EquationOfState EquationOfStateImpl::create(EquationOfStateOptions const& opts,

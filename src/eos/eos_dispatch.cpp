@@ -76,7 +76,8 @@ void ideal_gas_cons2prim_mps(at::TensorIterator& iter, double gammad) {
   });
 }*/
 
-int call_fix_vapor_cpu(at::TensorIterator& iter, bool /*count*/) {
+int call_fix_vapor_cpu(at::TensorIterator& iter, bool /*count*/,
+                       at::Tensor const& /*sink*/) {
   int grain_size = iter.numel() / at::get_num_threads();
   // for_each is parallel
   std::atomic<int> all_err{0};

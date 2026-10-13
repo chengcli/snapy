@@ -93,13 +93,27 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor dry_clamp_step() const { return _dry_clamp_step; }
   void reset_dry_clamp_step() { _dry_clamp_step.zero_(); }
 
-  //! Latched until the next step, including later RK stages.
-  bool solve_failed() const { return _solve_failed; }
-  void reset_solve_failure() { _solve_failed = false; }
+  //! Latched until the next step, including later RK stages. A failure
+  //! found after the solve is latched on the device; this reads it back.
+  bool solve_failed() const {
+    return _solve_failed || (_failed_dev.defined() && _failed_dev.item<bool>());
+  }
+  void reset_solve_failure() {
+    _solve_failed = false;
+    if (_failed_dev.defined()) _failed_dev.zero_();
+  }
+
+  //! solve_failed() as a 0-d tensor (1 or 0) with `opts`, without a host read
+  torch::Tensor solve_failed_tensor(torch::TensorOptions const& opts) const {
+    auto flag = torch::full({}, _solve_failed ? 1. : 0., opts);
+    return _failed_dev.defined() ? torch::maximum(flag, _failed_dev.to(opts))
+                                 : flag;
+  }
 
  private:
   void ensure_workspace(torch::Tensor const& w);
   bool _solve_failed = false;
+  torch::Tensor _failed_dev;  // 0-d bool: a failure found after the solve
 
   torch::Tensor _a, _b, _c, _delta, _du0, _corr, _mass_corr, _clamp_residual,
       _dry_clamp_step;
@@ -109,6 +123,25 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   X1GridKey _rx_key;
   torch::Tensor _rx_lo, _rx_mid, _rx_hi;
   CorrectedPEFactors _rx_work;
+
+  // grid-only factors of forward_masked, rebuilt only
+  // when a coordinate face tensor, the device, dtype, shape or grav1 changes
+  struct GeoKey {
+    c10::TensorImpl const *f1 = nullptr, *f2 = nullptr, *f3 = nullptr;
+    int64_t v1 = -1, v2 = -1, v3 = -1;
+    torch::Device dev = torch::kCPU;
+    c10::ScalarType st = torch::kDouble;
+    std::vector<int64_t> shape;
+    double grav1 = 0.;
+    bool operator==(GeoKey const& o) const {
+      return f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && v1 == o.v1 &&
+             v2 == o.v2 && v3 == o.v3 && dev == o.dev && st == o.st &&
+             shape == o.shape && grav1 == o.grav1;
+    }
+  };
+  GeoKey _g_key;
+  torch::Tensor _g_area, _g_volume, _g_work_lo, _g_work_hi, _g_mask0, _g_phi,
+      _g_dp_lo, _g_dp_hi;
 };
 TORCH_MODULE(ImplicitHydro);
 

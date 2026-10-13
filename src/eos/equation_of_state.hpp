@@ -165,11 +165,33 @@ class EquationOfStateImpl {
   //! A side channel: the limiter calls set the marks as a side effect; the
   //! MeshBlock resets them at stage 0 and after a redo decision, and reads them
   //! in check_redo (MeshBlock and Mesh).
-  torch::Tensor const& limiter_marks() const { return limiter_marks_; }
+  // the calls queue their 0-d any() results and the
+  // read folds them, one stack + any + or per row instead of one or per call
+  torch::Tensor const& limiter_marks() const {
+    for (int i = 0; i < 2; ++i) {
+      if (pending_marks_[i].empty()) continue;
+      if (limiter_marks_.defined())
+        limiter_marks_[i].logical_or_(torch::stack(pending_marks_[i]).any());
+      pending_marks_[i].clear();
+    }
+    return limiter_marks_;
+  }
+  void push_mark_(int i, torch::Tensor t) { pending_marks_[i].push_back(t); }
+
+  //! While on (a MeshBlock stage, and check_redo's conversion), the CUDA vapor
+  //! repair adds its failures to vapor_failures() instead of reading them
+  //! back; check_redo raises on a nonzero count and zeroes it, and stage 0
+  //! zeroes it. Off (any other call), a failure raises at once, as on the CPU.
+  void defer_vapor_check(bool on) { defer_vapor_check_ = on; }
+  //! this instance's deferred failure count (0-d int32), undefined until used
+  torch::Tensor const& vapor_failures() const { return vapor_failures_; }
 
  private:
+  bool defer_vapor_check_ = false;
+  torch::Tensor vapor_failures_;
   // not a buffer: stage forcings get named_buffers()
   torch::Tensor limiter_marks_;
+  mutable std::vector<torch::Tensor> pending_marks_[2];
 
   //! Parent vapor slots and normalized stoichiometric mass fractions by cloud.
   std::vector<std::vector<std::pair<int, double>>> cloud_parent_cache_;

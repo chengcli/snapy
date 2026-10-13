@@ -213,6 +213,14 @@ torch::Tensor IdealMoistImpl::_prim2intEng(torch::Tensor prim) {
   auto gammad =
       (pthermo->options->cref_R()[0] + 1) / pthermo->options->cref_R()[0];
 
+  // a dry gas has f_sig = f_eps = 1 and yd = 1 exactly, and
+  // the empty species matmul adds rho * 0; skip those launches
+  if (ny == 0) {
+    auto ie0 = prim[IPR] / (gammad - 1);
+    ie0 += prim[IDN] * u0[0];
+    return ie0;
+  }
+
   // TODO(cli) iteration needed here
   auto ie = prim[IPR] * f_sig(yfrac) / f_eps(yfrac) / (gammad - 1);
 
@@ -225,11 +233,28 @@ torch::Tensor IdealMoistImpl::_prim2intEng(torch::Tensor prim) {
 }
 
 torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
+  // the same prim, unchanged since the last call
+  // (same storage, offset, shape and version), gives the same T; return a
+  // copy of the memo so a caller may still write its result
+  auto& memo = _temp_memo;
+  if (memo.prim.defined() && memo.prim.is_same(prim) &&
+      memo.data == prim.data_ptr() && memo.ver == prim._version() &&
+      memo.shape == prim.sizes().vec() && memo.stride == prim.strides().vec() &&
+      memo.val.defined() && memo.val.device() == prim.device() &&
+      memo.val.scalar_type() == prim.scalar_type())
+    return memo.val.clone();
   int ny = pthermo->options->vapor_ids().size() +
            pthermo->options->cloud_ids().size() - 1;
   auto Rd = kintera::constants::Rgas / options->weight();
   auto yfrac = prim.narrow(0, ICY, ny);
-  return prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
+  auto t = prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
+  memo.prim = prim;
+  memo.data = prim.data_ptr();
+  memo.ver = prim._version();
+  memo.shape = prim.sizes().vec();
+  memo.stride = prim.strides().vec();
+  memo.val = t;
+  return t.clone();
 }
 
 torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {
@@ -267,8 +292,22 @@ torch::Tensor IdealMoistImpl::species_enthalpy(torch::Tensor prim) {
 
   // the per-species split of the flux enthalpy rho*(W->I/rho + KE + p/rho):
   // u0 + cv T + KE, plus R T for a vapour (a cloud has no pressure share)
-  auto c = (cv_ratio_m1 + 1.) * cvd;
-  c.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
+  // c depends only on the species table buffers, the device and the dtype
+  auto& cc = _cc;
+  if (!(cc.a.defined() && cc.a.is_same(cv_ratio_m1) &&
+        cc.b.is_same(inv_mu_ratio_m1) && cc.va == cv_ratio_m1._version() &&
+        cc.vb == inv_mu_ratio_m1._version() && cc.val.defined() &&
+        cc.val.device() == prim.device() &&
+        cc.val.scalar_type() == cv_ratio_m1.scalar_type())) {
+    auto c0 = (cv_ratio_m1 + 1.) * cvd;
+    c0.narrow(0, 0, nvapor) += (inv_mu_ratio_m1.narrow(0, 0, nvapor) + 1.) * Rd;
+    cc.a = cv_ratio_m1;
+    cc.b = inv_mu_ratio_m1;
+    cc.va = cv_ratio_m1._version();
+    cc.vb = inv_mu_ratio_m1._version();
+    cc.val = c0;
+  }
+  auto c = cc.val;
 
   auto vel = prim.narrow(0, IVX, 3).clone();
   coord_vec_lower_(vel, pcoord->cosine_cell_kj);

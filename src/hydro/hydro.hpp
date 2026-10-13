@@ -243,8 +243,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
    * \param[in] wl,wr  reconstructed states at the face, BEFORE the Riemann
    *                   solver projects them into the face-local frame
    * \param[in] dim    the solver's direction tag: 2 for x2, 1 for x3
-   * \return           the flux increment, shaped like one flux row; undefined
-   *                   when the x1 axis is too thin to difference
+   * \return           the flux increment, shaped like the flux; in Cartesian
+   *                   only its nonzero rows on the x1-interior cells, stacked
+   *                   (IPR, ICY.., IDN); undefined when the x1 axis is too
+   *                   thin to difference
    */
   torch::Tensor _flux_covariance(torch::Tensor const& wl,
                                  torch::Tensor const& wr, int dim) const;
@@ -278,6 +280,21 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
   //! SNAP_GRAVITY_WORK_RADIAL_EXACT grid-only work factors, built on first use
   CorrectedPEFactors _pe_work;
+  //! face_moment2_x1() for this block's x1 grid, built on first use. Holds
+  //! x1f, so the key tensor cannot be freed and its address reused
+  struct FaceMoment2 {
+    torch::Tensor x1f, val;
+    int64_t ver = -1;
+  };
+  mutable FaceMoment2 _s2;
+  //! cell_volume() for this block's grid, built on first use by the tracer
+  //! positivity limiter. Holds the three face tensors, so a key tensor
+  //! cannot be freed and its address reused
+  struct CellVolume {
+    torch::Tensor f1, f2, f3, val;
+    int64_t v1 = -1, v2 = -1, v3 = -1;
+  };
+  CellVolume _cell_vol;
 
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   torch::Tensor _positivity_hits, _positivity_severe, _positivity_min;

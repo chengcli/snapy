@@ -241,6 +241,7 @@ snapy_add_python_test(test_cubed_sphere_vertical_velocity_exchange
                       LABELS "python;exchange;cubed-sphere;diagnostic")
 snapy_add_python_test(test_jit_user_forcing TIMEOUT 30 LABELS "python;forcing")
 snapy_add_python_test(test_fix_vapor_reports_failure TIMEOUT 60 LABELS "python;eos;positivity")
+snapy_add_python_test(test_fix_vapor_stale_count TIMEOUT 60 LABELS "python;eos;positivity;redo")
 snapy_add_python_test(test_fix_vapor_counts_every_column TIMEOUT 120 LABELS "python;eos;positivity")
 snapy_add_python_test(test_implicit_advection_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_implicit_gravity_tall_column TIMEOUT 120 LABELS "python;hydro;implicit;gravity")
@@ -305,6 +306,8 @@ snapy_add_python_test(test_flux_covariance_rows TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_flux_covariance_seams TIMEOUT 300
                       LABELS "python;hydro;cubed-sphere")
+# which flux rows the covariance changes: Cartesian vs curved, dry vs moist
+snapy_add_python_test(test_flux_covariance_rowset TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_wb_ref4_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_x1_centroid_rest TIMEOUT 300 LABELS "python;hydro")
 # #289: a passive scalar and the same tracer as a hydro species, covariance on and off
@@ -331,6 +334,9 @@ if(CUDA)
   snapy_add_python_test(test_fix_vapor_reports_failure_cuda
     SCRIPT test_fix_vapor_reports_failure.py ARGS --device cuda
     TIMEOUT 60 LABELS "python;eos;positivity;cuda")
+  snapy_add_python_test(test_fix_vapor_stale_count_cuda
+    SCRIPT test_fix_vapor_stale_count.py ARGS --device cuda
+    TIMEOUT 60 LABELS "python;eos;positivity;redo;cuda")
   snapy_add_python_test(test_check_redo_saturation_cuda
     SCRIPT test_check_redo_saturation.py ARGS --device cuda
     TIMEOUT 60 LABELS "python;mesh;redo;eos;cuda")
@@ -356,6 +362,7 @@ if(CUDA)
     TIMEOUT 300 LABELS "python;hydro;scalar;cuda")
   set_tests_properties(
     test_fix_vapor_reports_failure_cuda_python
+    test_fix_vapor_stale_count_cuda_python
     test_check_redo_saturation_cuda_python
     test_flux_positivity_cubedsphere_cuda_python
     test_flux_positivity_cubedsphere_moist_cuda_python
