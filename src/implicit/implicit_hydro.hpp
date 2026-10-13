@@ -10,6 +10,8 @@
 #include <snap/hydro/gravity_work_radial.hpp>
 
 // arg
+#include <snap/utils/cache_lifecycle.hpp>
+
 #include <snap/add_arg.h>
 
 namespace snap {
@@ -75,6 +77,36 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   explicit ImplicitHydroImpl(ImplicitOptions const& options,
                              torch::nn::Module* p = nullptr);
   void reset() override;
+
+  //! \brief Drop the grid-only factors cached from the coordinate.
+  /*!
+   * Both the radial-exact stencils of #308 (_rx_*) and the forward_masked
+   * geometry of #309 (_g_*) are built from the coordinate's buffers, which
+   * `Module::to` converts with `set_data`: identity and version are unchanged,
+   * and a float64 -> float32 -> float64 round trip restores the dtype as well,
+   * so neither key sees the conversion. See src/utils/cache_lifecycle.hpp.
+   */
+  void invalidate_cached_grid() {
+    _rx_key = X1GridKey();
+    _rx_lo.reset();
+    _rx_mid.reset();
+    _rx_hi.reset();
+    _rx_work = CorrectedPEFactors();
+    _g_key = GeoKey();
+    _g_area.reset();
+    _g_volume.reset();
+    _g_work_lo.reset();
+    _g_work_hi.reset();
+    _g_mask0.reset();
+    _g_phi.reset();
+    _g_dp_lo.reset();
+    _g_dp_hi.reset();
+  }
+
+  //! the coordinate is a sibling module, so a conversion requested on this
+  //! module alone still has to drop the caches built from its grid
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<ImplicitHydroImpl>,
+                               invalidate_cached_grid())
 
   //! corrector for the implicit hydro
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor gamma,

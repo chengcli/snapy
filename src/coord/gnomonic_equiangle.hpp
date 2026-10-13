@@ -48,6 +48,11 @@ class GnomonicEquiangleImpl
 
   torch::Tensor cell_volume() const override;
   torch::Tensor face_moment2_x1() const override;
+
+  //! Module::to keeps the buffers' identity and version, so the grid caches
+  //! are dropped explicitly when this coordinate is converted (#297/#308/#309)
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<GnomonicEquiangleImpl>,
+                               invalidate_cached_geometry())
   torch::Tensor face_centroid_shift_x1() const override;
   bool face_centroid_shift_zero() const override { return false; }
 

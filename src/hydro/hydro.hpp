@@ -124,6 +124,31 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                      torch::nn::Module* p = nullptr);
   void reset() override;
 
+  //! \brief Drop every cached grid quantity of this hydro module.
+  /*!
+   * The stencil caches of #297 (wb_ref4_, x1pm_, x1src_) key on the device and
+   * the dtype of their weights, and the caches of #308/#309 (_pe_work, _s2,
+   * _cell_vol) add the identity and version of the grid tensor. `Module::to`
+   * converts the coordinate buffers with `set_data`, which changes neither the
+   * identity nor the version, and a float64 -> float32 -> float64 round trip
+   * also restores the dtype, so none of these keys sees the conversion.
+   * See src/utils/cache_lifecycle.hpp.
+   */
+  void invalidate_cached_grid() {
+    wb_ref4_.reset();
+    x1pm_.reset();
+    x1src_.reset();
+    _pe_work = CorrectedPEFactors();
+    _s2 = FaceMoment2();
+    _cell_vol = CellVolume();
+    x1_uniform_ = -1;
+  }
+
+  //! the coordinate is a sibling module, so a conversion requested on this
+  //! module alone still has to drop the caches built from its grid
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<HydroImpl>,
+                               invalidate_cached_grid())
+
   double max_time_step(torch::Tensor hydro_w,
                        torch::Tensor solid = torch::Tensor()) const;
 

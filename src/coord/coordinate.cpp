@@ -346,6 +346,11 @@ void CoordinateImpl::reset_coordinates(std::array<MeshGenerator, 3> meshgens) {
         torch::linspace(0, nx3f, nx3f, torch::kFloat64), nx3f, true);
     x3f.copy_(meshgens[2](rx, op->x3min(), op->x3max()));
   }
+
+  // the grid moved. copy_ bumps the version counter, which the version-keyed
+  // caches see, but the #297 stencil caches key on device and dtype only, so
+  // the move has to be announced
+  invalidate_cached_geometry();
 }
 
 void CoordinateImpl::print(std::ostream& stream) const {

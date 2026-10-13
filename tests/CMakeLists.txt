@@ -46,6 +46,7 @@ set_tests_properties(
              "GTEST_FILTER=HydroRefX1.in_process_split_matches_one_block_after_200_steps;SNAP_FLUX_COVARIANCE=1"
              PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
 setup_test(test_gravity_work_cache_to)
+setup_test(test_cache_lifecycle_to)
 setup_test(test_x1_seam_split)
 # one arm per entry: its environment, its one test, which must run and pass (a
 # skip or an empty filter prints "PASSED ] 0 tests" and fails the entry)

@@ -43,6 +43,18 @@ class SphericalPolarImpl : public torch::nn::Cloneable<SphericalPolarImpl>,
       torch::Tensor flux3,
       torch::Tensor face_pressure1 = torch::Tensor()) override;
 
+  //! also drops the x1 pressure-source stencils (#297): they are built from
+  //! x1f, whose conversion their device/dtype test cannot see on a round trip
+  void invalidate_cached_geometry() override {
+    CoordinateImpl::invalidate_cached_geometry();
+    x1src_.reset();
+  }
+
+  //! Module::to keeps the buffers' identity and version, so the grid caches
+  //! are dropped explicitly when this coordinate is converted (#297/#308/#309)
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<SphericalPolarImpl>,
+                               invalidate_cached_geometry())
+
  private:
   //! SNAP_X1_CENTROID_EXACT: the (2/V) int r p~ dr weights, built on first use
   mutable std::shared_ptr<X1PressureSourceStencils> x1src_;

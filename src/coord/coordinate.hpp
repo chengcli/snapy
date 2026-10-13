@@ -17,6 +17,7 @@
 
 // arg
 #include <snap/add_arg.h>
+#include <snap/utils/cache_lifecycle.hpp>
 
 namespace snap {
 struct LayoutOptionsImpl;
@@ -342,6 +343,25 @@ class CoordinateImpl {
                                 torch::Tensor flux2, torch::Tensor flux3,
                                 torch::Tensor face_pressure1 = torch::Tensor());
 
+  //! \brief Drop every cached grid quantity of this coordinate.
+  /*!
+   * Called whenever `Module::to` converts the grid buffers and whenever the
+   * grid itself is rebuilt. `Module::to` keeps the buffers' identity and
+   * version, so the caches cannot detect a conversion -- and a
+   * float64 -> float32 -> float64 round trip also restores the dtype, so the
+   * dtype term of the key does not see it either. See
+   * src/utils/cache_lifecycle.hpp.
+   *
+   * Derived coordinates that keep their own grid-derived caches override this
+   * and call the base.
+   */
+  virtual void invalidate_cached_geometry() {
+    _area1_cache = GeomCache();
+    _area2_cache = GeomCache();
+    _area3_cache = GeomCache();
+    _vol_cache = GeomCache();
+  }
+
  protected:
   //! one cached face_area1/2/3() or cell_volume() and its grid inputs
   struct GeomCache {
@@ -375,6 +395,11 @@ class CartesianImpl : public torch::nn::Cloneable<CartesianImpl>,
   }
 
   void reset_coordinates(std::array<MeshGenerator, 3> meshgens) override;
+
+  //! Module::to keeps the buffers' identity and version, so the grid caches
+  //! are dropped explicitly when this coordinate is converted (#297/#308/#309)
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<CartesianImpl>,
+                               invalidate_cached_geometry())
 };
 TORCH_MODULE(Cartesian);
 
@@ -396,6 +421,10 @@ class CylindricalImpl : public torch::nn::Cloneable<CylindricalImpl>,
     stream << "Cylindrical coordinate:" << std::endl;
     print(stream);
   }
+
+  //! as CartesianImpl
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<CylindricalImpl>,
+                               invalidate_cached_geometry())
 };
 TORCH_MODULE(Cylindrical);
 

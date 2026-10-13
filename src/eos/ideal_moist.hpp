@@ -1,6 +1,8 @@
 #pragma once
 
 // snap
+#include <snap/utils/cache_lifecycle.hpp>
+
 #include "equation_of_state.hpp"
 
 namespace snap {
@@ -35,6 +37,23 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
                                  torch::Tensor temp) override;
   torch::Tensor internal_energy_offset(torch::Tensor hydro_like) const override;
   torch::Tensor species_enthalpy(torch::Tensor prim) override;
+
+  //! \brief Drop the species-table coefficient cached by species_enthalpy.
+  /*!
+   * `_cc` is built from the cv_ratio_m1 and inv_mu_ratio_m1 BUFFERS, which
+   * `Module::to` converts with `set_data`: identity and version are unchanged,
+   * and a float64 -> float32 -> float64 round trip restores the dtype too, so
+   * the key cannot see the conversion. See src/utils/cache_lifecycle.hpp.
+   *
+   * `_temp_memo` is deliberately NOT dropped here: its key is the caller's
+   * primitive state, which is neither a parameter nor a buffer of this module
+   * and is therefore never converted by `Module::to`. Its own dtype/device
+   * guard against the caller remains the right and only check it needs.
+   */
+  void invalidate_cached_species() { _cc = SpeciesCoeff(); }
+
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<IdealMoistImpl>,
+                               invalidate_cached_species())
 
   /*torch::Tensor get_buffer(std::string var) const override {
     return named_buffers()[var];
