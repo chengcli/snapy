@@ -47,6 +47,7 @@ set_tests_properties(
              PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.")
 setup_test(test_gravity_work_cache_to)
 setup_test(test_cache_lifecycle_to)
+setup_test(test_moist_mixture_cache)
 # a conversion or a reset of the coordinate child alone reaches the Hydro,
 # ImplicitHydro and layout caches; the _x1_centroid arm adds the #297 stencils
 setup_test(test_cache_child_conversion)

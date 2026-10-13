@@ -96,7 +96,7 @@ boundary-condition:
 )";
 
 std::string write_temp_config(char const* config) {
-  char fname[] = "/tmp/test-cache-lifecycle-XXXXXX";
+  char fname[] = "./test-cache-lifecycle-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
@@ -262,16 +262,13 @@ TEST(CacheLifecycleTo, step_after_round_trip_matches_control) {
   variable->to(torch::kFloat32);
   variable->to(torch::kFloat64);
   auto vvars = initial_state(variable, torch::kFloat64);
-  variable->phydro->forward(1.e-3, vvars.at("hydro_u"), vvars);
+  auto got = variable->phydro->forward(1.e-3, vvars.at("hydro_u"), vvars);
 
   auto control = make_block();
   control->to(torch::kFloat32);
   control->to(torch::kFloat64);
   auto cvars = initial_state(control, torch::kFloat64);
-  control->phydro->forward(1.e-3, cvars.at("hydro_u"), cvars);
-
-  auto const& got = vvars.at("hydro_u");
-  auto const& want = cvars.at("hydro_u");
+  auto want = control->phydro->forward(1.e-3, cvars.at("hydro_u"), cvars);
   double diff = (got - want).abs().max().item<double>();
   EXPECT_TRUE(torch::equal(got, want))
       << "step after round trip: max|diff| = " << diff;
@@ -503,17 +500,14 @@ TEST(CacheLifecycleToCuda, step_after_round_trip_matches_control_on_device) {
   variable->to(torch::kFloat32);
   variable->to(torch::kFloat64);
   auto vvars = initial_state(variable, torch::kFloat64, torch::kCUDA);
-  variable->phydro->forward(1.e-3, vvars.at("hydro_u"), vvars);
+  auto got = variable->phydro->forward(1.e-3, vvars.at("hydro_u"), vvars);
 
   auto control = make_block();
   control->to(torch::kCUDA);
   control->to(torch::kFloat32);
   control->to(torch::kFloat64);
   auto cvars = initial_state(control, torch::kFloat64, torch::kCUDA);
-  control->phydro->forward(1.e-3, cvars.at("hydro_u"), cvars);
-
-  auto const& got = vvars.at("hydro_u");
-  auto const& want = cvars.at("hydro_u");
+  auto want = control->phydro->forward(1.e-3, cvars.at("hydro_u"), cvars);
   double diff = (got - want).abs().max().item<double>();
   EXPECT_TRUE(torch::equal(got, want))
       << "device step after round trip: max|diff| = " << diff;
