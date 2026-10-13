@@ -273,14 +273,18 @@ torch::Tensor MoistMixtureImpl::_isothermal_sound_speed(torch::Tensor V,
 
 bool MoistMixtureImpl::_cache_matches(torch::Tensor const& prim) const {
   // an inference prim keeps no version counter, so an in-place edit of it
-  // could not be detected and reading the counter throws: never a cache hit
-  return cacheable_key(prim) && cached_prim_.defined() &&
+  // could not be detected and reading the counter throws: never a cache hit.
+  // A prim that needs gradients is never served from the cache either: the
+  // cached values would carry the autograd graph of an earlier call.
+  return cacheable_key(prim) && !needs_grad(prim) && cached_prim_.defined() &&
          cached_prim_.is_same(prim) &&
-         cached_prim_version_ == key_version(prim);
+         cached_prim_version_ == key_version(prim) && temp.defined() &&
+         temp.scalar_type() == prim.scalar_type() &&
+         temp.device() == prim.device();
 }
 
 void MoistMixtureImpl::_mark_cache(torch::Tensor const& prim) {
-  if (!cacheable_key(prim)) {
+  if (!cacheable_key(prim) || needs_grad(prim)) {
     cached_prim_ = torch::Tensor();
     cached_prim_version_ = -1;
     return;

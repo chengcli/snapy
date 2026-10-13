@@ -108,6 +108,15 @@ void MeshBlockImpl::set_user_stage_forcings(
   user_stage_forcings = std::move(loaded);
 }
 
+void MeshBlockImpl::invalidate_grid_caches() const {
+  if (_playout) _playout->invalidate_cached_geometry();
+  if (phydro) {
+    auto const &hydro = phydro.ptr();
+    hydro->invalidate_cached_grid();
+    if (hydro->picorr) hydro->picorr->invalidate_cached_grid();
+  }
+}
+
 void MeshBlockImpl::reset() {
   //// ---- (1) set up distributed environment ---- ////
   if (_playout == nullptr) {

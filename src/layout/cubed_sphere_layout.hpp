@@ -52,6 +52,13 @@ class CubedSphereLayoutImpl : public LayoutImpl {
                        std::vector<CommWorkPtr>& works) override;
   int num_exchange_buffers() const override { return 9; }
 
+  //! the cached matrices are built from the coordinate's angular buffers, and
+  //! are keyed only on the velocity's dtype, device and shape, so a
+  //! conversion of those buffers is invisible to the key
+  void invalidate_cached_geometry() override {
+    _velocity_transform_cache.clear();
+  }
+
  private:
   //! Constructor-time setup that replaces the old torch-style reset() hook.
   void _initialize();
@@ -75,14 +82,6 @@ class CubedSphereLayoutImpl : public LayoutImpl {
                                            torch::Tensor const& velocity) const;
 
   mutable std::map<std::string, torch::Tensor> _velocity_transform_cache;
-
- public:
-  //! the cached matrices are built from the coordinate's angular buffers, and
-  //! are keyed only on the velocity's dtype, device and shape, so a
-  //! conversion of those buffers is invisible to the key
-  void invalidate_cached_geometry() override {
-    _velocity_transform_cache.clear();
-  }
 
   //! \brief Global rank layout: face-major, Z-order within face
   int _global_rank_from_face_local(int face, int r_local) const {

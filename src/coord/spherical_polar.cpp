@@ -106,6 +106,9 @@ void SphericalPolarImpl::reset() {
   register_buffer("x1f", x1f);
   register_buffer("x2f", x2f);
   register_buffer("x3f", x3f);
+
+  // a reset rebuilds the grid buffers: drop what was built from the old ones
+  invalidate_cached_geometry();
 }
 
 void SphericalPolarImpl::reset_coordinates(

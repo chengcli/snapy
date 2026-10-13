@@ -57,6 +57,23 @@ class MoistMixtureImpl final : public torch::nn::Cloneable<MoistMixtureImpl>,
   torch::Tensor compute(std::string ab,
                         std::vector<torch::Tensor> const& args) override;
 
+  //! \brief Drop the cached `ivol`/`temp` state.
+  /*!
+   * `ivol` and `temp` are buffers, which `Module::to` converts with
+   * `set_data`, while the cache key -- the caller's primitive state -- is not
+   * a buffer and is left as it is. After a float64 -> float32 -> float64 round
+   * trip the cache would return float32-rounded values, and after a one-way
+   * conversion values of the old dtype. See src/utils/cache_lifecycle.hpp.
+   * The thermo submodule converted on its own is not seen here.
+   */
+  void invalidate_cached_prim() {
+    cached_prim_.reset();
+    cached_prim_version_ = -1;
+  }
+
+  SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<MoistMixtureImpl>,
+                               invalidate_cached_prim())
+
  private:
   //! \brief Convert primitive variables to conserved variables.
   /*

@@ -427,6 +427,15 @@ torch::Tensor CoordinateImpl::center_distance3() const {
   return dx3v.unsqueeze(1).unsqueeze(2);
 }
 
+void CoordinateImpl::invalidate_cached_geometry() {
+  _area1_cache = GeomCache();
+  _area2_cache = GeomCache();
+  _area3_cache = GeomCache();
+  _vol_cache = GeomCache();
+  // the caches other modules of the block built from this grid
+  if (pmb) pmb->invalidate_grid_caches();
+}
+
 // grid-only geometry is built once and rebuilt only when its inputs change
 torch::Tensor CoordinateImpl::cached_geometry_(
     GeomCache& c, std::function<torch::Tensor()> const& build) const {

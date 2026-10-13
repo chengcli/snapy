@@ -16,8 +16,9 @@
 //! value while the buffer now holds float32-rounded numbers, so every term of
 //! the key compares equal to the stale entry.
 //!
-//! Keying on `data_ptr()` does not help either: the caching allocator hands
-//! the same address back after a round trip.
+//! Keying on `data_ptr()` cannot be relied on either: after a round trip the
+//! allocator may hand the same address back (it does sometimes on the CPU),
+//! so a changed pointer is not guaranteed.
 //!
 //! The reliable signal is the conversion itself. `Module::to_impl` first calls
 //! `to()` on every child, through the VIRTUAL `to()` declared in `Module`, so a
@@ -55,6 +56,17 @@ inline bool cacheable_key(torch::Tensor const& t) {
  */
 inline int64_t key_version(torch::Tensor const& t) {
   return cacheable_key(t) ? t._version() : -1;
+}
+
+//! \brief Would a value computed from this tensor carry an autograd graph?
+/*!
+ * A memo of such a value would hand an earlier call's graph to a later one:
+ * once that graph has been used by a backward pass, a second backward through
+ * the memo fails, and a graph kept alive pins its saved tensors. Values that
+ * need gradients are computed afresh and not memoised.
+ */
+inline bool needs_grad(torch::Tensor const& t) {
+  return t.defined() && t.requires_grad() && torch::GradMode::is_enabled();
 }
 
 }  // namespace snap

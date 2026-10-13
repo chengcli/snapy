@@ -238,8 +238,9 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
   // copy of the memo so a caller may still write its result
   auto& memo = _temp_memo;
   // an inference prim keeps no version counter, so an in-place edit of it
-  // could not be detected: it is not memoised (#308)
-  bool memoable = cacheable_key(prim);
+  // could not be detected: it is not memoised (#308). Nor is a prim that
+  // needs gradients: the memo would hand this call's graph to a later one.
+  bool memoable = cacheable_key(prim) && !needs_grad(prim);
   if (memoable && memo.prim.defined() && memo.prim.is_same(prim) &&
       memo.data == prim.data_ptr() && memo.ver == key_version(prim) &&
       memo.shape == prim.sizes().vec() && memo.stride == prim.strides().vec() &&

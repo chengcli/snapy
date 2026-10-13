@@ -194,6 +194,9 @@ void GnomonicEquiangleImpl::reset() {
   usrc_LR = register_buffer(
       "usrc_LR", usrc.narrow(-1, offset_y, op->nx3()).transpose(0, 1).clone());
   usrc_shift_LR = margin - offset_y;
+
+  // a reset rebuilds the grid buffers: drop what was built from the old ones
+  invalidate_cached_geometry();
 }
 
 torch::Tensor GnomonicEquiangleImpl::center_width2() const {

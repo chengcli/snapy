@@ -164,6 +164,15 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
     if (_playout) _playout->invalidate_cached_geometry();
   }
 
+  //! \brief Drop every cache this block's modules built from the coordinate.
+  /*!
+   * The layout's transforms and the Hydro and ImplicitHydro grid caches.
+   * Called by the coordinate whenever its grid is converted (on it alone or
+   * through an ancestor), reset or moved, because a conversion requested on
+   * the coordinate child alone does not reach their own `to()` hooks.
+   */
+  void invalidate_grid_caches() const;
+
   SNAP_INVALIDATE_CACHES_ON_TO(torch::nn::Cloneable<MeshBlockImpl>,
                                invalidate_cached_geometry())
 

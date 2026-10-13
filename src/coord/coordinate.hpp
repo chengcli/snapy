@@ -353,15 +353,15 @@ class CoordinateImpl {
    * dtype term of the key does not see it either. See
    * src/utils/cache_lifecycle.hpp.
    *
+   * Other modules of the owning block (Hydro, ImplicitHydro, the layout)
+   * build caches from these buffers too, and a conversion or a reset
+   * requested on this coordinate alone does not reach their own `to()`
+   * hooks, so they are told through the block as well.
+   *
    * Derived coordinates that keep their own grid-derived caches override this
    * and call the base.
    */
-  virtual void invalidate_cached_geometry() {
-    _area1_cache = GeomCache();
-    _area2_cache = GeomCache();
-    _area3_cache = GeomCache();
-    _vol_cache = GeomCache();
-  }
+  virtual void invalidate_cached_geometry();
 
  protected:
   //! one cached face_area1/2/3() or cell_volume() and its grid inputs
