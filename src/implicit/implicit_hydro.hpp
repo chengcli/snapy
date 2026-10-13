@@ -158,15 +158,21 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
 
   // grid-only factors of forward_masked, rebuilt only
   // when a coordinate face tensor, the device, dtype, shape or grav1 changes
+  //! The face tensors are held by reference, as every sibling cache does
+  //! (HydroImpl::FaceMoment2/CellVolume, X1GridKey): a raw TensorImpl address
+  //! can be handed back by the allocator for a different tensor, with the
+  //! version counter of a fresh tensor back at 0, and the key would then
+  //! compare equal to a stale entry.
   struct GeoKey {
-    c10::TensorImpl const *f1 = nullptr, *f2 = nullptr, *f3 = nullptr;
+    torch::Tensor f1, f2, f3;
     int64_t v1 = -1, v2 = -1, v3 = -1;
     torch::Device dev = torch::kCPU;
     c10::ScalarType st = torch::kDouble;
     std::vector<int64_t> shape;
     double grav1 = 0.;
     bool operator==(GeoKey const& o) const {
-      return f1 == o.f1 && f2 == o.f2 && f3 == o.f3 && v1 == o.v1 &&
+      return f1.defined() && o.f1.defined() && f1.is_same(o.f1) &&
+             f2.is_same(o.f2) && f3.is_same(o.f3) && v1 == o.v1 &&
              v2 == o.v2 && v3 == o.v3 && dev == o.dev && st == o.st &&
              shape == o.shape && grav1 == o.grav1;
     }

@@ -246,9 +246,9 @@ torch::Tensor ImplicitHydroImpl::forward_masked(torch::Tensor du,
   bool no_solid = !solid.defined();
   {
     GeoKey key;
-    key.f1 = pcoord->x1f.unsafeGetTensorImpl();
-    key.f2 = pcoord->x2f.unsafeGetTensorImpl();
-    key.f3 = pcoord->x3f.unsafeGetTensorImpl();
+    key.f1 = pcoord->x1f;
+    key.f2 = pcoord->x2f;
+    key.f3 = pcoord->x3f;
     key.v1 = pcoord->x1f._version();
     key.v2 = pcoord->x2f._version();
     key.v3 = pcoord->x3f._version();
