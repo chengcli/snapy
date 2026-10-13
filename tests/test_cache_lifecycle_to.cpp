@@ -249,7 +249,7 @@ TEST(CacheLifecycleTo, geometry_round_trip_applied_to_the_child_module) {
 // conversions; step controls compare the returned hydro increment.
 // ---------------------------------------------------------------------------
 
-// CPU float64 -> float32 -> float64 with the Cartesian default explicit fixture.
+// CPU float64 -> float32 -> float64 in the Cartesian default explicit fixture.
 // Returned-du warm/fresh equality also passed on bd787c91 (retained evidence):
 // this is a control, not a RED reproduction.
 TEST(CacheLifecycleTo, step_after_round_trip_matches_control) {
@@ -487,7 +487,7 @@ TEST(CacheLifecycleToCuda, species_enthalpy_after_round_trip_on_device) {
       << "species_enthalpy on device after round trip: max|diff| = " << diff;
 }
 
-// CUDA float64 -> float32 -> float64 with the Cartesian default explicit fixture.
+// CUDA float64 -> float32 -> float64 in the Cartesian default explicit fixture.
 // Returned-du warm/fresh equality also passed on bd787c91 (retained evidence):
 // this is a control, not a RED reproduction.
 TEST(CacheLifecycleToCuda, step_after_round_trip_matches_control_on_device) {
