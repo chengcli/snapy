@@ -43,6 +43,9 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/snap.h>
 
+// tests
+#include "cuda_test_gate.hpp"
+
 using namespace snap;
 
 namespace {
@@ -416,8 +419,11 @@ TEST(CacheLifecycleTo, geometry_survives_f32_f64_f32_round_trip) {
                    "f32 round trip");
 }
 
+// A CPU build of snapy must not enter a CUDA test just because a GPU is
+// visible: snapy_cuda_test_enabled() checks the BUILD, not only the device.
 #define SKIP_WITHOUT_CUDA()                                              \
-  if (!torch::cuda::is_available()) GTEST_SKIP() << "no CUDA device"
+  if (!snapy_cuda_test_enabled())                                        \
+  GTEST_SKIP() << "snapy was not built with CUDA, or no device"
 
 // A DEVICE round trip, CPU -> CUDA -> CPU. Module::to keeps the buffers'
 // identity and version here too, and the device term of the key comes back to
