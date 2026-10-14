@@ -26,8 +26,9 @@ using namespace snap;
 
 namespace {
 
-std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type) {
-  auto options = MeshBlockOptionsImpl::from_yaml("test_eos.yaml");
+std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type,
+                                          std::string file = "test_eos.yaml") {
+  auto options = MeshBlockOptionsImpl::from_yaml(file);
   options->hydro()->eos()->type() = std::move(eos_type);
   return std::make_shared<MeshBlockImpl>(options);
 }
@@ -163,6 +164,58 @@ TEST_P(DeviceTest, moist_mixture) {
   auto temp_reference = peos->compute("W->T", {prim.clone()});
   EXPECT_FALSE(torch::allclose(temp_before, temp_after, 1.E-6, 1.E-6));
   EXPECT_TRUE(torch::allclose(temp_after, temp_reference, 1.E-6, 1.E-6));
+}
+
+// Repeating a public W->T call must build a fresh backward graph.
+TEST_P(DeviceTest, ideal_moist_temperature_repeated_backward) {
+  auto block = make_block("ideal-moist", "test_eos_temp2inteng.yaml");
+  block->to(device, dtype);
+  auto eos = block->phydro->peos;
+  auto prim = torch::ones(
+      {eos->nvar(), block->pcoord->options->nc3(),
+       block->pcoord->options->nc2(), block->pcoord->options->nc1()},
+      torch::device(device).dtype(dtype));
+  prim[IPR].fill_(1.e5);
+  prim.narrow(0, ICY, eos->nvar() - ICY).fill_(0.01);
+  prim.requires_grad_(true);
+  eos->compute("W->T", {prim}).sum().backward();
+  auto expected = prim.grad().clone();
+  prim.mutable_grad() = torch::Tensor();
+  auto temp = eos->compute("W->T", {prim});
+  EXPECT_EQ(temp.device(), device);
+  EXPECT_EQ(temp.scalar_type(), dtype);
+  temp.sum().backward();
+  EXPECT_TRUE(torch::equal(prim.grad(), expected));
+}
+
+// Warming enthalpy in inference mode must not poison a later tracked call.
+TEST_P(DeviceTest, ideal_moist_enthalpy_after_inference) {
+  auto block = make_block("ideal-moist", "test_eos_temp2inteng.yaml");
+  block->to(device, dtype);
+  auto eos = block->phydro->peos;
+  auto prim = torch::ones(
+      {eos->nvar(), block->pcoord->options->nc3(),
+       block->pcoord->options->nc2(), block->pcoord->options->nc1()},
+      torch::device(device).dtype(dtype));
+  prim[IPR].fill_(1.e5);
+  prim.narrow(0, ICY, eos->nvar() - ICY).fill_(0.01);
+  {
+    c10::InferenceMode inference;
+    eos->species_enthalpy(prim);
+  }
+  auto tracked = prim.clone().requires_grad_(true);
+  auto enthalpy = eos->species_enthalpy(tracked);
+  EXPECT_EQ(enthalpy.device(), device);
+  EXPECT_EQ(enthalpy.scalar_type(), dtype);
+  enthalpy.sum().backward();
+  EXPECT_TRUE(torch::isfinite(tracked.grad()).all().item<bool>());
+  auto fresh = make_block("ideal-moist", "test_eos_temp2inteng.yaml");
+  fresh->to(device, dtype);
+  auto reference = prim.clone().requires_grad_(true);
+  auto expected = fresh->phydro->peos->species_enthalpy(reference);
+  expected.sum().backward();
+  EXPECT_TRUE(torch::equal(enthalpy, expected));
+  EXPECT_TRUE(torch::equal(tracked.grad(), reference.grad()));
 }
 
 TEST_P(DeviceTest, ideal_moist_internal_energy_offset) {
