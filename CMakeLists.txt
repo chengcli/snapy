@@ -99,7 +99,9 @@ find_package(Harp REQUIRED)
 # >= 2.5.13: ThermoY take_saturation_adjustment_failures() (kintera #131),
 # read by check_redo
 # >= 2.6.2: h2o_bryan beta of kintera #144, needed by examples/bryan.yaml (#295)
-find_package(Kintera 2.6.2 REQUIRED)
+# >= 2.6.3: explicit same-call rate constants for the kinetics Jacobian at
+# zero solid abundance, used by run_hydro and jupiter_evap_precip_1d
+find_package(Kintera 2.6.3 REQUIRED)
 #include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)
