@@ -162,7 +162,10 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   }
 
   op->nghost() = node["cells"]["nghost"].as<int>(1);
+  op->interp_order() = node["cells"]["interp_order"].as<int>(2);
+  op->repartition(layout);
 
+  // the per-block cell counts are known only after the repartition
   if (op->nx1() > 1 && op->nx1() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x1 grids must be greater than the ghost zone size");
@@ -177,9 +180,6 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
     TORCH_CHECK(false,
                 "Number of x3 grids must be greater than the ghost zone size");
   }
-
-  op->interp_order() = node["cells"]["interp_order"].as<int>(2);
-  op->repartition(layout);
   return op;
 }
 

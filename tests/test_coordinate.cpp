@@ -259,6 +259,29 @@ TEST(Coordinate, face_centroid_shift_zero_matches_the_shift) {
   }
 }
 
+TEST(Coordinate, refuses_a_block_narrower_than_the_ghost_zone) {
+  std::string config = spherical_polar_config;
+  auto replace = [&](std::string const& from, std::string const& to) {
+    auto at = config.find(from);
+    ASSERT_NE(at, std::string::npos) << from;
+    config.replace(at, from.size(), to);
+  };
+  replace("type: spherical-polar", "type: cartesian");
+  replace("{nx1: 4, nx2: 4, nx3: 4, nghost: 1}",
+          "{nx1: 4, nx2: 8, nx3: 4, nghost: 3}");
+
+  // one block holds all 8 x2 cells
+  auto fname = write_temp_config(config.c_str());
+  EXPECT_NO_THROW(CoordinateOptionsImpl::from_yaml(fname));
+  std::remove(fname.c_str());
+
+  // four blocks hold 2 x2 cells each, fewer than the 3 ghost cells
+  replace("nb2: 1", "nb2: 4");
+  fname = write_temp_config(config.c_str());
+  EXPECT_THROW(CoordinateOptionsImpl::from_yaml(fname), c10::Error);
+  std::remove(fname.c_str());
+}
+
 TEST(GnomonicEquiangle, l2g) {
   CSVel l2g[6][3];
   populate_cs_l2g_vel(l2g);
