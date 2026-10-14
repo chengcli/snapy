@@ -44,9 +44,16 @@ void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
   std::vector<double> output_next_times;
   std::vector<int64_t> output_keys;
 
+  // make_outputs advances an output's schedule only after writing it. Save the
+  // advanced schedule for this restart and the outputs after it that fire in
+  // the same pass, so a resume does not write their t0 files again.
+  bool firing = false;
   for (auto out : pmb->output_types) {
-    output_file_numbers.push_back(out->file_number);
-    output_next_times.push_back(out->next_time);
+    if (out.get() == this) firing = !final_write;
+    bool advance = firing && current_time >= out->next_time;
+    output_file_numbers.push_back(out->file_number + (advance ? 1 : 0));
+    output_next_times.push_back(out->next_time +
+                                (advance ? out->options->dt() : 0.0));
     output_keys.push_back(out->schedule_key());
   }
   // Old readers use the first N entries. Precise keys follow them in the same
