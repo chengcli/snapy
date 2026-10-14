@@ -27,7 +27,7 @@ using namespace snap;
 namespace {
 
 std::shared_ptr<MeshBlockImpl> make_block(std::string eos_type,
-                                        std::string file = "test_eos.yaml") {
+                                          std::string file = "test_eos.yaml") {
   auto options = MeshBlockOptionsImpl::from_yaml(file);
   options->hydro()->eos()->type() = std::move(eos_type);
   return std::make_shared<MeshBlockImpl>(options);
@@ -172,8 +172,8 @@ TEST_P(DeviceTest, ideal_moist_temperature_repeated_backward) {
   block->to(device, dtype);
   auto eos = block->phydro->peos;
   auto prim = torch::ones(
-      {eos->nvar(), block->pcoord->options->nc3(), block->pcoord->options->nc2(),
-       block->pcoord->options->nc1()},
+      {eos->nvar(), block->pcoord->options->nc3(),
+       block->pcoord->options->nc2(), block->pcoord->options->nc1()},
       torch::device(device).dtype(dtype));
   prim[IPR].fill_(1.e5);
   prim.narrow(0, ICY, eos->nvar() - ICY).fill_(0.01);
@@ -207,8 +207,8 @@ TEST_P(DeviceTest, ideal_moist_enthalpy_after_inference) {
   block->to(device, dtype);
   auto eos = block->phydro->peos;
   auto prim = torch::ones(
-      {eos->nvar(), block->pcoord->options->nc3(), block->pcoord->options->nc2(),
-       block->pcoord->options->nc1()},
+      {eos->nvar(), block->pcoord->options->nc3(),
+       block->pcoord->options->nc2(), block->pcoord->options->nc1()},
       torch::device(device).dtype(dtype));
   prim[IPR].fill_(1.e5);
   prim.narrow(0, ICY, eos->nvar() - ICY).fill_(0.01);
