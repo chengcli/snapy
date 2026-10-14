@@ -35,6 +35,14 @@ class MetadataTable {
   static MetadataTable* myptr_;
 };
 
+//! Units of the x2/x3 axes: the angles of the curvilinear grids are in
+//! radians, the cartesian axes are lengths.
+inline std::string horizontal_axis_units(std::string const& coord_type) {
+  return coord_type == "gnomonic-equiangle" || coord_type == "spherical-polar"
+             ? "radian"
+             : "m";
+}
+
 template <typename T>
 int get_num_variables(std::string grid, AthenaArray<T> const& data) {
   int nvar;

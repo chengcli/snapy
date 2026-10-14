@@ -201,28 +201,34 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
                                         "Z-coordinate at cell face"));
   }
 
+  std::string const hunits =
+      horizontal_axis_units(pmb->options->coord()->type());
   SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x2", NC_FLOAT, 1, &idx2, &ivx2));
   SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "axis", 1, "X"));
-  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "units", 1, "m"));
+  SNAP_PINC_CHECK(
+      ncmpix_put_att_text(ifile, ivx2, "units", hunits.size(), hunits.c_str()));
   SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2, "long_name", 27,
                                       "X-coordinate at cell center"));
   if (ncells2 > 1) {
     SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x2f", NC_FLOAT, 1, &idx2f, &ivx2f));
-    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "units", 1, "m"));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "units", hunits.size(),
+                                        hunits.c_str()));
     SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx2f, "long_name", 25,
-                                        "Y-coordinate at cell face"));
+                                        "X-coordinate at cell face"));
   }
 
   SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x3", NC_FLOAT, 1, &idx3, &ivx3));
   SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "axis", 1, "Y"));
-  SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "units", 1, "m"));
+  SNAP_PINC_CHECK(
+      ncmpix_put_att_text(ifile, ivx3, "units", hunits.size(), hunits.c_str()));
   SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3, "long_name", 27,
                                       "Y-coordinate at cell center"));
   if (ncells3 > 1) {
     SNAP_PINC_CHECK(ncmpix_def_var(ifile, "x3f", NC_FLOAT, 1, &idx3f, &ivx3f));
-    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "units", 1, "m"));
+    SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "units", hunits.size(),
+                                        hunits.c_str()));
     SNAP_PINC_CHECK(ncmpix_put_att_text(ifile, ivx3f, "long_name", 25,
-                                        "X-coordinate at cell face"));
+                                        "Y-coordinate at cell face"));
   }
 
   int nbtotal = nb1 * nb2 * nb3;

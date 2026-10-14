@@ -497,6 +497,20 @@ if (NOT APPLE)
         LABELS "restart;examples"
       )
     endforeach()
+
+    add_test(
+      NAME test_netcdf_axis_attrs
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/test_netcdf_axis_attrs.py
+              --build-dir ${CMAKE_BINARY_DIR}
+              --build-type release
+    )
+    set_tests_properties(test_netcdf_axis_attrs PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+      TIMEOUT 300
+      SKIP_RETURN_CODE 125
+      LABELS "output;examples"
+    )
 endif()
 
 setup_parallel_test(test_mesh_multi_block 2)
