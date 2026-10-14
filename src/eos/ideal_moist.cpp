@@ -239,7 +239,7 @@ torch::Tensor IdealMoistImpl::_prim2temp(torch::Tensor prim) {
   auto Rd = kintera::constants::Rgas / options->weight();
   auto yfrac = prim.narrow(0, ICY, ny);
   auto t = prim[IPR] / (prim[IDN] * Rd * f_eps(yfrac));
-  return t.clone();
+  return t;
 }
 
 torch::Tensor IdealMoistImpl::_prim2speciesEng(torch::Tensor prim) {

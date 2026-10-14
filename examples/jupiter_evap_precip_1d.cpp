@@ -252,7 +252,7 @@ int main(int argc, char** argv) {
     auto [rate, rc_ddC, rc_ddT, rate_constants] =
         kinet->forward_with_rate_constants(temp, pres, conc_kinet);
     auto jac = kinet->jacobian(temp, conc_kinet, cp_vol, rate, rc_ddC, rc_ddT,
-                               rate_constants);
+                              rate_constants);
     auto del_conc = kintera::evolve_implicit(rate, kinet->stoich, jac, dt);
     std::vector<int64_t> view_shape(del_conc.dim(), 1);
     view_shape[del_conc.dim() - 1] = -1;
