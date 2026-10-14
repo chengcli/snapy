@@ -182,7 +182,7 @@ TEST_P(DeviceTest, ideal_moist_temperature_repeated_backward) {
   auto expected = prim.grad().clone();
   prim.mutable_grad() = torch::Tensor();
   auto temp = eos->compute("W->T", {prim});
-  EXPECT_EQ(temp.device(), device);
+  EXPECT_EQ(temp.device(), prim.device());
   EXPECT_EQ(temp.scalar_type(), dtype);
   temp.sum().backward();
   EXPECT_TRUE(torch::equal(prim.grad(), expected));
@@ -205,7 +205,7 @@ TEST_P(DeviceTest, ideal_moist_enthalpy_after_inference) {
   }
   auto tracked = prim.clone().requires_grad_(true);
   auto enthalpy = eos->species_enthalpy(tracked);
-  EXPECT_EQ(enthalpy.device(), device);
+  EXPECT_EQ(enthalpy.device(), tracked.device());
   EXPECT_EQ(enthalpy.scalar_type(), dtype);
   enthalpy.sum().backward();
   EXPECT_TRUE(torch::isfinite(tracked.grad()).all().item<bool>());
