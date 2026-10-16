@@ -35,7 +35,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"x3", "distance at cell center", "m", "C--"},
       {"x3f", "distance at cell boundary", "m", "F--"},
       {"rho", "density", "kg/m^3", "CCC"},
-      {"press", "pressure", "pa", "CCC"},
+      {"press", "pressure", "Pa", "CCC"},
       {"vel1", "vertical velocity", "m/s", "CCC"},
       {"vel2", "horizontal velocity", "m/s", "CCC"},
       {"vel3", "horizontal velocity", "m/s", "CCC"},
@@ -50,7 +50,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       // relative humidity
       {"rh1", "relative humidity 1", "1", "CCC"},
       {"rh2", "relative humidity 2", "1", "CCC"},
-      {"eps", "turbulent dissipation", "w/kg", "CCC"},
+      {"eps", "turbulent dissipation", "W/kg", "CCC"},
       {"tke", "turbulent kinetic energy", "J/kg", "CCC"},
       {"mut", "dynamic turbulent viscosity", "kg/(m.s)", "CCC"},
       // radiation
@@ -66,7 +66,7 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"b", "buoyancy", "m/s^2", "CCC"},
       // hydro mean
       {"avg_rho", "zonal mean density", "kg/m^3", "--C"},
-      {"avg_press", "zonal mean pressure", "pa", "--C"},
+      {"avg_press", "zonal mean pressure", "Pa", "--C"},
       {"avg_vel1", "zonal mean vertical velocity", "m/s", "--C"},
       {"avg_vel2", "zonal mean horizontal velocity", "m/s", "--C"},
       {"avg_vel3", "zonal mean horizontal velocity", "m/s", "--C"},
@@ -78,10 +78,10 @@ __attribute__((weak)) MetadataTable::MetadataTable() {
       {"rhoa", "horizontal density anomaly", "kg/m^3", "CCC"},
       {"tempa", "horizontal temperature anomaly", "K", "CCC"},
       {"v1a", "horizontal vertical velocity anomaly", "m/s", "CCC"},
-      {"presa", "horizontal pressure anomaly", "pa", "CCC"},
+      {"presa", "horizontal pressure anomaly", "Pa", "CCC"},
       // radiative flux
-      {"rflx_up", "total upward radiative flux", "w/m^2", "--F"},
-      {"rflx_dn", "total downward radiative flux", "w/m^2", "--F"},
+      {"rflx_up", "total upward radiative flux", "W/m^2", "--F"},
+      {"rflx_dn", "total downward radiative flux", "W/m^2", "--F"},
       // hydro flux
       {"v1rho", "total upward mass flux", "kg/(m^2.s)", "--C"},
       {"v1q1", "total upward vapor1 flux", "1/(m^2.s)", "--C"},

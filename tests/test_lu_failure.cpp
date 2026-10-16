@@ -119,8 +119,8 @@ void retry_case(int scheme, bool stop, bool assembly_failure = false,
   auto node = YAML::Load(R"(
 geometry:
   type: cartesian
-  cells: {nx1: 8, nx2: 2, nx3: 1, nghost: 3}
-  bounds: {x1min: 0, x1max: 8, x2min: 0, x2max: 2, x3min: 0, x3max: 1}
+  cells: {nx1: 8, nx2: 4, nx3: 1, nghost: 3}
+  bounds: {x1min: 0, x1max: 8, x2min: 0, x2max: 4, x3min: 0, x3max: 1}
 dynamics:
   equation-of-state: {type: ideal-gas, gammad: 1.4, weight: 0.029}
   reconstruct:

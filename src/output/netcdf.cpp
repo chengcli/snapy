@@ -219,9 +219,11 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     nc_put_att_int(ifile, ivx1f, "domain_decomposition", NC_INT, 4, pos);
   }
 
+  std::string const hunits =
+      horizontal_axis_units(pmb->options->coord()->type());
   nc_def_var(ifile, "x2", nctype, 1, &idx2, &ivx2);
   nc_put_att_text(ifile, ivx2, "axis", 1, "X");
-  nc_put_att_text(ifile, ivx2, "units", 1, "m");
+  nc_put_att_text(ifile, ivx2, "units", hunits.size(), hunits.c_str());
   nc_put_att_text(ifile, ivx2, "long_name", 27, "X-coordinate at cell center");
 
   pos[0] = 1;
@@ -232,8 +234,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
 
   if (ncells2 > 1) {
     nc_def_var(ifile, "x2f", nctype, 1, &idx2f, &ivx2f);
-    nc_put_att_text(ifile, ivx2f, "units", 1, "m");
-    nc_put_att_text(ifile, ivx2f, "long_name", 25, "Y-coordinate at cell face");
+    nc_put_att_text(ifile, ivx2f, "units", hunits.size(), hunits.c_str());
+    nc_put_att_text(ifile, ivx2f, "long_name", 25, "X-coordinate at cell face");
     pos[0]--;
     pos[2]--;
     nc_put_att_int(ifile, ivx2f, "domain_decomposition", NC_INT, 4, pos);
@@ -241,7 +243,7 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
 
   nc_def_var(ifile, "x3", nctype, 1, &idx3, &ivx3);
   nc_put_att_text(ifile, ivx3, "axis", 1, "Y");
-  nc_put_att_text(ifile, ivx3, "units", 1, "m");
+  nc_put_att_text(ifile, ivx3, "units", hunits.size(), hunits.c_str());
   nc_put_att_text(ifile, ivx3, "long_name", 27, "Y-coordinate at cell center");
 
   pos[0] = 1;
@@ -252,8 +254,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
 
   if (ncells3 > 1) {
     nc_def_var(ifile, "x3f", nctype, 1, &idx3f, &ivx3f);
-    nc_put_att_text(ifile, ivx3f, "units", 1, "m");
-    nc_put_att_text(ifile, ivx3f, "long_name", 25, "X-coordinate at cell face");
+    nc_put_att_text(ifile, ivx3f, "units", hunits.size(), hunits.c_str());
+    nc_put_att_text(ifile, ivx3f, "long_name", 25, "Y-coordinate at cell face");
     pos[0]--;
     pos[2]--;
     nc_put_att_int(ifile, ivx3f, "domain_decomposition", NC_INT, 4, pos);

@@ -364,19 +364,20 @@ TEST(X1SeamSplit, wb_ref4_flag_at_the_seam_split_matches_one_block_cuda) {
 }
 
 // SNAP_X1_MASS_COVARIANCE: the one-sided wall rho_1 spans three cells, so a
-// block with two would read the ghost it replaces; setup refuses it
+// block with two would read the ghost it replaces; setup refuses it. On
+// nghost 3 the coordinate setup already refuses two cells, so use nghost 2.
 TEST(X1SeamSplit, x1_mass_covariance_needs_3_x1_cells) {
   ASSERT_TRUE(std::getenv("SNAP_X1_MASS_COVARIANCE"));
   ASSERT_TRUE(HydroImpl::x1_mass_covariance());
   try {
-    make_column(1, 2, 1., "cell");
+    make_column(1, 2, 1., "cell", 2);
     ADD_FAILURE() << "nx1 2 accepted";
   } catch (c10::Error const& e) {
     EXPECT_NE(std::string(e.what()).find("needs at least 3 x1 cells"),
               std::string::npos)
         << e.what();
   }
-  EXPECT_NO_THROW(make_column(1, 3, 1., "cell"));
+  EXPECT_NO_THROW(make_column(1, 3, 1., "cell", 2));
 }
 
 // SNAP_WB_REF4 with grav1 = 0: no reference is built, so the nghost >= 3
