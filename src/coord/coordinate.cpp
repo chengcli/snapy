@@ -165,18 +165,19 @@ CoordinateOptions CoordinateOptionsImpl::from_yaml(
   op->interp_order() = node["cells"]["interp_order"].as<int>(2);
   op->repartition(layout);
 
-  // the per-block cell counts are known only after the repartition
-  if (op->nx1() > 1 && op->nx1() < op->nghost()) {
+  // the per-block cell counts are known only after the repartition; an axis
+  // is collapsed by its total count, not by one block's share of it
+  if (op->global_nx1() > 1 && op->nx1() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x1 grids must be greater than the ghost zone size");
   }
 
-  if (op->nx2() > 1 && op->nx2() < op->nghost()) {
+  if (op->global_nx2() > 1 && op->nx2() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x2 grids must be greater than the ghost zone size");
   }
 
-  if (op->nx3() > 1 && op->nx3() < op->nghost()) {
+  if (op->global_nx3() > 1 && op->nx3() < op->nghost()) {
     TORCH_CHECK(false,
                 "Number of x3 grids must be greater than the ghost zone size");
   }

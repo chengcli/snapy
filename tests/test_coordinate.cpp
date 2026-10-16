@@ -280,6 +280,12 @@ TEST(Coordinate, refuses_a_block_narrower_than_the_ghost_zone) {
   fname = write_temp_config(config.c_str());
   EXPECT_THROW(CoordinateOptionsImpl::from_yaml(fname), c10::Error);
   std::remove(fname.c_str());
+
+  // eight blocks hold 1 x2 cell each: a split axis, not a collapsed one
+  replace("nb2: 4", "nb2: 8");
+  fname = write_temp_config(config.c_str());
+  EXPECT_THROW(CoordinateOptionsImpl::from_yaml(fname), c10::Error);
+  std::remove(fname.c_str());
 }
 
 TEST(GnomonicEquiangle, l2g) {
