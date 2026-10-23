@@ -3,6 +3,7 @@
 #include <configure.h>
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <exception>
 #include <functional>
@@ -46,8 +47,10 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
 
 class MeshImpl::BlockWorkerPool {
  public:
-  BlockWorkerPool(size_t count, torch::Device device)
-      : device_(std::move(device)), remaining_(count) {
+  BlockWorkerPool(size_t count, torch::Device device, int local_group)
+      : device_(std::move(device)),
+        local_group_(local_group),
+        remaining_(count) {
 #ifdef USE_CUDA
     if (device_.is_cuda()) {
       c10::cuda::CUDAGuard device_guard(device_.index());
@@ -110,6 +113,8 @@ class MeshImpl::BlockWorkerPool {
 #endif
 
     if (error_ != nullptr) {
+      // every worker is out of the aborted exchange now
+      LayoutImpl::reset_local_exchange(local_group_);
       auto error = error_;
       error_ = nullptr;
       std::rethrow_exception(error);
@@ -167,10 +172,15 @@ class MeshImpl::BlockWorkerPool {
       try {
         func(index);
       } catch (...) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (error_ == nullptr) {
-          error_ = std::current_exception();
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          if (error_ == nullptr) {
+            error_ = std::current_exception();
+          }
         }
+        // the other blocks may be waiting for this one at a local exchange
+        // barrier: wake them with an error, so the first one surfaces
+        LayoutImpl::abort_local_exchange(local_group_);
       }
 
 #ifdef USE_CUDA
@@ -190,6 +200,7 @@ class MeshImpl::BlockWorkerPool {
   }
 
   torch::Device device_;
+  int local_group_;
   std::vector<std::thread> workers_;
   std::mutex mutex_;
   std::condition_variable cv_;
@@ -237,9 +248,14 @@ void MeshImpl::reset() {
   base_layout->world_size(base_layout->process_world_size() *
                           options->blocks_per_process());
 
+  // this mesh's blocks form their own same-process exchange group
+  static std::atomic<int> next_local_group{1};
+  int local_group = next_local_group.fetch_add(1);
+
   for (int i = 0; i < options->blocks_per_process(); ++i) {
     auto block_opts = clone_block_options(base);
     auto layout = block_opts->layout();
+    layout->local_group(local_group);
     layout->blocks_per_process(options->blocks_per_process());
     layout->world_size(layout->process_world_size() *
                        options->blocks_per_process());
@@ -254,7 +270,8 @@ void MeshImpl::reset() {
 
   if (blocks.size() > 1) {
     workers_ = std::make_shared<BlockWorkerPool>(
-        blocks.size(), torch::Device(blocks.front()->options->device_str()));
+        blocks.size(), torch::Device(blocks.front()->options->device_str()),
+        local_group);
   }
 }
 
