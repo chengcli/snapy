@@ -7,6 +7,8 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/coord_utils.hpp>
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/coord/x1_centroid.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
@@ -166,6 +168,26 @@ void HydroImpl::reset() {
     register_module(forcing_names[i], forcings[i].ptr());
   }
 
+  // angular-momentum-fixer: the grid is known here, not in the YAML reader
+  _forcing_torque.clear();
+  for (auto const& name : forcing_names)
+    _forcing_torque.push_back(name == "diffusion" || name == "relax-bot-velo" ||
+                              name == "top-sponge-lyr" ||
+                              name == "bot-sponge-lyr");
+  if (options->coriolis() && options->coriolis()->angular_momentum_fixer()) {
+    auto const& type = pmb->pcoord->options->type();
+    TORCH_CHECK(type == "gnomonic-equiangle",
+                "coriolis angular-momentum-fixer needs the gnomonic-equiangle "
+                "(cubed-sphere) coordinate, got '",
+                type, "'; set it false otherwise");
+    TORCH_CHECK(options->coriolis()->type() == "xyz",
+                "coriolis angular-momentum-fixer needs type: xyz");
+    TORCH_CHECK(options->coriolis()->omega2() == 0. &&
+                    options->coriolis()->omega3() == 0.,
+                "coriolis angular-momentum-fixer needs omega2 = omega3 = 0 "
+                "(its axis is the omega1 axis); set it false otherwise");
+  }
+
   //// ---- (10) populate buffers ---- ////
   int nc1 = pmb->options->coord()->nc1();
   int nc2 = pmb->options->coord()->nc2();
@@ -214,6 +236,11 @@ void HydroImpl::reset() {
       register_buffer("gwfix_pending", torch::zeros({1}, torch::kFloat64));
   _gwfix_wall =
       register_buffer("gwfix_wall", torch::zeros({1}, torch::kFloat64));
+  _aamfix_d = register_buffer("aamfix_d", torch::zeros({1}, torch::kFloat64));
+  _aamfix_total =
+      register_buffer("aamfix_total", torch::zeros({1}, torch::kFloat64));
+  _aamfix_pending =
+      register_buffer("aamfix_pending", torch::zeros({1}, torch::kFloat64));
 }
 
 bool HydroImpl::is_x1_wall(int f) const {
@@ -227,6 +254,25 @@ bool HydroImpl::gravity_work_fixer() const {
   auto g = options->grav();
   return g && g->grav1() != 0. && g->gravity_work() == "cell" &&
          g->gravity_work_fixer();
+}
+
+bool HydroImpl::angular_momentum_fixer() const {
+  auto c = options->coriolis();
+  return c && c->angular_momentum_fixer();
+}
+
+torch::Tensor HydroImpl::angular_momentum(torch::Tensor const& d) const {
+  auto cs = dynamic_cast<GnomonicEquiangleImpl const*>(pmb->pcoord.get());
+  TORCH_CHECK(cs, "[Hydro] angular_momentum needs the gnomonic-equiangle grid");
+  int ny = d.size(0) - ICY;
+  auto m = d[IDN].clone();
+  if (ny > 0) m += d.narrow(0, ICY, ny).sum(0);
+  auto mom = d.narrow(0, IVX, 3).clone();  // covariant rows -> contravariant
+  coord_vec_raise_(mom, cs->cosine_cell_kj);
+  double omega = options->coriolis() ? options->coriolis()->omega1() : 0.;
+  auto l = (cs->aam_coef * mom).sum(0) + omega * m * cs->aam_inertia;
+  auto in3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  return l.index(in3).sum().to(torch::kFloat64);
 }
 
 bool HydroImpl::flux_covariance() {

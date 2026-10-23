@@ -10,6 +10,7 @@
 
 // snap
 #include <snap/coord/coord_utils.hpp>
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/hydro/flux_positivity.hpp>
 #include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/input/read_restart_file.hpp>
@@ -629,6 +630,10 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       phydro->commit_gravity_work_fix();      // the previous step was accepted
       phydro->gravity_work_wall_mass().zero_();
     }
+    if (phydro->angular_momentum_fixer()) {
+      phydro->angular_momentum_defect().zero_();
+      phydro->commit_angular_momentum_fix();
+    }
     if (phydro->picorr) {
       phydro->picorr->reset_dry_clamp_step();
       phydro->picorr->reset_solve_failure();
@@ -859,7 +864,81 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     apply_gravity_work_fixer(vars, reduce[0]);
   }
 
+  // angular-momentum-fixer (#314): once per step, after the last mass change,
+  // add the solid-body spin about the omega1 axis that removes the step's
+  // global AAM defect D: du_east = -(D / I) r cos(lat), I = sum rho r^2
+  // cos^2(lat) V. Mass and energy are untouched. A Mesh with several local
+  // blocks sums them first (MeshImpl::forward).
+  if (stage == pintg->stages.size() - 1 && phydro->angular_momentum_fixer() &&
+      !defer_angular_momentum_fixer) {
+    std::vector<at::Tensor> reduce = {angular_momentum_fixer_sums(vars)};
+    if (_playout->has_process_group()) {
+      _playout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
+    }
+    apply_angular_momentum_fixer(vars, reduce[0]);
+  }
+
   apply_boundaries(vars, hydro_u, scalar_s);
+}
+
+torch::Tensor MeshBlockImpl::angular_momentum_fixer_sums(
+    Variables const &vars) const {
+  auto cs = dynamic_cast<GnomonicEquiangleImpl const *>(pcoord.get());
+  TORCH_CHECK(cs,
+              "[MeshBlock] angular-momentum-fixer needs the "
+              "gnomonic-equiangle grid");
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  // immersed solid cells are refilled each step: they take no share of -D
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto inertia = (m * cs->aam_inertia).index(in3).sum();
+  // the limiter patched a cell or found a NaN: the redo check discards the
+  // step
+  auto const &marks = phydro->peos->limiter_marks();
+  auto redo = phydro->picorr
+                  ? phydro->picorr->solve_failed_tensor(inertia.options())
+                  : torch::zeros_like(inertia);
+  if (marks.defined()) redo = torch::maximum(redo, marks.any().to(redo));
+  return torch::stack({phydro->angular_momentum_defect()[0],
+                       inertia.to(torch::kFloat64), redo.to(torch::kFloat64)})
+      .cpu();
+}
+
+void MeshBlockImpl::apply_angular_momentum_fixer(Variables &vars,
+                                                 torch::Tensor const &global) {
+  auto cs = dynamic_cast<GnomonicEquiangleImpl const *>(pcoord.get());
+  TORCH_CHECK(cs,
+              "[MeshBlock] angular-momentum-fixer needs the "
+              "gnomonic-equiangle grid");
+  auto g = global.to(torch::kCPU, torch::kFloat64).contiguous();
+  auto ga = g.accessor<double, 1>();
+  double D = ga[0], inertia = ga[1];
+  bool finite = true;
+  for (int64_t i = 0; i < g.size(0); ++i)
+    finite = finite && std::isfinite(ga[i]);
+  if (ga[2] > 0. || !finite || !(inertia > 0.)) {
+    // a step the redo check will discard (limiter repair, NaN, non-finite
+    // sums) is left to it, as with the fixer off
+    phydro->angular_momentum_defect().zero_();
+    return;
+  }
+  auto hydro_u = vars.at("hydro_u");
+  int ny = hydro_u.size(0) - ICY;
+  auto m = hydro_u[IDN].clone();
+  if (ny > 0) m += hydro_u.narrow(0, ICY, ny).sum(0);
+  if (vars.count("solid")) m.masked_fill_(vars.at("solid"), 0.);
+  // solid-body momentum -(D / I) rho r cos(lat) e_east, contravariant then
+  // lowered to the conserved covariant rows
+  auto dm = cs->aam_east * (m * (-D / inertia)).unsqueeze(0);
+  coord_vec_lower_(dm, cs->cosine_cell_kj);
+  auto in3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  hydro_u[IVY].index(in3) += dm[VEL2].index(in3);
+  hydro_u[IVZ].index(in3) += dm[VEL3].index(in3);
+  phydro->angular_momentum_defect().zero_();
+  phydro->add_angular_momentum_fix(-D);  // counted once the step is accepted
 }
 
 torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
@@ -1157,6 +1236,8 @@ void print_cycle_diagnostics(
   if (vic_max.defined()) print(" vicclamp=", vic_max[0].item<double>());
   if (root->phydro->gravity_work_fixer())  // global: every block holds it
     print(" fixgrav=", root->phydro->gravity_work_fix()[0].item<double>());
+  if (root->phydro->angular_momentum_fixer())
+    print(" fixaam=", root->phydro->angular_momentum_fix()[0].item<double>());
   SINFO() << std::endl;
 }
 
@@ -1295,8 +1376,9 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
       return -1;  // terminate
     }
 
-    // reset variables (the fixer's -D goes with them: drop its count)
+    // reset variables (the fixers' -D goes with them: drop their count)
     phydro->drop_gravity_work_fix();
+    phydro->drop_angular_momentum_fix();
     vars["hydro_u"].copy_(_hydro_u0);
     phydro->peos->forward(vars["hydro_u"], vars["hydro_w"]);
     if (vars.count("scalar_s")) {
@@ -1321,6 +1403,7 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
   // good to go
   pintg->current_redo = 0;
   phydro->commit_gravity_work_fix();
+  phydro->commit_angular_momentum_fix();
   return 0;
 }
 

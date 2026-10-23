@@ -338,23 +338,44 @@ void MeshImpl::forward(MeshVariables& vars, double dt, int stage) {
     return;
   }
 
-  for (auto& b : blocks) b->defer_gravity_work_fixer = true;
+  for (auto& b : blocks) {
+    b->defer_gravity_work_fixer = true;
+    b->defer_angular_momentum_fixer = true;
+  }
   run_block_jobs(
       [&](size_t i) { blocks[i]->advance_local(vars[i], dt, stage); });
-  // gravity-work-fixer: one sum over the local blocks, one reduction
+  // the global fixers: one sum over the local blocks, one reduction each
   auto root = blocks.front();
-  if (stage == static_cast<int>(root->pintg->stages.size()) - 1 &&
-      root->phydro->gravity_work_fixer()) {
+  bool last = stage == static_cast<int>(root->pintg->stages.size()) - 1;
+  bool gwfix = last && root->phydro->gravity_work_fixer();
+  bool aamfix = last && root->phydro->angular_momentum_fixer();
+  auto layout = root->get_layout();
+  if (gwfix) {
     auto sums = torch::zeros({5}, torch::kFloat64);
     for (size_t i = 0; i < blocks.size(); ++i)
       sums += blocks[i]->gravity_work_fixer_sums(vars[i]);
     std::vector<at::Tensor> reduce = {sums};
-    auto layout = root->get_layout();
     if (layout->has_process_group()) {
       layout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
     }
     run_block_jobs([&](size_t i) {
       blocks[i]->apply_gravity_work_fixer(vars[i], reduce[0]);
+    });
+  }
+  if (aamfix) {
+    auto sums = torch::zeros({3}, torch::kFloat64);
+    for (size_t i = 0; i < blocks.size(); ++i)
+      sums += blocks[i]->angular_momentum_fixer_sums(vars[i]);
+    std::vector<at::Tensor> reduce = {sums};
+    if (layout->has_process_group()) {
+      layout->comm->allreduce(reduce, c10d::ReduceOp::SUM);
+    }
+    run_block_jobs([&](size_t i) {
+      blocks[i]->apply_angular_momentum_fixer(vars[i], reduce[0]);
+    });
+  }
+  if (gwfix || aamfix) {
+    run_block_jobs([&](size_t i) {
       auto& v = vars[i];
       blocks[i]->apply_boundaries(
           v, v.at("hydro_u"),

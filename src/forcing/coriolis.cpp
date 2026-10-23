@@ -21,7 +21,8 @@ CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const &forcing) {
 
   auto node = forcing["coriolis"];
   check_keys(node, "forcing/coriolis",
-             {"type", "omega1", "omega2", "omega3", "traditional"});
+             {"type", "omega1", "omega2", "omega3", "traditional",
+              "angular-momentum-fixer"});
   auto op = CoriolisOptionsImpl::create();
 
   op->type() = node["type"].as<std::string>("xyz");
@@ -32,6 +33,14 @@ CoriolisOptions CoriolisOptionsImpl::from_yaml(YAML::Node const &forcing) {
   op->omega2() = node["omega2"].as<double>(0.);
   op->omega3() = node["omega3"].as<double>(0.);
   op->traditional() = node["traditional"].as<bool>(false);
+  op->angular_momentum_fixer() = node["angular-momentum-fixer"].as<bool>(false);
+  // the coordinate is not known here; HydroImpl checks it is the cubed sphere
+  TORCH_CHECK(!op->angular_momentum_fixer() || op->type() == "xyz",
+              "coriolis angular-momentum-fixer needs type: xyz");
+  TORCH_CHECK(!op->angular_momentum_fixer() ||
+                  (op->omega2() == 0. && op->omega3() == 0.),
+              "coriolis angular-momentum-fixer needs omega2 = omega3 = 0 (its "
+              "axis is the omega1 axis); set it false otherwise");
 
   return op;
 }

@@ -41,7 +41,8 @@ void bind_forcing(py::module &m) {
            })
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega1)
       .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega2)
-      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega3);
+      .ADD_OPTION(double, snap::CoriolisOptionsImpl, omega3)
+      .ADD_OPTION(bool, snap::CoriolisOptionsImpl, angular_momentum_fixer);
 
   auto pyDiffusionOptions =
       py::class_<snap::DiffusionOptionsImpl, snap::DiffusionOptions>(
