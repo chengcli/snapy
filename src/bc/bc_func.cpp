@@ -139,16 +139,34 @@ void radiating(torch::Tensor const& var, int dim, BoundaryFuncOptions op,
   auto interior = [&](torch::Tensor t) { return t.narrow(dim, src, 1); };
   auto ghost = [&](torch::Tensor t) { return t.narrow(dim, dst, ng); };
   auto w = var.clone(), b = op.reference.clone();
-  auto sound = [&](torch::Tensor t) {
+  // The source plane's cells off the block interior (the other axes' ghost
+  // rows) hold stale or forced values that the exchange or the next face
+  // overwrites; only the interior cells must be a valid gas state.
+  auto in_plane =
+      torch::ones_like(var[IDN].narrow(dim - 1, src, 1), torch::kBool);
+  for (int d = 1; d <= 3; ++d) {
+    if (d == dim || var.size(d) == 1) continue;
+    int lo = d == 3 ? op.coord->il() : d == 2 ? op.coord->jl() : op.coord->kl();
+    int hi = d == 3 ? op.coord->iu() : d == 2 ? op.coord->ju() : op.coord->ku();
+    auto keep = torch::zeros_like(in_plane);
+    keep.narrow(d - 1, lo, hi - lo + 1).fill_(true);
+    in_plane = in_plane & keep;
+  }
+  auto sound = [&](torch::Tensor t, bool background) {
     auto a = op.eos->compute("W->A", {t});
     auto c = op.eos->compute("WA->L", {t, a});
-    TORCH_CHECK(
-        torch::isfinite(c).all().item<bool>() && (c > 0).all().item<bool>(),
-        "outflow: invalid EOS sound speed");
     // EOS sound speed has spatial axes only, unlike the 4D hydro tensor.
-    return c.narrow(dim - 1, src, 1);
+    c = c.narrow(dim - 1, src, 1);
+    auto ok = torch::isfinite(c) & (c > 0);
+    TORCH_CHECK((background ? ok : ok | ~in_plane).all().item<bool>(),
+                "outflow: invalid EOS sound speed");
+    return std::make_pair(c, ok);
   };
-  auto c0 = sound(b), c = sound(w);
+  auto [c0, ok0] = sound(b, true);
+  auto [c, ok] = sound(w, false);
+  // an off-interior cell without a valid state takes the background there
+  interior(w).copy_(torch::where(ok.unsqueeze(0), interior(w), interior(b)));
+  c = torch::where(ok, c, c0);
   op.coord->boundary_velocity_(w, axis);
   op.coord->boundary_velocity_(b, axis);
   auto wi = interior(w), bi = interior(b);
