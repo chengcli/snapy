@@ -145,6 +145,20 @@ std::map<std::pair<int, int>, torch::Tensor> g_x1_anchors;
 //! keyed by (group, sender block rank, receiver block rank, tag)
 std::map<std::tuple<int, int, int, int>, torch::Tensor> g_local_mail;
 
+// g_local_exchange_mutex held
+void drop_local_group(int local_group) {
+  g_aborted_groups.erase(local_group);
+  auto of_group = [&](auto const& key) {
+    return std::get<0>(key) == local_group;
+  };
+  erase_keys_if(g_local_exchange_states, [&](LocalExchangeKey const& key) {
+    return key.local_group == local_group;
+  });
+  erase_keys_if(g_column_boards, of_group);
+  erase_keys_if(g_x1_anchors, of_group);
+  erase_keys_if(g_local_mail, of_group);
+}
+
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
   if (layout.num_exchange_buffers() < 27) return {0, 0};
@@ -299,10 +313,17 @@ LayoutImpl::~LayoutImpl() {
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
   // only this layout's own registration: the slot may since have been taken
   // by a newer layout of the same group and block index
+  int group = options->local_group();
   auto it = g_local_layouts.find(
-      {options->local_group(), options->local_block_index(options->rank())});
+      {group, options->local_block_index(options->rank())});
   if (it != g_local_layouts.end() && it->second == this) {
     g_local_layouts.erase(it);
+  }
+  // the group's last layout: no block of it can be at a barrier any more, so
+  // its barrier states and boards go too (each Mesh has its own group)
+  auto next = g_local_layouts.lower_bound({group, 0});
+  if (next == g_local_layouts.end() || next->first.first != group) {
+    drop_local_group(group);
   }
 }
 
@@ -314,16 +335,14 @@ void LayoutImpl::abort_local_exchange(int local_group) {
 
 void LayoutImpl::reset_local_exchange(int local_group) {
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-  g_aborted_groups.erase(local_group);
-  auto of_group = [&](auto const& key) {
-    return std::get<0>(key) == local_group;
-  };
-  erase_keys_if(g_local_exchange_states, [&](LocalExchangeKey const& key) {
-    return key.local_group == local_group;
-  });
-  erase_keys_if(g_column_boards, of_group);
-  erase_keys_if(g_x1_anchors, of_group);
-  erase_keys_if(g_local_mail, of_group);
+  drop_local_group(local_group);
+}
+
+size_t LayoutImpl::local_exchange_entries() {
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  return g_local_layouts.size() + g_local_exchange_states.size() +
+         g_column_boards.size() + g_x1_anchors.size() + g_local_mail.size() +
+         g_aborted_groups.size();
 }
 
 void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,

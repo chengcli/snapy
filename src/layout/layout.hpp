@@ -221,6 +221,10 @@ class LayoutImpl {
   //! block has stopped, so the group can exchange again.
   static void abort_local_exchange(int local_group);
   static void reset_local_exchange(int local_group);
+  //! Entries of the same-process exchange tables (registrations, barrier
+  //! states, boards, messages, aborted groups), for tests: a group's entries
+  //! go with its last layout.
+  static size_t local_exchange_entries();
 
   //! Owning MeshBlock that provides exchange buffer storage for this layout.
   MeshBlockImpl* owner() const { return _owner; }

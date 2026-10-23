@@ -178,6 +178,24 @@ TEST(CubedSphere, subdivided_panel_exchange_matches_one_block) {
   }
 }
 
+// Each Mesh has its own same-process exchange group; its barrier states and
+// registrations go with its blocks, so building and freeing meshes one after
+// another leaves the process-wide tables where they started.
+TEST(CubedSphere, freed_mesh_leaves_no_local_exchange_state) {
+  size_t before = LayoutImpl::local_exchange_entries();
+  for (int i = 0; i < 3; ++i) {
+    for (int nb : {1, 2}) {
+      try {
+        run(nb);
+      } catch (std::exception const &e) {
+        FAIL() << "nb2=" << nb << " " << e.what();
+      }
+      EXPECT_EQ(LayoutImpl::local_exchange_entries(), before)
+          << "after mesh " << i << " nb2=" << nb;
+    }
+  }
+}
+
 TEST(CubedSphere, subdivided_panel_exchange_matches_one_block_cuda) {
   if (!snapy_cuda_test_enabled()) GTEST_SKIP() << "CUDA is not available";
   PanelFields ref;
