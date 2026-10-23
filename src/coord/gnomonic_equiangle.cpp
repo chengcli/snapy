@@ -1,3 +1,6 @@
+// C/C++
+#include <array>
+
 // torch
 #include <ATen/TensorIterator.h>
 
@@ -146,6 +149,34 @@ void GnomonicEquiangleImpl::reset() {
 
   register_buffer("x_ov_rD_kji", x_ov_rD_kji);
   register_buffer("y_ov_rC_kji", y_ov_rC_kji);
+
+  // axial angular momentum coefficients (see the header): Cartesian (z, x, y)
+  // directions of the three unit basis vectors, n = b_1 the position
+  {
+    auto mesh3 = torch::meshgrid({x3v, x2v, x1v}, "ij");
+    auto beta3 = mesh3[0], alpha3 = mesh3[1], r3 = mesh3[2];
+    std::array<torch::Tensor, 3> cart;
+    for (int i = 0; i < 3; ++i) {
+      cart[i] =
+          torch::zeros({3, op->nc3(), op->nc2(), op->nc1()}, torch::kFloat64);
+      cart[i][i].fill_(1.);
+      cs_contra_to_cart_(cart[i], alpha3, beta3, face_id);
+    }
+    auto nx = cart[0][VEL2], ny = cart[0][VEL3];
+    auto vol = cell_volume();
+    aam_coef = torch::empty_like(cart[0]);
+    for (int i = 0; i < 3; ++i)
+      aam_coef[i] = r3 * (nx * cart[i][VEL3] - ny * cart[i][VEL2]) * vol;
+    aam_inertia = r3.square() * (nx.square() + ny.square()) * vol;
+    // z_hat x R = r (-n_y, n_x, 0) in (x, y, z), ordered (z, x, y) here
+    aam_east = torch::zeros_like(cart[0]);
+    aam_east[VEL2] = -r3 * ny;
+    aam_east[VEL3] = r3 * nx;
+    cs_cart_to_contra_(aam_east, alpha3, beta3, face_id);
+    register_buffer("aam_coef", aam_coef);
+    register_buffer("aam_inertia", aam_inertia);
+    register_buffer("aam_east", aam_east);
+  }
 
   // register metric data (placeholder, overwritten later)
   auto vol = cell_volume();

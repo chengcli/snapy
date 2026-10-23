@@ -201,6 +201,14 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   void apply_gravity_work_fixer(Variables& vars, torch::Tensor const& global);
   //! set by a Mesh with several local blocks: it reduces and applies the fix
   bool defer_gravity_work_fixer = false;
+
+  //! angular-momentum-fixer (#314): this block's {AAM defect D, inertia
+  //! sum(rho aam_inertia), redo flag} (CPU, double), and the step-end
+  //! solid-body spin from the global sums
+  torch::Tensor angular_momentum_fixer_sums(Variables const& vars) const;
+  void apply_angular_momentum_fixer(Variables& vars,
+                                    torch::Tensor const& global);
+  bool defer_angular_momentum_fixer = false;
   void exchange(Variables& vars, SyncOptions const& opts) const;
 
   //! Serialize state into MeshBlock-owned buffers without launching comms yet.

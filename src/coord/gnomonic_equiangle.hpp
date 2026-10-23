@@ -19,6 +19,21 @@ class GnomonicEquiangleImpl
   // metric data
   torch::Tensor g11, g22, g33, gi11, gi22, gi33, g12, g13, g23;
 
+  // axial angular momentum (AAM) about the global z axis, the axis of the
+  // Coriolis option omega1 (#314). All three are per cell, [.., nc3, nc2, nc1],
+  // and include the cell volume V. With m^i the CONTRAVARIANT momentum density
+  // (the conserved rows raised with coord_vec_raise_), rho the density and
+  // Omega the rotation rate:
+  //   L_rel  = sum_i aam_coef[i] * m^i        relative AAM of the cell,
+  //            aam_coef[i] = r (n x b_i)_z V, n the unit position vector,
+  //            b_i the unit basis vector of component i (aam_coef[0] = 0)
+  //   L_plan = Omega * rho * aam_inertia      planetary AAM,
+  //            aam_inertia = r^2 cos^2(lat) V
+  //   aam_east[i]: contravariant components of the velocity r cos(lat) e_east
+  //            of a unit-rate solid-body rotation about z (aam_east[0] = 0),
+  //            so sum_i aam_coef[i] * aam_east[i] = aam_inertia
+  torch::Tensor aam_coef, aam_inertia, aam_east;
+
   // local ghost cell usrc -- GLOBAL source coordinates, NOT rebased onto this
   // block. The block offset is applied to the integer index instead; see
   // _interp_ghost_BT.

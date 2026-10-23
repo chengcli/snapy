@@ -112,6 +112,16 @@ class CoriolisOptions:
         """Set rotation rate omega3."""
         ...
 
+    @overload
+    def angular_momentum_fixer(self) -> bool:
+        """Get the global axial angular momentum fixer switch (cubed sphere)."""
+        ...
+
+    @overload
+    def angular_momentum_fixer(self, value: bool) -> "CoriolisOptions":
+        """Set the global axial angular momentum fixer switch (cubed sphere)."""
+        ...
+
 class DiffusionOptions:
     """Isotropic hydro diffusion options."""
 

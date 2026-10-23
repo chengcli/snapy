@@ -105,7 +105,9 @@ struct CoriolisOptionsImpl {
        << "* omega2 = " << omega2() << "\n"
        << "* omega3 = " << omega3() << "\n"
        << "* type = " << type() << "\n"
-       << "* traditional = " << (traditional() ? "true" : "false") << "\n";
+       << "* traditional = " << (traditional() ? "true" : "false") << "\n"
+       << "* angular-momentum-fixer = "
+       << (angular_momentum_fixer() ? "true" : "false") << "\n";
   }
 
   ADD_ARG(double, omega1) = 0.;
@@ -114,6 +116,10 @@ struct CoriolisOptionsImpl {
 
   ADD_ARG(std::string, type) = "xyz";
   ADD_ARG(bool, traditional) = false;
+  //! global axial angular momentum fixer on the gnomonic-equiangle cubed
+  //! sphere (#314): once per step, add the solid-body spin about the omega1
+  //! axis that undoes the dynamics' AAM defect. See HydroImpl.
+  ADD_ARG(bool, angular_momentum_fixer) = false;
 };
 using CoriolisOptions = std::shared_ptr<CoriolisOptionsImpl>;
 

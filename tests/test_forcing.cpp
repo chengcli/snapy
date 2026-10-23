@@ -19,6 +19,7 @@
 
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/forcing/forcing.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -241,6 +242,92 @@ TEST(forcing, cubed_sphere_coriolis_supports_traditional_approximation) {
 
 TEST(forcing, cubed_sphere_shallow_water_uses_traditional_coriolis) {
   check_cubed_sphere_coriolis("shallow-water", false, true);
+}
+
+TEST(forcing_options, parse_coriolis_angular_momentum_fixer) {
+  auto op = CoriolisOptionsImpl::from_yaml(
+      YAML::Load("coriolis: {type: xyz, omega1: 1.e-4}"));
+  EXPECT_FALSE(op->angular_momentum_fixer());
+  op = CoriolisOptionsImpl::from_yaml(YAML::Load(
+      "coriolis: {type: xyz, omega1: 1.e-4, angular-momentum-fixer: true}"));
+  EXPECT_TRUE(op->angular_momentum_fixer());
+  // its axis is the omega1 axis, and the cubed-sphere Coriolis is type xyz
+  EXPECT_THROW(CoriolisOptionsImpl::from_yaml(
+                   YAML::Load("coriolis: {omega1: 1.e-4, omega2: 1.e-5, "
+                              "angular-momentum-fixer: true}")),
+               c10::Error);
+  EXPECT_THROW(CoriolisOptionsImpl::from_yaml(
+                   YAML::Load("coriolis: {type: '123', omega1: 1.e-4, "
+                              "angular-momentum-fixer: true}")),
+               c10::Error);
+}
+
+// #314: the AAM coefficients of the gnomonic-equiangle grid. On every panel
+// (i) the radial momentum carries no AAM and the east direction is tangential,
+// (ii) a unit-rate solid-body rotation has L_rel = aam_inertia per cell, and
+// (iii) the torque of the Coriolis force about z, booked through aam_coef,
+// equals minus the rate of change of the planetary AAM Omega r^2 cos^2(lat)
+// of the same momentum: -2 Omega r (n_x m_x + n_y m_y) V. (iii) ties the
+// coefficients' axis and sign to the Coriolis module's omega1 axis, so the
+// fixer's defect sees the Coriolis torque and the mass transport cancel.
+TEST(forcing, cubed_sphere_aam_coefficients_match_coriolis_torque) {
+  double omega = 7.e-5;
+  for (int face = 0; face < 6; ++face) {
+    auto block = make_cubed_sphere_block(face, "ideal-gas",
+                                         "test_forcing_cubed_sphere.yaml");
+    auto cs = std::dynamic_pointer_cast<GnomonicEquiangleImpl>(block->pcoord);
+    ASSERT_TRUE(cs) << "face " << face;
+    double scale = cs->aam_coef.abs().max().item<double>();
+    EXPECT_LT(cs->aam_coef[VEL1].abs().max().item<double>(), 1.e-12 * scale)
+        << "face " << face;
+    double rmax = cs->x1v.abs().max().item<double>();
+    EXPECT_LT(cs->aam_east[VEL1].abs().max().item<double>(), 1.e-12 * rmax)
+        << "face " << face;
+    auto l_sb = (cs->aam_coef * cs->aam_east).sum(0);
+    EXPECT_TRUE(torch::allclose(l_sb, cs->aam_inertia, 1.e-12,
+                                1.e-12 * cs->aam_inertia.max().item<double>()))
+        << "face " << face;
+
+    auto coord = block->pcoord;
+    auto mesh = torch::meshgrid({coord->x3v, coord->x2v, coord->x1v}, "ij");
+    auto shape = std::vector<int64_t>{
+        3, coord->options->nc3(), coord->options->nc2(), coord->options->nc1()};
+    // a global Cartesian (z, x, y) velocity, the panel's contravariant form
+    auto global_velocity = torch::empty(shape, torch::kFloat64);
+    global_velocity[VEL1].fill_(1.3);
+    global_velocity[VEL2].fill_(-2.1);
+    global_velocity[VEL3].fill_(0.8);
+    auto panel_velocity = global_velocity.clone();
+    cs_cart_to_contra_(panel_velocity, mesh[1], mesh[0], face);
+
+    auto w = torch::zeros({block->phydro->peos->nvar(), coord->options->nc3(),
+                           coord->options->nc2(), coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.7);
+    w.narrow(0, IVX, 3).copy_(panel_velocity);
+    w[IPR].fill_(1.e5);
+    auto du = torch::zeros_like(w);
+    auto op = CoriolisOptionsImpl::from_yaml(
+        YAML::Load("coriolis: {type: xyz, omega1: 7.e-5}"));
+    CoriolisXYZ(op, block->phydro.get())->forward(du, w, torch::Tensor(), 1.);
+
+    auto dm = du.narrow(0, IVX, 3).clone();
+    coord_vec_raise_(dm, coord->cosine_cell_kj);
+    auto torque = (cs->aam_coef * dm).sum(0);
+
+    auto n = torch::zeros(shape, torch::kFloat64);
+    n[VEL1].fill_(1.);
+    cs_contra_to_cart_(n, mesh[1], mesh[0], face);
+    auto m = w[IDN].unsqueeze(0) * global_velocity;
+    auto expected = -2. * omega * mesh[2] *
+                    (n[VEL2] * m[VEL2] + n[VEL3] * m[VEL3]) *
+                    coord->cell_volume();
+    EXPECT_TRUE(torch::allclose(torque, expected, 1.e-10,
+                                1.e-10 * expected.abs().max().item<double>()))
+        << "face " << face << ": max |torque - expected| = "
+        << (torque - expected).abs().max().item<double>() << " of "
+        << expected.abs().max().item<double>();
+  }
 }
 
 TEST(forcing, relax_bottom_temperature) {

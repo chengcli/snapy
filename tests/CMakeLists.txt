@@ -295,6 +295,8 @@ snapy_add_python_test(test_flux_positivity_cubedsphere_moist TIMEOUT 300
                       LABELS "python;positivity;cubed-sphere")
 snapy_add_python_test(test_cubed_sphere_cell_volume TIMEOUT 120
                       LABELS "python;coordinate;cubed-sphere")
+snapy_add_python_test(test_angular_momentum_fixer TIMEOUT 300
+                      LABELS "python;forcing;cubed-sphere")
 snapy_add_python_test(test_outflow_stale_ghosts TIMEOUT 120
                       LABELS "python;boundary;implicit;cubed-sphere")
 snapy_add_python_test(test_tracer_dry_convention TIMEOUT 120 LABELS "python;scalar;implicit;forcing")

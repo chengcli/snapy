@@ -939,7 +939,17 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   bool track_dry =
       pmb->pscalar && pmb->pscalar->nvar() > 0 && !forcings.empty();
   auto dry_before = track_dry ? du[IDN].clone() : torch::Tensor();
-  for (auto& f : forcings) f.forward(du, w, temp, dt);
+  // angular-momentum-fixer: what the physical torques add this stage is left
+  // out of the defect (hydro.hpp)
+  bool aam_fixer = angular_momentum_fixer();
+  auto aam_ext = aam_fixer ? torch::zeros_like(du) : torch::Tensor();
+  for (size_t i = 0; i < forcings.size(); ++i) {
+    // (a forcing pushed after construction has no entry: not a torque)
+    bool torque = aam_fixer && i < _forcing_torque.size() && _forcing_torque[i];
+    auto before = torque ? du.clone() : torch::Tensor();
+    forcings[i].forward(du, w, temp, dt);
+    if (torque) aam_ext += du - before;
+  }
   _forcing_dry = track_dry ? du[IDN] - dry_before : torch::Tensor();
 
   // Face work uses the x1 mass flux after positivity limiting and
@@ -1181,9 +1191,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     du[IPR].slice(-1, is, ie) += gravity_energy_correction;
   }
 
-  if (gwfix_stage.defined()) {
-    // weight of this stage's du in the step's update u0 -> u1 (stage s:
-    // u <- w0 u0 + w1 u + w2 du): w2_s * prod_{t > s} w1_t (rk3: 1/6 1/6 2/3)
+  // weight of this stage's du in the step's update u0 -> u1 (stage s:
+  // u <- w0 u0 + w1 u + w2 du): w2_s * prod_{t > s} w1_t (rk3: 1/6 1/6 2/3)
+  auto stage_weight = [&]() {
     double cw = 1.;
     auto const& st = pmb->pintg->stages;
     if (rk_stage >= 0 && rk_stage < static_cast<int>(st.size())) {
@@ -1191,7 +1201,19 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       for (int t = rk_stage + 1; t < static_cast<int>(st.size()); ++t)
         cw *= st[t].wght1();
     }
-    _gwfix_d += cw * gwfix_stage.to(_gwfix_d.device());
+    return cw;
+  };
+
+  if (gwfix_stage.defined()) {
+    _gwfix_d += stage_weight() * gwfix_stage.to(_gwfix_d.device());
+  }
+
+  if (aam_fixer) {
+    // the dynamics' AAM change this stage: everything in du but the torques
+    // and what the x1 flux carries through the physical x1 boundary faces
+    auto l = angular_momentum(du) - angular_momentum(aam_ext) -
+             angular_momentum_boundary_gain(dt);
+    _aamfix_d += stage_weight() * l.to(_aamfix_d.device());
   }
 
   return du;
