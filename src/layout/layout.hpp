@@ -125,6 +125,9 @@ struct LayoutOptionsImpl {
   ADD_ARG(int, process_world_size) = 1;
   ADD_ARG(int, world_size) = 1;
   ADD_ARG(int, blocks_per_process) = 1;
+  //! same-process block group (one per Mesh): the local exchange registry
+  //! and barriers are keyed by it, so two live meshes never share them
+  ADD_ARG(int, local_group) = 0;
   ADD_ARG(int, master_port) = -1;
   ADD_ARG(int, device_id) = -1;
   ADD_ARG(bool, verbose) = false;
@@ -211,6 +214,17 @@ class LayoutImpl {
   }
 
   virtual ~LayoutImpl();
+
+  //! A block of the group failed: wake the blocks waiting at its local
+  //! exchange barriers (and boards) with an error instead of leaving them
+  //! there. reset_local_exchange() clears the group's state once every
+  //! block has stopped, so the group can exchange again.
+  static void abort_local_exchange(int local_group);
+  static void reset_local_exchange(int local_group);
+  //! Entries of the same-process exchange tables (registrations, barrier
+  //! states, boards, messages, aborted groups), for tests: a group's entries
+  //! go with its last layout.
+  static size_t local_exchange_entries();
 
   //! Owning MeshBlock that provides exchange buffer storage for this layout.
   MeshBlockImpl* owner() const { return _owner; }
