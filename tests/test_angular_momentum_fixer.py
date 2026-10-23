@@ -15,6 +15,13 @@ raised with cosine_cell_kj), independently of the fixer's own per-stage sum.
                     final dL undone, within a factor of two;
   (c) a discretely balanced rest state with the fixer on stays at rest (max |v| / c_s <= REST_TOL)
       and keeps L to TOL;
+  (e) an open top (x1-outer: outflow): the discrete balance of (b) does not hold against the
+      outflow ghost, so mass falls in through the top face (about 1.5% of L in 20 steps). The AAM
+      it carries is physical and must stay. B, the stage-weighted sum of
+      dt A_f [r_f (n x b_i)_z F^i + Omega r_f^2 cos^2(lat) F_mass] over the physical x1 faces, is
+      computed here from the face flux buffer hydro.F1 after each stage:
+        fixer on    |dL - B| / |L| <= TOL, with |B| / |L| > 1e6 TOL (the transport is real)
+        fixer off   |dL - B| / |L| > 100 TOL;
   (d) the key is refused on a Cartesian grid and with omega2 != 0, with clear messages, and is
       reachable from Python.
 Each arm builds its own Mesh and frees it before the next: the local exchange of six panels in
@@ -128,6 +135,63 @@ def initial_state(cfg, blocks, wind):
             w[kIV3] = u_east * east[2]
         mesh_vars.append({"hydro_w": w})
     return mesh_vars
+
+
+def boundary_gain(cfg, blocks, dt):
+    """AAM the last stage's x1 face flux carries in through the physical x1 faces (inner in, outer
+    out), from hydro.F1 and the coordinate buffers."""
+    from snapy import kIDN, kIV1, kIV2, kIV3
+
+    ng, nx1 = cfg["geometry"]["cells"]["nghost"], cfg["geometry"]["cells"]["nx1"]
+    bc = cfg["boundary-condition"]["external"]
+    faces = [(f, sign) for f, sign, key in ((ng, 1.0, "x1-inner"), (ng + nx1, -1.0, "x1-outer"))
+             if bc[key] != "periodic"]
+    total = 0.0
+    for block in blocks:
+        coord = block.module("coord")
+        F = dict(block.named_buffers())["hydro.F1"].double()
+        c = coord.buffer("cosine_cell_kj").double()[..., 0]
+        coef = coord.buffer("aam_coef").double()
+        inertia = coord.buffer("aam_inertia").double()
+        vol = coord.cell_volume().double()
+        area = coord.face_area1().double()
+        x1v, x1f = coord.buffer("x1v").double(), coord.buffer("x1f").double()
+        k, j, _ = interior(block)
+        for face, sign in faces:
+            cell = face if sign > 0 else face - 1
+            m2, m3 = F[kIV2][..., face], F[kIV3][..., face]
+            v2 = (m2 - c * m3) / (1.0 - c * c)
+            v3 = (m3 - c * m2) / (1.0 - c * c)
+            rc, rf, v = x1v[cell], x1f[face], vol[..., cell]
+            ang = coef[..., cell] / (rc * v)
+            cos2 = inertia[..., cell] / (rc * rc * v)
+            fm = F[kIDN][..., face]
+            g = area[..., face] * (rf * (ang[0] * F[kIV1][..., face] + ang[1] * v2 + ang[2] * v3)
+                                   + OMEGA * rf * rf * cos2 * fm)
+            total += sign * dt * g[k, j].sum().item()
+    return total
+
+
+def run_open(cfg, mesh, blocks, mesh_vars, nstep):
+    """Run nstep steps; return L0, the final dL and B, the stage-weighted boundary gain."""
+    mesh_vars, _ = mesh.initialize(mesh_vars)
+    stages = blocks[0].module("intg").stages
+    weight = []
+    for s in range(len(stages)):
+        cw = stages[s].wght2()
+        for t in range(s + 1, len(stages)):
+            cw *= stages[t].wght1()
+        weight.append(cw)
+    l0 = aam(blocks, mesh_vars, OMEGA)
+    gain = 0.0
+    for cycle in range(1, nstep + 1):
+        mesh.set_cycle(cycle)
+        dt = mesh.max_time_step(mesh_vars)
+        for stage in range(len(stages)):
+            mesh.forward(mesh_vars, dt, stage)
+            gain += weight[stage] * boundary_gain(cfg, blocks, dt)
+        assert mesh.check_redo(mesh_vars) == 0, "step rejected at cycle %d" % cycle
+    return l0, aam(blocks, mesh_vars, OMEGA) - l0, gain
 
 
 def run(cfg, mesh, blocks, mesh_vars, nstep):
@@ -263,6 +327,28 @@ def main(argv=None):
         failures.append("rest state moved with the fixer on: max |v| / c_s = %g" % v)
     if not drift <= TOL:
         failures.append("rest + fixer: L drifts %.3e > %.0e" % (drift, TOL))
+
+    # (e) an open top: the AAM crossing it is physical and stays out of the defect
+    for fixer in (False, True):
+        cfg = config(fixer)
+        cfg["boundary-condition"]["external"]["x1-outer"] = "outflow"
+        mesh, blocks = build(cfg, args.device)
+        state = initial_state(cfg, blocks, jet)
+        l0, dl, gain = run_open(cfg, mesh, blocks, state, args.nstep)
+        del mesh, blocks, state
+        gc.collect()
+        miss = abs(dl - gain) / abs(l0)
+        print("(e) open top, fixer %-5s dL / L = %+.6e, B / L = %+.6e, |dL - B| / |L| = %.3e"
+              % (fixer, dl / l0, gain / l0, miss))
+        if not (math.isfinite(dl) and math.isfinite(gain)):
+            failures.append("open top, fixer %s: L or B is not finite" % fixer)
+        elif not abs(gain / l0) > 1.0e6 * TOL:
+            failures.append("open top: boundary transport %.3e of L is too small to test" % (gain / l0))
+        elif fixer and not miss <= TOL:
+            failures.append("open top + fixer: dL - B = %.3e of L, the fixer removes physical "
+                            "boundary transport" % miss)
+        elif not fixer and not miss > 100 * TOL:
+            failures.append("open top, fixer off: |dL - B| = %.3e of L, no defect to fix" % miss)
 
     # (d) refusals and the Python option
     from snapy import MeshBlock

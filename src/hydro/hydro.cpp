@@ -275,6 +275,41 @@ torch::Tensor HydroImpl::angular_momentum(torch::Tensor const& d) const {
   return l.index(in3).sum().to(torch::kFloat64);
 }
 
+torch::Tensor HydroImpl::angular_momentum_boundary_gain(double dt) const {
+  auto cs = dynamic_cast<GnomonicEquiangleImpl const*>(pmb->pcoord.get());
+  TORCH_CHECK(cs, "[Hydro] angular_momentum needs the gnomonic-equiangle grid");
+  auto gain = torch::zeros({}, cs->aam_coef.options().dtype(torch::kFloat64));
+  if (!_flux1.defined() || _flux1.size(-1) <= 1 || options->disable_flux_x1())
+    return gain;
+  int ny = _flux1.size(0) - ICY;
+  int is = cs->il(), ie = cs->iu() + 1;
+  int kl = cs->kl(), ku = cs->ku() + 1, jl = cs->jl(), ju = cs->ju() + 1;
+  double omega = options->coriolis() ? options->coriolis()->omega1() : 0.;
+  auto area = cs->face_area1();
+  auto vol = cs->cell_volume();
+  for (int f : {0, 1}) {
+    if (!is_x1_wall(f)) continue;
+    int face = f == 0 ? is : ie, cell = f == 0 ? is : ie - 1;
+    double sign = f == 0 ? 1. : -1.;  // the inner face's flux enters
+    auto F = _flux1.select(-1, face);
+    auto mom = F.narrow(0, IVX, 3).clone();  // covariant -> contravariant
+    coord_vec_raise_(mom, cs->cosine_cell_kj.select(-1, 0));
+    auto fm = F[IDN].clone();
+    if (ny > 0) fm += F.narrow(0, ICY, ny).sum(0);
+    // the angular factors are the cell's: an x1 face shares its (alpha, beta)
+    auto rc = cs->x1v[cell];
+    auto rf = cs->x1f[face];
+    auto v = vol.select(-1, cell);
+    auto ang = cs->aam_coef.select(-1, cell) / (rc * v);  // (n x b_i)_z
+    auto cos2 = cs->aam_inertia.select(-1, cell) / (rc * rc * v);
+    auto g = area.select(-1, face) *
+             (rf * (ang * mom).sum(0) + omega * rf * rf * cos2 * fm);
+    gain += sign * dt *
+            g.slice(0, kl, ku).slice(1, jl, ju).sum().to(torch::kFloat64);
+  }
+  return gain;
+}
+
 bool HydroImpl::flux_covariance() {
   // read once: the term is a scheme choice for the whole run, and every block
   // must make the same one or the shared faces stop being single-valued; on

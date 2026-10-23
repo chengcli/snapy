@@ -229,15 +229,22 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! momentum flux divergence and the metric source terms. Each stage books
   //! the AAM change of the dynamics (flux divergence, metric sources,
   //! Coriolis, the implicit correction), leaving out the forcings that are
-  //! physical torques (diffusion, relax-bot-velo, the sponges) and the user
-  //! stage forcings; at the last stage MeshBlockImpl adds the solid-body
-  //! spin about the axis that removes the step's global defect. Total energy
-  //! is left alone, so the spin's kinetic energy comes out of the internal
-  //! energy.
+  //! physical torques (diffusion, relax-bot-velo, the sponges), the user
+  //! stage forcings, and the AAM carried through the physical x1 boundary
+  //! faces (an open top or bottom); at the last stage MeshBlockImpl adds the
+  //! solid-body spin about the axis that removes the step's global defect.
+  //! Total energy is left alone, so the spin's kinetic energy comes out of the
+  //! internal energy.
   bool angular_momentum_fixer() const;
   //! AAM of the interior cells of a conserved increment d (kg m^2/s, a
   //! float64 scalar tensor on the device); needs the gnomonic-equiangle grid
   torch::Tensor angular_momentum(torch::Tensor const& d) const;
+  //! AAM that this stage's x1 face flux carries into the block through its
+  //! physical x1 boundary faces, dt * sum A_f [r_f (n x b_i)_z F^i +
+  //! omega1 r_f^2 cos^2(lat) F_mass] (inner face in, outer face out), with
+  //! F^i the raised horizontal momentum flux (float64 scalar tensor). The
+  //! implicit solve seals the column ends, so this is the only boundary term.
+  torch::Tensor angular_momentum_boundary_gain(double dt) const;
   //! this block's AAM defect of the dynamics in the current step, accumulated
   //! over the stages with their weight in the step
   torch::Tensor angular_momentum_defect() const { return _aamfix_d; }

@@ -1210,7 +1210,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   if (aam_fixer) {
     // the dynamics' AAM change this stage: everything in du but the torques
-    auto l = angular_momentum(du) - angular_momentum(aam_ext);
+    // and what the x1 flux carries through the physical x1 boundary faces
+    auto l = angular_momentum(du) - angular_momentum(aam_ext) -
+             angular_momentum_boundary_gain(dt);
     _aamfix_d += stage_weight() * l.to(_aamfix_d.device());
   }
 
