@@ -213,6 +213,11 @@ std::string MetadataTable::GetGridType(std::string name) const {
   name = strip_stat_suffix(std::move(name));
   int nouts = table_.size();
 
+  // if trailing 5 characters is '_flux', grid type is 'CCF'
+  if (name.size() >= 5 && name.substr(name.size() - 5) == "_flux") {
+    return "CCF";
+  }
+
   // if leading 5 characters is 'path_', grid type is '-CC'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "-CC";
@@ -234,6 +239,11 @@ std::string MetadataTable::GetGridType(std::string name) const {
 
 std::string MetadataTable::GetUnits(std::string name) const {
   name = strip_stat_suffix(std::move(name));
+  // if trailing 5 characters is '_flux', unit is 'W/m^2'
+  if (name.size() >= 5 && name.substr(name.size() - 5) == "_flux") {
+    return "W/m^2";
+  }
+
   // if leading 5 characters is 'path_', unit is 'kg/m^2'
   if (name.size() >= 5 && name.substr(0, 5) == "path_") {
     return "kg/m^2";
