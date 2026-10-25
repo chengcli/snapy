@@ -47,6 +47,9 @@ void put_vara_float(int ncid, int varid, const PINC_Offset* start,
 
 PNetcdfOutput::PNetcdfOutput(OutputOptions const& options_)
     : OutputType(options_) {
+  TORCH_CHECK(options->x1_slice().empty() && options->x2_slice().empty() &&
+                  options->x3_slice().empty(),
+              "Slice lists require type: netcdf with block combining.");
   // This writer is float-only (every nc*_def_var below is NC_FLOAT). Reject
   // at construction, which MeshBlock does at setup (meshblock.cpp, beside the
   // validate_slice calls), so a misconfigured run fails before its first step
@@ -153,18 +156,6 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
     lx3 += (face / 3) * nb3;
     nb2 *= 3;
     nb3 *= 2;
-  }
-  if (options->x1_slice()) {
-    lx1 = 0;
-    nb1 = 1;
-  }
-  if (options->x2_slice()) {
-    lx2 = 0;
-    nb2 = 1;
-  }
-  if (options->x3_slice()) {
-    lx3 = 0;
-    nb3 = 1;
   }
 
   PINC_Offset nx1 = static_cast<PINC_Offset>(ncells1) * nb1;
@@ -341,12 +332,12 @@ void PNetcdfOutput::write_output_file(MeshBlockImpl* pmb_in,
   SNAP_PINC_CHECK(
       ncmpix_put_vara_float_all(ifile, ivt, &stime, &ctime, &timef));
 
-  int coord_is = options->x1_slice() ? islice : out_is;
-  int coord_ie = options->x1_slice() ? islice : out_ie;
-  int coord_js = options->x2_slice() ? jslice : out_js;
-  int coord_je = options->x2_slice() ? jslice : out_je;
-  int coord_ks = options->x3_slice() ? kslice : out_ks;
-  int coord_ke = options->x3_slice() ? kslice : out_ke;
+  int coord_is = out_is;
+  int coord_ie = out_ie;
+  int coord_js = out_js;
+  int coord_je = out_je;
+  int coord_ks = out_ks;
+  int coord_ke = out_ke;
 
   PINC_Offset start_x1[1] = {start[1]};
   PINC_Offset count_x1[1] = {ncells1};

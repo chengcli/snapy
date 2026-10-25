@@ -80,17 +80,20 @@ OutputOptions OutputOptionsImpl::from_yaml(YAML::Node const &node, int fid) {
   options->cartesian_vector() = node["cartesian_vector"].as<bool>(false);
   options->double_precision() = node["double_precision"].as<bool>(false);
 
-  if (node["x1_slice"]) options->x1_slice() = node["x1_slice"].as<double>();
-  if (node["x2_slice"]) options->x2_slice() = node["x2_slice"].as<double>();
-  if (node["x3_slice"]) options->x3_slice() = node["x3_slice"].as<double>();
+  if (node["x1_slice"])
+    options->x1_slice() = node["x1_slice"].as<std::vector<double>>();
+  if (node["x2_slice"])
+    options->x2_slice() = node["x2_slice"].as<std::vector<double>>();
+  if (node["x3_slice"])
+    options->x3_slice() = node["x3_slice"].as<std::vector<double>>();
 
-  if (options->x1_slice() && options->output_sumx1()) {
+  if (!options->x1_slice().empty() && options->output_sumx1()) {
     throw std::invalid_argument("Cannot request both slice and sum along x1");
   }
-  if (options->x2_slice() && options->output_sumx2()) {
+  if (!options->x2_slice().empty() && options->output_sumx2()) {
     throw std::invalid_argument("Cannot request both slice and sum along x2");
   }
-  if (options->x3_slice() && options->output_sumx3()) {
+  if (!options->x3_slice().empty() && options->output_sumx3()) {
     throw std::invalid_argument("Cannot request both slice and sum along x3");
   }
 
@@ -396,9 +399,9 @@ void OutputType::appendTensorSliceOutput(std::string type, std::string name,
 }
 
 bool OutputType::TransformOutputData(MeshBlockImpl *pmb) {
-  if (options->x3_slice() && !SliceOutputData(pmb, 3)) return false;
-  if (options->x2_slice() && !SliceOutputData(pmb, 2)) return false;
-  if (options->x1_slice() && !SliceOutputData(pmb, 1)) return false;
+  if (!options->x3_slice().empty() && !SliceOutputData(pmb, 3)) return false;
+  if (!options->x2_slice().empty() && !SliceOutputData(pmb, 2)) return false;
+  if (!options->x1_slice().empty() && !SliceOutputData(pmb, 1)) return false;
 
   if (options->output_sumx3()) SumOutputData(pmb, 3);
   if (options->output_sumx2()) SumOutputData(pmb, 2);
@@ -410,49 +413,33 @@ bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
   auto pcoord = pmb->pcoord;
   auto coord_options = pcoord->options;
 
-  double slice;
-  double lower;
-  double upper;
-  int begin;
-  int end;
-  torch::Tensor faces;
-  int *selected;
-
-  if (dim == 1) {
-    slice = *options->x1_slice();
-    lower = coord_options->x1min();
-    upper = coord_options->x1max();
-    begin = pcoord->il();
-    end = pcoord->iu();
-    faces = pcoord->x1f;
-    selected = &islice;
-  } else if (dim == 2) {
-    slice = *options->x2_slice();
-    lower = coord_options->x2min();
-    upper = coord_options->x2max();
-    begin = pcoord->jl();
-    end = pcoord->ju();
-    faces = pcoord->x2f;
-    selected = &jslice;
-  } else {
-    slice = *options->x3_slice();
-    lower = coord_options->x3min();
-    upper = coord_options->x3max();
-    begin = pcoord->kl();
-    end = pcoord->ku();
-    faces = pcoord->x3f;
-    selected = &kslice;
-  }
-
-  if (slice < lower || slice >= upper) return false;
-
-  *selected = begin;
-  for (int i = begin + 1; i <= end + 1; ++i) {
-    if (faces[i].item<double>() > slice) {
-      *selected = i - 1;
-      break;
+  auto const &slices = dim == 1   ? options->x1_slice()
+                       : dim == 2 ? options->x2_slice()
+                                  : options->x3_slice();
+  auto &selected = dim == 1 ? islice : dim == 2 ? jslice : kslice;
+  double lower = dim == 1   ? coord_options->x1min()
+                 : dim == 2 ? coord_options->x2min()
+                            : coord_options->x3min();
+  double upper = dim == 1   ? coord_options->x1max()
+                 : dim == 2 ? coord_options->x2max()
+                            : coord_options->x3max();
+  int begin = dim == 1 ? pcoord->il() : dim == 2 ? pcoord->jl() : pcoord->kl();
+  int end = dim == 1 ? pcoord->iu() : dim == 2 ? pcoord->ju() : pcoord->ku();
+  auto faces = dim == 1 ? pcoord->x1f : dim == 2 ? pcoord->x2f : pcoord->x3f;
+  selected.clear();
+  slice_offset[dim - 1] = 0;
+  for (double slice : slices) {
+    if (slice < lower) ++slice_offset[dim - 1];
+    if (slice < lower || slice >= upper) continue;
+    for (int i = begin; i <= end; ++i) {
+      if (faces[i + 1].item<double>() > slice) {
+        selected.push_back(i);
+        break;
+      }
     }
   }
+  if (selected.empty()) return false;
+  int count = selected.size();
 
   OutputData *pdata = pfirst_data_;
   while (pdata != nullptr) {
@@ -474,41 +461,30 @@ bool OutputType::SliceOutputData(MeshBlockImpl *pmb, int dim) {
     int nx3 = pdata->data.GetDim3();
     int nx2 = pdata->data.GetDim2();
     int nx1 = pdata->data.GetDim1();
-    int source = *selected;
-
-    if (data_dim == 3) {
-      pnew->data.NewAthenaArray(nx4, 1, nx2, nx1);
-      source = nx3 > 1 ? source : 0;
-      for (int n = 0; n < nx4; ++n)
-        for (int j = 0; j < nx2; ++j)
-          for (int i = 0; i < nx1; ++i)
-            pnew->data(n, 0, j, i) = pdata->data(n, source, j, i);
-    } else if (data_dim == 2) {
-      pnew->data.NewAthenaArray(nx4, nx3, 1, nx1);
-      source = nx2 > 1 ? source : 0;
-      for (int n = 0; n < nx4; ++n)
-        for (int k = 0; k < nx3; ++k)
-          for (int i = 0; i < nx1; ++i)
-            pnew->data(n, k, 0, i) = pdata->data(n, k, source, i);
-    } else {
-      pnew->data.NewAthenaArray(nx4, nx3, nx2, 1);
-      source = nx1 > 1 ? source : 0;
-      for (int n = 0; n < nx4; ++n)
-        for (int k = 0; k < nx3; ++k)
-          for (int j = 0; j < nx2; ++j)
-            pnew->data(n, k, j, 0) = pdata->data(n, k, j, source);
-    }
-
+    pnew->data.NewAthenaArray(nx4, data_dim == 3 ? count : nx3,
+                              data_dim == 2 ? count : nx2,
+                              data_dim == 1 ? count : nx1);
+    for (int n = 0; n < nx4; ++n)
+      for (int k = 0; k < pnew->data.GetDim3(); ++k)
+        for (int j = 0; j < pnew->data.GetDim2(); ++j)
+          for (int i = 0; i < pnew->data.GetDim1(); ++i)
+            pnew->data(n, k, j, i) =
+                pdata->data(n, data_dim == 3 ? (nx3 > 1 ? selected[k] : 0) : k,
+                            data_dim == 2 ? (nx2 > 1 ? selected[j] : 0) : j,
+                            data_dim == 1 ? (nx1 > 1 ? selected[i] : 0) : i);
     ReplaceOutputDataNode(pdata, pnew);
     pdata = pnew->pnext;
   }
 
   if (dim == 3) {
-    out_ks = out_ke = 0;
+    out_ks = 0;
+    out_ke = count - 1;
   } else if (dim == 2) {
-    out_js = out_je = 0;
+    out_js = 0;
+    out_je = count - 1;
   } else {
-    out_is = out_ie = 0;
+    out_is = 0;
+    out_ie = count - 1;
   }
   return true;
 }
@@ -566,11 +542,14 @@ void OutputType::SumOutputData(MeshBlockImpl *, int dim) {
   }
 
   if (dim == 3) {
-    out_ks = out_ke = 0;
+    out_ks = 0;
+    out_ke = 0;
   } else if (dim == 2) {
-    out_js = out_je = 0;
+    out_js = 0;
+    out_je = 0;
   } else {
-    out_is = out_ie = 0;
+    out_is = 0;
+    out_ie = 0;
   }
 }
 

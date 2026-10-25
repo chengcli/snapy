@@ -206,7 +206,7 @@ TEST(UserOutput, registered_callback_allows_uov_output) {
 TEST(OutputSlice, selects_boundary_cell_and_collapses_axis) {
   auto block = make_3d_block();
   auto opts = OutputOptionsImpl::create();
-  opts->x1_slice(2.0);
+  opts->x1_slice({2.0});
   TestOutputType output(opts);
 
   int nc1 = block->pcoord->options->nc1();
@@ -223,7 +223,7 @@ TEST(OutputSlice, selects_boundary_cell_and_collapses_axis) {
   output.out_ke = block->pcoord->ku();
 
   ASSERT_TRUE(output.TransformOutputData(block.get()));
-  EXPECT_EQ(output.islice, block->pcoord->il() + 2);
+  EXPECT_EQ(output.islice.at(0), block->pcoord->il() + 2);
   EXPECT_EQ(output.output_shape("field"), (std::vector<int>{1, nc3, nc2, 1}));
   EXPECT_DOUBLE_EQ(output.output_value("field", 0, block->pcoord->kl(),
                                        block->pcoord->jl(), 0),
@@ -237,8 +237,8 @@ TEST(OutputSlice, selects_boundary_cell_and_collapses_axis) {
 TEST(OutputSlice, supports_multiple_axes_and_rejects_nonintersecting_block) {
   auto block = make_3d_block();
   auto opts = OutputOptionsImpl::create();
-  opts->x2_slice(1.5);
-  opts->x3_slice(2.5);
+  opts->x2_slice({1.5});
+  opts->x3_slice({2.5});
   TestOutputType output(opts);
 
   int nc1 = block->pcoord->options->nc1();
@@ -257,7 +257,7 @@ TEST(OutputSlice, supports_multiple_axes_and_rejects_nonintersecting_block) {
   output.ClearOutputData();
 
   auto outside_opts = OutputOptionsImpl::create();
-  outside_opts->x1_slice(block->pcoord->options->x1max());
+  outside_opts->x1_slice({block->pcoord->options->x1max()});
   TestOutputType outside(outside_opts);
   outside.append("field", torch::ones({1, nc3, nc2, nc1}, torch::kFloat64));
   EXPECT_FALSE(outside.TransformOutputData(block.get()));
@@ -267,8 +267,8 @@ TEST(OutputSlice, supports_multiple_axes_and_rejects_nonintersecting_block) {
 TEST(OutputSlice, preserves_axes_absent_from_reduced_outputs) {
   auto block = make_3d_block();
   auto opts = OutputOptionsImpl::create();
-  opts->x2_slice(1.5);
-  opts->x3_slice(2.5);
+  opts->x2_slice({1.5});
+  opts->x3_slice({2.5});
   TestOutputType output(opts);
 
   int nc1 = block->pcoord->options->nc1();
@@ -288,7 +288,7 @@ TEST(OutputSlice, preserves_axes_absent_from_reduced_outputs) {
 TEST(OutputSlice, maps_reduced_output_spatial_axes) {
   auto block = make_3d_block();
   auto opts = OutputOptionsImpl::create();
-  opts->x2_slice(1.5);
+  opts->x2_slice({1.5});
   TestOutputType output(opts);
 
   int nc2 = block->pcoord->options->nc2();
@@ -345,17 +345,142 @@ TEST(OutputSlice, maps_reduced_output_sum_axes) {
   output.ClearOutputData();
 }
 
+TEST(OutputSlice, lists_gather_cartesian_product) {
+  auto block = make_3d_block();
+  auto opts = OutputOptionsImpl::create();
+  opts->x1_slice({0., 2., 5.});
+  opts->x2_slice({0., 3.});
+  TestOutputType output(opts);
+  auto co = block->pcoord;
+  int nc1 = co->options->nc1(), nc2 = co->options->nc2();
+  int nc3 = co->options->nc3();
+  auto values = torch::arange(nc1 * nc2 * nc3, torch::kFloat64)
+                    .reshape({1, nc3, nc2, nc1});
+  output.append("field", values);
+  ASSERT_TRUE(output.TransformOutputData(block.get()));
+  EXPECT_EQ(output.output_shape("field"), (std::vector<int>{1, nc3, 2, 3}));
+  for (int j = 0; j < 2; ++j)
+    for (int i = 0; i < 3; ++i)
+      EXPECT_DOUBLE_EQ(output.output_value("field", 0, co->kl(), j, i),
+                       values
+                           .index({0, co->kl(), co->jl() + (j ? 3 : 0),
+                                   co->il() + (i == 2 ? 5 : i * 2)})
+                           .item<double>());
+  output.ClearOutputData();
+}
+
+TEST(OutputSlice, rejects_scalar_yaml_and_invalid_lists) {
+  EXPECT_THROW(OutputOptionsImpl::from_yaml(
+                   YAML::Load("{type: netcdf, x1_slice: 1.25}")),
+               YAML::Exception);
+  for (auto slices : {std::vector<double>{2., 1.},
+                      {1., 1.},
+                      {std::numeric_limits<double>::quiet_NaN()},
+                      {6.}}) {
+    auto opts = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+    auto output = OutputOptionsImpl::create();
+    output->file_type("netcdf");
+    output->x1_slice(slices);
+    opts->outputs().push_back(output);
+    EXPECT_THROW(std::make_shared<MeshBlockImpl>(opts), std::invalid_argument);
+  }
+}
+
+#ifdef NETCDFOUTPUT
+TEST(OutputSlice, combines_uneven_lists_across_blocks) {
+  auto dir = std::filesystem::temp_directory_path() / "snapy_slice_lists_test";
+  std::vector<std::shared_ptr<MeshBlockImpl>> blocks;
+  auto opts = OutputOptionsImpl::create();
+  opts->file_type("netcdf");
+  opts->variables({"d", "uov"});
+  opts->x1_slice({0., 2., 5.});
+  opts->x2_slice({1., 2., 3.});
+  opts->combine(false);
+  NetcdfOutput output(opts);
+  for (int rank = 0; rank < 2; ++rank) {
+    auto op = MeshBlockOptionsImpl::from_yaml("test_forcing_3d.yaml");
+    op->layout()->px(2).world_size(2).rank(rank).blocks_per_process(2);
+    op->coord()->repartition(op->layout());
+    op->output_dir(dir.string());
+    op->basename("lists");
+    auto block = std::make_shared<MeshBlockImpl>(op);
+    blocks.push_back(block);
+    auto co = block->pcoord;
+    block->user_output_callback = [co](Variables const&) {
+      Variables out;
+      out["sample_flux"] =
+          (100 * co->x1f.view({1, 1, -1}) + co->x2v.view({1, -1, 1}))
+              .expand({co->options->nc3(), co->options->nc2(),
+                       co->options->nc1() + 1});
+      return out;
+    };
+    Variables vars;
+    vars["hydro_w"] =
+        torch::ones({block->phydro->peos->nvar(), co->options->nc3(),
+                     co->options->nc2(), co->options->nc1()},
+                    torch::kFloat64);
+    vars["hydro_w"][IDN].copy_(100 * co->x1v.view({1, 1, -1}) +
+                               co->x2v.view({1, -1, 1}));
+    vars["hydro_u"] = vars["hydro_w"].clone();
+    output.write_output_file(block.get(), vars, 0., false);
+  }
+  for (auto& block : blocks) output.combine_blocks(block.get(), false);
+  auto file = dir / "lists.out0.00000.nc";
+  int ncid, varid, dimid;
+  ASSERT_EQ(nc_open(file.c_str(), NC_NOWRITE, &ncid), NC_NOERR);
+  for (auto axis : {"x1", "x2"}) {
+    size_t length;
+    ASSERT_EQ(nc_inq_dimid(ncid, axis, &dimid), NC_NOERR);
+    ASSERT_EQ(nc_inq_dimlen(ncid, dimid, &length), NC_NOERR);
+    EXPECT_EQ(length, 3);
+  }
+  float x1[3], x2[3];
+  ASSERT_EQ(nc_inq_varid(ncid, "x1", &varid), NC_NOERR);
+  ASSERT_EQ(nc_get_var_float(ncid, varid, x1), NC_NOERR);
+  ASSERT_EQ(nc_inq_varid(ncid, "x2", &varid), NC_NOERR);
+  ASSERT_EQ(nc_get_var_float(ncid, varid, x2), NC_NOERR);
+  EXPECT_FLOAT_EQ(x1[0], .5);
+  EXPECT_FLOAT_EQ(x1[1], 2.5);
+  EXPECT_FLOAT_EQ(x1[2], 5.5);
+  EXPECT_FLOAT_EQ(x2[0], 1.5);
+  EXPECT_FLOAT_EQ(x2[1], 2.5);
+  EXPECT_FLOAT_EQ(x2[2], 3.5);
+  ASSERT_EQ(nc_inq_varid(ncid, "rho", &varid), NC_NOERR);
+  float values[27];
+  ASSERT_EQ(nc_get_var_float(ncid, varid, values), NC_NOERR);
+  for (int i = 0; i < 3; ++i)
+    for (int k = 0; k < 3; ++k)
+      for (int j = 0; j < 3; ++j)
+        EXPECT_FLOAT_EQ(values[(i * 3 + k) * 3 + j], 100 * x1[i] + x2[j]);
+  float faces[3];
+  ASSERT_EQ(nc_inq_varid(ncid, "x1f", &varid), NC_NOERR);
+  ASSERT_EQ(nc_get_var_float(ncid, varid, faces), NC_NOERR);
+  EXPECT_FLOAT_EQ(faces[0], 0.);
+  EXPECT_FLOAT_EQ(faces[1], 2.);
+  EXPECT_FLOAT_EQ(faces[2], 5.);
+  ASSERT_EQ(nc_inq_varid(ncid, "sample_flux", &varid), NC_NOERR);
+  ASSERT_EQ(nc_get_var_float(ncid, varid, values), NC_NOERR);
+  for (int i = 0; i < 3; ++i)
+    for (int k = 0; k < 3; ++k)
+      for (int j = 0; j < 3; ++j)
+        EXPECT_FLOAT_EQ(values[(i * 3 + k) * 3 + j], 100 * faces[i] + x2[j]);
+  EXPECT_EQ(nc_close(ncid), NC_NOERR);
+  std::remove(file.c_str());
+  std::remove(dir.c_str());
+}
+#endif
+
 TEST(OutputSlice, yaml_coordinate_presence_activates_slice_and_rejects_sum) {
   auto opts = OutputOptionsImpl::from_yaml(
-      YAML::Load("{type: netcdf, x1_slice: 1.25}"));
-  ASSERT_TRUE(opts->x1_slice().has_value());
-  EXPECT_DOUBLE_EQ(*opts->x1_slice(), 1.25);
-  EXPECT_FALSE(opts->x2_slice().has_value());
+      YAML::Load("{type: netcdf, x1_slice: [1.25]}"));
+  ASSERT_TRUE(!opts->x1_slice().empty());
+  EXPECT_DOUBLE_EQ(opts->x1_slice().at(0), 1.25);
+  EXPECT_FALSE(!opts->x2_slice().empty());
 
-  EXPECT_THROW(
-      OutputOptionsImpl::from_yaml(YAML::Load("{type: netcdf, x1_slice: 1.25, "
-                                              "output_sumx1: true}")),
-      std::invalid_argument);
+  EXPECT_THROW(OutputOptionsImpl::from_yaml(
+                   YAML::Load("{type: netcdf, x1_slice: [1.25], "
+                              "output_sumx1: true}")),
+               std::invalid_argument);
 }
 
 TEST(OutputScheduleKey, precise_cadences_do_not_collide) {
@@ -402,7 +527,7 @@ TEST(OutputSlice, netcdf_writes_selected_coordinate_and_collapsed_dimension) {
   auto opts = OutputOptionsImpl::create();
   opts->file_type("netcdf");
   opts->variables({"d"});
-  opts->x1_slice(2.0);
+  opts->x1_slice({2.0});
   opts->combine(false);
   NetcdfOutput output(opts);
 

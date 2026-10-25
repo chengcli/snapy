@@ -180,17 +180,23 @@ void MeshBlockImpl::reset() {
 
   //// --------- (3) set up output --------- ////
   for (auto const &out_op : options->outputs()) {
-    auto validate_slice = [](std::optional<double> const &slice, double lower,
+    auto validate_slice = [](std::vector<double> const &slices, double lower,
                              double upper, bool sum, char const *axis) {
-      if (slice && sum) {
+      if (!slices.empty() && sum) {
         throw std::invalid_argument(std::string("Cannot request both slice and "
                                                 "sum along ") +
                                     axis);
       }
-      if (slice && (*slice < lower || *slice >= upper)) {
-        throw std::invalid_argument(std::string("Slice at ") + axis + "=" +
-                                    std::to_string(*slice) +
-                                    " is out of range of Mesh");
+      for (size_t i = 0; i < slices.size(); ++i) {
+        double slice = slices[i];
+        if (!(slice >= lower && slice < upper)) {
+          throw std::invalid_argument(
+              std::string("Slice out of mesh bounds: ") + axis);
+        }
+        if (i && slice <= slices[i - 1]) {
+          throw std::invalid_argument(
+              std::string("Slices must be strictly increasing: ") + axis);
+        }
       }
     };
     validate_slice(out_op->x1_slice(), options->coord()->global_x1min(),

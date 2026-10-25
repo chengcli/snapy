@@ -100,33 +100,33 @@ class OutputOptions:
         ...
 
     @overload
-    def x1_slice(self) -> Optional[float]:
-        """Get x1 slice position."""
+    def x1_slice(self) -> List[float]:
+        """Get x1 slice positions."""
         ...
 
     @overload
-    def x1_slice(self, value: Optional[float]) -> "OutputOptions":
-        """Set x1 slice position."""
+    def x1_slice(self, value: List[float]) -> "OutputOptions":
+        """Set x1 slice positions."""
         ...
 
     @overload
-    def x2_slice(self) -> Optional[float]:
-        """Get x2 slice position."""
+    def x2_slice(self) -> List[float]:
+        """Get x2 slice positions."""
         ...
 
     @overload
-    def x2_slice(self, value: Optional[float]) -> "OutputOptions":
-        """Set x2 slice position."""
+    def x2_slice(self, value: List[float]) -> "OutputOptions":
+        """Set x2 slice positions."""
         ...
 
     @overload
-    def x3_slice(self) -> Optional[float]:
-        """Get x3 slice position."""
+    def x3_slice(self) -> List[float]:
+        """Get x3 slice positions."""
         ...
 
     @overload
-    def x3_slice(self, value: Optional[float]) -> "OutputOptions":
-        """Set x3 slice position."""
+    def x3_slice(self, value: List[float]) -> "OutputOptions":
+        """Set x3 slice positions."""
         ...
 
     @overload

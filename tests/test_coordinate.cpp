@@ -1006,7 +1006,7 @@ TEST(CoordinateProgrammatic,
     op->coord(co);
     auto out = OutputOptionsImpl::create();
     out->file_type("restart");
-    out->x1_slice(slice);
+    out->x1_slice({slice});
     op->outputs(std::vector<OutputOptions>{out});
     return op;
   };

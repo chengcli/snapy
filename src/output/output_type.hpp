@@ -3,7 +3,7 @@
 // C/C++
 #include <initializer_list>
 #include <memory>
-#include <optional>
+#include <vector>
 
 // yaml
 #include <yaml-cpp/yaml.h>
@@ -48,12 +48,9 @@ struct OutputOptionsImpl {
        << "* include_ghost_zones = " << include_ghost_zones() << "\n"
        << "* cartesian_vector = " << cartesian_vector() << "\n"
        << "* double_precision = " << double_precision() << "\n"
-       << "* x1_slice = " << (x1_slice() ? std::to_string(*x1_slice()) : "none")
-       << "\n"
-       << "* x2_slice = " << (x2_slice() ? std::to_string(*x2_slice()) : "none")
-       << "\n"
-       << "* x3_slice = " << (x3_slice() ? std::to_string(*x3_slice()) : "none")
-       << "\n"
+       << "* x1_slice = " << fmt::format("{}", x1_slice()) << "\n"
+       << "* x2_slice = " << fmt::format("{}", x2_slice()) << "\n"
+       << "* x3_slice = " << fmt::format("{}", x3_slice()) << "\n"
        << "* file_type = " << file_type() << "\n"
        << "* data_format = " << data_format() << "\n"
        << "* variables = " << fmt::format("{}", variables()) << "\n"
@@ -71,9 +68,9 @@ struct OutputOptionsImpl {
   ADD_ARG(bool, include_ghost_zones) = false;
   ADD_ARG(bool, cartesian_vector) = false;
 
-  ADD_ARG(std::optional<double>, x1_slice) = std::nullopt;
-  ADD_ARG(std::optional<double>, x2_slice) = std::nullopt;
-  ADD_ARG(std::optional<double>, x3_slice) = std::nullopt;
+  ADD_ARG(std::vector<double>, x1_slice);
+  ADD_ARG(std::vector<double>, x2_slice);
+  ADD_ARG(std::vector<double>, x3_slice);
 
   ADD_ARG(std::string, file_type);
   ADD_ARG(std::string, data_format);
@@ -143,7 +140,8 @@ class OutputType {
   // data
   // OutputData array start/end index
   int out_is, out_ie, out_js, out_je, out_ks, out_ke;
-  int islice = -1, jslice = -1, kslice = -1;
+  std::vector<int> islice, jslice, kslice;
+  int slice_offset[3] = {0, 0, 0};
 
   // ptr to next node in singly linked list of OutputTypes
   OutputType *pnext_type;
