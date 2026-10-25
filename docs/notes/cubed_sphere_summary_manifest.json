@@ -1,0 +1,18 @@
+{
+  "pdf": "cubed_sphere_diffusion_convection_summary.pdf",
+  "study_date": "2026-10-25",
+  "input_sha256": {
+    "cubed_sphere_diffusion_convection.rst": "720e0a7c37404d53fe0b0a0f6d8f4134c3dc791383f1add7be230dca5cdd97cf",
+    "spherical_compressible_theory.inc": "2d67beed5eabf0bdb9c68bd29b1f5fdb5dc71c57a3333d8563f801792623d9ab",
+    "spherical_reference_results.json": "06ff26950151fb5507a7fa81b417dfdfd867bacbf3a4978cf060b76fb3916ef2",
+    "spherical_onset_results.json": "96d98a8fd9351dece8d36ef4dc352ce7c156f39928737b493f47d9069ac3b0ec",
+    "spherical_control_study.json": "cbdd055e23819fc06abca954fd790006dfc87535a3b7fbabc942b487fe09aac7",
+    "planar_onset_results.json": "5cc77c82c91b5edc6d47875eabead3b73ebf6a8b400f3232997a51c9c94b97da",
+    "figures/cubed_sphere_geometry.png": "3298e383053d2a84e9a81218464ebd0656356c9f486f9eae6f6936d284455b83",
+    "figures/spherical_summary_onset.png": "cc686d7083791b1de35fcbf2523aee4cf3a3f26cd7e36c04b8e65ec06c4671e3",
+    "figures/spherical_thin_shell_limit.png": "c484d609993f162911543f5e84110741769296496687014838e5c61cdbcf4f90",
+    "figures/spherical_control_study.png": "0e14187f40633659f47cf93580a00c0047c6dd98d431a7aea055301d1088487d",
+    "build_summary_pdf.py": "f049f0ec50aa06a0d03816eb6b09ff7f2b00c06aa2db98284c21724c9bcbde2f"
+  },
+  "pdf_sha256": "b7de17707f27f5211097f9a67dd9c46b3ffb98f805a22b687cb6a3e91075290e"
+}
