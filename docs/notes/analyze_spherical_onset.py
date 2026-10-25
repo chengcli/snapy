@@ -633,7 +633,7 @@ def write_artifacts(result, reference, output):
             "\nEach directional comparison uses matched physical parameters, precision, "
             "seed, orientation, timestep settings, and fitting window.\n"
         )
-    (output / "spherical_onset_tables.inc").write_text("\n".join(table) + "\n")
+    (output / "spherical_onset_tables.inc").write_text("\n".join(table).rstrip() + "\n")
     status = (
         "Coverage requirement met"
         if result["coverage"]["complete"]
@@ -886,9 +886,11 @@ def plot_thin_limit(result, reference, output, status):
                 ax.annotate(
                     f"N={p['N']}, nr={nr}",
                     (float(thickness(p["eta"])), group["neutral"]["Ra"] - plane),
-                    xytext=(8, 5 if nr == 8 else -15),
+                    xytext=(-8, -14 if nr == 8 else 8),
                     textcoords="offset points",
+                    ha="right",
                     fontsize=9,
+                    color=f"C{index % 10}",
                 )
     ax.set(
         xscale="log",

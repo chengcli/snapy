@@ -3139,9 +3139,7 @@
     "short": {
       "directory": "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples",
       "invalid": [],
-      "incomplete": [
-        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f0940.csv"
-      ]
+      "incomplete": []
     },
     "long": {
       "directory": "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/long_window",

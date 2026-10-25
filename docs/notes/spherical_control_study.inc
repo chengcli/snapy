@@ -80,7 +80,7 @@ The original short run clips its final timestep to diffusive time 0.2 and writes
 
 All mode/orientation estimates use window 0.15--0.2, float64, seed=1e-6, CFL=0.8, and diffusion step scale 8.
 
-Input audit (short directory): 1 incomplete CSV files skipped; 0 completed files failed validation. Paths and reasons are retained in the JSON.
+Input audit (short directory): 0 incomplete CSV files skipped; 0 completed files failed validation. Paths and reasons are retained in the JSON.
 
 Input audit (long directory): 0 incomplete CSV files skipped; 0 completed files failed validation. Paths and reasons are retained in the JSON.
 

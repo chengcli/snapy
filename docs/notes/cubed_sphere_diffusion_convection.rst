@@ -1140,6 +1140,25 @@ with :math:`N=72,n_r=12` changes only angular resolution, and the comparison
 with :math:`N=96,n_r=16` changes only radial resolution. The generated tables
 report these directional changes separately.
 
+At :math:`\eta=0.99`, angular refinement alone from :math:`N=336` to
+:math:`N=456`, with :math:`n_r=8` fixed, changes the neutral point from
+706.86847 to 690.92785, a decrease of 15.94063 Rayleigh units. The refined
+angular result is 0.891 percent below the spherical reference; its final
+two windows differ by only 0.06251 Rayleigh units. Thus the upward turn of
+the original 336-cell coarse result is sensitive to horizontal resolution.
+The subsequent 456/8 to 504/12 comparison changes both directions and cannot
+isolate radial error.
+
+At :math:`\eta=0.9`, increasing :math:`N` from 72 to 96 at fixed
+:math:`n_r=12` raises the threshold from 704.09279 to 705.24015, a change
+of 1.14736. Increasing :math:`n_r` from 12 to 16 at fixed :math:`N=96`
+then raises it to 708.71016, a change of 3.47001. Both refinements reduce
+the absolute discrepancy from the reference 708.31172, with the final
+grid crossing above it. Radial resolution has the larger effect in this
+particular comparison. These are measured directional changes, not an
+additive decomposition of continuum error or an established convergence
+order.
+
 To make the large angular grids practical, the four-point polynomial
 reconstruction is applied using four indexed stencil terms instead of a
 dense matrix product. This changes its work from
@@ -1230,6 +1249,10 @@ within 0.79 percent but does not resolve that smaller curvature correction.
 Reducing relative shell thickness and reducing spatial truncation error are
 distinct limits. The measured finite-grid sequence must not be interpreted
 as a precision verification of the continuum planar limit.
+Scaling :math:`N` with spherical degree maintains approximately fixed cells
+per wavelength; it does not make the horizontal discretization error vanish.
+Keeping :math:`n_r` fixed likewise retains radial error as the shell becomes
+thin. A continuum-limit claim therefore also requires spatial convergence.
 At :math:`\eta=0.99`, the proportional refinement from
 :math:`N=336,n_r=8` to :math:`N=504,n_r=12` changes the modal threshold from
 706.86847 to 691.57820. The latter is 0.797 percent below the spherical

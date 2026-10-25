@@ -131,6 +131,15 @@
      - quadratic (three nearest points); 0.15--0.2
    * - 0.9
      - 21
+     - 12 / 96
+     - float64
+     - 1e-06 / 0.8 / 8 / z
+     - 705.240150
+     - 708.311717
+     - -0.4336%
+     - quadratic (three nearest points); 0.15--0.2
+   * - 0.9
+     - 21
      - 16 / 96
      - float64
      - 1e-06 / 0.8 / 8 / z
@@ -185,6 +194,15 @@
      - quadratic (three nearest points); 0.15--0.2
    * - 0.99
      - 224
+     - 8 / 456
+     - float64
+     - 1e-06 / 0.8 / 8 / z
+     - 690.927846
+     - 697.136655
+     - -0.8906%
+     - quadratic (three nearest points); 0.15--0.2
+   * - 0.99
+     - 224
      - 12 / 504
      - float64
      - 1e-06 / 0.8 / 8 / z
@@ -192,3 +210,37 @@
      - 697.136655
      - -0.7973%
      - quadratic (three nearest points); 0.15--0.2
+
+.. list-table:: Directional refinement with the other resolution held fixed
+   :header-rows: 1
+
+   * - Radius ratio / degree
+     - Refined direction
+     - Coarse nr / N
+     - Fine nr / N
+     - Coarse neutral Ra
+     - Fine neutral Ra
+     - Change
+   * - 0.9 / 21
+     - angular
+     - 12 / 72
+     - 12 / 96
+     - 704.092793
+     - 705.240150
+     - +1.147357
+   * - 0.9 / 21
+     - radial
+     - 12 / 96
+     - 16 / 96
+     - 705.240150
+     - 708.710163
+     - +3.470013
+   * - 0.99 / 224
+     - angular
+     - 8 / 336
+     - 8 / 456
+     - 706.868471
+     - 690.927846
+     - -15.940625
+
+Each directional comparison uses matched physical parameters, precision, seed, orientation, timestep settings, and fitting window.

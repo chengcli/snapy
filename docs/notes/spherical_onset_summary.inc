@@ -2,7 +2,7 @@
 
 **Coverage requirement met.**
 
-Analyzed 71 completed GPU runs, totaling 43,985 steps and 12621.8 summed run seconds (not elapsed batch time). There are 20 bracketed modal neutral estimates; 0 running/incomplete CSV files were skipped and 0 completed runs failed input validation.
+Analyzed 77 completed GPU runs, totaling 45,842 steps and 13607.0 summed run seconds (not elapsed batch time). There are 22 bracketed modal neutral estimates; 0 running/incomplete CSV files were skipped and 0 completed runs failed input validation.
 
 The required baseline is ``{"cfl": 0.8, "diffusion_step_scale": 8.0, "dtype": "float64", "orientation": "z", "seed": 1e-06}``.
 
@@ -12,9 +12,17 @@ GPU neutral estimates are unconnected markers, with every completed baseline gri
 
 Available matched controls: 12; zero-seed controls: 2. Missing controls have not been marked as passed.
 
-Across 20 brackets present in both final windows, the absolute neutral-Ra shift ranges from 0.000798902 to 1.97457. These shifts measure window sensitivity, not statistical uncertainty.
+Across 22 brackets present in both final windows, the absolute neutral-Ra shift ranges from 0.000798902 to 1.97457. These shifts measure window sensitivity, not statistical uncertainty.
+
+Three-grid order fit not applicable at eta=0.9 (float64, seed=1e-06, CFL=0.8, diffusion scale=8, axis=z): nr/N=8/48: Ra=700.974221; nr/N=12/72: Ra=704.092793; nr/N=12/96: Ra=705.240150. Successive Ra increments: +3.11857, +1.14736. The three grids do not refine radially and angularly in proportion. Any two-grid second-order extrapolation remains an assumption, not an observed convergence result.
 
 Three-grid order fit failed at eta=0.9 (float64, seed=1e-06, CFL=0.8, diffusion scale=8, axis=z): nr/N=8/48: Ra=700.974221; nr/N=12/72: Ra=704.092793; nr/N=16/96: Ra=708.710163. Successive Ra increments: +3.11857, +4.61737. No positive-order fit in the searched interval 0.05 <= p <= 8; these grids do not demonstrate asymptotic convergence. Orders outside this interval were not tested. Any two-grid second-order extrapolation remains an assumption, not an observed convergence result.
+
+Three-grid order fit not applicable at eta=0.9 (float64, seed=1e-06, CFL=0.8, diffusion scale=8, axis=z): nr/N=8/48: Ra=700.974221; nr/N=12/96: Ra=705.240150; nr/N=16/96: Ra=708.710163. Successive Ra increments: +4.26593, +3.47001. The three grids do not refine radially and angularly in proportion. Any two-grid second-order extrapolation remains an assumption, not an observed convergence result.
+
+Three-grid order fit not applicable at eta=0.9 (float64, seed=1e-06, CFL=0.8, diffusion scale=8, axis=z): nr/N=12/72: Ra=704.092793; nr/N=12/96: Ra=705.240150; nr/N=16/96: Ra=708.710163. Successive Ra increments: +1.14736, +3.47001. The three grids do not refine radially and angularly in proportion. Any two-grid second-order extrapolation remains an assumption, not an observed convergence result.
+
+Three-grid order fit not applicable at eta=0.99 (float64, seed=1e-06, CFL=0.8, diffusion scale=8, axis=z): nr/N=8/336: Ra=706.868471; nr/N=8/456: Ra=690.927846; nr/N=12/504: Ra=691.578196. Successive Ra increments: -15.9406, +0.65035. The three grids do not refine radially and angularly in proportion. Any two-grid second-order extrapolation remains an assumption, not an observed convergence result.
 
 The 2 matched float64 timestep comparisons have maximum absolute growth-rate change 0.000133266 and maximum seed-normalized amplitude difference 9.8141e-07.
 
