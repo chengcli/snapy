@@ -1336,12 +1336,14 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
   TORCH_CHECK(vars.count("hydro_w"),
               "MeshBlock::check_redo needs hydro_w to restore the primitives");
-  // hydro_w is one stage stale: test the primitives as they stand
-  torch::Tensor w;
+  // Retain the checked primitives for output and the next timestep.
+  // A rejected step restores both fields in apply_redo.
+  auto const &hydro_w = vars.at("hydro_w");
   {
     DeferVaporCheck defer(phydro->peos.get());
-    w = phydro->peos->forward(hydro_u.clone()).index(interior);
+    phydro->peos->forward(hydro_u.clone(), hydro_w);
   }
+  auto w = hydro_w.index(interior);
   auto const &eos = phydro->peos->options;
   // negated so a NaN, which fails every comparison, counts as a hit
   auto floor = (w[IDN].min() > 1.001 * eos->density_floor()).logical_not();

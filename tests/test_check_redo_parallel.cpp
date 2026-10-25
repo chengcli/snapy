@@ -48,8 +48,18 @@ TEST(Mesh, check_redo_is_one_decision_across_ranks) {
     saved[i] = vars[i].at("hydro_u").clone();
   }
 
-  // control. EXPECT, not ASSERT: every rank must reach the collective below
+  // A valid source changes U on every rank; acceptance must refresh W.
+  std::vector<torch::Tensor> expected_w;
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    vars[i].at("hydro_u")[IPR].mul_(1.01 + rank * 0.01);
+    expected_w.push_back(mesh->blocks[i]->phydro->peos->compute(
+        "U->W", {vars[i].at("hydro_u").clone()}));
+  }
+  // EXPECT, not ASSERT: every rank must reach the collective below.
   EXPECT_EQ(mesh->check_redo(vars), 0) << "rank " << rank;
+  for (int i = 0; i < mesh->blocks.size(); ++i) {
+    EXPECT_TRUE(torch::equal(vars[i].at("hydro_w"), expected_w[i]));
+  }
 
   // one interior cell of one block of rank 0, put exactly at the density floor
   if (rank == 0) {
@@ -65,5 +75,8 @@ TEST(Mesh, check_redo_is_one_decision_across_ranks) {
   for (int i = 0; i < mesh->blocks.size(); ++i) {
     EXPECT_TRUE(torch::equal(vars[i].at("hydro_u"), saved[i]))
         << "rank " << rank << " block " << i << " was not rolled back";
+    auto restored_w =
+        mesh->blocks[i]->phydro->peos->compute("U->W", {saved[i].clone()});
+    EXPECT_TRUE(torch::equal(vars[i].at("hydro_w"), restored_w));
   }
 }
