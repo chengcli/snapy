@@ -38,15 +38,34 @@ def block_arm(device, yaml_file):
     dt = block.max_time_step(block_vars)
     for stage in range(len(block.intg.stages)):
         block.forward(block_vars, dt, stage)
+    # Mimic chemistry changing conserved species after the hydro stages.
+    u = block_vars["hydro_u"]
+    transfer = 0.5 * u[kICY].clone()
+    u[kICY] -= transfer
+    u[kICY + 1] += transfer
+    expected_w = eos.compute("U->W", [u.clone()])
+    saved_u = u.clone()
+    primitive_storage = block_vars["hydro_w"].data_ptr()
+    if torch.equal(block_vars["hydro_w"], expected_w):
+        return "chemistry did not make the primitives stale"
     if block.check_redo(block_vars) != 0:
         return "healthy step was rejected"
+    if not torch.equal(block_vars["hydro_w"], expected_w):
+        return "accepted step did not refresh post-chemistry primitives"
+    if block_vars["hydro_w"].data_ptr() != primitive_storage:
+        return "accepted step replaced primitive storage"
+    if not torch.equal(u, saved_u):
+        return "redo validation changed the conserved state"
 
     k, j, i = u0.size(1) // 2, u0.size(2) // 2, u0.size(3) // 2
     block_vars["hydro_u"][kIDN, k, j, i] = density_floor  # at the floor, not below it
     block_vars["hydro_u"][kICY:, k, j, i] = 0.0
     w_stale_min = block_vars["hydro_w"][kIDN].min().item()
 
+    cycle = block.cycle()
     err = block.check_redo(block_vars)
+    if block.cycle() != cycle:
+        return "rejected step changed the caller-owned cycle"
     if err != 1:
         return "floored cell not rejected (err=%d; stale hydro_w min rho=%g)" % (err, w_stale_min)
     if not torch.equal(block_vars["hydro_u"], u0):
@@ -54,8 +73,17 @@ def block_arm(device, yaml_file):
     w_expect = eos.compute("U->W", [u0.clone()])
     if not torch.equal(block_vars["hydro_w"], w_expect):
         return "hydro_w not recomputed from the restored hydro_u"
+    # A second rejected attempt must not consume another cycle either.
+    block_vars["hydro_u"][kIDN, k, j, i] = density_floor
+    block_vars["hydro_u"][kICY:, k, j, i] = 0.0
+    if block.check_redo(block_vars) != 1 or block.cycle() != cycle:
+        return "repeated retry changed the cycle or was not rejected"
+    if not torch.equal(block_vars["hydro_u"], u0):
+        return "second retry did not restore the conserved state"
     if block.check_redo(block_vars) != 0:
         return "restored state was rejected"
+    if block.cycle() != cycle:
+        return "accepted check changed the caller-owned cycle"
     return None
 
 
@@ -89,7 +117,10 @@ def nan_arm(device, yaml_file):
 
     k, j, i = u0.size(1) // 2, u0.size(2) // 2, u0.size(3) // 2
     block_vars["hydro_u"][kIDN, k, j, i] = float("nan")
+    cycle = block.cycle()
     err = block.check_redo(block_vars)
+    if block.cycle() != cycle:
+        return "rejected step changed the caller-owned cycle"
     if err != 1:
         return "a NaN density was not rejected (err=%d)" % err
     if not torch.equal(block_vars["hydro_u"], u0):
@@ -145,8 +176,19 @@ def mesh_arm(device, yaml_file, nan=False):
     dt0 = mesh.max_time_step(mesh_vars)
     for stage in range(len(intg.stages)):
         mesh.forward(mesh_vars, dt0, stage)
+    expected_w = []
+    saved_u = []
+    for block, mv in zip(blocks, mesh_vars):
+        mv["hydro_u"][kIPR] *= 1.01
+        saved_u.append(mv["hydro_u"].clone())
+        expected_w.append(block.module("hydro.eos").compute("U->W", [mv["hydro_u"].clone()]))
     if mesh.check_redo(mesh_vars) != 0:
         return "healthy mesh step was rejected"
+    for ib, (mv, w, u) in enumerate(zip(mesh_vars, expected_w, saved_u)):
+        if not torch.equal(mv["hydro_w"], w):
+            return "accepted mesh step left block %d primitives stale" % ib
+        if not torch.equal(mv["hydro_u"], u):
+            return "redo validation changed block %d conserved state" % ib
     moved = sum(int(not torch.equal(mv["hydro_u"], u)) for mv, u in zip(mesh_vars, u0))
     if moved != len(blocks):
         return "the step left %d of %d blocks unchanged; a restore would be vacuous" % (len(blocks) - moved, len(blocks))
@@ -157,7 +199,10 @@ def mesh_arm(device, yaml_file, nan=False):
         ub[kIV1, k, j, i] = float("nan")
     else:
         ub[kIDN, k, j, i] = density_floor
+    cycles = [b.cycle() for b in blocks]
     err = mesh.check_redo(mesh_vars)
+    if [b.cycle() for b in blocks] != cycles:
+        return "mesh rejection changed the caller-owned cycles"
     if err != 1:
         what = "a NaN velocity" if nan else "a floor"
         return "%s in one block of six not rejected (err=%d)" % (what, err)

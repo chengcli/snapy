@@ -63,12 +63,18 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   // ------------- coordinate ------------- //
   op->coord() = CoordinateOptionsImpl::from_yaml(input_file);
   for (auto const &out_op : op->outputs()) {
-    auto check_slice = [](std::optional<double> const &slice, double lower,
+    auto check_slice = [](std::vector<double> const &slices, double lower,
                           double upper, char const *axis) {
-      if (slice && (*slice < lower || *slice >= upper)) {
-        throw std::invalid_argument(std::string("Slice at ") + axis + "=" +
-                                    std::to_string(*slice) +
-                                    " is out of range of Mesh");
+      for (size_t i = 0; i < slices.size(); ++i) {
+        double slice = slices[i];
+        if (!(slice >= lower && slice < upper)) {
+          throw std::invalid_argument(
+              std::string("Slice out of mesh bounds: ") + axis);
+        }
+        if (i && slice <= slices[i - 1]) {
+          throw std::invalid_argument(
+              std::string("Slices must be strictly increasing: ") + axis);
+        }
       }
     };
     check_slice(out_op->x1_slice(), op->coord()->global_x1min(),

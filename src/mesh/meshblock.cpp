@@ -180,17 +180,23 @@ void MeshBlockImpl::reset() {
 
   //// --------- (3) set up output --------- ////
   for (auto const &out_op : options->outputs()) {
-    auto validate_slice = [](std::optional<double> const &slice, double lower,
+    auto validate_slice = [](std::vector<double> const &slices, double lower,
                              double upper, bool sum, char const *axis) {
-      if (slice && sum) {
+      if (!slices.empty() && sum) {
         throw std::invalid_argument(std::string("Cannot request both slice and "
                                                 "sum along ") +
                                     axis);
       }
-      if (slice && (*slice < lower || *slice >= upper)) {
-        throw std::invalid_argument(std::string("Slice at ") + axis + "=" +
-                                    std::to_string(*slice) +
-                                    " is out of range of Mesh");
+      for (size_t i = 0; i < slices.size(); ++i) {
+        double slice = slices[i];
+        if (!(slice >= lower && slice < upper)) {
+          throw std::invalid_argument(
+              std::string("Slice out of mesh bounds: ") + axis);
+        }
+        if (i && slice <= slices[i - 1]) {
+          throw std::invalid_argument(
+              std::string("Slices must be strictly increasing: ") + axis);
+        }
       }
     };
     validate_slice(out_op->x1_slice(), options->coord()->global_x1min(),
@@ -1304,8 +1310,7 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
       set_scalar_primitive(vars, vars["scalar_s"], vars["hydro_u"]);
     }
 
-    // reset cycle
-    cycle -= 1;
+    // The caller advances the cycle only after an accepted step.
     // decided: floor_hit's and the restore's cons2prim must not mark the redo
     phydro->peos->reset_limiter_marks(vars["hydro_u"]);
     if (pintg->current_redo > pintg->options->max_redo()) {
@@ -1330,12 +1335,14 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
   auto interior = part({0, 0, 0}, PartOptions().exterior(false));
   TORCH_CHECK(vars.count("hydro_w"),
               "MeshBlock::check_redo needs hydro_w to restore the primitives");
-  // hydro_w is one stage stale: test the primitives as they stand
-  torch::Tensor w;
+  // Retain the checked primitives for output and the next timestep.
+  // A rejected step restores both fields in apply_redo.
+  auto const &hydro_w = vars.at("hydro_w");
   {
     DeferVaporCheck defer(phydro->peos.get());
-    w = phydro->peos->forward(hydro_u.clone()).index(interior);
+    phydro->peos->forward(hydro_u.clone(), hydro_w);
   }
+  auto w = hydro_w.index(interior);
   auto const &eos = phydro->peos->options;
   // negated so a NaN, which fails every comparison, counts as a hit
   auto floor = (w[IDN].min() > 1.001 * eos->density_floor()).logical_not();

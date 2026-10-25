@@ -119,21 +119,71 @@ example ``r_tracer_a_mean`` and ``r_tracer_a_std``.
 Slice Output
 ~~~~~~~~~~~~
 
-Set a slice coordinate on a NetCDF output to write only the cell containing
-that coordinate:
+Set a list of coordinates on a NetCDF output to stack selected planes in one
+file. Even a single coordinate uses list syntax:
 
 .. code-block:: yaml
 
     outputs:
       - type: netcdf
         variables: [prim]
-        x2_slice: 0.0
+        x1_slice: [75000., 150000., 225000.]
+        dt: 300.
+      - type: netcdf
+        variables: [prim]
+        x3_slice: [0.0]
         dt: 300.
 
-Slices use lower-inclusive, upper-exclusive mesh bounds. Multiple slice
-coordinates may be specified to produce line or point output. A slice
-coordinate must lie inside the global mesh and cannot be combined with a sum
-along the same axis.
+Coordinates must be strictly increasing and inside the lower-inclusive,
+upper-exclusive global bounds. Each coordinate selects its containing cell;
+the output coordinate is that cell's center, without interpolation. Lists on
+multiple axes select their Cartesian product. An empty list disables slicing.
+A slice cannot be combined with a sum on the same axis. Blocks with no selected
+cells are omitted; block combining assembles the lists in coordinate order.
+Face-staggered variables along a sliced axis sample the selected cells' lower
+faces, recorded separately in the face coordinate. No intervening cells or
+faces are written. Slice lists require ``type: netcdf``; the collective
+``pnetcdf`` writer does not support them.
+
+Slice implementation choices
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Athena++ accepts one coordinate per axis. Its ``SliceOutputData`` selects the
+containing cell and copies it into a smaller ``AthenaArray``. The HDF5 writer
+counts participating mesh blocks, gathers those counts across MPI ranks, and
+packs the selected data into output buffers. See the upstream
+`output transforms <https://github.com/PrincetonUniversity/athena-public-version/blob/master/src/outputs/outputs.cpp>`_
+and `HDF5 writer <https://github.com/PrincetonUniversity/athena-public-version/blob/master/src/outputs/athena_hdf5.cpp>`_.
+
+.. list-table:: Strategies for several planes
+   :header-rows: 1
+   :widths: 25 35 40
+
+   * - Strategy
+     - Advantage
+     - Cost
+   * - Separate output per plane
+     - Reuses single-plane output directly.
+     - Produces separate files and repeats diagnostic loading.
+   * - Gather lists in the output transform (implemented)
+     - Keeps selection together and reuses the existing writer. Multiple axes
+       compose naturally; unequal block contributions have explicit offsets.
+     - Allocates a selected array for each sliced axis, then packs it again
+       for NetCDF output.
+   * - Gather directly into the writer buffer
+     - Eliminates the intermediate selected arrays.
+     - Moves selection into each writer and complicates sums, reduced fields,
+       face coordinates, and non-NetCDF formats.
+   * - Select on the tensor's device before copying to CPU
+     - Transfers only requested cells from GPU to host.
+     - Requires changes across field/diagnostic loaders and handling of their
+       different axis layouts. Arbitrary index lists still require gathering.
+
+The implemented approach is the smallest extension of the existing transform
+pipeline. It does not eliminate the full-field CPU copy already performed by
+Snapy's tensor-to-AthenaArray adapters. Direct writer packing reduces CPU
+copies; selecting before the device-to-host transfer is the more substantial
+GPU optimization. These are architectural comparisons, not benchmark results.
 
 Double-Precision Output
 ~~~~~~~~~~~~~~~~~~~~~~~

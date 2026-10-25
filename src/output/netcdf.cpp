@@ -132,11 +132,11 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   int ncells3 = out_ke - out_ks + 1;
 
   int nfaces1 = ncells1;
-  if (ncells1 > 1) nfaces1++;
+  if (ncells1 > 1 && options->x1_slice().empty()) nfaces1++;
   int nfaces2 = ncells2;
-  if (ncells2 > 1) nfaces2++;
+  if (ncells2 > 1 && options->x2_slice().empty()) nfaces2++;
   int nfaces3 = ncells3;
-  if (ncells3 > 1) nfaces3++;
+  if (ncells3 > 1 && options->x3_slice().empty()) nfaces3++;
 
   // 2. define coordinate
   int idt, idx1, idx2, idx3, idx1f, idx2f, idx3f, iray;
@@ -144,13 +144,16 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   nc_def_dim(ifile, "time", NC_UNLIMITED, &idt);
 
   nc_def_dim(ifile, "x1", ncells1, &idx1);
-  if (ncells1 > 1) nc_def_dim(ifile, "x1f", nfaces1, &idx1f);
+  if (ncells1 > 1 || !options->x1_slice().empty())
+    nc_def_dim(ifile, "x1f", nfaces1, &idx1f);
 
   nc_def_dim(ifile, "x2", ncells2, &idx2);
-  if (ncells2 > 1) nc_def_dim(ifile, "x2f", nfaces2, &idx2f);
+  if (ncells2 > 1 || !options->x2_slice().empty())
+    nc_def_dim(ifile, "x2f", nfaces2, &idx2f);
 
   nc_def_dim(ifile, "x3", ncells3, &idx3);
-  if (ncells3 > 1) nc_def_dim(ifile, "x3f", nfaces3, &idx3f);
+  if (ncells3 > 1 || !options->x3_slice().empty())
+    nc_def_dim(ifile, "x3f", nfaces3, &idx3f);
 
   // 3. define variables
   auto layout = pmb->get_layout();
@@ -171,15 +174,15 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     nb2 *= 3;
     nb3 *= 2;
   }
-  if (options->x1_slice()) {
+  if (!options->x1_slice().empty()) {
     lx1 = 0;
     nb1 = 1;
   }
-  if (options->x2_slice()) {
+  if (!options->x2_slice().empty()) {
     lx2 = 0;
     nb2 = 1;
   }
-  if (options->x3_slice()) {
+  if (!options->x3_slice().empty()) {
     lx3 = 0;
     nb3 = 1;
   }
@@ -205,17 +208,19 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   nc_put_att_text(ifile, ivx1, "long_name", 27, "Z-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells1 * nb1;
-  pos[2] = ncells1 * loc[0] + 1;
-  pos[3] = ncells1 * (loc[0] + 1);
+  pos[1] =
+      options->x1_slice().empty() ? ncells1 * nb1 : options->x1_slice().size();
+  pos[2] =
+      (options->x1_slice().empty() ? ncells1 * loc[0] : slice_offset[0]) + 1;
+  pos[3] = pos[2] + ncells1 - 1;
   nc_put_att_int(ifile, ivx1, "domain_decomposition", NC_INT, 4, pos);
 
-  if (ncells1 > 1) {
+  if (ncells1 > 1 || !options->x1_slice().empty()) {
     nc_def_var(ifile, "x1f", nctype, 1, &idx1f, &ivx1f);
     nc_put_att_text(ifile, ivx1f, "units", 1, "m");
     nc_put_att_text(ifile, ivx1f, "long_name", 25, "Z-coordinate at cell face");
-    pos[0]--;
-    pos[2]--;
+    if (options->x1_slice().empty()) pos[0]--;
+    if (options->x1_slice().empty()) pos[2]--;
     nc_put_att_int(ifile, ivx1f, "domain_decomposition", NC_INT, 4, pos);
   }
 
@@ -227,17 +232,26 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   nc_put_att_text(ifile, ivx2, "long_name", 27, "X-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells2 * nb2;
-  pos[2] = ncells2 * loc[2] + 1;
-  pos[3] = ncells2 * (loc[2] + 1);
+  pos[1] =
+      options->x2_slice().empty() ? ncells2 * nb2 : options->x2_slice().size();
+  pos[2] =
+      (options->x2_slice().empty() ? ncells2 * loc[2] : slice_offset[1]) + 1;
+  pos[3] = pos[2] + ncells2 - 1;
+  if (layout->options->type() == "cubed-sphere" &&
+      !options->x2_slice().empty()) {
+    int offset = (face % 3) * options->x2_slice().size();
+    pos[1] *= 3;
+    pos[2] += offset;
+    pos[3] += offset;
+  }
   nc_put_att_int(ifile, ivx2, "domain_decomposition", NC_INT, 4, pos);
 
-  if (ncells2 > 1) {
+  if (ncells2 > 1 || !options->x2_slice().empty()) {
     nc_def_var(ifile, "x2f", nctype, 1, &idx2f, &ivx2f);
     nc_put_att_text(ifile, ivx2f, "units", hunits.size(), hunits.c_str());
     nc_put_att_text(ifile, ivx2f, "long_name", 25, "X-coordinate at cell face");
-    pos[0]--;
-    pos[2]--;
+    if (options->x2_slice().empty()) pos[0]--;
+    if (options->x2_slice().empty()) pos[2]--;
     nc_put_att_int(ifile, ivx2f, "domain_decomposition", NC_INT, 4, pos);
   }
 
@@ -247,21 +261,51 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   nc_put_att_text(ifile, ivx3, "long_name", 27, "Y-coordinate at cell center");
 
   pos[0] = 1;
-  pos[1] = ncells3 * nb3;
-  pos[2] = ncells3 * loc[1] + 1;
-  pos[3] = ncells3 * (loc[1] + 1);
+  pos[1] =
+      options->x3_slice().empty() ? ncells3 * nb3 : options->x3_slice().size();
+  pos[2] =
+      (options->x3_slice().empty() ? ncells3 * loc[1] : slice_offset[2]) + 1;
+  pos[3] = pos[2] + ncells3 - 1;
+  if (layout->options->type() == "cubed-sphere" &&
+      !options->x3_slice().empty()) {
+    int offset = (face / 3) * options->x3_slice().size();
+    pos[1] *= 2;
+    pos[2] += offset;
+    pos[3] += offset;
+  }
   nc_put_att_int(ifile, ivx3, "domain_decomposition", NC_INT, 4, pos);
 
-  if (ncells3 > 1) {
+  if (ncells3 > 1 || !options->x3_slice().empty()) {
     nc_def_var(ifile, "x3f", nctype, 1, &idx3f, &ivx3f);
     nc_put_att_text(ifile, ivx3f, "units", hunits.size(), hunits.c_str());
     nc_put_att_text(ifile, ivx3f, "long_name", 25, "Y-coordinate at cell face");
-    pos[0]--;
-    pos[2]--;
+    if (options->x3_slice().empty()) pos[0]--;
+    if (options->x3_slice().empty()) pos[2]--;
     nc_put_att_int(ifile, ivx3f, "domain_decomposition", NC_INT, 4, pos);
   }
 
-  int nbtotal = nb1 * nb2 * nb3;
+  // Count participating partitions, even when each owns a different number
+  // of requested planes. This metadata also supports combining files later.
+  auto count_blocks = [](std::vector<double> const &slices, double lower,
+                         double upper, int nblocks) {
+    if (slices.empty()) return nblocks;
+    int count = 0;
+    for (int b = 0; b < nblocks; ++b) {
+      double lo = lower + b * (upper - lower) / nblocks;
+      double hi = lo + (upper - lower) / nblocks;
+      count += std::any_of(slices.begin(), slices.end(),
+                           [=](double x) { return x >= lo && x < hi; });
+    }
+    return count;
+  };
+  auto co = pmb->pcoord->options;
+  int nbtotal = count_blocks(options->x1_slice(), co->global_x1min(),
+                             co->global_x1max(), layout->options->pz()) *
+                count_blocks(options->x2_slice(), co->global_x2min(),
+                             co->global_x2max(), layout->options->px()) *
+                count_blocks(options->x3_slice(), co->global_x3min(),
+                             co->global_x3max(), layout->options->py());
+  if (layout->options->type() == "cubed-sphere") nbtotal *= 6;
   nc_put_att_int(ifile, NC_GLOBAL, "NumFilesInSet", NC_INT, 1, &nbtotal);
 
   OutputData *pdata = pfirst_data_;
@@ -324,13 +368,13 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
       auto const &raw_name = varnames[n];
       auto name = sanitize_netcdf_name(raw_name);
 
-      if (grid == "CCF" && ncells1 > 1)
+      if (grid == "CCF" && (ncells1 > 1 || !options->x1_slice().empty()))
         SNAP_NETCDF_CHECK(
             nc_def_var(ifile, name.c_str(), nctype, 4, iaxis1, ivar));
-      else if ((grid == "CFC") && (ncells2 > 1))
+      else if ((grid == "CFC") && (ncells2 > 1 || !options->x2_slice().empty()))
         SNAP_NETCDF_CHECK(
             nc_def_var(ifile, name.c_str(), nctype, 4, iaxis2, ivar));
-      else if ((grid == "FCC") && (ncells3 > 1))
+      else if ((grid == "FCC") && (ncells3 > 1 || !options->x3_slice().empty()))
         SNAP_NETCDF_CHECK(
             nc_def_var(ifile, name.c_str(), nctype, 4, iaxis3, ivar));
       else if (grid == "--C")
@@ -415,8 +459,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   size_t start[4] = {0, 0, 0, 0};
   size_t count[4] = {1, (size_t)ncells1, (size_t)ncells3, (size_t)ncells2};
   size_t count1[4] = {1, (size_t)nfaces1, (size_t)ncells3, (size_t)ncells2};
-  size_t count2[4] = {1, (size_t)ncells1, (size_t)nfaces3, (size_t)ncells2};
-  size_t count3[4] = {1, (size_t)ncells1, (size_t)ncells3, (size_t)nfaces2};
+  size_t count2[4] = {1, (size_t)ncells1, (size_t)ncells3, (size_t)nfaces2};
+  size_t count3[4] = {1, (size_t)ncells1, (size_t)nfaces3, (size_t)ncells2};
   size_t count_23[3] = {1, (size_t)ncells3, (size_t)ncells2};
 
   double timed = current_time;
@@ -426,47 +470,59 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
   else
     nc_put_vara_float(ifile, ivt, start, count, &timef);
 
-  int coord_is = options->x1_slice() ? islice : out_is;
-  int coord_ie = options->x1_slice() ? islice : out_ie;
-  int coord_js = options->x2_slice() ? jslice : out_js;
-  int coord_je = options->x2_slice() ? jslice : out_je;
-  int coord_ks = options->x3_slice() ? kslice : out_ks;
-  int coord_ke = options->x3_slice() ? kslice : out_ke;
+  int coord_is = out_is;
+  int coord_ie = out_ie;
+  int coord_js = out_js;
+  int coord_je = out_je;
+  int coord_ks = out_ks;
+  int coord_ke = out_ke;
 
   for (int i = coord_is; i <= coord_ie; ++i)
-    buf.set(i - coord_is, pmb->pcoord->x1v[i].item<double>());
+    buf.set(i - coord_is,
+            pmb->pcoord->x1v[!options->x1_slice().empty() ? islice[i] : i]
+                .item<double>());
   buf.put_var(ifile, ivx1);
 
-  if (ncells1 > 1) {
-    for (int i = coord_is; i <= coord_ie + 1; ++i)
-      buf.set(i - coord_is, pmb->pcoord->x1f[i].item<double>());
+  if (ncells1 > 1 || !options->x1_slice().empty()) {
+    for (int i = coord_is; i <= coord_ie + options->x1_slice().empty(); ++i)
+      buf.set(i - coord_is,
+              pmb->pcoord->x1f[!options->x1_slice().empty() ? islice[i] : i]
+                  .item<double>());
     buf.put_var(ifile, ivx1f);
   }
 
   for (int j = coord_js; j <= coord_je; ++j) {
     buf.set(j - coord_js,
-            pmb->pcoord->x2v[j].item<double>() + (face % 3) * M_PI / 2.);
+            pmb->pcoord->x2v[!options->x2_slice().empty() ? jslice[j] : j]
+                    .item<double>() +
+                (face % 3) * M_PI / 2.);
   }
   buf.put_var(ifile, ivx2);
 
-  if (ncells2 > 1) {
-    for (int j = coord_js; j <= coord_je + 1; ++j) {
+  if (ncells2 > 1 || !options->x2_slice().empty()) {
+    for (int j = coord_js; j <= coord_je + options->x2_slice().empty(); ++j) {
       buf.set(j - coord_js,
-              pmb->pcoord->x2f[j].item<double>() + (face % 3) * M_PI / 2.);
+              pmb->pcoord->x2f[!options->x2_slice().empty() ? jslice[j] : j]
+                      .item<double>() +
+                  (face % 3) * M_PI / 2.);
     }
     buf.put_var(ifile, ivx2f);
   }
 
   for (int k = coord_ks; k <= coord_ke; ++k) {
     buf.set(k - coord_ks,
-            pmb->pcoord->x3v[k].item<double>() + (face / 3) * M_PI / 2.);
+            pmb->pcoord->x3v[!options->x3_slice().empty() ? kslice[k] : k]
+                    .item<double>() +
+                (face / 3) * M_PI / 2.);
   }
   buf.put_var(ifile, ivx3);
 
-  if (ncells3 > 1) {
-    for (int k = coord_ks; k <= coord_ke + 1; ++k) {
+  if (ncells3 > 1 || !options->x3_slice().empty()) {
+    for (int k = coord_ks; k <= coord_ke + options->x3_slice().empty(); ++k) {
       buf.set(k - coord_ks,
-              pmb->pcoord->x3f[k].item<double>() + (face / 3) * M_PI / 2.);
+              pmb->pcoord->x3f[!options->x3_slice().empty() ? kslice[k] : k]
+                      .item<double>() +
+                  (face / 3) * M_PI / 2.);
     }
     buf.put_var(ifile, ivx3f);
   }
@@ -478,31 +534,33 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     std::string grid = pmeta->GetGridType(names[0]);
     int nvar = get_num_variables(grid, pdata->data);
 
-    if (grid == "CCF" && ncells1 > 1) {
+    if (grid == "CCF" && (ncells1 > 1 || !options->x1_slice().empty())) {
       for (int n = 0; n < nvar; n++) {
         buf.reset();
-        for (int i = out_is; i <= out_ie + 1; ++i)
+        for (int i = out_is; i <= out_ie + options->x1_slice().empty(); ++i)
           for (int k = out_ks; k <= out_ke; ++k)
             for (int j = out_js; j <= out_je; ++j)
               buf.push(pdata->data(n, k, j, i));
         buf.put_vara(ifile, *ivar, start, count1);
         ++ivar;
       }
-    } else if ((grid == "CFC") && (ncells2 > 1)) {
+    } else if ((grid == "CFC") &&
+               (ncells2 > 1 || !options->x2_slice().empty())) {
       for (int n = 0; n < nvar; n++) {
         buf.reset();
         for (int i = out_is; i <= out_ie; ++i)
           for (int k = out_ks; k <= out_ke; ++k)
-            for (int j = out_js; j <= out_je + 1; ++j)
+            for (int j = out_js; j <= out_je + options->x2_slice().empty(); ++j)
               buf.push(pdata->data(n, k, j, i));
         buf.put_vara(ifile, *ivar, start, count2);
         ++ivar;
       }
-    } else if ((grid == "FCC") && (ncells3 > 1)) {
+    } else if ((grid == "FCC") &&
+               (ncells3 > 1 || !options->x3_slice().empty())) {
       for (int n = 0; n < nvar; n++) {
         buf.reset();
         for (int i = out_is; i <= out_ie; ++i)
-          for (int k = out_ks; k <= out_ke + 1; ++k)
+          for (int k = out_ks; k <= out_ke + options->x3_slice().empty(); ++k)
             for (int j = out_js; j <= out_je; ++j)
               buf.push(pdata->data(n, k, j, i));
         buf.put_vara(ifile, *ivar, start, count3);
@@ -526,7 +584,8 @@ void NetcdfOutput::write_output_file(MeshBlockImpl *pmb_in,
     } else if (grid == "--F") {
       for (int n = 0; n < nvar; n++) {
         buf.reset();
-        for (int i = out_is; i <= out_ie + 1; ++i) buf.push(pdata->data(n, i));
+        for (int i = out_is; i <= out_ie + options->x1_slice().empty(); ++i)
+          buf.push(pdata->data(n, i));
         buf.put_vara(ifile, *ivar, start, count1);
         ++ivar;
       }
