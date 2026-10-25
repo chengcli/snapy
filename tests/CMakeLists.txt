@@ -131,6 +131,25 @@ add_test(NAME test_diffusion_cubed_sphere_mp.${buildl}
     --gtest_filter=CubedSphereDiffusion.constant_state_and_rigid_rotation:CubedSphereDiffusion.split_panels_preserve_constants_and_rotation:CubedSphereDiffusion.distributed_shared_heat_flux)
 set_tests_properties(test_diffusion_cubed_sphere_mp.${buildl}
   PROPERTIES TIMEOUT 120 LABELS "parallel;forcing" ENVIRONMENT "BACKEND=gloo")
+setup_test(test_diffusion_cubed_sphere_two_gpu)
+set_tests_properties(test_diffusion_cubed_sphere_two_gpu.${buildl} PROPERTIES
+  TIMEOUT 60
+  SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]"
+  LABELS "forcing;gpu")
+if(CUDA AND UCX_FOUND AND COMMUX_CUDA_FOUND)
+  find_program(SNAPY_TWO_GPU_TORCHRUN_EXECUTABLE NAMES torchrun)
+  if(SNAPY_TWO_GPU_TORCHRUN_EXECUTABLE)
+    add_test(NAME test_diffusion_cubed_sphere_two_gpu_ucx.${buildl}
+      COMMAND ${SNAPY_TWO_GPU_TORCHRUN_EXECUTABLE}
+        --standalone --no-python --nproc-per-node=2
+        $<TARGET_FILE:test_diffusion_cubed_sphere_two_gpu.${buildl}>)
+    set_tests_properties(test_diffusion_cubed_sphere_two_gpu_ucx.${buildl}
+      PROPERTIES TIMEOUT 60 PROCESSORS 2 LABELS "parallel;forcing;gpu;ucx"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+        SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]"
+        ENVIRONMENT "BACKEND=ucx;DEVICE=cuda;UCX_TLS=self,tcp,cuda_copy,cuda_ipc")
+  endif()
+endif()
 setup_test(test_diffusion_moist)
 setup_test(test_diffusion_x1_scale)
 setup_test(test_condensate_conservation)

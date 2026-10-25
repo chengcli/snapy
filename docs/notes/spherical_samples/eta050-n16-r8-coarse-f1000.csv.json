@@ -1,0 +1,9 @@
+{
+"device": "cuda:1", "Ra": 865.9830627013874, "eta": 0.5,
+"ell": 3, "N": 16, "nr": 8,
+"a": 1, "D": 0.5, "gamma": 1.666666666666667, "Pr": 1, "chi_mid": 0.02686490503329732,
+"seed": 1e-06, "cfl": 0.8, "eigenmode_seed": true, "orientation": "z",
+"diffusion_step_scale": 8,
+"end_diffusive_time": 0.2, "cycles": 565, "retries": 0, "seconds": 88.634751294,
+"balance_residual": 2.916973300596773e-11
+}

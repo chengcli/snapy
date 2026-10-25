@@ -708,8 +708,9 @@ Snapy's compressible equations. It outputs the volume-weighted radial-velocity
 mode projection and radial RMS velocity. It uses fixed dynamic coefficients
 with the explicit :math:`c_p` conversion, :math:`Pr=1`, a superadiabatic Rayleigh
 number, and LMARS/WENO5 hydrodynamics. The discrete hydrostatic balancing step
-can slightly change the analytic conductive temperature profile; the
-unperturbed control measures the resulting drift.
+preserves the conductive temperature profile while adjusting density and
+pressure; the unperturbed control measures the remaining drift under the
+discrete hydro and conduction operators.
 
 The initial suite uses N=24, 12 radial cells, :math:`d/R=0.2`,
 :math:`d/H_p\simeq0.09524`, :math:`\Delta T/T_0\simeq0.09524`, and perturbation
@@ -810,10 +811,10 @@ C++ options change object layouts, so rebuild downstream C++ consumers and the
 Python extension together with the library. No new solver runtime dependency
 was added; NumPy/SciPy/Matplotlib remain analysis prerequisites. EOS heat-capacity
 and communication APIs are reused. Moist/nonlinear implicit conduction,
-implicit viscosity, a distributed radial line solve, and a grid/time/
-stratification-extrapolated spherical compressible neutral curve remain outside
-the implemented scope. The planar compressible verification below removes
-curvature and tests a separate Cartesian reference problem.
+implicit viscosity and a distributed radial line solve remain outside the
+implemented scope. The planar verification below removes curvature; the
+subsequent radius-ratio sweep returns to a matched compressible spherical
+problem.
 
 Compressible planar reference and GPU benchmark
 -----------------------------------------------
@@ -1033,8 +1034,100 @@ This planar experiment uses different :math:`a`, :math:`{\cal D}` and
 :math:`\gamma` from the earlier spherical experiment. Similar-looking neutral
 Rayleigh numbers in the two experiments are not evidence of equivalent
 physical states. The planar test constrains the Cartesian diffusion and
-compressible dynamics; the spherical continuum threshold still requires its
-own matched eigenproblem and grid refinement.
+compressible dynamics. The following spherical study uses the same
+thermodynamic parameters and an independently matched spherical eigenproblem.
+
+.. include:: spherical_compressible_theory.inc
+
+GPU cubed-sphere radius-ratio sweep
+----------------------------------
+
+``examples/spherical_convection.cpp`` evolves six cubed-sphere panels using
+the fully compressible production solver on the requested CUDA device. The
+radius ratios are :math:`0.5,0.6,0.7,0.8,0.9,0.95,0.98,0.99`. This family
+holds :math:`a=1,{\cal D}=0.5,\gamma=5/3,Pr=1` and the midpoint reference
+state fixed. Thus its thin-shell target is the compressible planar value
+:math:`696.16667`, not the Boussinesq value :math:`657.51136`.
+
+The runner initializes the exact conductive temperature, projects density
+and pressure onto snapy's discrete hydrostatic balance at fixed temperature,
+and rescales both to restore midpoint density one using cubic interpolation.
+The independent physical growing or decaying eigenmode supplies all four
+initial perturbations: radial and tangential velocity, temperature, and
+pressure. Subsequent evolution is unrestricted: there is no projection,
+filtering, or replacement of the evolving state by a spherical harmonic.
+Only the diagnostic projects radial velocity onto the seeded harmonic.
+
+Each mode initially uses :math:`Y_\ell^0` about the Cartesian z axis. The
+runner also accepts a diagonal orientation to measure the finite mesh's
+splitting of the continuum rotational degeneracy. Numerical and spectral
+Rayleigh numbers use the same constant gravity, coefficients, thermal walls,
+stress-free velocity walls, and reference density. The spherical thermal
+profile is :math:`A+B/r`; setting both wall temperatures to the planar
+values would instead change the midpoint reference temperature at finite
+shell thickness.
+
+Resolution and implementation cost
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The critical degree grows from :math:`\ell=3` at :math:`\eta=0.5` to
+:math:`\ell=224` at :math:`\eta=0.99`. A fixed panel resolution cannot resolve
+that sequence. At a panel center there are approximately
+:math:`4N/\sqrt{\ell(\ell+1)}` cells per wavelength. The coarse family uses
+eight radial cells and rounds :math:`2\sqrt{\ell(\ell+1)}` up to a multiple
+of eight, with a minimum of 16 angular cells per panel direction. The next
+family multiplies both radial and angular resolutions by 1.5. Angular
+resolution, radial resolution, fit-window variation, and timestep dependence
+are reported separately from the continuum change with shell thickness.
+
+To make the large angular grids practical, the four-point polynomial
+reconstruction is applied using four indexed stencil terms instead of a
+dense matrix product. This changes its work from
+:math:`O(n_rN^3)` to :math:`O(n_rN^2)` while preserving its coefficients and
+one-sided boundary rows. Face traces and normals are retained only on the
+boundary slabs. Four completed exchanges stream the seam data through one
+12-channel buffer instead of retaining 48 volume-sized channels. The common
+integrated flux, jump penalty, and conservation rule are unchanged. These
+changes introduce no public C++ object-layout or external-library changes.
+
+The benchmark uses explicit viscosity and conduction with SSPRK3. An optional
+``diffusion_step_scale`` relaxes the initial conservative diffusion guard;
+the original acoustic timestep limit is still enforced. This is a runner
+option, not a change to the production timestep policy. Larger steps must
+be assessed against smaller-step runs; an absence of step retries alone
+does not establish temporal accuracy.
+
+.. include:: spherical_onset_tables.inc
+
+.. include:: spherical_onset_summary.inc
+
+.. figure:: figures/spherical_compressible_onset.png
+   :width: 100%
+   :alt: Spherical spectral thresholds and independently measured cubed-sphere GPU thresholds versus radius ratio.
+
+   Compressible spherical-shell onset with a fixed thermodynamic convention.
+   The reference curve and finite-grid GPU estimates are distinct results.
+
+Reproducing the radius-ratio study
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+From the repository root::
+
+   cmake -S . -B build
+   cmake --build build --target spherical_convection.release -j 12
+   OPENBLAS_NUM_THREADS=1 python docs/notes/spherical_compressible_reference.py
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --nr 8 --angular-scale 1 --diffusion-step-scale 8 --tag coarse
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --nr 12 --angular-scale 1.5 --diffusion-step-scale 8 --tag fine
+   OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_spherical_onset.py
+
+Use ``--etas`` and ``--devices`` to schedule subsets, particularly the large
+thin-shell grids. The batch runner retains parameter manifests, binary and
+library hashes, hardware information, initial eigenprofiles, CSV diagnostics,
+stdout logs, and completion metadata. It reuses a completed matching run and
+requires ``--overwrite`` before replacing an existing incomplete run. Its
+``--output-dir`` option can place large campaigns under ``/data02``; the
+analysis accepts a corresponding ``--input-dir``. A CUDA request never falls
+back to CPU evolution.
 
 References
 ----------
