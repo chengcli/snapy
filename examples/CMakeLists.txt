@@ -8,6 +8,7 @@ setup_problem(bryan)
 setup_problem(jupiter_evap_precip_1d)
 setup_problem(run_hydro)
 setup_problem(cubed_sphere_convection)
+setup_problem(planar_convection)
 setup_problem(shallow_xy)
 setup_problem(shallow_splash)
 

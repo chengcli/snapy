@@ -96,9 +96,11 @@ DiffusionOptions
                temperature_outer() -> float
                temperature_outer(value: float) -> DiffusionOptions
 
-      Cubed-sphere radial wall temperature in kelvin; zero (the default) means
-      insulated. Positive temperatures prescribe the conductive boundary
-      value independently of the reflecting hydrodynamic ghost state.
+      Temperature in kelvin at the inner/outer x1 wall, supported on Cartesian
+      and cubed-sphere meshes with reflecting hydrodynamic boundaries. Positive
+      values prescribe the conductive boundary value independently of the
+      hydrodynamic ghost state. Zero preserves the default: insulated on the
+      cubed sphere, or the existing ghost-based heat flux on Cartesian meshes.
 
    .. method:: wall_velocity() -> str
                wall_velocity(value: str) -> DiffusionOptions
@@ -118,8 +120,9 @@ DiffusionOptions
       nonpositive temperature; reduce the timestep for such sharp transients.
 
    The new wall and radial implicit options use the same names under
-   ``forcing/diffusion`` in YAML. They are not supported on Cartesian meshes;
-   the default options preserve the existing Cartesian implementation.
+   ``forcing/diffusion`` in YAML. The prescribed wall temperatures also work
+   on Cartesian meshes. The no-slip override and radial implicit solve remain
+   specific to the cubed sphere. Defaults preserve the Cartesian behavior.
    See :doc:`../notes/cubed_sphere_diffusion_convection` for the
    metric, coefficient conventions and validation results.
 

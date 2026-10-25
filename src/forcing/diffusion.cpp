@@ -364,10 +364,19 @@ void DiffusionImpl::reset() {
                   options->wall_velocity() == "no-slip",
               "[Diffusion] wall_velocity must be stress-free or no-slip.");
   TORCH_CHECK(
-      spherical || (options->temperature_inner() == 0. &&
-                    options->temperature_outer() == 0. &&
-                    options->wall_velocity() == "stress-free"),
-      "[Diffusion] Thermal/velocity wall options require gnomonic-equiangle.");
+      spherical || options->wall_velocity() == "stress-free",
+      "[Diffusion] The no-slip wall option requires gnomonic-equiangle.");
+  if (!spherical && (options->temperature_inner() > 0. ||
+                     options->temperature_outer() > 0.)) {
+    auto const& names = phydro->pmb->options->bcnames();
+    TORCH_CHECK(coord->options->type() == "cartesian" && names.size() >= 2 &&
+                    (options->temperature_inner() == 0. ||
+                     names[0] == "reflecting_inner") &&
+                    (options->temperature_outer() == 0. ||
+                     names[1] == "reflecting_outer"),
+                "[Diffusion] Cartesian prescribed temperatures require "
+                "reflecting x1 walls.");
+  }
   if (enabled && spherical) {
     auto op = coord->options;
     TORCH_CHECK(op->nghost() >= 2 && op->nx1() >= std::max(4, op->nghost()) &&
@@ -596,6 +605,24 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
     if (options->kappa_iso() > 0.) {
       auto dtdn =
           face_normal_derivative(temp, coord, idir, face_start, face_end);
+      if (idir == 0) {
+        // Conductive Dirichlet values are independent of the reflecting
+        // hydro ghosts, which must remain suitable for hydrostatic balance.
+        // Zero preserves the existing Cartesian ghost-based heat flux.
+        for (int side = 0; side < 2; ++side) {
+          double tw = side ? options->temperature_outer()
+                           : options->temperature_inner();
+          if (tw == 0. || !(side ? wall_upper : wall_lower)) continue;
+          int ic = side ? coord->iu() : coord->il();
+          int face = side ? coord->iu() + 1 : coord->il();
+          auto tc = region_slice(temp, cell_start, cell_end)
+                        .select(-1, side ? cell_end[2] - cell_start[2] - 1 : 0);
+          auto distance =
+              (coord->x1v[ic] - coord->x1f[face]).to(temp.options());
+          dtdn.select(-1, side ? dtdn.size(-1) - 1 : 0)
+              .copy_((tc - tw) / distance);
+        }
+      }
       if (options->dynamic()) {
         flux[IPR].index(face_index) -= options->kappa_iso() * dtdn;
       } else {

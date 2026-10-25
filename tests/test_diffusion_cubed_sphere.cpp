@@ -23,7 +23,12 @@ Mesh make_mesh(int n = 12, int partitions = 1) {
   c->global_nx3() = n * partitions;
   opts->block()->layout()->px(partitions).py(partitions);
   opts->blocks_per_process(6 * partitions * partitions / get_world_size());
-  return Mesh(opts);
+  // Keep the distributed test session alive between meshes. Recreating Gloo
+  // against torchrun's persistent store can reuse stale rendezvous keys.
+  static std::shared_ptr<ProcessGroupContext> session;
+  auto mesh = Mesh(opts);
+  if (get_world_size() > 1) session = mesh->blocks[0]->get_layout()->comm;
+  return mesh;
 }
 struct State {
   torch::Tensor w, t, x;

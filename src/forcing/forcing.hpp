@@ -202,7 +202,7 @@ struct DiffusionOptionsImpl {
   ADD_ARG(double, kappa_iso) = 0.;
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
-  //! Cubed-sphere reflecting walls: zero means insulated, otherwise kelvin.
+  //! Prescribed x1 wall temperatures in kelvin; zero retains default heat BC.
   ADD_ARG(double, temperature_inner) = 0.;
   ADD_ARG(double, temperature_outer) = 0.;
   ADD_ARG(std::string, wall_velocity) = "stress-free";

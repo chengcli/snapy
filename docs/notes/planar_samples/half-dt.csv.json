@@ -1,0 +1,10 @@
+{
+"device": "cuda:1",
+"Ra": 710, "a": 1, "D": 0.5,
+"gamma": 1.666666666666667, "Pr": 1, "k": 2.256319607715666,
+"nz": 32, "nx": 64, "cfl": 0.4,
+"seed": 1e-06, "chi_mid": 0.02966954145484633,
+"end_diffusive_time": 1, "cycles": 20141,
+"retries": 0, "seconds": 109.750399234,
+"balance_residual": 4.149488811699367e-12
+}

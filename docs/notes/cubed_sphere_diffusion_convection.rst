@@ -16,8 +16,16 @@ implemented, with shared conservative seam fluxes, radial thermal/velocity
 walls, and optional second-order implicit radial heat conduction. The original
 Cartesian-only guard at the audited commit has been replaced by explicit
 geometry and boundary requirements. Cartesian diffusion keeps its original
-operator. The sections below distinguish the independent Python calculation,
-the C++ operator regression, and full compressible runs.
+interior stencil and now accepts prescribed conductive x1 wall temperatures.
+The sections below distinguish the independent Python calculation, the C++
+operator regression, and full compressible runs.
+
+The added planar verification compares GPU snapy runs with an independent
+spectral solution of the fully compressible equations from
+[AlboussiereRicard2017]_. At :math:`a=1,{\cal D}=0.5,\gamma=5/3`, the
+64-by-128-cell GPU threshold is :math:`696.00945`, within 0.0226 percent of the
+compressible reference :math:`696.16667`. The reference is distinct from the
+Boussinesq threshold and from the earlier spherical test.
 
 The main analytical result, for impermeable, stress-free, fixed-temperature
 walls, is
@@ -803,11 +811,241 @@ Python extension together with the library. No new solver runtime dependency
 was added; NumPy/SciPy/Matplotlib remain analysis prerequisites. EOS heat-capacity
 and communication APIs are reused. Moist/nonlinear implicit conduction,
 implicit viscosity, a distributed radial line solve, and a grid/time/
-stratification-extrapolated compressible neutral curve remain outside the
-implemented scope.
+stratification-extrapolated spherical compressible neutral curve remain outside
+the implemented scope. The planar compressible verification below removes
+curvature and tests a separate Cartesian reference problem.
+
+Compressible planar reference and GPU benchmark
+-----------------------------------------------
+
+To separate compressibility from curvature, consider a plane ideal-gas layer
+with constant dynamic viscosity :math:`\mu`, constant Fourier conductivity
+:math:`K`, uniform downward gravity, fixed temperatures, and impermeable,
+stress-free walls. This is the exact compressible stability problem of
+[AlboussiereRicard2017]_, sections 5 and 8.1. The values computed below are an
+independent reproduction of those equations, not numbers transcribed from a
+published table. The production runs use Cartesian snapy on CUDA; the reference
+uses NumPy/SciPy Chebyshev collocation on the CPU.
+
+Let :math:`d=T_m=\rho_m=R=1`, with :math:`z\in[-1/2,1/2]`. Define
+
+.. math::
+
+   a=\frac{\Delta T}{T_m},\qquad
+   {\cal D}=\frac{gd}{c_pT_m},\qquad
+   c_p=\frac{\gamma}{\gamma-1},\qquad g=c_p{\cal D}.
+
+The exact conductive, hydrostatic background is
+
+.. math::
+
+   T_b=1-az,\qquad \rho_b=T_b^{g/a-1},\qquad p_b=T_b^{g/a}.
+
+For the prescribed :math:`Pr=1`, choose
+
+.. math::
+
+   \chi_m=\nu_m=\sqrt{\frac{g(a-{\cal D})}{Ra_{\rm sa}}},\qquad
+   \mu=\chi_m,\qquad K=c_p\chi_m.
+
+Here :math:`\chi_m=K/(\rho_m c_p)` is the thermal diffusivity in the
+Rayleigh number. It is not :math:`K/(\rho_m c_v)`, the diffusivity controlling
+the conservative-energy explicit timestep. The full solver evolves total
+energy and includes compressional work. The background density and temperature
+are allowed to vary; the comparison makes no Boussinesq or anelastic
+approximation.
+
+Independent neutral and growth eigenproblems
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use perturbations proportional to :math:`\exp(ikx+\sigma t)`, with horizontal
+velocity amplitude :math:`iU` and vertical velocity amplitude :math:`w`.
+Writing :math:`\partial=d/dz` and :math:`L=\partial^2-k^2`, the linearized
+dimensional equations in the units above are
+
+.. math::
+
+   \sigma\left(\frac{p'}{T_b}-\frac{\rho_bT'}{T_b}\right)
+      &= k\rho_b U-\partial(\rho_b w),\\
+   \sigma\rho_b U
+      &=-kp'+\mu\left[(\partial^2-4k^2/3)U+(k/3)\partial w\right],\\
+   \sigma\rho_b w
+      &=-\partial p'-\frac{g}{T_b}p'+\frac{g\rho_b}{T_b}T'
+        +\mu\left[(4\partial^2/3-k^2)w-(k/3)\partial U\right],\\
+   \sigma(\rho_b c_pT'-p')
+      &=\rho_b c_p(a-{\cal D})w+KL T'.
+
+The density time derivative, pressure contribution to buoyancy, and pressure
+time derivative in the thermal equation are all retained. Viscous heating is
+quadratic in perturbations and does not enter this linear problem. The boundary
+conditions are :math:`w=\partial U=T'=0` at both walls. Growth is reported in
+units :math:`\chi_m/d^2`.
+
+At stationary onset set :math:`\sigma=0`, :math:`q=p'/\mu` and
+:math:`\Theta=gT'/\mu`. The generalized Rayleigh eigenproblem becomes
+
+.. math::
+
+   0&=-k\rho_b U+\partial(\rho_b w),\\
+   0&=-kq+(\partial^2-4k^2/3)U+(k/3)\partial w,\\
+   0&=-(\partial+g/T_b)q+(4\partial^2/3-k^2)w
+       -(k/3)\partial U+(\rho_b/T_b)\Theta,\\
+   L\Theta&=-Ra_{\rm sa}\rho_b w.
+
+The mass-flux constraint here follows from setting :math:`\sigma=0` in the
+full continuity equation; it is not an anelastic approximation.
+
+``planar_compressible_reference.py`` assembles both matrix pencils independently
+of snapy, enforces the six wall conditions, rejects infinite constraint
+eigenvalues, and minimizes the lowest positive neutral eigenvalue over
+:math:`k`. The time-dependent pencil independently checks the change of sign
+of the leading growth rate through that threshold. It also checks the
+Boussinesq limit, spectral resolution, and generalized-eigenpair residuals.
+
+For comparison, the published two-mode, second-order approximation (equation
+8.9 in the journal version, 8.11 in the arXiv manuscript) is
+
+.. math::
+
+   Ra_{\rm sa,c}\simeq\frac{27\pi^4}{4}
+    +\left(2\pi^2-\frac{320}{39}\right)\widetilde{\cal D}^{\,2}
+    +\left(\frac{9\pi^4}{8}-\frac{17\pi^2}{4}+\frac{512}{13}\right)
+      a\widetilde{\cal D}
+    -\left(\frac{27\pi^4}{16}-\frac{63\pi^2}{8}+\frac{1216}{39}\right)a^2,
+   \qquad \widetilde{\cal D}=\frac{{\cal D}}{1-1/\gamma}.
+
+This truncated approximation is not used as the exact target at finite
+stratification. For :math:`\gamma=5/3`, :math:`a=1` and
+:math:`{\cal D}=0.5`, collocation gives :math:`Ra_c=696.16667`,
+:math:`k_c=2.25632`; the two-mode approximation gives :math:`691.47920`.
+For :math:`a=0.1,{\cal D}=0.02`, the corresponding thresholds are
+:math:`656.89807` and :math:`656.89698`. At
+:math:`a=10^{-3},{\cal D}=2\times10^{-4}`, the collocation threshold is
+:math:`657.51130`, approaching :math:`27\pi^4/4=657.51136`.
+
+GPU experiment definition
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``examples/planar_convection.cpp`` uses one Cartesian block, one horizontal
+period :math:`2\pi/k_c`, and :math:`N_x=2N_z` cells. It uses double precision,
+WENO5 reconstruction, LMARS, SSPRK3, and explicit viscosity and conduction.
+There is no implicit radial solve in this planar experiment. A requested CUDA
+device must be available; the runner does not fall back to the CPU.
+
+The existing hydrostatic column projection preserves the linear temperature
+profile while finding a discrete hydrostatic density and pressure. After
+projection, both are rescaled together to set midpoint density to one, using
+cubic midpoint interpolation. This preserves balance while avoiding a
+second-order bias in the Rayleigh-number reference density. A small sinusoidal
+thermal and velocity perturbation excites the fundamental roll. The horizontal
+velocity includes the background density gradient so the initial mass flux is
+divergence-free to linear order for the analytic background. This seed is not
+the exact compressible eigenfunction; early acoustic and shape-adjustment
+transients are excluded from the growth fits.
+
+The new Cartesian prescribed-temperature flux uses the wall-to-cell distance
+and the active-cell temperature. Hydrodynamic ghosts remain reflecting.
+This leaves the unconfigured Cartesian diffusion behavior unchanged. CPU and
+CUDA regression cases check that a linear conductive profile has zero tendency
+and that a raised wall supplies the correct integrated heat flux.
+
+Measured GPU results
+~~~~~~~~~~~~~~~~~~~~
+
+The scan uses :math:`Ra=680,695,710` at each of three resolutions and evolves
+to diffusive time 1.0. Runs used the two NVIDIA GeForce RTX 5090 devices recorded
+in ``planar_samples/hardware.txt`` (driver 615.71.10), with LibTorch
+2.10.0+cu128. The initial column construction is on the CPU; conserved-state
+evolution and the spatial operators run on the requested CUDA device.
+
+The diagnostic is the volume-weighted projection of vertical velocity onto
+:math:`f=\sin[\pi(z+1/2)]\cos(kx)`. Fit :math:`\log A(t)` in the three
+windows 0.4--0.6, 0.6--0.8 and 0.8--1.0; the table reports the last window.
+A quadratic fit of growth versus :math:`Ra` through the three nearby runs
+estimates the neutral point. This resolves the small curvature that a
+two-point linear interpolation would miss. The domain admits the selected
+fundamental wavelength and its harmonics; it does not scan horizontal
+wavenumbers during the nonlinear runs.
+
+.. include:: planar_onset_tables.inc
+
+.. include:: planar_onset_summary.inc
+
+.. figure:: figures/planar_compressible_onset.png
+   :width: 100%
+   :alt: GPU growth rates and neutral thresholds converge to the compressible spectral reference.
+
+   Fully compressible GPU growth, grid convergence of the neutral estimate,
+   and the late-time mode histories. The continuum target includes finite
+   temperature contrast and compressibility; it is not the Boussinesq
+   threshold 657.51136.
+
+Reproducing the planar benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+From the repository root, build the C++ executable, reproduce the independent
+reference, and launch the GPU scan::
+
+   cmake -S . -B build
+   cmake --build build --target planar_convection.release test_diffusion.release -j 12
+   OPENBLAS_NUM_THREADS=1 python docs/notes/planar_compressible_reference.py
+   python docs/notes/run_planar_gpu.py --devices 0,1 --overwrite
+   OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_planar_onset.py
+
+The GPU command overwrites the saved sample files only when ``--overwrite`` is
+given. Use ``--output-dir /tmp/planar-scan`` to keep a new run separate from the
+checked-in samples, or ``--devices 0`` to run sequentially on one GPU. The
+analysis command above reads the samples in ``docs/notes/planar_samples``.
+Pass ``--input-dir /tmp/planar-scan`` to analyze an alternative output directory.
+The directory retains CSV time series, per-run parameter/timing JSON files,
+stdout logs, the experiment manifest and GPU hardware information. Re-running
+the analysis alone regenerates the figures and tables without running a
+simulation.
+
+A single run uses the following argument order::
+
+   build/bin/planar_convection.release examples/planar_convection.yaml \
+     710 1 0.5 2.2563196077156658 32 1.0 1e-6 0.8 /tmp/planar.csv cuda:0
+
+These arguments specify :math:`Ra`, :math:`a`, :math:`{\cal D}`, :math:`kd`,
+vertical cells, final diffusive time, perturbation amplitude, CFL factor,
+output CSV and device. Every production run advances the fully compressible
+equations; only the independent eigenvalue calculation is linearized.
+
+Validation also includes the dry, moist, coefficient-profile, cubed-sphere,
+and two-process Gloo diffusion regression targets::
+
+   ctest --test-dir build -R '^test_diffusion(_cubed_sphere|_cubed_sphere_mp|_moist|_x1_scale)?\.release$' --output-on-failure
+
+All five targets passed, including the CPU/CUDA wall-temperature cases and
+the two-process conservation check. The independent spectral and GPU-analysis
+scripts also passed their assertions, and Docutils rendered this note with
+warnings treated as errors.
+
+The distributed test fixture keeps its communication group alive between
+meshes to avoid reusing stale rendezvous keys in torchrun's persistent store.
+This is a test-lifetime change; the production communication code is unchanged.
+The planar addition changes no public object layout or external repository.
+Existing Cartesian configurations retain their previous thermal boundary
+behavior unless a positive prescribed wall temperature is configured.
+
+This planar experiment uses different :math:`a`, :math:`{\cal D}` and
+:math:`\gamma` from the earlier spherical experiment. Similar-looking neutral
+Rayleigh numbers in the two experiments are not evidence of equivalent
+physical states. The planar test constrains the Cartesian diffusion and
+compressible dynamics; the spherical continuum threshold still requires its
+own matched eigenproblem and grid refinement.
 
 References
 ----------
+
+.. [AlboussiereRicard2017] T. Alboussiere and Y. Ricard (2017),
+   *Rayleigh--Benard stability and the validity of quasi-Boussinesq or
+   quasi-anelastic liquid approximations*, Journal of Fluid Mechanics 817,
+   264--305. https://doi.org/10.1017/jfm.2017.108
+   Journal PDF supplied by the author:
+   https://perso.ens-lyon.fr/thierry.alboussiere/AlboussiereRicardJFM2017.pdf
+   Preprint: https://arxiv.org/abs/1607.02193
 
 .. [Ullrich2010] P. A. Ullrich, C. Jablonowski and B. van Leer (2010),
    *High-order finite-volume methods for the shallow-water equations on the
