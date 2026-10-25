@@ -1,0 +1,35 @@
+{
+  "runs": {
+    "single": {
+      "seconds": 9.03587279,
+      "cycles": 10,
+      "processes": 1,
+      "UCX_TLS": null,
+      "COMMUX_GROUP": null,
+      "COMMUX_COALESCE": null
+    },
+    "ipc": {
+      "seconds": 170.890248654,
+      "cycles": 10,
+      "processes": 2,
+      "UCX_TLS": "self,tcp,cuda_copy,cuda_ipc",
+      "COMMUX_GROUP": "1",
+      "COMMUX_COALESCE": "1"
+    },
+    "copy": {
+      "seconds": 5.26747963,
+      "cycles": 10,
+      "processes": 2,
+      "UCX_TLS": "self,tcp,cuda_copy",
+      "COMMUX_GROUP": "1",
+      "COMMUX_COALESCE": "1"
+    }
+  },
+  "ipc_copy_diagnostics_max_abs_difference": 0.0,
+  "single_copy_modal_amplitude_max_abs_difference": 6.617444900424222e-24,
+  "timing_note": "Concurrent smaller control runs and eta98 refinement were active; timings diagnose this host, not an isolated scaling benchmark.",
+  "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+  "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+  "profile_source": "../eta098-n224-r8-coarse-f1000.profile",
+  "profile_sha256": "8d29fdd605e4781629020d36a20d9f7dcf71e2437603c139994ff50fc40dd1e2"
+}

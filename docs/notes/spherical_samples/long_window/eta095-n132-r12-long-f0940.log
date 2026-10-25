@@ -1,0 +1,27 @@
+[HydroOptions] -- constant gravity options --
+* grav1 = -1.25
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+[HydroOptions] -- diffusion options --
+* nu_iso = 0.03
+* kappa_iso = 0.075
+* dynamic = true
+* nu_scale_x1 = none (uniform)
+* kappa_scale_x1 = none (uniform)
+device=cuda:0 Ra=659.51279065043 eta=0.95 ell=43 N=132 nr=12 chi=0.030784237242682 balance_residual=1.4913633683192e-11
+cycle=100 t_diff=0.046964041543764
+cycle=200 t_diff=0.093928083098043
+cycle=300 t_diff=0.14089212465876
+cycle=400 t_diff=0.1878561662252
+cycle=500 t_diff=0.23482020779828
+cycle=600 t_diff=0.28178424937742
+cycle=700 t_diff=0.32874829096245
+cycle=800 t_diff=0.37571233255348
+cycle=900 t_diff=0.42267637415028
+cycle=1000 t_diff=0.46964041575273
+cycle=1100 t_diff=0.51660445736077
+cycle=1200 t_diff=0.56356849897428
+completed 1278 cycles in 485.752170966 s

@@ -1,7 +1,7 @@
 """Analyze completed six-panel GPU convection runs without assuming filename tags.
 
-Strict mode requires bracketed neutral estimates on two refined grids at every
-requested radius ratio. --allow-partial writes explicitly incomplete diagnostics.
+Strict mode requires float64 bracketed neutral estimates on two refined grids at
+all eight radius ratios by default. --allow-partial writes explicitly incomplete diagnostics.
 CSV files without their completion metadata are reported and skipped. No GPU
 work is launched. Example:
 
@@ -13,10 +13,10 @@ otherwise three successive quarters of each group's common duration are used.
 """
 
 import argparse
-from collections import defaultdict
-from itertools import combinations
 import json
 import os
+from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/snapy-note-matplotlib")
@@ -46,14 +46,21 @@ GROUP_KEYS = (
     "dtype",
 )
 LIMITATIONS = [
-    "Neutral estimates are zeros of fitted finite-time modal growth, not formal confidence intervals.",
-    "Two Rayleigh numbers use linear interpolation; three use a quadratic inside a measured sign bracket.",
+    "Neutral estimates are zeros of fitted finite-time modal growth, "
+    "not formal confidence intervals.",
+    "Two Rayleigh numbers use linear interpolation; "
+    "three use a quadratic inside a measured sign bracket.",
     "Two grids establish a refinement comparison, not a demonstrated asymptotic convergence order.",
-    "One seeded harmonic/orientation does not establish the minimum over all discrete modes or orientations.",
-    "Short-time fits can retain startup, acoustic, hydrostatic and seam errors; successive windows expose some of these effects.",
-    "Metadata eigenmode_seed records use of a profile, not its physical correctness or reference-code version.",
-    "Controls are reported numerically; no universal acceptable error or equilibrium-drift tolerance is assumed.",
-    "diffusion_step_scale multiplies the conservative diffusion bound only; the acoustic cap still applies, so scale ratios are not actual timestep ratios.",
+    "One seeded harmonic/orientation does not establish the minimum "
+    "over all discrete modes or orientations.",
+    "Short-time fits can retain startup, acoustic, hydrostatic and seam errors; "
+    "successive windows expose some of these effects.",
+    "Metadata eigenmode_seed records use of a profile, "
+    "not its physical correctness or reference-code version.",
+    "Controls are reported numerically; "
+    "no universal acceptable error or equilibrium-drift tolerance is assumed.",
+    "diffusion_step_scale multiplies the conservative diffusion bound only; "
+    "the acoustic cap still applies, so scale ratios are not actual timestep ratios.",
 ]
 
 
@@ -142,7 +149,7 @@ def read_run(path):
     # at the same time as the preceding row. Only coalesce an indistinguishable
     # final pair; never hide a reversal or a duplicate inside the trajectory.
     eps = np.finfo(float).eps
-    if len(data) > 2 and data["diffusive_time"][-1] <= data["diffusive_time"][-2]:
+    if len(data) > 2 and any(data[name][-1] <= data[name][-2] for name in columns[:2]):
         same_endpoint = all(
             abs(data[name][-1] - data[name][-2]) <= 16 * eps * max(1.0, abs(data[name][-1]))
             for name in ("time", "diffusive_time")
@@ -311,12 +318,23 @@ def analyze(directory, reference, explicit_windows=None, min_points=10, exclude=
             or not set(varying) <= {"seed", "cfl", "diffusion_step_scale", "orientation", "dtype"}
         ):
             continue
-        # A control varies either seed, orientation, or timestep, never several.
+        # A control varies one category, with CFL and diffusion scale paired.
         categories = set(
-            "timestep" if k in ("cfl", "diffusion_step_scale") else
-            "precision" if k == "dtype" else k for k in varying)
+            "timestep"
+            if k in ("cfl", "diffusion_step_scale")
+            else "precision"
+            if k == "dtype"
+            else k
+            for k in varying
+        )
         if len(categories) != 1:
             continue
+        control = dict(
+            kind=next(iter(categories)),
+            runs=[left["name"], right["name"]],
+            varied_parameters=varying,
+            parameters={k: left[k] for k in (*GROUP_KEYS, "Ra") if k not in varying},
+        )
         common_end = min(left["end_diffusive_time"], right["end_diffusive_time"])
         try:
             window = windows_for(common_end, explicit_windows)[-1]
@@ -329,18 +347,25 @@ def analyze(directory, reference, explicit_windows=None, min_points=10, exclude=
             )
             require(np.all(denominator != 0), "Zero control amplitude")
             difference = rd["amplitude"][use] / right["seed"] / denominator - 1
-            controls.append(
-                dict(
-                    kind=next(iter(categories)),
-                    runs=[left["name"], right["name"]],
-                    varied_parameters=varying,
-                    window=list(window),
-                    growth_difference=rf["growth"] - lf["growth"],
-                    max_seed_normalized_amplitude_difference=float(np.max(np.abs(difference))),
-                )
+            control.update(
+                window=list(window),
+                growth_difference=rf["growth"] - lf["growth"],
+                absolute_growth_difference=abs(rf["growth"] - lf["growth"]),
+                max_seed_normalized_amplitude_difference=float(np.max(np.abs(difference))),
             )
+            if control["kind"] == "precision":
+                growth = {left["dtype"]: lf["growth"], right["dtype"]: rf["growth"]}
+                control["growth_by_dtype"] = growth
+                control["growth_sign_agrees"] = bool(
+                    np.sign(growth["float32"]) == np.sign(growth["float64"])
+                )
+                if growth["float64"] != 0:
+                    control["float32_relative_growth_difference"] = (
+                        growth["float32"] / growth["float64"] - 1
+                    )
         except ValueError as error:
-            controls.append(dict(runs=[left["name"], right["name"]], issue=str(error)))
+            control["issue"] = str(error)
+        controls.append(control)
     return dict(
         runs=runs,
         groups=grids,
@@ -352,24 +377,28 @@ def analyze(directory, reference, explicit_windows=None, min_points=10, exclude=
     )
 
 
+def matches_baseline(group, baseline):
+    p = group["parameters"]
+    return (
+        all(p[k] == value for k, value in baseline.items())
+        and p["dtype"] == "float64"
+        and p["eigenmode_seed"]
+        and "reference" in group
+        and p["ell"] == group["reference"]["critical_ell"]
+    )
+
+
 def coverage(result, required, min_grids, seed, cfl, orientation, step_scale):
-    eligible = [
-        g
-        for g in result["groups"]
-        if "neutral" in g
-        and g["parameters"]["seed"] == seed
-        and g["parameters"]["cfl"] == cfl
-        and g["parameters"]["orientation"] == orientation
-        and g["parameters"]["eigenmode_seed"]
-        and g["parameters"]["ell"] == g["reference"]["critical_ell"]
-    ]
+    baseline = dict(seed=seed, cfl=cfl, orientation=orientation, dtype="float64")
+    eligible = [g for g in result["groups"] if "neutral" in g and matches_baseline(g, baseline)]
     if step_scale is None and eligible:
         counts = defaultdict(set)
         for g in eligible:
             p = g["parameters"]
             counts[p["diffusion_step_scale"]].add((p["eta"], p["N"], p["nr"]))
         step_scale = max(sorted(counts), key=lambda s: len(counts[s]))
-    selected = [g for g in eligible if g["parameters"]["diffusion_step_scale"] == step_scale]
+    baseline["diffusion_step_scale"] = step_scale
+    selected = [g for g in eligible if matches_baseline(g, baseline)]
     ratios, missing = [], []
     for eta in required:
         grids = sorted(
@@ -394,10 +423,10 @@ def coverage(result, required, min_grids, seed, cfl, orientation, step_scale):
     return dict(
         required_ratios=list(required),
         minimum_refined_grids=min_grids,
-        baseline=dict(seed=seed, cfl=cfl, orientation=orientation, diffusion_step_scale=step_scale),
+        baseline=baseline,
         ratios=ratios,
         missing_or_unrefined_ratios=missing,
-        complete=not missing and not result["invalid_runs"],
+        complete=not missing and not result["invalid_runs"] and not result["incomplete_runs"],
     )
 
 
@@ -440,7 +469,8 @@ def refinement_comparisons(groups):
                     radial**2 * fine["neutral"]["Ra"] - coarse["neutral"]["Ra"]
                 ) / (radial**2 - 1)
                 comparison["extrapolation_note"] = (
-                    "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
+                    "Assumes second-order error under simultaneous radial/angular refinement; "
+                    "not a measured order or rigorous bound."
                 )
             comparisons.append(comparison)
         # With three proportional grids, solve the unequal-spacing error-ratio equation.
@@ -449,49 +479,81 @@ def refinement_comparisons(groups):
             n = np.array([g["parameters"]["nr"] for g in (coarse, middle, fine)], dtype=float)
             horizontal = np.array([g["parameters"]["N"] for g in (coarse, middle, fine)])
             values = np.array([g["neutral"]["Ra"] for g in (coarse, middle, fine)])
-            if (
+            delta = np.diff(values)
+            order_fit = dict(
+                parameters={k: fine["parameters"][k] for k in fields},
+                grids=[
+                    {"nr": g["parameters"]["nr"], "N": g["parameters"]["N"]}
+                    for g in (coarse, middle, fine)
+                ],
+                Ra_values=values.tolist(),
+                neutral_increments=delta.tolist(),
+                windows=[g["neutral"]["window"] for g in (coarse, middle, fine)],
+                order_search_interval=[0.05, 8.0],
+                order_fit_status="not_applicable",
+            )
+            if not (
                 np.all(np.diff(n) > 0)
                 and np.allclose(horizontal / n, horizontal[0] / n[0], rtol=1e-12)
-                and all(
-                    np.allclose(
-                        g["neutral"]["window"], fine["neutral"]["window"], rtol=0, atol=1e-10
-                    )
-                    for g in (coarse, middle)
-                )
             ):
-                delta = np.diff(values)
-                if delta[0] * delta[1] > 0:
+                order_fit["reason"] = (
+                    "The three grids do not refine radially and angularly in proportion."
+                )
+            elif not all(
+                np.allclose(g["neutral"]["window"], fine["neutral"]["window"], rtol=0, atol=1e-10)
+                for g in (coarse, middle)
+            ):
+                order_fit["reason"] = "The three neutral estimates use different fit windows."
+            else:
+                order_fit["order_fit_status"] = "failed"
+                if np.any(delta == 0):
+                    order_fit["reason"] = (
+                        "Zero neutral-Ra increment; "
+                        "a unique positive asymptotic order is not identifiable."
+                    )
+                elif np.sign(delta[0]) != np.sign(delta[1]):
+                    order_fit["reason"] = (
+                        "Sign-changing neutral-Ra increments are inconsistent with a single "
+                        "leading power-law error term; "
+                        "these grids do not demonstrate asymptotic convergence."
+                    )
+                else:
                     from scipy.optimize import brentq
 
-                    def equation(order):
+                    def equation(order, n=n, delta=delta):
                         powers = (n / n[0]) ** (-order)
                         return (powers[0] - powers[1]) / (powers[1] - powers[2]) - delta[0] / delta[
                             1
                         ]
 
                     try:
-                        order = float(brentq(equation, 0.05, 8))
+                        order = float(brentq(equation, *order_fit["order_search_interval"]))
                         ratio = n[2] / n[1]
-                        comparisons.append(
-                            dict(
-                                parameters={k: fine["parameters"][k] for k in fields},
-                                grids=[
-                                    {"nr": g["parameters"]["nr"], "N": g["parameters"]["N"]}
-                                    for g in (coarse, middle, fine)
-                                ],
-                                observed_order=order,
-                                empirical_extrapolation=float(
-                                    (ratio**order * values[2] - values[1]) / (ratio**order - 1)
-                                ),
-                                extrapolation_note="Three-grid empirical estimate; finite-time fit errors and higher-order terms remain.",
-                            )
+                        order_fit.update(
+                            order_fit_status="fitted",
+                            observed_order=order,
+                            empirical_extrapolation=float(
+                                (ratio**order * values[2] - values[1]) / (ratio**order - 1)
+                            ),
+                            extrapolation_note=(
+                                "Three-grid empirical estimate; "
+                                "finite-time fit errors and higher-order terms remain."
+                            ),
                         )
-                    except ValueError:
-                        pass
+                    except ValueError as error:
+                        order_fit["reason"] = (
+                            "No positive-order fit in the searched interval 0.05 <= p <= 8; "
+                            "these grids do not demonstrate asymptotic convergence. "
+                            "Orders outside this interval were not tested."
+                        )
+                        order_fit["solver_error"] = str(error)
+            comparisons.append(order_fit)
     return comparisons
 
 
 def write_artifacts(result, reference, output):
+    if "refinement_comparisons" not in result:
+        result["refinement_comparisons"] = refinement_comparisons(result["groups"])
     output.mkdir(parents=True, exist_ok=True)
     (output / "figures").mkdir(exist_ok=True)
     (output / "spherical_onset_results.json").write_text(
@@ -505,6 +567,7 @@ def write_artifacts(result, reference, output):
         "   * - Radius ratio",
         "     - Degree",
         "     - nr / N per panel",
+        "     - Precision",
         "     - Seed / CFL / diffusion step scale / axis",
         "     - Neutral Ra",
         "     - Same-degree spectral Ra",
@@ -518,7 +581,9 @@ def write_artifacts(result, reference, output):
             f"   * - {p['eta']:g}",
             f"     - {p['ell']}",
             f"     - {p['nr']} / {p['N']}",
-            f"     - {p['seed']:g} / {p['cfl']:g} / {p['diffusion_step_scale']:g} / {p['orientation']}",
+            f"     - {p['dtype']}",
+            f"     - {p['seed']:g} / {p['cfl']:g} / "
+            f"{p['diffusion_step_scale']:g} / {p['orientation']}",
             f"     - {root['Ra']:.6f}",
             f"     - {g['reference']['modal_Ra']:.6f}",
             f"     - {100 * root['relative_error']:+.4f}%",
@@ -533,12 +598,13 @@ def write_artifacts(result, reference, output):
     status = (
         "Coverage requirement met"
         if result["coverage"]["complete"]
-        else "PARTIAL DIAGNOSTIC: coverage requirement not met"
+        else "PARTIAL DIAGNOSTIC: coverage/input requirement not met"
     )
     summary = [
         ".. Generated by analyze_spherical_onset.py.\n",
         f"**{status}.**\n",
-        f"Analyzed {len(result['runs'])} completed GPU runs, totaling {result['total_cycles']:,} steps "
+        f"Analyzed {len(result['runs'])} completed GPU runs, "
+        f"totaling {result['total_cycles']:,} steps "
         f"and {result['total_gpu_run_seconds']:.1f} summed run seconds (not elapsed batch time). "
         f"There are {len(measured)} bracketed modal neutral estimates; "
         f"{len(result['incomplete_runs'])} running/incomplete CSV files were skipped and "
@@ -555,8 +621,12 @@ def write_artifacts(result, reference, output):
             + ".\n"
         ]
     summary += [
-        "The plotted spectral curve includes radius ratio 0.9999 when present in the reference file; "
+        "The plotted spectral curve includes radius ratio 0.9999 "
+        "when present in the reference file; "
         "it is an independent continuum calculation, not a GPU measurement.\n",
+        "GPU neutral estimates are unconnected markers, with every completed baseline grid "
+        "retained. Multiple angular resolutions at the same radius ratio and radial resolution "
+        "are separate grid controls, not points joined into a curve.\n",
         f"Available matched controls: {sum('growth_difference' in c for c in result['controls'])}; "
         f"zero-seed controls: {len(result['rest_controls'])}. "
         "Missing controls have not been marked as passed.\n",
@@ -568,17 +638,69 @@ def write_artifacts(result, reference, output):
             f"shift ranges from {min(shifts):.6g} to {max(shifts):.6g}. "
             "These shifts measure window sensitivity, not statistical uncertainty.\n"
         )
-    for kind in ("timestep", "seed", "orientation"):
-        controls = [
-            c for c in result["controls"] if c.get("kind") == kind and "growth_difference" in c
-        ]
-        if controls:
+    for comparison in result["refinement_comparisons"]:
+        if comparison.get("order_fit_status") not in ("failed", "not_applicable"):
+            continue
+        p = comparison["parameters"]
+        points = "; ".join(
+            f"nr/N={grid['nr']}/{grid['N']}: Ra={ra:.6f}"
+            for grid, ra in zip(comparison["grids"], comparison["Ra_values"])
+        )
+        increments = ", ".join(f"{delta:+.6g}" for delta in comparison["neutral_increments"])
+        summary.append(
+            f"Three-grid order fit {comparison['order_fit_status'].replace('_', ' ')} "
+            f"at eta={p['eta']:g} ({p['dtype']}, seed={p['seed']:g}, CFL={p['cfl']:g}, "
+            f"diffusion scale={p['diffusion_step_scale']:g}, axis={p['orientation']}): "
+            f"{points}. Successive Ra increments: {increments}. {comparison['reason']} "
+            "Any two-grid second-order extrapolation remains an assumption, "
+            "not an observed convergence result.\n"
+        )
+    for kind in ("timestep", "seed", "orientation", "precision"):
+        by_precision = defaultdict(list)
+        for control in result["controls"]:
+            if control.get("kind") == kind and "growth_difference" in control:
+                by_precision[control["parameters"].get("dtype", "float32/float64")].append(control)
+        for dtype, controls in sorted(by_precision.items()):
             summary.append(
-                f"The {len(controls)} matched {kind} comparisons have maximum absolute "
+                f"The {len(controls)} matched {dtype} {kind} comparisons have maximum absolute "
                 f"growth-rate change {max(abs(c['growth_difference']) for c in controls):.6g} "
                 f"and maximum seed-normalized amplitude difference "
                 f"{max(c['max_seed_normalized_amplitude_difference'] for c in controls):.6g}.\n"
             )
+    precision_controls = [c for c in result["controls"] if c.get("kind") == "precision"]
+    if precision_controls:
+        summary.append(
+            "Precision controls are separate from the primary float64 baseline and do not "
+            "contribute grids to its coverage. Growth rates below use thermal diffusion units; "
+            "the absolute rates and their absolute difference "
+            "are the primary precision diagnostics. "
+            "Percent changes are supplementary and can be amplified "
+            "by a near-zero float64 growth rate. "
+            "They compare float32 with the matched float64 run, not the spectral reference.\n"
+        )
+    for control in precision_controls:
+        p = control["parameters"]
+        context = (
+            f"At eta={p['eta']:g}, nr/N={p['nr']}/{p['N']}, Ra={p['Ra']:.6g}, seed={p['seed']:g}"
+        )
+        if "growth_by_dtype" in control:
+            growth = control["growth_by_dtype"]
+            lo, hi = control["window"]
+            description = (
+                f"{context}, window {lo:g}--{hi:g}: float32 growth {growth['float32']:+.6g}; "
+                f"float64 growth {growth['float64']:+.6g}; "
+                f"absolute growth-rate difference {control['absolute_growth_difference']:.6g}. "
+            )
+            if not control["growth_sign_agrees"]:
+                description += "The precisions disagree on growth versus decay. "
+            if "float32_relative_growth_difference" in control:
+                description += (
+                    f"Supplementary relative growth-rate change: "
+                    f"{100 * control['float32_relative_growth_difference']:+.3f}%. "
+                )
+            summary.append(description.rstrip() + "\n")
+        else:
+            summary.append(f"{context}: precision comparison unavailable ({control['issue']}).\n")
     if result["rest_controls"]:
         summary.append(
             f"Across zero-seed controls the largest radial RMS velocity is "
@@ -589,7 +711,8 @@ def write_artifacts(result, reference, output):
     summary += [text + "\n" for text in LIMITATIONS]
     (output / "spherical_onset_summary.inc").write_text("\n".join(summary))
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5.8), layout="constrained")
+    baseline = result["coverage"]["baseline"]
     cases = sorted(reference["cases"], key=lambda c: c["eta"])
     axes[0].plot(
         [c["eta"] for c in cases], [c["Ra"] for c in cases], "k.-", label="Spherical spectral"
@@ -597,24 +720,30 @@ def write_artifacts(result, reference, output):
     axes[0].axhline(reference["planar"]["Ra"], color="gray", ls="--", label="Planar spectral limit")
     families = defaultdict(list)
     for g in measured:
-        p = g["parameters"]
-        label = f"nr={p['nr']}, seed={p['seed']:g}, CFL={p['cfl']:g}, scale={p['diffusion_step_scale']:g}, {p['orientation']}"
-        families[label].append(g)
-    for label, groups in families.items():
+        if matches_baseline(g, baseline):
+            families[g["parameters"]["nr"]].append(g)
+    for index, (nr, groups) in enumerate(sorted(families.items())):
+        groups.sort(key=lambda g: (g["parameters"]["eta"], g["parameters"]["N"]))
         angular = sorted({g["parameters"]["N"] for g in groups})
-        label += f", N={angular[0]}" + (f"--{angular[-1]}" if len(angular) > 1 else "")
+        label = f"nr={nr}; N={angular[0]}" + (f"–{angular[-1]}" if len(angular) > 1 else "")
+        style = dict(color=f"C{index % 10}", marker=("o", "s", "^", "D")[index % 4], label=label)
+        etas = [g["parameters"]["eta"] for g in groups]
         axes[0].scatter(
-            [g["parameters"]["eta"] for g in groups],
+            etas,
             [g["neutral"]["Ra"] for g in groups],
-            label=label,
+            **style,
         )
+        axes[2].scatter(etas, [100 * g["neutral"]["relative_error"] for g in groups], **style)
     axes[0].set(xlabel=r"Radius ratio $\eta=r_i/r_o$", ylabel="Critical / measured modal Ra")
-    axes[0].legend(fontsize=7)
+    axes[0].legend(fontsize=10, loc="upper center", bbox_to_anchor=(0.5, -0.19), frameon=False)
     # Show up to three well-populated groups across the available eta range.
     available = [
         g
         for g in result["groups"]
-        if all("fits" in next(r for r in result["runs"] if r["name"] == name) for name in g["runs"])
+        if matches_baseline(g, baseline)
+        and all(
+            "fits" in next(r for r in result["runs"] if r["name"] == name) for name in g["runs"]
+        )
     ]
     chosen = []
     etas = sorted({g["parameters"]["eta"] for g in available})
@@ -635,30 +764,37 @@ def write_artifacts(result, reference, output):
             label=f"eta={p['eta']:g}, nr/N={p['nr']}/{p['N']}",
         )
     axes[1].axhline(0, color="gray", lw=0.8)
-    axes[1].set(xlabel="Ra", ylabel=r"Final-window growth ($\chi_m/d^2$)")
+    axes[1].set(xlabel="Ra", ylabel=r"Final-window growth $\widehat{\sigma}=\sigma d^2/\chi_m$")
     if chosen:
-        axes[1].legend(fontsize=7)
-    controls = [
-        c for c in result["controls"] if c.get("kind") == "timestep" and "growth_difference" in c
-    ]
-    if controls:
-        axes[2].bar(range(len(controls)), [abs(c["growth_difference"]) for c in controls])
-        axes[2].set(
-            xlabel="Matched timestep-control pair (JSON order)",
-            ylabel="Absolute growth-rate change",
-        )
+        axes[1].legend(fontsize=10, loc="upper center", bbox_to_anchor=(0.5, -0.19), frameon=False)
+    axes[2].axhline(0, color="gray", lw=0.8)
+    axes[2].set(
+        xlabel=r"Radius ratio $\eta=r_i/r_o$",
+        ylabel=r"Numerical error $100\,(Ra_{grid}/Ra_{spectral}-1)$ (%)",
+    )
+    if families:
+        axes[2].legend(fontsize=10, loc="upper center", bbox_to_anchor=(0.5, -0.19), frameon=False)
     else:
         axes[2].text(
             0.5,
             0.5,
-            "No completed matched\ntimestep control available",
+            "No completed float64\nbaseline neutral bracket",
             ha="center",
             va="center",
             transform=axes[2].transAxes,
         )
-        axes[2].set_axis_off()
-    fig.suptitle(status, fontsize=11)
-    fig.tight_layout()
+    for ax, title in zip(
+        axes, ("Onset thresholds", "Sample growth brackets", "Grid error vs. spectral reference")
+    ):
+        ax.set_title(title, fontsize=12)
+        ax.grid(alpha=0.2)
+    fig.suptitle(
+        status
+        + "\n"
+        + f"Float64 baseline: seed={baseline['seed']:g}, CFL={baseline['cfl']:g}, "
+        + f"diffusion scale={baseline['diffusion_step_scale']}, axis={baseline['orientation']}",
+        fontsize=11,
+    )
     fig.savefig(output / "figures/spherical_compressible_onset.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
 
@@ -741,7 +877,8 @@ def main():
     )
     if not result["coverage"]["complete"] and not args.allow_partial:
         raise SystemExit(
-            "Coverage/input validation failed; no artifacts written. Use --allow-partial for labeled diagnostics."
+            "Coverage/input validation failed; no artifacts written. "
+            "Use --allow-partial for labeled diagnostics."
         )
     if not any("fits" in r for r in result["runs"]):
         raise SystemExit("No completed run has adequate fit data; no artifacts written.")
