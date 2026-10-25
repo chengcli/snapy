@@ -62,7 +62,10 @@ def block_arm(device, yaml_file):
     block_vars["hydro_u"][kICY:, k, j, i] = 0.0
     w_stale_min = block_vars["hydro_w"][kIDN].min().item()
 
+    cycle = block.cycle()
     err = block.check_redo(block_vars)
+    if block.cycle() != cycle:
+        return "rejected step changed the caller-owned cycle"
     if err != 1:
         return "floored cell not rejected (err=%d; stale hydro_w min rho=%g)" % (err, w_stale_min)
     if not torch.equal(block_vars["hydro_u"], u0):
@@ -70,8 +73,17 @@ def block_arm(device, yaml_file):
     w_expect = eos.compute("U->W", [u0.clone()])
     if not torch.equal(block_vars["hydro_w"], w_expect):
         return "hydro_w not recomputed from the restored hydro_u"
+    # A second rejected attempt must not consume another cycle either.
+    block_vars["hydro_u"][kIDN, k, j, i] = density_floor
+    block_vars["hydro_u"][kICY:, k, j, i] = 0.0
+    if block.check_redo(block_vars) != 1 or block.cycle() != cycle:
+        return "repeated retry changed the cycle or was not rejected"
+    if not torch.equal(block_vars["hydro_u"], u0):
+        return "second retry did not restore the conserved state"
     if block.check_redo(block_vars) != 0:
         return "restored state was rejected"
+    if block.cycle() != cycle:
+        return "accepted check changed the caller-owned cycle"
     return None
 
 
@@ -105,7 +117,10 @@ def nan_arm(device, yaml_file):
 
     k, j, i = u0.size(1) // 2, u0.size(2) // 2, u0.size(3) // 2
     block_vars["hydro_u"][kIDN, k, j, i] = float("nan")
+    cycle = block.cycle()
     err = block.check_redo(block_vars)
+    if block.cycle() != cycle:
+        return "rejected step changed the caller-owned cycle"
     if err != 1:
         return "a NaN density was not rejected (err=%d)" % err
     if not torch.equal(block_vars["hydro_u"], u0):
@@ -184,7 +199,10 @@ def mesh_arm(device, yaml_file, nan=False):
         ub[kIV1, k, j, i] = float("nan")
     else:
         ub[kIDN, k, j, i] = density_floor
+    cycles = [b.cycle() for b in blocks]
     err = mesh.check_redo(mesh_vars)
+    if [b.cycle() for b in blocks] != cycles:
+        return "mesh rejection changed the caller-owned cycles"
     if err != 1:
         what = "a NaN velocity" if nan else "a floor"
         return "%s in one block of six not rejected (err=%d)" % (what, err)

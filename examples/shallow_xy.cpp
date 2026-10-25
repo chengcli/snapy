@@ -107,9 +107,6 @@ int main(int argc, char** argv) {
 
   int cycle = mesh->blocks.front()->cycle;
   while (!mesh->blocks.front()->pintg->stop(cycle, current_time)) {
-    ++cycle;
-    mesh->set_cycle(cycle);
-
     auto dt = mesh->max_time_step(vars);
     mesh->print_cycle_info(vars, current_time, dt);
 
@@ -119,12 +116,11 @@ int main(int argc, char** argv) {
     }
 
     int redo = mesh->check_redo(vars);
-    if (redo > 0) {
-      cycle = mesh->blocks.front()->cycle;
-      continue;
-    }
+    if (redo > 0) continue;
     if (redo < 0) break;
 
+    ++cycle;
+    mesh->set_cycle(cycle);
     current_time += dt;
     mesh->make_outputs(vars, current_time);
   }

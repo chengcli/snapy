@@ -187,7 +187,9 @@ boundary-condition:
   EXPECT_TRUE(torch::equal(du, before));
   EXPECT_TRUE(torch::equal(prim, prim0));
   if (stop) block->pintg->current_redo = block->pintg->options->max_redo();
+  block->cycle = 7;
   EXPECT_EQ(block->check_redo(vars), stop ? -1 : 1);
+  EXPECT_EQ(block->cycle, 7);
   EXPECT_TRUE(torch::equal(vars.at("hydro_u"), saved));
 }
 
@@ -282,7 +284,9 @@ TEST(lu_failure, mesh_terminal_failure_restores_all_blocks) {
   auto du = torch::ones_like(prim);
   auto gamma = torch::full_like(prim[IDN], 1.4);
   mesh->blocks[1]->phydro->picorr->forward(du, prim, gamma, 0.);
+  mesh->set_cycle(7);
   EXPECT_EQ(mesh->check_redo(vars), -1);
+  for (auto const &block : mesh->blocks) EXPECT_EQ(block->cycle, 7);
   for (int n = 0; n < 2; ++n)
     EXPECT_TRUE(torch::equal(vars[n].at("hydro_u"), saved[n]))
         << "local block " << n << " was not restored on terminal failure";

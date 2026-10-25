@@ -157,6 +157,7 @@ class MeshBlock:
         """Refresh hydro_w on acceptance (0); restore the saved state on retry (1).
 
         Returns -1 when stopping. Accepted primitives are updated in place.
+        Never changes the cycle; callers increment it only after acceptance.
         """
         ...
     def get_outputs(self): ...
@@ -210,6 +211,7 @@ class Mesh:
         """Refresh hydro_w on acceptance (0); restore the saved state on retry (1).
 
         Returns -1 when stopping. Accepted primitives are updated in place.
+        Never changes the cycle; callers increment it only after acceptance.
         """
         ...
     def set_cycle(self, cycle: int) -> None: ...

@@ -48,6 +48,8 @@ TEST(Mesh, check_redo_is_one_decision_across_ranks) {
     saved[i] = vars[i].at("hydro_u").clone();
   }
 
+  mesh->set_cycle(7);
+
   // A valid source changes U on every rank; acceptance must refresh W.
   std::vector<torch::Tensor> expected_w;
   for (int i = 0; i < mesh->blocks.size(); ++i) {
@@ -58,6 +60,7 @@ TEST(Mesh, check_redo_is_one_decision_across_ranks) {
   // EXPECT, not ASSERT: every rank must reach the collective below.
   EXPECT_EQ(mesh->check_redo(vars), 0) << "rank " << rank;
   for (int i = 0; i < mesh->blocks.size(); ++i) {
+    EXPECT_EQ(mesh->blocks[i]->cycle, 7);
     EXPECT_TRUE(torch::equal(vars[i].at("hydro_w"), expected_w[i]));
   }
 
@@ -73,6 +76,7 @@ TEST(Mesh, check_redo_is_one_decision_across_ranks) {
       << " did not redo the step that rank 0 floored; the ranks now disagree "
          "about dt";
   for (int i = 0; i < mesh->blocks.size(); ++i) {
+    EXPECT_EQ(mesh->blocks[i]->cycle, 7);
     EXPECT_TRUE(torch::equal(vars[i].at("hydro_u"), saved[i]))
         << "rank " << rank << " block " << i << " was not rolled back";
     auto restored_w =

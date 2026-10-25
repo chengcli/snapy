@@ -159,7 +159,6 @@ int main(int argc, char **argv) {
   }
 
   while (!block->pintg->stop(block->cycle, current_time)) {
-    ++block->cycle;
     auto dt = block->max_time_step(vars);
     block->print_cycle_info(vars, current_time, dt);
 
@@ -197,6 +196,7 @@ int main(int argc, char **argv) {
     if (err < 0) break;     // terminate simulation
 
     // make outputs
+    ++block->cycle;
     current_time += dt;
     block->make_outputs(vars, current_time);
   }

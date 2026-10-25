@@ -231,7 +231,6 @@ int main(int argc, char** argv) {
   int ny = static_cast<int>(thermo_y->options->species().size()) - 1;
 
   while (!block->pintg->stop(block->cycle, current_time)) {
-    ++block->cycle;
     auto dt = block->max_time_step(vars);
     block->print_cycle_info(vars, current_time, dt);
 
@@ -264,6 +263,7 @@ int main(int argc, char** argv) {
     if (redo > 0) continue;
     if (redo < 0) break;
 
+    ++block->cycle;
     current_time += dt;
     block->make_outputs(vars, current_time);
   }

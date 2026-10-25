@@ -1310,8 +1310,7 @@ int MeshBlockImpl::apply_redo(Variables &vars, int causes) {
       set_scalar_primitive(vars, vars["scalar_s"], vars["hydro_u"]);
     }
 
-    // reset cycle
-    cycle -= 1;
+    // The caller advances the cycle only after an accepted step.
     // decided: floor_hit's and the restore's cons2prim must not mark the redo
     phydro->peos->reset_limiter_marks(vars["hydro_u"]);
     if (pintg->current_redo > pintg->options->max_redo()) {

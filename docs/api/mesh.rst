@@ -88,6 +88,14 @@ MeshBlock
       :return: PyTorch device
       :rtype: torch.device
 
+   .. method:: check_redo(vars) -> int
+
+      Return 0 for acceptance, 1 for retry, or -1 to stop. On acceptance,
+      refresh ``hydro_w`` in place; on retry, restore the saved step state.
+      This method never changes the cycle counter. The driver must increment
+      the cycle only after an accepted step, before writing outputs.
+      ``Mesh.check_redo`` follows the same convention across all local blocks.
+
    .. method:: inc_cycle() -> int
 
       Increment and return the cycle number.
