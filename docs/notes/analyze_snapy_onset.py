@@ -1,0 +1,114 @@
+"""Fit and plot completed compressible runs from cubed_sphere_convection.
+
+python docs/notes/analyze_snapy_onset.py --input-dir /tmp
+Input names: snapy-onset-{450,690,700,950}.csv, snapy-onset-rest.csv,
+and snapy-onset-small-seed.csv.
+This reports a coarse-grid neutral estimate, not a continuum extrapolation.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/snapy-note-matplotlib")
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+HERE = Path(__file__).resolve().parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input-dir", type=Path, default=HERE / "onset_samples")
+    args = parser.parse_args()
+    (HERE / "onset_samples").mkdir(exist_ok=True)
+    rows = []
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    baseline = None
+    for ra in (450, 690, 700, 950):
+        path = args.input_dir / f"snapy-onset-{ra}.csv"
+        data = np.genfromtxt(path, delimiter=",", names=True)
+        t, amplitude = data["diffusive_time"], data["amplitude"]
+        assert t[-1] >= 0.2999, f"{path}: run incomplete ({t[-1]})"
+        fits = []
+        for low, high in ((0.1, 0.2), (0.2, 0.3)):
+            use = (t >= low) & (t <= high)
+            assert use.sum() >= 10 and np.all(amplitude[use] > 0)
+            slope, intercept = np.polyfit(t[use], np.log(amplitude[use]), 1)
+            residual = np.log(amplitude[use]) - slope * t[use] - intercept
+            fits.append(dict(window=[low, high], growth=float(slope),
+                             rms_log_residual=float(np.sqrt(np.mean(residual**2)))))
+        rows.append(dict(Ra=ra, fits=fits))
+        if ra == 700:
+            baseline = data
+        ref = np.interp(.1, t, amplitude)
+        axes[0].semilogy(t, amplitude/ref, label=f"Ra = {ra}")
+        target = HERE / "onset_samples" / path.name
+        if path.resolve() != target.resolve():
+            shutil.copyfile(path, target)
+    estimates = []
+    for i in (0, 1):
+        ras = np.array([row["Ra"] for row in rows])
+        growth = np.array([row["fits"][i]["growth"] for row in rows])
+        assert growth[0] < 0 < growth[-1]
+        # The Pr=1 thin-shell dispersion relation is affine in sqrt(Ra).
+        slope, intercept = np.polyfit(np.sqrt(ras), growth, 1)
+        estimates.append(float((-intercept/slope)**2))
+        axes[1].plot(ras, growth, "o-", label=f"fit window {rows[0]['fits'][i]['window']}")
+    rest_path = args.input_dir / "snapy-onset-rest.csv"
+    rest = np.genfromtxt(rest_path, delimiter=",", names=True)
+    assert rest["diffusive_time"][-1] >= .0799
+    control = dict(max_mode_amplitude=float(np.abs(rest["amplitude"]).max()),
+                   max_radial_rms=float(rest["radial_rms"].max()),
+                   end_diffusive_time=float(rest["diffusive_time"][-1]))
+    target = HERE / "onset_samples" / rest_path.name
+    if target.resolve() != rest_path.resolve():
+        shutil.copyfile(rest_path, target)
+    seed_path = args.input_dir / "snapy-onset-small-seed.csv"
+    small = np.genfromtxt(seed_path, delimiter=",", names=True)
+    assert small["diffusive_time"][-1] >= .2999
+    use = small["diffusive_time"] >= .1
+    big_amplitude = np.interp(small["diffusive_time"][use], baseline["diffusive_time"],
+                             baseline["amplitude"])
+    scaling_error = float(np.max(np.abs(10*small["amplitude"][use]/big_amplitude-1)))
+    assert scaling_error < 1e-3, scaling_error
+    target = HERE / "onset_samples" / seed_path.name
+    if target.resolve() != seed_path.resolve():
+        shutil.copyfile(seed_path, target)
+    low = next(row for row in rows if row["Ra"] == 690)
+    high = next(row for row in rows if row["Ra"] == 700)
+    bracket_roots = []
+    for i in (0, 1):
+        gl, gh = low["fits"][i]["growth"], high["fits"][i]["growth"]
+        assert gl < 0 < gh
+        bracket_roots.append(float(690-10*gl/(gh-gl)))
+    axes[0].set(xlabel=r"Time ($d^2/\chi$)", ylabel="Mode amplitude / amplitude at t = 0.1")
+    axes[0].legend()
+    axes[1].axhline(0, color="gray", lw=.7)
+    axes[1].axvline(658.521493477, color="black", ls="--", label="thin-shell prediction")
+    axes[1].set(xlabel="Superadiabatic Rayleigh number", ylabel=r"Fitted growth ($\chi/d^2$)")
+    axes[1].legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(HERE / "figures" / "snapy_compressible_onset.png", dpi=180, bbox_inches="tight")
+    result = dict(scope="Coarse-grid compressible run; N=24, nr=12, d/R=0.2, Pr=1",
+                  fits=rows, neutral_estimates=estimates, neutral_bracket=[690, 700],
+                  bracket_interpolated_roots=bracket_roots,
+                  seed_scaling_max_relative_error=scaling_error,
+                  unperturbed_control=control)
+    (HERE / "snapy_onset_results.json").write_text(json.dumps(result, indent=2)+"\n")
+    table = [".. Generated by analyze_snapy_onset.py.\n",
+             ".. list-table:: Full compressible Snapy growth rates (coarse grid)",
+             "   :header-rows: 1\n", "   * - Ra (superadiabatic)",
+             "     - Growth, t = 0.1--0.2", "     - Growth, t = 0.2--0.3"]
+    for row in rows:
+        table += [f"   * - {row['Ra']}", f"     - {row['fits'][0]['growth']:.6f}",
+                  f"     - {row['fits'][1]['growth']:.6f}"]
+    (HERE / "snapy_onset_tables.inc").write_text("\n".join(table)+"\n")
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

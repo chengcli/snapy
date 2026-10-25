@@ -63,7 +63,11 @@ DiffusionOptions
 
 .. class:: DiffusionOptions
 
-   Isotropic hydro diffusion configuration for Cartesian meshes.
+   Isotropic hydro diffusion configuration for Cartesian and equiangular
+   cubed-sphere meshes. Cubed-sphere diffusion requires the cubed-sphere
+   layout, ``nb1=1``, reflecting radial hydrodynamic boundaries, at least
+   ``max(4, nghost)`` active cells in every direction, and ``nghost >= 2``.
+   Calls on participating blocks must run concurrently, as for mesh exchange.
 
    .. method:: nu_iso() -> float
                nu_iso(value: float) -> DiffusionOptions
@@ -86,6 +90,38 @@ DiffusionOptions
 
       Read ``nu_iso`` as ``mu`` and ``kappa_iso`` as ``k``. Default ``False``,
       which leaves the previous path bit-identical.
+
+   .. method:: temperature_inner() -> float
+               temperature_inner(value: float) -> DiffusionOptions
+               temperature_outer() -> float
+               temperature_outer(value: float) -> DiffusionOptions
+
+      Cubed-sphere radial wall temperature in kelvin; zero (the default) means
+      insulated. Positive temperatures prescribe the conductive boundary
+      value independently of the reflecting hydrodynamic ghost state.
+
+   .. method:: wall_velocity() -> str
+               wall_velocity(value: str) -> DiffusionOptions
+
+      Cubed-sphere radial viscous wall: ``"stress-free"`` (default) or
+      ``"no-slip"``. Both are stationary and impermeable.
+
+   .. method:: implicit_radial() -> bool
+               implicit_radial(value: bool) -> DiffusionOptions
+
+      Default ``False``. With ``True``, use a second-order L-stable SDIRK solve
+      for radial heat conduction, Strang split around each full hydro step.
+      Requires the dry ``ideal-gas`` EOS. Horizontal conduction and all
+      viscosity remain explicit and retain timestep restrictions. Step retries
+      restore the state before the first half-step. This option is independent
+      of the acoustic vertical implicit correction. The solver rejects a
+      nonpositive temperature; reduce the timestep for such sharp transients.
+
+   The new wall and radial implicit options use the same names under
+   ``forcing/diffusion`` in YAML. They are not supported on Cartesian meshes;
+   the default options preserve the existing Cartesian implementation.
+   See :doc:`../notes/cubed_sphere_diffusion_convection` for the
+   metric, coefficient conventions and validation results.
 
    .. method:: nu_scale_x1_table() -> torch.Tensor
                nu_scale_x1_table(value: torch.Tensor) -> DiffusionOptions

@@ -1,0 +1,107 @@
+{
+  "scope": "Coarse-grid compressible run; N=24, nr=12, d/R=0.2, Pr=1",
+  "fits": [
+    {
+      "Ra": 450,
+      "fits": [
+        {
+          "window": [
+            0.1,
+            0.2
+          ],
+          "growth": -3.0111629583657415,
+          "rms_log_residual": 0.0008055803551815866
+        },
+        {
+          "window": [
+            0.2,
+            0.3
+          ],
+          "growth": -2.9314082091550926,
+          "rms_log_residual": 7.839853296434402e-05
+        }
+      ]
+    },
+    {
+      "Ra": 690,
+      "fits": [
+        {
+          "window": [
+            0.1,
+            0.2
+          ],
+          "growth": -0.06352882992445014,
+          "rms_log_residual": 0.00024690920826270457
+        },
+        {
+          "window": [
+            0.2,
+            0.3
+          ],
+          "growth": -0.05310513238702554,
+          "rms_log_residual": 2.6789473477722595e-05
+        }
+      ]
+    },
+    {
+      "Ra": 700,
+      "fits": [
+        {
+          "window": [
+            0.1,
+            0.2
+          ],
+          "growth": 0.04605798154659415,
+          "rms_log_residual": 0.00023229720900716315
+        },
+        {
+          "window": [
+            0.2,
+            0.3
+          ],
+          "growth": 0.05482698003591922,
+          "rms_log_residual": 2.5157141485058115e-05
+        }
+      ]
+    },
+    {
+      "Ra": 950,
+      "fits": [
+        {
+          "window": [
+            0.1,
+            0.2
+          ],
+          "growth": 2.5434606743193884,
+          "rms_log_residual": 0.0002392765178801746
+        },
+        {
+          "window": [
+            0.2,
+            0.3
+          ],
+          "growth": 2.5372991653961217,
+          "rms_log_residual": 2.6291124757308626e-05
+        }
+      ]
+    }
+  ],
+  "neutral_estimates": [
+    696.9554407538911,
+    694.9823687146892
+  ],
+  "neutral_bracket": [
+    690,
+    700
+  ],
+  "bracket_interpolated_roots": [
+    695.7971236749813,
+    694.9202346915
+  ],
+  "seed_scaling_max_relative_error": 9.129089852955019e-07,
+  "unperturbed_control": {
+    "max_mode_amplitude": 7.919445256986989e-16,
+    "max_radial_rms": 1.390299054966995e-08,
+    "end_diffusive_time": 0.08
+  }
+}

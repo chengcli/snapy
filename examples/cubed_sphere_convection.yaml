@@ -1,0 +1,51 @@
+reference-state: {Tref: 0., Pref: 1.}
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+dynamics:
+  equation-of-state:
+    type: ideal-gas
+    weight: 8.31446261815324
+    gammad: 1.4
+    density-floor: 1.e-12
+    pressure-floor: 1.e-12
+    temperature-floor: 1.e-12
+  reconstruct:
+    vertical: {type: weno5, scale: true, shock: false}
+    horizontal: {type: weno5, scale: true, shock: false}
+  riemann-solver: {type: lmars}
+geometry:
+  type: gnomonic-equiangle
+  cells: {nx1: 12, nx2: 24, nx3: 24, nghost: 3}
+  bounds:
+    x1min: 4.5
+    x1max: 5.5
+    x2min_pi: -0.25
+    x2max_pi: 0.25
+    x3min_pi: -0.25
+    x3max_pi: 0.25
+distribute:
+  layout: cubed-sphere
+  nb2: 1
+  nb3: 1
+  blocks_per_process: 6
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: custom
+    x2-outer: custom
+    x3-inner: custom
+    x3-outer: custom
+forcing:
+  const-gravity: {grav1: -0.1}
+  diffusion:
+    dynamic: true
+    nu_iso: 0.003
+    kappa_iso: 0.0105
+    temperature_inner: 1.1
+    temperature_outer: 1.0
+    wall_velocity: stress-free
+    implicit_radial: true
+integration: {type: rk3, cfl: 0.4}

@@ -123,6 +123,14 @@ setup_test(test_user_output)
 setup_test(test_process_group)
 setup_test(test_refine)
 setup_test(test_diffusion)
+setup_test(test_diffusion_cubed_sphere)
+set_tests_properties(test_diffusion_cubed_sphere.${buildl} PROPERTIES TIMEOUT 120)
+add_test(NAME test_diffusion_cubed_sphere_mp.${buildl}
+  COMMAND torchrun --standalone --no-python --nproc-per-node=2
+    $<TARGET_FILE:test_diffusion_cubed_sphere.${buildl}>
+    --gtest_filter=CubedSphereDiffusion.constant_state_and_rigid_rotation:CubedSphereDiffusion.split_panels_preserve_constants_and_rotation:CubedSphereDiffusion.distributed_shared_heat_flux)
+set_tests_properties(test_diffusion_cubed_sphere_mp.${buildl}
+  PROPERTIES TIMEOUT 120 LABELS "parallel;forcing" ENVIRONMENT "BACKEND=gloo")
 setup_test(test_diffusion_moist)
 setup_test(test_diffusion_x1_scale)
 setup_test(test_condensate_conservation)

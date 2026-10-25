@@ -250,9 +250,10 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   TORCH_CHECK(!node["K"] && !node["type"],
               "DiffusionOptions: legacy 'K' and 'type' keys are unsupported; "
               "use 'nu_iso' and 'kappa_iso'.");
-  check_keys(
-      node, "forcing/diffusion",
-      {"nu_iso", "kappa_iso", "dynamic", "nu_scale_x1", "kappa_scale_x1"});
+  check_keys(node, "forcing/diffusion",
+             {"nu_iso", "kappa_iso", "dynamic", "nu_scale_x1", "kappa_scale_x1",
+              "temperature_inner", "temperature_outer", "wall_velocity",
+              "implicit_radial"});
 
   // the tables are ordinary tensors even when parsed under inference mode
   c10::InferenceMode not_inference(false);
@@ -276,6 +277,16 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   };
   op->nu_iso() = take_non_negative("nu_iso");
   op->kappa_iso() = take_non_negative("kappa_iso");
+  op->temperature_inner() = take_non_negative("temperature_inner");
+  op->temperature_outer() = take_non_negative("temperature_outer");
+  if (node["wall_velocity"])
+    op->wall_velocity() = node["wall_velocity"].as<std::string>();
+  if (node["implicit_radial"]) {
+    auto value = node["implicit_radial"].as<std::string>();
+    TORCH_CHECK(value == "true" || value == "false",
+                "[Diffusion] implicit_radial must be true or false.");
+    op->implicit_radial() = value == "true";
+  }
   if (node["dynamic"]) {
     auto const flag = node["dynamic"];
     TORCH_CHECK(flag.IsScalar(),
@@ -336,8 +347,45 @@ void DiffusionImpl::reset() {
 
   auto coord = phydro->pmb->pcoord;
   auto enabled = options->nu_iso() > 0. || options->kappa_iso() > 0.;
-  TORCH_CHECK(!enabled || coord->options->type() == "cartesian",
-              "[Diffusion] Only cartesian coordinates are supported.");
+  bool spherical = coord->options->type() == "gnomonic-equiangle";
+  TORCH_CHECK(!options->implicit_radial() ||
+                  (spherical && phydro->peos->options->type() == "ideal-gas"),
+              "[Diffusion] implicit_radial requires cubed sphere and dry "
+              "ideal-gas EOS.");
+  TORCH_CHECK(
+      !enabled || coord->options->type() == "cartesian" || spherical,
+      "[Diffusion] Supported coordinates: cartesian, gnomonic-equiangle.");
+  TORCH_CHECK(std::isfinite(options->temperature_inner()) &&
+                  options->temperature_inner() >= 0. &&
+                  std::isfinite(options->temperature_outer()) &&
+                  options->temperature_outer() >= 0.,
+              "[Diffusion] Wall temperatures must be finite and nonnegative.");
+  TORCH_CHECK(options->wall_velocity() == "stress-free" ||
+                  options->wall_velocity() == "no-slip",
+              "[Diffusion] wall_velocity must be stress-free or no-slip.");
+  TORCH_CHECK(
+      spherical || (options->temperature_inner() == 0. &&
+                    options->temperature_outer() == 0. &&
+                    options->wall_velocity() == "stress-free"),
+      "[Diffusion] Thermal/velocity wall options require gnomonic-equiangle.");
+  if (enabled && spherical) {
+    auto op = coord->options;
+    TORCH_CHECK(op->nghost() >= 2 && op->nx1() >= std::max(4, op->nghost()) &&
+                    op->nx2() >= std::max(4, op->nghost()) &&
+                    op->nx3() >= std::max(4, op->nghost()) &&
+                    coord->x1v.min().item<double>() > 0.,
+                "[Diffusion] Cubed sphere requires positive radii, nghost >= 2 "
+                "and at least max(4, nghost) active cells per direction.");
+    TORCH_CHECK(
+        phydro->pmb->options->layout()->type() == "cubed-sphere" &&
+            phydro->pmb->options->layout()->pz() == 1,
+        "[Diffusion] Cubed sphere requires cubed-sphere layout and nb1=1.");
+    auto const& names = phydro->pmb->options->bcnames();
+    TORCH_CHECK(
+        names.size() >= 2 && names[0].compare(0, 10, "reflecting") == 0 &&
+            names[1].compare(0, 10, "reflecting") == 0,
+        "[Diffusion] Cubed sphere currently requires reflecting radial walls.");
+  }
   TORCH_CHECK(options->nu_iso() == 0. || coord->options->nghost() >= 2,
               "[Diffusion] Isotropic viscosity requires nghost >= 2.");
   TORCH_CHECK(options->kappa_iso() == 0. || phydro->peos->species_cv_ref() > 0.,
@@ -448,6 +496,10 @@ torch::Tensor DiffusionImpl::forward(torch::Tensor du, torch::Tensor w,
   };
   on_state(nu_scale_, nu_scale_w_);
   on_state(kappa_scale_, kappa_scale_w_);
+  if (coord->options->type() == "gnomonic-equiangle") {
+    if (options->nu_iso() == 0. && options->kappa_iso() == 0.) return du;
+    return forward_cubed_sphere(du, w, temp, dt);
+  }
 
   auto [cell_start, cell_end] = region_bounds(
       pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3)));
@@ -612,6 +664,25 @@ double DiffusionImpl::max_time_step(torch::Tensor w) const {
   if (coeff == 0.) return std::numeric_limits<double>::max();
   TORCH_CHECK(std::isfinite(coeff), "[Diffusion] diffusivity is not finite");
   double dt = dx_min * dx_min / (2. * ndim * coeff);
+  // Conservative initial bound for corrected nonorthogonal gradients and
+  // the 4/3 longitudinal viscous eigenvalue. Explicit stages only.
+  if (coord->options->type() == "gnomonic-equiangle") dt *= 0.125;
+  if (coord->options->type() == "gnomonic-equiangle" &&
+      options->implicit_radial()) {
+    double viscous = options->nu_iso() * nu_scale_max_;
+    if (options->dynamic())
+      viscous = options->nu_iso() / w[IDN].index(interior).min().item<double>();
+    double rate = 0.;
+    for (int idir = 0; idir < 3; ++idir) {
+      auto dx = cell_width(coord, idir)
+                    .expand_as(w[IDN])
+                    .index(interior)
+                    .min()
+                    .item<double>();
+      rate += (idir == 0 ? (4. / 3.) * viscous : (4. / 3.) * coeff) / (dx * dx);
+    }
+    dt = rate > 0. ? 1. / (16. * rate) : std::numeric_limits<double>::max();
+  }
   TORCH_CHECK(std::isfinite(dt) && dt > 0.,
               "[Diffusion] time-step bound must be positive and finite, got ",
               dt);
