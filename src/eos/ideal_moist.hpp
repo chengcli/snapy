@@ -73,7 +73,9 @@ class IdealMoistImpl final : public torch::nn::Cloneable<IdealMoistImpl>,
    * \param[in] cons  conserved variables
    * \param[ou] out   primitive variables
    */
-  void _cons2prim(torch::Tensor cons, torch::Tensor& out);
+  //! `cons` holds totals; `limit` false skips the conserved limiter (the
+  //! anomaly key "U'->W" has already limited the stored anomalies)
+  void _cons2prim(torch::Tensor cons, torch::Tensor& out, bool limit = true);
 
   //! \brief calculate internal energy
   /*
