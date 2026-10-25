@@ -313,6 +313,37 @@ class AnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(third["observed_order"], 2, places=8)
         self.assertAlmostEqual(third["empirical_extrapolation"], 850, places=8)
 
+    def test_angular_control_does_not_hide_proportional_triple(self):
+        self.fixture()
+        for ra in (800, 850, 900):
+            self.runfile(f"angular-ra{ra}", ra, nr=12, n=32)
+        result = a.analyze(self.path, REF)
+        comparisons = a.refinement_comparisons(result["groups"])
+        fitted = [c for c in comparisons if c.get("order_fit_status") == "fitted"]
+        self.assertEqual(len(fitted), 1)
+        self.assertEqual(
+            fitted[0]["grids"],
+            [dict(nr=8, N=16), dict(nr=12, N=24), dict(nr=16, N=32)],
+        )
+        self.assertAlmostEqual(fitted[0]["observed_order"], 2, places=8)
+        self.assertTrue(
+            any(
+                c.get("coarse_grid") == dict(nr=8, N=16)
+                and c.get("fine_grid") == dict(nr=16, N=32)
+                for c in comparisons
+            )
+        )
+        directional = [
+            c for c in comparisons if c.get("refined_direction") in ("angular", "radial")
+        ]
+        self.assertEqual({c["refined_direction"] for c in directional}, {"angular", "radial"})
+        for comparison in directional:
+            self.assertNotIn("assumed_second_order_extrapolation", comparison)
+            self.assertAlmostEqual(
+                comparison["fine_neutral_Ra"] - comparison["coarse_neutral_Ra"],
+                comparison["neutral_change"],
+            )
+
     def test_failed_three_grid_order_is_recorded_and_reported(self):
         from docutils.core import publish_doctree
 
@@ -474,7 +505,8 @@ class AnalysisTests(unittest.TestCase):
         out = self.path / "angular-controls-output"
         with patch.object(a.plt, "close"):
             a.write_artifacts(result, reference, out)
-            fig = a.plt.gcf()
+            figures = [a.plt.figure(number) for number in a.plt.get_fignums()]
+            fig = next(figure for figure in figures if len(figure.axes) == 3)
         try:
             np.testing.assert_allclose(
                 fig.axes[0].collections[0].get_offsets(), [[0.99, ra] for ra in roots]
@@ -486,7 +518,8 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(len(fig.axes[0].lines), 2)  # Spectral curve and planar limit only.
             self.assertEqual(len(fig.axes[2].lines), 1)  # Zero-error reference only.
         finally:
-            a.plt.close(fig)
+            for figure in figures:
+                a.plt.close(figure)
         self.assertIn("unconnected markers", (out / "spherical_onset_summary.inc").read_text())
 
 

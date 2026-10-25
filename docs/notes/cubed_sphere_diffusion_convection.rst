@@ -34,7 +34,11 @@ The independent compressible spherical reference decreases from
 neutral points with that reference, reports spatial and fitting-window
 sensitivity, and tests seed amplitude, timestep, orientation, neighboring
 degrees, background drift, and floating-point precision. Its generated
-coverage report distinguishes completed comparisons from pending runs.
+coverage report confirms at least two completed grids at all eight requested
+radius ratios. The finest primary grids agree with their spherical references
+within 0.80 percent. At the thinnest shells, that discretization error exceeds
+the continuum curvature correction: the GPU results do not yet resolve the
+planar limit to the precision of the independent spectral calculation.
 
 The main analytical result, for impermeable, stress-free, fixed-temperature
 walls, is
@@ -1131,6 +1135,10 @@ These sequences refine both directions together, so they do not by
 themselves separate radial from angular truncation error. Fit-window variation
 and timestep dependence are assessed separately from spatial refinement and
 the continuum change with shell thickness.
+An additional :math:`\eta=0.9` grid uses :math:`N=96,n_r=12`: the comparison
+with :math:`N=72,n_r=12` changes only angular resolution, and the comparison
+with :math:`N=96,n_r=16` changes only radial resolution. The generated tables
+report these directional changes separately.
 
 To make the large angular grids practical, the four-point polynomial
 reconstruction is applied using four indexed stencil terms instead of a
@@ -1146,7 +1154,9 @@ library because the seam communication layout has changed. Two-device runs
 use the existing CUDA-aware UCX backend; the standalone two-GPU regression
 exercises a full six-panel evolution and host/device diagnostic reductions.
 
-On this two-RTX-5090 host, direct peer access is unavailable. A matched
+On this two-RTX-5090 host, ``nvidia-smi topo -p2p r`` and ``-p2p w`` report
+``GNS`` (GPU not supported) between the devices under the current driver.
+A matched
 ten-step transport check at :math:`\eta=0.98`, :math:`N=224,n_r=8` took
 170.89 s with ``UCX_TLS=self,tcp,cuda_copy,cuda_ipc`` and 5.27 s with
 ``UCX_TLS=self,tcp,cuda_copy``. Every recorded diagnostic agreed exactly
@@ -1157,6 +1167,17 @@ isolated strong scaling. The remaining distributed cases explicitly select
 the transport without CUDA IPC. This setting is hardware dependent; it does
 not change the spatial operator or timestep. Raw probe data and settings are
 retained in ``spherical_samples/transport_controls``.
+The responsible IPC calls have not been profiled: lack of peer access alone
+does not establish the cause of the measured slowdown. In particular, these
+measurements do not separate memory-mapping, synchronization, and fallback
+costs. The choice here follows the measured communication comparison.
+UCX describes ``cuda_ipc`` as intra-node peer-to-peer device transport and
+``cuda_copy`` as the copy transport for staging protocols
+(`UCX GPU support <https://github.com/openucx/ucx/wiki/NVIDIA-GPU-Support>`_).
+NVIDIA also documents potentially expensive interprocess buffer mappings
+(`UCX integration <https://docs.nvidia.com/dask-cuda/latest/ucx/>`_).
+That is a plausible source of overhead, not evidence that it dominates this
+particular workload.
 
 The benchmark uses explicit viscosity and conduction with SSPRK3. An optional
 ``diffusion_step_scale`` relaxes the initial conservative diffusion guard;
@@ -1192,6 +1213,54 @@ other discrete modes, even when initialized with a continuum eigenfunction.
    Compressible spherical-shell onset with a fixed thermodynamic convention.
    The reference curve and finite-grid GPU estimates are distinct results.
 
+.. figure:: figures/spherical_thin_shell_limit.png
+   :width: 100%
+   :alt: Spherical reference and finite-grid modal thresholds relative to the compressible planar limit as shell thickness decreases.
+
+   The continuum curvature correction tends to zero as :math:`d/r_m` tends
+   to zero. GPU points retain spatial error. Vertical bars show the absolute
+   shift between the final two fitting-window estimates, where available;
+   they are not confidence intervals or bounds on spatial error. Separate
+   labels identify the angular resolutions used at :math:`\eta=0.99`.
+
+For example, at :math:`\eta=0.98` the continuum curvature correction is
+only 1.99 Rayleigh units, while the :math:`N=336,n_r=12` estimate lies 5.48
+units below its spherical reference. This grid agrees with the reference
+within 0.79 percent but does not resolve that smaller curvature correction.
+Reducing relative shell thickness and reducing spatial truncation error are
+distinct limits. The measured finite-grid sequence must not be interpreted
+as a precision verification of the continuum planar limit.
+At :math:`\eta=0.99`, the proportional refinement from
+:math:`N=336,n_r=8` to :math:`N=504,n_r=12` changes the modal threshold from
+706.86847 to 691.57820. The latter is 0.797 percent below the spherical
+reference 697.13666 and 4.59 Rayleigh units below the compressible planar
+reference 696.16667. The final two fitting windows differ by 0.23324 Rayleigh
+units. These quantities describe separate spatial, geometric, and
+finite-time effects; the window shift cannot serve as an error bar for the
+continuum threshold.
+
+Longer fits and mode controls
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+At :math:`\eta=0.95`, extending all three runs from :math:`\tau=0.2` to
+:math:`0.6` changes the final-window neutral estimate from 696.55594 to
+696.58401. The latter remains about 0.72 percent below the same-degree
+spectral reference, 701.60935. Thus longer fitting times stabilize this
+estimate but do not remove its spatial error. At :math:`\eta=0.9`, the
+third grid reaches 708.71016 versus the reference 708.31172; the three-grid
+sequence nevertheless fails to establish a positive asymptotic convergence
+order. Close agreement on an individual grid is not an extrapolated error
+bound.
+
+The sampled :math:`\ell=20,21,22` modes at :math:`\eta=0.9` retain the
+continuum preference for degree 21. Rotating that degree's seed from the z
+axis to the cube diagonal shifts its finite-grid neutral point by 0.65755.
+This quantifies one part of the mesh's orientation dependence; it does not
+exhaust all azimuthal combinations. The supplemental tables and figure
+below retain each fitting interval and comparison explicitly.
+
+.. include:: spherical_control_study.inc
+
 Reproducing the radius-ratio study
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1208,7 +1277,9 @@ From the repository root::
    UCX_TLS=self,tcp,cuda_copy OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .99 --nr 12 --angular-per-degree 1.48 --angular-scale 1.5 --devices 0,1 --processes 2 --diffusion-step-scale 8 --tag fine
    UCX_TLS=self,tcp,cuda_copy OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .99 --nr 8 --devices 0,1 --processes 2 --diffusion-step-scale 8 --tag angular
    OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 16 --angular-scale 2 --devices 0 --diffusion-step-scale 8 --tag third
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 12 --angular-scale 2 --devices 1 --diffusion-step-scale 8 --tag angular
    OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_spherical_onset.py --baseline-step-scale 8
+   OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_spherical_controls.py --output-dir docs/notes
 
 Use ``--etas`` and ``--devices`` to schedule subsets, particularly the large
 thin-shell grids. Run the large cases sequentially, after checking available
@@ -1220,6 +1291,37 @@ requires ``--overwrite`` before replacing an existing incomplete run. Its
 ``--output-dir`` option can place large campaigns under ``/data02``; the
 analysis accepts a corresponding ``--input-dir``. A CUDA request never falls
 back to CPU evolution.
+
+Some early archived cases predate per-run executable and library hash
+recording. Later cases retain those hashes; they must not be assigned
+retrospectively to older results. One recorded early executable also differs
+from the final executable while sharing the recorded diffusion-library hash.
+The archive therefore documents a development study, not a single immutable
+binary campaign. The large final grids and directional controls use the same
+recorded final executable and library.
+
+The supplemental controls can be regenerated with the following commands.
+They use one device per case; the device index can be changed to suit the
+available memory::
+
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 12 --angular-scale 1.5 --devices 0 --seed 0 --factors 1 --diffusion-step-scale 8 --tag rest
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 12 --angular-scale 1.5 --devices 0 --seed 1e-7 --factors 1 --diffusion-step-scale 8 --tag smallseed
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 12 --angular-scale 1.5 --devices 0 --factors 1 --diffusion-step-scale 4 --tag step4
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --nr 12 --angular-scale 1.5 --devices 0 --orientation diagonal --diffusion-step-scale 8 --tag diagonal
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --ell 20 --nr 12 --angular-scale 1.5 --devices 0 --diffusion-step-scale 8 --tag neighbor
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .9 --ell 22 --nr 12 --angular-scale 1.5 --devices 0 --diffusion-step-scale 8 --tag neighbor
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .95 --nr 12 --angular-scale 1.5 --devices 0 --end .6 --diffusion-step-scale 8 --tag long --output-dir docs/notes/spherical_samples/long_window
+   OPENBLAS_NUM_THREADS=1 python docs/notes/run_spherical_gpu.py --etas .99 --nr 8 --angular-per-degree 1.48 --devices 0 --seed 0 --factors 1 --diffusion-step-scale 8 --tag rest
+   OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_spherical_controls.py --output-dir docs/notes
+
+CPU reference-limit, analysis, and batch-runner regression checks use::
+
+   OPENBLAS_NUM_THREADS=1 python -m unittest discover -s docs/notes -p 'test_spherical_*.py'
+
+The distributed full-mesh conservation and reduction regression also passes
+with the selected CUDA-copy communication setting. From ``build/tests``::
+
+   env BACKEND=ucx DEVICE=cuda CUDA_VISIBLE_DEVICES=0,1 UCX_TLS=self,tcp,cuda_copy COMMUX_GROUP=1 COMMUX_COALESCE=1 torchrun --standalone --no-python --nproc-per-node=2 ./test_diffusion_cubed_sphere_two_gpu.release
 
 References
 ----------

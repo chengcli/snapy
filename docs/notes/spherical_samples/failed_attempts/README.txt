@@ -1,0 +1,1 @@
+The eta090 N96 nr12 control failed during GPU initialization before producing CSV output. Available memory changed when an unrelated GPU job started during the main thin-shell run. The control is rerun sequentially after the large cases. This log is retained as failure evidence, not simulation data.

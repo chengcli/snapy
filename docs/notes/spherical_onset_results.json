@@ -2569,6 +2569,112 @@
       "last_window_growth_shift": 0.00344376715374866
     },
     {
+      "name": "eta090-ell22-n72-r12-neighbor-f1060.csv",
+      "device": "cuda:0",
+      "Ra": 753.5040463142208,
+      "eta": 0.9,
+      "ell": 22,
+      "N": 72,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.0288003134372478,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 433,
+      "retries": 0,
+      "seconds": 122.214690532,
+      "balance_residual": 6.61546490281319e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "753.5040463142208",
+        "0.9",
+        "22",
+        "72",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta090-ell22-n72-r12-neighbor-f1060.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta090-ell22-n72-r12-neighbor-f1060.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "bcfa55b728958b771fa47ded3ab2d4d04a44e696078effde7006864d9ac0f3e0",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 3.3663868330530175e-09,
+      "max_temperature_drift": 3.393789005379233e-08,
+      "max_density_drift": 3.3117464326437585e-09,
+      "max_mode_amplitude": 3.1931885105532196e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.05088176937600326,
+            0.09991329259041659
+          ],
+          "growth": 0.4953988840963633,
+          "rms_log_residual": 0.00011405383017715293,
+          "max_log_residual": 0.00022768395558259158
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.1008384156699098,
+            0.1498699388810677
+          ],
+          "growth": 0.5133650191768376,
+          "rms_log_residual": 6.768732278506161e-05,
+          "max_log_residual": 0.00017333335641112058
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 55,
+          "sampled_interval": [
+            0.15079506196048528,
+            0.2
+          ],
+          "growth": 0.5190355193145161,
+          "rms_log_residual": 2.535278250889821e-05,
+          "max_log_residual": 5.805269818637271e-05
+        }
+      ],
+      "growth_window_range": 0.02363663521815279,
+      "last_window_growth_shift": 0.005670500137678447
+    },
+    {
       "name": "eta090-n48-r8-coarse-f0940.csv",
       "device": "cuda:0",
       "Ra": 665.8130138238757,
@@ -4887,6 +4993,916 @@
       "last_window_growth_shift": -0.005724553260678222
     },
     {
+      "name": "eta098-n336-r12-fine-f1000.csv",
+      "device": "cuda:1",
+      "Ra": 698.156640282864,
+      "eta": 0.98,
+      "ell": 111,
+      "N": 336,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02992013661365179,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 423,
+      "retries": 0,
+      "seconds": 733.659376684,
+      "balance_residual": 1.783607396622567e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "698.156640282864",
+        "0.98",
+        "111",
+        "336",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta098-n336-r12-fine-f1000.csv",
+        "cuda:1",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta098-n336-r12-fine-f1000.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "1f0ac1c8280c3e09bc0158cc7d76be9cffd248bbfb9acd1f3ff5a9f8e1c748a4",
+      "process_count": 1,
+      "visible_devices": null,
+      "max_radial_rms": 1.4404805605251476e-09,
+      "max_temperature_drift": 3.2944287742253664e-08,
+      "max_density_drift": 5.1895709951566e-10,
+      "max_mode_amplitude": 3.0420679315287803e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.05022637048541997,
+            0.09950507360465817
+          ],
+          "growth": 0.04588607856231982,
+          "rms_log_residual": 9.973367387057837e-05,
+          "max_log_residual": 0.0001565337405970979
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.10045274097231968,
+            0.1497314440908703
+          ],
+          "growth": 0.06241322330948131,
+          "rms_log_residual": 5.696268746355715e-05,
+          "max_log_residual": 0.00010832169077090725
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.15067911145850602,
+            0.2
+          ],
+          "growth": 0.06004810877830888,
+          "rms_log_residual": 3.316637308588858e-05,
+          "max_log_residual": 7.323560746286262e-05
+        }
+      ],
+      "growth_window_range": 0.016527144747161493,
+      "last_window_growth_shift": -0.002365114531172434
+    },
+    {
+      "name": "eta098-n336-r12-fine-f1060.csv",
+      "device": "cuda:1",
+      "Ra": 740.0460386998359,
+      "eta": 0.98,
+      "ell": 111,
+      "N": 336,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02906100569263793,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 423,
+      "retries": 0,
+      "seconds": 734.05690861,
+      "balance_residual": 1.783607396622567e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "740.0460386998359",
+        "0.98",
+        "111",
+        "336",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta098-n336-r12-fine-f1060.csv",
+        "cuda:1",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta098-n336-r12-fine-f1060.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "d43e153a88ff8f6dc4f31d20f79e6f94e0e55b9cd59a9ae60e12ba2e00382d22",
+      "process_count": 1,
+      "visible_devices": null,
+      "max_radial_rms": 1.531512067264031e-09,
+      "max_temperature_drift": 3.5005318865799495e-08,
+      "max_density_drift": 3.445181695482802e-09,
+      "max_mode_amplitude": 3.234333191448681e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.050226370492663146,
+            0.09950507361064684
+          ],
+          "growth": 0.49528074974355485,
+          "rms_log_residual": 9.920529505444223e-05,
+          "max_log_residual": 0.00015871855657323408
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.10045274097821387,
+            0.1497314440872233
+          ],
+          "growth": 0.510581953427173,
+          "rms_log_residual": 5.868994848679501e-05,
+          "max_log_residual": 0.00010754732205597861
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.15067911145459537,
+            0.2
+          ],
+          "growth": 0.5111509124017768,
+          "rms_log_residual": 2.4092180374362594e-05,
+          "max_log_residual": 6.280630686106292e-05
+        }
+      ],
+      "growth_window_range": 0.015870162658221942,
+      "last_window_growth_shift": 0.0005689589746037393
+    },
+    {
+      "name": "eta099-n336-r8-coarse-f0940.csv",
+      "device": "cuda:0",
+      "Ra": 655.30845615467,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 336,
+      "nr": 8,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.03088283226118846,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 186,
+      "retries": 0,
+      "seconds": 333.802918061,
+      "balance_residual": 4.587904860028416e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "655.30845615467",
+        "0.99",
+        "224",
+        "336",
+        "8",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f0940.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f0940.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "3ddff9bcae37da0763ce035d81d761f2618a6df3613104c8f1c89a0422c93cca",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 1.049581483226048e-09,
+      "max_temperature_drift": 3.001978310379627e-08,
+      "max_density_drift": 2.83391676791922e-09,
+      "max_mode_amplitude": 3.145227213523199e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.05182610016100394,
+            0.09933335864263082
+          ],
+          "growth": -0.6393355010790869,
+          "rms_log_residual": 0.00029129257172177465,
+          "max_log_residual": 0.0007315638246900846
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.10149277948276184,
+            0.14900003796743114
+          ],
+          "growth": -0.560549550011829,
+          "rms_log_residual": 0.0001449339045398561,
+          "max_log_residual": 0.0002886836463673603
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 24,
+          "sampled_interval": [
+            0.15115945880766285,
+            0.2
+          ],
+          "growth": -0.5604803703516592,
+          "rms_log_residual": 6.965395366146942e-05,
+          "max_log_residual": 0.00017193371283497072
+        }
+      ],
+      "growth_window_range": 0.07885513072742767,
+      "last_window_growth_shift": 6.917966016983801e-05
+    },
+    {
+      "name": "eta099-n336-r8-coarse-f1000.csv",
+      "device": "cuda:0",
+      "Ra": 697.1366554836916,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 336,
+      "nr": 8,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02994201677850609,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 186,
+      "retries": 0,
+      "seconds": 269.331522872,
+      "balance_residual": 4.587904860028416e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "697.1366554836916",
+        "0.99",
+        "224",
+        "336",
+        "8",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f1000.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f1000.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "9b56c1fa17b7b6e2dd14658286feaf16c58b3f3ac656846f93cb4b72a3b04040",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 1.0181443429867832e-09,
+      "max_temperature_drift": 2.937789611578978e-08,
+      "max_density_drift": 8.297729170436696e-10,
+      "max_mode_amplitude": 3.051031117488972e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.05182610016333369,
+            0.09933335864512934
+          ],
+          "growth": -0.1809013048893163,
+          "rms_log_residual": 0.000259967559011932,
+          "max_log_residual": 0.0007177761878516264
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.10149277948523763,
+            0.14900003796823624
+          ],
+          "growth": -0.11089533483317103,
+          "rms_log_residual": 0.0001652539973876238,
+          "max_log_residual": 0.0002683949639354921
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 24,
+          "sampled_interval": [
+            0.15115945880835643,
+            0.2
+          ],
+          "growth": -0.10402364424882302,
+          "rms_log_residual": 4.3043283595992394e-05,
+          "max_log_residual": 0.00011629938329349443
+        }
+      ],
+      "growth_window_range": 0.07687766064049328,
+      "last_window_growth_shift": 0.006871690584348014
+    },
+    {
+      "name": "eta099-n336-r8-coarse-f1060.csv",
+      "device": "cuda:0",
+      "Ra": 738.9648548127132,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 336,
+      "nr": 8,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02908225758742696,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 186,
+      "retries": 0,
+      "seconds": 245.505775837,
+      "balance_residual": 4.587904860028416e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "738.9648548127132",
+        "0.99",
+        "224",
+        "336",
+        "8",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f1060.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-coarse-f1060.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "3b85f1e1fb1b07585e80806f7090d3abbaa79c8c2809d442d9e98cdd60bac658",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 1.0380510489149184e-09,
+      "max_temperature_drift": 3.086978872524071e-08,
+      "max_density_drift": 2.6047390910832746e-09,
+      "max_mode_amplitude": 3.108725331129684e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.05182610016536731,
+            0.099333358647216
+          ],
+          "growth": 0.26395034618189706,
+          "rms_log_residual": 0.00022610061858571864,
+          "max_log_residual": 0.0006708064451608209
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 23,
+          "sampled_interval": [
+            0.10149277948729628,
+            0.149000037968495
+          ],
+          "growth": 0.3252231330574091,
+          "rms_log_residual": 0.0001655309369459682,
+          "max_log_residual": 0.0002689062486567195
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 24,
+          "sampled_interval": [
+            0.15115945880850096,
+            0.2
+          ],
+          "growth": 0.3372562157698659,
+          "rms_log_residual": 2.507063329504917e-05,
+          "max_log_residual": 6.224853413172582e-05
+        }
+      ],
+      "growth_window_range": 0.07330586958796886,
+      "last_window_growth_shift": 0.012033082712456844
+    },
+    {
+      "name": "eta099-n336-r8-rest-f1000.csv",
+      "device": "cuda:0",
+      "Ra": 697.1366554836916,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 336,
+      "nr": 8,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02994201677850609,
+      "seed": 0,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 186,
+      "retries": 0,
+      "seconds": 375.285903464,
+      "balance_residual": 4.587904860028416e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "697.1366554836916",
+        "0.99",
+        "224",
+        "336",
+        "8",
+        "0.2",
+        "0.0",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-rest-f1000.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-rest-f1000.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "9b56c1fa17b7b6e2dd14658286feaf16c58b3f3ac656846f93cb4b72a3b04040",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 1.2233570474587027e-12,
+      "max_temperature_drift": 1.1586287484988134e-12,
+      "max_density_drift": 5.339062525422378e-12,
+      "max_mode_amplitude": 6.210813010689582e-17
+    },
+    {
+      "name": "eta099-n504-r12-fine-f0940.csv",
+      "device": "cuda:0",
+      "Ra": 655.30845615467,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 504,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.03088283226118846,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 2,
+      "end_diffusive_time": 0.2,
+      "cycles": 421,
+      "retries": 0,
+      "seconds": 990.058962641,
+      "balance_residual": 1.856828161255679e-11,
+      "command": [
+        "torchrun",
+        "--standalone",
+        "--no-python",
+        "--nproc-per-node=2",
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "655.30845615467",
+        "0.99",
+        "224",
+        "504",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f0940.csv",
+        "cuda:local",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f0940.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "022e7611facb51c6821379f86833de91e925396338a60d9f2704dee3e176ee62",
+      "process_count": 2,
+      "visible_devices": "0,1",
+      "transport_environment": {
+        "UCX_TLS": "self,tcp,cuda_copy",
+        "COMMUX_GROUP": "1",
+        "COMMUX_COALESCE": "1"
+      },
+      "max_radial_rms": 1.0389301830316434e-09,
+      "max_temperature_drift": 3.2464611443572267e-08,
+      "max_density_drift": 2.372481877621624e-09,
+      "max_mode_amplitude": 3.11331016178635e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.050373580790290806,
+            0.09979671666410722
+          ],
+          "growth": -0.42308349573774967,
+          "rms_log_residual": 8.570877874070776e-05,
+          "max_log_residual": 0.00013421271226832232
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 52,
+          "sampled_interval": [
+            0.10074716158478027,
+            0.14921985254103204
+          ],
+          "growth": -0.3977963929480136,
+          "rms_log_residual": 5.931765279318382e-05,
+          "max_log_residual": 0.00013575331999149398
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.15017029746176402,
+            0.2
+          ],
+          "growth": -0.404071369842578,
+          "rms_log_residual": 4.8248925042818566e-05,
+          "max_log_residual": 9.761502844440884e-05
+        }
+      ],
+      "growth_window_range": 0.02528710278973606,
+      "last_window_growth_shift": -0.00627497689456441
+    },
+    {
+      "name": "eta099-n504-r12-fine-f1000.csv",
+      "device": "cuda:0",
+      "Ra": 697.1366554836916,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 504,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02994201677850609,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 2,
+      "end_diffusive_time": 0.2,
+      "cycles": 421,
+      "retries": 0,
+      "seconds": 1001.660644744,
+      "balance_residual": 1.856828161255679e-11,
+      "command": [
+        "torchrun",
+        "--standalone",
+        "--no-python",
+        "--nproc-per-node=2",
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "697.1366554836916",
+        "0.99",
+        "224",
+        "504",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f1000.csv",
+        "cuda:local",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f1000.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "f0cfcc2224c09b67a501fb83a79b04903f8fcf0d972a877aae31eb98a7504977",
+      "process_count": 2,
+      "visible_devices": "0,1",
+      "transport_environment": {
+        "UCX_TLS": "self,tcp,cuda_copy",
+        "COMMUX_GROUP": "1",
+        "COMMUX_COALESCE": "1"
+      },
+      "max_radial_rms": 1.0151502164220688e-09,
+      "max_temperature_drift": 3.1998648397646434e-08,
+      "max_density_drift": 5.162319460794151e-10,
+      "max_mode_amplitude": 3.0420235245456155e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.05037358079379601,
+            0.09979671666732827
+          ],
+          "growth": 0.03917711325242332,
+          "rms_log_residual": 8.575745785586802e-05,
+          "max_log_residual": 0.0001380006000069045
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 52,
+          "sampled_interval": [
+            0.100747161587966,
+            0.14921985254057005
+          ],
+          "growth": 0.06296974584838577,
+          "rms_log_residual": 7.101032718839636e-05,
+          "max_log_residual": 0.00013819228861677857
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.15017029746119692,
+            0.2
+          ],
+          "growth": 0.06095657336852065,
+          "rms_log_residual": 3.939269057231938e-05,
+          "max_log_residual": 9.311998761063478e-05
+        }
+      ],
+      "growth_window_range": 0.023792632595962454,
+      "last_window_growth_shift": -0.0020131724798651204
+    },
+    {
+      "name": "eta099-n504-r12-fine-f1060.csv",
+      "device": "cuda:0",
+      "Ra": 738.9648548127132,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 504,
+      "nr": 12,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02908225758742696,
+      "seed": 1e-06,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 2,
+      "end_diffusive_time": 0.2,
+      "cycles": 421,
+      "retries": 0,
+      "seconds": 1141.65452285,
+      "balance_residual": 1.856828161255679e-11,
+      "command": [
+        "torchrun",
+        "--standalone",
+        "--no-python",
+        "--nproc-per-node=2",
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "738.9648548127132",
+        "0.99",
+        "224",
+        "504",
+        "12",
+        "0.2",
+        "1e-06",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f1060.csv",
+        "cuda:local",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n504-r12-fine-f1060.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "b9c9155e0ae461ff00ee48e95ffff09a0cb97e7a2ec6e71fab2d4d75611a3fde",
+      "process_count": 2,
+      "visible_devices": "0,1",
+      "transport_environment": {
+        "UCX_TLS": "self,tcp,cuda_copy",
+        "COMMUX_GROUP": "1",
+        "COMMUX_COALESCE": "1"
+      },
+      "max_radial_rms": 1.0791493050718057e-09,
+      "max_temperature_drift": 3.399605597032007e-08,
+      "max_density_drift": 3.355831612594784e-09,
+      "max_mode_amplitude": 3.233813979744671e-08,
+      "fits": [
+        {
+          "window": [
+            0.05,
+            0.1
+          ],
+          "sample_count": 53,
+          "sampled_interval": [
+            0.050373580796883394,
+            0.09979671666993079
+          ],
+          "growth": 0.4881668905051451,
+          "rms_log_residual": 8.295730444078828e-05,
+          "max_log_residual": 0.00013573338259931234
+        },
+        {
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "sample_count": 52,
+          "sampled_interval": [
+            0.10074716159052954,
+            0.1492198525392652
+          ],
+          "growth": 0.5098238350847597,
+          "rms_log_residual": 7.349356750667507e-05,
+          "max_log_residual": 0.00013069987249281212
+        },
+        {
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "sample_count": 54,
+          "sampled_interval": [
+            0.15017029745978303,
+            0.2
+          ],
+          "growth": 0.5114049745682901,
+          "rms_log_residual": 2.7059424904207267e-05,
+          "max_log_residual": 7.39489730037235e-05
+        }
+      ],
+      "growth_window_range": 0.023238084063145037,
+      "last_window_growth_shift": 0.001581139483530447
+    },
+    {
       "name": "precision-seed001-float32.csv",
       "device": "cuda:1",
       "Ra": 701.6093517557772,
@@ -6381,59 +7397,63 @@
       },
       "runs": [
         "eta090-ell22-n72-r12-neighbor-f0940.csv",
-        "eta090-ell22-n72-r12-neighbor-f1000.csv"
+        "eta090-ell22-n72-r12-neighbor-f1000.csv",
+        "eta090-ell22-n72-r12-neighbor-f1060.csv"
       ],
       "neutral_by_window": [
         {
-          "Ra": 708.3573272792692,
-          "method": "linear (two points)",
+          "Ra": 708.3236233377294,
+          "method": "quadratic (three nearest points)",
           "bracket": [
             668.2017014484599,
             710.8528738813403
           ],
           "used_Ra": [
             668.2017014484599,
-            710.8528738813403
+            710.8528738813403,
+            753.5040463142208
           ],
           "window": [
             0.05,
             0.1
           ],
-          "relative_error": -0.0035106372834158295
+          "relative_error": -0.0035580506691925695
         },
         {
-          "Ra": 706.4932679178582,
-          "method": "linear (two points)",
+          "Ra": 706.4361972761901,
+          "method": "quadratic (three nearest points)",
           "bracket": [
             668.2017014484599,
             710.8528738813403
           ],
           "used_Ra": [
             668.2017014484599,
-            710.8528738813403
+            710.8528738813403,
+            753.5040463142208
           ],
           "window": [
             0.1,
             0.15000000000000002
           ],
-          "relative_error": -0.006132923033254523
+          "relative_error": -0.006213207778192786
         },
         {
-          "Ra": 706.2238338855431,
-          "method": "linear (two points)",
+          "Ra": 706.1568638489726,
+          "method": "quadratic (three nearest points)",
           "bracket": [
             668.2017014484599,
             710.8528738813403
           ],
           "used_Ra": [
             668.2017014484599,
-            710.8528738813403
+            710.8528738813403,
+            753.5040463142208
           ],
           "window": [
             0.15000000000000002,
             0.2
           ],
-          "relative_error": -0.006511952284193656
+          "relative_error": -0.006606163110415397
         }
       ],
       "issues": [],
@@ -6458,23 +7478,24 @@
         ]
       ],
       "neutral": {
-        "Ra": 706.2238338855431,
-        "method": "linear (two points)",
+        "Ra": 706.1568638489726,
+        "method": "quadratic (three nearest points)",
         "bracket": [
           668.2017014484599,
           710.8528738813403
         ],
         "used_Ra": [
           668.2017014484599,
-          710.8528738813403
+          710.8528738813403,
+          753.5040463142208
         ],
         "window": [
           0.15000000000000002,
           0.2
         ],
-        "relative_error": -0.006511952284193656
+        "relative_error": -0.006606163110415397
       },
-      "last_window_Ra_shift": -0.26943403231518914
+      "last_window_Ra_shift": -0.2793334272174661
     },
     {
       "parameters": {
@@ -7429,18 +8450,67 @@
         "dtype": "float64"
       },
       "runs": [
-        "eta098-n336-r12-fine-f0940.csv"
+        "eta098-n336-r12-fine-f0940.csv",
+        "eta098-n336-r12-fine-f1000.csv",
+        "eta098-n336-r12-fine-f1060.csv"
       ],
       "neutral_by_window": [
-        null,
-        null,
-        null
+        {
+          "Ra": 693.9487245605063,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            656.2672418658922,
+            698.156640282864
+          ],
+          "used_Ra": [
+            656.2672418658922,
+            698.156640282864,
+            740.0460386998359
+          ],
+          "window": [
+            0.05,
+            0.1
+          ],
+          "relative_error": -0.0060271799759046285
+        },
+        {
+          "Ra": 692.424482892573,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            656.2672418658922,
+            698.156640282864
+          ],
+          "used_Ra": [
+            656.2672418658922,
+            698.156640282864,
+            740.0460386998359
+          ],
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "relative_error": -0.0082104173469848
+        },
+        {
+          "Ra": 692.6793132617322,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            656.2672418658922,
+            698.156640282864
+          ],
+          "used_Ra": [
+            656.2672418658922,
+            698.156640282864,
+            740.0460386998359
+          ],
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "relative_error": -0.00784541276999473
+        }
       ],
-      "issues": [
-        "Window (0.05, 0.1): Need distinct Rayleigh numbers",
-        "Window (0.1, 0.15000000000000002): Need distinct Rayleigh numbers",
-        "Window (0.15000000000000002, 0.2): Need distinct Rayleigh numbers"
-      ],
+      "issues": [],
       "reference": {
         "modal_Ra": 698.156640282864,
         "critical_Ra": 698.156640282864,
@@ -7460,7 +8530,264 @@
           0.15000000000000002,
           0.2
         ]
-      ]
+      ],
+      "neutral": {
+        "Ra": 692.6793132617322,
+        "method": "quadratic (three nearest points)",
+        "bracket": [
+          656.2672418658922,
+          698.156640282864
+        ],
+        "used_Ra": [
+          656.2672418658922,
+          698.156640282864,
+          740.0460386998359
+        ],
+        "window": [
+          0.15000000000000002,
+          0.2
+        ],
+        "relative_error": -0.00784541276999473
+      },
+      "last_window_Ra_shift": 0.2548303691592082
+    },
+    {
+      "parameters": {
+        "eta": 0.99,
+        "ell": 224,
+        "N": 336,
+        "nr": 8,
+        "a": 1,
+        "D": 0.5,
+        "gamma": 1.666666666666667,
+        "Pr": 1,
+        "seed": 1e-06,
+        "cfl": 0.8,
+        "diffusion_step_scale": 8,
+        "orientation": "z",
+        "eigenmode_seed": true,
+        "dtype": "float64"
+      },
+      "runs": [
+        "eta099-n336-r8-coarse-f0940.csv",
+        "eta099-n336-r8-coarse-f1000.csv",
+        "eta099-n336-r8-coarse-f1060.csv"
+      ],
+      "neutral_by_window": [
+        {
+          "Ra": 713.9926857960879,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.05,
+            0.1
+          ],
+          "relative_error": 0.024178947097109882
+        },
+        {
+          "Ra": 707.6504994227174,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "relative_error": 0.015081467681155036
+        },
+        {
+          "Ra": 706.8684714199632,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "relative_error": 0.013959696222714646
+        }
+      ],
+      "issues": [],
+      "reference": {
+        "modal_Ra": 697.1366554836916,
+        "critical_Ra": 697.1366554836916,
+        "critical_ell": 224,
+        "planar_Ra": 696.1666697687201
+      },
+      "windows": [
+        [
+          0.05,
+          0.1
+        ],
+        [
+          0.1,
+          0.15000000000000002
+        ],
+        [
+          0.15000000000000002,
+          0.2
+        ]
+      ],
+      "neutral": {
+        "Ra": 706.8684714199632,
+        "method": "quadratic (three nearest points)",
+        "bracket": [
+          697.1366554836916,
+          738.9648548127132
+        ],
+        "used_Ra": [
+          655.30845615467,
+          697.1366554836916,
+          738.9648548127132
+        ],
+        "window": [
+          0.15000000000000002,
+          0.2
+        ],
+        "relative_error": 0.013959696222714646
+      },
+      "last_window_Ra_shift": -0.7820280027542594
+    },
+    {
+      "parameters": {
+        "eta": 0.99,
+        "ell": 224,
+        "N": 504,
+        "nr": 12,
+        "a": 1,
+        "D": 0.5,
+        "gamma": 1.666666666666667,
+        "Pr": 1,
+        "seed": 1e-06,
+        "cfl": 0.8,
+        "diffusion_step_scale": 8,
+        "orientation": "z",
+        "eigenmode_seed": true,
+        "dtype": "float64"
+      },
+      "runs": [
+        "eta099-n504-r12-fine-f0940.csv",
+        "eta099-n504-r12-fine-f1000.csv",
+        "eta099-n504-r12-fine-f1060.csv"
+      ],
+      "neutral_by_window": [
+        {
+          "Ra": 693.5445337003417,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            655.30845615467,
+            697.1366554836916
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.05,
+            0.1
+          ],
+          "relative_error": -0.005152679542947736
+        },
+        {
+          "Ra": 691.3449539138658,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            655.30845615467,
+            697.1366554836916
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.1,
+            0.15000000000000002
+          ],
+          "relative_error": -0.008307842550335232
+        },
+        {
+          "Ra": 691.5781959674579,
+          "method": "quadratic (three nearest points)",
+          "bracket": [
+            655.30845615467,
+            697.1366554836916
+          ],
+          "used_Ra": [
+            655.30845615467,
+            697.1366554836916,
+            738.9648548127132
+          ],
+          "window": [
+            0.15000000000000002,
+            0.2
+          ],
+          "relative_error": -0.007973271054549702
+        }
+      ],
+      "issues": [],
+      "reference": {
+        "modal_Ra": 697.1366554836916,
+        "critical_Ra": 697.1366554836916,
+        "critical_ell": 224,
+        "planar_Ra": 696.1666697687201
+      },
+      "windows": [
+        [
+          0.05,
+          0.1
+        ],
+        [
+          0.1,
+          0.15000000000000002
+        ],
+        [
+          0.15000000000000002,
+          0.2
+        ]
+      ],
+      "neutral": {
+        "Ra": 691.5781959674579,
+        "method": "quadratic (three nearest points)",
+        "bracket": [
+          655.30845615467,
+          697.1366554836916
+        ],
+        "used_Ra": [
+          655.30845615467,
+          697.1366554836916,
+          738.9648548127132
+        ],
+        "window": [
+          0.15000000000000002,
+          0.2
+        ],
+        "relative_error": -0.007973271054549702
+      },
+      "last_window_Ra_shift": 0.23324205359210737
     },
     {
       "parameters": {
@@ -8132,14 +9459,70 @@
       "max_temperature_drift": 1.011302153131055e-12,
       "max_density_drift": 5.213607323639735e-12,
       "max_mode_amplitude": 9.571991190791713e-18
+    },
+    {
+      "name": "eta099-n336-r8-rest-f1000.csv",
+      "device": "cuda:0",
+      "Ra": 697.1366554836916,
+      "eta": 0.99,
+      "ell": 224,
+      "N": 336,
+      "nr": 8,
+      "a": 1,
+      "D": 0.5,
+      "gamma": 1.666666666666667,
+      "Pr": 1,
+      "chi_mid": 0.02994201677850609,
+      "seed": 0,
+      "cfl": 0.8,
+      "eigenmode_seed": true,
+      "orientation": "z",
+      "diffusion_step_scale": 8,
+      "dtype": "float64",
+      "processes": 1,
+      "end_diffusive_time": 0.2,
+      "cycles": 186,
+      "retries": 0,
+      "seconds": 375.285903464,
+      "balance_residual": 4.587904860028416e-11,
+      "command": [
+        "/home/chengcli/scix/repos/snapy/build/bin/spherical_convection.release",
+        "/home/chengcli/scix/repos/snapy/examples/spherical_convection.yaml",
+        "697.1366554836916",
+        "0.99",
+        "224",
+        "336",
+        "8",
+        "0.2",
+        "0.0",
+        "0.8",
+        "1",
+        ".5",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-rest-f1000.csv",
+        "cuda:0",
+        "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples/eta099-n336-r8-rest-f1000.profile",
+        "z",
+        "8.0",
+        "float64"
+      ],
+      "executable_sha256": "24c75eab259c03d0ad4f04a075067425eab9490ff0fe2284054615aee1c23e92",
+      "library_sha256": "4d6f7aabc02ccc90446449287a18351b63948a91b63c3167043d3cff82e2e5b5",
+      "profile_sha256": "9b56c1fa17b7b6e2dd14658286feaf16c58b3f3ac656846f93cb4b72a3b04040",
+      "process_count": 1,
+      "visible_devices": null,
+      "transport_environment": {
+        "UCX_TLS": null,
+        "COMMUX_GROUP": null,
+        "COMMUX_COALESCE": null
+      },
+      "max_radial_rms": 1.2233570474587027e-12,
+      "max_temperature_drift": 1.1586287484988134e-12,
+      "max_density_drift": 5.339062525422378e-12,
+      "max_mode_amplitude": 6.210813010689582e-17
     }
   ],
   "invalid_runs": [],
-  "incomplete_runs": [
-    "eta090-ell22-n72-r12-neighbor-f1060.csv",
-    "eta098-n336-r12-fine-f1000.csv",
-    "eta099-n336-r8-coarse-f0940.csv"
-  ],
+  "incomplete_runs": [],
   "excluded_runs": [],
   "coverage": {
     "required_ratios": [
@@ -8255,21 +9638,31 @@
           {
             "nr": 8,
             "N": 224
+          },
+          {
+            "nr": 12,
+            "N": 336
           }
         ],
-        "sufficient": false
+        "sufficient": true
       },
       {
         "eta": 0.99,
-        "grids": [],
-        "sufficient": false
+        "grids": [
+          {
+            "nr": 8,
+            "N": 336
+          },
+          {
+            "nr": 12,
+            "N": 504
+          }
+        ],
+        "sufficient": true
       }
     ],
-    "missing_or_unrefined_ratios": [
-      0.98,
-      0.99
-    ],
-    "complete": false
+    "missing_or_unrefined_ratios": [],
+    "complete": true
   },
   "reference_file": "/home/chengcli/scix/repos/snapy/docs/notes/spherical_reference_results.json",
   "input_directory": "/home/chengcli/scix/repos/snapy/docs/notes/spherical_samples",
@@ -8334,10 +9727,10 @@
     "Controls are reported numerically; no universal acceptable error or equilibrium-drift tolerance is assumed.",
     "diffusion_step_scale multiplies the conservative diffusion bound only; the acoustic cap still applies, so scale ratios are not actual timestep ratios."
   ],
-  "total_cycles": 40699,
-  "total_gpu_run_seconds": 6674.599853659999,
+  "total_cycles": 43985,
+  "total_gpu_run_seconds": 12621.831079955002,
   "window_policy": "last three quarters of common group duration",
-  "status": "partial_diagnostic",
+  "status": "coverage_complete",
   "refinement_comparisons": [
     {
       "parameters": {
@@ -8364,6 +9757,9 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 857.7888771228855,
+      "fine_neutral_Ra": 865.9402176449454,
       "same_fit_window": true,
       "neutral_change": 8.151340522059854,
       "absolute_error_decreased": true,
@@ -8395,6 +9791,9 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 791.0726864537578,
+      "fine_neutral_Ra": 797.1023402384819,
       "same_fit_window": true,
       "neutral_change": 6.0296537847241325,
       "absolute_error_decreased": true,
@@ -8426,6 +9825,9 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 746.3962647777428,
+      "fine_neutral_Ra": 753.4610915067503,
       "same_fit_window": true,
       "neutral_change": 7.064826729007564,
       "absolute_error_decreased": true,
@@ -8457,6 +9859,9 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 719.9079638159136,
+      "fine_neutral_Ra": 725.1849868567432,
       "same_fit_window": true,
       "neutral_change": 5.27702304082959,
       "absolute_error_decreased": true,
@@ -8488,10 +9893,47 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 700.974221352773,
+      "fine_neutral_Ra": 704.0927932064062,
       "same_fit_window": true,
       "neutral_change": 3.1185718536331706,
       "absolute_error_decreased": true,
       "assumed_second_order_extrapolation": 706.5876506893127,
+      "extrapolation_note": "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
+    },
+    {
+      "parameters": {
+        "eta": 0.9,
+        "ell": 21,
+        "a": 1,
+        "D": 0.5,
+        "gamma": 1.666666666666667,
+        "Pr": 1,
+        "seed": 1e-06,
+        "cfl": 0.8,
+        "diffusion_step_scale": 8,
+        "orientation": "z",
+        "eigenmode_seed": true,
+        "dtype": "float64"
+      },
+      "coarse_grid": {
+        "nr": 8,
+        "N": 48
+      },
+      "fine_grid": {
+        "nr": 16,
+        "N": 96
+      },
+      "radial_refinement_factor": 2.0,
+      "angular_refinement_factor": 2.0,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 700.974221352773,
+      "fine_neutral_Ra": 708.7101630679573,
+      "same_fit_window": true,
+      "neutral_change": 7.7359417151842536,
+      "absolute_error_decreased": true,
+      "assumed_second_order_extrapolation": 711.288810306352,
       "extrapolation_note": "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
     },
     {
@@ -8519,6 +9961,9 @@
       },
       "radial_refinement_factor": 1.3333333333333333,
       "angular_refinement_factor": 1.3333333333333333,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 704.0927932064062,
+      "fine_neutral_Ra": 708.7101630679573,
       "same_fit_window": true,
       "neutral_change": 4.617369861551083,
       "absolute_error_decreased": true,
@@ -8610,10 +10055,81 @@
       },
       "radial_refinement_factor": 1.5,
       "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 695.4460897580888,
+      "fine_neutral_Ra": 696.5559385561493,
       "same_fit_window": true,
       "neutral_change": 1.1098487980605114,
       "absolute_error_decreased": true,
       "assumed_second_order_extrapolation": 697.4438175945977,
+      "extrapolation_note": "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
+    },
+    {
+      "parameters": {
+        "eta": 0.98,
+        "ell": 111,
+        "a": 1,
+        "D": 0.5,
+        "gamma": 1.666666666666667,
+        "Pr": 1,
+        "seed": 1e-06,
+        "cfl": 0.8,
+        "diffusion_step_scale": 8,
+        "orientation": "z",
+        "eigenmode_seed": true,
+        "dtype": "float64"
+      },
+      "coarse_grid": {
+        "nr": 8,
+        "N": 224
+      },
+      "fine_grid": {
+        "nr": 12,
+        "N": 336
+      },
+      "radial_refinement_factor": 1.5,
+      "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 692.1261242274088,
+      "fine_neutral_Ra": 692.6793132617322,
+      "same_fit_window": true,
+      "neutral_change": 0.5531890343233954,
+      "absolute_error_decreased": true,
+      "assumed_second_order_extrapolation": 693.1218644891909,
+      "extrapolation_note": "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
+    },
+    {
+      "parameters": {
+        "eta": 0.99,
+        "ell": 224,
+        "a": 1,
+        "D": 0.5,
+        "gamma": 1.666666666666667,
+        "Pr": 1,
+        "seed": 1e-06,
+        "cfl": 0.8,
+        "diffusion_step_scale": 8,
+        "orientation": "z",
+        "eigenmode_seed": true,
+        "dtype": "float64"
+      },
+      "coarse_grid": {
+        "nr": 8,
+        "N": 336
+      },
+      "fine_grid": {
+        "nr": 12,
+        "N": 504
+      },
+      "radial_refinement_factor": 1.5,
+      "angular_refinement_factor": 1.5,
+      "refined_direction": "both",
+      "coarse_neutral_Ra": 706.8684714199632,
+      "fine_neutral_Ra": 691.5781959674579,
+      "same_fit_window": true,
+      "neutral_change": -15.290275452505284,
+      "absolute_error_decreased": true,
+      "assumed_second_order_extrapolation": 679.3459756054536,
       "extrapolation_note": "Assumes second-order error under simultaneous radial/angular refinement; not a measured order or rigorous bound."
     }
   ]
