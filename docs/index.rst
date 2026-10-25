@@ -23,6 +23,7 @@ Features
    user_guide/index
    api/index
    examples
+   notes/cubed_sphere_diffusion_convection
 
 Indices and tables
 ==================

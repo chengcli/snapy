@@ -175,6 +175,16 @@ TEST(diffusion_options, reject_conduction_without_reference_specific_heat) {
   EXPECT_ANY_THROW(std::make_shared<MeshBlockImpl>(options));
 }
 
+TEST(diffusion_options, cartesian_temperature_requires_reflecting_x1) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  options->hydro()->diffusion()->temperature_inner(300.);
+  EXPECT_NO_THROW(std::make_shared<MeshBlockImpl>(options));
+  options->bcnames()[BoundaryFace::kInnerX1] = "reflecting_custom";
+  EXPECT_THROW(std::make_shared<MeshBlockImpl>(options), c10::Error);
+  make_x1_periodic(options);
+  EXPECT_THROW(std::make_shared<MeshBlockImpl>(options), c10::Error);
+}
+
 TEST_P(DeviceTest, uniform_state_has_zero_tendency) {
   auto block = make_block();
   block->to(device, dtype);
@@ -187,6 +197,39 @@ TEST_P(DeviceTest, uniform_state_has_zero_tendency) {
 
   block->phydro->pdiffusion->forward(du, w, temp, 0.1);
   EXPECT_TRUE(torch::allclose(du, torch::zeros_like(du), 1.e-6, 1.e-6));
+}
+
+TEST_P(DeviceTest, cartesian_fixed_temperature_preserves_linear_conduction) {
+  auto options = MeshBlockOptionsImpl::from_yaml("test_diffusion.yaml");
+  options->hydro()
+      ->diffusion()
+      ->dynamic(true)
+      .nu_iso(0.)
+      .kappa_iso(2.)
+      .temperature_inner(300.)
+      .temperature_outer(360.);
+  auto block = std::make_shared<MeshBlockImpl>(options);
+  block->to(device, dtype);
+  auto w = make_primitive(block, device, dtype);
+  auto c = block->pcoord;
+  auto temperature = 300. + 10. * c->x1v.to(device, dtype).view({1, 1, -1});
+  double gas = block->phydro->peos->species_cv_ref() *
+               (block->phydro->peos->options->gammad() - 1.);
+  w[IPR].copy_(w[IDN] * gas * temperature);
+  fill_reflecting_x1(w, c->options->nghost());
+  temperature = block->phydro->peos->compute("W->T", {w});
+  auto du = block->phydro->pdiffusion->forward(torch::zeros_like(w), w,
+                                               temperature, 1.);
+  auto sl = block->part({0, 0, 0}, PartOptions().exterior(false));
+  EXPECT_LT(du.index(sl).abs().max().item<double>(),
+            dtype == torch::kFloat64 ? 1.e-9 : 1.e-3);
+  // Raising only the lower wall injects K * deltaT / (dz/2) into the layer.
+  block->phydro->pdiffusion->options->temperature_inner(305.);
+  du = block->phydro->pdiffusion->forward(torch::zeros_like(w), w, temperature,
+                                          1.);
+  auto spatial = block->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  auto heat = (du[IPR] * c->cell_volume()).index(spatial).sum().item<double>();
+  EXPECT_NEAR(heat, 20., dtype == torch::kFloat64 ? 1.e-9 : 1.e-3);
 }
 
 TEST_P(DeviceTest, transverse_velocity_uses_viscous_laplacian) {

@@ -202,6 +202,12 @@ struct DiffusionOptionsImpl {
   ADD_ARG(double, kappa_iso) = 0.;
   //! nu_iso/kappa_iso as dynamic coefficients: flux = -mu*stress, -k*grad T
   ADD_ARG(bool, dynamic) = false;
+  //! Prescribed x1 wall temperatures in kelvin; zero retains default heat BC.
+  ADD_ARG(double, temperature_inner) = 0.;
+  ADD_ARG(double, temperature_outer) = 0.;
+  ADD_ARG(std::string, wall_velocity) = "stress-free";
+  //! Strang-split, second-order L-stable radial heat solve (dry ideal gas).
+  ADD_ARG(bool, implicit_radial) = false;
   //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
   //! cell centre of the block (ghosts included), set before it is built;
   //! refused when x1 is split into several blocks (give a table instead)
@@ -230,8 +236,15 @@ class DiffusionImpl : public torch::nn::Cloneable<DiffusionImpl> {
   torch::Tensor forward(torch::Tensor du, torch::Tensor w, torch::Tensor temp,
                         double dt);
   double max_time_step(torch::Tensor w) const;
+  void radial_conduction_step(torch::Tensor u, double dt);
+  void begin_step(torch::Tensor u, double dt);
+  void finish_step(torch::Tensor u, double dt);
+  void restore_step(torch::Tensor u) const;
 
  private:
+  torch::Tensor forward_cubed_sphere(torch::Tensor du, torch::Tensor w,
+                                     torch::Tensor temp, double dt);
+  torch::Tensor split_initial_;
   //! refuses a profile changed since reset; every entry point that reads the
   //! cached profiles (forward, max_time_step) calls it first
   void check_profiles() const;
