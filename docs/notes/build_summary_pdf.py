@@ -32,6 +32,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+from study_archive import read_data
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "cubed_sphere_diffusion_convection_summary.pdf"
@@ -53,9 +54,9 @@ def main():
             "planar_onset_results.json",
         )
     ]
-    reference = json.loads(paths[2].read_text())
-    results = json.loads(paths[3].read_text())
-    controls = json.loads(paths[4].read_text())
+    reference = json.loads(read_data(paths[2]))
+    results = json.loads(read_data(paths[3]))
+    controls = json.loads(read_data(paths[4]))
     if (
         results["status"] != "coverage_complete"
         or controls["status"] != "control_coverage_complete"
@@ -696,6 +697,7 @@ def main():
     p("Reproduce the summary and verify the archived study", "Sub")
     p(
         "python docs/notes/build_summary_pdf.py<br/>"
+        "python docs/notes/study_archive.py extract<br/>"
         "OPENBLAS_NUM_THREADS=1 python docs/notes/analyze_spherical_onset.py<br/>"
         "&nbsp;&nbsp;--baseline-step-scale 8<br/>"
         "OPENBLAS_NUM_THREADS=1 python -m unittest discover -s docs/notes<br/>"
@@ -703,8 +705,9 @@ def main():
         "CodeCustom",
     )
     p(
-        "Wrapped command lines above continue onto the indented line. Raw samples, JSON results, "
-        "figures, and full run commands are retained under docs/notes. Early "
+        "Wrapped command lines continue onto the indented line. Raw samples and JSON are in "
+        "docs/notes/cubed_sphere_study_data.tar.gz; extract before analysis. Figures and full run "
+        "commands remain under docs/notes. Early "
         "samples have incomplete "
         "binary-hash provenance; the final large grids and directional controls share the recorded "
         "final executable and library. Distributed ranks must use matching libraries because the "
@@ -754,7 +757,7 @@ def main():
         "pdf": OUTPUT.name,
         "study_date": "2026-10-25",
         "input_sha256": {
-            str(p.relative_to(HERE)): hashlib.sha256(p.read_bytes()).hexdigest()
+            str(p.relative_to(HERE)): hashlib.sha256(read_data(p)).hexdigest()
             for p in dict.fromkeys(paths)
         },
         "pdf_sha256": hashlib.sha256(OUTPUT.read_bytes()).hexdigest(),

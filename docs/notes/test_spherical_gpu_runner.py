@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import call, patch
 
 import run_spherical_gpu as runner
+from study_archive import read_data
 
 REFERENCE = {"cases": [{"eta": 0.5, "ell": 3, "Ra": 850.0}]}
 
@@ -67,7 +68,7 @@ class PlanningTests(unittest.TestCase):
         self.assertTrue({r["name"] for r in default}.isdisjoint(r["name"] for r in explicit))
 
     def test_real_same_degree_neutral_reference(self):
-        reference = json.loads((runner.HERE / "spherical_reference_results.json").read_text())
+        reference = json.loads(read_data(runner.HERE / "spherical_reference_results.json"))
         args = runner.parse_args(["--etas", ".5", "--ell", "4", "--factors", ".94,1,1.06"])
         expected = runner.neutral(48, .5, 4)
         runs = runner.plan_runs(args, reference)

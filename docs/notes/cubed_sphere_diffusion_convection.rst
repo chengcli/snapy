@@ -4,6 +4,16 @@ Diffusion, heat conduction, and convection onset on Snapy's cubed sphere
 Scope and principal conclusions
 -------------------------------
 
+The numerical data and run records are packaged in
+``cubed_sphere_study_data.tar.gz``. Before executing sample-based analysis or
+batch commands below, restore their original paths from the repository root::
+
+   python docs/notes/study_archive.py extract
+
+See ``docs/notes/README.rst`` for checksum verification and extraction to a
+separate directory. The PDF, figures, generated RST tables, and scripts remain
+directly accessible.
+
 This note derives the physical operators, a thin-shell stability benchmark,
 and a numerical design for Snapy. The code audit refers to commit
 ``a09cc25`` (2026-10-25). The recommended starting point is second-order,
