@@ -350,8 +350,8 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     // is applied but not marked (kPositivityRoundoffUlp): kinetics leaves
     // ~1e-304 in a cloud-free cell that no smaller dt removes (#256)
     if (mark) {
-      auto rho = dry_total(cons).unsqueeze(0).index(interior)[0] +
-                 species().sum(0);
+      auto rho =
+          dry_total(cons).unsqueeze(0).index(interior)[0] + species().sum(0);
       auto tol = positivity_roundoff(cons.scalar_type()) * rho.abs();
       push_mark_(0, ((species() - species_before).abs() > tol).any());
     }
