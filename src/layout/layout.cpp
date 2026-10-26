@@ -455,6 +455,13 @@ void LayoutImpl::_copy_local_exchange_buffers(
 
           auto& send_bufs = layout->owner()->send_bufs;
           auto& peer_recv_bufs = peer->owner()->recv_bufs;
+          // a block that packed different variables than its peer would make
+          // the copy below read past the peer's buffers
+          TORCH_CHECK(peer_recv_bufs[peer_bid].size() == send_bufs[bid].size(),
+                      "local exchange: block ", rank, " sends ",
+                      send_bufs[bid].size(), " variables to block ", nb,
+                      ", which expects ", peer_recv_bufs[peer_bid].size(),
+                      "; every block must exchange the same variables");
           for (int n = 0; n < send_bufs[bid].size(); ++n) {
             TORCH_CHECK(peer_recv_bufs[peer_bid][n].numel() ==
                             send_bufs[bid][n].numel(),

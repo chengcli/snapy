@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <string>
+#include <thread>
 
 #include "cuda_test_gate.hpp"
 
@@ -145,6 +146,28 @@ PanelFields run(int nb, torch::Device device = torch::kCPU) {
   return out;
 }
 
+// Six panels in one process, initialized at rest.
+Mesh initialized_mesh(MeshVariables &vars) {
+  auto block_opts = MeshBlockOptionsImpl::from_yaml(write_card(1));
+  auto mesh_opts = MeshOptionsImpl::create();
+  mesh_opts->block(block_opts);
+  mesh_opts->blocks_per_process(6);
+  auto mesh = Mesh(mesh_opts);
+  vars.assign(mesh->blocks.size(), Variables());
+  for (size_t i = 0; i < mesh->blocks.size(); ++i) {
+    auto coord = mesh->blocks[i]->pcoord;
+    int nvar = mesh->blocks[i]->phydro->peos->nvar();
+    auto w = torch::zeros({nvar, coord->options->nc3(), coord->options->nc2(),
+                           coord->options->nc1()},
+                          torch::kFloat64);
+    w[IDN].fill_(1.);
+    w[IPR].fill_(1.e5);
+    vars[i]["hydro_w"] = w;
+  }
+  mesh->initialize(vars);
+  return mesh;
+}
+
 }  // namespace
 
 // Variable n of a remote exchange adds n * 65536 to the tag, so phyid 64 would
@@ -175,6 +198,51 @@ TEST(CubedSphere, subdivided_panel_exchange_matches_one_block) {
     } catch (std::exception const &e) {
       ADD_FAILURE() << "nb2=" << nb << " " << e.what();
     }
+  }
+}
+
+// A block that exchanges different variables than its neighbors used to make
+// the same-process copy read past the neighbor's buffers (segfault). Through
+// the Mesh it is refused up front, naming the block and the variable.
+TEST(CubedSphere, mesh_exchange_refuses_a_block_missing_a_variable) {
+  MeshVariables vars;
+  auto mesh = initialized_mesh(vars);
+  vars[3].erase("hydro_w");
+  try {
+    mesh->exchange_ghost_zones(vars);
+    FAIL() << "exchange with a block missing hydro_w did not throw";
+  } catch (c10::Error const &e) {
+    EXPECT_NE(std::string(e.what()).find(
+                  "block 3 has no variable 'hydro_w' (block 0 has it)"),
+              std::string::npos)
+        << e.what();
+  }
+}
+
+// The blocks exchanging on their own (as Mesh::forward runs them) meet the
+// guard in the copy itself: every block gets the error, none crashes or waits.
+TEST(CubedSphere, block_exchange_refuses_mismatched_variables) {
+  MeshVariables vars;
+  auto mesh = initialized_mesh(vars);
+  vars[3].erase("hydro_w");
+  SyncOptions opts;
+  opts.interpolate(true).type(kConserved);
+  std::vector<std::string> errors(mesh->blocks.size());
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < mesh->blocks.size(); ++i) {
+    threads.emplace_back([&, i]() {
+      try {
+        mesh->blocks[i]->exchange(vars[i], opts);
+      } catch (c10::Error const &e) {
+        errors[i] = e.what();
+      }
+    });
+  }
+  for (auto &t : threads) t.join();
+  for (size_t i = 0; i < errors.size(); ++i) {
+    EXPECT_NE(errors[i].find("every block must exchange the same variables"),
+              std::string::npos)
+        << "block " << i << ": " << errors[i];
   }
 }
 
