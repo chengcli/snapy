@@ -28,15 +28,15 @@ TEST(fp32_storage, parse_and_resolve_rows) {
   EXPECT_TRUE(parse_fp32_storage_rows("").empty());
 
   int64_t nvar = ICY + 3;
-  auto rows = resolve_fp32_storage_rows(parse_fp32_storage_rows("IPR, idn"),
-                                        nvar);
+  auto rows =
+      resolve_fp32_storage_rows(parse_fp32_storage_rows("IPR, idn"), nvar);
   EXPECT_EQ(rows, (std::vector<int64_t>{IDN, IPR}));
 
   rows = resolve_fp32_storage_rows(parse_fp32_storage_rows("ICY"), nvar);
   EXPECT_EQ(rows, (std::vector<int64_t>{ICY, ICY + 1, ICY + 2}));
 
-  rows = resolve_fp32_storage_rows(parse_fp32_storage_rows("ICY+1,IPR,IPR"),
-                                   nvar);
+  rows =
+      resolve_fp32_storage_rows(parse_fp32_storage_rows("ICY+1,IPR,IPR"), nvar);
   EXPECT_EQ(rows, (std::vector<int64_t>{IPR, ICY + 1}));
 
   rows = resolve_fp32_storage_rows(parse_fp32_storage_rows("1,2"), nvar);

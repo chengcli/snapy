@@ -388,6 +388,9 @@ def main():
     p.add_argument("--child", default=None)
     args = p.parse_args()
     torch.set_default_dtype(torch.float64)
+    # a restart loads onto the layout's device, which snapy reads from DEVICE
+    # (default cpu): keep it in step with --device, for the children too
+    os.environ.setdefault("DEVICE", args.device)
     if args.child:
         return child(args.child, args.device)
 

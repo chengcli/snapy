@@ -17,7 +17,6 @@
 
 namespace py = pybind11;
 
-
 namespace {
 // Anomaly storage (fp32 roadmap Step 1): "U->W"/"W->U" mean totals, "U'->W"/
 // "W->U'" the stored anomalies. A full-block tensor passed with an old key
