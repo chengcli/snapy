@@ -12,6 +12,10 @@ rewrite, so a run with it on must match the run with it off to round-off. The ar
   keys        "U->W" on the full stored hydro_u raises; "U'->W" reproduces hydro_w;
               total_u / stored_u round-trip
   switch      SNAP_ANOMALY=1 turns it on without the YAML key; an unsupported EOS refuses it
+  restart     write a restart mid-run, resume from it: the continuation is bit-identical to the
+              uninterrupted run (hydro_u_stored), and the file holds totals plus hydro_ref
+  limiter     a cell pushed below the density and energy floors is clipped in anomaly space to
+              the same totals as the totals path clips it; every other cell is untouched
   fp32        SNAP_FP32_STORAGE=step leaves hydro_u representable in float32 after a step;
               SNAP_FP32_STORAGE_ROWS=IPR rounds that row only
 
@@ -31,13 +35,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 YAML = os.path.join(HERE, "test_anomaly_storage.yaml")
 
 
-def make_block(device, anomaly=None, eos_type=None):
+def make_block(device, anomaly=None, eos_type=None, outputs=None):
     from snapy import MeshBlock, MeshBlockOptions
 
     with open(YAML) as f:
         cfg = yaml.safe_load(f)
     if anomaly is not None:
         cfg["dynamics"]["anomaly"] = anomaly
+    if outputs is not None:
+        cfg["outputs"] = outputs
     if eos_type is not None:
         cfg["dynamics"]["equation-of-state"] = {"type": eos_type}
         for k in ("species", "reactions"):
@@ -220,6 +226,122 @@ def arm_switch(device):
     return failures
 
 
+def arm_restart(device):
+    """Resume from a restart mid-run; compare with the uninterrupted run, both arms."""
+    import glob
+    import snapy
+
+    failures = []
+    cwd = os.getcwd()
+    for anomaly in (False, True):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                outputs = [{"type": "restart", "dt": 1.0e9}]
+                ref = make_block(device, anomaly=anomaly, outputs=outputs)
+                bv, _ = ref.initialize(initial_state(ref))
+                t0 = sum(run_steps(ref, bv, 3))
+                ref.make_outputs(bv, t0, True)
+                files = glob.glob(os.path.join(tmp, "*.final.restart"))
+                if len(files) != 1:
+                    failures.append("restart (anomaly=%s): expected one file, got %s"
+                                    % (anomaly, files))
+                    continue
+                dts = run_steps(ref, bv, 3)
+
+                data = snapy.load_restart(files[0], 0)
+                if anomaly:
+                    missing = [k for k in ("hydro_ref", "hydro_u_stored") if k not in data]
+                    if missing:
+                        failures.append("anomaly restart file lacks %s" % missing)
+
+                cont = make_block(device, anomaly=anomaly, outputs=outputs)
+                cv, t1 = cont.initialize_from_restart(files[0])
+                if cont.anomaly() != anomaly:
+                    failures.append("restart: anomaly() is %s after resume" % cont.anomaly())
+                for h in dts:
+                    run_steps(cont, cv, 1, dt=h)
+                same_u = torch.equal(cv["hydro_u"], bv["hydro_u"])
+                du = rel(cont.total_u(cv), ref.total_u(bv))
+                if anomaly:
+                    rr = dict(ref.named_buffers())["hydro.ref.u0"]
+                    rc = dict(cont.named_buffers())["hydro.ref.u0"]
+                    if not torch.equal(rr, rc):
+                        failures.append("restart: hydro.ref.u0 changed across the resume")
+                    # totals in the file, the stored anomaly kept bit for bit
+                    tot = data["hydro_u"].to(rr.device)
+                    sto = data["hydro_u_stored"].to(rr.device)
+                    back = ref.stored_u(tot)
+                    print("restart    anomaly file: totals - stored differ by the ref "
+                          "(|stored_u(totals) - stored| = %.1e)"
+                          % (back - sto).abs().max().item())
+                print("restart    anomaly=%-5s resumed run bit-identical: %s (rel %.1e)"
+                      % (anomaly, same_u, du))
+                if not same_u:
+                    failures.append("restart (anomaly=%s): resumed run differs from the "
+                                    "uninterrupted one (rel %.3e)" % (anomaly, du))
+            finally:
+                os.chdir(cwd)
+    return failures
+
+
+def arm_limiter(device):
+    """Push one interior cell below the density and energy floors; the anomaly-space
+    limiter must give the totals the totals-space limiter gives, and leave the rest alone."""
+    from snapy import kIDN, kIPR
+
+    failures = []
+    out = {}
+    out_ref = None
+    for anomaly in (False, True):
+        block = make_block(device, anomaly=anomaly)
+        bv, _ = block.initialize(initial_state(block))
+        run_steps(block, bv, 2)
+        eos, _ = modules(block)
+        tot = block.total_u(bv)
+        k, j, i = tot.size(1) // 2, tot.size(2) // 2, tot.size(3) // 2
+        bad = tot.clone()
+        bad[kIDN, k, j, i] = -1.0e-3   # below the density floor
+        bad[kIPR, k, j, i + 1] = 0.0   # below the temperature floor's energy
+        stored = block.stored_u(bad)
+        before = stored.clone()
+        if anomaly:
+            eos.compute("U'->W", [stored])  # limits the stored state in place
+            got = block.total_u(stored)
+        else:
+            eos.compute("U->W", [stored])
+            got = stored
+        mask = torch.zeros_like(got[0], dtype=torch.bool)
+        mask[k, j, i] = mask[k, j, i + 1] = True
+        untouched = torch.equal(stored[:, ~mask], before[:, ~mask])
+        out[anomaly] = (got, untouched, (k, j, i))
+        if anomaly:
+            out_ref = block
+        print("limiter    anomaly=%-5s floored rho_d=%.3e, E=%.6e; other cells untouched: %s"
+              % (anomaly, got[kIDN, k, j, i].item(), got[kIPR, k, j, i + 1].item(),
+                 untouched))
+        if not untouched:
+            failures.append("limiter (anomaly=%s) changed cells it should not touch" % anomaly)
+    g0, _, (k, j, i) = out[False]
+    g1, _, _ = out[True]
+    # In anomaly space the floor is reached as (floor - ref) + ref: exact to an ulp of the
+    # reference, not of the floor (1e-10 vs a reference of order 1). Compare on that scale.
+    rref = dict(out_ref.named_buffers())["hydro.ref.u0"]
+    for row, cell, r in ((kIDN, (k, j, i), 0), (kIPR, (k, j, i + 1), 1)):
+        a, b = g1[(row,) + cell].item(), g0[(row,) + cell].item()
+        scale = rref[r].abs().max().item()
+        print("limiter    row %d: anomaly-space %.17g vs totals %.17g (ulp scale %.1e)"
+              % (row, a, b, 2.2e-16 * scale))
+        if not a > 0.0:
+            failures.append("limiter: row %d floored to a non-positive total %g" % (row, a))
+        if abs(a - b) > 4 * 2.2e-16 * scale:
+            failures.append("limiter: row %d floored to %.17g in anomaly space, %.17g in "
+                            "totals" % (row, a, b))
+        if row == kIDN and not b > 0:
+            failures.append("limiter: the density floor did not act (rho_d = %g)" % b)
+    return failures
+
+
 def arm_fp32(device):
     failures = []
     for rows, expect in (("all", "ALL_ROUNDED"), ("IPR", "IPR_ONLY")):
@@ -274,6 +396,8 @@ def main():
     failures += arm_match(args.device, args.steps)
     failures += arm_keys(args.device)
     failures += arm_switch(args.device)
+    failures += arm_restart(args.device)
+    failures += arm_limiter(args.device)
     failures += arm_fp32(args.device)
     for f in failures:
         print("FAIL:", f)
