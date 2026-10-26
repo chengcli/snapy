@@ -26,6 +26,9 @@ data/
 # pt file
 *.pt
 
+# pdf file
+*.pdf
+
 # restart file
 *.restart
 
