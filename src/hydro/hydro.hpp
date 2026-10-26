@@ -256,8 +256,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
     if (!has_reference() || t.dim() != 4 || t.size(0) <= IPR) return false;
     auto r = u_ref();
     return (r.size(1) == 1 || t.size(1) == r.size(1)) &&
-           (r.size(2) == 1 || t.size(2) == r.size(2)) &&
-           t.size(3) == r.size(3);
+           (r.size(2) == 1 || t.size(2) == r.size(2)) && t.size(3) == r.size(3);
   }
   //! rows {IDN, IPR} of the reference expanded to the block shape of `u`
   //! (nvar, n3, n2, n1), in u's dtype; checks that `u` is a full block

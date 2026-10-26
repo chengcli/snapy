@@ -718,9 +718,9 @@ void HydroImpl::set_reference(torch::Tensor const& u_full) {
   TORCH_CHECK(u_full.dim() == 4 && u_full.size(0) > IPR,
               "Hydro::set_reference: expected (nvar, n3, n2, n1), got ",
               u_full.sizes());
-  auto idx = torch::tensor({static_cast<int64_t>(IDN),
-                            static_cast<int64_t>(IPR)},
-                           torch::dtype(torch::kLong).device(u_full.device()));
+  auto idx =
+      torch::tensor({static_cast<int64_t>(IDN), static_cast<int64_t>(IPR)},
+                    torch::dtype(torch::kLong).device(u_full.device()));
   auto r = u_full.index_select(0, idx).to(torch::kFloat64);
   // a horizontally uniform reference is kept as one broadcast column; the
   // test is bit equality, so a column is used only when it changes nothing
@@ -739,6 +739,9 @@ torch::Tensor HydroImpl::u_ref_like(torch::Tensor const& u) const {
               "Hydro: the anomaly reference ", r.sizes(),
               " needs a full-block state (nvar, n3, n2, n1), got ", u.sizes(),
               "; a sub-array cannot be converted with the anomaly keys");
+  // Step 1 runs in fp64, so casting to u's dtype is exact. Once hydro_u is
+  // stored in float32 (Step 2), u' + ref must be formed in fp64 instead, or
+  // the totals lose what the anomaly kept.
   return r.to(u.dtype()).expand({2, u.size(1), u.size(2), u.size(3)});
 }
 
