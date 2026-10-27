@@ -31,6 +31,18 @@ setup_test(test_flux_positivity_carry)
 set_tests_properties(test_flux_positivity_carry.${buildl}
                      PROPERTIES ENVIRONMENT "SNAP_FLUX_COVARIANCE=0")
 setup_test(test_yaml_keys)
+
+# Reads the example decks from the source tree; it needs no build and no snapy import.
+add_test(
+  NAME test_example_species_composition
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_example_species_composition.py
+)
+set_tests_properties(test_example_species_composition PROPERTIES
+  TIMEOUT 60
+  LABELS "examples;species"
+)
+
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
