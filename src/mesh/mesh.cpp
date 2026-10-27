@@ -42,6 +42,25 @@ MeshBlockOptions clone_block_options(MeshBlockOptions const& src) {
   return dst;
 }
 
+//! Every block of a Mesh exchanges the same variables; a missing or extra
+//! one would leave the same-process copy reading past a block's buffers.
+void check_same_variables(MeshVariables const& vars, char const* caller) {
+  for (size_t i = 1; i < vars.size(); ++i) {
+    for (auto const& [name, _] : vars[0]) {
+      TORCH_CHECK(vars[i].count(name), caller, ": block ", i,
+                  " has no variable '", name,
+                  "' (block 0 has it); every block must pass the same "
+                  "variables");
+    }
+    for (auto const& [name, _] : vars[i]) {
+      TORCH_CHECK(vars[0].count(name), caller, ": block ", i, " has variable '",
+                  name,
+                  "' that block 0 does not; every block must pass the same "
+                  "variables");
+    }
+  }
+}
+
 }  // namespace
 
 class MeshImpl::BlockWorkerPool {
@@ -383,6 +402,7 @@ void MeshImpl::exchange(MeshVariables& vars, SyncOptions const& opts) {
     return;
   }
 
+  check_same_variables(vars, "Mesh::exchange");
   run_block_jobs([&](size_t i) { blocks[i]->exchange(vars[i], opts); });
 }
 
