@@ -3,8 +3,9 @@
 
 yaml-cpp 0.8.0 declares EncodeUTF16SurrogatePair as std::pair<uint16_t, uint16_t> and
 uses uint32_t beneath it, but src/emitterutils.cpp includes only <algorithm>, <iomanip>
-and <sstream>. Up to libstdc++ 14 those pulled <cstdint> in transitively; libstdc++ 15
-no longer does, so the translation unit stops compiling:
+and <sstream> before its own headers. Whether uint16_t is nonetheless declared depends
+on what those headers drag in, and that changed: with libstdc++ 15 the translation unit
+stops compiling, while libstdc++ 13 still builds it.
 
   src/emitterutils.cpp:221:11: error: 'uint16_t' was not declared in this scope
   note: 'uint16_t' is defined in header '<cstdint>'
@@ -16,17 +17,24 @@ include.
 Two checks:
 
   patch    the unified diff is parsed, and the hunks for src/emitterutils.cpp must add
-           an `#include <cstdint>` line. This is the check that fails before the fix.
-  compile  only where the toolchain reproduces the condition. The probe compiles the
-           header set of emitterutils.cpp with its uint16_t declaration and no
-           <cstdint>. If that builds, the standard library still supplies the include
-           transitively, the failure cannot occur here, and the arm says so and stops.
-           If it does not build, the same unit must build once <cstdint> is added.
+           an `#include <cstdint>` line. This arm is compiler independent and is the one
+           that fails before the fix.
+  compile  the real src/emitterutils.cpp, when the yaml-cpp source can be found, built
+           exactly as the build would leave it: the file with every `#include <cstdint>`
+           stripped, plus the include back only if the patch above actually adds it.
+           That unit must compile. It is the real file with its real include graph, so
+           a toolchain whose headers already supply uint16_t is never failed for it.
+           The unstripped-minus-include variant is compiled too and only reported, to
+           say whether this toolchain reproduces the defect at all.
 
-  python test_yamlcpp_cstdint_patch.py [--cxx g++]
+The compile arm needs the yaml-cpp source. It is taken from --yaml-cpp-src, else
+$YAML_CPP_SRC, else <build dir>/_deps/yaml-cpp-src; without any of those it is skipped.
+
+  python test_yamlcpp_cstdint_patch.py [--cxx g++] [--build-dir DIR] [--yaml-cpp-src DIR]
 """
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,20 +45,6 @@ ROOT = Path(__file__).resolve().parent.parent
 PATCH = ROOT / "patches" / "02.yaml-cpp.patch"
 TARGET = "src/emitterutils.cpp"
 INCLUDE = "#include <cstdint>"
-
-# The header set and declaration of yaml-cpp 0.8.0 src/emitterutils.cpp, which is what
-# libstdc++ 15 stopped carrying <cstdint> into.
-PROBE = """#include <algorithm>
-%s
-#include <iomanip>
-#include <sstream>
-std::pair<uint16_t, uint16_t> EncodeUTF16SurrogatePair(int codePoint) {
-  const uint32_t leadOffset = 0xD800 - (0x10000 >> 10);
-  return std::pair<uint16_t, uint16_t>(static_cast<uint16_t>(leadOffset),
-                                       static_cast<uint16_t>(codePoint));
-}
-int main() { return 0; }
-"""
 
 
 def added_lines(patch_text, target):
@@ -66,18 +60,38 @@ def added_lines(patch_text, target):
     return added
 
 
-def compiles(cxx, source):
-    with tempfile.TemporaryDirectory() as d:
-        src = Path(d) / "probe.cpp"
-        src.write_text(source)
-        r = subprocess.run([cxx, "-std=c++11", "-c", str(src), "-o", str(Path(d) / "probe.o")],
-                           capture_output=True, text=True)
-        return r.returncode == 0, r.stderr
+def find_source(args):
+    for candidate in (args.yaml_cpp_src, os.environ.get("YAML_CPP_SRC")):
+        if candidate:
+            return Path(candidate)
+    if args.build_dir:
+        guess = Path(args.build_dir) / "_deps" / "yaml-cpp-src"
+        if guess.is_dir():
+            return guess
+    return None
+
+
+def strip_include(text):
+    return "".join(l for l in text.splitlines(keepends=True)
+                   if l.strip() != INCLUDE)
+
+
+def compile_variant(cxx, source_dir, text, workdir, name):
+    """Compile `text` as if it were source_dir/src/emitterutils.cpp."""
+    unit = workdir / f"{name}.cpp"
+    unit.write_text(text)
+    r = subprocess.run(
+        [cxx, "-std=c++11", f"-I{source_dir / 'include'}", f"-I{source_dir / 'src'}",
+         "-c", str(unit), "-o", str(workdir / f"{name}.o")],
+        capture_output=True, text=True)
+    return r.returncode == 0, r.stderr
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cxx", default=os.environ.get("CXX", "g++"))
+    ap.add_argument("--build-dir")
+    ap.add_argument("--yaml-cpp-src")
     args = ap.parse_args()
 
     failures = []
@@ -85,36 +99,50 @@ def main():
     if not PATCH.exists():
         print(f"FAIL {PATCH.name} is missing")
         return 1
-    added = added_lines(PATCH.read_text(), TARGET)
-    if INCLUDE not in [a.strip() for a in added]:
+    added = [a.strip() for a in added_lines(PATCH.read_text(), TARGET)]
+    patch_adds_include = INCLUDE in added
+    if not patch_adds_include:
         failures.append(
             f"{PATCH.name} does not add '{INCLUDE}' to {TARGET}; "
             f"it adds {added or 'nothing'} there. yaml-cpp 0.8.0 will not compile "
-            f"with libstdc++ 15."
-        )
+            f"with libstdc++ 15.")
         print(f"FAIL {failures[-1]}")
     else:
         print(f"pass patch: {PATCH.name} adds '{INCLUDE}' to {TARGET}")
 
     cxx = shutil.which(args.cxx)
+    source = find_source(args)
     if cxx is None:
         print(f"skip compile: no {args.cxx} on PATH")
+    elif source is None or not (source / TARGET).is_file():
+        print("skip compile: yaml-cpp source not found; pass --yaml-cpp-src, set "
+              "$YAML_CPP_SRC, or give --build-dir of a build that fetched it")
     else:
         version = subprocess.run([cxx, "--version"], capture_output=True, text=True
                                  ).stdout.splitlines()[0]
-        without, err = compiles(cxx, PROBE % "")
-        if without:
-            print(f"skip compile: {version} still supplies <cstdint> transitively, "
-                  f"so the failure cannot be reproduced with this toolchain")
-        else:
-            first = next((l for l in err.splitlines() if "uint16_t" in l), err.splitlines()[0])
-            print(f"pass compile: {version} rejects the unpatched unit -- {first.strip()}")
-            with_include, err2 = compiles(cxx, PROBE % INCLUDE)
-            if not with_include:
-                failures.append(f"the unit still fails with '{INCLUDE}' added: {err2.strip()}")
-                print(f"FAIL {failures[-1]}")
+        pristine = strip_include((source / TARGET).read_text())
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            # what the build will actually see, given the patch as it stands
+            as_built = (INCLUDE + "\n" + pristine) if patch_adds_include else pristine
+            ok, err = compile_variant(cxx, source, as_built, work, "as_built")
+            if ok:
+                print(f"pass compile: {version} builds the real {TARGET} as the patch "
+                      f"leaves it")
             else:
-                print(f"pass compile: the same unit builds once '{INCLUDE}' is added")
+                first = next((l for l in err.splitlines() if "uint16_t" in l),
+                             err.splitlines()[0] if err else "")
+                failures.append(f"{version} cannot build the real {TARGET} as the patch "
+                                f"leaves it -- {first.strip()}")
+                print(f"FAIL {failures[-1]}")
+            # informational only: does this toolchain reproduce the defect?
+            bare, _ = compile_variant(cxx, source, pristine, work, "bare")
+            if bare:
+                print(f"note compile: {version} builds {TARGET} even without "
+                      f"'{INCLUDE}', so the defect does not show on this toolchain")
+            else:
+                print(f"note compile: {version} rejects {TARGET} without "
+                      f"'{INCLUDE}', so the defect reproduces on this toolchain")
 
     if failures:
         print(f"yaml-cpp <cstdint> patch: {len(failures)} problem(s)")

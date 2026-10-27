@@ -49,6 +49,7 @@ add_test(
   COMMAND ${Python3_EXECUTABLE}
           ${CMAKE_CURRENT_SOURCE_DIR}/test_yamlcpp_cstdint_patch.py
           --cxx ${CMAKE_CXX_COMPILER}
+          --yaml-cpp-src ${yaml-cpp_SOURCE_DIR}
 )
 set_tests_properties(test_yamlcpp_cstdint_patch PROPERTIES
   TIMEOUT 120
