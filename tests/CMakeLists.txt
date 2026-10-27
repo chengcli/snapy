@@ -43,6 +43,18 @@ set_tests_properties(test_example_species_composition PROPERTIES
   LABELS "examples;species"
 )
 
+# Reads patches/ from the source tree; the compile arm uses the build's own compiler.
+add_test(
+  NAME test_yamlcpp_cstdint_patch
+  COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/test_yamlcpp_cstdint_patch.py
+          --cxx ${CMAKE_CXX_COMPILER}
+)
+set_tests_properties(test_yamlcpp_cstdint_patch PROPERTIES
+  TIMEOUT 120
+  LABELS "build;patches"
+)
+
 setup_test(test_sedimentation_guards)
 setup_test(test_balance_column)
 setup_test(test_hydro_ref_x1)
