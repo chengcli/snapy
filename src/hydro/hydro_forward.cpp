@@ -837,7 +837,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       vc.v2 = pc->x2f._version();
       vc.v3 = pc->x3f._version();
     }
-    auto cell_mass = (u[IDN] + uy.sum(0)) * vc.val;
+    auto cell_mass = (dry_density(u) + uy.sum(0)) * vc.val;
     auto withheld = ((1. - theta) * drain).index(cells).to(torch::kFloat64);
     auto above =
         withheld > positivity_roundoff(u.scalar_type()) *
