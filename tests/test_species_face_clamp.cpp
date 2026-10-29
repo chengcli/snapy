@@ -20,7 +20,8 @@ namespace {
 //! WENO5 faces along x2 of a one-cell dry slot between two moist cells, the
 //! shape of the TJ16 species trigger; `limiter` switches the EOS limiter
 torch::Tensor slot_faces(bool limiter) {
-  auto options = MeshBlockOptionsImpl::from_yaml("test_species_face_clamp.yaml");
+  auto options =
+      MeshBlockOptionsImpl::from_yaml("test_species_face_clamp.yaml");
   options->hydro()->eos()->limiter() = limiter;
   auto block = std::make_shared<MeshBlockImpl>(options);
   block->to(torch::kCPU, torch::kFloat64);

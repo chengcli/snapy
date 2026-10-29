@@ -21,8 +21,8 @@ namespace {
 
 // bottom to top: a moist layer under one slightly negative cell and two dry
 // ones, the shape of the TJ16 species trigger (-2.5e-11 above moist air)
-std::vector<double> const kColumn = {2.e-3, 1.5e-3, 1.e-3, -2.5e-11,
-                                     1.e-16, 1.e-16};
+std::vector<double> const kColumn = {2.e-3,    1.5e-3, 1.e-3,
+                                     -2.5e-11, 1.e-16, 1.e-16};
 double const kDry = 0.8;  // dry density of every cell
 
 struct Repaired {
@@ -117,8 +117,8 @@ TEST(eos, fix_vapor_marks_on_the_deficit) {
   double mark = positivity_roundoff(torch::kFloat64) * kDry;
   double small = 0.25 * mark;
   auto r = repair(-small);
-  std::printf("deficit %.3g (mark %.3g): cell 2 moved %.6g, marked %d\n",
-              small, mark, r.vapor[2] - kColumn[2], int(r.marked));
+  std::printf("deficit %.3g (mark %.3g): cell 2 moved %.6g, marked %d\n", small,
+              mark, r.vapor[2] - kColumn[2], int(r.marked));
   EXPECT_EQ(r.vapor[3], 0.);
   EXPECT_NEAR(kColumn[2] - r.vapor[2], small,
               4. * std::numeric_limits<double>::epsilon() * kColumn[2]);
