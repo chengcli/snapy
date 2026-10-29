@@ -766,9 +766,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   int nspec = hydro_u.size(0) - ICY;
   bool clip_species = !user_stage_forcings.empty() && nspec > 0 &&
                       phydro->options->eos()->limiter();
-  auto species_base = clip_species
-                          ? fut_hydro_du.narrow(0, ICY, nspec).clone()
-                          : torch::Tensor();
+  auto species_base = clip_species ? fut_hydro_du.narrow(0, ICY, nspec).clone()
+                                   : torch::Tensor();
   if (!user_stage_forcings.empty()) {
     auto inputs = stage_forcing_variables(*this, vars);
     for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
@@ -779,8 +778,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
   if (clip_species) {
     auto du = fut_hydro_du.narrow(0, ICY, nspec);
-    auto floor = torch::minimum(species_base,
-                                -hydro_u.narrow(0, ICY, nspec));
+    auto floor = torch::minimum(species_base, -hydro_u.narrow(0, ICY, nspec));
     // only the binding cells are rewritten (signed zeros stay as they are)
     du.copy_(torch::where(du < floor, floor, du));
   }
