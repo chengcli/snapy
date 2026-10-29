@@ -1,0 +1,66 @@
+# Fixture for tests/test_forcing_species_clip.py. A 3x3x3 box, 343 m layers
+# and 300 km columns: vapor and a nucleation cloud as kintera species, WENO5
+# with shock and scale on in both directions, the EOS limiter on (species flux
+# limiter and repair), the full vertical implicit correction (scheme 9), rk3.
+# Periodic in x2/x3, reflecting walls in x1. The state is set by the test.
+reference-state:
+  Tref: 300.
+  Pref: 1.e5
+
+species:
+  - name: dry
+    composition: {O: 0.42, N: 1.56, Ar: 0.01}
+    cv_R: 2.5
+
+  - name: vapor
+    composition: {H: 2, O: 1}
+    cv_R: 2.5
+    u0_R: 0.
+
+  - name: cloud
+    composition: {H: 2, O: 1}
+    cv_R: 9.0
+    u0_R: -3430.
+
+reactions:
+  - equation: vapor <=> cloud
+    type: nucleation
+    rate-constant: {formula: h2o_ideal}
+
+geometry:
+  type: cartesian
+  bounds: {x1min: 0., x1max: 1029., x2min: 0., x2max: 9.e5, x3min: 0., x3max: 9.e5}
+  cells: {nx1: 3, nx2: 3, nx3: 3, nghost: 3}
+
+dynamics:
+  equation-of-state:
+    type: ideal-moist
+    density-floor: 1.e-10
+    pressure-floor: 1.e-10
+    limiter: true
+  reconstruct:
+    vertical: {type: weno5, scale: true, shock: true}
+    horizontal: {type: weno5, scale: true, shock: true}
+  riemann-solver:
+    type: lmars
+
+boundary-condition:
+  external:
+    x1-inner: reflecting
+    x1-outer: reflecting
+    x2-inner: periodic
+    x2-outer: periodic
+    x3-inner: periodic
+    x3-outer: periodic
+
+integration:
+  type: rk3
+  cfl: 0.9
+  implicit-scheme: 9
+  nlim: -1
+  tlim: 1.e9
+  ncycle_out: 1
+
+forcing:
+  const-gravity:
+    grav1: -9.80616

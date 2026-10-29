@@ -49,8 +49,8 @@ TEST(eos_limiter, accepts_zero_vapor_column) {
   vapor = {0.2, -0.1, 0., 0.};
   EXPECT_EQ(
       fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
-  EXPECT_DOUBLE_EQ(vapor[0], 0.05);
-  EXPECT_DOUBLE_EQ(vapor[1], 0.05);
+  EXPECT_DOUBLE_EQ(vapor[0], 0.1);
+  EXPECT_DOUBLE_EQ(vapor[1], 0.);
   EXPECT_DOUBLE_EQ(vapor[2], 0.);
   EXPECT_DOUBLE_EQ(vapor[3], 0.);
 }
@@ -106,17 +106,18 @@ TEST(eos_limiter, rejects_single_cell_column) {
   EXPECT_EQ(fix_vapor_impl(vapor.data(), major.data(), vol.data(), 1), 1);
 }
 
-// a deficit the cells below can cover is still flattened as before
-TEST(eos_limiter, downward_branch_is_unchanged) {
+// a deficit the cells below can cover is borrowed from them, in proportion
+// to their vapor, whatever the dry density: no longer flattened to one mass
+// fraction
+TEST(eos_limiter, downward_branch_borrows_the_deficit) {
   std::vector<double> major = {1.00, 0.85, 0.72, 0.61};
   std::vector<double> vapor = {0.2, -0.1, 0., 0.};
   double before = column_sum(vapor);
 
   EXPECT_EQ(
       fix_vapor_impl(vapor.data(), major.data(), vol.data(), vapor.size()), 0);
-  double const yfrac = 0.1 / 1.85;
-  EXPECT_DOUBLE_EQ(vapor[0], yfrac * 1.00);
-  EXPECT_DOUBLE_EQ(vapor[1], yfrac * 0.85);
+  EXPECT_DOUBLE_EQ(vapor[0], 0.2 - 0.2 * (0.1 / 0.2));
+  EXPECT_DOUBLE_EQ(vapor[1], 0.);
   EXPECT_NEAR(column_sum(vapor), before, 1.e-14 * std::abs(before));
 }
 

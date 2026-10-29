@@ -63,13 +63,24 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, T const* vol,
       return 0;
     }
 
-    // redistribute concentrations from is (inclusive) to i (exclusive)
-    T yfrac = sum_vapor / sum_major;
+    // borrow only the deficit of (i, is]: its negative cells go to zero and
+    // each positive cell gives up the same fraction of its vapor, D / S. The
+    // old re-mix to one mass fraction moved the donors by up to half their
+    // vapor for a deficit of any size, which no smaller dt removes. Both sums
+    // are volume-weighted, so sum(vapor * vol) is kept, as above (#241).
+    T deficit = 0.;
+    T donors = 0.;
     for (int j = is; j > i; --j) {
-      vapor[j] = yfrac * major[j];
+      T w = vol[j] / vol0;
+      if (vapor[j] < 0.)
+        deficit -= vapor[j] * w;
+      else
+        donors += vapor[j] * w;
     }
-    // printf("yfrac = %e redistributed from %d to %d\n", double(yfrac), i + 1,
-    // is);
+    T share = donors > 0. ? deficit / donors : T(0.);
+    for (int j = is; j > i; --j) {
+      vapor[j] = vapor[j] < 0. ? T(0.) : vapor[j] - vapor[j] * share;
+    }
 
     // continue scan
     is = i;
