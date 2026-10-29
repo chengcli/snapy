@@ -22,12 +22,26 @@ constexpr double kPositivityRoundoffUlp = 4096.;
 //! 1 ulp of the gas mass. The margin of flux_positivity_theta stays 4096 ulp.
 constexpr double kPositivityRoundoffUlpFloat = 64.;
 
+//! A species deficit (a negative conserved density before the EOS species
+//! repair), in ulp of the cell's TOTAL gas density, above which the repair
+//! marks a limiter patch for MeshBlock::check_redo; a smaller one is repaired
+//! without a redo. It defaults to the round-off bound above; its final value
+//! is to be set from the redo logs of the TJ16 species deck.
+constexpr double kSpeciesRepairMarkUlp = kPositivityRoundoffUlp;
+
+//! The same mark in float32, in float32 ulp
+constexpr double kSpeciesRepairMarkUlpFloat = kPositivityRoundoffUlpFloat;
+
 //! machine epsilon of `dtype` (float32 for kFloat, float64 otherwise)
 double machine_epsilon(c10::ScalarType dtype);
 
 //! kPositivityRoundoffUlp (kPositivityRoundoffUlpFloat in float32) times the
 //! machine epsilon of `dtype`
 double positivity_roundoff(c10::ScalarType dtype);
+
+//! kSpeciesRepairMarkUlp (kSpeciesRepairMarkUlpFloat in float32) times the
+//! machine epsilon of `dtype`
+double species_repair_mark(c10::ScalarType dtype);
 
 //! \brief Per-cell positivity limiter factors for donor-form tracer fluxes.
 //!

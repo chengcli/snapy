@@ -19,6 +19,12 @@ double positivity_roundoff(c10::ScalarType dtype) {
   return ulp * machine_epsilon(dtype);
 }
 
+double species_repair_mark(c10::ScalarType dtype) {
+  double ulp = dtype == torch::kFloat ? kSpeciesRepairMarkUlpFloat
+                                      : kSpeciesRepairMarkUlp;
+  return ulp * machine_epsilon(dtype);
+}
+
 torch::Tensor flux_positivity_theta(torch::Tensor const& u,
                                     torch::Tensor const& flux1,
                                     torch::Tensor const& flux2,

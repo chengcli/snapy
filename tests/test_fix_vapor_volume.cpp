@@ -20,15 +20,18 @@ using namespace snap;
 
 namespace {
 
-// the value the unweighted repair writes into each of the three cells: the
-// column sum -d + q + q, accumulated top down in T, over a dry sum of 3
+// the value the unweighted repair leaves in each of the two donor cells: the
+// deficit d over the donors' vapor q + q, accumulated top down in T, taken
+// from each donor in proportion to its own vapor
 template <typename T>
 double unweighted_fill(double q, double d) {
-  T sum = T(0.);
-  sum += T(-d);
-  sum += T(q);
-  sum += T(q);
-  return double(sum / T(3.));
+  T deficit = T(0.);
+  T donors = T(0.);
+  deficit -= T(-d);
+  donors += T(q);
+  donors += T(q);
+  T share = deficit / donors;
+  return double(T(q) - T(q) * share);
 }
 
 }  // namespace
@@ -83,13 +86,14 @@ TEST_P(DeviceTest, fix_vapor_keeps_the_column_mass_on_varying_cell_volume) {
       EXPECT_GE(cons[slot].min().item<double>(), 0.) << label;
       EXPECT_NEAR(rel, 0., tol) << label << ": the repair moved vapor mass";
 
-      if (geometry == "cartesian") {  // uniform column: the old values
+      if (geometry == "cartesian") {  // uniform column: the exact values
         double fill = dtype == torch::kFloat64 ? unweighted_fill<double>(q, d)
                                                : unweighted_fill<float>(q, d);
-        for (int i = il + 1; i <= il + 3; ++i) {
+        for (int i = il + 1; i <= il + 2; ++i) {
           EXPECT_EQ(cons[slot].select(-1, i).item<double>(), fill)
               << label << ", cell " << i - il;
         }
+        EXPECT_EQ(cons[slot].select(-1, il + 3).item<double>(), 0.) << label;
       }
     }
   }

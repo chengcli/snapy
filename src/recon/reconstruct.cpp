@@ -98,6 +98,12 @@ torch::Tensor ReconstructImpl::forward(torch::Tensor w, int dim, bool floor) {
 
   if (options->shock()) {
     _apply_inplace(dim, il, iu, w, pinterp1, result);
+    // the species faces get the floor of the non-shock path below: a WENO
+    // undershoot would otherwise carry vapor up the gradient. clamp_min keeps
+    // -0., so non-negative faces are unchanged bit for bit
+    if (phydro->options->eos()->limiter() && nvar > ICY) {
+      result.narrow(1, ICY, nvar - ICY).clamp_min_(0.);
+    }
     return result;
   }
 

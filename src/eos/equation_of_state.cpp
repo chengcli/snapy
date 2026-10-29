@@ -317,13 +317,14 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
       cons.narrow(0, ICY + nvapor, ncloud).clamp_min_(0.);
     }
     repair_column(cons.index(interior).narrow(0, ICY, nvapor), true);
-    // a repair of round-off size, relative to the cell's total gas density,
-    // is applied but not marked (kPositivityRoundoffUlp): kinetics leaves
-    // ~1e-304 in a cloud-free cell that no smaller dt removes (#256)
+    // mark on the deficit the repair covered, not on how far it moved the
+    // donors: a deficit below kSpeciesRepairMarkUlp of the cell's total gas
+    // density is repaired without a redo; kinetics leaves ~1e-304 in a
+    // cloud-free cell that no smaller dt removes (#256)
     if (mark) {
-      auto rho = cons.index(interior)[IDN] + species().sum(0);
-      auto tol = positivity_roundoff(cons.scalar_type()) * rho.abs();
-      push_mark_(0, ((species() - species_before).abs() > tol).any());
+      auto rho = cons.index(interior)[IDN] + species_before.sum(0);
+      auto tol = species_repair_mark(cons.scalar_type()) * rho.abs();
+      push_mark_(0, (species_before < -tol).any());
     }
   }
 }
