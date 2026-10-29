@@ -90,8 +90,14 @@ TEST_P(DeviceTest, fix_vapor_keeps_the_column_mass_on_varying_cell_volume) {
         double fill = dtype == torch::kFloat64 ? unweighted_fill<double>(q, d)
                                                : unweighted_fill<float>(q, d);
         for (int i = il + 1; i <= il + 2; ++i) {
-          EXPECT_EQ(cons[slot].select(-1, i).item<double>(), fill)
-              << label << ", cell " << i - il;
+          // within 4 ulp: a device sums in its own order
+          double got = cons[slot].select(-1, i).item<double>();
+          if (dtype == torch::kFloat64) {
+            EXPECT_DOUBLE_EQ(got, fill) << label << ", cell " << i - il;
+          } else {
+            EXPECT_FLOAT_EQ(float(got), float(fill))
+                << label << ", cell " << i - il;
+          }
         }
         EXPECT_EQ(cons[slot].select(-1, il + 3).item<double>(), 0.) << label;
       }
