@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <set>
 #include <sstream>
 
 // base
@@ -50,7 +51,7 @@ std::string default_backend() {
 }
 
 struct LocalExchangeKey {
-  int process_rank;
+  int local_group;
   int blocks_per_process;
   int dim;
   int phyid;
@@ -63,10 +64,10 @@ struct LocalExchangeKey {
   std::string device;
 
   bool operator<(LocalExchangeKey const& other) const {
-    return std::tie(process_rank, blocks_per_process, dim, phyid, type,
+    return std::tie(local_group, blocks_per_process, dim, phyid, type,
                     intra_panel_only, cross_panel_only, skip_corner,
                     interpolate, layout_type, device) <
-           std::tie(other.process_rank, other.blocks_per_process, other.dim,
+           std::tie(other.local_group, other.blocks_per_process, other.dim,
                     other.phyid, other.type, other.intra_panel_only,
                     other.cross_panel_only, other.skip_corner,
                     other.interpolate, other.layout_type, other.device);
@@ -97,13 +98,37 @@ struct RemoteExchangeOp {
   std::tuple<int, int, int> peer_offset;
 };
 
+// Same-process state, keyed by the block group (LayoutOptions::local_group,
+// one per Mesh) and the local block index, never by the process rank alone:
+// two live meshes of one process would otherwise share and clobber it.
 std::mutex g_local_exchange_mutex;
 std::condition_variable g_local_exchange_cv;
 std::map<std::pair<int, int>, LayoutImpl*> g_local_layouts;
 std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
+//! groups whose exchange was aborted by a failed block (abort_local_exchange)
+std::set<int> g_aborted_groups;
 std::mutex g_process_comm_mutex;
 
-//! same-process pieces of one x1 column, posted by its blocks (gather_x1)
+template <typename Map, typename Pred>
+void erase_keys_if(Map& map, Pred pred) {
+  for (auto it = map.begin(); it != map.end();) {
+    it = pred(it->first) ? map.erase(it) : std::next(it);
+  }
+}
+
+// g_local_exchange_mutex held
+bool local_group_aborted(int local_group) {
+  return g_aborted_groups.count(local_group) > 0;
+}
+
+void check_local_group(int local_group) {
+  TORCH_CHECK(!local_group_aborted(local_group),
+              "[Layout] local exchange of block group ", local_group,
+              " aborted: another block of the mesh failed");
+}
+
+//! same-process pieces of one x1 column, posted by its blocks (gather_x1),
+//! keyed by (group, rx, ry)
 struct ColumnBoard {
   int posted = 0;
   int taken = 0;
@@ -113,12 +138,26 @@ struct ColumnBoard {
 std::map<std::tuple<int, int, int>, ColumnBoard> g_column_boards;
 
 //! same-process x1 reference anchors in flight (take_x1_anchor), keyed by
-//! (process, receiving block rank)
+//! (group, receiving block rank)
 std::map<std::pair<int, int>, torch::Tensor> g_x1_anchors;
 
 //! same-process block-to-block messages in flight (post_to_local_block),
-//! keyed by (process, sender block rank, receiver block rank, tag)
+//! keyed by (group, sender block rank, receiver block rank, tag)
 std::map<std::tuple<int, int, int, int>, torch::Tensor> g_local_mail;
+
+// g_local_exchange_mutex held
+void drop_local_group(int local_group) {
+  g_aborted_groups.erase(local_group);
+  auto of_group = [&](auto const& key) {
+    return std::get<0>(key) == local_group;
+  };
+  erase_keys_if(g_local_exchange_states, [&](LocalExchangeKey const& key) {
+    return key.local_group == local_group;
+  });
+  erase_keys_if(g_column_boards, of_group);
+  erase_keys_if(g_x1_anchors, of_group);
+  erase_keys_if(g_local_mail, of_group);
+}
 
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
@@ -131,7 +170,7 @@ std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
                                    nullptr);
 
   for (auto const& [key, local_layout] : g_local_layouts) {
-    if (key.first == layout.options->process_rank()) {
+    if (key.first == layout.options->local_group()) {
       TORCH_CHECK(
           key.second >= 0 && key.second < layout.options->blocks_per_process(),
           "invalid local block index ", key.second,
@@ -142,8 +181,8 @@ std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
 
   for (int i = 0; i < layouts.size(); ++i) {
     TORCH_CHECK(layouts[i] != nullptr,
-                "missing process-local layout registration for process ",
-                layout.options->process_rank(), " local block ", i);
+                "missing process-local layout registration for block group ",
+                layout.options->local_group(), " local block ", i);
   }
 
   return layouts;
@@ -152,7 +191,7 @@ std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
 LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
                                          SyncOptions const& opts) {
   return LocalExchangeKey{
-      layout.options->process_rank(),
+      layout.options->local_group(),
       layout.options->blocks_per_process(),
       opts.dim(),
       opts.phyid(),
@@ -261,7 +300,7 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
 
   if (p != nullptr) {
     std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-    g_local_layouts[{options->process_rank(),
+    g_local_layouts[{options->local_group(),
                      options->local_block_index(options->rank())}] = pl.get();
   }
 
@@ -272,8 +311,38 @@ LayoutImpl::~LayoutImpl() {
   if (options == nullptr || owner() == nullptr) return;
 
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-  g_local_layouts.erase(
-      {options->process_rank(), options->local_block_index(options->rank())});
+  // only this layout's own registration: the slot may since have been taken
+  // by a newer layout of the same group and block index
+  int group = options->local_group();
+  auto it = g_local_layouts.find(
+      {group, options->local_block_index(options->rank())});
+  if (it != g_local_layouts.end() && it->second == this) {
+    g_local_layouts.erase(it);
+  }
+  // the group's last layout: no block of it can be at a barrier any more, so
+  // its barrier states and boards go too (each Mesh has its own group)
+  auto next = g_local_layouts.lower_bound({group, 0});
+  if (next == g_local_layouts.end() || next->first.first != group) {
+    drop_local_group(group);
+  }
+}
+
+void LayoutImpl::abort_local_exchange(int local_group) {
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  g_aborted_groups.insert(local_group);
+  g_local_exchange_cv.notify_all();
+}
+
+void LayoutImpl::reset_local_exchange(int local_group) {
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  drop_local_group(local_group);
+}
+
+size_t LayoutImpl::local_exchange_entries() {
+  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
+  return g_local_layouts.size() + g_local_exchange_states.size() +
+         g_column_boards.size() + g_x1_anchors.size() + g_local_mail.size() +
+         g_aborted_groups.size();
 }
 
 void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
@@ -289,7 +358,9 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
 
   auto key = make_local_exchange_key(*this, opts);
   int expected = options->blocks_per_process();
+  int group = options->local_group();
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
+  check_local_group(group);
   auto& state = g_local_exchange_states[key];
   int generation = state.generation;
 
@@ -312,30 +383,39 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
 
   state.arrived += 1;
   if (state.arrived == expected) {
-    auto layouts = local_layouts_for(*this);
-    lock.unlock();
+    // the last block to arrive copies for all; whatever fails here is handed
+    // to every block of the barrier, so none waits for a copy that never comes
     std::exception_ptr error;
+    std::vector<LayoutImpl*> layouts;
+    try {
+      layouts = local_layouts_for(*this);
+    } catch (...) {
+      error = std::current_exception();
+    }
+    lock.unlock();
 #ifdef USE_CUDA
     auto completion_event = state.completion_event;
 #endif
-    try {
+    if (error == nullptr) {
+      try {
 #ifdef USE_CUDA
-      if (current_stream) {
-        for (auto const& event : state.arrival_events) {
-          TORCH_CHECK(event != nullptr,
-                      "missing CUDA arrival event for local exchange");
-          event->block(*current_stream);
+        if (current_stream) {
+          for (auto const& event : state.arrival_events) {
+            TORCH_CHECK(event != nullptr,
+                        "missing CUDA arrival event for local exchange");
+            event->block(*current_stream);
+          }
         }
-      }
 #endif
-      _copy_local_exchange_buffers(layouts, opts);
+        _copy_local_exchange_buffers(layouts, opts);
 #ifdef USE_CUDA
-      if (current_stream && completion_event) {
-        completion_event->record(*current_stream);
-      }
+        if (current_stream && completion_event) {
+          completion_event->record(*current_stream);
+        }
 #endif
-    } catch (...) {
-      error = std::current_exception();
+      } catch (...) {
+        error = std::current_exception();
+      }
     }
     lock.lock();
     state.error = error;
@@ -343,9 +423,15 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     state.released = expected;
     g_local_exchange_cv.notify_all();
   } else {
-    g_local_exchange_cv.wait(
-        lock, [&]() { return state.ready && state.generation == generation; });
+    g_local_exchange_cv.wait(lock, [&]() {
+      return (state.ready && state.generation == generation) ||
+             local_group_aborted(group);
+    });
   }
+
+  // a block of the mesh failed meanwhile: leave without the release
+  // bookkeeping, the worker pool resets the group once every block stopped
+  check_local_group(group);
 
 #ifdef USE_CUDA
   if (state.error == nullptr && state.completion_event && current_stream) {
@@ -356,22 +442,7 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
   }
 #endif
 
-  if (state.error != nullptr) {
-    auto error = state.error;
-    state.released -= 1;
-    if (state.released == 0) {
-      state.arrived = 0;
-      state.ready = false;
-      state.error = nullptr;
-      state.generation += 1;
-      g_local_exchange_cv.notify_all();
-    } else {
-      g_local_exchange_cv.wait(
-          lock, [&]() { return state.generation != generation; });
-    }
-    std::rethrow_exception(error);
-  }
-
+  auto error = state.error;
   state.released -= 1;
   if (state.released == 0) {
     state.arrived = 0;
@@ -380,8 +451,12 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
     state.generation += 1;
     g_local_exchange_cv.notify_all();
   } else {
-    g_local_exchange_cv.wait(lock,
-                             [&]() { return state.generation != generation; });
+    g_local_exchange_cv.wait(lock, [&]() {
+      return state.generation != generation || local_group_aborted(group);
+    });
+  }
+  if (error != nullptr) {
+    std::rethrow_exception(error);
   }
 }
 
@@ -786,6 +861,7 @@ torch::Tensor LayoutImpl::gather_x1(torch::Tensor const& piece) {
   if (pz <= 1) return piece;
   auto [rx, ry, rz] = loc_of(options->rank());
   int proc = options->process_rank();
+  int group = options->local_group();
   int bpp = std::max(1, options->blocks_per_process());
   int me = options->local_block_index(options->rank());
   std::vector<torch::Tensor> pieces(pz);
@@ -824,14 +900,19 @@ torch::Tensor LayoutImpl::gather_x1(torch::Tensor const& piece) {
   int nlocal = local.size();
   if (nlocal > 1) {
     std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
-    auto& board = g_column_boards[{proc, rx, ry}];
-    g_local_exchange_cv.wait(lock, [&]() { return !board.full; });
+    check_local_group(group);
+    auto& board = g_column_boards[{group, rx, ry}];
+    g_local_exchange_cv.wait(
+        lock, [&]() { return !board.full || local_group_aborted(group); });
+    check_local_group(group);
     board.pieces[rz] = pieces[rz];
     if (++board.posted == nlocal) {
       board.full = true;
       g_local_exchange_cv.notify_all();
     } else {
-      g_local_exchange_cv.wait(lock, [&]() { return board.full; });
+      g_local_exchange_cv.wait(
+          lock, [&]() { return board.full || local_group_aborted(group); });
+      check_local_group(group);
     }
     for (int k : local) pieces[k] = board.pieces.at(k);
   }
@@ -844,7 +925,7 @@ torch::Tensor LayoutImpl::gather_x1(torch::Tensor const& piece) {
 #endif
   if (nlocal > 1) {
     std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-    auto& board = g_column_boards[{proc, rx, ry}];
+    auto& board = g_column_boards[{group, rx, ry}];
     if (++board.taken == nlocal) {
       board = ColumnBoard();
       g_local_exchange_cv.notify_all();
@@ -894,10 +975,13 @@ torch::Tensor LayoutImpl::take_x1_anchor(int above, torch::Tensor const& like,
   // the block above runs on another thread of this process (Mesh advances
   // local blocks together); a caller stepping them one by one must go top
   // down, or this would wait forever
-  std::pair<int, int> key = {options->process_rank(), options->rank()};
+  int group = options->local_group();
+  std::pair<int, int> key = {group, options->rank()};
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   bool posted = g_local_exchange_cv.wait_for(
-      lock, std::chrono::minutes(5), [&]() { return g_x1_anchors.count(key); });
+      lock, std::chrono::minutes(5),
+      [&]() { return g_x1_anchors.count(key) || local_group_aborted(group); });
+  check_local_group(group);
   TORCH_CHECK(posted, "[Layout:take_x1_anchor] block ", options->rank(),
               " waited 5 min for the x1 reference of block ", above,
               " above it in this process; local blocks must run concurrently "
@@ -924,7 +1008,7 @@ void LayoutImpl::pass_x1_anchor(int below, torch::Tensor const& face, int tag) {
   if (posted.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
 #endif
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-  g_x1_anchors[{options->process_rank(), below}] = posted;
+  g_x1_anchors[{options->local_group(), below}] = posted;
   g_local_exchange_cv.notify_all();
 }
 
@@ -937,14 +1021,16 @@ void LayoutImpl::post_to_local_block(int block_rank, torch::Tensor const& t,
   // the receiving block reads this tensor on its own stream
   if (posted.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
 #endif
-  std::tuple<int, int, int, int> key = {options->process_rank(),
-                                        options->rank(), block_rank, tag};
+  int group = options->local_group();
+  std::tuple<int, int, int, int> key = {group, options->rank(), block_rank,
+                                        tag};
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   // one message per (sender, receiver, tag) in flight: wait for the previous
   // one to be taken
-  bool free =
-      g_local_exchange_cv.wait_for(lock, std::chrono::minutes(5),
-                                   [&]() { return !g_local_mail.count(key); });
+  bool free = g_local_exchange_cv.wait_for(
+      lock, std::chrono::minutes(5),
+      [&]() { return !g_local_mail.count(key) || local_group_aborted(group); });
+  check_local_group(group);
   TORCH_CHECK(free, "[Layout:post_to_local_block] block ", options->rank(),
               " waited 5 min for block ", block_rank,
               " to take its previous message, tag ", tag);
@@ -956,11 +1042,14 @@ torch::Tensor LayoutImpl::take_from_local_block(int block_rank, int tag) {
   TORCH_CHECK(is_local_block(block_rank),
               "[Layout:take_from_local_block] block ", block_rank,
               " is not in this process");
-  std::tuple<int, int, int, int> key = {options->process_rank(), block_rank,
-                                        options->rank(), tag};
+  int group = options->local_group();
+  std::tuple<int, int, int, int> key = {group, block_rank, options->rank(),
+                                        tag};
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   bool posted = g_local_exchange_cv.wait_for(
-      lock, std::chrono::minutes(5), [&]() { return g_local_mail.count(key); });
+      lock, std::chrono::minutes(5),
+      [&]() { return g_local_mail.count(key) || local_group_aborted(group); });
+  check_local_group(group);
   TORCH_CHECK(posted, "[Layout:take_from_local_block] block ", options->rank(),
               " waited 5 min for block ", block_rank, ", tag ", tag,
               "; local blocks must run concurrently");
