@@ -757,6 +757,18 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       track_user_dry ? fut_hydro_du[IDN].clone() : torch::Tensor();
   auto user_scalar_before =
       track_user_dry ? fut_scalar_ds.clone() : torch::Tensor();
+  // A user forcing's species increment comes after the flux positivity
+  // limiter and the implicit correction, and nothing else bounds it by what
+  // they left: clip it so that u + du stays >= 0 in every species cell the
+  // forcing would take below zero. The withheld amount is not applied (the
+  // forcing removes less than it asked for there). Where the clip does not
+  // bind, du is unchanged bit for bit.
+  int nspec = hydro_u.size(0) - ICY;
+  bool clip_species = !user_stage_forcings.empty() && nspec > 0 &&
+                      phydro->options->eos()->limiter();
+  auto species_base = clip_species
+                          ? fut_hydro_du.narrow(0, ICY, nspec).clone()
+                          : torch::Tensor();
   if (!user_stage_forcings.empty()) {
     auto inputs = stage_forcing_variables(*this, vars);
     for (size_t i = 0; i < user_stage_forcings.size(); ++i) {
@@ -764,6 +776,13 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       apply_extra_forcing(stage_forcing_result(result, i),
                           "User stage forcing " + std::to_string(i));
     }
+  }
+  if (clip_species) {
+    auto du = fut_hydro_du.narrow(0, ICY, nspec);
+    auto floor = torch::minimum(species_base,
+                                -hydro_u.narrow(0, ICY, nspec));
+    // only the binding cells are rewritten (signed zeros stay as they are)
+    du.copy_(torch::where(du < floor, floor, du));
   }
 
   if (user_dry_before.defined()) {
