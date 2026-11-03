@@ -127,6 +127,23 @@ void HydroImpl::reset() {
     }
   }
 
+  //// ---- (5b) anomaly storage (fp32 roadmap, Step 1) ---- ////
+  if (options->anomaly()) {
+    TORCH_CHECK(options->eos()->type() == "ideal-moist",
+                "dynamics: anomaly is implemented for the ideal-moist "
+                "equation of state only, got '",
+                options->eos()->type(), "'; unset it (or SNAP_ANOMALY)");
+    // curved grids interpolate ghosts (cubed-sphere seams): the reference's
+    // ghosts would not match the interpolated anomaly's, so on/off would no
+    // longer agree to round-off. Step 1 is cartesian only.
+    TORCH_CHECK(!pmb->pcoord || pmb->pcoord->options->type() == "cartesian",
+                "dynamics: anomaly supports cartesian grids only in Step 1, "
+                "got '",
+                pmb->pcoord ? pmb->pcoord->options->type() : std::string(),
+                "'");
+    pref = register_module("ref", Fp64Store());
+  }
+
   //// ---- (6) set up implicit solver ---- ////
   if (options->icorr()) {
     picorr = ImplicitHydroImpl::create(options->icorr(), this);
@@ -695,5 +712,58 @@ void check_eos(torch::Tensor w, int nghost) {
               "Suggestions: 1) Reducting the CFL number; ",
               " 2) Activate EOS limiter and set the pressure floor");
 }*/
+
+void HydroImpl::set_reference(torch::Tensor const& u_full) {
+  TORCH_CHECK(pref, "Hydro::set_reference: anomaly mode is off");
+  TORCH_CHECK(u_full.dim() == 4 && u_full.size(0) > IPR,
+              "Hydro::set_reference: expected (nvar, n3, n2, n1), got ",
+              u_full.sizes());
+  auto idx =
+      torch::tensor({static_cast<int64_t>(IDN), static_cast<int64_t>(IPR)},
+                    torch::dtype(torch::kLong).device(u_full.device()));
+  auto r = u_full.index_select(0, idx).to(torch::kFloat64);
+  // a horizontally uniform reference is kept as one broadcast column; the
+  // test is bit equality, so a column is used only when it changes nothing
+  auto col = r.narrow(1, 0, 1).narrow(2, 0, 1);
+  if (torch::equal(r, col.expand_as(r))) r = col;
+  pref->set("u0", r);
+}
+
+torch::Tensor HydroImpl::u_ref_like(torch::Tensor const& u) const {
+  TORCH_CHECK(has_reference(), "Hydro: no anomaly reference");
+  auto r = u_ref();
+  TORCH_CHECK(u.dim() == 4 && u.size(0) > IPR && u.size(1) >= r.size(1) &&
+                  (r.size(1) == 1 || u.size(1) == r.size(1)) &&
+                  (r.size(2) == 1 || u.size(2) == r.size(2)) &&
+                  u.size(3) == r.size(3),
+              "Hydro: the anomaly reference ", r.sizes(),
+              " needs a full-block state (nvar, n3, n2, n1), got ", u.sizes(),
+              "; a sub-array cannot be converted with the anomaly keys");
+  // Step 1 runs in fp64, so casting to u's dtype is exact. Once hydro_u is
+  // stored in float32 (Step 2), u' + ref must be formed in fp64 instead, or
+  // the totals lose what the anomaly kept.
+  return r.to(u.dtype()).expand({2, u.size(1), u.size(2), u.size(3)});
+}
+
+void HydroImpl::add_reference_(torch::Tensor u) const {
+  if (!has_reference()) return;
+  auto r = u_ref_like(u);
+  u[IDN].add_(r[0]);
+  u[IPR].add_(r[1]);
+}
+
+void HydroImpl::sub_reference_(torch::Tensor u) const {
+  if (!has_reference()) return;
+  auto r = u_ref_like(u);
+  u[IDN].sub_(r[0]);
+  u[IPR].sub_(r[1]);
+}
+
+torch::Tensor HydroImpl::total_u(torch::Tensor const& u) const {
+  if (!has_reference()) return u;
+  auto t = u.clone();
+  add_reference_(t);
+  return t;
+}
 
 }  // namespace snap

@@ -94,6 +94,26 @@ torch::Tensor IdealMoistImpl::compute(std::string ab,
     auto w = args.size() > 1 ? args[1] : torch::empty_like(u);
     _cons2prim(u, w);
     return w;
+  } else if (ab == "W->U'") {
+    // the stored representation: totals, then rows {IDN, IPR} minus the
+    // reference (fp32 roadmap Step 1); totals when there is no reference
+    auto w = args[0];
+    auto u = args.size() > 1 ? args[1] : torch::empty_like(w);
+    _prim2cons(w, u);
+    phydro->sub_reference_(u);
+    return u;
+  } else if (ab == "U'->W") {
+    // limit the stored anomalies in place (anomaly-space floors), then
+    // convert the totals they stand for; `u` itself keeps anomalies
+    auto u = args[0];
+    auto w = args.size() > 1 ? args[1] : torch::empty_like(u);
+    if (!phydro->has_reference()) {
+      _cons2prim(u, w);
+      return w;
+    }
+    apply_conserved_limiter_(u);
+    _cons2prim(phydro->total_u(u), w, /*limit=*/false);
+    return w;
   } else if (ab == "W->I") {
     auto w = args[0];
     return _prim2intEng(w);
@@ -158,11 +178,14 @@ void IdealMoistImpl::_prim2cons(torch::Tensor prim, torch::Tensor& cons) {
   cons[IPR] = _prim2intEng(prim);
   cons[IPR] += ke;
 
-  apply_conserved_limiter_(cons);
+  apply_conserved_limiter_(cons, /*whole_column=*/false, /*totals=*/true);
 }
 
-void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor& prim) {
-  apply_conserved_limiter_(cons);
+void IdealMoistImpl::_cons2prim(torch::Tensor cons, torch::Tensor& prim,
+                                bool limit) {
+  if (limit) {
+    apply_conserved_limiter_(cons, /*whole_column=*/false, /*totals=*/true);
+  }
   auto pcoord = phydro->pmb->pcoord;
 
   int ny = pthermo->options->vapor_ids().size() +
