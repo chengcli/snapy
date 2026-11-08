@@ -9,6 +9,7 @@
 #include <snap/utils/log.hpp>
 
 #include "flux_positivity.hpp"
+#include "gravity_work.hpp"
 #include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 #include "x1_mass_covariance.hpp"
@@ -1066,24 +1067,32 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     int ie = pmb->pcoord->iu() + 1;
     auto area1 = pmb->pcoord->face_area1();
     auto volume = pmb->pcoord->cell_volume();
-    auto phi_face = -grav1 * pmb->pcoord->x1f;
     auto phi_cell = -grav1 * pmb->pcoord->x1v;
-    auto potential_flux1 = vertical_mass_flux1 *
-                           phi_face.narrow(0, 0, vertical_mass_flux1.size(-1));
     auto vertical_mass_div =
         (area1.slice(-1, is + 1, ie + 1) *
              vertical_mass_flux1.slice(-1, is + 1, ie + 1) -
          area1.slice(-1, is, ie) * vertical_mass_flux1.slice(-1, is, ie)) /
         volume.slice(-1, is, ie);
-    auto potential_flux_div =
-        (area1.slice(-1, is + 1, ie + 1) *
-             potential_flux1.slice(-1, is + 1, ie + 1) -
-         area1.slice(-1, is, ie) * potential_flux1.slice(-1, is, ie)) /
-        volume.slice(-1, is, ie);
-
-    auto face_gravity_work =
-        dt *
-        (phi_cell.slice(0, is, ie) * vertical_mass_div - potential_flux_div);
+    torch::Tensor face_gravity_work;
+    if (pmb->pcoord->options->type() == "cartesian") {
+      auto face_mass = area1.narrow(-1, 0, vertical_mass_flux1.size(-1)) *
+                       vertical_mass_flux1;
+      face_gravity_work = dt * gravity_work_from_face_mass(
+                                   face_mass, pmb->pcoord->x1f,
+                                   pmb->pcoord->x1v, volume, is, ie, grav1);
+    } else {
+      auto phi_face = -grav1 * pmb->pcoord->x1f;
+      auto potential_flux1 =
+          vertical_mass_flux1 *
+          phi_face.narrow(0, 0, vertical_mass_flux1.size(-1));
+      auto potential_flux_div =
+          (area1.slice(-1, is + 1, ie + 1) *
+               potential_flux1.slice(-1, is + 1, ie + 1) -
+           area1.slice(-1, is, ie) * potential_flux1.slice(-1, is, ie)) /
+          volume.slice(-1, is, ie);
+      face_gravity_work = dt * (phi_cell.slice(0, is, ie) * vertical_mass_div -
+                                potential_flux_div);
+    }
 
     // SNAP_GRAVITY_WORK_RADIAL_EXACT: add the work of the corrected potential
     // energy for this stage's x1 density change (derivation sec 7); it

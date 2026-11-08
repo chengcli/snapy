@@ -42,6 +42,10 @@ void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
     out_vars["hydro_u"] = pmb->phydro->total_u(u).to(torch::kCPU);
     out_vars["hydro_u_stored"] = u.to(torch::kCPU);
     out_vars["hydro_ref"] = pmb->phydro->u_ref().to(torch::kCPU);
+    if (pmb->phydro->species_ref().defined()) {
+      out_vars["hydro_ref_species"] =
+          pmb->phydro->species_ref().to(torch::kCPU);
+    }
     if (vars.count("fill_solid_hydro_u") &&
         vars.at("fill_solid_hydro_u").defined()) {
       out_vars["fill_solid_hydro_u"] =

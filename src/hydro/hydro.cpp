@@ -14,6 +14,7 @@
 #include "gravity_work_radial.hpp"
 #include "hydro.hpp"
 #include "hydro_dispatch.hpp"
+#include "hydro_reference.hpp"
 #include "wb_ref4.hpp"
 
 namespace snap {
@@ -601,37 +602,17 @@ HydroImpl::_hydro_ref_x1(torch::Tensor const& w) const {
   }
 
   bool stretched = pcoord->options->stretched_x1();
-  if (x1_uniform_ < 0 && stretched) {
-    x1_uniform_ = 0;
-  } else if (x1_uniform_ < 0) {
-    auto d = pcoord->dx1f.to(torch::kCPU);
-    x1_uniform_ =
-        ((d.max() - d.min()).item<double>() < 1e-10 * d.mean().item<double>())
-            ? 1
-            : 0;
-  }
-  int x1_grid = stretched ? kX1RefStretched : x1_uniform_;
-
-  auto ref_options = w.options();
-  auto ref_sizes = w.sizes().slice(1).vec();
-  auto psf_lo = torch::empty(ref_sizes, ref_options);
-  auto psf_hi = torch::empty(ref_sizes, ref_options);
-  auto pref = torch::empty(ref_sizes, ref_options);
-  auto dsf = torch::empty(ref_sizes, ref_options);
-  auto dref = torch::empty(ref_sizes, ref_options);
   bool phys_in = pmb->options->is_physical_boundary(0, 0, -1);
   bool phys_out = pmb->options->is_physical_boundary(0, 0, 1);
-
-  auto dx1f = pcoord->dx1f.contiguous();
-  if (stretched && !x1_rows_.defined()) {
-    x1_rows_ = hydro_ref_x1_stretched_rows(pcoord->dx1f, iu, phys_in, phys_out,
-                                           options->wb_wall_clamp());
+  bool clamp = options->wb_wall_clamp();
+  if (!x1_reference_ || !x1_reference_->matches(pcoord->dx1f, iu, stretched,
+                                                phys_in, phys_out, clamp)) {
+    x1_reference_ = std::make_shared<HydroReferenceX1Operator>(
+        pcoord->dx1f, iu, stretched, phys_in, phys_out, clamp);
   }
-  torch::Tensor rows;
-  if (stretched) rows = x1_rows_.to(w.options()).contiguous();
-  at::native::call_hydro_ref_x1(
-      w.device().type(), w, dx1f, anchor, psf_lo, psf_hi, pref, dsf, dref, iu,
-      g, x1_grid, phys_in, phys_out, options->wb_wall_clamp(), rows);
+  HydroReferenceX1 reference(w);
+  x1_reference_->evaluate(w, g, anchor, reference);
+  auto& [psf_lo, psf_hi, pref, dsf, dref] = reference;
 
   // #289 (SNAP_WB_REF4), and conversion-order 4, which needs it: the only
   // fourth-order part is the face density below, the face value of the
@@ -774,6 +755,12 @@ void HydroImpl::set_reference(torch::Tensor const& u_full) {
   auto col = r.narrow(1, 0, 1).narrow(2, 0, 1);
   if (torch::equal(r, col.expand_as(r))) r = col;
   pref->set("u0", r);
+  auto species =
+      u_full.narrow(0, ICY, u_full.size(0) - ICY).to(torch::kFloat64);
+  auto species_col = species.narrow(1, 0, 1).narrow(2, 0, 1);
+  if (torch::equal(species, species_col.expand_as(species)))
+    species = species_col;
+  pref->set("species0", species);
 }
 
 torch::Tensor HydroImpl::u_ref_like(torch::Tensor const& u) const {
@@ -786,10 +773,10 @@ torch::Tensor HydroImpl::u_ref_like(torch::Tensor const& u) const {
               "Hydro: the anomaly reference ", r.sizes(),
               " needs a full-block state (nvar, n3, n2, n1), got ", u.sizes(),
               "; a sub-array cannot be converted with the anomaly keys");
-  // Step 1 runs in fp64, so casting to u's dtype is exact. Once hydro_u is
-  // stored in float32 (Step 2), u' + ref must be formed in fp64 instead, or
-  // the totals lose what the anomaly kept.
-  return r.to(u.dtype()).expand({2, u.size(1), u.size(2), u.size(3)});
+  // Keep the master precision when reading totals, including dry_density().
+  // In-place encoding helpers retain their destination dtype; callers that
+  // need exact totals use total_u(), which promotes before addition.
+  return r.expand({2, u.size(1), u.size(2), u.size(3)});
 }
 
 void HydroImpl::add_reference_(torch::Tensor u) const {
@@ -808,7 +795,10 @@ void HydroImpl::sub_reference_(torch::Tensor u) const {
 
 torch::Tensor HydroImpl::total_u(torch::Tensor const& u) const {
   if (!has_reference()) return u;
-  auto t = u.clone();
+  // Promote BEFORE adding the background: casting the rounded total back to
+  // double cannot recover the small increment retained by anomaly storage.
+  auto t =
+      u.scalar_type() == torch::kFloat32 ? u.to(torch::kFloat64) : u.clone();
   add_reference_(t);
   return t;
 }

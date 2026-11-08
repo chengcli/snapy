@@ -129,6 +129,13 @@ def arm_reference(device):
     if "hydro.ref.u0" not in bufs:
         return ["hydro.ref.u0 is not a registered buffer: %s" % sorted(bufs)[:8]]
     r = bufs["hydro.ref.u0"]
+    species = bufs["hydro.ref.species0"]
+    if species.dtype != torch.float64:
+        failures.append("species background is not float64")
+    from snapy import kICY
+    if not torch.equal(species.expand_as(bv["hydro_u"][kICY:]),
+                       bv["hydro_u"][kICY:]):
+        failures.append("species background differs from initial conserved species")
     print("reference  shape %s dtype %s" % (tuple(r.shape), r.dtype))
     if r.dtype != torch.float64:
         failures.append("hydro.ref.u0 is %s, not float64" % r.dtype)
@@ -147,6 +154,9 @@ def arm_reference(device):
     # dtype conversion keeps the reference in float64; device moves still apply
     block.to(torch.float32)
     r32 = dict(block.named_buffers())["hydro.ref.u0"]
+    sr32 = dict(block.named_buffers())["hydro.ref.species0"]
+    if sr32.dtype != torch.float64 or not torch.equal(sr32, species):
+        failures.append("block.to(float32) changed the species background")
     other = dict(block.named_buffers())["hydro.D"]
     print("reference  after block.to(float32): ref %s, hydro.D %s" % (r32.dtype, other.dtype))
     if r32.dtype != torch.float64:
@@ -251,7 +261,7 @@ def arm_restart(device):
 
                 data = snapy.load_restart(files[0], 0)
                 if anomaly:
-                    missing = [k for k in ("hydro_ref", "hydro_u_stored") if k not in data]
+                    missing = [k for k in ("hydro_ref", "hydro_ref_species", "hydro_u_stored") if k not in data]
                     if missing:
                         failures.append("anomaly restart file lacks %s" % missing)
 
@@ -268,6 +278,10 @@ def arm_restart(device):
                     rc = dict(cont.named_buffers())["hydro.ref.u0"]
                     if not torch.equal(rr, rc):
                         failures.append("restart: hydro.ref.u0 changed across the resume")
+                    sr = dict(ref.named_buffers())["hydro.ref.species0"]
+                    sc = dict(cont.named_buffers())["hydro.ref.species0"]
+                    if not torch.equal(sr, sc):
+                        failures.append("restart: species background changed")
                     # totals in the file, the stored anomaly kept bit for bit
                     tot = data["hydro_u"].to(rr.device)
                     sto = data["hydro_u_stored"].to(rr.device)

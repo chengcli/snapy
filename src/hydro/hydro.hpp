@@ -24,6 +24,7 @@ namespace snap {
 
 class MeshBlockImpl;
 struct WbRef4Stencils;
+class HydroReferenceX1Operator;
 struct X1PlainMeanStencils;
 struct X1PressureSourceStencils;
 
@@ -254,6 +255,12 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor u_ref() const {
     return pref ? pref->get("u0") : torch::Tensor();
   }
+  //! Initial species densities for thermodynamic/mixture-density perturbations.
+  //! Undefined for legacy restarts that did not retain composition.
+  torch::Tensor species_ref() const {
+    auto r = pref ? pref->get("species0") : torch::Tensor();
+    return r.defined() && r.dim() == 4 ? r : torch::Tensor();
+  }
   //! `t` has the full block shape the reference covers (nvar, n3, n2, n1)
   bool is_full_block(torch::Tensor const& t) const {
     if (!has_reference() || t.dim() != 4 || t.size(0) <= IPR) return false;
@@ -262,7 +269,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
            (r.size(2) == 1 || t.size(2) == r.size(2)) && t.size(3) == r.size(3);
   }
   //! rows {IDN, IPR} of the reference expanded to the block shape of `u`
-  //! (nvar, n3, n2, n1), in u's dtype; checks that `u` is a full block
+  //! (nvar, n3, n2, n1), retaining FP64; checks that `u` is a full block
   torch::Tensor u_ref_like(torch::Tensor const& u) const;
   //! store the reference from a full-row conserved state `u_full`
   //! (velocities already zero). Keeps a broadcast column when `u_full` is
@@ -276,7 +283,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor dry_density(torch::Tensor const& u) const {
     return has_reference() ? u[IDN] + u_ref_like(u)[0] : u[IDN];
   }
-  //! totals from the stored representation (a new tensor; `u` if no ref)
+  //! FP64 totals from the stored representation (new tensor; `u` if no ref)
   torch::Tensor total_u(torch::Tensor const& u) const;
 
  protected:
@@ -317,8 +324,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! Register all forcing modules
   std::vector<std::string> _register_forcings_module();
 
-  mutable int x1_uniform_ = -1;
-  mutable torch::Tensor x1_rows_;
+  mutable std::shared_ptr<HydroReferenceX1Operator> x1_reference_;
 
   void _check_stretched_x1(torch::Tensor const& u) const;
   //! SNAP_WB_REF4 stencils for this block's x1 grid, built on first use

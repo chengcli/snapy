@@ -794,3 +794,26 @@ target_link_libraries(g3_decks.${buildl}
 if (UNIX AND NOT APPLE)
   target_link_options(g3_decks.${buildl} PRIVATE -Wl,--no-as-needed)
 endif()
+
+# Reproducible gate for the FP32 foundations. This does not replace the coupled
+# Jupiter/production-GPU acceptance runs in FP32_ROADMAP.md.
+foreach(_t IN ITEMS
+    test_eos test_coordinate test_fp32_storage test_balance_column
+    test_balance_column_wb_ref4 test_balance_column_x1_centroid
+    test_hydro_ref_x1 test_hydro_ref_x1_rf_wall test_gravity_work_cache_to
+    test_implicit_face_work_jacobian test_riemann test_stretched_x1_ref
+    test_stretched_x1_ref_wb_ref4 test_stretched_x1_ref_x1_centroid
+    test_stretched_x1_ref_radial_exact_off test_stretched_x1_ref_x1_mass_covariance
+    test_wb_ref_wall test_wb_wall_corner test_x1_seam_split
+    test_x1_seam_split_x1_centroid test_x1_seam_split_radial_exact
+    test_x1_seam_split_radial_exact_off test_x1_seam_split_vic_refuses_split
+    test_x1_seam_split_wb_ref4 test_x1_seam_split_wb_ref4_gravity_0
+    test_x1_seam_split_x1_mass_covariance)
+  set_property(TEST ${_t}.${buildl} APPEND PROPERTY LABELS "fp32-foundations")
+endforeach()
+foreach(_t IN ITEMS
+    test_anomaly_storage test_gravity_work_fixer test_gravity_work_radial_exact
+    test_implicit_face_work_operator test_implicit_face_work_operator_radial_exact
+    test_implicit_gravity_tall_column test_implicit_gravity_tall_column_cubed)
+  set_property(TEST ${_t}_python APPEND PROPERTY LABELS "fp32-foundations")
+endforeach()

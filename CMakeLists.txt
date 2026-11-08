@@ -102,6 +102,17 @@ find_package(Harp REQUIRED)
 # >= 2.6.3: explicit same-call rate constants for the kinetics Jacobian at
 # zero solid abundance, used by run_hydro and jupiter_evap_precip_1d
 find_package(Kintera 2.6.3 REQUIRED)
+# The FP32 branch is developed together with kintera's perturbation helper.
+# Check the header capability until that paired change has a release number.
+file(STRINGS "${KINTERA_INCLUDE_DIR}/kintera/thermo/eval_uhs.hpp"
+     _kintera_pressure_delta REGEX "eval_const_cv_pressure_delta")
+if(NOT _kintera_pressure_delta)
+  message(FATAL_ERROR
+    "This FP32 branch requires kintera's eval_const_cv_pressure_delta helper. "
+    "Build the paired kintera FP32 source and select its headers/library; "
+    "unmodified kintera 2.6.8 and older packages do not provide it.")
+endif()
+unset(_kintera_pressure_delta)
 #include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kintera.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/fmt.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gtest.cmake)

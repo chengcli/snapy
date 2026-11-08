@@ -1631,7 +1631,9 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       continue;
     }
     // held by hydro.ref / used below, not kept in vars
-    if (name == "hydro_ref" || name == "hydro_u_stored") continue;
+    if (name == "hydro_ref" || name == "hydro_ref_species" ||
+        name == "hydro_u_stored")
+      continue;
     vars[name] = tensor.to(torch::Device(options->device_str()));
   }
 
@@ -1645,6 +1647,20 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       auto r = data.at("hydro_ref").to(hydro_u.device());
       phydro->pref->set("u0", r);
       phydro->u_ref_like(hydro_u);  // shape check
+      if (data.count("hydro_ref_species")) {
+        auto species = data.at("hydro_ref_species").to(hydro_u.device());
+        TORCH_CHECK(
+            species.dim() == 4 && species.size(0) == hydro_u.size(0) - ICY &&
+                (species.size(1) == 1 || species.size(1) == hydro_u.size(1)) &&
+                (species.size(2) == 1 || species.size(2) == hydro_u.size(2)) &&
+                species.size(3) == hydro_u.size(3),
+            "restart: hydro_ref_species does not match the block state");
+        phydro->pref->set("species0", species);
+      } else {
+        // Composition at restart time is not the initial background. Never
+        // silently substitute it (or keep a previous initialization's cache).
+        phydro->pref->set("species0", torch::empty({0}, r.options()));
+      }
       // resume the anomaly bit for bit when the file carries it
       if (data.count("hydro_u_stored")) {
         hydro_u.copy_(data.at("hydro_u_stored"));

@@ -1,5 +1,6 @@
 // C/C++
 #include <algorithm>
+#include <limits>
 
 // yaml
 #include <yaml-cpp/yaml.h>
@@ -29,6 +30,21 @@
 #include "shallow_water.hpp"
 
 namespace snap {
+
+namespace {
+
+// The nearest representable anomaly can reconstruct below the requested
+// floor (even as zero when the reference is large). Round the bound upward
+// only when necessary. Inactive cells are never re-encoded through totals.
+torch::Tensor float_anomaly_floor(torch::Tensor const& floor,
+                                  torch::Tensor const& ref) {
+  auto bound = (floor - ref).to(torch::kFloat32);
+  auto up = torch::nextafter(
+      bound, torch::full_like(bound, std::numeric_limits<float>::infinity()));
+  return torch::where(bound.to(torch::kFloat64) + ref < floor, up, bound);
+}
+
+}  // namespace
 
 EquationOfStateOptions EquationOfStateOptionsImpl::from_yaml(
     std::string const& filename, bool verbose) {
@@ -203,6 +219,8 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
   // applied to the anomaly against (floor - ref); the totals are formed only
   // to be read. Never limit a total and write total - ref back: that
   // re-rounds the anomaly on every call.
+  bool float_anomaly = !totals && phydro->has_reference() &&
+                       cons.scalar_type() == torch::kFloat32;
   auto ref = (!totals && phydro->has_reference()) ? phydro->u_ref_like(cons)
                                                   : torch::Tensor();
   bool anom = ref.defined();
@@ -221,8 +239,10 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
   };
   auto before = mark ? dens_energy() : torch::Tensor();
   if (anom) {
-    cons[IDN].copy_(
-        torch::maximum(cons[IDN], options->density_floor() - ref[0]));
+    auto floor = options->density_floor() * torch::ones_like(ref[0]);
+    auto bound =
+        float_anomaly ? float_anomaly_floor(floor, ref[0]) : floor - ref[0];
+    cons[IDN].copy_(torch::maximum(cons[IDN], bound));
   } else {
     cons[IDN].clamp_min_(options->density_floor());
   }
@@ -251,12 +271,15 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     // UT->I reads the dry density: hand it the total
     auto cons_t = cons;
     if (anom) {
-      cons_t = cons.clone();
+      cons_t = float_anomaly ? cons.to(torch::kFloat64) : cons.clone();
       cons_t[IDN].add_(ref[0]);
     }
     auto min_ie = compute("UT->I", {cons_t, min_temp});
     if (anom) {
-      cons[IPR].clamp_min_(ke + min_ie - ref[1]);
+      auto floor = ke + min_ie;
+      auto bound =
+          float_anomaly ? float_anomaly_floor(floor, ref[1]) : floor - ref[1];
+      cons[IPR].clamp_min_(bound);
     } else {
       cons[IPR].clamp_min_(ke + min_ie);
     }
@@ -298,13 +321,18 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
     }
 
     // cell volumes, so a column repair conserves mass, not density (#241)
-    auto vol = pcoord->cell_volume().unsqueeze(0).contiguous().index(interior);
+    auto vol = pcoord->cell_volume()
+                   .to(cons.options())
+                   .unsqueeze(0)
+                   .contiguous()
+                   .index(interior);
 
     // Keep the two repairs separate: clouds tolerate an unrepairable column
     // and clamp it; vapor must throw before a gathered column is copied back.
     auto repair_column = [&](torch::Tensor field, bool require_success) {
       int count = field.size(0);
-      auto major = dry_total(cons).unsqueeze(0).index(interior);
+      auto major =
+          dry_total(cons).to(field.options()).unsqueeze(0).index(interior);
       auto layout = pmb->get_layout();
       bool split =
           count > 0 && whole_column && layout && layout->options->pz() > 1;
