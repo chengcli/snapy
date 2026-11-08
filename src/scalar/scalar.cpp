@@ -225,8 +225,31 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
 
   // positivity last: the blend above can export tracer a donor lacks
   // by design: Courant>1 can make explicit rho<0; no scaling keeps both, so r>b
-  if (pmb->phydro->options->eos()->limiter() || cov) {
+  bool lim = pmb->phydro->options->eos()->limiter();
+  if (lim || cov) {
     auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
+    // switched on by cov alone, the mass flux is unlimited: where it drains
+    // the dry air too (Courant>1), the implicit x1 refill from the neighbours
+    // carries their r back, so the tracer may drain past its content only as
+    // far as the poorer neighbour repays: all of it at a uniform r, none
+    // beside an empty cell
+    if (!lim) {
+      auto m = [&](torch::Tensor const& f, torch::Tensor const& mass) {
+        return f.defined() ? mass[IDN].unsqueeze(0) : torch::Tensor();
+      };
+      auto ph = pmb->phydro;
+      auto td = flux_positivity_theta(rho, m(_flux1, ph->flux1()),
+                                      m(_flux2, ph->flux2()),
+                                      m(_flux3, ph->flux3()), pcoord, dt);
+      auto r = u / rho;
+      auto phi = torch::where(
+          r > 0.,
+          (torch::minimum(r.roll(1, DIM1), r.roll(-1, DIM1)) / r).clamp(0., 1.),
+          torch::zeros_like(r));
+      theta = torch::where((td < 1.) & (td > 0.),
+                           theta + phi * ((theta / td).clamp_max(1.) - theta),
+                           theta);
+    }
     _positivity_hits += (theta.index(cells) < 1.).sum();
     flux_positivity_scale_(sync_theta(theta), _flux1, _flux2, _flux3, pcoord);
   }
