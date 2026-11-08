@@ -793,6 +793,27 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     torch::Tensor drain;
     auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt, &drain);
+    // switched on by cov alone, the mass flux is unlimited: where it drains
+    // the dry air too (Courant>1), the implicit x1 refill from the neighbours
+    // carries their q back, so a species may drain past its content only as
+    // far as the poorer neighbour repays: all of it at a uniform q, none
+    // beside an empty cell
+    if (!options->eos()->limiter()) {
+      auto m = [&](torch::Tensor const& f) {
+        return f.defined() ? f.narrow(0, IDN, 1) : torch::Tensor();
+      };
+      auto rho = u.narrow(0, IDN, 1);
+      auto td = flux_positivity_theta(rho, m(_flux1), m(_flux2), m(_flux3),
+                                      pmb->pcoord, dt);
+      auto q = uy / rho;
+      auto phi = torch::where(
+          q > 0.,
+          (torch::minimum(q.roll(1, DIM1), q.roll(-1, DIM1)) / q).clamp(0., 1.),
+          torch::zeros_like(q));
+      theta = torch::where((td < 1.) & (td > 0.),
+                           theta + phi * ((theta / td).clamp_max(1.) - theta),
+                           theta);
+    }
     // census of interior (cell, species) entries, before the ghost fill
     auto cells = pmb->part({0, 0, 0}, PartOptions().exterior(false));
     auto ti = theta.index(cells).to(torch::kFloat64);

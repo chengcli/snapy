@@ -429,6 +429,7 @@ snapy_add_python_test(test_scalar_stratified TIMEOUT 300 LABELS "python;scalar")
 snapy_add_python_test(test_scalar_upper_bound_donor TIMEOUT 300 LABELS "python;scalar")
 # a uniform tracer ratio on nx2 > 1, where the covariance rows switch the scalar limiter on
 snapy_add_python_test(test_scalar_ratio_2d TIMEOUT 120 LABELS "python;scalar")
+snapy_add_python_test(test_species_ratio_2d TIMEOUT 120 LABELS "python;hydro;scalar")
 # #289: the same, on a column split in x1, four blocks in one process vs one
 snapy_add_python_test(test_scalar_cov_x1_split TIMEOUT 300 LABELS "python;hydro;scalar")
 set_tests_properties(test_scalar_cov_x1_split_python
@@ -489,6 +490,9 @@ if(CUDA)
   snapy_add_python_test(test_scalar_ratio_2d_cuda
     SCRIPT test_scalar_ratio_2d.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;cuda")
+  snapy_add_python_test(test_species_ratio_2d_cuda
+    SCRIPT test_species_ratio_2d.py ARGS --device cuda
+    TIMEOUT 120 LABELS "python;hydro;scalar;cuda")
   snapy_add_python_test(test_tracer_dry_convention_cuda
     SCRIPT test_tracer_dry_convention.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;implicit;forcing;cuda")
@@ -507,6 +511,7 @@ if(CUDA)
     test_scalar_flux_covariance_cuda_python
     test_scalar_upper_bound_donor_cuda_python
     test_scalar_ratio_2d_cuda_python
+    test_species_ratio_2d_cuda_python
     test_tracer_dry_convention_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
