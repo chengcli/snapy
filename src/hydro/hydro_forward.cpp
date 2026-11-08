@@ -793,12 +793,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
     torch::Tensor drain;
     auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt, &drain);
-    // switched on by cov alone, the mass flux is unlimited: where it drains
+    // the eos limiter does not limit the mass flux either: where it drains
     // the dry air too (Courant>1), the implicit x1 refill from the neighbours
     // carries their q back, so a species may drain past its content only as
     // far as the poorer neighbour repays: all of it at a uniform q, none
     // beside an empty cell
-    if (!options->eos()->limiter()) {
+    {
       auto m = [&](torch::Tensor const& f) {
         return f.defined() ? f.narrow(0, IDN, 1) : torch::Tensor();
       };

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""A uniform tracer ratio r = s / rho_dry stays uniform with the eos limiter ON.
+"""A uniform tracer ratio r = s / rho_dry, and a uniform vapour fraction q, stay uniform with the eos limiter ON.
 Moist column, nx1 = 32 stretched (x1rat 4^(1/31)), nx2 = 4, a pressure bump in one column, one rk3
 step at vertical acoustic Courant 30 and 100 (implicit-scheme 1; --scheme 9), accepted by the
 redo rule. In stage 1 the bump drains cells 19 and 22 past their dry air (outflow 1.14 and 1.19 of
 the content at C30), and the limiter scaled the tracer flux on all their outgoing faces by their
-theta (0.8799, 0.8389) while the mass flux, never limited, moved in full. Positivity: one filled
+theta (0.8799, 0.8389), and the vapour flux likewise, while the mass flux, never limited, moved in
+full. Positivity: one filled
 cell 22 in an empty column and one empty cell 22 in a uniform one.
 python test_tracer_ratio_limiter.py [--device cuda] [--scheme 9]"""
 import math, os, sys, tempfile, torch, yaml, snapy
@@ -72,27 +73,29 @@ def step(courant, amp, p):  # one rk3 step from ratio R0 * p (tracer) and Q0 * p
     w[kIPR] *= 1. + bump.view(1, -1, 1) * torch.exp(-((z - 0.5 * ZTOP) / 2.e3) ** 2 / 2).view(1, 1, -1)
     v, _ = block.initialize({"hydro_w": w, "scalar_r": torch.zeros_like(w[:1]) + R0 * p})
     dt = courant * float(h.min()) / math.sqrt(1.4 * RG * T0)
-    dev, lo, I = 0., float("inf"), (slice(None), slice(3, -3), slice(3, -3))
+    dev, dq, lo, I = 0., 0., float("inf"), (slice(None), slice(3, -3), slice(3, -3))
     for stage in range(3):
         block.forward(v, dt, stage)
         s, rho = v["scalar_s"][0][I], v["hydro_u"][kIDN][I]
         if p.min() > 0:
             dev = max(dev, float((s / rho / R0 - 1).abs().max()))
+            u = v["hydro_u"][(slice(None),) + I]
+            dq = max(dq, float((u[kICY] / (u[kIDN] + u[kICY:].sum(0)) / Q0 - 1).abs().max()))
         lo = min(lo, float(s.min()))
-    return dev, lo, block.check_redo(v)
+    return dev, dq, lo, block.check_redo(v)
 
 
 if __name__ == "__main__":
     if DEV == "cuda" and not torch.cuda.is_available(): sys.exit(125)  # no visible GPU: skip
     bad = False
-    for courant, amp in ((30., 0.55), (100., 0.18)):  # main 68f4e066 (= 49aed098): 4.401e-02, 7.055e-03
-        dev, _, redo = step(courant, amp, torch.ones(NX1, dtype=torch.float64))
-        print(f"{DEV} scheme {SCHEME} C={courant:g}: max|r/r0-1| = {dev:.3e}, redo = {redo}")
-        bad |= dev > 1e-12 or redo != 0
+    for courant, amp in ((30., 0.55), (100., 0.18)):  # main 68f4e066 (= 49aed098): r 4.401e-02, 7.055e-03
+        dev, dq, _, redo = step(courant, amp, torch.ones(NX1, dtype=torch.float64))  # q 4.378e-02, 7.019e-03
+        print(f"{DEV} scheme {SCHEME} C={courant:g}: max|r/r0-1| = {dev:.3e}, max|q/q0-1| = {dq:.3e}, redo = {redo}")
+        bad |= dev > 1e-12 or dq > 1e-12 or redo != 0
     for name, hole in (("one-cell 22", False), ("one-hole 22", True)):
         p = torch.full((NX1,), 1. if hole else 0., dtype=torch.float64)
         p[22] = 0. if hole else 1.
-        _, lo, _ = step(30., 0.55, p)
+        _, _, lo, _ = step(30., 0.55, p)
         print(f"{DEV} scheme {SCHEME} C=30 {name}: min s = {lo:.3e}")
         bad |= lo < -1e-12 * R0
     sys.exit(1 if bad else 0)
