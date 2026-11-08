@@ -12,12 +12,13 @@ import test_scalar_ratio_2d as S
 Q0 = 1e-4
 
 
-def run(nx2):  # max|q/q0 - 1| over one rk3 step
-    block, v, dt = S.setup(nx2, S.SCHEME, Q0)
+def run(nx2, nx3=1):  # max|q/q0 - 1| over one rk3 step
+    block, v, dt = S.setup(nx2, S.SCHEME, Q0, nx3=nx3)
     J, dev = slice(3, -3) if nx2 > 1 else slice(None), 0.
+    K = slice(3, -3) if nx3 > 1 else slice(None)
     for stage in range(3):
         block.forward(v, dt, stage)
-        u = v["hydro_u"][:, 0, J, 3:-3]
+        u = v["hydro_u"][:, K, J, 3:-3]
         q = u[kICY] / (u[kIDN] + u[kICY:].sum(0))
         dev = max(dev, float((q / Q0 - 1).abs().max()))
     return dev
@@ -26,8 +27,8 @@ def run(nx2):  # max|q/q0 - 1| over one rk3 step
 if __name__ == "__main__":
     if S.DEV == "cuda" and not torch.cuda.is_available(): sys.exit(125)  # no visible GPU: skip
     bad = S.positivity(True, Q0)  # 45fe81e1: -4.359e-06, -3.702e-06; main 68f4e066: 0, 9.00e-07
-    for nx2 in (4, 1):
-        dev = run(nx2)
-        print(f"{S.DEV} scheme {S.SCHEME} nx2={nx2}: max|q/q0-1| = {dev:.3e}")
+    for nx2, nx3 in ((4, 1), (4, 4), (1, 1)):
+        dev = run(nx2, nx3)
+        print(f"{S.DEV} scheme {S.SCHEME} nx2={nx2} nx3={nx3}: max|q/q0-1| = {dev:.3e}")
         bad |= dev > 1e-12
     sys.exit(1 if bad else 0)
