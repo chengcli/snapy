@@ -228,12 +228,12 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   bool lim = pmb->phydro->options->eos()->limiter();
   if (lim || cov) {
     auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
-    // switched on by cov alone, the mass flux is unlimited: where it drains
+    // the eos limiter does not limit the mass flux either: where it drains
     // the dry air too (Courant>1), the implicit x1 refill from the neighbours
     // carries their r back, so the tracer may drain past its content only as
     // far as the poorer neighbour repays: all of it at a uniform r, none
     // beside an empty cell
-    if (!lim) {
+    {
       auto m = [&](torch::Tensor const& f, torch::Tensor const& mass) {
         return f.defined() ? mass[IDN].unsqueeze(0) : torch::Tensor();
       };
