@@ -313,10 +313,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
 
-  // key 4 reads u past an x1 seam in the x2/x3 ghost columns too; those
-  // corners are the neighbour's (its x2/x3 ghosts are filled)
-  if (options->conversion_order() == 4)
-    _x1_ghost_rows(u, pmb->pcoord->options->nghost(), false, 0x772c);
   peos->forward(u, w);
   // x1 point values u - L u, the primitives there, and back to cell averages:
   // w = W(u - L u) + L W(u), fourth order where W(u) is second
@@ -375,16 +371,18 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     w.add_(lap(w0));
     w.copy_(torch::where(good, w, w0));
     _conv4_trips += good.logical_not().sum();
-    // x1 ghosts: the neighbour's converted cells at a seam, the boundary
-    // condition of the converted cells at a physical face (outflow keeps W(u))
+    // every ghost from the converted owned cells: the block's exchange, the
+    // x1 rows again across all x2/x3 columns (the corners past a seam), then
+    // the boundary conditions (outflow keeps W(u))
+    Variables gv{{"hydro_w", w}};
+    pmb->exchange(gv, SyncOptions().interpolate(true).type(kPrimitive));
     _x1_ghost_rows(w, ng, false, 0x772a);
     BoundaryFuncOptions bop;
     bop.nghost(ng);
     bop.type(kPrimitive);
-    for (int f = 0; f < 2; ++f)
-      if (mo->is_physical_boundary(0, 0, 2 * f - 1) &&
-          !is_outflow(mo->bfuncs()[f]))
-        mo->bfuncs()[f](w, 3, bop);
+    for (int f = 0; f < mo->bfuncs().size(); ++f)
+      if (mo->bfuncs()[f] && !is_outflow(mo->bfuncs()[f]))
+        mo->bfuncs()[f](w, 3 - f / 2, bop);
   }
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();

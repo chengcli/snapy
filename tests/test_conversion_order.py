@@ -13,13 +13,14 @@ gravity  a column at rest with T = 1 - 0.8 z (g = 1, discretely balanced) and a 
 theta    a coarse Straka density current (32 x 128) to t = 900 s: theta' stays within its initial range +- 2 K
          (key 4 takes only the face part of that reference).
 mass     |dM|/M <= 1e-13 after 40 steps, nx2 = 4: two pulses against a reflecting wall (one block), and an
-         x2-uniform 2:1 jump on the seam of two x1 blocks in one process (the converted ghosts at a wall and a seam,
-         and the u corners past the seam that the x2 ghost columns read).
+         x2-uniform 2:1 jump on the seam of two x1 blocks in one process (the converted ghosts at a wall, a seam
+         and in the x2 ghost columns).
 floor    limiter on, a 4-cell pressure dip of 0.06 in p = rho = 1: a temperature floor (1e-4) that only the
          point state crosses must not change the solution (bitwise equal to a floor of 1e-6).
-slab     moist EOS, limiter on, 32 x 8 with periodic x2: a vapour slab (0.02, exactly 0 outside) crossed by
-         w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and the tracer ratio within 1e-13
-         (u - L u with negative vapour must not reach the EOS).
+slab     moist EOS, limiter on, 32 x 8 with periodic x2 on two x1 blocks in one process: a vapour slab (0.02,
+         exactly 0 outside) crossed by w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and
+         the tracer ratio within 1e-13, and every seam ghost of w, corners included, bitwise the neighbour's
+         converted cell.
 
   python test_conversion_order.py [--device cpu|cuda] [--arms order,...]
 """
@@ -289,14 +290,17 @@ def arm_slab(device):
         q = (((z - 5.e3).abs() < 1.e3) & ((y - 5.e3).abs() < 2.5e3)).double()
         return {kIDN: p / (3900. * 320.), kIPR: p, kICY: .02 * q, kICY + 1: 1.e-3 * q * ((z - 5.e3).abs() < 400.),
                 kIV1: 25. * torch.sin(np.pi * z / 1.e4) + 0. * y, kIV1 + 1: 20. + 0. * p}
-    m = mesh(4, nx=32, moist=True, tracer=True, nx2=8)
+    m = mesh(4, nx=32, nb1=2, moist=True, tracer=True, nx2=8)
     state, blocks = start(m, init, device)
     water = lambda: float(sum(interior(state, blocks, "hydro_u", r).sum() for r in (kICY, kICY + 1)))
     q0 = water()
     dd = drift(m, state, blocks, device, [kIDN], nstep=30)
     dq, r = abs(water() - q0) / q0, ratio(state, blocks)
-    print(f"slab key 4: |dM|/M dry {dd:.2e} water {dq:.2e}, max|r/r0-1| {r:.2e}")
-    return max(dd, dq, r) <= TOL
+    m.forward(state, m.max_time_step(state), 0)  # check_redo leaves W(u); the stage's w is the converted one
+    w0, w1 = (s["hydro_w"] for s in state)  # every seam ghost, corners too, is the neighbour's converted cell
+    same = torch.equal(w0[..., 16 + NG:], w1[..., NG:2 * NG]) and torch.equal(w1[..., :NG], w0[..., 16:16 + NG])
+    print(f"slab key 4: |dM|/M dry {dd:.2e} water {dq:.2e}, max|r/r0-1| {r:.2e}, seam ghosts = owners {same}")
+    return max(dd, dq, r) <= TOL and same
 
 
 if __name__ == "__main__":
