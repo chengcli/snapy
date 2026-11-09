@@ -373,15 +373,22 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     _conv4_trips += good.logical_not().sum();
     // every ghost from the converted owned cells: the block's exchange, the
     // x1 rows again across all x2/x3 columns (the corners past a seam), then
-    // the boundary conditions (outflow keeps W(u))
+    // the boundary conditions on every ghost layer (outflow from the saved
+    // background, as the block's own outflow)
     Variables gv{{"hydro_w", w}};
     pmb->exchange(gv, SyncOptions().interpolate(true).type(kPrimitive));
     _x1_ghost_rows(w, ng, false, 0x772a);
     BoundaryFuncOptions bop;
     bop.nghost(ng);
     bop.type(kPrimitive);
+    if (other.count("boundary_reference_w")) {
+      bop.reference = other.at("boundary_reference_w");
+      bop.eos = peos.get();
+      bop.coord = pmb->pcoord.get();
+    }
     for (int f = 0; f < mo->bfuncs().size(); ++f)
-      if (mo->bfuncs()[f] && !is_outflow(mo->bfuncs()[f]))
+      if (mo->bfuncs()[f] &&
+          (bop.reference.defined() || !is_outflow(mo->bfuncs()[f])))
         mo->bfuncs()[f](w, 3 - f / 2, bop);
   }
   if (options->verbose()) {

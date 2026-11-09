@@ -14,7 +14,8 @@ theta    a coarse Straka density current (32 x 128) to t = 900 s: theta' stays w
          (key 4 takes only the face part of that reference).
 mass     |dM|/M <= 1e-13 after 40 steps, nx2 = 4: two pulses against a reflecting wall (one block), and an
          x2-uniform 2:1 jump on the seam of two x1 blocks in one process (the converted ghosts at a wall, a seam
-         and in the x2 ghost columns).
+         and in the x2 ghost columns); a pulse leaving through x1 outflow faces, 100 steps: dM/M within 1e-10 of
+         the run whose every w ghost layer comes from the outflow condition.
 floor    limiter on, a 4-cell pressure dip of 0.06 in p = rho = 1: a temperature floor (1e-4) that only the
          point state crosses must not change the solution (bitwise equal to a floor of 1e-6).
 slab     moist EOS, limiter on, 32 x 8 with periodic x2 on two x1 blocks in one process: a vapour slab (0.02,
@@ -41,7 +42,7 @@ RD = 8.314462618 / 29.e-3
 
 
 def mesh(key, nx=64, geo="cartesian", x1f=None, nb1=1, nx2=1, limiter=False, moist=False, tracer=False, grav=0.,
-         straka=False, tfloor=1.e-12):
+         straka=False, tfloor=1.e-12, x1bc="reflecting"):
     bounds = {"x1min": 0., "x1max": 1., "x2min": 0., "x2max": 1., "x3min": 0., "x3max": 1.}
     bounds.update({"spherical-polar": {"x1min": 1., "x1max": 2., "x2min": 1., "x2max": 2.},
                    "gnomonic-equiangle": {"x1min": 1., "x1max": 2., "x2min": -.05, "x2max": .05,
@@ -49,7 +50,7 @@ def mesh(key, nx=64, geo="cartesian", x1f=None, nb1=1, nx2=1, limiter=False, moi
     weno = {"type": "weno5", "scale": True, "shock": False}
     eos = {"type": "ideal-gas", "gammad": G, "limiter": limiter, "density-floor": 1.e-10, "pressure-floor": 1.e-10}
     cfg = {"geometry": {"type": geo, "bounds": bounds, "cells": {"nx1": nx, "nx2": nx2, "nx3": 1, "nghost": NG}},
-           "boundary-condition": {"external": {f"x{d}-{s}": "reflecting" if d == 1 else "periodic"
+           "boundary-condition": {"external": {f"x{d}-{s}": x1bc if d == 1 else "periodic"
                                                for d in (1, 2, 3) for s in ("inner", "outer")}},
            "distribute": {"layout": "cubed" if nb1 > 1 else "slab", "nb1": nb1, "nb2": 1, "nb3": 1,
                           "blocks_per_process": nb1},
@@ -275,7 +276,13 @@ def arm_mass(device):
         print(f"mass {name} key 4: |dM|/M {dm:.2e}")
         ok &= dm <= TOL
         del m, state, blocks  # a mesh still alive stalls the next one's in-process x1 seam
-    return ok
+    m = mesh(4, x1bc="outflow")
+    state, blocks = start(m, lambda xf, *_: averages(xf, *pulse(.85))[0], device)
+    m0 = float(interior(state, blocks, "hydro_u", kIDN).sum())
+    run(m, None, device, 100, 1. / 512, state=state)
+    out = (float(interior(state, blocks, "hydro_u", kIDN).sum()) - m0) / m0 / -1.687639303786939e-02 - 1.
+    print(f"mass outflow key 4: dM/M vs every w ghost layer from the outflow condition {out:.1e}")
+    return ok and abs(out) <= 1.e-10
 
 
 def arm_floor(device):
