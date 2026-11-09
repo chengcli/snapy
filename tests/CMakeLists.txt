@@ -427,15 +427,8 @@ snapy_add_python_test(test_scalar_flux_covariance TIMEOUT 300 LABELS "python;hyd
 snapy_add_python_test(test_scalar_stratified TIMEOUT 300 LABELS "python;scalar")
 # upper-bound must not drive a donor negative
 snapy_add_python_test(test_scalar_upper_bound_donor TIMEOUT 300 LABELS "python;scalar")
-# a uniform tracer ratio on nx2 > 1, where the covariance rows switch the scalar limiter on
-snapy_add_python_test(test_scalar_ratio_2d TIMEOUT 120 LABELS "python;scalar")
-snapy_add_python_test(test_species_ratio_2d TIMEOUT 120 LABELS "python;hydro;scalar")
-# the same with the eos limiter on: one bump column at vertical Courant 30 and 100
-snapy_add_python_test(test_tracer_ratio_limiter TIMEOUT 120 LABELS "python;scalar;positivity")
-# a cell that settling drains keeps the plain species theta, eos limiter on and off
-snapy_add_python_test(test_settling_theta_both_paths TIMEOUT 120 LABELS "python;hydro;positivity")
-# a sideways over-drain keeps tracers and species non-negative where the dry air is
-snapy_add_python_test(test_ratio_drain_sideways TIMEOUT 120 LABELS "python;scalar;positivity")
+# tracer and species ratios under the species positivity limiter (#338)
+snapy_add_python_test(test_tracer_ratio TIMEOUT 120 LABELS "python;hydro;scalar;positivity")
 # #289: the same, on a column split in x1, four blocks in one process vs one
 snapy_add_python_test(test_scalar_cov_x1_split TIMEOUT 300 LABELS "python;hydro;scalar")
 set_tests_properties(test_scalar_cov_x1_split_python
@@ -493,21 +486,9 @@ if(CUDA)
   snapy_add_python_test(test_scalar_upper_bound_donor_cuda
     SCRIPT test_scalar_upper_bound_donor.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;scalar;cuda")
-  snapy_add_python_test(test_scalar_ratio_2d_cuda
-    SCRIPT test_scalar_ratio_2d.py ARGS --device cuda
-    TIMEOUT 120 LABELS "python;scalar;cuda")
-  snapy_add_python_test(test_species_ratio_2d_cuda
-    SCRIPT test_species_ratio_2d.py ARGS --device cuda
-    TIMEOUT 120 LABELS "python;hydro;scalar;cuda")
-  snapy_add_python_test(test_tracer_ratio_limiter_cuda
-    SCRIPT test_tracer_ratio_limiter.py ARGS --device cuda
-    TIMEOUT 120 LABELS "python;scalar;positivity;cuda")
-  snapy_add_python_test(test_settling_theta_both_paths_cuda
-    SCRIPT test_settling_theta_both_paths.py ARGS --device cuda
-    TIMEOUT 120 LABELS "python;hydro;positivity;cuda")
-  snapy_add_python_test(test_ratio_drain_sideways_cuda
-    SCRIPT test_ratio_drain_sideways.py ARGS --device cuda
-    TIMEOUT 120 LABELS "python;scalar;positivity;cuda")
+  snapy_add_python_test(test_tracer_ratio_cuda
+    SCRIPT test_tracer_ratio.py ARGS --device cuda
+    TIMEOUT 120 LABELS "python;hydro;scalar;positivity;cuda")
   snapy_add_python_test(test_tracer_dry_convention_cuda
     SCRIPT test_tracer_dry_convention.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;implicit;forcing;cuda")
@@ -525,11 +506,7 @@ if(CUDA)
     test_gravity_work_radial_exact_cuda_python
     test_scalar_flux_covariance_cuda_python
     test_scalar_upper_bound_donor_cuda_python
-    test_scalar_ratio_2d_cuda_python
-    test_species_ratio_2d_cuda_python
-    test_tracer_ratio_limiter_cuda_python
-    test_settling_theta_both_paths_cuda_python
-    test_ratio_drain_sideways_cuda_python
+    test_tracer_ratio_cuda_python
     test_tracer_dry_convention_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
