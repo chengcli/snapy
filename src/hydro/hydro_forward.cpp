@@ -362,7 +362,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     peos->forward(tmp, w);
     if (lim) {
       good &= (tmp == tmp0).all(0);
-      if (marks.defined()) peos->limiter_marks().copy_(marks);
+      if (marks.defined()) {
+        _conv4_repairs += (peos->limiter_marks() != marks).any();
+        peos->limiter_marks().copy_(marks);
+      }
       if (peos->vapor_failures().defined())
         fails.defined() ? peos->vapor_failures().copy_(fails)
                         : peos->vapor_failures().zero_();
