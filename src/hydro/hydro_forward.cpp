@@ -897,7 +897,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       auto m = [&](torch::Tensor const& f) {
         return f.defined() ? f.narrow(0, IDN, 1) : torch::Tensor();
       };
-      auto rho = u.narrow(0, IDN, 1);
+      auto rho = dry_density(u).unsqueeze(0);
       auto td = flux_positivity_theta(rho, m(_flux1), m(_flux2), m(_flux3),
                                       pmb->pcoord, dt);
       auto phi = flux_positivity_share(uy / rho);

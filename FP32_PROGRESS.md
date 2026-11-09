@@ -223,3 +223,51 @@ for M3 hydro integration or the M4–M6 acceptance gates.
   stock kintera 2.6.8 lacks the new header API. New restart composition metadata
   is additive; legacy anomaly storage still works, but perturbation EOS requires
   the original composition rather than guessing it from an evolved restart.
+
+## PR #326 rebase and CI repair — 2026-11-09
+
+- Rebased onto snapy main `3c891cb` (#337 radial wall refresh and #338 species
+  positivity limiter). The rebase applied without textual conflicts.
+- Kintera #155 merged as `b8e726ce2fb1538aa15f0787fdcef732d9cdc997`, tagged
+  `v2.6.9`. Raised the CMake, Python build/runtime, and release-workflow minimum
+  to 2.6.9; removed the temporary unreleased-header probe.
+- The failed macOS CI job installed kintera 2.6.6 and stopped in CMake. PyPI does
+  not yet offer 2.6.9, so CI builds the exact merged/tagged commit from source
+  before configuring snapy. Package release builds require that dependency to
+  be published (or preinstalled from source); a version bump alone is insufficient.
+- Resolved the semantic interaction with #338: species positivity now uses
+  total dry density through `dry_density`, including in anomaly mode. Added
+  2-D/3-D anomaly cases to `test_tracer_ratio.py` and its CPU test to the
+  `fp32-foundations` gate. Scalar transport already used total dry density.
+
+Validation uses a fresh source build of kintera v2.6.9 in
+`/tmp/snapy-326-kintera` and an isolated install at `/tmp/snapy-326-python`.
+The earlier 2.6.8 paired-build results above remain historical checkpoints.
+
+Reproduction (macOS SDK flag is host-specific):
+
+```sh
+git clone --branch v2.6.9 --depth 1 https://github.com/chengcli/kintera.git /tmp/snapy-326-kintera
+cmake -S /tmp/snapy-326-kintera -B /tmp/snapy-326-kintera/build -DCMAKE_BUILD_TYPE=Release -DNETCDF=ON -DBUILD_TESTS=OFF -DCMAKE_OSX_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+cmake --build /tmp/snapy-326-kintera/build --parallel 4
+(cd /tmp/snapy-326-kintera && SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk MAX_JOBS=4 python -m pip install --no-deps --no-build-isolation --target /tmp/snapy-326-python .)
+PYTHONPATH=/tmp/snapy-326-python cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DCMAKE_OSX_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -D_KINTERA_HEADER_DIR=/tmp/snapy-326-python/kintera/kintera -DKINTERA_INCLUDE_DIR=/tmp/snapy-326-python/kintera -DKINTERA_LIBRARY=/tmp/snapy-326-python/kintera/lib/libkintera_release.dylib -DKINTERA_DATA_DIR=/tmp/snapy-326-python/kintera/data -DSNAPY_TEST_PYTHONPATH=/tmp/snapy-326-python
+cmake --build build --parallel 4 --target test_eos.release test_coordinate.release test_fp32_storage.release test_balance_column.release test_hydro_ref_x1.release test_gravity_work_cache_to.release test_implicit_face_work_jacobian.release test_riemann.release test_stretched_x1_ref.release test_hydro_ref_x1_rf_wall.release test_wb_ref_wall.release test_wb_wall_corner.release test_x1_seam_split.release test_cubed_sphere_exchange.release
+PYTHONPATH=/tmp/snapy-326-python SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk MAX_JOBS=4 python -m pip install --no-deps --no-build-isolation --target /tmp/snapy-326-python .
+```
+
+Validation results:
+
+- The dependency configure/build/install and snapy configure/build/install
+  commands above all passed; CMake detected kintera **2.6.9**.
+- `ctest --test-dir build --output-on-failure -L fp32-foundations`:
+  **34/34 passed**, 62.83 seconds, including the new tracer-ratio cases.
+- `ctest --test-dir build --output-on-failure -R '^test_cubed_sphere_exchange.release$'`:
+  **1/1 passed**, 6.14 seconds, including main's radial wall refresh regression.
+- `PYTHONPATH=/tmp/snapy-326-python python tests/test_tracer_ratio.py`:
+  **passed**; both anomaly cases preserve ratios within 7e-16.
+- `git diff --check`, `python -m py_compile tests/test_tracer_ratio.py`, and
+  `pre-commit run --files FP32_PROGRESS.md FP32_ROADMAP.md .github/workflows/ci.yml .github/workflows/release.yml CMakeLists.txt cmake/modules/FindKintera.cmake pyproject.toml src/hydro/hydro_forward.cpp tests/CMakeLists.txt tests/test_tracer_ratio.py`:
+  **passed**.
+- Local validation is macOS CPU only. CUDA and production FP32 acceptance
+  remain outstanding; milestone scope is unchanged.

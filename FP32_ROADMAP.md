@@ -115,8 +115,9 @@ ctest --test-dir build --output-on-failure -R 'test_(anomaly_storage|fp32_storag
 ```
 
 Kintera owns thermodynamics/chemistry; source changes there are authorized for
-this effort. Validate against the actual modified library, not a stale installed
-package, and record both revisions. Main compatibility risks are stored hydro_u
+this effort. The merged pressure helper requires kintera >= 2.6.9; until its
+wheel is published, build tag v2.6.9 from source (as CI does). Validate against
+the actual library and record both revisions. Main compatibility risks are stored hydro_u
 interpretation, chemistry/forcing total-state writebacks, regridding, and kintera
 dtype assumptions. Other EOS/geometries remain FP64 regression obligations;
 LMARS perturbation support is deferred.
