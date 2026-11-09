@@ -333,7 +333,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
           k[0] * (a.narrow(-1, 2, n) - a0) - k[1] * (a0 - am);
       return out;
     };
-    // per cell, keep the second-order w where u - L u, its primitives or w is
+    // per cell, keep the second-order w where u - L u or its primitives are
     // not admissible: non-finite, rho or p not above the floor (zero with the
     // limiter off), or repaired by the limiter. Those cells hand u to the
     // EOS; this call's redo marks and vapor failures are dropped. Trips count
@@ -367,7 +367,6 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
     good &= ok(w, true);
     w.add_(lap(w0));
-    good &= ok(w, true);
     w.copy_(torch::where(good, w, w0));
     _conv4_trips += good.logical_not().sum();
     // x1 ghosts: the neighbour's converted cells at a seam, the boundary

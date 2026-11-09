@@ -23,6 +23,9 @@ theta    a coarse Straka density current (32 x 128, dry, adiabatic, reflecting w
 gravity  a column at rest with T = 1 - 0.8 z (g = 1, discretely balanced) and a density/pressure pulse at z = 0.5,
          nx1 = 64, 128, 256 against 1024: the pulse's fitted order >= 3.8 (the default face density reference is
          O(dz^2) where p/rho curves; key 4 takes the fourth-order one, docs/derivations/wb-ref4.md).
+slab     moist EOS, limiter on, 32 x 8 with periodic x2: a vapour slab (0.02, exactly 0 outside, sharp edges)
+         crossed by w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and a uniform tracer
+         ratio within 1e-13, converted species >= 0 (u - L u with negative vapour must not reach the EOS).
 
   python test_conversion_order.py [--device cpu|cuda]
 """
@@ -34,20 +37,20 @@ import time
 import numpy as np
 import torch
 import yaml
-from snapy import Mesh, MeshOptions, balance_column, kICY, kIDN, kIPR
+from snapy import Mesh, MeshOptions, balance_column, kICY, kIDN, kIPR, kIV1
 
 G, NG, TOL = 1.4, 3, 1.e-13
 X, WQ = (torch.from_numpy(v) for v in np.polynomial.legendre.leggauss(8))
 
 
 def mesh(key, nx=64, geo="cartesian", x1f=None, nb1=1, limiter=False, moist=False, shock=False, tracer=False,
-         grav=0., straka=False, tfloor=1.e-12):
+         grav=0., straka=False, tfloor=1.e-12, nx2=1):
     bounds = {"x1min": 0., "x1max": 1., "x2min": 0., "x2max": 1., "x3min": 0., "x3max": 1.}
     bounds.update({"spherical-polar": {"x1min": 1., "x1max": 2., "x2min": 1., "x2max": 2.},
                    "gnomonic-equiangle": {"x1min": 1., "x1max": 2., "x2min": -.05, "x2max": .05,
                                           "x3min": -.05, "x3max": .05}}.get(geo, {}))
     weno = {"type": "weno5", "scale": True, "shock": shock}
-    cfg = {"geometry": {"type": geo, "bounds": bounds, "cells": {"nx1": nx, "nx2": 1, "nx3": 1, "nghost": NG}},
+    cfg = {"geometry": {"type": geo, "bounds": bounds, "cells": {"nx1": nx, "nx2": nx2, "nx3": 1, "nghost": NG}},
            "boundary-condition": {"external": {f"x{d}-{s}": "reflecting" if d == 1 else "periodic"
                                                for d in (1, 2, 3) for s in ("inner", "outer")}},
            "distribute": {"layout": "cubed" if nb1 > 1 else "slab", "nb1": nb1, "nb2": 1, "nb3": 1,
@@ -83,7 +86,7 @@ def mesh(key, nx=64, geo="cartesian", x1f=None, nb1=1, limiter=False, moist=Fals
                           {"name": "cloud", "composition": {"H": 2, "O": 1}, "cv_R": 9.0, "u0_R": -3430.}]
         cfg["reactions"] = [{"equation": "vapor <=> cloud", "type": "nucleation",
                              "rate-constant": {"formula": "h2o_ideal"}}]
-        bounds["x1max"] = 1.e4
+        bounds["x1max"] = bounds["x2max"] = 1.e4
         cfg["dynamics"]["equation-of-state"] = {"type": "ideal-moist", "density-floor": 1.e-10,
                                                 "pressure-floor": 1.e-10, "limiter": True}
         cfg["forcing"] = {"const-gravity": {"grav1": -10.}}
@@ -327,17 +330,52 @@ def arm_gravity(device):
     return fit(err) >= 3.8
 
 
+def arm_slab(device):
+    ok = True
+    for nb1 in (1,):
+        m = mesh(4, nx=32, nb1=nb1, moist=True, tracer=True, nx2=8)
+        blocks, state = list(m.blocks), []
+        for b in blocks:
+            b.to(torch.device(device), torch.float64)
+            w = b.buffer("hydro.D").clone().zero_()
+            z, y = b.buffer("coord.x1v").double().cpu().view(1, -1), b.buffer("coord.x2v").double().cpu().view(-1, 1)
+            p = 1.e5 * torch.exp(-z * 10. / (3900. * 320.)) + 0. * y
+            q = (((z - 5.e3).abs() < 1.e3) & ((y - 5.e3).abs() < 2.5e3)).double()
+            for row, val in {kIDN: p / (3900. * 320.), kIPR: p, kICY: .02 * q, kICY + 1: 1.e-3 * q * ((z - 5.e3).abs() < 400.),
+                             kIV1: 25. * torch.sin(np.pi * z / 1.e4) + 0. * y, kIV1 + 1: 20. + 0. * p}.items():
+                w[row] = val.to(w)
+            state.append({"hydro_w": w, "scalar_r": torch.full_like(w[:1], .01)})
+        state = m.initialize(state)[0]
+        tot = lambda rows: sum(float(interior(state, blocks, "hydro_u", r).sum()) for r in rows)
+        d0, q0, rmax, qmin = tot([kIDN]), tot([kICY, kICY + 1]), 0., 0.
+        for c in range(1, 31):
+            m.set_cycle(c)
+            h = m.max_time_step(state)
+            for st in range(3):
+                m.forward(state, h, st)
+                qmin = min([qmin] + [float(s["hydro_w"][kICY:].min()) for s in state])
+                r = interior(state, blocks, "scalar_s", 0) / interior(state, blocks, "hydro_u", kIDN)
+                rmax = max(rmax, float((r / .01 - 1.).abs().max()))
+            assert m.check_redo(state) == 0
+        dd, dq = abs(tot([kIDN]) - d0) / d0, abs(tot([kICY, kICY + 1]) - q0) / q0
+        print(f"slab key 4 nb1 {nb1}: |dM|/M dry {dd:.2e} water {dq:.2e}, max|r/r0-1| {rmax:.2e}, "
+              f"min converted species {qmin:.2e}")
+        del m, state, blocks, b
+        ok &= max(dd, dq, rmax) <= TOL and qmin >= 0.
+    return ok
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
-    ap.add_argument("--arms", default="order,radial,refused,shock,mass,seam,floor,limiter,theta,gravity")
+    ap.add_argument("--arms", default="order,radial,refused,shock,mass,seam,floor,limiter,theta,gravity,slab")
     a = ap.parse_args()
     if a.device == "cuda" and not torch.cuda.is_available():
         raise SystemExit(125)
     arms = {"order": lambda d: arm_order(d, 0.) and arm_order(d, .8), "radial": arm_radial, "refused": arm_refused,
             "shock": arm_shock, "mass": arm_mass, "limiter": arm_limiter,
             "theta": arm_theta, "gravity": arm_gravity,
-            "seam": arm_seam, "floor": arm_floor}
+            "seam": arm_seam, "floor": arm_floor, "slab": arm_slab}
     bad = []
     for name in a.arms.split(","):
         t0 = time.time()
