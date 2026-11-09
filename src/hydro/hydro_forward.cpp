@@ -501,9 +501,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       }
     }
 
-    // sedimentation flux; skipped when x1 flux is off (_flux1 not rewritten)
+    // sedimentation flux; skipped when x1 flux is off (_flux1 not rewritten).
+    // Its settling part is kept wherever step 4.C can limit species: with the
+    // eos limiter, or with the covariance rows that switch it on (cov2, cov3)
     if (psed && !options->disable_flux_x1()) {
-      bool carry = options->eos()->limiter() && ny > 0;
+      bool carry = (options->eos()->limiter() || flux_covariance()) && ny > 0;
       auto fadv = carry ? _flux1.narrow(0, ICY, ny).clone() : torch::Tensor();
       psed->forward(w, _flux1);
       if (carry) fsed1 = _flux1.narrow(0, ICY, ny) - fadv;

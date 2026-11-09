@@ -432,6 +432,8 @@ snapy_add_python_test(test_scalar_ratio_2d TIMEOUT 120 LABELS "python;scalar")
 snapy_add_python_test(test_species_ratio_2d TIMEOUT 120 LABELS "python;hydro;scalar")
 # the same with the eos limiter on: one bump column at vertical Courant 30 and 100
 snapy_add_python_test(test_tracer_ratio_limiter TIMEOUT 120 LABELS "python;scalar;positivity")
+# a cell that settling drains keeps the plain species theta, eos limiter on and off
+snapy_add_python_test(test_settling_theta_both_paths TIMEOUT 120 LABELS "python;hydro;positivity")
 # #289: the same, on a column split in x1, four blocks in one process vs one
 snapy_add_python_test(test_scalar_cov_x1_split TIMEOUT 300 LABELS "python;hydro;scalar")
 set_tests_properties(test_scalar_cov_x1_split_python
@@ -498,6 +500,9 @@ if(CUDA)
   snapy_add_python_test(test_tracer_ratio_limiter_cuda
     SCRIPT test_tracer_ratio_limiter.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;positivity;cuda")
+  snapy_add_python_test(test_settling_theta_both_paths_cuda
+    SCRIPT test_settling_theta_both_paths.py ARGS --device cuda
+    TIMEOUT 120 LABELS "python;hydro;positivity;cuda")
   snapy_add_python_test(test_tracer_dry_convention_cuda
     SCRIPT test_tracer_dry_convention.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;implicit;forcing;cuda")
@@ -518,6 +523,7 @@ if(CUDA)
     test_scalar_ratio_2d_cuda_python
     test_species_ratio_2d_cuda_python
     test_tracer_ratio_limiter_cuda_python
+    test_settling_theta_both_paths_cuda_python
     test_tracer_dry_convention_cuda_python
     PROPERTIES SKIP_RETURN_CODE 125)
 endif()
