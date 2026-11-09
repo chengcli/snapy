@@ -20,7 +20,8 @@ floor    limiter on, a 4-cell pressure dip of 0.06 in p = rho = 1: a temperature
 slab     moist EOS, limiter on, 32 x 8 with periodic x2 on two x1 blocks in one process: a vapour slab (0.02,
          exactly 0 outside) crossed by w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and
          the tracer ratio within 1e-13, every seam ghost of w, corners included, bitwise the neighbour's
-         converted cell, and no point state u - L u that the EOS limiter repairs (negative vapour).
+         converted cell, and the sum of vapour^2 after 30 steps within 1e-10 of the screened run's (u - L u with
+         negative vapour falls back before the EOS; without that the state moves by 1.6e-6).
 
   python test_conversion_order.py [--device cpu|cuda] [--arms order,...]
 """
@@ -296,13 +297,14 @@ def arm_slab(device):
     q0 = water()
     dd = drift(m, state, blocks, device, [kIDN], nstep=30)
     dq, r = abs(water() - q0) / q0, ratio(state, blocks)
+    # the species screen: u - L u with negative vapour falls back before the EOS; the state shows it
+    v2 = float((interior(state, blocks, "hydro_u", kICY) ** 2).sum()) / 5.491166134649262e-05 - 1.
     m.forward(state, m.max_time_step(state), 0)  # check_redo leaves W(u); the stage's w is the converted one
     w0, w1 = (s["hydro_w"] for s in state)  # every seam ghost, corners too, is the neighbour's converted cell
     same = torch.equal(w0[..., 16 + NG:], w1[..., NG:2 * NG]) and torch.equal(w1[..., :NG], w0[..., 16:16 + NG])
-    rep = sum(int(b.buffer("hydro.conversion_repairs")) for b in blocks)
     print(f"slab key 4: |dM|/M dry {dd:.2e} water {dq:.2e}, max|r/r0-1| {r:.2e}, seam ghosts = owners {same}, "
-          f"point-state repairs {rep}")
-    return max(dd, dq, r) <= TOL and same and rep == 0
+          f"sum vapour^2 vs the screened run {v2:.1e}")
+    return max(dd, dq, r) <= TOL and same and abs(v2) <= 1.e-10
 
 
 if __name__ == "__main__":
