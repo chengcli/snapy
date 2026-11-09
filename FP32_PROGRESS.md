@@ -293,3 +293,54 @@ chemistry. No kintera source modification is needed for this caller fix.
   and `git diff --check`: passed.
 - `ctest --test-dir build --output-on-failure -R '^test_example_ic_stretched_python$'`:
   **1/1 passed**, 2.73 seconds.
+
+## PR326_REVIEWS.md follow-up — 2026-11-09
+
+- Restore #332's deficit-based redo criterion with `species_repair_mark` and
+  pre-repair species density; use total dry density in anomaly mode. A new
+  regression distinguishes a small receiving deficit from a relatively large
+  donor change, and checks both storage modes plus a real deficit that must redo.
+- Retain the shared Cartesian face-gravity-work calculation. Its different
+  arithmetic grouping changes default FP64 results at round-off: reviewers
+  measured about **2e-9 relative velocity difference** against main in Straka
+  after 40 steps, with density and pressure identical at output precision.
+  They isolated the difference to this branch; disabling it restored bitwise
+  equality. This is reviewer-provided evidence, not a new local measurement.
+  Default FP64 behavior is numerically equivalent, not promised bitwise identical
+  to main. This does not change the same-dtype restart-continuation requirement.
+- Update all README dependency references to kintera >=2.6.9 and explain source
+  installation while wheels are unavailable. No dependency API change is needed.
+- Register a CUDA twin of `test_anomaly_storage` with the same assertions and
+  a no-device skip. Zoey's review reports successful CUDA compilation and tests
+  at cf14479 on RTX 5090; these are external results, not local GPU validation.
+- Check finite positive background and total volumetric heat capacity before
+  evaluating perturbation pressure. Tests cover zero/negative total capacity
+  and zero background capacity.
+- Preserve FP32 stored anomalies on restart instead of copying them into the
+  file's FP64 totals tensor. The new storage-only restart case failed before
+  the fix and verifies dtype, exact bits, and FP64 reference metadata. This is
+  serialization coverage, not a claim that full FP32 evolution works.
+- Full-model FP32 dtype failures remain M4 work; coupled/solid-boundary restart
+  acceptance remains M5. Earlier-round comments and validation are historical;
+  the active round-2 requests above are the scope of this follow-up.
+
+Review validation (macOS CPU, tagged kintera 2.6.9):
+
+- `PYTHONPATH=/tmp/snapy-326-python cmake --build build --parallel 4 --target test_eos.release test_fix_vapor_deficit.release test_forcing.release test_uranus_cycle1_abort.release run_hydro.release`:
+  passed. The PYTHONPATH is needed for CMake's dependency-version probe; the
+  global environment still has kintera 2.6.6.
+- Refreshed the isolated Python installation's shared library using
+  `cp build/lib/libsnap_release.dylib /tmp/snapy-326-python/snapy/lib/libsnap_release.dylib`.
+  Python binding sources are unchanged.
+- `ctest --test-dir build --output-on-failure -R '^test_(eos|fix_vapor_deficit|forcing|uranus_cycle1_abort)\.release$'`:
+  **4/4 passed**, 3.45 seconds.
+- `PYTHONPATH=/tmp/snapy-326-python python tests/test_anomaly_storage.py`:
+  **passed**, including the new FP32 serialization case (which failed against
+  the previous shared library).
+- `PYTHONPATH=/tmp/snapy-326-python python tests/test_anomaly_storage.py --device cuda`:
+  returned **125**, the expected no-GPU skip. This is not a CUDA execution result.
+- `ctest --test-dir build --output-on-failure -L fp32-foundations`:
+  **34/34 passed**, 58.86 seconds.
+- `git diff --check`, `python -m py_compile tests/test_anomaly_storage.py`, and
+  `pre-commit run --files README.md FP32_PROGRESS.md FP32_ROADMAP.md src/eos/equation_of_state.cpp src/eos/ideal_moist.cpp src/mesh/meshblock.cpp tests/test_eos.cpp tests/test_fix_vapor_deficit.cpp tests/test_anomaly_storage.py tests/CMakeLists.txt`:
+  passed.

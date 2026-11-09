@@ -125,9 +125,17 @@ IdealMoistPerturbations IdealMoistImpl::perturbations(
   auto thermal0 = ref[1] - dot(rho0, offset);
   auto dthermal = u[IPR] - ke - dot(drho, offset);
   auto gas0 = dot(rho0, gas), cv0 = dot(rho0, cv);
+  auto dcv = dot(drho, cv);
+  auto total_cv = cv0 + dcv;
+  TORCH_CHECK((torch::isfinite(cv0) & (cv0 > 0.) & torch::isfinite(total_cv) &
+               (total_cv > 0.))
+                  .all()
+                  .item<bool>(),
+              "ideal-moist perturbations require finite positive background "
+              "and total volumetric heat capacities");
   auto pressure0 = thermal0 * gas0 / cv0;
   auto pressure_delta = kintera::eval_const_cv_pressure_delta(
-      thermal0, gas0, cv0, dthermal, dot(drho, gas), dot(drho, cv));
+      thermal0, gas0, cv0, dthermal, dot(drho, gas), dcv);
   return {density0, pressure0, density_delta.to(stored.scalar_type()),
           pressure_delta.to(stored.scalar_type())};
 }

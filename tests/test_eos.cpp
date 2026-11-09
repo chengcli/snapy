@@ -363,6 +363,16 @@ TEST_P(DeviceTest, ideal_moist_pressure_perturbations_without_condensables) {
                               1.e-10));
   EXPECT_TRUE(torch::equal(result.density_delta,
                            torch::zeros_like(result.density_delta)));
+  // Reject singular and negative total heat capacity before pressure division.
+  for (double drho : {-10., -20.}) {
+    stored[IDN].fill_(drho);
+    EXPECT_THROW(eos->perturbations(stored), c10::Error);
+  }
+  stored[IDN].zero_();
+  auto bad_ref = block->phydro->u_ref().clone();
+  bad_ref[0].zero_();
+  block->phydro->pref->set("u0", bad_ref);
+  EXPECT_THROW(eos->perturbations(stored), c10::Error);
 }
 
 TEST(eos_limiter,

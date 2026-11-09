@@ -455,6 +455,9 @@ set_tests_properties(
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)
+  snapy_add_python_test(test_anomaly_storage_cuda
+    SCRIPT test_anomaly_storage.py ARGS --device cuda
+    TIMEOUT 300 LABELS "python;hydro;anomaly;cuda;fp32-foundations")
   snapy_add_python_test(test_fix_vapor_reports_failure_cuda
     SCRIPT test_fix_vapor_reports_failure.py ARGS --device cuda
     TIMEOUT 60 LABELS "python;eos;positivity;cuda")
@@ -502,6 +505,7 @@ if(CUDA)
     SCRIPT test_tracer_dry_convention.py ARGS --device cuda
     TIMEOUT 120 LABELS "python;scalar;implicit;forcing;cuda")
   set_tests_properties(
+    test_anomaly_storage_cuda_python
     test_fix_vapor_reports_failure_cuda_python
     test_fix_vapor_stale_count_cuda_python
     test_check_redo_saturation_cuda_python

@@ -70,6 +70,10 @@ face-pressure semantics explicit for downstream consumers. Preserve static
 background residual forces, including for unbalanced initial states.
 Consolidate explicit/implicit Cartesian gravity work using local potential
 differences; preserve sedimentation and wall corrections.
+The shared Cartesian face-work arithmetic is not bitwise identical to main:
+reviewers measured about 2e-9 relative velocity change in FP64 Straka at 40
+steps (density/pressure unchanged at output precision). Require numerical
+equivalence and conservation; retain exact same-dtype restart continuation.
 Gate: FP64 equivalence, conservation, storage-emulated rest noise and split
 columns. A velocity target alone cannot distinguish initialization imbalance.
 

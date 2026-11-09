@@ -14,6 +14,7 @@ rewrite, so a run with it on must match the run with it off to round-off. The ar
   switch      SNAP_ANOMALY=1 turns it on without the YAML key; an unsupported EOS refuses it
   restart     write a restart mid-run, resume from it: the continuation is bit-identical to the
               uninterrupted run (hydro_u_stored), and the file holds totals plus hydro_ref
+  float_restart FP32 stored anomalies retain dtype and bits; references stay FP64
   limiter     a cell pushed below the density and energy floors is clipped in anomaly space to
               the same totals as the totals path clips it; every other cell is untouched
   fp32        SNAP_FP32_STORAGE=step leaves hydro_u representable in float32 after a step;
@@ -236,6 +237,37 @@ def arm_switch(device):
     return failures
 
 
+def arm_float_restart(device):
+    """Check FP32 storage serialization, without claiming full FP32 evolution."""
+    import glob
+    from snapy import kIPR
+
+    cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmp:
+        os.chdir(tmp)
+        try:
+            outputs = [{"type": "restart", "dt": 1.0e9}]
+            block = make_block(device, anomaly=True, outputs=outputs)
+            state, _ = block.initialize(initial_state(block))
+            state["hydro_u"] = state["hydro_u"].float()
+            state["hydro_u"][kIPR].fill_(0.01234567)
+            expected = state["hydro_u"].clone()
+            block.make_outputs(state, 0., True)
+            path, = glob.glob(os.path.join(tmp, "*.final.restart"))
+            resumed = make_block(device, anomaly=True, outputs=outputs)
+            restored, _ = resumed.initialize_from_restart(path)
+            actual = restored["hydro_u"]
+            if actual.dtype != expected.dtype or not torch.equal(actual, expected):
+                return ["FP32 restart changed stored anomaly dtype or bits"]
+            for name in ("hydro.ref.u0", "hydro.ref.species0"):
+                if dict(resumed.named_buffers())[name].dtype != torch.float64:
+                    return ["FP32 restart demoted the reference"]
+            print("restart    FP32 stored dtype and bits preserved, references FP64")
+            return []
+        finally:
+            os.chdir(cwd)
+
+
 def arm_restart(device):
     """Resume from a restart mid-run; compare with the uninterrupted run, both arms."""
     import glob
@@ -401,6 +433,8 @@ def main():
     p.add_argument("--steps", type=int, default=10)
     p.add_argument("--child", default=None)
     args = p.parse_args()
+    if args.device.startswith("cuda") and not torch.cuda.is_available():
+        return 125
     torch.set_default_dtype(torch.float64)
     # a restart loads onto the layout's device, which snapy reads from DEVICE
     # (default cpu): keep it in step with --device, for the children too
@@ -414,6 +448,7 @@ def main():
     failures += arm_keys(args.device)
     failures += arm_switch(args.device)
     failures += arm_restart(args.device)
+    failures += arm_float_restart(args.device)
     failures += arm_limiter(args.device)
     failures += arm_fp32(args.device)
     for f in failures:

@@ -1663,7 +1663,8 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       }
       // resume the anomaly bit for bit when the file carries it
       if (data.count("hydro_u_stored")) {
-        hydro_u.copy_(data.at("hydro_u_stored"));
+        // Totals in the file are FP64; retain the stored anomaly dtype.
+        hydro_u = data.at("hydro_u_stored").to(hydro_u.device());
         stored = true;
       }
     } else {
