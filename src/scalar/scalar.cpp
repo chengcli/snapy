@@ -229,10 +229,10 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   if (lim || cov) {
     auto theta = flux_positivity_theta(u, _flux1, _flux2, _flux3, pcoord, dt);
     // the eos limiter does not limit the mass flux either: where it drains
-    // the dry air too (Courant>1), the implicit x1 refill from the neighbours
-    // carries their r back, so the tracer may drain past its content only as
-    // far as the poorer neighbour repays: all of it at a uniform r, none
-    // beside an empty cell
+    // the dry air too (Courant>1), the neighbours (implicit x1 refill, inflow
+    // along x2, x3) bring their r back, so the tracer may drain past its
+    // content only as far as the poorer neighbour repays: all of it at a
+    // uniform r, none beside an empty cell
     {
       auto m = [&](torch::Tensor const& f, torch::Tensor const& mass) {
         return f.defined() ? mass[IDN].unsqueeze(0) : torch::Tensor();
@@ -241,11 +241,7 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
       auto td = flux_positivity_theta(rho, m(_flux1, ph->flux1()),
                                       m(_flux2, ph->flux2()),
                                       m(_flux3, ph->flux3()), pcoord, dt);
-      auto r = u / rho;
-      auto phi = torch::where(
-          r > 0.,
-          (torch::minimum(r.roll(1, DIM1), r.roll(-1, DIM1)) / r).clamp(0., 1.),
-          torch::zeros_like(r));
+      auto phi = flux_positivity_share(u / rho);
       theta = torch::where((td < 1.) & (td > 0.),
                            theta + phi * ((theta / td).clamp_max(1.) - theta),
                            theta);

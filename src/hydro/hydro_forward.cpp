@@ -796,10 +796,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     torch::Tensor drain;
     auto theta = flux_positivity_theta(uy, f1, f2, f3, pmb->pcoord, dt, &drain);
     // the eos limiter does not limit the mass flux either: where it drains
-    // the dry air too (Courant>1), the implicit x1 refill from the neighbours
-    // carries their q back, so a species may drain past its content only as
-    // far as the poorer neighbour repays: all of it at a uniform q, none
-    // beside an empty cell
+    // the dry air too (Courant>1), the neighbours (implicit x1 refill, inflow
+    // along x2, x3) bring their q back, so a species may drain past its
+    // content only as far as the poorer neighbour repays: all of it at a
+    // uniform q, none beside an empty cell
     {
       auto m = [&](torch::Tensor const& f) {
         return f.defined() ? f.narrow(0, IDN, 1) : torch::Tensor();
@@ -807,11 +807,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       auto rho = u.narrow(0, IDN, 1);
       auto td = flux_positivity_theta(rho, m(_flux1), m(_flux2), m(_flux3),
                                       pmb->pcoord, dt);
-      auto q = uy / rho;
-      auto phi = torch::where(
-          q > 0.,
-          (torch::minimum(q.roll(1, DIM1), q.roll(-1, DIM1)) / q).clamp(0., 1.),
-          torch::zeros_like(q));
+      auto phi = flux_positivity_share(uy / rho);
       // settling mass is not dry air: nothing refills it, so a cell it drains
       // keeps the plain theta
       if (fsed1.defined()) {
