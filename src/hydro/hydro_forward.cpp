@@ -810,6 +810,12 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
           q > 0.,
           (torch::minimum(q.roll(1, DIM1), q.roll(-1, DIM1)) / q).clamp(0., 1.),
           torch::zeros_like(q));
+      // settling mass is not dry air: nothing refills it, so a cell it drains
+      // keeps the plain theta
+      if (fsed1.defined()) {
+        auto out = fsed1.clamp_min(0.).roll(-1, DIM1) + (-fsed1).clamp_min(0.);
+        phi.masked_fill_(out > 0., 0.);
+      }
       theta = torch::where((td < 1.) & (td > 0.),
                            theta + phi * ((theta / td).clamp_max(1.) - theta),
                            theta);
