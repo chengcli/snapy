@@ -313,6 +313,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
 
+  // key 4 reads u past an x1 seam in the x2/x3 ghost columns too; those
+  // corners are the neighbour's (its x2/x3 ghosts are filled)
+  if (options->conversion_order() == 4)
+    _x1_ghost_rows(u, pmb->pcoord->options->nghost(), false, 0x772c);
   peos->forward(u, w);
   // x1 point values u - L u, the primitives there, and back to cell averages:
   // w = W(u - L u) + L W(u), fourth order where W(u) is second

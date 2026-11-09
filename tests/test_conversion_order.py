@@ -23,9 +23,11 @@ theta    a coarse Straka density current (32 x 128, dry, adiabatic, reflecting w
 gravity  a column at rest with T = 1 - 0.8 z (g = 1, discretely balanced) and a density/pressure pulse at z = 0.5,
          nx1 = 64, 128, 256 against 1024: the pulse's fitted order >= 3.8 (the default face density reference is
          O(dz^2) where p/rho curves; key 4 takes the fourth-order one, docs/derivations/wb-ref4.md).
-slab     moist EOS, limiter on, 32 x 8 with periodic x2: a vapour slab (0.02, exactly 0 outside, sharp edges)
-         crossed by w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and a uniform tracer
-         ratio within 1e-13, converted species >= 0 (u - L u with negative vapour must not reach the EOS).
+slab     moist EOS, limiter on, 32 x 8 with periodic x2, one block and two x1 blocks in one process (the
+         converted x2 ghosts next to the seam read u corners past it): a vapour slab (0.02, exactly 0 outside,
+         sharp edges) crossed by w = 25 sin(pi z / 10 km) and u = 20 m/s, 30 steps: dry and water mass and a
+         uniform tracer ratio within 1e-13, converted species >= 0 (u - L u with negative vapour must not reach
+         the EOS).
 
   python test_conversion_order.py [--device cpu|cuda]
 """
@@ -332,7 +334,7 @@ def arm_gravity(device):
 
 def arm_slab(device):
     ok = True
-    for nb1 in (1,):
+    for nb1 in (1, 2):
         m = mesh(4, nx=32, nb1=nb1, moist=True, tracer=True, nx2=8)
         blocks, state = list(m.blocks), []
         for b in blocks:
