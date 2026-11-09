@@ -271,3 +271,25 @@ Validation results:
   **passed**.
 - Local validation is macOS CPU only. CUDA and production FP32 acceptance
   remain outstanding; milestone scope is unchanged.
+
+### Linux CI follow-up
+
+CI run `42645426999` passed pre-commit and macOS (4/4 tests). Linux passed its
+build/install but failed one CTest: `test_uranus_cycle1_abort.release`. The dry
+abort fixture has no reacting species; kintera 2.6.9's Jacobian attempted to
+slice a zero-length species axis and threw before snapy's intended redo/exit
+handling. This was reproduced locally with the tagged dependency.
+
+`run_hydro` now skips the chemistry update when its stoichiometry is empty.
+The existing abort assertion is unchanged, and failed assertions now include
+the captured subprocess log. The two moist Uranus cases continue to execute
+chemistry. No kintera source modification is needed for this caller fix.
+
+- `cmake --build build --parallel 4 --target test_uranus_cycle1_abort.release run_hydro.release`: passed.
+- `ctest --test-dir build --output-on-failure -R '^test_uranus_cycle1_abort.release$'`:
+  **failed before the fix; passed after**, 1/1 CTest containing three cases,
+  1.42 seconds.
+- `pre-commit run --files examples/run_hydro.cpp tests/test_uranus_cycle1_abort.cpp`
+  and `git diff --check`: passed.
+- `ctest --test-dir build --output-on-failure -R '^test_example_ic_stretched_python$'`:
+  **1/1 passed**, 2.73 seconds.
