@@ -324,9 +324,11 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto const& mo = pmb->options;
     int ng = pmb->pcoord->options->nghost();
     auto* k = conv4_x1_;
-    if (!k[0].defined() || k[0].device() != u.device() ||
+    auto const& x1f = pmb->pcoord->x1f;  // rebuilt on a new or rewritten grid
+    std::pair<void*, int64_t> at{x1f.data_ptr(), x1f._version()};
+    if (!k[0].defined() || at != conv4_x1_at_ || k[0].device() != u.device() ||
         k[0].scalar_type() != u.scalar_type())
-      conv4_x1_weights(pmb->pcoord->x1f, u.size(DIM1), u.options(), k);
+      conv4_x1_weights(x1f, u.size(DIM1), u.options(), k), conv4_x1_at_ = at;
     int n = u.size(DIM1) - 2;
     // centred everywhere, reading the u ghosts the boundary condition or the
     // exchange filled; the converted ghosts are refilled below

@@ -283,8 +283,10 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   mutable std::shared_ptr<X1PlainMeanStencils> x1pm_;
   //! and its pressure-force stencils, for the hydrostatic correction
   mutable std::shared_ptr<X1PressureSourceStencils> x1src_;
-  //! conversion-order 4 x1 weights {kp, km}, built on first use
+  //! conversion-order 4 x1 weights {kp, km}, built on first use, and the x1f
+  //! (storage, version) they were built from
   mutable torch::Tensor conv4_x1_[2];
+  mutable std::pair<void*, int64_t> conv4_x1_at_;
   //! SNAP_GRAVITY_WORK_RADIAL_EXACT grid-only work factors, built on first use
   CorrectedPEFactors _pe_work;
   //! face_moment2_x1() for this block's x1 grid, built on first use. Holds

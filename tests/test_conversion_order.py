@@ -198,7 +198,24 @@ def arm_radial(device):
                 err.append(float((state[0]["hydro_w"][1, 0, 0].cpu()[s] - exact["v"][s]).abs().max()))
             print(f"radial {geo} key {key}: max err {err} order {fit(err):.2f}")
             ok &= key == 2 or fit(err) >= 3.8
-    return ok
+    # the weights follow a rewritten grid: a uniform block, after one stage, takes a stretched block's buffers
+    s = np.linspace(0., 1., 65)
+    ma, mb = mesh(4, 64), mesh(4, 64, x1f=(s + .8 * np.sin(2 * np.pi * s) / (2 * np.pi)).tolist())
+    init = lambda xf, *_: averages(xf, *pulse(.5))[0]
+    sa, ba = start(ma, init, device)
+    ma.set_cycle(1), ma.forward(sa, 1.e-12, 0)
+    sb, bb = start(mb, init, device)
+    grid = dict(ba[0].named_buffers())
+    for name, y in bb[0].named_buffers():
+        if name.startswith("coord."):
+            grid[name].copy_(y)
+    sa = [{k: v.clone() for k, v in sb[0].items()}]
+    for m, st in ((ma, sa), (mb, sb)):
+        m.set_cycle(1), m.forward(st, 1.e-12, 0)
+    same = torch.equal(sa[0]["hydro_w"], sb[0]["hydro_w"])
+    d = float((sa[0]["hydro_w"] - sb[0]["hydro_w"]).abs().max())
+    print(f"radial: a rewritten x1f gives the converted w of a fresh block: {same} (max|dw| {d:.1e})")
+    return ok and same
 
 
 def arm_gravity(device):
