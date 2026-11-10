@@ -504,6 +504,7 @@ if(CUDA)
     test_flux_positivity_cubedsphere_cuda_python
     test_flux_positivity_cubedsphere_moist_cuda_python
     test_vic_moist_device_python
+    test_conversion_order_cuda_python
     test_wb_ref4_order_cuda_python
     test_x1_centroid_rest_cuda_python
     test_radial_order_cuda_python
