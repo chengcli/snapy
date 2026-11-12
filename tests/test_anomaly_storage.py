@@ -36,11 +36,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 YAML = os.path.join(HERE, "test_anomaly_storage.yaml")
 
 
-def make_block(device, anomaly=None, eos_type=None, outputs=None):
+def make_block(device, anomaly=None, eos_type=None, outputs=None, conversion_order=2):
     from snapy import MeshBlock, MeshBlockOptions
 
     with open(YAML) as f:
         cfg = yaml.safe_load(f)
+    cfg["dynamics"]["conversion-order"] = conversion_order
     if anomaly is not None:
         cfg["dynamics"]["anomaly"] = anomaly
     if outputs is not None:
@@ -165,11 +166,12 @@ def arm_reference(device):
     return failures
 
 
-def arm_match(device, nsteps):
+def arm_match(device, nsteps, conversion_order=2):
+    print("match      conversion-order=%d" % conversion_order)
     failures = []
     runs = {}
     for anomaly in (False, True):
-        block = make_block(device, anomaly=anomaly)
+        block = make_block(device, anomaly=anomaly, conversion_order=conversion_order)
         bv, _ = block.initialize(initial_state(block))
         dts = run_steps(block, bv, nsteps)
         runs[anomaly] = (block, bv, dts)
@@ -445,6 +447,7 @@ def main():
     failures = []
     failures += arm_reference(args.device)
     failures += arm_match(args.device, args.steps)
+    failures += arm_match(args.device, args.steps, conversion_order=4)
     failures += arm_keys(args.device)
     failures += arm_switch(args.device)
     failures += arm_restart(args.device)

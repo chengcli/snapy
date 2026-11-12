@@ -344,3 +344,35 @@ Review validation (macOS CPU, tagged kintera 2.6.9):
 - `git diff --check`, `python -m py_compile tests/test_anomaly_storage.py`, and
   `pre-commit run --files README.md FP32_PROGRESS.md FP32_ROADMAP.md src/eos/equation_of_state.cpp src/eos/ideal_moist.cpp src/mesh/meshblock.cpp tests/test_eos.cpp tests/test_fix_vapor_deficit.cpp tests/test_anomaly_storage.py tests/CMakeLists.txt`:
   passed.
+
+## Rebase onto main 919936d — 2026-11-12
+
+- Rebased the seven PR commits onto main `919936da07d80a310b98ab11da184972a3203274`
+  (#340 Roe face frames, #334 CUDA reconstruction launch sizing, #339 optional
+  fourth-order x1 conversion). Resolved hydro option conflicts by retaining
+  both `conversion-order` and `anomaly`, including cloning and YAML parsing.
+- Adapted the new conversion-order 4 path to use total conserved cell averages
+  before applying the spatial conversion, then explicitly use the total-state
+  EOS entry point. Applying it to stored anomalies would omit background
+  curvature and test anomaly density against a total-density floor. The
+  anomaly-on/off regression now exercises conversion orders 2 and 4.
+- Prior temporary validation packages were no longer present. Built the clean
+  neighboring kintera v2.6.10 checkout (`3f5ff938181351a84cb129a9e6314fb89b669b71`)
+  and installed it in `/tmp/snapy-rebase-python`; the global package is 2.6.6
+  and a package-index install of `kintera>=2.6.9` still found no match.
+  No kintera source change or minimum-version change is required.
+
+Validation uses `/tmp/snapy-rebase-python` for the Python package, kintera
+headers/library/data, and `SNAPY_TEST_PYTHONPATH`. CMake configured successfully
+with kintera 2.6.10; the foundation executables and fresh snapy Python extension
+built successfully. Local validation is CPU only; upstream CUDA reconstruction
+changes require CUDA CI/hardware.
+
+- `ctest --test-dir build --output-on-failure -L fp32-foundations`:
+  **34/34 passed**, 62.29 seconds, including anomaly on/off with conversion
+  orders 2 and 4.
+- `ctest --test-dir build --output-on-failure -R '^test_(conversion_order|wb_ref4_order|roe_cubed_sphere_rest)_python$'`:
+  **3/3 passed**, 40.42 seconds.
+- `pre-commit run --files src/hydro/hydro.hpp src/hydro/hydro_options.cpp src/hydro/hydro_forward.cpp tests/test_anomaly_storage.py FP32_PROGRESS.md`,
+  `python -m py_compile tests/test_anomaly_storage.py`, and `git diff --check`:
+  passed.

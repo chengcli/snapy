@@ -351,16 +351,19 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       return p && a.size(0) > IPR ? good & (a[IPR] > pf) : good;
     };
     auto w0 = w.clone();
-    auto up = u - lap(u);
+    // Conversion acts on total cell averages, including the static background.
+    // Differencing only stored anomalies omits the background curvature.
+    auto averages = has_reference() ? total_u(u) : u;
+    auto up = averages - lap(averages);
     auto good = ok(up, false);
-    auto tmp = torch::where(good, up, u);
+    auto tmp = torch::where(good, up, averages);
     auto keep = [](torch::Tensor const& a) {
       return a.defined() ? a.clone() : a;
     };
     auto marks = keep(peos->limiter_marks());
     auto fails = keep(peos->vapor_failures());
     auto tmp0 = lim ? tmp.clone() : torch::Tensor();
-    peos->forward(tmp, w);
+    peos->compute("U->W", {tmp, w});
     if (lim) {
       good &= (tmp == tmp0).all(0);
       if (marks.defined()) peos->limiter_marks().copy_(marks);
