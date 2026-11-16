@@ -997,3 +997,52 @@ changes require CUDA CI/hardware.
   versus eager FP64 is met; this optional fixture path does not enable general
   moist, VIC, distributed or limiter-enabled graph execution. Broader M6 gates
   remain separate.
+
+### FP32 graph slowdown diagnosis — 2026-11-16 (complete)
+
+- Profiled three alternating graph FP64/FP32 pairs and one eager run per
+  precision on dungeon3 GPU 0, reusing the validated build. Each run includes
+  100 checked steps and five profiled steps with CFL/retry/finite checks.
+- Median summed GPU kernel time over five steps: FP64 **14.081 ms**, FP32
+  **15.009 ms** (+6.59%). FP32 has **196 extra kernels per step**, 195 inside
+  the graph. Outside-graph GPU work differs by only 0.010 ms per five steps.
+- Dtype-copy overhead rises **1.320 ms**, net elementwise arithmetic rises
+  **0.638 ms**, outweighing WENO/HLLC savings of **0.876 ms** per five steps.
+- C++ dispatch backtraces identify **48 uniform reconstruction coefficient
+  casts and 30 divergence geometry casts per FP32 timestep**. Cache these
+  first; then inspect full-field hydro/EOS round trips. Caller counts are not
+  per-caller timings; A/B validation is still needed to establish savings.
+- `bash /tmp/snapy-hllc-2f321dc/profile-straka-checked.sh`: **8/8 passed**.
+  `/home/chengcli/pyenv/bin/python /tmp/snapy-hllc-2f321dc/analyze-straka-graph.py`:
+  passed, six traces, five graph launches each.
+  `CUDA_VISIBLE_DEVICES=0 PYTHONPATH=/tmp/snapy-hllc-2f321dc/package /home/chengcli/pyenv/bin/python /tmp/snapy-hllc-2f321dc/straka-op-origin.py`:
+  both precision probes passed.
+- [Diagnosis and ranked next steps](docs/notes/fp32-straka-graph-profile.md).
+  No solver/native/kintera changes or new cross-repo compatibility risks.
+  This identifies candidates; no additional speedup is claimed.
+
+### Dtype-conversion cache implementation — 2026-11-16 (complete)
+
+- Added a shared derived-tensor cast cache for uniform/nonuniform WENO5/Center5
+  coefficients and divergence face areas/volume. Source edits, storage/metadata
+  replacement and target device/dtype changes invalidate the cached conversion.
+  Inference tensors and autograd inputs bypass caching; no restart buffers added.
+- Added CPU/CUDA regression coverage for mutation/storage/device/dtype changes,
+  coefficient results and divergence after grid edits. Isolated dungeon3 native
+  library and matching Python bindings rebuilt successfully; kintera unchanged.
+- `CUDA_VISIBLE_DEVICES=0 ctest --test-dir build --output-on-failure -R '^test_(weno|coordinate|x1_coeffs|straka_cuda_graph_python)(.release)?$'`:
+  **4/4 passed**, 10.50 s.
+- `bash /tmp/snapy-hllc-2f321dc/snapy-cast-cache-benchmark.sh` and
+  `/home/chengcli/pyenv/bin/python /tmp/snapy-hllc-2f321dc/snapy-cast-cache-summary.py`:
+  **12/12 full runs passed**, all saved fields bit-identical within each
+  precision. Preserved previous package supplies the fresh before/after control.
+- FP32 captured dtype-copy kernels **177→99 per timestep**; GPU copy time
+  **1.39236→0.89626 ms per five steps (−35.6%)**. Total captured GPU time
+  **13.90260→13.40345 ms (−3.59%)**. FP64 GPU time/count nearly unchanged.
+- Full FP32 median **31.89151→30.05118 s (1.061×)**; all three paired speedups
+  positive. FP64 wall-time variability prevents a precision-parity claim:
+  FP32 still costs **4.15% more captured GPU time** than FP64.
+- Retained cache memory increases FP32 peak allocation by **227,328 bytes**.
+  Local formatting, diagnostic-script syntax and `git diff --check` passed.
+  [Detailed results and evidence](docs/notes/fp32-straka-cast-cache.md).
+  No kintera/restart changes; native ABI consumers/bindings require rebuilding.

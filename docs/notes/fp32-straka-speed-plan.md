@@ -157,3 +157,42 @@ the original 31.7241 s threshold, though the slowest trial does not. Full detail
 Stop expanding native fusion for this benchmark now that its throughput goal is
 met. General graph support for moist/implicit/distributed/limiter-enabled models
 and larger-grid scaling remain separate future work; eager remains the default.
+
+### Follow-up: identify the remaining FP32 graph overhead
+
+At the user's request, profiled the remaining precision gap before further
+implementation. [GPU diagnosis](fp32-straka-graph-profile.md): FP32 has 6.59%
+more summed GPU kernel time and 196 additional kernels per timestep. Converting
+copies and mixed arithmetic outweigh the now-faster WENO/HLLC kernels.
+
+Next candidates, in order of implementation scope:
+
+1. Cache uniform WENO5/Center5 coefficients in the working dtype, consolidating
+   with the existing nonuniform coefficient-cache pattern (48 casts/step).
+2. Cache converted face areas/volume used by divergence (30 casts/step).
+3. Investigate full-state hydro/EOS precision round trips, preserving FP64
+   cancellation-sensitive expressions and checks.
+
+Steps 1 and 2 need correct invalidation on coefficient/geometry/device/dtype
+changes. Measure each with the same graph profiles and full Straka runs; require
+same-precision snapshot equality for caching-only changes. These are proposals,
+not implemented gains. No kintera changes are indicated. The current evidence
+supports targeting the remaining roughly 6% gap, not claiming 2× over FP64 graphs.
+
+### Coefficient and geometry cast caching completed
+
+Implemented follow-up candidates 1 and 2 with one shared cache, also replacing
+the older nonuniform coefficient-cache helper. Invalidation covers source edits,
+storage/metadata replacement and device/dtype changes; inference/autograd inputs
+bypass caching. No equations or cancellation-sensitive precision were changed.
+
+Four regression suites and twelve full paired GPU runs passed. Saved fields are
+bit-identical within each precision. **78 conversion kernels/step removed**;
+captured dtype-copy GPU time falls **35.6%** and total captured GPU time **3.59%**.
+Full FP32 median improves **31.89151→30.05118 s (1.061×)**. FP64 wall-time
+variation is substantial; FP32 still uses **4.15% more captured GPU time** than
+FP64. Retained caches add 227,328 bytes to peak FP32 allocation.
+
+[Validation, commands and evidence](fp32-straka-cast-cache.md). The remaining
+candidate is reducing full-field hydro/EOS dtype round trips; that is a separate
+numerical change and has not been implemented. Kintera remains unchanged.

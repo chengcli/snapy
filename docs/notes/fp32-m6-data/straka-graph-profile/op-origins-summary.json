@@ -1,0 +1,486 @@
+{
+  "float64": {
+    "explicit_conversions_by_caller": {
+      "snap::RiemannSolverImpl::forward": 6,
+      "snap::MeshBlockImpl::local_redo_flag_tensor": 3,
+      "snap::MeshBlockImpl::read_redo_flags": 1
+    },
+    "mixed_dtype_copies_by_caller": {},
+    "mixed_dtype_operations": [
+      {
+        "caller": "snap::RiemannSolverImpl::forward",
+        "op": "aten.mul.Tensor",
+        "calls": 12
+      }
+    ],
+    "conversion_input_shapes": [
+      {
+        "caller": "snap::RiemannSolverImpl::forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.bool"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::MeshBlockImpl::local_redo_flag_tensor",
+        "inputs": [
+          [
+            [],
+            "torch.bool"
+          ]
+        ],
+        "calls": 2
+      },
+      {
+        "caller": "snap::MeshBlockImpl::local_redo_flag_tensor",
+        "inputs": [
+          [
+            [
+              2
+            ],
+            "torch.bool"
+          ]
+        ],
+        "calls": 1
+      },
+      {
+        "caller": "snap::MeshBlockImpl::read_redo_flags",
+        "inputs": [
+          [
+            [
+              8
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 1
+      }
+    ]
+  },
+  "float32": {
+    "explicit_conversions_by_caller": {
+      "snap::CoordinateImpl::divergence": 30,
+      "snap::HydroImpl::forward": 18,
+      "snap::Weno5InterpImpl::left": 18,
+      "snap::Weno5InterpImpl::right": 18,
+      "snap::IdealMoistImpl::perturbations": 9,
+      "snap::Center5InterpImpl::left": 6,
+      "snap::Center5InterpImpl::right": 6,
+      "snap::HLLCSolverImpl::_forward": 6,
+      "snap::RiemannSolverImpl::forward": 6,
+      "snap::HydroImpl::total_u": 4,
+      "snap::MeshBlockImpl::exchange_ghost_zones": 3,
+      "snap::ScalarImpl::forward": 3,
+      "snap::MeshBlockImpl::advance_local": 3,
+      "snap::MeshBlockImpl::local_redo_flag_tensor": 3,
+      "snap::MeshBlockImpl::read_redo_flags": 2
+    },
+    "mixed_dtype_copies_by_caller": {
+      "snap::HydroImpl::forward": 30,
+      "snap::HLLCSolverImpl::_forward": 3
+    },
+    "mixed_dtype_operations": [
+      {
+        "caller": "snap::HydroImpl::forward",
+        "op": "aten.add.Tensor",
+        "calls": 21
+      },
+      {
+        "caller": "snap::RiemannSolverImpl::forward",
+        "op": "aten.mul.Tensor",
+        "calls": 15
+      },
+      {
+        "caller": "snap::flux_positivity_theta",
+        "op": "aten.mul.Tensor",
+        "calls": 15
+      },
+      {
+        "caller": "snap::IdealMoistImpl::_prim2intEng",
+        "op": "aten.mul.Tensor",
+        "calls": 12
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "op": "aten.mul.Tensor",
+        "calls": 9
+      },
+      {
+        "caller": "snap::HydroImpl::dry_density",
+        "op": "aten.add.Tensor",
+        "calls": 6
+      },
+      {
+        "caller": "snap::HydroImpl::scalar_flux_covariance",
+        "op": "aten.mul.Tensor",
+        "calls": 6
+      },
+      {
+        "caller": "snap::flux_positivity_theta",
+        "op": "aten.div.Tensor",
+        "calls": 6
+      },
+      {
+        "caller": "snap::CoordinateImpl::divergence",
+        "op": "aten.mul.Tensor",
+        "calls": 6
+      },
+      {
+        "caller": "snap::MeshBlockImpl::advance_local",
+        "op": "aten.div.Tensor",
+        "calls": 6
+      },
+      {
+        "caller": "snap::MeshBlockImpl::exchange_ghost_zones",
+        "op": "aten.div.Tensor",
+        "calls": 3
+      },
+      {
+        "caller": "snap::ScalarImpl::forward",
+        "op": "aten.add.Tensor",
+        "calls": 3
+      },
+      {
+        "caller": "snap::flux_positivity_relax",
+        "op": "aten.mul.Tensor",
+        "calls": 3
+      },
+      {
+        "caller": "snap::MeshBlockImpl::advance_local",
+        "op": "aten.add.Tensor",
+        "calls": 3
+      },
+      {
+        "caller": "snap::MeshBlockImpl::advance_local",
+        "op": "aten.mul.Tensor",
+        "calls": 3
+      }
+    ],
+    "conversion_input_shapes": [
+      {
+        "caller": "snap::Weno5InterpImpl::left",
+        "inputs": [
+          [
+            [
+              9,
+              5
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 18
+      },
+      {
+        "caller": "snap::Weno5InterpImpl::right",
+        "inputs": [
+          [
+            [
+              9,
+              5
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 18
+      },
+      {
+        "caller": "snap::CoordinateImpl::divergence",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              64
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 12
+      },
+      {
+        "caller": "snap::CoordinateImpl::divergence",
+        "inputs": [
+          [
+            [
+              1,
+              256,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 12
+      },
+      {
+        "caller": "snap::IdealMoistImpl::perturbations",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "inputs": [
+          [
+            [
+              5,
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::Center5InterpImpl::left",
+        "inputs": [
+          [
+            [
+              5
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::Center5InterpImpl::right",
+        "inputs": [
+          [
+            [
+              5
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::HLLCSolverImpl::_forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::CoordinateImpl::divergence",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::RiemannSolverImpl::forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.bool"
+          ]
+        ],
+        "calls": 6
+      },
+      {
+        "caller": "snap::HydroImpl::total_u",
+        "inputs": [
+          [
+            [
+              5,
+              1,
+              262,
+              70
+            ],
+            "torch.float32"
+          ]
+        ],
+        "calls": 4
+      },
+      {
+        "caller": "snap::MeshBlockImpl::exchange_ghost_zones",
+        "inputs": [
+          [
+            [
+              1,
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::IdealMoistImpl::perturbations",
+        "inputs": [
+          [
+            [
+              5,
+              1,
+              262,
+              70
+            ],
+            "torch.float32"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "inputs": [
+          [
+            [
+              2,
+              5,
+              1,
+              262,
+              70
+            ],
+            "torch.float32"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "inputs": [
+          [
+            [
+              2,
+              5,
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float32"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::HydroImpl::forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::ScalarImpl::forward",
+        "inputs": [
+          [
+            [
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::MeshBlockImpl::advance_local",
+        "inputs": [
+          [
+            [
+              1,
+              1,
+              262,
+              70
+            ],
+            "torch.float64"
+          ]
+        ],
+        "calls": 3
+      },
+      {
+        "caller": "snap::MeshBlockImpl::local_redo_flag_tensor",
+        "inputs": [
+          [
+            [],
+            "torch.bool"
+          ]
+        ],
+        "calls": 2
+      },
+      {
+        "caller": "snap::MeshBlockImpl::read_redo_flags",
+        "inputs": [
+          [
+            [
+              8
+            ],
+            "torch.float32"
+          ]
+        ],
+        "calls": 2
+      },
+      {
+        "caller": "snap::MeshBlockImpl::local_redo_flag_tensor",
+        "inputs": [
+          [
+            [
+              2
+            ],
+            "torch.bool"
+          ]
+        ],
+        "calls": 1
+      }
+    ]
+  }
+}
