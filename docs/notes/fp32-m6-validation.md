@@ -342,3 +342,14 @@ conserved and tracer fields are bit-identical across repetitions of each dtype.
 
 See [the Kratos-based diagnosis](fp32-kratos-diagnosis.md) for subsequent analysis
 of the precision policy, implicit C++ promotions and GPU kernel attribution.
+
+
+## Updated HLLC GPU validation — 2026-11-16
+
+The isolated current-source GPU build and six full paired Straka runs are now
+complete. See [the HLLC GPU validation report](fp32-hllc-gpu-validation.md) for
+exact commands, hashes, correctness, memory and timing results. HLLC's FP32 kernel
+is 2.63× faster than FP64 in the short profile, but full-run medians are 69.00 s
+FP64 / 76.26 s FP32 (10.5% slower FP32). The 2× end-to-end goal remains open.
+Kintera and dungeon3's installed snapy were unchanged; historical timings above
+remain measurements of the previous installed binary.

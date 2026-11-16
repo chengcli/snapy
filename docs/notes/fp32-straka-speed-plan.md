@@ -75,11 +75,12 @@ contracts. No kintera API changes are currently required.
 
 ## Execution status
 
-H1 implementation and local validation are complete. GPU validation is pending.
-H2–H4 are planned.
-The current installed dungeon3 binary predates all optimizations. An isolated
-GPU rebuild is still pending the earlier no-recompilation clarification; existing
-GPU measurements must not be presented as optimized results.
+H1 implementation, local validation, CUDA codegen verification and six full
+GPU Straka runs are complete. Results are tracked in
+[the HLLC GPU report](fp32-hllc-gpu-validation.md). H2–H4 are planned.
+The user requested GPU testing before further implementation. An isolated
+dungeon3 build now contains the current source; the installed package remains
+untouched. Historical installed-package measurements remain separate.
 
 ### H1 local validation completed
 
@@ -105,6 +106,21 @@ precision is not expected to preserve bitwise trajectories. These differences
 are observations, not a new scientific-equivalence claim. [Correctness data and
 binary hashes](fp32-m6-data/straka-hllc-fix.json) are retained.
 
-Google clang-format and `git diff --check` passed. No kintera changes. GPU SASS
-verification and throughput for the new binary remain unmeasured; CPU runtime
-is not used to infer GPU gains. H2/H3 remain planned, not implemented.
+Google clang-format and `git diff --check` passed. No kintera changes. Subsequent
+GPU results are recorded in [the HLLC GPU report](fp32-hllc-gpu-validation.md);
+CPU runtime is not used to infer GPU gains. H2/H3 remain planned, not implemented.
+
+### H1 GPU validation completed
+
+Three alternating GPU-only Straka pairs passed (9000 steps each). Median FP64
+**69.00 s**, FP32 **76.26 s**: FP32 remains **10.5% slower overall**. Background
+CPU load limits historical wall-time comparisons. The HLLC kernel itself is
+**2.63× faster in FP32** in the matched short profile and both compiled float
+specializations contain no FP64 arithmetic/conversions. Final theta error is
+**0.00165 K RMS**, FP32 mass drift **6.47e-10**. Full evidence and commands are in
+the [GPU report](fp32-hllc-gpu-validation.md).
+
+The 2× end-to-end target remains open. H2 should reduce the measured 1956 FP32
+launches/step and conversion/copy overhead; H3 addresses remaining host dispatch.
+CUDA peak allocation, including retained scratch, is the memory acceptance
+metric. Preserve the fixed-grid experiment and all safety checks.

@@ -857,3 +857,38 @@ changes require CUDA CI/hardware.
 - Google clang-format and `git diff --check`: passed. Kintera API/source unchanged.
   H1 locally validated; GPU codegen/timing pending isolated build. H2/H3 fusion
   and dispatch work are planned to pursue the 2× target, not yet implemented.
+
+### H1 GPU validation — 2026-11-16 (complete)
+
+- User requested GPU FP64/FP32 testing before further fusion work. H2 is paused.
+- Testing source commit `2f321dc` in `/tmp/snapy-hllc-2f321dc` on dungeon3;
+  installed snapy and the existing checkout remain untouched. Rebuilding the
+  native libraries and Python bindings together avoids mixing incompatible
+  Hydro layouts. Kintera remains installed version 2.6.10, unchanged.
+- Isolated build uses Release, CUDA 13.1 and sm_120 only (a scratch CMake
+  architecture override), with the existing dependency sources reused read-only.
+  Planned checks: GPU Riemann tests, short paired Straka profiles, then three
+  sequential alternating FP64/FP32 9000-step pairs on GPU 0 and SASS inspection.
+
+- Native and matching Python bindings built successfully. Loaded-library paths
+  and hashes verify the isolated build; installed library hashes are unchanged.
+- `CUDA_VISIBLE_DEVICES=0 ctest --test-dir build --output-on-failure -R '^test_riemann.release$'`:
+  **1/1 executable, 11/11 GoogleTests passed**, including CUDA float/double dispatch.
+- `bash /tmp/snapy-hllc-2f321dc/snapy-hllc-benchmark.sh`: **6/6 full GPU runs
+  passed**, 9000 steps each, no rejected/nonfinite state. Same-precision saved
+  fields are bit-identical across all repeats. Both short GPU profiles passed.
+- Median FP64 **68.9998 s**, FP32 **76.2602 s**: FP32 **10.522% slower**. Ranges
+  68.3417–69.0580 / 72.6487–76.2797 s. Host background CPU load was substantial;
+  historical absolute wall times are not a controlled before/after comparison.
+- HLLC short-profile GPU time: FP64 **0.209247 ms**, FP32 **0.079583 ms**, over
+  30 calls: **2.63× faster for HLLC itself**. SASS verification passed: both float
+  specializations have no FP64 arithmetic/conversions. Full FP32 still has
+  **9780 launches per five steps**, versus FP64 8665. The end-to-end 2× goal is
+  not met; H2/H3 remain necessary and no new fusion was implemented in this step.
+- At 900 s: theta error **0.00165068 K RMS / 0.0338796 K max**, identical 15.35 km
+  front location, FP32 relative mass drift **6.46765e-10**. CUDA peak FP64/FP32:
+  **15,606,784 / 12,379,648 bytes**; include retained scratch in memory accounting.
+- Reproducible commands, source/native hashes, full trial reports, profiler/SASS
+  evidence and plot: [HLLC GPU validation](docs/notes/fp32-hllc-gpu-validation.md).
+  Evidence Python compileall, Ruff F401/F821 and `git diff --check`: passed.
+  Kintera 2.6.10 was used unchanged; other dependency combinations were not tested.

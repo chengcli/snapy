@@ -1,0 +1,513 @@
+{
+  "source_commit": "2f321dc",
+  "remote_root": "/tmp/snapy-hllc-2f321dc",
+  "gpu": 0,
+  "build": "Release, CUDA 13.1.115, sm_120; UCX/NETCDF/PNETCDF ON; current native libraries and Python bindings rebuilt together",
+  "package_version_note": "snapy version in runner reports comes from installed distribution metadata; source_commit and native hashes identify the isolated tested build",
+  "order": [
+    "1-float64",
+    "1-float32",
+    "2-float32",
+    "2-float64",
+    "3-float64",
+    "3-float32"
+  ],
+  "runs": {
+    "float64": [
+      {
+        "precision": "float64",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 68.99984239926562,
+        "storage": {
+          "by_dtype": {
+            "torch.float64": 6623960,
+            "torch.int64": 24
+          },
+          "total": 6623984
+        },
+        "cuda_peak_allocated_bytes": 15606784,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 0.0,
+            "theta_min": -17.229395578878666,
+            "theta_max": 0.27015459277254195
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -15.404687147949119,
+            "theta_max": 0.8246903647097952
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -14.352641782634805,
+            "theta_max": 0.956376526048416
+          }
+        ]
+      },
+      {
+        "precision": "float64",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 69.05798477865756,
+        "storage": {
+          "by_dtype": {
+            "torch.float64": 6623960,
+            "torch.int64": 24
+          },
+          "total": 6623984
+        },
+        "cuda_peak_allocated_bytes": 15606784,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 0.0,
+            "theta_min": -17.229395578878666,
+            "theta_max": 0.27015459277254195
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -15.404687147949119,
+            "theta_max": 0.8246903647097952
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -14.352641782634805,
+            "theta_max": 0.956376526048416
+          }
+        ]
+      },
+      {
+        "precision": "float64",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 68.34171752585098,
+        "storage": {
+          "by_dtype": {
+            "torch.float64": 6623960,
+            "torch.int64": 24
+          },
+          "total": 6623984
+        },
+        "cuda_peak_allocated_bytes": 15606784,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 0.0,
+            "theta_min": -17.229395578878666,
+            "theta_max": 0.27015459277254195
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -15.404687147949119,
+            "theta_max": 0.8246903647097952
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 1.3064846820421612e-16,
+            "theta_min": -14.352641782634805,
+            "theta_max": 0.956376526048416
+          }
+        ]
+      }
+    ],
+    "float32": [
+      {
+        "precision": "float32",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 72.64873739192262,
+        "storage": {
+          "by_dtype": {
+            "torch.float32": 2640960,
+            "torch.float64": 1342040,
+            "torch.int64": 24
+          },
+          "total": 3983024
+        },
+        "cuda_peak_allocated_bytes": 12379648,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 3.85116409179614e-10,
+            "theta_min": -17.23077725237698,
+            "theta_max": 0.2697710447035888
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.2637315386039499e-09,
+            "theta_min": -15.406760182454889,
+            "theta_max": 0.8255035701189399
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 6.467645286705792e-10,
+            "theta_min": -14.356707748225517,
+            "theta_max": 0.9567394964731761
+          }
+        ]
+      },
+      {
+        "precision": "float32",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 76.27972063887864,
+        "storage": {
+          "by_dtype": {
+            "torch.float32": 2640960,
+            "torch.float64": 1342040,
+            "torch.int64": 24
+          },
+          "total": 3983024
+        },
+        "cuda_peak_allocated_bytes": 12379648,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 3.85116409179614e-10,
+            "theta_min": -17.23077725237698,
+            "theta_max": 0.2697710447035888
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.2637315386039499e-09,
+            "theta_min": -15.406760182454889,
+            "theta_max": 0.8255035701189399
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 6.467645286705792e-10,
+            "theta_min": -14.356707748225517,
+            "theta_max": 0.9567394964731761
+          }
+        ]
+      },
+      {
+        "precision": "float32",
+        "device": "cuda",
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "visible_devices": "0",
+        "torch": "2.10.0+cu128",
+        "snapy": "2.13.27",
+        "kintera": "2.6.10",
+        "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+        "native_libraries_sha256": {
+          "libsnap_cuda_release.so": "27562871fef9f8d67f64300f5f6ac601ea351e563283493b060bc9c3e4d0cf59",
+          "libsnap_release.so": "b2812d72c938d2f6a88188fb22215e080b3584983bd02198aa13253b7a5b10be"
+        },
+        "rd": 286.9998232033527,
+        "cp": 1004.4993812117345,
+        "steps": 9000,
+        "dt": 0.1,
+        "elapsed_seconds_including_diagnostics": 76.26017081225291,
+        "storage": {
+          "by_dtype": {
+            "torch.float32": 2640960,
+            "torch.float64": 1342040,
+            "torch.int64": 24
+          },
+          "total": 3983024
+        },
+        "cuda_peak_allocated_bytes": 12379648,
+        "history": [
+          {
+            "time": 0.0,
+            "mass_drift": 0.0,
+            "theta_min": -16.61954767331406,
+            "theta_max": 5.684341886080802e-14
+          },
+          {
+            "time": 300.0,
+            "mass_drift": 3.85116409179614e-10,
+            "theta_min": -17.23077725237698,
+            "theta_max": 0.2697710447035888
+          },
+          {
+            "time": 600.0,
+            "mass_drift": 1.2637315386039499e-09,
+            "theta_min": -15.406760182454889,
+            "theta_max": 0.8255035701189399
+          },
+          {
+            "time": 900.0,
+            "mass_drift": 6.467645286705792e-10,
+            "theta_min": -14.356707748225517,
+            "theta_max": 0.9567394964731761
+          }
+        ]
+      }
+    ]
+  },
+  "timing": {
+    "float64": {
+      "seconds": [
+        68.99984239926562,
+        69.05798477865756,
+        68.34171752585098
+      ],
+      "median_seconds": 68.99984239926562,
+      "min_seconds": 68.34171752585098,
+      "max_seconds": 69.05798477865756,
+      "sample_stdev_seconds": 0.3978164699815446
+    },
+    "float32": {
+      "seconds": [
+        72.64873739192262,
+        76.27972063887864,
+        76.26017081225291
+      ],
+      "median_seconds": 76.26017081225291,
+      "min_seconds": 72.64873739192262,
+      "max_seconds": 76.27972063887864,
+      "sample_stdev_seconds": 2.0907284569767737
+    }
+  },
+  "repeated_fields_bit_identical": {
+    "float64": true,
+    "float32": true
+  },
+  "fp32_speedup_vs_fp64": 0.9047952773294765,
+  "fp32_percent_slower_vs_fp64": 10.522239124802057,
+  "historical_installed_medians_seconds": {
+    "float64": 63.4482360766,
+    "float32": 70.2005774607
+  },
+  "historical_comparison_note": "Historical installed binaries predate HLLC plus earlier conversion/scratch changes, and the current host has substantial background CPU load; this is not an isolated HLLC speedup measurement or a controlled historical wall-time comparison.",
+  "fp32_percent_faster_than_historical_installed": -8.631828356319748,
+  "current_fp64_2x_target_seconds": 34.49992119963281,
+  "initial_2x_target_seconds": 31.7241180383,
+  "extension_sha256": {
+    "snapy.cpython-311-x86_64-linux-gnu.so": "bd0bfc2c8e313ca603c49113b38c404f268fb60e5d5b699347fa6ad4fc007f8f"
+  },
+  "comparisons": [
+    {
+      "time": 0.0,
+      "theta_max_absolute_error_K": 0.0,
+      "theta_rms_error_K": 0.0,
+      "theta_relative_l2_error": 0.0,
+      "cold_front_x_m_fp64_fp32": [
+        null,
+        null
+      ],
+      "primitive_errors": {
+        "density": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "vertical_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "horizontal_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "transverse_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "pressure": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        }
+      }
+    },
+    {
+      "time": 300.0,
+      "theta_max_absolute_error_K": 0.010525691162740713,
+      "theta_rms_error_K": 0.0003136429732504653,
+      "theta_relative_l2_error": 0.0001854590796311177,
+      "cold_front_x_m_fp64_fp32": [
+        4250.0,
+        4250.0
+      ],
+      "primitive_errors": {
+        "density": {
+          "max_absolute_error": 4.13443343283415e-05,
+          "rms_error": 1.1891296540179594e-06
+        },
+        "vertical_velocity": {
+          "max_absolute_error": 0.009176666259667066,
+          "rms_error": 0.0003868738832588411
+        },
+        "horizontal_velocity": {
+          "max_absolute_error": 0.007115522160887622,
+          "rms_error": 0.0003589676617365581
+        },
+        "transverse_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "pressure": {
+          "max_absolute_error": 0.10432626906549558,
+          "rms_error": 0.010439853384333194
+        }
+      }
+    },
+    {
+      "time": 600.0,
+      "theta_max_absolute_error_K": 0.02234438210763301,
+      "theta_rms_error_K": 0.0009183278200694708,
+      "theta_relative_l2_error": 0.0006235342455153567,
+      "cold_front_x_m_fp64_fp32": [
+        10850.0,
+        10850.0
+      ],
+      "primitive_errors": {
+        "density": {
+          "max_absolute_error": 9.065216172698953e-05,
+          "rms_error": 3.4032194210107356e-06
+        },
+        "vertical_velocity": {
+          "max_absolute_error": 0.02162737198130138,
+          "rms_error": 0.0015044254191042164
+        },
+        "horizontal_velocity": {
+          "max_absolute_error": 0.014015184837683492,
+          "rms_error": 0.0012058479756005519
+        },
+        "transverse_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "pressure": {
+          "max_absolute_error": 0.3556105793832103,
+          "rms_error": 0.03155738060472341
+        }
+      }
+    },
+    {
+      "time": 900.0,
+      "theta_max_absolute_error_K": 0.03387964237555252,
+      "theta_rms_error_K": 0.0016506783173666048,
+      "theta_relative_l2_error": 0.0012572429672156958,
+      "cold_front_x_m_fp64_fp32": [
+        15350.0,
+        15350.0
+      ],
+      "primitive_errors": {
+        "density": {
+          "max_absolute_error": 0.00013465650014832242,
+          "rms_error": 6.154893994990105e-06
+        },
+        "vertical_velocity": {
+          "max_absolute_error": 0.031188837580995,
+          "rms_error": 0.003392530485946928
+        },
+        "horizontal_velocity": {
+          "max_absolute_error": 0.02546765540742868,
+          "rms_error": 0.0028448266791858503
+        },
+        "transverse_velocity": {
+          "max_absolute_error": 0.0,
+          "rms_error": 0.0
+        },
+        "pressure": {
+          "max_absolute_error": 0.8372538446565159,
+          "rms_error": 0.07083797624937153
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+[
+  {
+    "symbol": "_ZN2at6native18elementwise_kernelILi128ELi1EZN4snap6native10gpu_kernelILi7ELi128EZZZNS2_14hllc_cuda_implILi7EEEvRNS_14TensorIteratorEiENKUlvE_clEvENKUlvE0_clEvEUlPKPcPjE_EEvS7_RKT1_EUliE_EEviSF_",
+    "demangled": "void at::native::elementwise_kernel<128, 1, snap::native::gpu_kernel<7, 128, snap::hllc_cuda_impl<7>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*)#1}>(at::TensorIterator&, snap::hllc_cuda_impl<7>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*)#1} const&)::{lambda(int)#1}>(int, unsigned int*)",
+    "fp_ops": {
+      "FADD": 78,
+      "FMUL": 111,
+      "FFMA": 92,
+      "FMUL.FTZ": 4
+    }
+  },
+  {
+    "symbol": "_ZN2at6native18elementwise_kernelILi128ELi1EZN4snap6native10gpu_kernelILi7ELi128EZZZNS2_14hllc_cuda_implILi7EEEvRNS_14TensorIteratorEiENKUlvE_clEvENKUlvE_clEvEUlPKPcPjE_EEvS7_RKT1_EUliE_EEviSF_",
+    "demangled": "void at::native::elementwise_kernel<128, 1, snap::native::gpu_kernel<7, 128, snap::hllc_cuda_impl<7>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*)#1}>(at::TensorIterator&, snap::hllc_cuda_impl<7>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*)#1} const&)::{lambda(int)#1}>(int, unsigned int*)",
+    "fp_ops": {
+      "DMUL": 125,
+      "DFMA": 119,
+      "DADD": 79,
+      "DSETP.GTU.AND": 2,
+      "FFMA": 10,
+      "DSETP.GEU.AND": 1,
+      "DSETP.GT.AND": 1,
+      "DSETP.MAX.AND": 1,
+      "DSETP.GE.AND": 1
+    }
+  },
+  {
+    "symbol": "_ZN2at6native18elementwise_kernelILi128ELi1EZN4snap6native10gpu_kernelILi8ELi128EZZZNS2_14hllc_cuda_implILi8EEEvRNS_14TensorIteratorEiENKUlvE_clEvENKUlvE0_clEvEUlPKPcPjE_EEvS7_RKT1_EUliE_EEviSF_",
+    "demangled": "void at::native::elementwise_kernel<128, 1, snap::native::gpu_kernel<8, 128, snap::hllc_cuda_impl<8>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*)#1}>(at::TensorIterator&, snap::hllc_cuda_impl<8>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*)#1} const&)::{lambda(int)#1}>(int, unsigned int*)",
+    "fp_ops": {
+      "FMUL": 111,
+      "FADD": 82,
+      "FFMA": 103,
+      "FMUL.FTZ": 4
+    }
+  },
+  {
+    "symbol": "_ZN2at6native18elementwise_kernelILi128ELi1EZN4snap6native10gpu_kernelILi8ELi128EZZZNS2_14hllc_cuda_implILi8EEEvRNS_14TensorIteratorEiENKUlvE_clEvENKUlvE_clEvEUlPKPcPjE_EEvS7_RKT1_EUliE_EEviSF_",
+    "demangled": "void at::native::elementwise_kernel<128, 1, snap::native::gpu_kernel<8, 128, snap::hllc_cuda_impl<8>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*)#1}>(at::TensorIterator&, snap::hllc_cuda_impl<8>(at::TensorIterator&, int)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*)#1} const&)::{lambda(int)#1}>(int, unsigned int*)",
+    "fp_ops": {
+      "DMUL": 127,
+      "DADD": 84,
+      "DFMA": 134,
+      "DSETP.NEU.AND": 3,
+      "FFMA": 12,
+      "DSETP.GTU.AND": 2,
+      "DSETP.GT.AND": 2,
+      "DSETP.GEU.AND": 1,
+      "DSETP.MAX.AND": 1,
+      "DSETP.GE.AND": 1
+    }
+  }
+]

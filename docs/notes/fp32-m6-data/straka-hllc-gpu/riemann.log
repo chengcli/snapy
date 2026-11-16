@@ -1,0 +1,66 @@
+Start testing: Nov 16 14:21 EST
+----------------------------------------------------------
+945/1138 Testing: test_riemann.release
+945/1138 Test: test_riemann.release
+Command: "/tmp/snapy-hllc-2f321dc/src/build/tests/test_riemann.release"
+Directory: /tmp/snapy-hllc-2f321dc/src/build/tests
+"test_riemann.release" start time: Nov 16 14:21 EST
+Output:
+----------------------------------------------------------
+[==========] Running 11 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from RiemannSolver
+[ RUN      ] RiemannSolver.hllc_writes_face_pressure_output
+[       OK ] RiemannSolver.hllc_writes_face_pressure_output (255 ms)
+[ RUN      ] RiemannSolver.lmars_writes_face_pressure_output
+[       OK ] RiemannSolver.lmars_writes_face_pressure_output (19 ms)
+[ RUN      ] RiemannSolver.roe_writes_face_pressure_output
+[       OK ] RiemannSolver.roe_writes_face_pressure_output (67 ms)
+[ RUN      ] RiemannSolver.roe_writes_face_pressure_output_ideal_moist
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+[       OK ] RiemannSolver.roe_writes_face_pressure_output_ideal_moist (12 ms)
+[----------] 4 tests from RiemannSolver (355 ms total)
+
+[----------] 2 tests from HLLCPerturbation
+[ RUN      ] HLLCPerturbation.all_directions_and_contact_branches_match_total_flux
+[       OK ] HLLCPerturbation.all_directions_and_contact_branches_match_total_flux (0 ms)
+[ RUN      ] HLLCPerturbation.float_pressure_difference_survives_large_background
+[       OK ] HLLCPerturbation.float_pressure_difference_survives_large_background (0 ms)
+[----------] 2 tests from HLLCPerturbation (0 ms total)
+
+[----------] 1 test from HLLCFloat
+[ RUN      ] HLLCFloat.shocks_rarefactions_and_boosts_match_double
+[       OK ] HLLCFloat.shocks_rarefactions_and_boosts_match_double (0 ms)
+[----------] 1 test from HLLCFloat (0 ms total)
+
+[----------] 4 tests from DeviceAndDtype/DeviceTest
+[ RUN      ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cpu_Float
+[       OK ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cpu_Float (16 ms)
+[ RUN      ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cpu_Double
+[       OK ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cpu_Double (16 ms)
+[ RUN      ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cuda_Float
+[       OK ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cuda_Float (593 ms)
+[ RUN      ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cuda_Double
+[       OK ] DeviceAndDtype/DeviceTest.hllc_pressure_split_dispatch_and_tensor_backend/cuda_Double (61 ms)
+[----------] 4 tests from DeviceAndDtype/DeviceTest (688 ms total)
+
+[----------] Global test environment tear-down
+[==========] 11 tests from 4 test suites ran. (1044 ms total)
+[  PASSED  ] 11 tests.
+<end of output>
+Test time =   1.46 sec
+----------------------------------------------------------
+Test Passed.
+"test_riemann.release" end time: Nov 16 14:21 EST
+"test_riemann.release" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Nov 16 14:21 EST
+
+fp32-foundations =   1.46 sec*proc
