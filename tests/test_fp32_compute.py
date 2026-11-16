@@ -90,6 +90,34 @@ def case(scheme, steps, sediment=True):
     assert drift < 2.0e-5
 
 
+def zero_step_after_forcing():
+    """A previous gravity increment must not leak into a subsequent stage."""
+    block = make(True, precision="float32")
+    w = initial_state(block)["hydro_w"]
+    w[5:].zero_()  # dry limit: no saturation adjustment at zero elapsed time
+    bv, _ = block.initialize({"hydro_w": w})
+    run_steps(block, bv, 2, dt=0.05)
+    before = interior(block, bv["hydro_u"]).clone()
+    block.forward(bv, 0.0, 0)
+    assert torch.equal(interior(block, bv["hydro_u"]), before)
+    print("FP32 zero-duration stage after gravity: unchanged", flush=True)
+
+
+def disabled_fluxes():
+    """An inactive sweep must not introduce a background pressure source."""
+    block = make(True, precision="float32", gravity=False, disabled_dims=(1, 2, 3))
+    w = initial_state(block)["hydro_w"]
+    w[5:].zero_()
+    w[kIV1 : kIV1 + 3].zero_()
+    x = block.module("coord").buffer("x2v").view(1, -1, 1)
+    w[kIPR] *= 1.0 + 0.01 * torch.cos(2.0 * torch.pi * x / 4000.0)
+    bv, _ = block.initialize({"hydro_w": w})
+    before = interior(block, bv["hydro_u"]).clone()
+    run_steps(block, bv, 2, dt=0.05)
+    assert torch.equal(interior(block, bv["hydro_u"]), before)
+    print("FP32 disabled fluxes: no pressure source", flush=True)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", type=int, default=10)
@@ -98,4 +126,6 @@ if __name__ == "__main__":
     original_dtype = torch.get_default_dtype()
     for scheme in (0, 9):
         case(scheme, args.steps)
+    zero_step_after_forcing()
+    disabled_fluxes()
     assert torch.get_default_dtype() == original_dtype

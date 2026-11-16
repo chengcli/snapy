@@ -16,7 +16,8 @@ The loader checks the version, stored dtype/shape, required state/reference
 fields and exact coordinate faces before installing a background. A different
 grid requires explicit remapping of totals and initialization of a new
 background; loading a same-shaped checkpoint on a changed grid is rejected.
-This does not implement regridding. Existing geometry-cache invalidation still
+Regridding is outside the requested FP32 scope; rejection remains intentional.
+Existing geometry-cache invalidation still
 applies to normal initialization and coordinate changes.
 
 Files without this metadata remain readable using the previous format.

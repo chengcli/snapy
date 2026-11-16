@@ -11,8 +11,8 @@ Updated: 2026-11-16. Roadmap: [FP32_ROADMAP.md](FP32_ROADMAP.md).
 | M2 Thermodynamic perturbations | Merged (#326) | Delta thermodynamics, exact total reads and FP32 floors; hydro wiring follows |
 | M3 Perturbation dynamics | Merged (#360) | 31/31 foundation tests pass after main rebase; split reference, flux/source coupling, seams and restart; CUDA execution pending |
 | M4 True FP32 | Merged (#361) | 35/35 foundations after main rebase; 1000-step moist/Jupiter acceptance; FP32 VIC with checked FP64 fallback; GPU validation pending |
-| M5 Coupled workflow/restart | M5a–M5c CPU implementation validated | 37/37 foundations, exact coupled/bundled continuation; external driver/distributed/GPU validation pending |
-| M6 Science/performance | Planned | Requires production GPU and coupled cases |
+| M5 Coupled workflow/restart | CPU implementation merged (#367) | 37/37 foundations, exact coupled/bundled continuation; external driver/distributed/GPU validation pending |
+| M6 Science/performance | In progress | Budget/seeded-comparison harness; GPU smoke passed; Jupiter comparison and installed GPU restart compatibility remain open |
 
 Historical foundation baseline (2026-11-08): snapy work was recorded on
 `fp32-step1-anomaly`, based on `fe003dd`.
@@ -680,3 +680,132 @@ changes require CUDA CI/hardware.
   no source/API change and minimum remains 2.6.9. Remaining M5 integration work:
   external paddle/production decks, actual distributed ranks, explicit remapping
   workflows and GPU execution. M6 science/performance work is not claimed here.
+
+### M5 merge confirmed — 2026-11-16
+
+- PR #367 merged as `cbf8683009de2d4c211e65e5daeaf1ad1e05c80d`.
+  Linux/macOS build-and-test, bitwise CPU and pre-commit CI all passed.
+- The CPU restart implementation is integrated. Remaining validation is CUDA,
+  production Jupiter/paddle workflows and actual distributed ranks, followed by
+  M6 scientific budgets/statistics and GPU memory/throughput measurements.
+- No new kintera changes are required by this merge. Changed-grid restart still
+  requires explicit remapping and background reconstruction; it is rejected by
+  the current loader.
+
+### M6 started — 2026-11-16
+
+- Branch `fp32-step5-validation`, based on main `cbf8683`. User explicitly
+  excluded regridding; changed-grid rejection remains the supported behavior.
+- M6a: closed Cartesian moist mass/dry-mass/water-family/energy budgets,
+  including the existing corrected potential energy and actual/requested heat
+  increments. Pair FP32/FP64 trajectories over several deterministic seeds.
+- M6b: late-window statistics and reduced full-physics Jupiter comparisons.
+  Engineering tolerances are provisional reduced-case gates, not evidence of
+  production climate equivalence or long-time statistical convergence.
+- M6c: synchronized step timing, deduplicated registered-buffer/state storage,
+  CUDA peak allocation when available, and optional operator profiler traces.
+  No speedup assertion in CI. This host reports no available CUDA or MPS device.
+- Restored missing pure-Python files and metadata in the isolated kintera
+  install from the clean local 2.6.10 source; no kintera source modification.
+
+### M6 GPU validation without recompilation — 2026-11-16
+
+- Used installed packages on dungeon3 GPU 0 (RTX 5090): Torch 2.10.0+cu128,
+  snapy 2.13.27, kintera 2.6.10. Copied Python fixtures into an isolated
+  `/tmp/snapy-m6-hsaZRT` directory; no checkout, library or package changes.
+- Made existing column, Jupiter and restart Python fixtures device-aware.
+  CPU defaults are retained. No native source or kintera API changes.
+- `ctest --test-dir build --output-on-failure -L fp32-science`: **1/1 passed**,
+  8.11 s. `ctest --test-dir build --output-on-failure -L fp32-foundations`:
+  **37/37 passed**, 74.41 s, after the device-aware fixture changes.
+- GPU 30-step column smoke and 10-step Jupiter pair passed, with zero VIC
+  fallbacks. Exact commands, provenance, and remaining gates are in
+  [the M6 validation report](docs/notes/fp32-m6-validation.md).
+- GPU `test_fp32_restart.py` failed: installed native restart output lacks
+  `hydro_restart_metadata`, required by merged M5. Honored the explicit
+  no-recompilation instruction; this is an installed-library compatibility
+  blocker, not a completed M5 GPU restart validation.
+- Initial 1000-step CPU Jupiter paired-state error was **4.6658e-4**, exceeding
+  the provisional **2e-4** gate. Standalone mass/fallback checks passed.
+  M6 remains open; no tolerance was loosened. JSON now preserves measurements
+  before a Jupiter comparison failure.
+- Long runs finished on both CPU and GPU: all 18 column trajectories per host
+  passed 1000-step budgets and paired-state gates. GPU worst water-family
+  residual **3.152e-5**; zero VIC fallbacks. Jupiter state gate failed on both
+  CPU (**4.666e-4**) and GPU (**4.669e-4**) against **2e-4**; family/scalar
+  comparisons passed. Raw JSON and exact commands are retained in the report.
+- GPU `test_fp32_implicit.py` and `test_fp32_policy.py`: **passed** using installed
+  libraries. VIC registered storage fell **45.6%**, CUDA peak allocation **11.5%**.
+  Small-grid GPU median step time rose from **17.175 ms** to **21.717 ms**;
+  no performance gain is claimed. Production-size profiling remains open.
+- Final science CTest after JSON failure-reporting edits: **1/1 passed**, 8.38 s.
+  Compileall, Ruff F401/F821 and `git diff --check`: passed.
+
+### M6 Straka paired GPUs — 2026-11-16
+
+- User requested FP64 on one GPU and FP32 on the other. Ran dungeon3 GPU 0/1
+  simultaneously with installed binaries; no recompilation. Added reproducible
+  run/comparison scripts and saved JSON plus a field-comparison plot.
+- Both 64×256 explicit Straka runs completed **9000 steps / 900 s**, dt=0.1,
+  without rejected/nonfinite steps. Used matching HLLC/ideal-moist dry-limit
+  configurations required by the FP32 path, not the shipped LMARS regression.
+  No explicit viscosity; the shipped problem/K is unused by straka.cpp.
+- At 900 s: theta RMS difference **0.001764 K**, maximum **0.03645 K**, relative
+  L2 **0.1344%**. Both fronts at **15.35 km** (100 m resolution). FP32 relative
+  mass drift **1.09e-9**. No post-hoc equivalence threshold imposed.
+- FP64/FP32 wall times **63.63/70.30 s**, including diagnostics; FP32 saved
+  **39.9%** registered storage and **25.0%** CUDA peak allocation. This single
+  simultaneous pair does not demonstrate a speedup or isolated timing variance.
+- Exact commands, results and scope are in the Straka section of the
+  [M6 report](docs/notes/fp32-m6-validation.md). Both GPU run commands and the
+  comparison passed. Compileall, Ruff F401/F821 and `git diff --check` passed.
+  Kintera remains unchanged. Jupiter/M5 restart/production gates remain open.
+
+### M6 Straka optimization work — 2026-11-16
+
+- User authorized prioritizing face-state conversions and forcing allocations.
+  Dungeon3 binaries remain unchanged; new native code is validated with a local
+  isolated build before any optimized GPU performance claim.
+- Added `--profile` to the Straka runner: profiles five extra steps after saving
+  final fields and capturing elapsed time/peak allocation, so the profile does
+  not alter the reported trajectory or timed interval.
+- Sequential baseline profiles on dungeon3 GPU 0, each after 10 simulated
+  seconds: FP64/FP32 `_to_copy` calls **105/805**, `copy_` calls **1925/2665**,
+  `empty_strided` calls **1005/1730**, CUDA launches **8665/9765** over five steps.
+  Reports are saved in `docs/notes/fp32-m6-data/straka-profile/`.
+- Horizontal FP32 reconstruction now promotes only the two pressure rows for
+  gauge restoration/flooring/background subtraction. Density/velocity/species
+  faces remain FP32; covariance consumers retain the existing total-state path.
+  The gravity-balanced vertical sweep already reconstructed FP32 faces.
+- Reuse FP64 forcing accumulation and FP32 rounded-increment scratch buffers.
+  Reset contents each stage; invalidate on module reset, shape/device changes.
+  Preserve accumulation order and rounding before addition to the hydro update.
+  Scratch is not restart state; registered-buffer-only memory reports exclude it.
+- Added a zero-duration-stage regression after nonzero gravity forcing to detect
+  stale forcing increments. Preparing before/after local Straka comparison and
+  foundation/acceptance validation. No kintera source/API changes.
+- Native build passed after restoring missing matching headers in the temporary
+  kintera installation. Created `/tmp/snapy-straka-opt-python` for optimized tests;
+  retained `/tmp/snapy-rebase-python` as baseline. Rebuilt the 15 foundation C++
+  executables for the changed Hydro layout.
+- Before/after FP32 CPU Straka at 0/300/600/900 s: **bit-identical** temperature,
+  primitive, total conserved and tracer arrays. Five-step CPU profiles reduce
+  `_to_copy` 2270→2255, `copy_` 4265→4250, `empty_strided` 3195→3165,
+  `clone` 330→315 and `empty` 1260→1245. No controlled timing gain claimed.
+- Reviewed disabled-flux behavior and added a guard plus a no-pressure-source
+  regression. The long run predates this guard; final guarded binary is checked
+  separately. Reused scratch persists between stages and is excluded from the
+  registered-only memory metric; no new GPU memory-saving claim is made.
+- Final guarded build validation:
+  `ctest --test-dir build --output-on-failure -L 'fp32-(foundations|science|acceptance)'`:
+  **40/40 passed**, 163.30 s (37 foundations, 2 acceptance, 1 science), including
+  restart, multi-block, VIC, moist 1000-step and standalone Jupiter tests.
+  The separate long paired Jupiter science discrepancy remains open.
+- Final guarded Straka command:
+  `PYTHONPATH=/tmp/snapy-straka-opt-python python -u tests/run_fp32_straka.py --precision float32 --device cpu --tlim 30 --output /tmp/straka-final-30`:
+  passed; all saved fields bit-identical to the original binary's 30-second run.
+  Results saved in `docs/notes/fp32-m6-data/straka-optimization/final-30.json`.
+- Google clang-format verification, Python compileall/Ruff F401/F821 and
+  `git diff --check` passed. Native optimization is implemented and locally
+  validated; optimized CUDA measurements remain pending the user's no-remote-
+  rebuild constraint. Dungeon3 installation and kintera sources are unchanged.

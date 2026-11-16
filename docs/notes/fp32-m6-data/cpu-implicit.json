@@ -1,0 +1,4471 @@
+{
+  "schema_version": 1,
+  "scope": "reduced Cartesian moist engineering validation",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "torch": "2.10.0",
+  "kintera": "2.6.10",
+  "git_revision": "cbf8683009de2d4c211e65e5daeaf1ad1e05c80d",
+  "working_tree_modified": true,
+  "harness_sha256": "52df490580e8b76e98bc2c178eef0d2fff0070e11e0dfb682182243177e1bbcd",
+  "snapy": null,
+  "native_libraries_sha256": {
+    "libsnap_release.dylib": "f665f93ef8b6457d4ae9f7602652f9c69213f32db28bcf28219300a7ce884fe8"
+  },
+  "device": "cpu",
+  "threads": 1,
+  "steps": 1000,
+  "dt": 0.05,
+  "seeds": 3,
+  "benchmark_steps": 100,
+  "benchmark_repeats": 3,
+  "benchmark_warmup_steps": 5,
+  "sample_every": 50,
+  "budget_limits_fp32": {
+    "mass": 2e-05,
+    "dry_mass": 2e-05,
+    "water_mass": 0.0002,
+    "energy": 2e-05
+  },
+  "runs": [
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 0,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 2.672840521471917e-16,
+        "dry_mass": 1.3415821683054901e-16,
+        "water_mass": 5.807027842619748e-14,
+        "energy": 1.466572042974029e-16,
+        "energy_with_requested_source": 1.466572042974029e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14475611461.031792,
+        "vertical_velocity_rms": 0.4617201533732923,
+        "vapor_mass": 439308862.5584625
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558481,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 5019675811.920028,
+          "vertical_velocity_rms": 0.2461408092331995,
+          "vapor_mass": 439308862.558481
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55847967,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 15420933807.891598,
+          "vertical_velocity_rms": 0.37453308460987517,
+          "vapor_mass": 439308862.55847967
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584784,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 18005768459.773968,
+          "vertical_velocity_rms": 0.46369877102638785,
+          "vapor_mass": 439308862.5584784
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847716,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 18867509283.359962,
+          "vertical_velocity_rms": 0.5245319384151504,
+          "vapor_mass": 439308862.55847716
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55847585,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 24491464484.040283,
+          "vertical_velocity_rms": 0.5624749164936993,
+          "vapor_mass": 439308862.55847585
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55847454,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 19231652518.040382,
+          "vertical_velocity_rms": 0.5859545600915359,
+          "vapor_mass": 439308862.55847454
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847335,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 23724208892.447594,
+          "vertical_velocity_rms": 0.5997846600111553,
+          "vapor_mass": 439308862.55847335
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847204,
+          "energy": 2.7274486917727464e+16,
+          "kinetic_energy": 18735560910.60064,
+          "vertical_velocity_rms": 0.6009525822475039,
+          "vapor_mass": 439308862.55847204
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584707,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 17037950618.200417,
+          "vertical_velocity_rms": 0.572541053283623,
+          "vapor_mass": 439308862.5584707
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584694,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 14119522067.195736,
+          "vertical_velocity_rms": 0.49049530780273004,
+          "vapor_mass": 439308862.5584694
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584682,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 6040267492.692934,
+          "vertical_velocity_rms": 0.33032969530991313,
+          "vapor_mass": 439308862.5584682
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584669,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 5452797750.655115,
+          "vertical_velocity_rms": 0.10735789500628169,
+          "vapor_mass": 439308862.5584669
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584657,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 5146307824.8246975,
+          "vertical_velocity_rms": 0.29364206525659875,
+          "vapor_mass": 439308862.5584657
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584644,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 12549034515.762287,
+          "vertical_velocity_rms": 0.47838095307633705,
+          "vapor_mass": 439308862.5584644
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584632,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 16552382017.605705,
+          "vertical_velocity_rms": 0.5625538832263784,
+          "vapor_mass": 439308862.5584632
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846184,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 19043420539.556854,
+          "vertical_velocity_rms": 0.5957110700008809,
+          "vapor_mass": 439308862.55846184
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846065,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 21060831920.592453,
+          "vertical_velocity_rms": 0.6024696848217446,
+          "vapor_mass": 439308862.55846065
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55845934,
+          "energy": 2.727448691772747e+16,
+          "kinetic_energy": 20453705013.898514,
+          "vertical_velocity_rms": 0.5917094036802047,
+          "vapor_mass": 439308862.55845934
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584581,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 20392922065.158104,
+          "vertical_velocity_rms": 0.5556332433909782,
+          "vapor_mass": 439308862.5584581
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584568,
+          "energy": 2.7274486917727468e+16,
+          "kinetic_energy": 18064445469.57126,
+          "vertical_velocity_rms": 0.4994136399636054,
+          "vapor_mass": 439308862.5584568
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 0,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 1.185373460313554e-07,
+        "dry_mass": 2.3147739226873025e-10,
+        "water_mass": 3.0826373079828206e-05,
+        "energy": 9.291337239989235e-09,
+        "energy_with_requested_source": 9.291337239989235e-09
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14476378628.084991,
+        "vertical_velocity_rms": 0.4617321613818624,
+        "vapor_mass": 439319342.23928696
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577518.28114,
+          "dry_mass": 113737268001.05301,
+          "water_mass": 439309517.22813916,
+          "energy": 2.727448693111153e+16,
+          "kinetic_energy": 5019687440.102927,
+          "vertical_velocity_rms": 0.24614109643871623,
+          "vapor_mass": 439309517.22813916
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578195.47443,
+          "dry_mass": 113737268000.37714,
+          "water_mass": 439310195.0972777,
+          "energy": 2.7274486944661376e+16,
+          "kinetic_energy": 15421014246.199942,
+          "vertical_velocity_rms": 0.37453398926225734,
+          "vapor_mass": 439310195.0972777
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578844.02997,
+          "dry_mass": 113737267998.6167,
+          "water_mass": 439310845.4132744,
+          "energy": 2.727448695682391e+16,
+          "kinetic_energy": 18005904030.755943,
+          "vertical_velocity_rms": 0.463700460559088,
+          "vapor_mass": 439310845.4132744
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579531.09311,
+          "dry_mass": 113737268007.51056,
+          "water_mass": 439311523.58254623,
+          "energy": 2.727448696905936e+16,
+          "kinetic_energy": 18867693575.041832,
+          "vertical_velocity_rms": 0.5245344673429434,
+          "vapor_mass": 439311523.58254623
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580241.09229,
+          "dry_mass": 113737268010.03653,
+          "water_mass": 439312231.0557374,
+          "energy": 2.7274486982987024e+16,
+          "kinetic_energy": 24491773170.793743,
+          "vertical_velocity_rms": 0.5624783146106327,
+          "vapor_mass": 439312231.0557374
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580911.57434,
+          "dry_mass": 113737268005.32336,
+          "water_mass": 439312906.25096154,
+          "energy": 2.727448699727093e+16,
+          "kinetic_energy": 19231929236.64837,
+          "vertical_velocity_rms": 0.5859588009176124,
+          "vapor_mass": 439312906.25096154
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581615.09094,
+          "dry_mass": 113737268011.15295,
+          "water_mass": 439313603.9379897,
+          "energy": 2.727448701183899e+16,
+          "kinetic_energy": 23724629147.01143,
+          "vertical_velocity_rms": 0.5997897672216401,
+          "vapor_mass": 439313603.9379897
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582281.50726,
+          "dry_mass": 113737268009.14072,
+          "water_mass": 439314272.3665732,
+          "energy": 2.727448702475641e+16,
+          "kinetic_energy": 18735928706.878067,
+          "vertical_velocity_rms": 0.6009584683334562,
+          "vapor_mass": 439314272.3665732
+        },
+        {
+          "time": 22.5,
+          "mass": 114176582950.83511,
+          "dry_mass": 113737268004.14644,
+          "water_mass": 439314946.68868256,
+          "energy": 2.7274487035841976e+16,
+          "kinetic_energy": 17038335060.162397,
+          "vertical_velocity_rms": 0.5725473522525011,
+          "vapor_mass": 439314946.68868256
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583649.66014,
+          "dry_mass": 113737268010.67319,
+          "water_mass": 439315638.98695457,
+          "energy": 2.727448704877054e+16,
+          "kinetic_energy": 14119875785.931492,
+          "vertical_velocity_rms": 0.49050113545419255,
+          "vapor_mass": 439315638.98695457
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584305.59,
+          "dry_mass": 113737267989.58429,
+          "water_mass": 439316316.00571567,
+          "energy": 2.72744870618361e+16,
+          "kinetic_energy": 6040427813.387632,
+          "vertical_velocity_rms": 0.33033363378601927,
+          "vapor_mass": 439316316.00571567
+        },
+        {
+          "time": 30.0,
+          "mass": 114176584973.57861,
+          "dry_mass": 113737267995.61536,
+          "water_mass": 439316977.96324444,
+          "energy": 2.7274487075953932e+16,
+          "kinetic_energy": 5452991656.578531,
+          "vertical_velocity_rms": 0.10735957328037461,
+          "vapor_mass": 439316977.96324444
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585660.43924,
+          "dry_mass": 113737267987.82669,
+          "water_mass": 439317672.6125603,
+          "energy": 2.727448708870779e+16,
+          "kinetic_energy": 5146548627.59231,
+          "vertical_velocity_rms": 0.29364940261610717,
+          "vapor_mass": 439317672.6125603
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586304.87311,
+          "dry_mass": 113737267992.49013,
+          "water_mass": 439318312.3829658,
+          "energy": 2.727448710122421e+16,
+          "kinetic_energy": 12549631386.284899,
+          "vertical_velocity_rms": 0.47839260971777453,
+          "vapor_mass": 439318312.3829658
+        },
+        {
+          "time": 37.5,
+          "mass": 114176586967.20578,
+          "dry_mass": 113737267992.74251,
+          "water_mass": 439318974.4632764,
+          "energy": 2.727448711112072e+16,
+          "kinetic_energy": 16553203748.145786,
+          "vertical_velocity_rms": 0.5625680168144146,
+          "vapor_mass": 439318974.4632764
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587635.63734,
+          "dry_mass": 113737267979.54872,
+          "water_mass": 439319656.0886282,
+          "energy": 2.7274487123859972e+16,
+          "kinetic_energy": 19044417029.98648,
+          "vertical_velocity_rms": 0.5957266768195528,
+          "vapor_mass": 439319656.0886282
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588327.02542,
+          "dry_mass": 113737267976.96504,
+          "water_mass": 439320350.0603704,
+          "energy": 2.727448713622012e+16,
+          "kinetic_energy": 21061979102.473465,
+          "vertical_velocity_rms": 0.6024862032140517,
+          "vapor_mass": 439320350.0603704
+        },
+        {
+          "time": 45.0,
+          "mass": 114176589015.67036,
+          "dry_mass": 113737267985.28976,
+          "water_mass": 439321030.38059723,
+          "energy": 2.7274487151250636e+16,
+          "kinetic_energy": 20454879961.383835,
+          "vertical_velocity_rms": 0.5917263926304915,
+          "vapor_mass": 439321030.38059723
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589718.51366,
+          "dry_mass": 113737267987.94492,
+          "water_mass": 439321730.56873584,
+          "energy": 2.727448715891429e+16,
+          "kinetic_energy": 20394140398.286594,
+          "vertical_velocity_rms": 0.5556499167072753,
+          "vapor_mass": 439321730.56873584
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590397.04901,
+          "dry_mass": 113737267995.18222,
+          "water_mass": 439322401.8667752,
+          "energy": 2.7274487171113744e+16,
+          "kinetic_energy": 18065566556.730377,
+          "vertical_velocity_rms": 0.49942918823256255,
+          "vapor_mass": 439322401.8667752
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 1,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 4.009260782207876e-16,
+        "dry_mass": 1.3415821683054901e-16,
+        "water_mass": 5.76632437643316e-14,
+        "energy": 1.4665720434687335e-16,
+        "energy_with_requested_source": 1.4665720434687335e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14468605399.60385,
+        "vertical_velocity_rms": 0.46155360189051026,
+        "vapor_mass": 439308862.55846256
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584811,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 5011238508.664268,
+          "vertical_velocity_rms": 0.245841294813707,
+          "vapor_mass": 439308862.5584811
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.5584798,
+          "energy": 2.7274486908527236e+16,
+          "kinetic_energy": 15411438878.334564,
+          "vertical_velocity_rms": 0.37436062189109287,
+          "vapor_mass": 439308862.5584798
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584786,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 17997811346.625763,
+          "vertical_velocity_rms": 0.4635418068336026,
+          "vapor_mass": 439308862.5584786
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584772,
+          "energy": 2.7274486908527236e+16,
+          "kinetic_energy": 18857948878.9997,
+          "vertical_velocity_rms": 0.5243691821805878,
+          "vapor_mass": 439308862.5584772
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.558476,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 24483234636.76477,
+          "vertical_velocity_rms": 0.5623375845771462,
+          "vapor_mass": 439308862.558476
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.55847466,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 19223360858.020103,
+          "vertical_velocity_rms": 0.5858556606463996,
+          "vapor_mass": 439308862.55847466
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584733,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 23714636636.527386,
+          "vertical_velocity_rms": 0.599685959178496,
+          "vapor_mass": 439308862.5584733
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.558472,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 18728904103.92361,
+          "vertical_velocity_rms": 0.6008180967286699,
+          "vapor_mass": 439308862.558472
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584707,
+          "energy": 2.7274486908527236e+16,
+          "kinetic_energy": 17027859224.255325,
+          "vertical_velocity_rms": 0.5723865229805989,
+          "vapor_mass": 439308862.5584707
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584694,
+          "energy": 2.7274486908527236e+16,
+          "kinetic_energy": 14113046094.241634,
+          "vertical_velocity_rms": 0.49036502663854203,
+          "vapor_mass": 439308862.5584694
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.5584683,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 6031694258.746635,
+          "vertical_velocity_rms": 0.3302031009029939,
+          "vapor_mass": 439308862.5584683
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584669,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 5444623187.002982,
+          "vertical_velocity_rms": 0.1068329005373569,
+          "vapor_mass": 439308862.5584669
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584657,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 5140156086.606916,
+          "vertical_velocity_rms": 0.29335174800818037,
+          "vapor_mass": 439308862.5584657
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.5584644,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 12539724041.866964,
+          "vertical_velocity_rms": 0.47820746386182367,
+          "vapor_mass": 439308862.5584644
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.85109,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846316,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 16547202624.20764,
+          "vertical_velocity_rms": 0.5624703043015268,
+          "vapor_mass": 439308862.55846316
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.85109,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584619,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 19035146224.66587,
+          "vertical_velocity_rms": 0.5956628494971178,
+          "vapor_mass": 439308862.5584619
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846065,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 21054333380.860638,
+          "vertical_velocity_rms": 0.6023785148562045,
+          "vapor_mass": 439308862.55846065
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.85109,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55845946,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 20447911515.01574,
+          "vertical_velocity_rms": 0.591568521125047,
+          "vapor_mass": 439308862.55845946
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584583,
+          "energy": 2.7274486908527228e+16,
+          "kinetic_energy": 20385203227.760452,
+          "vertical_velocity_rms": 0.5555069058390895,
+          "vapor_mass": 439308862.5584583
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55845696,
+          "energy": 2.727448690852723e+16,
+          "kinetic_energy": 18060059449.304657,
+          "vertical_velocity_rms": 0.49935370997576206,
+          "vapor_mass": 439308862.55845696
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 1,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 1.194292686368491e-07,
+        "dry_mass": 2.3240187654090958e-10,
+        "water_mass": 3.097955349359673e-05,
+        "energy": 9.528317686483668e-09,
+        "energy_with_requested_source": 9.528317686483668e-09
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14469376146.843056,
+        "vertical_velocity_rms": 0.46156566077063543,
+        "vapor_mass": 439319415.5900346
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577544.67242,
+          "dry_mass": 113737268003.9202,
+          "water_mass": 439309540.75221956,
+          "energy": 2.7274486922080308e+16,
+          "kinetic_energy": 5011250831.848022,
+          "vertical_velocity_rms": 0.24584159489068186,
+          "vapor_mass": 439309540.75221956
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578216.38795,
+          "dry_mass": 113737268003.05533,
+          "water_mass": 439310213.3326465,
+          "energy": 2.727448693696094e+16,
+          "kinetic_energy": 15411517115.733807,
+          "vertical_velocity_rms": 0.37436152022185265,
+          "vapor_mass": 439310213.3326465
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578895.54063,
+          "dry_mass": 113737267997.91327,
+          "water_mass": 439310897.62736523,
+          "energy": 2.7274486948775236e+16,
+          "kinetic_energy": 17997947759.51155,
+          "vertical_velocity_rms": 0.46354351113631326,
+          "vapor_mass": 439310897.62736523
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579571.18976,
+          "dry_mass": 113737267996.60275,
+          "water_mass": 439311574.58700913,
+          "energy": 2.727448696143808e+16,
+          "kinetic_energy": 18858136037.303482,
+          "vertical_velocity_rms": 0.524371757880793,
+          "vapor_mass": 439311574.58700913
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580290.32324,
+          "dry_mass": 113737268009.72733,
+          "water_mass": 439312280.59591377,
+          "energy": 2.727448697602265e+16,
+          "kinetic_energy": 24483547992.54426,
+          "vertical_velocity_rms": 0.5623410280339529,
+          "vapor_mass": 439312280.59591377
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580963.03326,
+          "dry_mass": 113737268016.79637,
+          "water_mass": 439312946.23689616,
+          "energy": 2.7274486991204844e+16,
+          "kinetic_energy": 19223641684.754463,
+          "vertical_velocity_rms": 0.5858599644025306,
+          "vapor_mass": 439312946.23689616
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581681.56134,
+          "dry_mass": 113737268020.90274,
+          "water_mass": 439313660.6586268,
+          "energy": 2.727448700764989e+16,
+          "kinetic_energy": 23715064236.901924,
+          "vertical_velocity_rms": 0.5996911634656502,
+          "vapor_mass": 439313660.6586268
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582350.70618,
+          "dry_mass": 113737268021.98276,
+          "water_mass": 439314328.7234125,
+          "energy": 2.727448702085889e+16,
+          "kinetic_energy": 18729277169.547867,
+          "vertical_velocity_rms": 0.6008240646003563,
+          "vapor_mass": 439314328.7234125
+        },
+        {
+          "time": 22.5,
+          "mass": 114176583013.8631,
+          "dry_mass": 113737268022.13168,
+          "water_mass": 439314991.73140764,
+          "energy": 2.7274487029689188e+16,
+          "kinetic_energy": 17028246057.04246,
+          "vertical_velocity_rms": 0.572392863311717,
+          "vapor_mass": 439314991.73140764
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583706.34668,
+          "dry_mass": 113737268019.06555,
+          "water_mass": 439315687.2811232,
+          "energy": 2.7274487041828948e+16,
+          "kinetic_energy": 14113401043.800814,
+          "vertical_velocity_rms": 0.4903708670160112,
+          "vapor_mass": 439315687.2811232
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584378.84355,
+          "dry_mass": 113737268009.38681,
+          "water_mass": 439316369.4567193,
+          "energy": 2.727448705151116e+16,
+          "kinetic_energy": 6031855444.3920965,
+          "vertical_velocity_rms": 0.33020706836309643,
+          "vapor_mass": 439316369.4567193
+        },
+        {
+          "time": 30.0,
+          "mass": 114176585078.85262,
+          "dry_mass": 113737268005.3106,
+          "water_mass": 439317073.5420427,
+          "energy": 2.7274487068050908e+16,
+          "kinetic_energy": 5444816001.02185,
+          "vertical_velocity_rms": 0.10683462670286202,
+          "vapor_mass": 439317073.5420427
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585761.5364,
+          "dry_mass": 113737268002.23535,
+          "water_mass": 439317759.3010478,
+          "energy": 2.727448708588803e+16,
+          "kinetic_energy": 5140393649.155203,
+          "vertical_velocity_rms": 0.2933589459105299,
+          "vapor_mass": 439317759.3010478
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586394.25653,
+          "dry_mass": 113737267988.9141,
+          "water_mass": 439318405.34241927,
+          "energy": 2.727448709518128e+16,
+          "kinetic_energy": 12540314544.205864,
+          "vertical_velocity_rms": 0.478218955714313,
+          "vapor_mass": 439318405.34241927
+        },
+        {
+          "time": 37.5,
+          "mass": 114176587090.59692,
+          "dry_mass": 113737267999.82747,
+          "water_mass": 439319090.7694589,
+          "energy": 2.727448710883991e+16,
+          "kinetic_energy": 16548023297.063126,
+          "vertical_velocity_rms": 0.562484389976236,
+          "vapor_mass": 439319090.7694589
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587750.21535,
+          "dry_mass": 113737268002.19499,
+          "water_mass": 439319748.0203526,
+          "energy": 2.727448712306894e+16,
+          "kinetic_energy": 19036146586.856667,
+          "vertical_velocity_rms": 0.5956785550081606,
+          "vapor_mass": 439319748.0203526
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588406.11479,
+          "dry_mass": 113737268004.63159,
+          "water_mass": 439320401.4832008,
+          "energy": 2.727448713405693e+16,
+          "kinetic_energy": 21055488767.999588,
+          "vertical_velocity_rms": 0.6023951779383151,
+          "vapor_mass": 439320401.4832008
+        },
+        {
+          "time": 45.0,
+          "mass": 114176589097.58841,
+          "dry_mass": 113737268024.07956,
+          "water_mass": 439321073.50883603,
+          "energy": 2.7274487143931656e+16,
+          "kinetic_energy": 20449091983.307426,
+          "vertical_velocity_rms": 0.591585618921636,
+          "vapor_mass": 439321073.50883603
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589790.83667,
+          "dry_mass": 113737268025.52069,
+          "water_mass": 439321765.31598085,
+          "energy": 2.7274487155077852e+16,
+          "kinetic_energy": 20386432423.160336,
+          "vertical_velocity_rms": 0.5555237508934355,
+          "vapor_mass": 439321765.31598085
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590498.88568,
+          "dry_mass": 113737268029.7254,
+          "water_mass": 439322469.1602881,
+          "energy": 2.7274487168377056e+16,
+          "kinetic_energy": 18061198771.268394,
+          "vertical_velocity_rms": 0.4993695182777698,
+          "vapor_mass": 439322469.1602881
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 2,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 2.672840521471917e-16,
+        "dry_mass": 1.3415821683054901e-16,
+        "water_mass": 5.752756554370965e-14,
+        "energy": 2.933144087989264e-16,
+        "energy_with_requested_source": 2.933144087989264e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14461158994.108465,
+        "vertical_velocity_rms": 0.4613762091739223,
+        "vapor_mass": 439308862.55846286
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584811,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 5002269293.486591,
+          "vertical_velocity_rms": 0.24552249357513384,
+          "vapor_mass": 439308862.5584811
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584797,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 15401345413.232178,
+          "vertical_velocity_rms": 0.3741771972064428,
+          "vapor_mass": 439308862.5584797
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847853,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 17989352797.92976,
+          "vertical_velocity_rms": 0.46337488679983246,
+          "vapor_mass": 439308862.55847853
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847734,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 18847785997.324055,
+          "vertical_velocity_rms": 0.5241961077752807,
+          "vapor_mass": 439308862.55847734
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584761,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 24474486332.123627,
+          "vertical_velocity_rms": 0.5621915562571035,
+          "vapor_mass": 439308862.5584761
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584749,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 19214546929.293877,
+          "vertical_velocity_rms": 0.5857505066631203,
+          "vapor_mass": 439308862.5584749
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.55847365,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 23704461452.515854,
+          "vertical_velocity_rms": 0.599581016827148,
+          "vapor_mass": 439308862.55847365
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.55847234,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 18721828317.10742,
+          "vertical_velocity_rms": 0.600675098047052,
+          "vapor_mass": 439308862.55847234
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584711,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 17017132341.883581,
+          "vertical_velocity_rms": 0.5722222028271736,
+          "vapor_mass": 439308862.5584711
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846983,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 14106162720.673973,
+          "vertical_velocity_rms": 0.49022649244654243,
+          "vapor_mass": 439308862.55846983
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846864,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 6022581457.642499,
+          "vertical_velocity_rms": 0.3300684706310426,
+          "vapor_mass": 439308862.55846864
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846727,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 5435934294.147118,
+          "vertical_velocity_rms": 0.10627195784328339,
+          "vapor_mass": 439308862.55846727
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558466,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 5133617660.88238,
+          "vertical_velocity_rms": 0.29304280904534435,
+          "vapor_mass": 439308862.558466
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846465,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 12529827780.124968,
+          "vertical_velocity_rms": 0.47802296601592653,
+          "vapor_mass": 439308862.55846465
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584635,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 16541698031.971127,
+          "vertical_velocity_rms": 0.5623814415426739,
+          "vapor_mass": 439308862.5584635
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846226,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 19026351639.312004,
+          "vertical_velocity_rms": 0.5956115840672733,
+          "vapor_mass": 439308862.55846226
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846095,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 21047426641.604412,
+          "vertical_velocity_rms": 0.6022815809026836,
+          "vapor_mass": 439308862.55846095
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55845964,
+          "energy": 2.7274486898746864e+16,
+          "kinetic_energy": 20441754349.68477,
+          "vertical_velocity_rms": 0.5914187182376871,
+          "vapor_mass": 439308862.55845964
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584583,
+          "energy": 2.727448689874686e+16,
+          "kinetic_energy": 20376999405.165108,
+          "vertical_velocity_rms": 0.5553725703767779,
+          "vapor_mass": 439308862.5584583
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.558457,
+          "energy": 2.7274486898746856e+16,
+          "kinetic_energy": 18055398680.55027,
+          "vertical_velocity_rms": 0.4992899930765304,
+          "vapor_mass": 439308862.558457
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 2,
+      "case": "closed",
+      "max_relative_budget_residual": {
+        "mass": 1.181231228388135e-07,
+        "dry_mass": 2.5913021808005984e-10,
+        "water_mass": 3.071335620185477e-05,
+        "energy": 9.020557010426325e-09,
+        "energy_with_requested_source": 9.020557010426325e-09
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14461918168.118275,
+        "vertical_velocity_rms": 0.4613880648233062,
+        "vapor_mass": 439319310.5033788
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577513.13568,
+          "dry_mass": 113737268001.23718,
+          "water_mass": 439309511.8985002,
+          "energy": 2.727448691201225e+16,
+          "kinetic_energy": 5002281180.468467,
+          "vertical_velocity_rms": 0.24552278342627185,
+          "vapor_mass": 439309511.8985002
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578170.39624,
+          "dry_mass": 113737268001.90622,
+          "water_mass": 439310168.49001026,
+          "energy": 2.727448692552021e+16,
+          "kinetic_energy": 15401421810.779997,
+          "vertical_velocity_rms": 0.3741780677818212,
+          "vapor_mass": 439310168.49001026
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578824.49489,
+          "dry_mass": 113737267999.57707,
+          "water_mass": 439310824.9178113,
+          "energy": 2.727448693994943e+16,
+          "kinetic_energy": 17989484358.845314,
+          "vertical_velocity_rms": 0.4633765281446174,
+          "vapor_mass": 439310824.9178113
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579483.95827,
+          "dry_mass": 113737267992.03976,
+          "water_mass": 439311491.91848814,
+          "energy": 2.727448695437725e+16,
+          "kinetic_energy": 18847966039.435173,
+          "vertical_velocity_rms": 0.5241985974030916,
+          "vapor_mass": 439311491.91848814
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580177.4322,
+          "dry_mass": 113737267999.33179,
+          "water_mass": 439312178.1004083,
+          "energy": 2.7274486967719696e+16,
+          "kinetic_energy": 24474791024.33819,
+          "vertical_velocity_rms": 0.5621949075591651,
+          "vapor_mass": 439312178.1004083
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580826.53941,
+          "dry_mass": 113737267991.38365,
+          "water_mass": 439312835.15576065,
+          "energy": 2.727448697963125e+16,
+          "kinetic_energy": 19214820430.541634,
+          "vertical_velocity_rms": 0.5857547048601114,
+          "vapor_mass": 439312835.15576065
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581540.87845,
+          "dry_mass": 113737267996.72607,
+          "water_mass": 439313544.15235543,
+          "energy": 2.727448699141492e+16,
+          "kinetic_energy": 23704876764.58018,
+          "vertical_velocity_rms": 0.5995860617438034,
+          "vapor_mass": 439313544.15235543
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582224.26596,
+          "dry_mass": 113737267998.6292,
+          "water_mass": 439314225.63673544,
+          "energy": 2.7274487001810452e+16,
+          "kinetic_energy": 18722193730.02456,
+          "vertical_velocity_rms": 0.6006809384975106,
+          "vapor_mass": 439314225.63673544
+        },
+        {
+          "time": 22.5,
+          "mass": 114176582906.99179,
+          "dry_mass": 113737267999.45686,
+          "water_mass": 439314907.5349356,
+          "energy": 2.727448701192851e+16,
+          "kinetic_energy": 17017509743.851742,
+          "vertical_velocity_rms": 0.5722284172440217,
+          "vapor_mass": 439314907.5349356
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583569.24036,
+          "dry_mass": 113737268004.05435,
+          "water_mass": 439315565.186007,
+          "energy": 2.7274487027206976e+16,
+          "kinetic_energy": 14106513789.72178,
+          "vertical_velocity_rms": 0.4902322515539515,
+          "vapor_mass": 439315565.186007
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584227.137,
+          "dry_mass": 113737267974.64128,
+          "water_mass": 439316252.4957006,
+          "energy": 2.727448703716624e+16,
+          "kinetic_energy": 6022737589.147113,
+          "vertical_velocity_rms": 0.3300723160333455,
+          "vapor_mass": 439316252.4957006
+        },
+        {
+          "time": 30.0,
+          "mass": 114176584921.46968,
+          "dry_mass": 113737267973.81989,
+          "water_mass": 439316947.64978606,
+          "energy": 2.7274487049082516e+16,
+          "kinetic_energy": 5436124877.124294,
+          "vertical_velocity_rms": 0.10627355936728296,
+          "vapor_mass": 439316947.64978606
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585629.42548,
+          "dry_mass": 113737267978.43616,
+          "water_mass": 439317650.98932374,
+          "energy": 2.727448706567888e+16,
+          "kinetic_energy": 5133856376.793422,
+          "vertical_velocity_rms": 0.2930500754743018,
+          "vapor_mass": 439317650.98932374
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586270.97794,
+          "dry_mass": 113737267978.63113,
+          "water_mass": 439318292.3467975,
+          "energy": 2.727448707170002e+16,
+          "kinetic_energy": 12530414856.583355,
+          "vertical_velocity_rms": 0.478034403488823,
+          "vapor_mass": 439318292.3467975
+        },
+        {
+          "time": 37.5,
+          "mass": 114176586967.33311,
+          "dry_mass": 113737267977.98141,
+          "water_mass": 439318989.35170466,
+          "energy": 2.7274487087269428e+16,
+          "kinetic_energy": 16542510209.68723,
+          "vertical_velocity_rms": 0.562395372264362,
+          "vapor_mass": 439318989.35170466
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587626.08026,
+          "dry_mass": 113737267983.84325,
+          "water_mass": 439319642.23702383,
+          "energy": 2.727448709745601e+16,
+          "kinetic_energy": 19027336881.755676,
+          "vertical_velocity_rms": 0.595627027051563,
+          "vapor_mass": 439319642.23702383
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588290.30627,
+          "dry_mass": 113737267982.22818,
+          "water_mass": 439320308.07809496,
+          "energy": 2.727448710775204e+16,
+          "kinetic_energy": 21048559894.16642,
+          "vertical_velocity_rms": 0.6022978677031366,
+          "vapor_mass": 439320308.07809496
+        },
+        {
+          "time": 45.0,
+          "mass": 114176588982.66164,
+          "dry_mass": 113737267995.03638,
+          "water_mass": 439320987.62525123,
+          "energy": 2.727448711669436e+16,
+          "kinetic_energy": 20442913822.644623,
+          "vertical_velocity_rms": 0.591435475321091,
+          "vapor_mass": 439320987.62525123
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589672.7945,
+          "dry_mass": 113737267990.75185,
+          "water_mass": 439321682.042646,
+          "energy": 2.7274487132798416e+16,
+          "kinetic_energy": 20378208011.605858,
+          "vertical_velocity_rms": 0.5553890515680462,
+          "vapor_mass": 439321682.042646
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590349.75443,
+          "dry_mass": 113737267997.53696,
+          "water_mass": 439322352.21745944,
+          "energy": 2.7274487144747776e+16,
+          "kinetic_energy": 18056519161.67475,
+          "vertical_velocity_rms": 0.49930549996110984,
+          "vapor_mass": 439322352.21745944
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 0,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 4.009260782207876e-16,
+        "dry_mass": 2.6831643366109803e-16,
+        "water_mass": 5.752756554370965e-14,
+        "energy": 2.953581597371129e-16,
+        "energy_with_requested_source": 2.933144085948058e-16
+      },
+      "source_energy_actual": 14999999999.907887,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": -6.140899658203125e-12,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14474694960.37151,
+        "vertical_velocity_rms": 0.46170144922233175,
+        "vapor_mass": 439308862.55846274
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584811,
+          "energy": 2.727448766772747e+16,
+          "kinetic_energy": 5019652060.64353,
+          "vertical_velocity_rms": 0.24614021984588666,
+          "vapor_mass": 439308862.5584811
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584799,
+          "energy": 2.727448841772747e+16,
+          "kinetic_energy": 15420721172.207561,
+          "vertical_velocity_rms": 0.37452966233066926,
+          "vapor_mass": 439308862.5584799
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29262,
+          "water_mass": 439308862.55847865,
+          "energy": 2.727448916772747e+16,
+          "kinetic_energy": 18005201288.888344,
+          "vertical_velocity_rms": 0.4636920049058132,
+          "vapor_mass": 439308862.55847865
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584774,
+          "energy": 2.727448991772747e+16,
+          "kinetic_energy": 18867237374.041386,
+          "vertical_velocity_rms": 0.5245319405740618,
+          "vapor_mass": 439308862.5584774
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584761,
+          "energy": 2.7274490667727476e+16,
+          "kinetic_energy": 24492011384.072052,
+          "vertical_velocity_rms": 0.5624882404397199,
+          "vapor_mass": 439308862.5584761
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584748,
+          "energy": 2.727449141772747e+16,
+          "kinetic_energy": 19233070131.885834,
+          "vertical_velocity_rms": 0.5859814533338727,
+          "vapor_mass": 439308862.5584748
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847347,
+          "energy": 2.727449216772747e+16,
+          "kinetic_energy": 23726177072.2154,
+          "vertical_velocity_rms": 0.5998206979172163,
+          "vapor_mass": 439308862.55847347
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584723,
+          "energy": 2.727449291772747e+16,
+          "kinetic_energy": 18737724521.062782,
+          "vertical_velocity_rms": 0.6009928975041534,
+          "vapor_mass": 439308862.5584723
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558471,
+          "energy": 2.727449366772747e+16,
+          "kinetic_energy": 17039887559.516153,
+          "vertical_velocity_rms": 0.5725791860446606,
+          "vapor_mass": 439308862.558471
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846965,
+          "energy": 2.7274494417727464e+16,
+          "kinetic_energy": 14120678257.251019,
+          "vertical_velocity_rms": 0.4905216120097901,
+          "vapor_mass": 439308862.55846965
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846846,
+          "energy": 2.727449516772747e+16,
+          "kinetic_energy": 6040713374.699935,
+          "vertical_velocity_rms": 0.3303442118470789,
+          "vapor_mass": 439308862.55846846
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584672,
+          "energy": 2.727449591772747e+16,
+          "kinetic_energy": 5452773113.613981,
+          "vertical_velocity_rms": 0.10735651405306892,
+          "vapor_mass": 439308862.5584672
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846596,
+          "energy": 2.727449666772747e+16,
+          "kinetic_energy": 5145855720.319901,
+          "vertical_velocity_rms": 0.29362619732649964,
+          "vapor_mass": 439308862.55846596
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846465,
+          "energy": 2.727449741772747e+16,
+          "kinetic_energy": 12548022643.245628,
+          "vertical_velocity_rms": 0.47835774787999624,
+          "vapor_mass": 439308862.55846465
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584632,
+          "energy": 2.727449816772747e+16,
+          "kinetic_energy": 16550605606.378433,
+          "vertical_velocity_rms": 0.5625185863542813,
+          "vapor_mass": 439308862.5584632
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.558462,
+          "energy": 2.7274498917727476e+16,
+          "kinetic_energy": 19041295506.44957,
+          "vertical_velocity_rms": 0.5956706281862291,
+          "vapor_mass": 439308862.558462
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846083,
+          "energy": 2.727449966772747e+16,
+          "kinetic_energy": 21058832021.95733,
+          "vertical_velocity_rms": 0.6024328725622862,
+          "vapor_mass": 439308862.55846083
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584596,
+          "energy": 2.727450041772747e+16,
+          "kinetic_energy": 20452205101.787617,
+          "vertical_velocity_rms": 0.5916811451006817,
+          "vapor_mass": 439308862.5584596
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55845827,
+          "energy": 2.727450116772747e+16,
+          "kinetic_energy": 20392170606.789536,
+          "vertical_velocity_rms": 0.5556166249671237,
+          "vapor_mass": 439308862.55845827
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.85109,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558457,
+          "energy": 2.727450191772747e+16,
+          "kinetic_energy": 18064475908.47316,
+          "vertical_velocity_rms": 0.49940996394607207,
+          "vapor_mass": 439308862.558457
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 0,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 1.189551612542742e-07,
+        "dry_mass": 2.0807027154543705e-10,
+        "water_mass": 3.0932061147519314e-05,
+        "energy": 9.199149663873835e-09,
+        "energy_with_requested_source": 1.002288830675022e-08
+      },
+      "source_energy_actual": 15022467048.838734,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": 0.0014978032559155783,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14475450577.783854,
+        "vertical_velocity_rms": 0.46171327462784406,
+        "vapor_mass": 439319383.5348939
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577520.60945,
+          "dry_mass": 113737268004.54547,
+          "water_mass": 439309516.06398594,
+          "energy": 2.727448768248956e+16,
+          "kinetic_energy": 5019663621.15504,
+          "vertical_velocity_rms": 0.2461405040468768,
+          "vapor_mass": 439309516.06398594
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578198.54454,
+          "dry_mass": 113737268002.68329,
+          "water_mass": 439310195.86125326,
+          "energy": 2.727448845004313e+16,
+          "kinetic_energy": 15420799690.0438,
+          "vertical_velocity_rms": 0.3745305359798123,
+          "vapor_mass": 439310195.86125326
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578847.16887,
+          "dry_mass": 113737267997.772,
+          "water_mass": 439310849.39686114,
+          "energy": 2.7274489216280416e+16,
+          "kinetic_energy": 18005335010.05488,
+          "vertical_velocity_rms": 0.46369366534085676,
+          "vapor_mass": 439310849.39686114
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579523.90172,
+          "dry_mass": 113737268006.23088,
+          "water_mass": 439311517.67083067,
+          "energy": 2.727448997873501e+16,
+          "kinetic_energy": 18867421546.273785,
+          "vertical_velocity_rms": 0.524534482369893,
+          "vapor_mass": 439311517.67083067
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580235.08507,
+          "dry_mass": 113737268007.83102,
+          "water_mass": 439312227.2540495,
+          "energy": 2.727449073757412e+16,
+          "kinetic_energy": 24492318829.065186,
+          "vertical_velocity_rms": 0.5624916524936295,
+          "vapor_mass": 439312227.2540495
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580912.05154,
+          "dry_mass": 113737267997.13763,
+          "water_mass": 439312914.9138986,
+          "energy": 2.7274491497792224e+16,
+          "kinetic_energy": 19233345168.03219,
+          "vertical_velocity_rms": 0.5859856740812305,
+          "vapor_mass": 439312914.9138986
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581614.45428,
+          "dry_mass": 113737268004.84105,
+          "water_mass": 439313609.61323655,
+          "energy": 2.7274492260477772e+16,
+          "kinetic_energy": 23726585696.699425,
+          "vertical_velocity_rms": 0.5998257166750273,
+          "vapor_mass": 439313609.61323655
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582288.13976,
+          "dry_mass": 113737267996.119,
+          "water_mass": 439314292.02075374,
+          "energy": 2.7274493026921412e+16,
+          "kinetic_energy": 18738086039.378128,
+          "vertical_velocity_rms": 0.600998682448458,
+          "vapor_mass": 439314292.02075374
+        },
+        {
+          "time": 22.5,
+          "mass": 114176582957.67566,
+          "dry_mass": 113737267992.44693,
+          "water_mass": 439314965.228732,
+          "energy": 2.7274493792884664e+16,
+          "kinetic_energy": 17040261733.8741,
+          "vertical_velocity_rms": 0.5725853498436453,
+          "vapor_mass": 439314965.228732
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583651.25403,
+          "dry_mass": 113737267988.62932,
+          "water_mass": 439315662.6247219,
+          "energy": 2.7274494557087372e+16,
+          "kinetic_energy": 14121024216.699722,
+          "vertical_velocity_rms": 0.4905272721811819,
+          "vapor_mass": 439315662.6247219
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584331.54356,
+          "dry_mass": 113737267989.34439,
+          "water_mass": 439316342.1991631,
+          "energy": 2.727449532284903e+16,
+          "kinetic_energy": 6040866829.485564,
+          "vertical_velocity_rms": 0.33034789583931295,
+          "vapor_mass": 439316342.1991631
+        },
+        {
+          "time": 30.0,
+          "mass": 114176584986.78789,
+          "dry_mass": 113737267983.18597,
+          "water_mass": 439317003.60190004,
+          "energy": 2.7274496089043816e+16,
+          "kinetic_energy": 5452958537.715363,
+          "vertical_velocity_rms": 0.10735813742355017,
+          "vapor_mass": 439317003.60190004
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585706.08679,
+          "dry_mass": 113737267990.93262,
+          "water_mass": 439317715.1541749,
+          "energy": 2.7274496855353176e+16,
+          "kinetic_energy": 5146094304.603744,
+          "vertical_velocity_rms": 0.29363342030527867,
+          "vapor_mass": 439317715.1541749
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586349.89307,
+          "dry_mass": 113737267996.51009,
+          "water_mass": 439318353.382987,
+          "energy": 2.727449762146836e+16,
+          "kinetic_energy": 12548600405.46896,
+          "vertical_velocity_rms": 0.47836910348372236,
+          "vapor_mass": 439318353.382987
+        },
+        {
+          "time": 37.5,
+          "mass": 114176587016.08885,
+          "dry_mass": 113737268002.90839,
+          "water_mass": 439319013.1804658,
+          "energy": 2.7274498381221976e+16,
+          "kinetic_energy": 16551412273.641117,
+          "vertical_velocity_rms": 0.5625324169480823,
+          "vapor_mass": 439319013.1804658
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587696.72144,
+          "dry_mass": 113737267996.14034,
+          "water_mass": 439319700.5811089,
+          "energy": 2.7274499143081364e+16,
+          "kinetic_energy": 19042276056.567413,
+          "vertical_velocity_rms": 0.5956860112843951,
+          "vapor_mass": 439319700.5811089
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588378.49115,
+          "dry_mass": 113737267979.6273,
+          "water_mass": 439320398.8638561,
+          "energy": 2.727449990678224e+16,
+          "kinetic_energy": 21059967043.065636,
+          "vertical_velocity_rms": 0.602449236611857,
+          "vapor_mass": 439320398.8638561
+        },
+        {
+          "time": 45.0,
+          "mass": 114176589071.96808,
+          "dry_mass": 113737267988.12738,
+          "water_mass": 439321083.84069574,
+          "energy": 2.7274500673243384e+16,
+          "kinetic_energy": 20453366569.329704,
+          "vertical_velocity_rms": 0.5916979551846994,
+          "vapor_mass": 439321083.84069574
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589771.63269,
+          "dry_mass": 113737267995.38458,
+          "water_mass": 439321776.2481072,
+          "energy": 2.727450143247087e+16,
+          "kinetic_energy": 20393371947.22439,
+          "vertical_velocity_rms": 0.5556331215139458,
+          "vapor_mass": 439321776.2481072
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590444.75372,
+          "dry_mass": 113737267996.45723,
+          "water_mass": 439322448.2964797,
+          "energy": 2.7274502191066424e+16,
+          "kinetic_energy": 18065591810.73665,
+          "vertical_velocity_rms": 0.4994254476835969,
+          "vapor_mass": 439322448.2964797
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 1,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 2.672840521471917e-16,
+        "dry_mass": 1.3415821683054901e-16,
+        "water_mass": 5.752756554370965e-14,
+        "energy": 2.9150992853572067e-16,
+        "energy_with_requested_source": 2.933144086937467e-16
+      },
+      "source_energy_actual": 14999999999.907902,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": -6.139882405598959e-12,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14467688901.853626,
+        "vertical_velocity_rms": 0.4615348926555874,
+        "vapor_mass": 439308862.5584626
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584811,
+          "energy": 2.727448765852723e+16,
+          "kinetic_energy": 5011214757.364037,
+          "vertical_velocity_rms": 0.24584070470471023,
+          "vapor_mass": 439308862.5584811
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584798,
+          "energy": 2.727448840852723e+16,
+          "kinetic_energy": 15411226242.336742,
+          "vertical_velocity_rms": 0.3743571980227153,
+          "vapor_mass": 439308862.5584798
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584786,
+          "energy": 2.727448915852723e+16,
+          "kinetic_energy": 17997244175.158897,
+          "vertical_velocity_rms": 0.4635350384078279,
+          "vapor_mass": 439308862.5584786
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584773,
+          "energy": 2.727448990852723e+16,
+          "kinetic_energy": 18857676969.29029,
+          "vertical_velocity_rms": 0.52436918433632,
+          "vapor_mass": 439308862.5584773
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584759,
+          "energy": 2.727449065852723e+16,
+          "kinetic_energy": 24483781537.098907,
+          "vertical_velocity_rms": 0.5623509117778789,
+          "vapor_mass": 439308862.5584759
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847466,
+          "energy": 2.7274491408527228e+16,
+          "kinetic_energy": 19224778472.95304,
+          "vertical_velocity_rms": 0.5858825584143613,
+          "vapor_mass": 439308862.55847466
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584734,
+          "energy": 2.7274492158527228e+16,
+          "kinetic_energy": 23716604818.512825,
+          "vertical_velocity_rms": 0.5997220029963126,
+          "vapor_mass": 439308862.5584734
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584722,
+          "energy": 2.7274492908527224e+16,
+          "kinetic_energy": 18731067717.3068,
+          "vertical_velocity_rms": 0.6008584210181637,
+          "vapor_mass": 439308862.5584722
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558471,
+          "energy": 2.7274493658527224e+16,
+          "kinetic_energy": 17029796167.376656,
+          "vertical_velocity_rms": 0.5724246660750342,
+          "vapor_mass": 439308862.558471
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584697,
+          "energy": 2.7274494408527224e+16,
+          "kinetic_energy": 14114202288.795778,
+          "vertical_velocity_rms": 0.4903913378738949,
+          "vapor_mass": 439308862.5584697
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584684,
+          "energy": 2.7274495158527224e+16,
+          "kinetic_energy": 6032140141.0816,
+          "vertical_velocity_rms": 0.33021762298528606,
+          "vapor_mass": 439308862.5584684
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584671,
+          "energy": 2.7274495908527224e+16,
+          "kinetic_energy": 5444598555.098837,
+          "vertical_velocity_rms": 0.10683151256750496,
+          "vapor_mass": 439308862.5584671
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584658,
+          "energy": 2.7274496658527224e+16,
+          "kinetic_energy": 5139703983.486359,
+          "vertical_velocity_rms": 0.29333586429145575,
+          "vapor_mass": 439308862.5584658
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55846447,
+          "energy": 2.7274497408527228e+16,
+          "kinetic_energy": 12538712170.66201,
+          "vertical_velocity_rms": 0.47818425024270267,
+          "vapor_mass": 439308862.55846447
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584632,
+          "energy": 2.7274498158527224e+16,
+          "kinetic_energy": 16545426219.85104,
+          "vertical_velocity_rms": 0.5624350022425549,
+          "vapor_mass": 439308862.5584632
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584619,
+          "energy": 2.7274498908527228e+16,
+          "kinetic_energy": 19033021186.41284,
+          "vertical_velocity_rms": 0.5956224044053646,
+          "vapor_mass": 439308862.5584619
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584607,
+          "energy": 2.7274499658527224e+16,
+          "kinetic_energy": 21052333492.861984,
+          "vertical_velocity_rms": 0.6023416968963158,
+          "vapor_mass": 439308862.5584607
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584595,
+          "energy": 2.727450040852723e+16,
+          "kinetic_energy": 20446411598.64462,
+          "vertical_velocity_rms": 0.591540255637802,
+          "vapor_mass": 439308862.5584595
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584582,
+          "energy": 2.7274501158527224e+16,
+          "kinetic_energy": 20384451774.044876,
+          "vertical_velocity_rms": 0.5554902836004983,
+          "vapor_mass": 439308862.5584582
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558457,
+          "energy": 2.727450190852723e+16,
+          "kinetic_energy": 18060089896.39209,
+          "vertical_velocity_rms": 0.499350033686389,
+          "vapor_mass": 439308862.558457
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 1,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 1.1908749599405221e-07,
+        "dry_mass": 5.356273514870511e-10,
+        "water_mass": 3.098568153845759e-05,
+        "energy": 9.449290160834195e-09,
+        "energy_with_requested_source": 1.0272312030651448e-08
+      },
+      "source_energy_actual": 15022447499.213737,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": 0.001496499947582499,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14468449298.604513,
+        "vertical_velocity_rms": 0.4615467704097113,
+        "vapor_mass": 439319409.728796
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577542.38959,
+          "dry_mass": 113737268002.51047,
+          "water_mass": 439309539.87910473,
+          "energy": 2.727448767349489e+16,
+          "kinetic_energy": 5011227187.56293,
+          "vertical_velocity_rms": 0.24584100701605396,
+          "vapor_mass": 439309539.87910473
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578211.38718,
+          "dry_mass": 113737268003.58423,
+          "water_mass": 439310207.80291873,
+          "energy": 2.727448844220377e+16,
+          "kinetic_energy": 15411303538.888842,
+          "vertical_velocity_rms": 0.3743580804601587,
+          "vapor_mass": 439310207.80291873
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578897.54948,
+          "dry_mass": 113737268003.8875,
+          "water_mass": 439310893.66196835,
+          "energy": 2.727448920615363e+16,
+          "kinetic_energy": 17997379905.76116,
+          "vertical_velocity_rms": 0.4635367213951144,
+          "vapor_mass": 439310893.66196835
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579566.45113,
+          "dry_mass": 113737267995.06555,
+          "water_mass": 439311571.3855878,
+          "energy": 2.7274489970597896e+16,
+          "kinetic_energy": 18857861963.376495,
+          "vertical_velocity_rms": 0.5243717487494288,
+          "vapor_mass": 439311571.3855878
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580280.36427,
+          "dry_mass": 113737268008.61774,
+          "water_mass": 439312271.74653035,
+          "energy": 2.727449072705875e+16,
+          "kinetic_energy": 24484090967.7685,
+          "vertical_velocity_rms": 0.5623543465512368,
+          "vapor_mass": 439312271.74653035
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580942.37294,
+          "dry_mass": 113737267996.86821,
+          "water_mass": 439312945.5047529,
+          "energy": 2.727449148816108e+16,
+          "kinetic_energy": 19225058242.379932,
+          "vertical_velocity_rms": 0.5858868424255429,
+          "vapor_mass": 439312945.5047529
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581625.8389,
+          "dry_mass": 113737267983.59753,
+          "water_mass": 439313642.2413591,
+          "energy": 2.7274492252398524e+16,
+          "kinetic_energy": 23717020149.590797,
+          "vertical_velocity_rms": 0.5997271133890862,
+          "vapor_mass": 439313642.2413591
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582289.39714,
+          "dry_mass": 113737267985.96222,
+          "water_mass": 439314303.4349123,
+          "energy": 2.7274493017405544e+16,
+          "kinetic_energy": 18731435811.79093,
+          "vertical_velocity_rms": 0.6008643200082759,
+          "vapor_mass": 439314303.4349123
+        },
+        {
+          "time": 22.5,
+          "mass": 114176582943.68193,
+          "dry_mass": 113737267970.70886,
+          "water_mass": 439314972.97307944,
+          "energy": 2.727449377881936e+16,
+          "kinetic_energy": 17030177633.711414,
+          "vertical_velocity_rms": 0.5724309509144768,
+          "vapor_mass": 439314972.97307944
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583621.27481,
+          "dry_mass": 113737267959.4368,
+          "water_mass": 439315661.83800894,
+          "energy": 2.7274494538345636e+16,
+          "kinetic_energy": 14114552204.035326,
+          "vertical_velocity_rms": 0.49039714271137713,
+          "vapor_mass": 439315661.83800894
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584284.02075,
+          "dry_mass": 113737267942.37186,
+          "water_mass": 439316341.64891875,
+          "energy": 2.7274495294350784e+16,
+          "kinetic_energy": 6032299654.225691,
+          "vertical_velocity_rms": 0.3302215149675473,
+          "vapor_mass": 439316341.64891875
+        },
+        {
+          "time": 30.0,
+          "mass": 114176585015.48016,
+          "dry_mass": 113737267963.87057,
+          "water_mass": 439317051.6095779,
+          "energy": 2.7274496060491172e+16,
+          "kinetic_energy": 5444787822.417704,
+          "vertical_velocity_rms": 0.1068331926329926,
+          "vapor_mass": 439317051.6095779
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585723.08752,
+          "dry_mass": 113737267973.08151,
+          "water_mass": 439317750.00601196,
+          "energy": 2.7274496824426644e+16,
+          "kinetic_energy": 5139938541.697922,
+          "vertical_velocity_rms": 0.2933428814000444,
+          "vapor_mass": 439317750.00601196
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586367.99686,
+          "dry_mass": 113737267974.23685,
+          "water_mass": 439318393.7600043,
+          "energy": 2.7274497594901896e+16,
+          "kinetic_energy": 12539293881.12212,
+          "vertical_velocity_rms": 0.4781955125798485,
+          "vapor_mass": 439318393.7600043
+        },
+        {
+          "time": 37.5,
+          "mass": 114176587062.85962,
+          "dry_mass": 113737267976.37842,
+          "water_mass": 439319086.4811914,
+          "energy": 2.7274498358164944e+16,
+          "kinetic_energy": 16546238040.66652,
+          "vertical_velocity_rms": 0.562448909738048,
+          "vapor_mass": 439319086.4811914
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587727.78903,
+          "dry_mass": 113737267974.09346,
+          "water_mass": 439319753.69559956,
+          "energy": 2.7274499124558624e+16,
+          "kinetic_energy": 19034015730.636284,
+          "vertical_velocity_rms": 0.5956379865588061,
+          "vapor_mass": 439319753.69559956
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588377.40944,
+          "dry_mass": 113737267972.72482,
+          "water_mass": 439320404.68462217,
+          "energy": 2.7274499890947492e+16,
+          "kinetic_energy": 21053481384.331505,
+          "vertical_velocity_rms": 0.6023582780177065,
+          "vapor_mass": 439320404.68462217
+        },
+        {
+          "time": 45.0,
+          "mass": 114176589053.61853,
+          "dry_mass": 113737267977.29028,
+          "water_mass": 439321076.3282696,
+          "energy": 2.7274500658709252e+16,
+          "kinetic_energy": 20447580064.930084,
+          "vertical_velocity_rms": 0.591557176215523,
+          "vapor_mass": 439321076.3282696
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589745.99971,
+          "dry_mass": 113737267978.77835,
+          "water_mass": 439321767.22137225,
+          "energy": 2.727450142390209e+16,
+          "kinetic_energy": 20385654907.53354,
+          "vertical_velocity_rms": 0.5555068062826267,
+          "vapor_mass": 439321767.22137225
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590459.86325,
+          "dry_mass": 113737267988.01085,
+          "water_mass": 439322471.8523925,
+          "energy": 2.727450218866912e+16,
+          "kinetic_energy": 18061202958.483772,
+          "vertical_velocity_rms": 0.49936544570397007,
+          "vapor_mass": 439322471.8523925
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 2,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 2.672840521471917e-16,
+        "dry_mass": 1.3415821683054901e-16,
+        "water_mass": 5.834163486744139e-14,
+        "energy": 2.918660203707536e-16,
+        "energy_with_requested_source": 2.933144087989264e-16
+      },
+      "source_energy_actual": 14999999999.90793,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": -6.137975056966146e-12,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14460242499.445015,
+        "vertical_velocity_rms": 0.46135749451611113,
+        "vapor_mass": 439308862.55846244
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.5584811,
+          "energy": 2.727448764874686e+16,
+          "kinetic_energy": 5002245542.161283,
+          "vertical_velocity_rms": 0.24552190269605295,
+          "vapor_mass": 439308862.5584811
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584798,
+          "energy": 2.7274488398746864e+16,
+          "kinetic_energy": 15401132776.90099,
+          "vertical_velocity_rms": 0.3741737716462814,
+          "vapor_mass": 439308862.5584798
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584786,
+          "energy": 2.7274489148746864e+16,
+          "kinetic_energy": 17988785625.84457,
+          "vertical_velocity_rms": 0.4633681159209195,
+          "vapor_mass": 439308862.5584786
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847734,
+          "energy": 2.727448989874686e+16,
+          "kinetic_energy": 18847514087.196037,
+          "vertical_velocity_rms": 0.5241961099275874,
+          "vapor_mass": 439308862.55847734
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.558476,
+          "energy": 2.7274490648746864e+16,
+          "kinetic_energy": 24475033232.77302,
+          "vertical_velocity_rms": 0.5622048869203213,
+          "vapor_mass": 439308862.558476
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.5584748,
+          "energy": 2.7274491398746856e+16,
+          "kinetic_energy": 19215964545.376797,
+          "vertical_velocity_rms": 0.5857774092445187,
+          "vapor_mass": 439308862.5584748
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55847347,
+          "energy": 2.727449214874686e+16,
+          "kinetic_energy": 23706429636.853146,
+          "vertical_velocity_rms": 0.5996170669326403,
+          "vapor_mass": 439308862.55847347
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584722,
+          "energy": 2.7274492898746856e+16,
+          "kinetic_energy": 18723991933.59017,
+          "vertical_velocity_rms": 0.6007154319455533,
+          "vapor_mass": 439308862.5584722
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.55847085,
+          "energy": 2.727449364874686e+16,
+          "kinetic_energy": 17019069286.919498,
+          "vertical_velocity_rms": 0.5722603569156871,
+          "vapor_mass": 439308862.55847085
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846953,
+          "energy": 2.7274494398746856e+16,
+          "kinetic_energy": 14107318920.0051,
+          "vertical_velocity_rms": 0.4902528111594514,
+          "vapor_mass": 439308862.55846953
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584682,
+          "energy": 2.7274495148746856e+16,
+          "kinetic_energy": 6023027340.322788,
+          "vertical_velocity_rms": 0.3300829986150542,
+          "vapor_mass": 439308862.5584682
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.558467,
+          "energy": 2.7274495898746856e+16,
+          "kinetic_energy": 5435909667.699007,
+          "vertical_velocity_rms": 0.10627056230077485,
+          "vapor_mass": 439308862.558467
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29266,
+          "water_mass": 439308862.55846566,
+          "energy": 2.7274496648746856e+16,
+          "kinetic_energy": 5133165559.231425,
+          "vertical_velocity_rms": 0.2930269084950986,
+          "vapor_mass": 439308862.55846566
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584644,
+          "energy": 2.7274497398746856e+16,
+          "kinetic_energy": 12528815910.313334,
+          "vertical_velocity_rms": 0.47799974343287843,
+          "vapor_mass": 439308862.5584644
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55846316,
+          "energy": 2.727449814874686e+16,
+          "kinetic_energy": 16539921634.915483,
+          "vertical_velocity_rms": 0.5623461339672452,
+          "vapor_mass": 439308862.55846316
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584618,
+          "energy": 2.7274498898746856e+16,
+          "kinetic_energy": 19024226595.58306,
+          "vertical_velocity_rms": 0.5955711354908513,
+          "vapor_mass": 439308862.5584618
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29263,
+          "water_mass": 439308862.5584605,
+          "energy": 2.7274499648746856e+16,
+          "kinetic_energy": 21045426764.90039,
+          "vertical_velocity_rms": 0.6022447568799383,
+          "vapor_mass": 439308862.5584605
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.5584593,
+          "energy": 2.7274500398746856e+16,
+          "kinetic_energy": 20440254428.772785,
+          "vertical_velocity_rms": 0.5913904454015535,
+          "vapor_mass": 439308862.5584593
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.558458,
+          "energy": 2.7274501148746856e+16,
+          "kinetic_energy": 20376247956.383217,
+          "vertical_velocity_rms": 0.5553559440798346,
+          "vapor_mass": 439308862.558458
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113737268003.29265,
+          "water_mass": 439308862.55845666,
+          "energy": 2.7274501898746856e+16,
+          "kinetic_energy": 18055429136.328667,
+          "vertical_velocity_rms": 0.49928631649788235,
+          "vapor_mass": 439308862.55845666
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 2,
+      "case": "heated",
+      "max_relative_budget_residual": {
+        "mass": 1.1858762429983802e-07,
+        "dry_mass": 3.631087390852759e-10,
+        "water_mass": 3.073932793162578e-05,
+        "energy": 9.588801061993375e-09,
+        "energy_with_requested_source": 1.0410627083633967e-08
+      },
+      "source_energy_actual": 15022414883.06026,
+      "source_energy_requested": 15000000000.0,
+      "relative_source_rounding_error": 0.001494325537350718,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 14460997443.285236,
+        "vertical_velocity_rms": 0.46136926484346985,
+        "vapor_mass": 439319314.4296674
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577517.78548,
+          "dry_mass": 113737268004.75922,
+          "water_mass": 439309513.02627367,
+          "energy": 2.72744876646018e+16,
+          "kinetic_energy": 5002257373.219873,
+          "vertical_velocity_rms": 0.24552219076958673,
+          "vapor_mass": 439309513.02627367
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578174.74875,
+          "dry_mass": 113737268005.31287,
+          "water_mass": 439310169.4358848,
+          "energy": 2.7274488432171212e+16,
+          "kinetic_energy": 15401208470.2342,
+          "vertical_velocity_rms": 0.37417463132564144,
+          "vapor_mass": 439310169.4358848
+        },
+        {
+          "time": 7.5,
+          "mass": 114176578831.37292,
+          "dry_mass": 113737268001.30739,
+          "water_mass": 439310830.0655513,
+          "energy": 2.727448919925347e+16,
+          "kinetic_energy": 17988915979.73044,
+          "vertical_velocity_rms": 0.46336973287019634,
+          "vapor_mass": 439310830.0655513
+        },
+        {
+          "time": 10.0,
+          "mass": 114176579509.55557,
+          "dry_mass": 113737268011.22514,
+          "water_mass": 439311498.3304258,
+          "energy": 2.727448996122523e+16,
+          "kinetic_energy": 18847694090.531548,
+          "vertical_velocity_rms": 0.524198602743482,
+          "vapor_mass": 439311498.3304258
+        },
+        {
+          "time": 12.5,
+          "mass": 114176580225.2034,
+          "dry_mass": 113737268022.77402,
+          "water_mass": 439312202.4293916,
+          "energy": 2.727449071733635e+16,
+          "kinetic_energy": 24475336178.336742,
+          "vertical_velocity_rms": 0.5622082432573606,
+          "vapor_mass": 439312202.4293916
+        },
+        {
+          "time": 15.0,
+          "mass": 114176580889.67598,
+          "dry_mass": 113737268030.60504,
+          "water_mass": 439312859.0709239,
+          "energy": 2.7274491478540828e+16,
+          "kinetic_energy": 19216237117.115982,
+          "vertical_velocity_rms": 0.585781585335323,
+          "vapor_mass": 439312859.0709239
+        },
+        {
+          "time": 17.5,
+          "mass": 114176581588.84065,
+          "dry_mass": 113737268033.03311,
+          "water_mass": 439313555.80753005,
+          "energy": 2.727449223974132e+16,
+          "kinetic_energy": 23706836769.329086,
+          "vertical_velocity_rms": 0.5996220488095438,
+          "vapor_mass": 439313555.80753005
+        },
+        {
+          "time": 20.0,
+          "mass": 114176582279.5905,
+          "dry_mass": 113737268041.59828,
+          "water_mass": 439314237.992221,
+          "energy": 2.727449300825665e+16,
+          "kinetic_energy": 18724352340.19837,
+          "vertical_velocity_rms": 0.6007212047341013,
+          "vapor_mass": 439314237.992221
+        },
+        {
+          "time": 22.5,
+          "mass": 114176582967.13779,
+          "dry_mass": 113737268044.59164,
+          "water_mass": 439314922.5461457,
+          "energy": 2.727449377527684e+16,
+          "kinetic_energy": 17019442474.875065,
+          "vertical_velocity_rms": 0.5722664930585147,
+          "vapor_mass": 439314922.5461457
+        },
+        {
+          "time": 25.0,
+          "mass": 114176583621.0429,
+          "dry_mass": 113737268035.33868,
+          "water_mass": 439315585.7042074,
+          "energy": 2.7274494536990256e+16,
+          "kinetic_energy": 14107660936.546797,
+          "vertical_velocity_rms": 0.4902584352860671,
+          "vapor_mass": 439315585.7042074
+        },
+        {
+          "time": 27.5,
+          "mass": 114176584285.2395,
+          "dry_mass": 113737268019.41968,
+          "water_mass": 439316265.819798,
+          "energy": 2.727449530181354e+16,
+          "kinetic_energy": 6023182629.641504,
+          "vertical_velocity_rms": 0.33008673423408547,
+          "vapor_mass": 439316265.819798
+        },
+        {
+          "time": 30.0,
+          "mass": 114176584985.33951,
+          "dry_mass": 113737268026.57114,
+          "water_mass": 439316958.7683587,
+          "energy": 2.7274496066606496e+16,
+          "kinetic_energy": 5436095735.4407215,
+          "vertical_velocity_rms": 0.1062721140892346,
+          "vapor_mass": 439316958.7683587
+        },
+        {
+          "time": 32.5,
+          "mass": 114176585696.27562,
+          "dry_mass": 113737268036.98257,
+          "water_mass": 439317659.2930104,
+          "energy": 2.727449683192548e+16,
+          "kinetic_energy": 5133400930.605654,
+          "vertical_velocity_rms": 0.29303396581374963,
+          "vapor_mass": 439317659.2930104
+        },
+        {
+          "time": 35.0,
+          "mass": 114176586342.28572,
+          "dry_mass": 113737268042.4765,
+          "water_mass": 439318299.8092016,
+          "energy": 2.7274497600276812e+16,
+          "kinetic_energy": 12529392061.557533,
+          "vertical_velocity_rms": 0.4780109729259465,
+          "vapor_mass": 439318299.8092016
+        },
+        {
+          "time": 37.5,
+          "mass": 114176587030.08824,
+          "dry_mass": 113737268039.28589,
+          "water_mass": 439318990.8023487,
+          "energy": 2.727449835833615e+16,
+          "kinetic_energy": 16540725290.024439,
+          "vertical_velocity_rms": 0.562359894862343,
+          "vapor_mass": 439318990.8023487
+        },
+        {
+          "time": 40.0,
+          "mass": 114176587664.52191,
+          "dry_mass": 113737268024.85873,
+          "water_mass": 439319639.66315377,
+          "energy": 2.72744991220696e+16,
+          "kinetic_energy": 19025208072.904892,
+          "vertical_velocity_rms": 0.5955865023337934,
+          "vapor_mass": 439319639.66315377
+        },
+        {
+          "time": 42.5,
+          "mass": 114176588341.44772,
+          "dry_mass": 113737268031.65979,
+          "water_mass": 439320309.78794503,
+          "energy": 2.7274499890595852e+16,
+          "kinetic_energy": 21046558095.6046,
+          "vertical_velocity_rms": 0.6022610834788733,
+          "vapor_mass": 439320309.78794503
+        },
+        {
+          "time": 45.0,
+          "mass": 114176589000.77,
+          "dry_mass": 113737268018.69266,
+          "water_mass": 439320982.07733357,
+          "energy": 2.727450065587211e+16,
+          "kinetic_energy": 20441416423.500916,
+          "vertical_velocity_rms": 0.5914071956103137,
+          "vapor_mass": 439320982.07733357
+        },
+        {
+          "time": 47.5,
+          "mass": 114176589704.29259,
+          "dry_mass": 113737268029.64412,
+          "water_mass": 439321674.64845407,
+          "energy": 2.7274501417791264e+16,
+          "kinetic_energy": 20377447862.918907,
+          "vertical_velocity_rms": 0.5553724026182304,
+          "vapor_mass": 439321674.64845407
+        },
+        {
+          "time": 50.0,
+          "mass": 114176590402.78961,
+          "dry_mass": 113737268039.16254,
+          "water_mass": 439322363.6270704,
+          "energy": 2.7274502182661224e+16,
+          "kinetic_energy": 18056547330.653202,
+          "vertical_velocity_rms": 0.49930178246812856,
+          "vapor_mass": 439322363.6270704
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 0,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 4.009260782207876e-16,
+        "dry_mass": 1.342930285643598e-16,
+        "water_mass": 5.879854053832317e-14,
+        "energy": 2.9601946063691113e-16,
+        "energy_with_requested_source": 2.9601946063691113e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15864006908.024788,
+        "vertical_velocity_rms": 0.4519734590452733,
+        "vapor_mass": 544811825.9913635
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243319,
+          "energy": 2.702525024127576e+16,
+          "kinetic_energy": 6371129494.49309,
+          "vertical_velocity_rms": 0.3548867425629122,
+          "vapor_mass": 545231484.146975
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243302,
+          "energy": 2.7025250241275756e+16,
+          "kinetic_energy": 20005194321.75277,
+          "vertical_velocity_rms": 0.5853094293407686,
+          "vapor_mass": 545213256.2751613
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243286,
+          "energy": 2.7025250241275756e+16,
+          "kinetic_energy": 24973575125.59565,
+          "vertical_velocity_rms": 0.7015690944024936,
+          "vapor_mass": 545164361.9370112
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243268,
+          "energy": 2.702525024127576e+16,
+          "kinetic_energy": 23824878682.62343,
+          "vertical_velocity_rms": 0.711576886413764,
+          "vapor_mass": 545070234.578597
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243252,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 24225920850.9386,
+          "vertical_velocity_rms": 0.6291957399270804,
+          "vapor_mass": 544945484.9070437
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243236,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 15294435899.876398,
+          "vertical_velocity_rms": 0.5266616229387578,
+          "vapor_mass": 544833301.991287
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243219,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 21664311824.535233,
+          "vertical_velocity_rms": 0.517488364908344,
+          "vapor_mass": 544761594.4984572
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243203,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 23442941866.001183,
+          "vertical_velocity_rms": 0.575358644676459,
+          "vapor_mass": 544757470.70336
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243187,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 24307859723.645157,
+          "vertical_velocity_rms": 0.5823636100379924,
+          "vapor_mass": 544789535.3905498
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243171,
+          "energy": 2.7025250241275748e+16,
+          "kinetic_energy": 20505200605.10177,
+          "vertical_velocity_rms": 0.5048070307908538,
+          "vapor_mass": 544780108.4537911
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243155,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 9742972118.84307,
+          "vertical_velocity_rms": 0.3491286121879081,
+          "vapor_mass": 544744947.1731595
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42677,
+          "water_mass": 553485439.4243138,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 5369299502.242714,
+          "vertical_velocity_rms": 0.13006067843713143,
+          "vapor_mass": 544722543.1669344
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243122,
+          "energy": 2.7025250241275748e+16,
+          "kinetic_energy": 5314557750.573794,
+          "vertical_velocity_rms": 0.24065755544061843,
+          "vapor_mass": 544728872.4452888
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243107,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 15228209734.950773,
+          "vertical_velocity_rms": 0.44171148220429335,
+          "vapor_mass": 544763190.6043179
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424309,
+          "energy": 2.7025250241275748e+16,
+          "kinetic_energy": 21454054692.820183,
+          "vertical_velocity_rms": 0.5392523114807782,
+          "vapor_mass": 544799673.0323836
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42677,
+          "water_mass": 553485439.4243073,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 24651414254.14604,
+          "vertical_velocity_rms": 0.5678155306776043,
+          "vapor_mass": 544808604.0480272
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243057,
+          "energy": 2.7025250241275748e+16,
+          "kinetic_energy": 21552814623.86797,
+          "vertical_velocity_rms": 0.5423279025526547,
+          "vapor_mass": 544796508.8575671
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424304,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 17240882542.435463,
+          "vertical_velocity_rms": 0.5145062485180565,
+          "vapor_mass": 544820713.7508895
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243023,
+          "energy": 2.7025250241275748e+16,
+          "kinetic_energy": 18253239355.035934,
+          "vertical_velocity_rms": 0.5580892063812092,
+          "vapor_mass": 544907936.5005301
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243008,
+          "energy": 2.702525024127575e+16,
+          "kinetic_energy": 19832624505.33194,
+          "vertical_velocity_rms": 0.6361850625724786,
+          "vapor_mass": 545025270.3345367
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 0,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 1.5167007693098087e-07,
+        "dry_mass": 9.871135203457558e-10,
+        "water_mass": 3.149013133524946e-05,
+        "energy": 1.5568716672134395e-08,
+        "energy_with_requested_source": 1.5568716672134395e-08
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15864793035.11272,
+        "vertical_velocity_rms": 0.45198462313693816,
+        "vapor_mass": 544824704.5515018
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577770.34201,
+          "dry_mass": 113623091427.36697,
+          "water_mass": 553486342.9750202,
+          "energy": 2.70252502636824e+16,
+          "kinetic_energy": 6371146809.017186,
+          "vertical_velocity_rms": 0.3548871596275666,
+          "vapor_mass": 545232347.0399278
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578634.94063,
+          "dry_mass": 113623091424.13544,
+          "water_mass": 553487210.8052013,
+          "energy": 2.7025250285017004e+16,
+          "kinetic_energy": 20005309220.523094,
+          "vertical_velocity_rms": 0.5853109041164519,
+          "vapor_mass": 545214944.4317911
+        },
+        {
+          "time": 7.5,
+          "mass": 114176579499.63675,
+          "dry_mass": 113623091419.91026,
+          "water_mass": 553488079.7264919,
+          "energy": 2.7025250307156904e+16,
+          "kinetic_energy": 24973802177.03132,
+          "vertical_velocity_rms": 0.7015720433282426,
+          "vapor_mass": 545166877.5003783
+        },
+        {
+          "time": 10.0,
+          "mass": 114176580372.2118,
+          "dry_mass": 113623091430.05383,
+          "water_mass": 553488942.1579691,
+          "energy": 2.70252503271315e+16,
+          "kinetic_energy": 23825185760.262897,
+          "vertical_velocity_rms": 0.7115813130320028,
+          "vapor_mass": 545073576.2497061
+        },
+        {
+          "time": 12.5,
+          "mass": 114176581247.39084,
+          "dry_mass": 113623091428.17302,
+          "water_mass": 553489819.2178162,
+          "energy": 2.7025250344522384e+16,
+          "kinetic_energy": 24226304631.124985,
+          "vertical_velocity_rms": 0.629200780507682,
+          "vapor_mass": 544949657.8967228
+        },
+        {
+          "time": 15.0,
+          "mass": 114176582128.56075,
+          "dry_mass": 113623091418.70972,
+          "water_mass": 553490709.8510189,
+          "energy": 2.7025250361654404e+16,
+          "kinetic_energy": 15294731923.92352,
+          "vertical_velocity_rms": 0.526666696867036,
+          "vapor_mass": 544838322.5757425
+        },
+        {
+          "time": 17.5,
+          "mass": 114176583033.18709,
+          "dry_mass": 113623091413.25732,
+          "water_mass": 553491619.9297868,
+          "energy": 2.702525038333673e+16,
+          "kinetic_energy": 21664772003.947586,
+          "vertical_velocity_rms": 0.5174939034321291,
+          "vapor_mass": 544767482.5700233
+        },
+        {
+          "time": 20.0,
+          "mass": 114176583892.90173,
+          "dry_mass": 113623091384.21713,
+          "water_mass": 553492508.6845987,
+          "energy": 2.7025250399539064e+16,
+          "kinetic_energy": 23443501404.381878,
+          "vertical_velocity_rms": 0.5753654244908462,
+          "vapor_mass": 544764207.4250325
+        },
+        {
+          "time": 22.5,
+          "mass": 114176584720.21677,
+          "dry_mass": 113623091375.00623,
+          "water_mass": 553493345.2105405,
+          "energy": 2.702525041973849e+16,
+          "kinetic_energy": 24308520942.636845,
+          "vertical_velocity_rms": 0.5823714767391003,
+          "vapor_mass": 544797067.8687853
+        },
+        {
+          "time": 25.0,
+          "mass": 114176585588.43236,
+          "dry_mass": 113623091362.24716,
+          "water_mass": 553494226.1851938,
+          "energy": 2.702525043845183e+16,
+          "kinetic_energy": 20505823338.183006,
+          "vertical_velocity_rms": 0.5048148792177435,
+          "vapor_mass": 544788481.0382675
+        },
+        {
+          "time": 27.5,
+          "mass": 114176586402.40852,
+          "dry_mass": 113623091357.78268,
+          "water_mass": 553495044.6258335,
+          "energy": 2.7025250463823504e+16,
+          "kinetic_energy": 9743308921.45406,
+          "vertical_velocity_rms": 0.3491347565637423,
+          "vapor_mass": 544754098.1367638
+        },
+        {
+          "time": 30.0,
+          "mass": 114176587267.82797,
+          "dry_mass": 113623091356.24564,
+          "water_mass": 553495911.5823312,
+          "energy": 2.70252504880101e+16,
+          "kinetic_energy": 5369495482.196814,
+          "vertical_velocity_rms": 0.13006337547368163,
+          "vapor_mass": 544732520.7478571
+        },
+        {
+          "time": 32.5,
+          "mass": 114176588139.0932,
+          "dry_mass": 113623091349.1311,
+          "water_mass": 553496789.9620824,
+          "energy": 2.702525051110441e+16,
+          "kinetic_energy": 5314767367.863505,
+          "vertical_velocity_rms": 0.24066206889572975,
+          "vapor_mass": 544739686.7748466
+        },
+        {
+          "time": 35.0,
+          "mass": 114176588992.71735,
+          "dry_mass": 113623091357.94496,
+          "water_mass": 553497634.7723842,
+          "energy": 2.7025250539042524e+16,
+          "kinetic_energy": 15228852527.260998,
+          "vertical_velocity_rms": 0.44172061585316863,
+          "vapor_mass": 544774811.0236716
+        },
+        {
+          "time": 37.5,
+          "mass": 114176589891.69177,
+          "dry_mass": 113623091352.84526,
+          "water_mass": 553498538.8464974,
+          "energy": 2.702525056085016e+16,
+          "kinetic_energy": 21455023717.86518,
+          "vertical_velocity_rms": 0.539264482564804,
+          "vapor_mass": 544812159.2780807
+        },
+        {
+          "time": 40.0,
+          "mass": 114176590701.14035,
+          "dry_mass": 113623091339.38303,
+          "water_mass": 553499361.7573037,
+          "energy": 2.702525058184561e+16,
+          "kinetic_energy": 24652628401.7856,
+          "vertical_velocity_rms": 0.5678294242498765,
+          "vapor_mass": 544821873.7910793
+        },
+        {
+          "time": 42.5,
+          "mass": 114176591580.05612,
+          "dry_mass": 113623091332.56238,
+          "water_mass": 553500247.4937301,
+          "energy": 2.702525059959688e+16,
+          "kinetic_energy": 21553932078.992043,
+          "vertical_velocity_rms": 0.5423419845995511,
+          "vapor_mass": 544810625.287937
+        },
+        {
+          "time": 45.0,
+          "mass": 114176592462.54993,
+          "dry_mass": 113623091342.92126,
+          "water_mass": 553501119.6286633,
+          "energy": 2.7025250622871064e+16,
+          "kinetic_energy": 17241823474.666336,
+          "vertical_velocity_rms": 0.51452017616919,
+          "vapor_mass": 544835664.1045393
+        },
+        {
+          "time": 47.5,
+          "mass": 114176593314.45795,
+          "dry_mass": 113623091332.11105,
+          "water_mass": 553501982.3469157,
+          "energy": 2.702525064300027e+16,
+          "kinetic_energy": 18254286351.951183,
+          "vertical_velocity_rms": 0.5581051279884586,
+          "vapor_mass": 544923712.7868401
+        },
+        {
+          "time": 50.0,
+          "mass": 114176594180.20938,
+          "dry_mass": 113623091314.2679,
+          "water_mass": 553502865.9414821,
+          "energy": 2.7025250662027176e+16,
+          "kinetic_energy": 19833812027.091484,
+          "vertical_velocity_rms": 0.6362042190111792,
+          "vapor_mass": 545041893.5834023
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 1,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 4.009260782207876e-16,
+        "dry_mass": 1.342930285643598e-16,
+        "water_mass": 5.858316126895203e-14,
+        "energy": 1.480097303688427e-16,
+        "energy_with_requested_source": 1.480097303688427e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15856852209.369053,
+        "vertical_velocity_rms": 0.4518077363121284,
+        "vapor_mass": 544811826.2840413
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243318,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 6362716234.494268,
+          "vertical_velocity_rms": 0.3546806575265447,
+          "vapor_mass": 545231484.5646248
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243302,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 19995582494.75746,
+          "vertical_velocity_rms": 0.5852002973173565,
+          "vapor_mass": 545213256.3906612
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243287,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 24965744201.10193,
+          "vertical_velocity_rms": 0.7014639024172689,
+          "vapor_mass": 545164361.9706118
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.85114,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424327,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 23815262332.592903,
+          "vertical_velocity_rms": 0.7114531554296927,
+          "vapor_mass": 545070225.8568516
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243253,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 24217510469.01328,
+          "vertical_velocity_rms": 0.6290716143940671,
+          "vapor_mass": 544945484.9028041
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243237,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 15286494042.918056,
+          "vertical_velocity_rms": 0.5265575182816497,
+          "vapor_mass": 544833302.0973326
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243221,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 21654205937.163387,
+          "vertical_velocity_rms": 0.517380222803819,
+          "vapor_mass": 544761594.609179
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243205,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 23436583949.692184,
+          "vertical_velocity_rms": 0.5752153009475676,
+          "vapor_mass": 544757470.7289314
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243188,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 24297706059.793907,
+          "vertical_velocity_rms": 0.5822015597501279,
+          "vapor_mass": 544789536.3221357
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243171,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 20498187767.20646,
+          "vertical_velocity_rms": 0.5046736680331307,
+          "vapor_mass": 544780108.8605976
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243155,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 9735142812.194323,
+          "vertical_velocity_rms": 0.34902072954241226,
+          "vapor_mass": 544744947.2485467
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424314,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 5360158445.973604,
+          "vertical_velocity_rms": 0.12967439287095925,
+          "vapor_mass": 544722543.0785065
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243124,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 5308820700.4545145,
+          "vertical_velocity_rms": 0.24029927517432464,
+          "vapor_mass": 544728872.2251549
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243106,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 15218892127.672514,
+          "vertical_velocity_rms": 0.44150413390125764,
+          "vapor_mass": 544763191.3945366
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424309,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 21448012040.091118,
+          "vertical_velocity_rms": 0.5391522679391539,
+          "vapor_mass": 544799673.418747
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243073,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 24644190183.65131,
+          "vertical_velocity_rms": 0.5677737525497596,
+          "vapor_mass": 544808603.816752
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243059,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 21545121290.564514,
+          "vertical_velocity_rms": 0.54224408811607,
+          "vapor_mass": 544796508.7638645
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243042,
+          "energy": 2.702525023207551e+16,
+          "kinetic_energy": 17235440781.134277,
+          "vertical_velocity_rms": 0.5143438249907876,
+          "vapor_mass": 544820713.5990614
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243026,
+          "energy": 2.7025250232075508e+16,
+          "kinetic_energy": 18245712039.120193,
+          "vertical_velocity_rms": 0.557942848537099,
+          "vapor_mass": 544907937.6744461
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243009,
+          "energy": 2.7025250232075508e+16,
+          "kinetic_energy": 19827031672.834152,
+          "vertical_velocity_rms": 0.6361220494994599,
+          "vapor_mass": 545025271.6207972
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 1,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 1.512226344736597e-07,
+        "dry_mass": 1.0354406124840121e-09,
+        "water_mass": 3.140775088384386e-05,
+        "energy": 1.4896243348087516e-08,
+        "energy_with_requested_source": 1.4896243348087516e-08
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15857632506.420143,
+        "vertical_velocity_rms": 0.4518188131852153,
+        "vapor_mass": 544824665.1512818
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577737.57718,
+          "dry_mass": 113623091425.50139,
+          "water_mass": 553486312.0757905,
+          "energy": 2.702525025336919e+16,
+          "kinetic_energy": 6362733257.2124405,
+          "vertical_velocity_rms": 0.35468108071662124,
+          "vapor_mass": 545232316.981128
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578600.10358,
+          "dry_mass": 113623091426.38416,
+          "water_mass": 553487173.719418,
+          "energy": 2.7025250275067664e+16,
+          "kinetic_energy": 19995696041.241528,
+          "vertical_velocity_rms": 0.5852017657306265,
+          "vapor_mass": 545214909.8346126
+        },
+        {
+          "time": 7.5,
+          "mass": 114176579489.16776,
+          "dry_mass": 113623091419.31342,
+          "water_mass": 553488069.8543532,
+          "energy": 2.702525029550648e+16,
+          "kinetic_energy": 24965971106.40207,
+          "vertical_velocity_rms": 0.7014668995343724,
+          "vapor_mass": 545166871.3976688
+        },
+        {
+          "time": 10.0,
+          "mass": 114176580345.56148,
+          "dry_mass": 113623091425.11143,
+          "water_mass": 553488920.4500359,
+          "energy": 2.7025250315808624e+16,
+          "kinetic_energy": 23815573649.556725,
+          "vertical_velocity_rms": 0.7114576175449707,
+          "vapor_mass": 545073549.2649983
+        },
+        {
+          "time": 12.5,
+          "mass": 114176581220.15204,
+          "dry_mass": 113623091421.89523,
+          "water_mass": 553489798.2568054,
+          "energy": 2.702525033840623e+16,
+          "kinetic_energy": 24217889459.566307,
+          "vertical_velocity_rms": 0.6290765977255262,
+          "vapor_mass": 544949641.0983557
+        },
+        {
+          "time": 15.0,
+          "mass": 114176582081.61462,
+          "dry_mass": 113623091397.93004,
+          "water_mass": 553490683.684572,
+          "energy": 2.7025250357150616e+16,
+          "kinetic_energy": 15286781061.308952,
+          "vertical_velocity_rms": 0.5265624475898275,
+          "vapor_mass": 544838302.9306569
+        },
+        {
+          "time": 17.5,
+          "mass": 114176582928.82542,
+          "dry_mass": 113623091383.7533,
+          "water_mass": 553491545.0721201,
+          "energy": 2.7025250373613948e+16,
+          "kinetic_energy": 21654657863.344784,
+          "vertical_velocity_rms": 0.5173856437023926,
+          "vapor_mass": 544767415.2492254
+        },
+        {
+          "time": 20.0,
+          "mass": 114176583790.18512,
+          "dry_mass": 113623091362.79172,
+          "water_mass": 553492427.3933939,
+          "energy": 2.702525038994277e+16,
+          "kinetic_energy": 23437134277.81715,
+          "vertical_velocity_rms": 0.5752219665082264,
+          "vapor_mass": 544764131.4458451
+        },
+        {
+          "time": 22.5,
+          "mass": 114176584644.32683,
+          "dry_mass": 113623091352.22453,
+          "water_mass": 553493292.1023028,
+          "energy": 2.7025250411376176e+16,
+          "kinetic_energy": 24298362906.2022,
+          "vertical_velocity_rms": 0.5822093588944799,
+          "vapor_mass": 544797022.066632
+        },
+        {
+          "time": 25.0,
+          "mass": 114176585510.51822,
+          "dry_mass": 113623091347.39284,
+          "water_mass": 553494163.1253787,
+          "energy": 2.7025250432745536e+16,
+          "kinetic_energy": 20498810809.627556,
+          "vertical_velocity_rms": 0.5046814884707065,
+          "vapor_mass": 544788424.7587354
+        },
+        {
+          "time": 27.5,
+          "mass": 114176586323.42572,
+          "dry_mass": 113623091336.35498,
+          "water_mass": 553494987.070735,
+          "energy": 2.702525045444808e+16,
+          "kinetic_energy": 9735476278.488724,
+          "vertical_velocity_rms": 0.3490268548225486,
+          "vapor_mass": 544754046.5502243
+        },
+        {
+          "time": 30.0,
+          "mass": 114176587211.46658,
+          "dry_mass": 113623091337.0155,
+          "water_mass": 553495874.4510732,
+          "energy": 2.702525048100244e+16,
+          "kinetic_energy": 5360351365.1438,
+          "vertical_velocity_rms": 0.12967700726558315,
+          "vapor_mass": 544732488.1879468
+        },
+        {
+          "time": 32.5,
+          "mass": 114176588075.67981,
+          "dry_mass": 113623091336.52211,
+          "water_mass": 553496739.1577084,
+          "energy": 2.7025250502105e+16,
+          "kinetic_energy": 5309031634.363328,
+          "vertical_velocity_rms": 0.24030379161930976,
+          "vapor_mass": 544739641.2455418
+        },
+        {
+          "time": 35.0,
+          "mass": 114176588938.04906,
+          "dry_mass": 113623091346.52655,
+          "water_mass": 553497591.5225004,
+          "energy": 2.702525052413748e+16,
+          "kinetic_energy": 15219533894.10891,
+          "vertical_velocity_rms": 0.4415132472925359,
+          "vapor_mass": 544774773.4797304
+        },
+        {
+          "time": 37.5,
+          "mass": 114176589833.80867,
+          "dry_mass": 113623091341.54535,
+          "water_mass": 553498492.2633157,
+          "energy": 2.702525054372339e+16,
+          "kinetic_energy": 21448982963.08438,
+          "vertical_velocity_rms": 0.5391644272539621,
+          "vapor_mass": 544812117.4686093
+        },
+        {
+          "time": 40.0,
+          "mass": 114176590659.0839,
+          "dry_mass": 113623091326.34969,
+          "water_mass": 553499332.7341908,
+          "energy": 2.7025250561026256e+16,
+          "kinetic_energy": 24645398519.846886,
+          "vertical_velocity_rms": 0.5677876562370769,
+          "vapor_mass": 544821850.9172876
+        },
+        {
+          "time": 42.5,
+          "mass": 114176591532.26218,
+          "dry_mass": 113623091331.52101,
+          "water_mass": 553500200.7411549,
+          "energy": 2.7025250576394096e+16,
+          "kinetic_energy": 21546228455.87258,
+          "vertical_velocity_rms": 0.5422580658203088,
+          "vapor_mass": 544810584.3970553
+        },
+        {
+          "time": 45.0,
+          "mass": 114176592386.27145,
+          "dry_mass": 113623091324.72083,
+          "water_mass": 553501061.5506053,
+          "energy": 2.702525059586343e+16,
+          "kinetic_energy": 17236371284.391293,
+          "vertical_velocity_rms": 0.5143575071319066,
+          "vapor_mass": 544835610.1896933
+        },
+        {
+          "time": 47.5,
+          "mass": 114176593272.78378,
+          "dry_mass": 113623091323.40265,
+          "water_mass": 553501949.3811433,
+          "energy": 2.70252506188431e+16,
+          "kinetic_energy": 18246739088.591053,
+          "vertical_velocity_rms": 0.5579585055414088,
+          "vapor_mass": 544923685.5747585
+        },
+        {
+          "time": 50.0,
+          "mass": 114176594129.12193,
+          "dry_mass": 113623091308.77682,
+          "water_mass": 553502820.345102,
+          "energy": 2.702525063465321e+16,
+          "kinetic_energy": 19828211580.310474,
+          "vertical_velocity_rms": 0.6361410688675123,
+          "vapor_mass": 545041853.5019708
+        }
+      ]
+    },
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seed": 2,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 4.009260782207876e-16,
+        "dry_mass": 1.342930285643598e-16,
+        "water_mass": 5.836778199958088e-14,
+        "energy": 2.9601946084481404e-16,
+        "energy_with_requested_source": 2.9601946084481404e-16
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15849247835.357508,
+        "vertical_velocity_rms": 0.45163135028204443,
+        "vapor_mass": 544811826.6022936
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176576865.85114,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243319,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 6353772579.418998,
+          "vertical_velocity_rms": 0.35446144622641085,
+          "vapor_mass": 545231485.0087707
+        },
+        {
+          "time": 5.0,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243302,
+          "energy": 2.702525022229514e+16,
+          "kinetic_energy": 19985364760.946632,
+          "vertical_velocity_rms": 0.5850842615582537,
+          "vapor_mass": 545213256.5136081
+        },
+        {
+          "time": 7.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243286,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 24957419798.343765,
+          "vertical_velocity_rms": 0.7013520601564976,
+          "vapor_mass": 545164362.00651
+        },
+        {
+          "time": 10.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424327,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 23805039978.887733,
+          "vertical_velocity_rms": 0.7113215989470842,
+          "vapor_mass": 545070216.5851843
+        },
+        {
+          "time": 12.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243253,
+          "energy": 2.7025250222295148e+16,
+          "kinetic_energy": 24208570409.455154,
+          "vertical_velocity_rms": 0.6289396349121085,
+          "vapor_mass": 544945484.8961995
+        },
+        {
+          "time": 15.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243237,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 15278051903.799568,
+          "vertical_velocity_rms": 0.5264468267940073,
+          "vapor_mass": 544833302.212391
+        },
+        {
+          "time": 17.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424322,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 21643463717.115833,
+          "vertical_velocity_rms": 0.517265238171251,
+          "vapor_mass": 544761594.7287942
+        },
+        {
+          "time": 20.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243206,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 23429825896.543076,
+          "vertical_velocity_rms": 0.5750628791636462,
+          "vapor_mass": 544757470.7590227
+        },
+        {
+          "time": 22.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.4268,
+          "water_mass": 553485439.4243188,
+          "energy": 2.7025250222295148e+16,
+          "kinetic_energy": 24286912958.617615,
+          "vertical_velocity_rms": 0.5820292405345624,
+          "vapor_mass": 544789537.3167782
+        },
+        {
+          "time": 25.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42677,
+          "water_mass": 553485439.4243172,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 20490733754.294556,
+          "vertical_velocity_rms": 0.5045318556696728,
+          "vapor_mass": 544780109.2981461
+        },
+        {
+          "time": 27.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243155,
+          "energy": 2.7025250222295148e+16,
+          "kinetic_energy": 9726820743.054888,
+          "vertical_velocity_rms": 0.34890600836323954,
+          "vapor_mass": 544744947.3378316
+        },
+        {
+          "time": 30.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424314,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 5350442253.042794,
+          "vertical_velocity_rms": 0.12926248330717105,
+          "vapor_mass": 544722542.9890172
+        },
+        {
+          "time": 32.5,
+          "mass": 114176576865.85112,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243124,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 5302723144.3818245,
+          "vertical_velocity_rms": 0.2399178174479067,
+          "vapor_mass": 544728871.9959027
+        },
+        {
+          "time": 35.0,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243109,
+          "energy": 2.7025250222295144e+16,
+          "kinetic_energy": 15208988362.054836,
+          "vertical_velocity_rms": 0.4412836048497053,
+          "vapor_mass": 544763192.2425224
+        },
+        {
+          "time": 37.5,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243093,
+          "energy": 2.702525022229515e+16,
+          "kinetic_energy": 21441589800.344597,
+          "vertical_velocity_rms": 0.5390458949640852,
+          "vapor_mass": 544799673.8359164
+        },
+        {
+          "time": 40.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243077,
+          "energy": 2.702525022229515e+16,
+          "kinetic_energy": 24636511987.091576,
+          "vertical_velocity_rms": 0.5677293368048469,
+          "vapor_mass": 544808603.577872
+        },
+        {
+          "time": 42.5,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424306,
+          "energy": 2.702525022229515e+16,
+          "kinetic_energy": 21536944555.513115,
+          "vertical_velocity_rms": 0.5421549752846676,
+          "vapor_mass": 544796508.6715766
+        },
+        {
+          "time": 45.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243044,
+          "energy": 2.702525022229515e+16,
+          "kinetic_energy": 17229657549.20179,
+          "vertical_velocity_rms": 0.514171104167616,
+          "vapor_mass": 544820713.4453502
+        },
+        {
+          "time": 47.5,
+          "mass": 114176576865.85109,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.4243026,
+          "energy": 2.7025250222295148e+16,
+          "kinetic_energy": 18237711923.683327,
+          "vertical_velocity_rms": 0.5577872208914213,
+          "vapor_mass": 544907938.9300153
+        },
+        {
+          "time": 50.0,
+          "mass": 114176576865.8511,
+          "dry_mass": 113623091426.42679,
+          "water_mass": 553485439.424301,
+          "energy": 2.7025250222295148e+16,
+          "kinetic_energy": 19821088035.206337,
+          "vertical_velocity_rms": 0.6360550567397845,
+          "vapor_mass": 545025272.9969316
+        }
+      ]
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seed": 2,
+      "case": "sediment",
+      "max_relative_budget_residual": {
+        "mass": 1.519914127678655e-07,
+        "dry_mass": 8.898289645931622e-10,
+        "water_mass": 3.1536447359825756e-05,
+        "energy": 1.5570980491895542e-08,
+        "energy_with_requested_source": 1.5570980491895542e-08
+      },
+      "source_energy_actual": 0.0,
+      "source_energy_requested": 0.0,
+      "relative_source_rounding_error": 0.0,
+      "fp64_fallbacks": 0,
+      "late_time_means": {
+        "kinetic_energy": 15850030718.0781,
+        "vertical_velocity_rms": 0.451642476908188,
+        "vapor_mass": 544824675.1238912
+      },
+      "samples": [
+        {
+          "time": 2.5,
+          "mass": 114176577720.52301,
+          "dry_mass": 113623091424.67715,
+          "water_mass": 553486295.8458576,
+          "energy": 2.702525024384802e+16,
+          "kinetic_energy": 6353788688.746494,
+          "vertical_velocity_rms": 0.3544618528685886,
+          "vapor_mass": 545232303.1204287
+        },
+        {
+          "time": 5.0,
+          "mass": 114176578599.16112,
+          "dry_mass": 113623091423.62784,
+          "water_mass": 553487175.5332915,
+          "energy": 2.702525026737212e+16,
+          "kinetic_energy": 19985479094.09458,
+          "vertical_velocity_rms": 0.5850857732507221,
+          "vapor_mass": 545214913.9182439
+        },
+        {
+          "time": 7.5,
+          "mass": 114176579462.58423,
+          "dry_mass": 113623091424.40657,
+          "water_mass": 553488038.1776475,
+          "energy": 2.702525028944383e+16,
+          "kinetic_energy": 24957645532.383247,
+          "vertical_velocity_rms": 0.7013550549095376,
+          "vapor_mass": 545166842.1301293
+        },
+        {
+          "time": 10.0,
+          "mass": 114176580309.12881,
+          "dry_mass": 113623091424.93153,
+          "water_mass": 553488884.1972929,
+          "energy": 2.7025250311967772e+16,
+          "kinetic_energy": 23805344119.127197,
+          "vertical_velocity_rms": 0.7113259998098939,
+          "vapor_mass": 545073506.2549939
+        },
+        {
+          "time": 12.5,
+          "mass": 114176581184.33273,
+          "dry_mass": 113623091418.71881,
+          "water_mass": 553489765.6139036,
+          "energy": 2.702525033587935e+16,
+          "kinetic_energy": 24208949035.713066,
+          "vertical_velocity_rms": 0.6289446000383501,
+          "vapor_mass": 544949610.2028207
+        },
+        {
+          "time": 15.0,
+          "mass": 114176582031.55916,
+          "dry_mass": 113623091397.8732,
+          "water_mass": 553490633.6859536,
+          "energy": 2.702525034952639e+16,
+          "kinetic_energy": 15278340059.908813,
+          "vertical_velocity_rms": 0.526451749875983,
+          "vapor_mass": 544838254.7911024
+        },
+        {
+          "time": 17.5,
+          "mass": 114176582918.05075,
+          "dry_mass": 113623091392.18431,
+          "water_mass": 553491525.8664341,
+          "energy": 2.702525036956871e+16,
+          "kinetic_energy": 21643914895.78772,
+          "vertical_velocity_rms": 0.5172707228852689,
+          "vapor_mass": 544767398.1234403
+        },
+        {
+          "time": 20.0,
+          "mass": 114176583761.922,
+          "dry_mass": 113623091386.54999,
+          "water_mass": 553492375.3720024,
+          "energy": 2.7025250388338384e+16,
+          "kinetic_energy": 23430380132.8003,
+          "vertical_velocity_rms": 0.5750695900525845,
+          "vapor_mass": 544764081.9784284
+        },
+        {
+          "time": 22.5,
+          "mass": 114176584620.73625,
+          "dry_mass": 113623091374.8505,
+          "water_mass": 553493245.885761,
+          "energy": 2.70252504083544e+16,
+          "kinetic_energy": 24287567726.720528,
+          "vertical_velocity_rms": 0.5820370713291356,
+          "vapor_mass": 544796978.474551
+        },
+        {
+          "time": 25.0,
+          "mass": 114176585483.99963,
+          "dry_mass": 113623091365.88629,
+          "water_mass": 553494118.1133491,
+          "energy": 2.7025250428671244e+16,
+          "kinetic_energy": 20491358698.35651,
+          "vertical_velocity_rms": 0.5045397229333134,
+          "vapor_mass": 544788382.412662
+        },
+        {
+          "time": 27.5,
+          "mass": 114176586326.56972,
+          "dry_mass": 113623091360.0206,
+          "water_mass": 553494966.549124,
+          "energy": 2.7025250452723664e+16,
+          "kinetic_energy": 9727155563.154491,
+          "vertical_velocity_rms": 0.348912110992281,
+          "vapor_mass": 544754027.3144114
+        },
+        {
+          "time": 30.0,
+          "mass": 114176587204.4737,
+          "dry_mass": 113623091347.66568,
+          "water_mass": 553495856.8080128,
+          "energy": 2.7025250476463304e+16,
+          "kinetic_energy": 5350632041.339517,
+          "vertical_velocity_rms": 0.12926507521899272,
+          "vapor_mass": 544732473.4905124
+        },
+        {
+          "time": 32.5,
+          "mass": 114176588070.58806,
+          "dry_mass": 113623091351.19595,
+          "water_mass": 553496719.3921148,
+          "energy": 2.702525049911864e+16,
+          "kinetic_energy": 5302936261.119759,
+          "vertical_velocity_rms": 0.23992239509561855,
+          "vapor_mass": 544739623.7832435
+        },
+        {
+          "time": 35.0,
+          "mass": 114176588948.88397,
+          "dry_mass": 113623091359.4374,
+          "water_mass": 553497589.4465787,
+          "energy": 2.7025250521733892e+16,
+          "kinetic_energy": 15209631044.09552,
+          "vertical_velocity_rms": 0.44129276952095164,
+          "vapor_mass": 544774775.7534671
+        },
+        {
+          "time": 37.5,
+          "mass": 114176589840.56793,
+          "dry_mass": 113623091351.3287,
+          "water_mass": 553498489.2392459,
+          "energy": 2.7025250542666024e+16,
+          "kinetic_energy": 21442565732.547997,
+          "vertical_velocity_rms": 0.5390581282300786,
+          "vapor_mass": 544812118.041591
+        },
+        {
+          "time": 40.0,
+          "mass": 114176590684.67792,
+          "dry_mass": 113623091355.43277,
+          "water_mass": 553499329.2451417,
+          "energy": 2.7025250563192544e+16,
+          "kinetic_energy": 24637729855.589176,
+          "vertical_velocity_rms": 0.5677433329680449,
+          "vapor_mass": 544821848.2342781
+        },
+        {
+          "time": 42.5,
+          "mass": 114176591553.67622,
+          "dry_mass": 113623091352.00739,
+          "water_mass": 553500201.6688395,
+          "energy": 2.702525058258503e+16,
+          "kinetic_energy": 21538059255.82075,
+          "vertical_velocity_rms": 0.5421690616641428,
+          "vapor_mass": 544810585.7067276
+        },
+        {
+          "time": 45.0,
+          "mass": 114176592434.66866,
+          "dry_mass": 113623091348.05124,
+          "water_mass": 553501086.6174161,
+          "energy": 2.7025250603430584e+16,
+          "kinetic_energy": 17230591610.631416,
+          "vertical_velocity_rms": 0.5141849206578903,
+          "vapor_mass": 544835636.7014639
+        },
+        {
+          "time": 47.5,
+          "mass": 114176593336.31882,
+          "dry_mass": 113623091340.76263,
+          "water_mass": 553501995.5561893,
+          "energy": 2.702525062252041e+16,
+          "kinetic_energy": 18238742207.7924,
+          "vertical_velocity_rms": 0.5578029561394223,
+          "vapor_mass": 544923734.0235413
+        },
+        {
+          "time": 50.0,
+          "mass": 114176594216.8984,
+          "dry_mass": 113623091325.32167,
+          "water_mass": 553502891.5767272,
+          "energy": 2.7025250643107784e+16,
+          "kinetic_energy": 19822263608.689972,
+          "vertical_velocity_rms": 0.636074018594457,
+          "vapor_mass": 545041928.1896757
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "case": "closed",
+      "scheme": 9,
+      "seed": 0,
+      "max_normalized_state_error": 2.6178688571909525e-05
+    },
+    {
+      "case": "closed",
+      "scheme": 9,
+      "seed": 1,
+      "max_normalized_state_error": 2.6075747122433768e-05
+    },
+    {
+      "case": "closed",
+      "scheme": 9,
+      "seed": 2,
+      "max_normalized_state_error": 2.5954107254921865e-05
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "seed": 0,
+      "max_normalized_state_error": 2.5204358165664686e-05
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "seed": 1,
+      "max_normalized_state_error": 2.498973090980794e-05
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "seed": 2,
+      "max_normalized_state_error": 2.4612071581775474e-05
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "seed": 0,
+      "max_normalized_state_error": 2.2356675392187775e-05
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "seed": 1,
+      "max_normalized_state_error": 2.2448625250137688e-05
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "seed": 2,
+      "max_normalized_state_error": 2.2866059570136876e-05
+    }
+  ],
+  "benchmarks": [
+    {
+      "precision": "float64",
+      "scheme": 9,
+      "seconds_per_step": [
+        0.01814157291999436,
+        0.018425049590005075,
+        0.01868822915988858
+      ],
+      "median_seconds_per_step": 0.018425049590005075,
+      "registered_buffer_and_state_bytes": {
+        "by_dtype": {
+          "torch.float64": 3941080,
+          "torch.int64": 24
+        },
+        "total": 3941104
+      },
+      "cuda_peak_allocated_bytes": null,
+      "fp64_fallbacks": 0,
+      "profile_self_cpu_ms": {
+        "aten::slice": 8.747923000000048,
+        "aten::as_strided": 4.652742999999979,
+        "aten::copy_": 6.149326999999961,
+        "aten::select": 6.644193999999652,
+        "aten::unsqueeze": 1.086710999999782,
+        "aten::add": 4.726877000000119,
+        "aten::mul": 8.73711899999959,
+        "aten::narrow": 2.009318000000165,
+        "aten::flip": 0.47058900000000853,
+        "aten::empty_like": 0.5156340000001735,
+        "aten::empty_strided": 0.6304200000000677,
+        "aten::mul_": 0.32904399999995854,
+        "aten::to": 0.25840000000001995,
+        "aten::_to_copy": 0.18088300000006963,
+        "aten::zero_": 0.15844299999996575,
+        "aten::zeros": 0.08392299999995799,
+        "aten::empty": 0.6618259999998277,
+        "aten::expand": 0.298092000000103,
+        "aten::isnan": 0.03929799999993281,
+        "aten::ne": 1.1346630000000228,
+        "aten::any": 0.9706779999999442,
+        "aten::fill_": 2.448121000000316,
+        "aten::masked_fill_": 1.1464200000000082,
+        "aten::stack": 0.31299100000000774,
+        "aten::cat": 3.009587000000028,
+        "aten::view": 0.410044000000011,
+        "aten::ones_like": 0.0652880000000714,
+        "aten::sub": 2.4366069999997637,
+        "aten::maximum": 0.22646199999998692,
+        "aten::clone": 0.4486319999998695,
+        "aten::expand_as": 0.1139149999999397,
+        "aten::sum": 7.088814999999933,
+        "aten::div": 2.518145999999932,
+        "aten::add_": 2.765935999999942,
+        "aten::clamp_min_": 0.7766749999999046,
+        "aten::clamp_max": 0.1895089999999459,
+        "aten::abs": 0.3791200000000448,
+        "aten::neg": 0.3571690000000158,
+        "aten::lt": 0.2914959999999911,
+        "aten::sub_": 1.273207999999939,
+        "aten::unfold": 0.5437340000000892,
+        "aten::matmul": 0.8001310000000799,
+        "aten::reshape": 0.477828999999966,
+        "aten::mv": 0.5793669999999941,
+        "aten::addmv_": 1.1393330000000934,
+        "aten::_unsafe_view": 0.17911799999992933,
+        "aten::squeeze": 0.5473219999999914,
+        "aten::_reshape_alias": 0.18071399999994572,
+        "aten::div_": 0.06358399999999256,
+        "aten::isfinite": 0.09724800000004052,
+        "aten::eq": 0.11758499999999548,
+        "aten::gt": 1.3270349999998863,
+        "aten::bitwise_and": 0.14529099999999903,
+        "aten::all": 0.1113779999999581,
+        "aten::item": 0.030334000000080324,
+        "aten::_local_scalar_dense": 0.013789999999977227,
+        "aten::zeros_like": 0.16539699999994809,
+        "aten::contiguous": 0.027294999999967103,
+        "aten::minimum": 0.3457860000000071,
+        "aten::ge": 0.14241700000000834,
+        "aten::le": 0.194788000000015,
+        "aten::where": 1.8751759999999689,
+        "aten::roll": 0.11238199999998483,
+        "aten::bitwise_or": 0.024292000000004463,
+        "aten::sqrt": 0.23862300000003553,
+        "aten::relu": 0.08266099999999096,
+        "aten::clamp_min": 0.531381000000034,
+        "aten::clamp": 0.079546000000003,
+        "aten::min": 0.07391400000003615,
+        "aten::logical_not": 0.15249599999995916,
+        "aten::_has_compatible_shallow_copy_type": 0.003292000000004009,
+        "aten::index_select": 0.42732900000003793,
+        "aten::masked_fill": 0.03120600000000195,
+        "aten::max": 0.09941800000005332,
+        "aten::detach": 0.0199960000000392,
+        "detach": 0.020001999999982218,
+        "aten::logical_or_": 0.018917000000017652,
+        "aten::logical_or": 0.034916999999994,
+        "aten::set_": 0.04924999999997089,
+        "aten::permute": 0.023084999999984576,
+        "aten::full": 0.007289999999957217
+      },
+      "trace_file": "fp32-profile-float64-scheme9.json"
+    },
+    {
+      "precision": "float32",
+      "scheme": 9,
+      "seconds_per_step": [
+        0.0187422849998984,
+        0.018696857909963,
+        0.0193285879099858
+      ],
+      "median_seconds_per_step": 0.0187422849998984,
+      "registered_buffer_and_state_bytes": {
+        "by_dtype": {
+          "torch.float32": 1796000,
+          "torch.float64": 349080,
+          "torch.int64": 24
+        },
+        "total": 2145104
+      },
+      "cuda_peak_allocated_bytes": null,
+      "fp64_fallbacks": 0,
+      "profile_self_cpu_ms": {
+        "aten::slice": 8.654938999999235,
+        "aten::as_strided": 4.765998999999326,
+        "aten::copy_": 11.984043999999477,
+        "aten::select": 6.556091999999207,
+        "aten::unsqueeze": 1.0341600000003082,
+        "aten::add": 4.804768000000105,
+        "aten::mul": 8.217371999999877,
+        "aten::to": 1.521221999999912,
+        "aten::_to_copy": 3.2495599999997338,
+        "aten::empty_strided": 1.8749350000004439,
+        "aten::narrow": 1.9052160000010117,
+        "aten::flip": 0.44658199999986314,
+        "aten::empty_like": 0.705883999999842,
+        "aten::mul_": 0.29591199999993806,
+        "aten::zero_": 0.14303500000002198,
+        "aten::zeros": 0.10170600000005811,
+        "aten::empty": 0.8296240000001057,
+        "aten::expand": 0.3089930000003427,
+        "aten::isnan": 0.03299800000002358,
+        "aten::ne": 1.1446270000000225,
+        "aten::any": 1.0048440000001375,
+        "aten::fill_": 1.8194909999998885,
+        "aten::masked_fill_": 1.1505090000000127,
+        "aten::stack": 0.298792999999993,
+        "aten::cat": 2.9044960000001017,
+        "aten::view": 0.391189999999856,
+        "aten::ones_like": 0.0625030000000212,
+        "aten::sub": 2.313645000000338,
+        "aten::full_like": 0.049176000000131524,
+        "aten::nextafter": 0.4210480000000102,
+        "aten::lt": 0.5303720000001606,
+        "aten::where": 2.254722999999981,
+        "aten::maximum": 0.1773320000000656,
+        "aten::clone": 0.4124709999997268,
+        "aten::expand_as": 0.10663000000009043,
+        "aten::sum": 6.48818099999988,
+        "aten::div": 2.3610609999999514,
+        "aten::add_": 2.5661610000002066,
+        "aten::clamp_min_": 0.5659170000000506,
+        "aten::clamp_max": 0.17887199999995643,
+        "aten::abs": 0.35266999999995496,
+        "aten::neg": 0.34333300000000044,
+        "aten::sub_": 1.3166410000002247,
+        "aten::unfold": 0.5198519999999801,
+        "aten::matmul": 0.7595930000001044,
+        "aten::reshape": 0.42778100000015706,
+        "aten::mv": 0.5726039999997584,
+        "aten::addmv_": 0.9565420000001418,
+        "aten::_unsafe_view": 0.19059700000000715,
+        "aten::squeeze": 0.5297619999999041,
+        "aten::_reshape_alias": 0.17607599999991452,
+        "aten::div_": 0.1339549999999483,
+        "aten::isfinite": 0.08075299999994036,
+        "aten::eq": 0.1298350000000014,
+        "aten::gt": 1.3112930000002163,
+        "aten::bitwise_and": 0.14729599999998072,
+        "aten::all": 0.11479200000003426,
+        "aten::item": 0.03699700000009057,
+        "aten::_local_scalar_dense": 0.016375999999996112,
+        "aten::zeros_like": 0.19261299999999254,
+        "aten::contiguous": 0.031456000000018546,
+        "aten::minimum": 0.3602450000000758,
+        "aten::ge": 0.13646100000001773,
+        "aten::le": 0.18499799999996708,
+        "aten::roll": 0.12154899999977943,
+        "aten::bitwise_or": 0.02479399999999441,
+        "aten::sqrt": 0.17195400000004885,
+        "aten::mean": 0.07967300000003616,
+        "aten::relu": 0.09808100000008016,
+        "aten::clamp_min": 0.4074639999999226,
+        "aten::clamp": 0.0749179999999924,
+        "aten::min": 0.08062200000007215,
+        "aten::logical_not": 0.13753700000003938,
+        "aten::_has_compatible_shallow_copy_type": 0.0034170000000140134,
+        "aten::index_select": 0.4358480000001527,
+        "aten::masked_fill": 0.02945800000001509,
+        "aten::max": 0.07258300000009694,
+        "aten::detach": 0.018877000000024055,
+        "detach": 0.02458200000000761,
+        "aten::logical_or_": 0.020333999999958906,
+        "aten::logical_or": 0.03158600000001934,
+        "aten::set_": 0.04787999999992644,
+        "aten::permute": 0.014751000000000203,
+        "aten::full": 0.006624999999952706
+      },
+      "trace_file": "fp32-profile-float32-scheme9.json"
+    }
+  ],
+  "ensembles": [
+    {
+      "case": "closed",
+      "scheme": 9,
+      "metric": "kinetic_energy",
+      "means": {
+        "float64": 14468458618.248035,
+        "float32": 14469224314.348774
+      },
+      "sample_stdevs": {
+        "float64": 7227351.42478021,
+        "float32": 7231425.54701315
+      },
+      "paired_mean_difference": 765696.1007385254
+    },
+    {
+      "case": "closed",
+      "scheme": 9,
+      "metric": "vertical_velocity_rms",
+      "means": {
+        "float64": 0.4615499881459083,
+        "float32": 0.461561962325268
+      },
+      "sample_stdevs": {
+        "float64": 0.00017200057393103286,
+        "float32": 0.00017207809063375827
+      },
+      "paired_mean_difference": 1.197417935971945e-05
+    },
+    {
+      "case": "closed",
+      "scheme": 9,
+      "metric": "vapor_mass",
+      "means": {
+        "float64": 439308862.5584626,
+        "float32": 439319356.1109001
+      },
+      "sample_stdevs": {
+        "float64": 1.9160212598230353e-07,
+        "float32": 53.899142343998115
+      },
+      "paired_mean_difference": 10493.552437484264
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "metric": "kinetic_energy",
+      "means": {
+        "float64": 14467542120.556717,
+        "float32": 14468299106.557867
+      },
+      "sample_stdevs": {
+        "float64": 7227348.425930846,
+        "float32": 7227737.712931767
+      },
+      "paired_mean_difference": 756986.0011501312
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "metric": "vertical_velocity_rms",
+      "means": {
+        "float64": 0.4615312787980101,
+        "float32": 0.4615431032936751
+      },
+      "sample_stdevs": {
+        "float64": 0.0001720058282668629,
+        "float32": 0.00017203420805559332
+      },
+      "paired_mean_difference": 1.1824495665002654e-05
+    },
+    {
+      "case": "heated",
+      "scheme": 9,
+      "metric": "vapor_mass",
+      "means": {
+        "float64": 439308862.5584626,
+        "float32": 439319369.2311191
+      },
+      "sample_stdevs": {
+        "float64": 1.500017332091083e-07,
+        "float32": 49.23341809370855
+      },
+      "paired_mean_difference": 10506.672656476498
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "metric": "kinetic_energy",
+      "means": {
+        "float64": 15856702317.583782,
+        "float32": 15857485419.870321
+      },
+      "sample_stdevs": {
+        "float64": 7380677.960728467,
+        "float32": 7382257.574584751
+      },
+      "paired_mean_difference": 783102.2865390778
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "metric": "vertical_velocity_rms",
+      "means": {
+        "float64": 0.45180418187981536,
+        "float32": 0.4518153044101138
+      },
+      "sample_stdevs": {
+        "float64": 0.0001710820766804599,
+        "float32": 0.0001711000996172298
+      },
+      "paired_mean_difference": 1.1122530298446343e-05
+    },
+    {
+      "case": "sediment",
+      "scheme": 9,
+      "metric": "vapor_mass",
+      "means": {
+        "float64": 544811826.2925662,
+        "float32": 544824681.6088916
+      },
+      "sample_stdevs": {
+        "float64": 0.305554245772294,
+        "float32": 20.48501293020893
+      },
+      "paired_mean_difference": 12855.316325426102
+    }
+  ],
+  "jupiter": {
+    "steps": 1000,
+    "dt": 0.1,
+    "max_normalized_state_error": 0.00046657876716194036,
+    "relative_family_mass_difference": {
+      "water": 2.159228425035728e-05,
+      "ammonia": 1.976643696175388e-05
+    },
+    "relative_scalar_error": 1.6513101007577298e-05,
+    "passed": false
+  }
+}

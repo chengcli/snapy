@@ -133,17 +133,20 @@ are recorded in FP32_PROGRESS.md; see the
 Retain totals plus exact stored-anomaly/reference restart fields; version added
 background metadata and record dtype. Same-dtype continuation is exact;
 cross-dtype continuation has numerical tolerances. Retain legacy restrictions.
-Regridding invalidates all background-derived data. Coordinate snapy and kintera
+Regridding is excluded from the requested scope; changed-grid restarts remain
+rejected. Coordinate snapy and kintera
 changes and track paddle driver/forcing integration separately.
 Gate: uninterrupted/resumed and reduced rest/heating/full-moist workflows.
 See [the restart contract](docs/derivations/fp32-restart.md) for versioned
-metadata, destination precision and explicit changed-grid rejection. Remapping
-and external paddle/production integration remain separately tracked.
+metadata, destination precision and explicit changed-grid rejection. External
+paddle/production integration remains separately tracked.
 
 ### M6 — Science validation and performance
 
 Check mass/species/energy budgets including sources and boundary fluxes. Compare
 long-run statistics against multiple FP64 seeds as well as deterministic tests.
+The reduced-case harness is `tests/test_fp32_science.py`; measurements and open
+acceptance issues are recorded in [the M6 validation report](docs/notes/fp32-m6-validation.md).
 Profile production GPU memory, throughput and FP64/casting costs. Lower retained
 FP64 precision only with regression evidence. Publish measured supported scope
 and gains; BF16/stochastic rounding are separate research, not delivery gates.
@@ -163,6 +166,6 @@ Kintera owns thermodynamics/chemistry; source changes there are authorized for
 this effort. The merged pressure helper requires kintera >= 2.6.9; until its
 wheel is published, build tag v2.6.9 from source (as CI does). Validate against
 the actual library and record both revisions. Main compatibility risks are stored hydro_u
-interpretation, chemistry/forcing total-state writebacks, regridding, and kintera
+interpretation, chemistry/forcing total-state writebacks, and kintera
 dtype assumptions. Other EOS/geometries remain FP64 regression obligations;
 LMARS perturbation support is deferred.
