@@ -410,7 +410,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     TORCH_CHECK(
         w.scalar_type() == torch::kFloat64,
         "perturbation-flux currently requires FP64 compute (M4 enables FP32)");
-    perturb = dynamic_cast<IdealMoistImpl&>(*peos).perturbations(u);
+    perturb = dynamic_cast<IdealMoistImpl&>(*peos).perturbations(
+        u, /*defer_check=*/true);
     if (options->conversion_order() == 4) raw_primitive = w.clone();
   }
   // x1 point values u - L u, the primitives there, and back to cell averages:

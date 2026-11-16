@@ -1,0 +1,95 @@
+Internal ctest changing into directory: /tmp/snapy-hllc-2f321dc/src/build
+Test project /tmp/snapy-hllc-2f321dc/src/build
+    Start 1083: test_fp32_compute_python
+1/4 Test #1083: test_fp32_compute_python ..............   Passed    1.63 sec
+    Start 1085: test_fp32_restart_python
+2/4 Test #1085: test_fp32_restart_python ..............   Passed    5.82 sec
+    Start 1091: test_perturbation_flux_split_python
+3/4 Test #1091: test_perturbation_flux_split_python ...   Passed    1.43 sec
+    Start 1092: test_perturbation_flux_python
+4/4 Test #1092: test_perturbation_flux_python .........   Passed    3.00 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Label Time Summary:
+fp32-compute        =   1.63 sec*proc (1 test)
+fp32-dynamics       =   4.42 sec*proc (2 tests)
+fp32-foundations    =  11.88 sec*proc (4 tests)
+fp32-restart        =   5.82 sec*proc (1 test)
+hydro               =  11.88 sec*proc (4 tests)
+python              =  11.88 sec*proc (4 tests)
+
+Total Test time (real) =  11.89 sec
+WARMUP PASSED; CAPTURING
+CAPTURE PASSED
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+{'time': 0.0, 'mass_drift': 0.0, 'theta_min': -16.61954767331406, 'theta_max': 5.684341886080802e-14}
+{'time': 10.0, 'mass_drift': 0.0, 'theta_min': -16.6108822157467, 'theta_max': 0.0017968732616395755}
+/home/chengcli/pyenv/lib64/python3.11/site-packages/torch/profiler/profiler.py:217: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+{'time': 0.0, 'mass_drift': 0.0, 'theta_min': -16.61954767331406, 'theta_max': 5.684341886080802e-14}
+float64 step=1000 time=100.000
+float64 step=2000 time=200.000
+{'time': 300.0, 'mass_drift': 0.0, 'theta_min': -17.229395578878666, 'theta_max': 0.27015459277254195}
+float64 step=3000 time=300.000
+float64 step=4000 time=400.000
+float64 step=5000 time=500.000
+{'time': 600.0, 'mass_drift': 1.3064846820421612e-16, 'theta_min': -15.404687147949119, 'theta_max': 0.8246903647097952}
+float64 step=6000 time=600.000
+float64 step=7000 time=700.000
+float64 step=8000 time=800.000
+{'time': 900.0, 'mass_drift': 1.3064846820421612e-16, 'theta_min': -14.352641782634805, 'theta_max': 0.956376526048416}
+float64 step=9000 time=900.000
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+{'time': 0.0, 'mass_drift': 0.0, 'theta_min': -16.61954767331406, 'theta_max': 5.684341886080802e-14}
+{'time': 10.0, 'mass_drift': 1.3320917818101875e-12, 'theta_min': -16.61088448047434, 'theta_max': 0.001797350905235362}
+/home/chengcli/pyenv/lib64/python3.11/site-packages/torch/profiler/profiler.py:217: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+[HydroOptions] -- constant gravity options --
+* grav1 = -9.8
+* grav2 = 0
+* grav3 = 0
+* non-hydrostatic = 1
+* gravity-work = face
+* gravity-work-fixer = 0
+{'time': 0.0, 'mass_drift': 0.0, 'theta_min': -16.61954767331406, 'theta_max': 5.684341886080802e-14}
+float32 step=1000 time=100.000
+float32 step=2000 time=200.000
+{'time': 300.0, 'mass_drift': 3.85116409179614e-10, 'theta_min': -17.23077725237698, 'theta_max': 0.2697710447035888}
+float32 step=3000 time=300.000
+float32 step=4000 time=400.000
+float32 step=5000 time=500.000
+{'time': 600.0, 'mass_drift': 1.2637315386039499e-09, 'theta_min': -15.406760182454889, 'theta_max': 0.8255035701189399}
+float32 step=6000 time=600.000
+float32 step=7000 time=700.000
+float32 step=8000 time=800.000
+{'time': 900.0, 'mass_drift': 6.467645286705792e-10, 'theta_min': -14.356707748225517, 'theta_max': 0.9567394964731761}
+float32 step=9000 time=900.000
+float64 unchanged fields True seconds 62.9568544793874
+float32 unchanged fields True seconds 69.54297111090273

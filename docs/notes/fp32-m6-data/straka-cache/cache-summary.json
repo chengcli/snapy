@@ -1,0 +1,115 @@
+{
+  "float64": {
+    "report": {
+      "precision": "float64",
+      "device": "cuda",
+      "gpu": "NVIDIA GeForce RTX 5090",
+      "visible_devices": "0",
+      "torch": "2.10.0+cu128",
+      "snapy": "2.13.27",
+      "kintera": "2.6.10",
+      "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+      "native_libraries_sha256": {
+        "libsnap_cuda_release.so": "d838938f805fc79c88056337a88c87757338eb702cd91d875b0a92f77754bce4",
+        "libsnap_release.so": "e8af72d7448684a16e4373793d9151444ada9d442dc78fd8d020389fdca45c9a"
+      },
+      "rd": 286.9998232033527,
+      "cp": 1004.4993812117345,
+      "steps": 9000,
+      "dt": 0.1,
+      "elapsed_seconds_including_diagnostics": 62.9568544793874,
+      "storage": {
+        "by_dtype": {
+          "torch.float64": 6623960,
+          "torch.int64": 24
+        },
+        "total": 6623984
+      },
+      "cuda_peak_allocated_bytes": 15608832,
+      "history": [
+        {
+          "time": 0.0,
+          "mass_drift": 0.0,
+          "theta_min": -16.61954767331406,
+          "theta_max": 5.684341886080802e-14
+        },
+        {
+          "time": 300.0,
+          "mass_drift": 0.0,
+          "theta_min": -17.229395578878666,
+          "theta_max": 0.27015459277254195
+        },
+        {
+          "time": 600.0,
+          "mass_drift": 1.3064846820421612e-16,
+          "theta_min": -15.404687147949119,
+          "theta_max": 0.8246903647097952
+        },
+        {
+          "time": 900.0,
+          "mass_drift": 1.3064846820421612e-16,
+          "theta_min": -14.352641782634805,
+          "theta_max": 0.956376526048416
+        }
+      ]
+    },
+    "all_saved_fields_equal_pre_cache": true
+  },
+  "float32": {
+    "report": {
+      "precision": "float32",
+      "device": "cuda",
+      "gpu": "NVIDIA GeForce RTX 5090",
+      "visible_devices": "0",
+      "torch": "2.10.0+cu128",
+      "snapy": "2.13.27",
+      "kintera": "2.6.10",
+      "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+      "native_libraries_sha256": {
+        "libsnap_cuda_release.so": "d838938f805fc79c88056337a88c87757338eb702cd91d875b0a92f77754bce4",
+        "libsnap_release.so": "e8af72d7448684a16e4373793d9151444ada9d442dc78fd8d020389fdca45c9a"
+      },
+      "rd": 286.9998232033527,
+      "cp": 1004.4993812117345,
+      "steps": 9000,
+      "dt": 0.1,
+      "elapsed_seconds_including_diagnostics": 69.54297111090273,
+      "storage": {
+        "by_dtype": {
+          "torch.float32": 2640960,
+          "torch.float64": 1342040,
+          "torch.int64": 24
+        },
+        "total": 3983024
+      },
+      "cuda_peak_allocated_bytes": 12381696,
+      "history": [
+        {
+          "time": 0.0,
+          "mass_drift": 0.0,
+          "theta_min": -16.61954767331406,
+          "theta_max": 5.684341886080802e-14
+        },
+        {
+          "time": 300.0,
+          "mass_drift": 3.85116409179614e-10,
+          "theta_min": -17.23077725237698,
+          "theta_max": 0.2697710447035888
+        },
+        {
+          "time": 600.0,
+          "mass_drift": 1.2637315386039499e-09,
+          "theta_min": -15.406760182454889,
+          "theta_max": 0.8255035701189399
+        },
+        {
+          "time": 900.0,
+          "mass_drift": 6.467645286705792e-10,
+          "theta_min": -14.356707748225517,
+          "theta_max": 0.9567394964731761
+        }
+      ]
+    },
+    "all_saved_fields_equal_pre_cache": true
+  }
+}

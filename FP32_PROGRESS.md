@@ -892,3 +892,45 @@ changes require CUDA CI/hardware.
   evidence and plot: [HLLC GPU validation](docs/notes/fp32-hllc-gpu-validation.md).
   Evidence Python compileall, Ruff F401/F821 and `git diff --check`: passed.
   Kintera 2.6.10 was used unchanged; other dependency combinations were not tested.
+
+### H2 constant cache and capture-safe capacity validation — 2026-11-16
+
+- Full-step CUDA capture probe warmed up successfully, then failed in
+  `IdealMoistImpl::perturbations`: C++ stack traced `torch::tensor` through
+  `_to_copy`/`copy_kernel_cuda`. Per-call CPU constant uploads are the first
+  confirmed blocker; the synchronous capacity check is another known blocker.
+- Cache FP64 cv, energy-offset and gas coefficients privately, keyed by device,
+  original double-valued host options and gas/cloud counts. Reset clears the
+  cache; module FP32 conversion cannot round these coefficients. No restart
+  format or kintera API change.
+- During hydro stages, latch invalid background/total heat capacity on-device,
+  guard invalid denominators, and include the latch in the existing batched
+  check_redo readback. Invalid steps are rejected even if a later stage becomes
+  valid. Stage zero clears the latch; direct EOS calls still throw immediately.
+- Added regression checks for cached repeat equality, host-option refresh,
+  immediate invalid-capacity exceptions, deferred failure persistence, and
+  routing the failure to the existing retry decision. Validation underway.
+- The separate dry HLLC fusion experiment failed parity tests and was removed
+  from this change; its patch is preserved at `/tmp/snapy-dry-hllc-wip.patch`.
+  Initial cache/capture probes disabled fusion explicitly. Full warmed-up
+  Straka capture now passes; safe repeated replay remains a separate milestone.
+
+- Final cache/check-only native build and bindings passed. On dungeon3:
+  `CUDA_VISIBLE_DEVICES=0 ctest --test-dir build --output-on-failure -R '^test_(eos|riemann).release$'`:
+  **2/2 passed**, including CPU/CUDA float/double regression coverage.
+- `bash /tmp/snapy-hllc-2f321dc/snapy-cache-validate.sh`: passed. Four Python
+  compute/restart/perturbation fixtures, the warmed-up CUDA capture probe, both
+  short GPU profiles and **2/2 full 9000-step GPU Straka runs** passed. All saved
+  arrays at 0/300/600/900 s are **bit-identical** to the pre-cache results.
+- Five-step profiles: `aten::item` **15→0**, stream synchronizations **65→5** in
+  both precisions. FP32 `_to_copy` **790→750**, launches **9780→9775**. Single-run
+  times FP64/FP32 **62.9569 / 69.5430 s**; no standalone speedup claim against
+  historical runs with different host load. The 2× target remains open.
+- [Cache/check report and evidence](docs/notes/fp32-cache-validation.md).
+  Kintera 2.6.10 unchanged. Native libraries/bindings require a matching rebuild;
+  restart formats are unchanged. Production graph replay still needs storage
+  and host-bookkeeping validation despite successful capture.
+- `CUDA_VISIBLE_DEVICES=0 PYTHONPATH=/tmp/snapy-hllc-2f321dc/package /home/chengcli/pyenv/bin/python tests/test_fp32_science.py --device cuda --steps 30 --output /tmp/snapy-hllc-2f321dc/results/cache-science.json`:
+  passed (exit 0), closed/heated/sedimenting cases with explicit/implicit schemes.
+  Google clang-format, evidence compileall/Ruff F401/F821 and `git diff --check`
+  passed. Cache/check milestone complete; 2× graph-replay milestone remains open.

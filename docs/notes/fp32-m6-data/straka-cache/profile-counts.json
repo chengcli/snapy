@@ -1,0 +1,46 @@
+{
+  "float32": {
+    "aten::_to_copy": {
+      "before": 790,
+      "after": 750
+    },
+    "aten::copy_": {
+      "before": 2650,
+      "after": 2610
+    },
+    "aten::item": {
+      "before": 15,
+      "after": 0
+    },
+    "cudaStreamSynchronize": {
+      "before": 65,
+      "after": 5
+    },
+    "cudaLaunchKernel": {
+      "before": 9780,
+      "after": 9775
+    }
+  },
+  "float64": {
+    "aten::_to_copy": {
+      "before": 105,
+      "after": 65
+    },
+    "aten::copy_": {
+      "before": 1925,
+      "after": 1885
+    },
+    "aten::item": {
+      "before": 15,
+      "after": 0
+    },
+    "cudaStreamSynchronize": {
+      "before": 65,
+      "after": 5
+    },
+    "cudaLaunchKernel": {
+      "before": 8665,
+      "after": 8660
+    }
+  }
+}

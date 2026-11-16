@@ -1,0 +1,13 @@
+Internal ctest changing into directory: /tmp/snapy-hllc-2f321dc/src/build
+Test project /tmp/snapy-hllc-2f321dc/src/build
+    Start 928: test_eos.release
+1/2 Test #928: test_eos.release .................   Passed    1.51 sec
+    Start 945: test_riemann.release
+2/2 Test #945: test_riemann.release .............   Passed    0.93 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Label Time Summary:
+fp32-foundations    =   2.44 sec*proc (2 tests)
+
+Total Test time (real) =   2.45 sec

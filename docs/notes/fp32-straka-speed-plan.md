@@ -124,3 +124,17 @@ The 2× end-to-end target remains open. H2 should reduce the measured 1956 FP32
 launches/step and conversion/copy overhead; H3 addresses remaining host dispatch.
 CUDA peak allocation, including retained scratch, is the memory acceptance
 metric. Preserve the fixed-grid experiment and all safety checks.
+
+
+### Graph-enabling cache/check change
+
+The user selected graph-first execution to minimize code changes. Full-step
+capture initially failed on per-call EOS constant uploads. FP64 constant caching
+and deferred capacity validation now allow warmed-up Straka capture to pass.
+Both full GPU precision trajectories remain bit-identical to the pre-cache
+results; see [the cache/check report](fp32-cache-validation.md).
+
+Next: validate repeated replay with stable state storage and correct replay of
+limiter/retry bookkeeping before exposing an execution option. The separate dry
+HLLC fusion experiment failed parity checks and was removed from the active
+change; do not count it as implemented or validated.
