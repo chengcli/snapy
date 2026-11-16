@@ -300,3 +300,45 @@ science gate. The final 30-second Straka run passed and was bit-identical to the
 original binary for all four saved fields; [checks and final binary hashes](fp32-m6-data/straka-optimization/final-30.json)
 are retained. Google clang-format verification, Python compileall/Ruff F401/F821
 and `git diff --check` passed. Optimized GPU timing remains unmeasured.
+
+## Repeated GPU-only Straka comparison (installed binary)
+
+At the user's request, compare FP64 and FP32 only on dungeon3 GPU 0 (RTX 5090),
+with three sequential pairs and reversed precision order in pair 2. Each run
+uses the same 64×256 Straka case, dt=0.1 and 9000 steps to 900 s. Timing includes
+step validation and snapshots as in the original runner; it is end-to-end time
+for GPU execution, not CUDA-kernel-only time. No CPU simulation timings enter
+this comparison.
+
+The installed native hashes were checked before starting and still match the
+pre-optimization GPU reports. These trials therefore characterize the installed
+snapy 2.13.27 binary, **not the new native optimizations**. The isolated optimized
+GPU build remains pending clarification of the earlier no-recompilation request.
+
+From `/tmp/snapy-m6-hsaZRT`:
+
+```sh
+mkdir -p results/straka-gpu-repeat
+for trial in 1 2 3; do
+  if [ "$trial" = 2 ]; then
+    precisions="float32 float64"
+  else
+    precisions="float64 float32"
+  fi
+  for precision in $precisions; do
+    CUDA_VISIBLE_DEVICES=0 /home/chengcli/pyenv/bin/python -u tests/run_fp32_straka.py \
+      --precision "$precision" --output "results/straka-gpu-repeat/$trial-$precision" \
+      > "results/straka-gpu-repeat/$trial-$precision.log" 2>&1 || exit 1
+  done
+done
+```
+
+Repeated GPU results: **6/6 runs passed**, each completing 9000 steps. FP64 times
+were 63.4482, 63.0573 and 63.5365 s; FP32 times were 69.9918, 70.2651 and
+70.2006 s. Medians are **63.4482 / 70.2006 s**, so FP32 latency is **10.6423%**
+higher. Sample standard deviations are 0.2550 / 0.1428 s. Final theta, primitive,
+conserved and tracer fields are bit-identical across repetitions of each dtype.
+[Raw summary and provenance](fp32-m6-data/straka-gpu-repeat.json).
+
+See [the Kratos-based diagnosis](fp32-kratos-diagnosis.md) for subsequent analysis
+of the precision policy, implicit C++ promotions and GPU kernel attribution.

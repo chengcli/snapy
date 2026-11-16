@@ -809,3 +809,51 @@ changes require CUDA CI/hardware.
   `git diff --check` passed. Native optimization is implemented and locally
   validated; optimized CUDA measurements remain pending the user's no-remote-
   rebuild constraint. Dungeon3 installation and kintera sources are unchanged.
+
+### GPU repeats and Kratos-based diagnosis — 2026-11-16
+
+- Completed the exact three-pair GPU-only Straka loop recorded in the M6 report:
+  **6/6 passed**, 9000 steps each. Same GPU, sequential, reversed order in pair 2.
+  Medians FP64 **63.4482 s**, FP32 **70.2006 s**: **10.6423% slower** FP32.
+  Same-precision final arrays are bit-identical across all three repeats.
+  Installed binary hashes still predate the native optimizations.
+- Read Wang (2025), DOI 10.3847/1538-4365/adbdb6, using indexed publisher text
+  and arXiv v2 when the PDF was unavailable. Recorded source-linked findings and
+  revised priorities in `docs/notes/fp32-kratos-diagnosis.md`.
+- Verified unintended FP64 arithmetic inside the installed float HLLC CUDA
+  specialization using cuobjdump (no compilation). `.5`/`1.0` plus `auto`
+  promote intermediates. Static float N=8 kernel contains 101 DFMA/50 DMUL and
+  59 F32→F64 conversions; static counts are not runtime instruction counts.
+- Kernel-only trace analysis: HLLC ~1.4% of FP32 summed GPU kernel time, so fixing
+  it alone cannot explain/remove the observed slowdown. WENO speeds up, but
+  launch counts rise 8665→9765 and casts/copies consume the saving. Do not claim
+  the entire hydrodynamics pipeline is pure FP32 merely from buffer dtypes.
+- Prioritize typed, cancellation-safe scalar HLLC arithmetic and fewer pipeline
+  intermediates/launches. Consider an explicit FP64 accumulation/FP32 compute
+  experiment while preserving the hydrostatic anomaly design and current mode.
+  This diagnosis changes no native code or kintera API. Optimized GPU build
+  permission remains pending; all new GPU timings use installed libraries.
+
+### HLLC fix and 2× Straka target — 2026-11-16
+
+- User requested HLLC first and a plan for 2× speed. Recorded staged work and
+  measurement contract in `docs/notes/fp32-straka-speed-plan.md`.
+- Target: same-GPU FP32 median ≤31.7241 s for the existing 9000-step Straka case
+  (2× FP64 baseline, 2.21× old FP32), preserving physics/numerics/diagnostics.
+  HLLC alone cannot meet it; subsequent work targets fusion and launch overhead.
+- HLLC now uses typed constants with compile-time intermediate-type assertions.
+  Float acoustic differences avoid subtracting close velocities, including the
+  correct branches for clipped waves. Double arithmetic order is retained.
+  Added shock/expansion/boost/species/pressure-background comparisons in the
+  Riemann suite. Local build/validation in progress; no GPU speed claim yet.
+- HLLC build command:
+  `PYTHONPATH=/tmp/snapy-straka-opt-python cmake --build build --parallel 4 --target snap_release test_riemann.release`: passed.
+- `ctest --test-dir build --output-on-failure -L 'fp32-(foundations|science|acceptance)'`:
+  **40/40 passed**, 158.18 s, including the new 120-case Riemann sweep.
+- `PYTHONPATH=/tmp/snapy-straka-opt-python python -u tests/run_fp32_straka.py --precision float32 --device cpu --output /tmp/straka-hllc-fix-900`:
+  completed 9000 steps without rejection/nonfinite state; relative mass drift
+  **1.1391e-9**. Theta change versus old CPU FP32 at 900 s: **0.0005673 K RMS**,
+  **0.01535 K maximum**. CPU run used for correctness only, not GPU speed claims.
+- Google clang-format and `git diff --check`: passed. Kintera API/source unchanged.
+  H1 locally validated; GPU codegen/timing pending isolated build. H2/H3 fusion
+  and dispatch work are planned to pursue the 2× target, not yet implemented.

@@ -1,0 +1,80 @@
+{
+  "float64": {
+    "kernel_count": 8665,
+    "kernel_duration_sum_ms": 13.638402000000088,
+    "hllc_duration_sum_ms": 0.21023599999999998,
+    "top_kernel_ms": [
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::CUDAFunctor_add<double>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<double>, std::array<char*, 3ul>)",
+        1.527472999999979
+      ],
+      [
+        "void snap::native::reduce_kernel<double, snap::native::stencil_kernel<double, 2, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*, double*)#1}>(at::TensorIterator&, int, int, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*, double*)#1} const&, int)::{lambda(int, double*)#1}>(long, snap::native::stencil_kernel<double, 2, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*, double*)#1}>(at::TensorIterator&, int, int, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#1}::operator()() const::{lambda(char* const*, unsigned int*, double*)#1} const&, int)::{lambda(int, double*)#1})",
+        1.4739329999999986
+      ],
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::DivFunctor<double> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::DivFunctor<double> >, std::array<char*, 3ul>)",
+        1.2916290000000035
+      ],
+      [
+        "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#6}::operator()() const::{lambda(double)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#6}::operator()() const::{lambda(double)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#6}::operator()() const::{lambda(double)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#6}::operator()() const::{lambda(double)#1} const&)::{lambda(int)#1})",
+        0.971897000000003
+      ],
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::AUnaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> >, std::array<char*, 2ul> >(int, at::native::AUnaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> >, std::array<char*, 2ul>)",
+        0.8273770000000024
+      ],
+      [
+        "void snap::hydro_ref_x1_cuda_kernel<snap::SplitReferenceScalar>(snap::SplitReferenceScalar const*, snap::SplitReferenceScalar const*, snap::SplitReferenceScalar const*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, int, int, int, snap::SplitReferenceScalar, int, bool, bool, bool, snap::SplitReferenceScalar const*)",
+        0.8117709999999999
+      ],
+      [
+        "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> > >(at::TensorIteratorBase&, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> > const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> > >(at::TensorIteratorBase&, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> > const&)::{lambda(int)#1})",
+        0.6381390000000018
+      ],
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::FillFunctor<double>, std::array<char*, 1ul> >(int, at::native::FillFunctor<double>, std::array<char*, 1ul>)",
+        0.5084499999999973
+      ]
+    ]
+  },
+  "float32": {
+    "kernel_count": 9765,
+    "kernel_duration_sum_ms": 14.968013999999936,
+    "hllc_duration_sum_ms": 0.212545,
+    "top_kernel_ms": [
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::CUDAFunctor_add<double>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<double>, std::array<char*, 3ul>)",
+        0.896925000000002
+      ],
+      [
+        "void snap::hydro_ref_x1_cuda_kernel<snap::SplitReferenceScalar>(snap::SplitReferenceScalar const*, snap::SplitReferenceScalar const*, snap::SplitReferenceScalar const*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, snap::SplitReferenceScalar*, int, int, int, snap::SplitReferenceScalar, int, bool, bool, bool, snap::SplitReferenceScalar const*)",
+        0.815481
+      ],
+      [
+        "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)",
+        0.8043169999999994
+      ],
+      [
+        "void snap::native::reduce_kernel<float, snap::native::stencil_kernel<float, 2, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*, float*)#1}>(at::TensorIterator&, int, int, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*, float*)#1} const&, int)::{lambda(int, float*)#1}>(long, snap::native::stencil_kernel<float, 2, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*, float*)#1}>(at::TensorIterator&, int, int, snap::call_interp_cuda<5, 45, snap::Weno5Op>(at::TensorIterator&, at::Tensor, int, bool)::{lambda()#1}::operator()() const::{lambda()#2}::operator()() const::{lambda(char* const*, unsigned int*, float*)#1} const&, int)::{lambda(int, float*)#1})",
+        0.7344520000000001
+      ],
+      [
+        "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1} const&)::{lambda(int)#1})",
+        0.6121660000000002
+      ],
+      [
+        "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<double>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<2>, at::native::memory::StoreWithCast<1> >(int, at::native::CUDAFunctor_add<double>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<2>, at::native::memory::StoreWithCast<1>)",
+        0.6064960000000004
+      ],
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::AUnaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> >, std::array<char*, 2ul> >(int, at::native::AUnaryFunctor<double, double, double, at::native::binary_internal::MulFunctor<double> >, std::array<char*, 2ul>)",
+        0.49845500000000015
+      ],
+      [
+        "void at::native::vectorized_elementwise_kernel<2, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::DivFunctor<double> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<double, double, double, at::native::binary_internal::DivFunctor<double> >, std::array<char*, 3ul>)",
+        0.40495500000000056
+      ]
+    ]
+  }
+}

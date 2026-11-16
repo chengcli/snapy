@@ -1,0 +1,78 @@
+{
+  "scope": "CPU correctness only; no GPU throughput claim",
+  "run": {
+    "precision": "float32",
+    "device": "cpu",
+    "gpu": null,
+    "visible_devices": null,
+    "torch": "2.10.0",
+    "snapy": "2.13.28.dev0+g3fe398a.d20261116",
+    "kintera": "2.6.10",
+    "script_sha256": "fd76b3bcb7b348d157a5d84c20584b48d50b6a39433f18457b19fe8b6d5f476b",
+    "native_libraries_sha256": {
+      "libsnap_release.dylib": "d52b1b2fb41fbb82d6a14291ef5e72f95cfe6eb115f458635e57589a86b8c97a"
+    },
+    "rd": 286.9998232033527,
+    "cp": 1004.4993812117345,
+    "steps": 9000,
+    "dt": 0.1,
+    "elapsed_seconds_including_diagnostics": 248.3488632089866,
+    "storage": {
+      "by_dtype": {
+        "torch.float32": 2640960,
+        "torch.float64": 1342040,
+        "torch.int64": 24
+      },
+      "total": 3983024
+    },
+    "cuda_peak_allocated_bytes": null,
+    "history": [
+      {
+        "time": 0.0,
+        "mass_drift": 0.0,
+        "theta_min": -16.61954767331406,
+        "theta_max": 5.684341886080802e-14
+      },
+      {
+        "time": 300.0,
+        "mass_drift": 6.688293565201845e-10,
+        "theta_min": -17.230790273482626,
+        "theta_max": 0.26976609280853836
+      },
+      {
+        "time": 600.0,
+        "mass_drift": 1.6981524586598754e-09,
+        "theta_min": -15.406762286292803,
+        "theta_max": 0.8255175496850029
+      },
+      {
+        "time": 900.0,
+        "mass_drift": 1.1391016533844974e-09,
+        "theta_min": -14.356773322489687,
+        "theta_max": 0.9567975077284245
+      }
+    ]
+  },
+  "comparison_to_pre_fix_cpu_fp32": [
+    {
+      "time": 0,
+      "theta_max_change_K": 0.0,
+      "theta_rms_change_K": 0.0
+    },
+    {
+      "time": 300,
+      "theta_max_change_K": 0.0003325548322550276,
+      "theta_rms_change_K": 1.5671564453580233e-05
+    },
+    {
+      "time": 600,
+      "theta_max_change_K": 0.001660801433274628,
+      "theta_rms_change_K": 0.00010702620925095295
+    },
+    {
+      "time": 900,
+      "theta_max_change_K": 0.015353816002800613,
+      "theta_rms_change_K": 0.0005672922402734382
+    }
+  ]
+}

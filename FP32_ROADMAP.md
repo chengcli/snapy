@@ -143,6 +143,10 @@ paddle/production integration remains separately tracked.
 
 ### M6 — Science validation and performance
 
+The Straka performance work now targets **2× GPU throughput versus FP64** on
+the fixed reference case. See the [staged speed plan](docs/notes/fp32-straka-speed-plan.md)
+for HLLC arithmetic, kernel fusion, dispatch reduction and measured acceptance.
+
 Check mass/species/energy budgets including sources and boundary fluxes. Compare
 long-run statistics against multiple FP64 seeds as well as deterministic tests.
 The reduced-case harness is `tests/test_fp32_science.py`; measurements and open
