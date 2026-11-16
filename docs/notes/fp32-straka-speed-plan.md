@@ -103,8 +103,8 @@ with no rejected/nonfinite steps and relative mass drift **1.1391e-9**, below th
 existing reduced-case 2e-5 engineering mass limit. At 900 s, theta differs from
 the old CPU FP32 run by **0.0005673 K RMS / 0.01535 K maximum**; changing arithmetic
 precision is not expected to preserve bitwise trajectories. These differences
-are observations, not a new scientific-equivalence claim. [Correctness data and
-binary hashes](fp32-m6-data/straka-hllc-fix.json) are retained.
+are observations, not a new scientific-equivalence claim. Repository copies
+of the raw correctness data and binary hashes have been removed.
 
 Google clang-format and `git diff --check` passed. No kintera changes. Subsequent
 GPU results are recorded in [the HLLC GPU report](fp32-hllc-gpu-validation.md);

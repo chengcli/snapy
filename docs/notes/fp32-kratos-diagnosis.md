@@ -3,7 +3,7 @@
 The controlled installed-binary GPU comparison gives 63.4482 s FP64 versus
 70.2006 s FP32 (three sequential runs per precision on the same RTX 5090;
 10.6423% greater FP32 latency). All six runs passed. These are pre-optimization
-binaries, identified by hashes in [the timing data](fp32-m6-data/straka-gpu-repeat.json).
+binaries. Repository copies of the raw timing data and hashes have been removed.
 The recent face-state/scratch changes have CPU validation but no optimized GPU
 measurement. This analysis does not conflate those versions.
 
@@ -42,7 +42,7 @@ Disassembled the installed SM120 native library without compiling:
 The N=8 float HLLC symbol matched the profiler's float specialization. Static
 instruction occurrences include 101 DFMA, 50 DMUL, 15 DADD and 59 F32→F64
 conversions. These are static code counts, not executed-instruction counts or a
-cycle attribution. [Disassembly summary](fp32-m6-data/straka-profile/hllc-sass-summary.json).
+cycle attribution. The repository copy of the disassembly summary has been removed.
 HLLC float GPU duration is 0.2125 ms versus double 0.2102 ms over the five-step
 profile: this kernel currently supplies no measured speed advantage.
 
@@ -74,7 +74,6 @@ Snapy already uses custom CUDA kernels and shared-memory stencil code (see
 that no shared memory is used would be incorrect. The missing opportunity is
 reducing intermediate tensors and launches *between* these kernels. Existing
 profiles retain substantial FP64 elementwise arithmetic as well as casts.
-[Kernel-only attribution](fp32-m6-data/straka-profile/kernel-summary.json).
 There is no moist chemistry step in this dry Straka experiment.
 
 ## Precision policy and numerical stability

@@ -1,8 +1,16 @@
-# FP32 project progress
+# V3 project progress: FP32 and CUDA graphs
 
-Updated: 2026-11-16. Roadmap: [FP32_ROADMAP.md](FP32_ROADMAP.md).
+Updated: 2026-11-16. Plan: [V3_ROADMAP.md](V3_ROADMAP.md).
+
+This tracker combines FP32 numerical implementation/science milestones M0–M6
+with CUDA graph milestones G0–G7 across snapy, kintera, pyharp and UCX/commux.
+M6 remains in progress; the general graph milestones remain planned beyond the
+validated dry Straka prototype. Historical checkpoints below are dated records,
+not replacements for the current milestone tables.
 
 ## Milestones
+
+### FP32 numerical implementation and science
 
 | Milestone | Status | Evidence / next action |
 |---|---|---|
@@ -14,13 +22,92 @@ Updated: 2026-11-16. Roadmap: [FP32_ROADMAP.md](FP32_ROADMAP.md).
 | M5 Coupled workflow/restart | CPU implementation merged (#367) | 37/37 foundations, exact coupled/bundled continuation; external driver/distributed/GPU validation pending |
 | M6 Science/performance | In progress | Budget/seeded-comparison harness; GPU smoke passed; Jupiter comparison and installed GPU restart compatibility remain open |
 
+### CUDA graph execution
+
+| ID | Deliverable | Owner(s) | Dependencies | Status |
+|---|---|---|---|---|
+| Existing | Dry Cartesian Straka graph prototype and cast caches | snapy | — | Validated for the restricted fixture; evidence below |
+| G0 | Version/capability inventory, baselines and capture probes | snapy + providers | — | Plan/source inventory recorded; runtime audit/probes pending |
+| G1 | General segmented executor, stable RK storage, device diagnostics | snapy + pyharp | G0 | Planned |
+| G2 | Capture-safe moist thermodynamics and source terms | kintera + snapy | G1 | Planned |
+| G3 | VIC graphs with stage-local FP64 fallback and retry | snapy | G1; G2 for moist gate | Planned |
+| G4 | Local multi-block and UCX distributed Cartesian execution | snapy; commux if needed | G1; G2/G3 for combined gate | Planned |
+| G5 | Eager FP32 cubed-sphere numerical extension | snapy | G0 numerical baselines | Planned |
+| G6 | Cubed-sphere graph execution and full combined matrix | all providers as needed | G2–G5 | Planned |
+| G7 | Production API, compatible releases, CI and performance acceptance | snapy + providers | G6 | Planned |
+
+## Decisions
+
+- UCX remains the communication backend. Capture GPU computation/packing and
+  unpacking in segments; initially keep UCX posting/progress/completion and
+  global CFL/retry/correction reductions outside capture.
+- One GPU per process initially; support multiple blocks on that GPU. No
+  regridding. VIC retains nb1=1, with horizontal block/process decomposition.
+- Preserve physical operators, precision policy, diagnostics and rollback.
+  Stable storage is preferred; blanket `set_`→`copy_` replacement is not the plan.
+- Coordinate snapy, kintera and pyharp interfaces; modify commux only when its
+  inspected completion/stream API or measured synchronization cost requires it.
+- FP32 cubed-sphere numerics must be implemented and validated eagerly before
+  claiming FP32 cubed-sphere graph support. Current guards cannot just be removed.
+
+## Existing evidence
+
+- [Straka graph replay](docs/notes/fp32-straka-graph-replay.md): eager/graph parity,
+  storage/dt changes, rollback and retry exhaustion; full 9000-step comparisons.
+- [Dtype-copy caching](docs/notes/fp32-straka-cast-cache.md): 12 paired full runs,
+  bit-identical same-precision fields, 78 conversions/step removed. Captured
+  FP32 GPU time remains 4.15% above FP64; no general 2× precision claim.
+- [Capture-enabling EOS changes](docs/notes/fp32-cache-validation.md): cached
+  constants and deferred heat-capacity validation.
+- These results do not validate moist, VIC, multiple-block or distributed graph
+  execution. They also do not establish eager FP32 cubed-sphere support.
+
+## Work log
+
+### 2026-11-16 — Cross-repository plan recorded
+
+- Inspected snapy's RK state updates, implicit failure/fallback path, local-block
+  worker/exchange orchestration, cached halo buffers, UCX adapter and global
+  retry handling; kintera v2.6.10 temperature/equilibrium/table/failure paths;
+  and pyharp's allocating RK stage combination.
+- Identified separate numerical guards for Cartesian-only anomaly storage and
+  FP32 VIC, temperature-dependent FP32 perturbation EOS, and cubed-sphere full
+  axial-momentum mode. They have explicit prerequisites/capability gates in the
+  roadmap rather than being treated as graph-capture fixes.
+- Full commux implementation/version audit remains G0 work. No changes were
+  made to provider code or snapy runtime in this planning step.
+- Documentation validation: `git diff --check` passed (exit 0). A Python
+  consistency check passed for all 30 local Markdown links in the four touched
+  documents and the G0–G7 milestones in both plan and tracker. No runtime tests
+  were run for this documentation-only change.
+- Cross-repository compatibility requirements are recorded in the roadmap:
+  additive provider APIs, pinned revision sets, matching native/binding rebuilds,
+  and graph invalidation after restart/configuration changes. No new runtime
+  dependency or compatibility change is introduced by these documents.
+
+### 2026-11-16 — V3 documentation consolidated
+
+- Combined FP32 progress/history and CUDA graph tracking in this file, and both
+  roadmaps in [V3_ROADMAP.md](V3_ROADMAP.md). Removed the four predecessor files
+  and updated repository references, including README and the CTest comment.
+- Preserved M0–M6 and G0–G7 milestones, numerical requirements, historical
+  implementation/validation records and cross-repository ownership.
+- Documentation paths in historical command listings now use the consolidated
+  filenames; other command arguments and recorded results are retained.
+- Validation: `git diff --check` passed. Content-preservation checks passed;
+  all 27 checked local links resolve, M0–M6/G0–G7 appear in both documents, and
+  no predecessor filenames remain in repository references. No runtime or
+  dependency changes; runtime tests are not needed for this documentation/comment-only edit.
+
+## FP32 implementation and validation history
+
 Historical foundation baseline (2026-11-08): snapy work was recorded on
 `fp32-step1-anomaly`, based on `fe003dd`.
 The paired kintera change is commit `80ac117` on `fp32-perturbation-thermo`, based
 on user-rebased `v2.6.8` / `e646fe5`. Fresh CPU validation uses the paired source
 builds, not the globally installed packages.
 
-## Validation log
+### Validation log
 
 - Prior inspection: `ctest --test-dir build --output-on-failure -R
   'test_(balance_column|hydro_ref_x1)\.release$'`: 2/2 passed using existing
@@ -37,7 +124,7 @@ builds, not the globally installed packages.
   still 2.6.6. Isolated source copy at `/tmp/snapy-fp32-kintera-2.6.8` configured
   successfully using the installed SDK; building `kintera_release`.
 
-## Decisions — 2026-11-08
+### Decisions — 2026-11-08
 
 - Jupiter Cartesian ideal-moist first; perturbation kernels before true FP32.
 - Initial balancing remains opt-in; preserve unbalanced-state residual forces.
@@ -45,7 +132,7 @@ builds, not the globally installed packages.
 - Kintera source edits authorized for moist physics. Keep repository responsibilities.
 - Record exact commands/results and cross-repo compatibility at each checkpoint.
 
-## Environment and outstanding work
+### Environment and outstanding work
 
 Local host is macOS/CPU; CUDA and production GPU validation require another host.
 The initial 2026-11-08 validation pinned the isolated kintera v2.6.8 source
@@ -55,7 +142,7 @@ Coupled Jupiter cases live outside this repository and were not found in the
 local workspace search. The temporary build/install paths are local validation
 artifacts; a clean host must build/install the paired sources itself.
 
-## Implementation checkpoint — 2026-11-08
+### Implementation checkpoint — 2026-11-08
 
 - Added `HydroReferenceX1Operator` shared by runtime and `balance_column`.
   Retains legacy nonuniform vs stretched operator choice, runtime seam ordering,
@@ -70,7 +157,7 @@ artifacts; a clean host must build/install the paired sources itself.
   needed by future perturbation thermodynamics; existing anomaly storage does not
   require it. No kintera source changes yet.
 
-## Thermodynamics checkpoint — 2026-11-08
+### Thermodynamics checkpoint — 2026-11-08
 
 - Kintera source at v2.6.8 now has `eval_const_cv_pressure_delta` and
   `test_pressure_delta`: direct constant-cv mixture pressure increments, with
@@ -95,7 +182,7 @@ artifacts; a clean host must build/install the paired sources itself.
   `build/lib/libkintera_release.dylib` via `_KINTERA_HEADER_DIR`,
   `KINTERA_INCLUDE_DIR`, and `KINTERA_LIBRARY`; rebuilding EOS and reference tests.
 
-## Gravity-work checkpoint — 2026-11-08
+### Gravity-work checkpoint — 2026-11-08
 
 - Added a shared local-potential-difference face-work helper. Cartesian explicit
   hydro and the implicit post-solve correction now use it; non-Cartesian explicit
@@ -109,7 +196,7 @@ artifacts; a clean host must build/install the paired sources itself.
 - `git diff --check` and `python -m py_compile tests/test_anomaly_storage.py setup.py`:
   passed. These are static checks, not numerical validation.
 
-## CPU validation checkpoint — 2026-11-08
+### CPU validation checkpoint — 2026-11-08
 
 - First expanded EOS run exposed mixed-dtype assumptions in coordinate vector
   transforms and species repair. Fixed explicit geometry/repair compute views;
@@ -132,7 +219,7 @@ artifacts; a clean host must build/install the paired sources itself.
   and `SNAPY_TEST_PYTHONPATH=/tmp/snapy-fp32-python` ensures Python CTests use
   the rebuilt branch instead of the globally installed snapy.
 
-## Remaining implementation (not completed by the foundation work)
+### Remaining implementation (not completed by the foundation work)
 
 1. Split the shared hydrostatic reference's linear scan from its nonlinear
    anchor/guards/density operator. Cache static background evaluations and
@@ -150,7 +237,7 @@ artifacts; a clean host must build/install the paired sources itself.
 5. CUDA host and reduced Jupiter workspace location requested asynchronously;
    neither is available locally. CUDA/production acceptance remains pending.
 
-## Historical storage-only results
+### Historical storage-only results
 
 These are reported by the original roadmap, **not rerun in this work**. Errors
 are maximum velocity differences from its FP64 total-storage baseline.
@@ -163,7 +250,7 @@ are maximum velocity differences from its FP64 total-storage baseline.
 
 These storage-emulation measurements do not demonstrate true FP32 arithmetic.
 
-## Reproducing the current foundation gate
+### Reproducing the current foundation gate
 
 Current CMake configuration was generated with:
 
@@ -206,7 +293,7 @@ macOS-specific. `fp32-foundations` labels the 26 C++/environment cases and seven
 Python integration cases for the work implemented so far. It is not a substitute
 for M3 hydro integration or the M4–M6 acceptance gates.
 
-## Final validated checkpoint — 2026-11-08
+### Final validated checkpoint — 2026-11-08
 
 - `ctest --test-dir build --output-on-failure -L fp32-foundations`:
   **33/33 passed**, 57.69 seconds. Covers the current EOS/reference/HLLC/gravity
@@ -225,7 +312,7 @@ for M3 hydro integration or the M4–M6 acceptance gates.
   is additive; legacy anomaly storage still works, but perturbation EOS requires
   the original composition rather than guessing it from an evolved restart.
 
-## PR #326 rebase and CI repair — 2026-11-09
+### PR #326 rebase and CI repair — 2026-11-09
 
 - Rebased onto snapy main `3c891cb` (#337 radial wall refresh and #338 species
   positivity limiter). The rebase applied without textual conflicts.
@@ -268,12 +355,12 @@ Validation results:
 - `PYTHONPATH=/tmp/snapy-326-python python tests/test_tracer_ratio.py`:
   **passed**; both anomaly cases preserve ratios within 7e-16.
 - `git diff --check`, `python -m py_compile tests/test_tracer_ratio.py`, and
-  `pre-commit run --files FP32_PROGRESS.md FP32_ROADMAP.md .github/workflows/ci.yml .github/workflows/release.yml CMakeLists.txt cmake/modules/FindKintera.cmake pyproject.toml src/hydro/hydro_forward.cpp tests/CMakeLists.txt tests/test_tracer_ratio.py`:
+  `pre-commit run --files V3_PROGRESS.md V3_ROADMAP.md .github/workflows/ci.yml .github/workflows/release.yml CMakeLists.txt cmake/modules/FindKintera.cmake pyproject.toml src/hydro/hydro_forward.cpp tests/CMakeLists.txt tests/test_tracer_ratio.py`:
   **passed**.
 - Local validation is macOS CPU only. CUDA and production FP32 acceptance
   remain outstanding; milestone scope is unchanged.
 
-### Linux CI follow-up
+#### Linux CI follow-up
 
 CI run `42645426999` passed pre-commit and macOS (4/4 tests). Linux passed its
 build/install but failed one CTest: `test_uranus_cycle1_abort.release`. The dry
@@ -295,7 +382,7 @@ chemistry. No kintera source modification is needed for this caller fix.
 - `ctest --test-dir build --output-on-failure -R '^test_example_ic_stretched_python$'`:
   **1/1 passed**, 2.73 seconds.
 
-## PR326_REVIEWS.md follow-up — 2026-11-09
+### PR326_REVIEWS.md follow-up — 2026-11-09
 
 - Restore #332's deficit-based redo criterion with `species_repair_mark` and
   pre-repair species density; use total dry density in anomaly mode. A new
@@ -343,10 +430,10 @@ Review validation (macOS CPU, tagged kintera 2.6.9):
 - `ctest --test-dir build --output-on-failure -L fp32-foundations`:
   **34/34 passed**, 58.86 seconds.
 - `git diff --check`, `python -m py_compile tests/test_anomaly_storage.py`, and
-  `pre-commit run --files README.md FP32_PROGRESS.md FP32_ROADMAP.md src/eos/equation_of_state.cpp src/eos/ideal_moist.cpp src/mesh/meshblock.cpp tests/test_eos.cpp tests/test_fix_vapor_deficit.cpp tests/test_anomaly_storage.py tests/CMakeLists.txt`:
+  `pre-commit run --files README.md V3_PROGRESS.md V3_ROADMAP.md src/eos/equation_of_state.cpp src/eos/ideal_moist.cpp src/mesh/meshblock.cpp tests/test_eos.cpp tests/test_fix_vapor_deficit.cpp tests/test_anomaly_storage.py tests/CMakeLists.txt`:
   passed.
 
-## Rebase onto main 919936d — 2026-11-12
+### Rebase onto main 919936d — 2026-11-12
 
 - Rebased the seven PR commits onto main `919936da07d80a310b98ab11da184972a3203274`
   (#340 Roe face frames, #334 CUDA reconstruction launch sizing, #339 optional
@@ -374,14 +461,14 @@ changes require CUDA CI/hardware.
   orders 2 and 4.
 - `ctest --test-dir build --output-on-failure -R '^test_(conversion_order|wb_ref4_order|roe_cubed_sphere_rest)_python$'`:
   **3/3 passed**, 40.42 seconds.
-- `pre-commit run --files src/hydro/hydro.hpp src/hydro/hydro_options.cpp src/hydro/hydro_forward.cpp tests/test_anomaly_storage.py FP32_PROGRESS.md`,
+- `pre-commit run --files src/hydro/hydro.hpp src/hydro/hydro_options.cpp src/hydro/hydro_forward.cpp tests/test_anomaly_storage.py V3_PROGRESS.md`,
   `python -m py_compile tests/test_anomaly_storage.py`, and `git diff --check`:
   passed.
 
-## Next milestone: M3a signed pressure scan — 2026-11-12
+### Next milestone: M3a signed pressure scan — 2026-11-12
 
 - Start `fp32-step2-pressure-scan` from merged main `2d92c92` (PR #326).
-- Implement the first of three M3 stages listed in FP32_ROADMAP.md. The new
+- Implement the first of three M3 stages listed in V3_ROADMAP.md. The new
   internal API requires an explicit anchor increment and scans mixture-density
   increments directly; it must not derive an exponential anchor, clamp signed
   deltas, or subtract rounded total pressures.
@@ -395,7 +482,7 @@ changes require CUDA CI/hardware.
   >=2.6.9 pressure helper is sufficient; no cross-repo source change is needed.
 
 
-### M3a implementation and validation
+#### M3a implementation and validation
 
 - Added `HydroReferenceX1Operator::scan_pressure(rho, grav, anchor)`, returning
   lower/upper face pressure on each cell, ghosts included. It requires an
@@ -425,13 +512,13 @@ changes require CUDA CI/hardware.
 - `ctest --test-dir build --output-on-failure -L fp32-foundations`:
   **35/35 passed**, 54.89 seconds (including existing wall/stretched-grid/seam,
   EOS, HLLC, gravity, anomaly storage and restart regressions).
-- `pre-commit run --files src/hydro/hydro_reference.hpp src/hydro/hydro_ref_x1_impl.h src/hydro/hydro_dispatch.hpp src/hydro/hydro_dispatch.cpp src/hydro/hydro_dispatch.cu tests/test_pressure_scan_x1.cpp tests/CMakeLists.txt FP32_ROADMAP.md FP32_PROGRESS.md`
+- `pre-commit run --files src/hydro/hydro_reference.hpp src/hydro/hydro_ref_x1_impl.h src/hydro/hydro_dispatch.hpp src/hydro/hydro_dispatch.cpp src/hydro/hydro_dispatch.cu tests/test_pressure_scan_x1.cpp tests/CMakeLists.txt V3_ROADMAP.md V3_PROGRESS.md`
   and `git diff --check`: passed.
 - M3a implementation is ready for review with CPU evidence. GPU execution and
   actual MPS validation remain outstanding. M3b and M3c are not implemented;
   the new scan is an internal building block, not an enabled hydro mode.
 
-### M3b/M3c implementation in progress
+#### M3b/M3c implementation in progress
 
 - Reused the complete CPU/CUDA reference kernel with finite-increment FP64
   scalar pairs, including the M3a recurrence. Nonlinear branches inspect totals;
@@ -451,7 +538,7 @@ changes require CUDA CI/hardware.
   balanced/unbalanced rest, heating, split-column and conservation checks.
 
 
-### M3b/M3c completion — 2026-11-12
+#### M3b/M3c completion — 2026-11-12
 
 - M3b and M3c implementation is complete for the documented Cartesian,
   constant-cv ideal-moist HLLC scope. Numerical contract and remaining M4
@@ -502,7 +589,7 @@ changes require CUDA CI/hardware.
   FP64 implicit/chemistry boundaries, and full moist GPU acceptance. M3 CPU
   implementation is no longer blocking that work.
 
-### Rebase onto main aced752 — 2026-11-13
+#### Rebase onto main aced752 — 2026-11-13
 
 - Rebased PR #342 onto main's consolidated hydrostatic density reference,
   reconstruction, VIC gravity work, moist EOS base and deck-option defaults.
@@ -521,7 +608,7 @@ changes require CUDA CI/hardware.
   count. `ctest --test-dir build --output-on-failure -R 'test_(options_defaults|eos_io_core|lu_failure|pref_local_seam)\.release'`:
   **4/4 passed**, 3.02 seconds. Kintera remains 2.6.10; no cross-repo API changes.
   CUDA remains untested on this CPU host.
-### M4 started — 2026-11-12
+#### M4 started — 2026-11-12
 
 - Branch `fp32-step3-compute`, based on M3 `9f18a2d` (PR #342).
 - M4a: explicit precision policy, FP32 state/RK/flux/tendency buffers, FP64
@@ -533,7 +620,7 @@ changes require CUDA CI/hardware.
 - Initial audit finds snapy-side dtype assumptions; no necessary kintera source
   change identified yet. Existing FP64 chemistry APIs will be exercised first.
 
-### M4a checkpoint
+#### M4a checkpoint
 
 - Added `dynamics/precision: float32`, requiring the M3 anomaly/HLLC path.
   FP32 state/RK buffers, reconstruction, HLLC scratch/fluxes and divergence are
@@ -550,7 +637,7 @@ changes require CUDA CI/hardware.
   from its original RHS in FP64 and counts fallbacks explicitly.
 - No kintera source change required by the smoke/1000-step saturation runs.
 
-### M4b/M4c implementation checkpoint
+#### M4b/M4c implementation checkpoint
 
 - FP32 vertical implicit assembly/solve is the default under the explicit FP32
   dynamics policy. `implicit-precision` supports auto/float32/float64; pivot and
@@ -573,7 +660,7 @@ changes require CUDA CI/hardware.
   `test_pref_local_seam.cpp`; pass the new optional reference arguments explicitly
   because default arguments do not apply through member pointers.
 
-### M4 final fresh-build validation
+#### M4 final fresh-build validation
 
 - Built all 15 foundation C++ targets using the exact M3 build command above,
   adding `test_lu_failure.release`; exit 0. Built the corrected seam executable:
@@ -611,7 +698,7 @@ changes require CUDA CI/hardware.
   unvalidated. M5 covers broader coupled workflow/restart integration; M6 retains
   production science/performance validation. No new kintera dependency or API.
 
-### M4 rebase validation — 2026-11-13
+#### M4 rebase validation — 2026-11-13
 
 - Rebased PR #343 onto validated M3 `337b157`, based on main `aced752`.
   Preserved main's consolidated reconstruction, moist EOS and VIC operators,
@@ -630,7 +717,7 @@ changes require CUDA CI/hardware.
 - Cross-repo compatibility unchanged: kintera 2.6.10 tested, minimum 2.6.9,
   no kintera edits/API changes. CUDA and production GPU validation remain pending.
 
-### M5 started — 2026-11-16
+#### M5 started — 2026-11-16
 
 - Branch `fp32-step4-restart`, from main `3fe398a`. M3 and M4 entered main via
   #360/#361; original #342/#343 were closed. Their Linux/macOS and bitwise CPU
@@ -647,7 +734,7 @@ changes require CUDA CI/hardware.
   distributed/GPU validation remain separate, unverified work.
 - Contract: [fp32-restart.md](docs/derivations/fp32-restart.md).
 
-### M5 CPU implementation and validation — 2026-11-16
+#### M5 CPU implementation and validation — 2026-11-16
 
 - Version-1 anomaly metadata records saved storage precision and grid faces;
   unknown versions, inconsistent dtype/shape, missing backgrounds and changed
@@ -681,7 +768,7 @@ changes require CUDA CI/hardware.
   external paddle/production decks, actual distributed ranks, explicit remapping
   workflows and GPU execution. M6 science/performance work is not claimed here.
 
-### M5 merge confirmed — 2026-11-16
+#### M5 merge confirmed — 2026-11-16
 
 - PR #367 merged as `cbf8683009de2d4c211e65e5daeaf1ad1e05c80d`.
   Linux/macOS build-and-test, bitwise CPU and pre-commit CI all passed.
@@ -692,7 +779,7 @@ changes require CUDA CI/hardware.
   requires explicit remapping and background reconstruction; it is rejected by
   the current loader.
 
-### M6 started — 2026-11-16
+#### M6 started — 2026-11-16
 
 - Branch `fp32-step5-validation`, based on main `cbf8683`. User explicitly
   excluded regridding; changed-grid rejection remains the supported behavior.
@@ -708,7 +795,7 @@ changes require CUDA CI/hardware.
 - Restored missing pure-Python files and metadata in the isolated kintera
   install from the clean local 2.6.10 source; no kintera source modification.
 
-### M6 GPU validation without recompilation — 2026-11-16
+#### M6 GPU validation without recompilation — 2026-11-16
 
 - Used installed packages on dungeon3 GPU 0 (RTX 5090): Torch 2.10.0+cu128,
   snapy 2.13.27, kintera 2.6.10. Copied Python fixtures into an isolated
@@ -741,7 +828,7 @@ changes require CUDA CI/hardware.
 - Final science CTest after JSON failure-reporting edits: **1/1 passed**, 8.38 s.
   Compileall, Ruff F401/F821 and `git diff --check`: passed.
 
-### M6 Straka paired GPUs — 2026-11-16
+#### M6 Straka paired GPUs — 2026-11-16
 
 - User requested FP64 on one GPU and FP32 on the other. Ran dungeon3 GPU 0/1
   simultaneously with installed binaries; no recompilation. Added reproducible
@@ -761,7 +848,7 @@ changes require CUDA CI/hardware.
   comparison passed. Compileall, Ruff F401/F821 and `git diff --check` passed.
   Kintera remains unchanged. Jupiter/M5 restart/production gates remain open.
 
-### M6 Straka optimization work — 2026-11-16
+#### M6 Straka optimization work — 2026-11-16
 
 - User authorized prioritizing face-state conversions and forcing allocations.
   Dungeon3 binaries remain unchanged; new native code is validated with a local
@@ -772,7 +859,6 @@ changes require CUDA CI/hardware.
 - Sequential baseline profiles on dungeon3 GPU 0, each after 10 simulated
   seconds: FP64/FP32 `_to_copy` calls **105/805**, `copy_` calls **1925/2665**,
   `empty_strided` calls **1005/1730**, CUDA launches **8665/9765** over five steps.
-  Reports are saved in `docs/notes/fp32-m6-data/straka-profile/`.
 - Horizontal FP32 reconstruction now promotes only the two pressure rows for
   gauge restoration/flooring/background subtraction. Density/velocity/species
   faces remain FP32; covariance consumers retain the existing total-state path.
@@ -804,13 +890,12 @@ changes require CUDA CI/hardware.
 - Final guarded Straka command:
   `PYTHONPATH=/tmp/snapy-straka-opt-python python -u tests/run_fp32_straka.py --precision float32 --device cpu --tlim 30 --output /tmp/straka-final-30`:
   passed; all saved fields bit-identical to the original binary's 30-second run.
-  Results saved in `docs/notes/fp32-m6-data/straka-optimization/final-30.json`.
 - Google clang-format verification, Python compileall/Ruff F401/F821 and
   `git diff --check` passed. Native optimization is implemented and locally
   validated; optimized CUDA measurements remain pending the user's no-remote-
   rebuild constraint. Dungeon3 installation and kintera sources are unchanged.
 
-### GPU repeats and Kratos-based diagnosis — 2026-11-16
+#### GPU repeats and Kratos-based diagnosis — 2026-11-16
 
 - Completed the exact three-pair GPU-only Straka loop recorded in the M6 report:
   **6/6 passed**, 9000 steps each. Same GPU, sequential, reversed order in pair 2.
@@ -834,7 +919,7 @@ changes require CUDA CI/hardware.
   This diagnosis changes no native code or kintera API. Optimized GPU build
   permission remains pending; all new GPU timings use installed libraries.
 
-### HLLC fix and 2× Straka target — 2026-11-16
+#### HLLC fix and 2× Straka target — 2026-11-16
 
 - User requested HLLC first and a plan for 2× speed. Recorded staged work and
   measurement contract in `docs/notes/fp32-straka-speed-plan.md`.
@@ -858,7 +943,7 @@ changes require CUDA CI/hardware.
   H1 locally validated; GPU codegen/timing pending isolated build. H2/H3 fusion
   and dispatch work are planned to pursue the 2× target, not yet implemented.
 
-### H1 GPU validation — 2026-11-16 (complete)
+#### H1 GPU validation — 2026-11-16 (complete)
 
 - User requested GPU FP64/FP32 testing before further fusion work. H2 is paused.
 - Testing source commit `2f321dc` in `/tmp/snapy-hllc-2f321dc` on dungeon3;
@@ -893,7 +978,7 @@ changes require CUDA CI/hardware.
   Evidence Python compileall, Ruff F401/F821 and `git diff --check`: passed.
   Kintera 2.6.10 was used unchanged; other dependency combinations were not tested.
 
-### H2 constant cache and capture-safe capacity validation — 2026-11-16
+#### H2 constant cache and capture-safe capacity validation — 2026-11-16
 
 - Full-step CUDA capture probe warmed up successfully, then failed in
   `IdealMoistImpl::perturbations`: C++ stack traced `torch::tensor` through
@@ -935,7 +1020,7 @@ changes require CUDA CI/hardware.
   Google clang-format, evidence compileall/Ruff F401/F821 and `git diff --check`
   passed. Cache/check milestone complete; 2× graph-replay milestone remains open.
 
-### Fresh post-cache FP64/FP32 GPU repeats — 2026-11-16 (complete)
+#### Fresh post-cache FP64/FP32 GPU repeats — 2026-11-16 (complete)
 
 - User requested fresh FP64/FP32 testing. Reusing the validated isolated native
   build on dungeon3 (hashes match the cache/check report), without recompiling.
@@ -956,7 +1041,7 @@ changes require CUDA CI/hardware.
   production graph replay remains the next milestone. Evidence compileall,
   Ruff F401/F821 and `git diff --check` passed.
 
-### H3 CUDA graph replay — 2026-11-16 (Straka benchmark validated)
+#### H3 CUDA graph replay — 2026-11-16 (Straka benchmark validated)
 
 - Added opt-in `--execution cuda-graph` to the existing Straka benchmark,
   preserving eager as the default. No native kernel or kintera changes.
@@ -998,7 +1083,7 @@ changes require CUDA CI/hardware.
   moist, VIC, distributed or limiter-enabled graph execution. Broader M6 gates
   remain separate.
 
-### FP32 graph slowdown diagnosis — 2026-11-16 (complete)
+#### FP32 graph slowdown diagnosis — 2026-11-16 (complete)
 
 - Profiled three alternating graph FP64/FP32 pairs and one eager run per
   precision on dungeon3 GPU 0, reusing the validated build. Each run includes
@@ -1021,7 +1106,7 @@ changes require CUDA CI/hardware.
   No solver/native/kintera changes or new cross-repo compatibility risks.
   This identifies candidates; no additional speedup is claimed.
 
-### Dtype-conversion cache implementation — 2026-11-16 (complete)
+#### Dtype-conversion cache implementation — 2026-11-16 (complete)
 
 - Added a shared derived-tensor cast cache for uniform/nonuniform WENO5/Center5
   coefficients and divergence face areas/volume. Source edits, storage/metadata
@@ -1046,3 +1131,12 @@ changes require CUDA CI/hardware.
   Local formatting, diagnostic-script syntax and `git diff --check` passed.
   [Detailed results and evidence](docs/notes/fp32-straka-cast-cache.md).
   No kintera/restart changes; native ABI consumers/bindings require rebuilding.
+
+## Record for each implementation milestone
+
+Append: affected repositories and commit/version set; concrete changes; exact
+build/test/benchmark commands and results (including skips); capture/replay and
+failure-path evidence; same-precision and FP32/FP64 science comparisons; setup,
+runtime and peak-memory measurements; compatibility/restart implications;
+remaining blockers; and the next milestone. Update the table only when the
+stated exit gate passes. Proposed APIs/test names are not implemented features.

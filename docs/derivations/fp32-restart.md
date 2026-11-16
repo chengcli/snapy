@@ -46,5 +46,5 @@ Validation: `ctest --test-dir build --output-on-failure -L fp32-restart` covers
 heated and balanced cases, characteristic outflow, both precision-switch
 directions, legacy/corrupt metadata, grid mismatch, four-block bundles, and
 exact moist/chemistry continuation in FP32 and FP64. Results are recorded in
-[FP32_PROGRESS.md](../../FP32_PROGRESS.md). Production paddle drivers, external
+[V3_PROGRESS.md](../../V3_PROGRESS.md). Production paddle drivers, external
 Jupiter decks, distributed ranks and GPU execution require separate validation.

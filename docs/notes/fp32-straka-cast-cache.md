@@ -107,8 +107,8 @@ FP64 peak allocation stays at 19,572,224 bytes. The remaining copies include
 full-field hydro/EOS conversions; reducing those would require a separate
 numerical review rather than more constant caching.
 
-[Evidence](fp32-m6-data/straka-cast-cache/) includes both three-trial kernel
-summaries, full-run summaries with binary hashes, exact scripts and CTest log.
+Repository copies of the kernel/run summaries, scripts and CTest log have
+been removed. The results and commands above are retained.
 Local Google clang-format checking, Python compilation, `bash -n` on the
 benchmark script and `git diff --check` passed. No kintera or restart-schema
 changes; rebuild native snapy consumers/bindings together.

@@ -63,7 +63,8 @@ not establish correct repeated replay, stable RK input/output storage, or replay
 of host-managed limiter bookkeeping. Those remain required before exposing a
 production graph-execution option. No 2× speed claim is made from capture alone.
 
-Reproduction scripts and results: [evidence](fp32-m6-data/straka-cache/).
+Repository copies of the raw artifacts have been removed; the results and
+validation commands above are retained.
 
 Additional CUDA moist regression:
 
@@ -104,9 +105,7 @@ repeats and to the pre-cache same-precision run. At 900 s, FP32−FP64 theta err
 is **0.00165068 K RMS / 0.0338796 K maximum**, relative L2 **0.125724%**. Both
 cold fronts are at **15.35 km**. FP32 relative mass drift is **6.46765e-10**.
 
-[Raw reports, hashes and summary](fp32-m6-data/straka-cache-repeat/summary.json),
-[comparison plot](fp32-m6-data/straka-cache-repeat/theta-comparison.png), and
-[exact benchmark script](fp32-m6-data/straka-cache-repeat/snapy-cache-repeat.sh)
-are retained. Installed snapy and kintera 2.6.10 are unchanged; no source/API
+Repository copies of the raw reports, plot and benchmark script have been
+removed. Installed snapy and kintera 2.6.10 are unchanged; no source/API
 changes were made during these repeats. Evidence compileall, Ruff F401/F821
 and `git diff --check` passed.

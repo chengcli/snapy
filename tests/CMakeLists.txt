@@ -805,7 +805,7 @@ if (UNIX AND NOT APPLE)
 endif()
 
 # Reproducible gate for the FP32 foundations. This does not replace the coupled
-# Jupiter/production-GPU acceptance runs in FP32_ROADMAP.md.
+# Jupiter/production-GPU acceptance runs in V3_ROADMAP.md.
 foreach(_t IN ITEMS
     test_eos test_coordinate test_fp32_storage test_balance_column
     test_balance_column_x1_centroid

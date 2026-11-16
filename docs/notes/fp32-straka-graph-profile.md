@@ -102,9 +102,9 @@ establish that these small changes can deliver 2× over FP64 graphs. The earlier
 
 ## Evidence and validation
 
-[Evidence directory](fp32-m6-data/straka-graph-profile/) contains the diagnostic
-scripts, three-trial kernel summary, compact caller/shape counts and eight run
-reports. Full traces and full C++ backtraces remain on dungeon3 under
+Repository copies of the diagnostic scripts, kernel/caller summaries and run
+reports have been removed. Full traces and full C++ backtraces were stored on
+dungeon3 under
 `/tmp/snapy-hllc-2f321dc/results/graph-profile/`. The run reports include native
 library hashes; installed package version metadata alone does not identify the
 isolated native build. No installed package or remote checkout was changed.
@@ -125,10 +125,5 @@ are unchanged. Future caches must preserve coefficient/geometry updates and
 graph recapture semantics. No new behavioral tests are needed for this
 diagnostic-only change.
 
-Local artifact checks passed (exit 0):
-
-```sh
-python -m compileall -q docs/notes/fp32-m6-data/straka-graph-profile
-bash -n docs/notes/fp32-m6-data/straka-graph-profile/profile-straka-checked.sh
-git diff --check
-```
+Historical local artifact checks (Python compileall, `bash -n` on the benchmark
+script and `git diff --check`) passed before the raw artifacts were removed.

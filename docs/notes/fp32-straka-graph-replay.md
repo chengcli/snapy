@@ -54,8 +54,9 @@ adding all setup time to the measured interval is a conservative upper bound
 that counts in-run setup twice. This bound is also compared with eager FP64.
 Peak CUDA allocation includes retained graph input/output and work storage.
 
-Reports, binary hashes, scripts and host-load observations are retained in
-[the evidence directory](fp32-m6-data/straka-replay/). All ten full runs and all-field comparisons passed. Results follow.
+Repository copies of the raw reports, hashes, scripts and host-load observations
+have been removed. All ten full runs and all-field comparisons passed; the
+results below are retained.
 
 
 ## Results

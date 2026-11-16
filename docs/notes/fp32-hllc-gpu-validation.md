@@ -19,8 +19,8 @@ compatibility with other CUDA installations. Kintera source/API is unchanged.
 The runner's `snapy` version field comes from installed distribution metadata;
 use the source commit and native SHA256 hashes to identify this tested build.
 
-Build/test scripts and raw results are in
-[the evidence directory](fp32-m6-data/straka-hllc-gpu/). Commands below run on
+Repository copies of the build/test scripts and raw results have been removed.
+Commands below run on
 dungeon3 after extracting `git archive 2f321dc` into the isolated `src` directory.
 
 ```sh
@@ -135,9 +135,8 @@ At 900 s:
   versus the historical 11,710,976 bytes; registered-buffer counts alone miss it.
 
 These are observed numerical differences, not a new scientific-equivalence
-threshold. [Raw reports, hashes, timing and comparison summary](fp32-m6-data/straka-hllc-gpu/summary.json)
-and [the final field comparison plot](fp32-m6-data/straka-hllc-gpu/theta-comparison.png)
-are retained. The installed library hashes match their pre-test values.
+threshold. Repository copies of the raw reports, hashes and comparison plot
+have been removed. The installed library hashes matched their pre-test values.
 
 ## Next milestone
 
@@ -149,9 +148,7 @@ FP32 launches per step versus 1733 FP64**, and many more casts/copies. Preserve
 this numerical comparison and the per-step safety checks for subsequent work.
 No H2 implementation was made during this GPU-validation step.
 
-Local evidence checks:
-`python -m compileall -q docs/notes/fp32-m6-data/straka-hllc-gpu`,
-`ruff check --no-cache --select F401,F821 docs/notes/fp32-m6-data/straka-hllc-gpu`,
-and `git diff --check`: **passed**. Kintera is unchanged and compatibility was
+Historical local evidence checks (Python compileall, Ruff F401/F821 and
+`git diff --check`) **passed** before the raw artifacts were removed. Kintera is unchanged and compatibility was
 exercised with installed 2.6.10; other dependency combinations are not covered
 by this run.

@@ -80,9 +80,8 @@ Each platform completed 18 column trajectories (3 cases × 3 seeds × 2
 precisions) at dt=0.05 and the Jupiter pair at dt=0.1. Both complete commands
 returned **failure solely at the final Jupiter paired-state gate**. Column
 budgets, paired column states, Jupiter family/scalar comparisons, standalone
-Jupiter mass checks and zero-fallback checks passed. Reports retain that failure:
-[CPU JSON](fp32-m6-data/cpu-implicit.json),
-[GPU JSON](fp32-m6-data/gpu-implicit.json).
+Jupiter mass checks and zero-fallback checks passed. The raw CPU/GPU reports
+recorded that failure; repository copies of those reports have been removed.
 
 | Measurement | CPU (M1 Max) | GPU (RTX 5090) |
 | --- | ---: | ---: |
@@ -182,15 +181,14 @@ these results. FP32 saved 39.9% registered storage and 25.0% CUDA peak allocatio
 but took 10.5% longer in this single simultaneous-run measurement. Shared-host
 contention and run-to-run variance prevent treating this as an isolated benchmark.
 
-[Comparison JSON with histories/provenance](fp32-m6-data/straka/comparison.json)
-and [field plot](fp32-m6-data/straka/theta-comparison.png) are retained. Raw NPZ
-snapshots and emitted configurations remain under each remote output directory
+Repository copies of the comparison JSON and field plot have been removed.
+Raw NPZ snapshots and emitted configurations remain under each remote output directory
 and in `/tmp/snapy-m6-results/` locally. Reproduce the comparison after retrieval:
 
 ```sh
 MPLCONFIGDIR=/tmp/snapy-mpl python tests/compare_fp32_straka.py \
   /tmp/snapy-m6-results/straka-float64 /tmp/snapy-m6-results/straka-float32 \
-  --output docs/notes/fp32-m6-data/straka
+  --output /tmp/snapy-m6-comparison/straka
 ```
 
 The comparison command passed and checks matched coordinates, timesteps, steps,
@@ -221,9 +219,9 @@ redo checks, excluding the runner's CFL/finite checks and snapshots.
 | `aten::empty_strided` | 1005 | 1730 |
 | `cudaLaunchKernel` | 8665 | 9765 |
 
-[FP64 profile](fp32-m6-data/straka-profile/float64.json) and
-[FP32 profile](fp32-m6-data/straka-profile/float32.json) include CPU/device operator
-times, counts and native-library hashes. This confirms overhead in the dry
+The FP64/FP32 profiles recorded CPU/device operator times, counts and
+native-library hashes; repository copies have been removed. The results above
+confirm overhead in the dry
 Straka path without invoking chemistry as an explanation.
 
 The proposed native changes target horizontal face-state promotion/demotion and
@@ -271,8 +269,8 @@ C++ executables were rebuilt against the changed Hydro class layout. Python CTes
 was configured with `-DSNAPY_TEST_PYTHONPATH=/tmp/snapy-straka-opt-python`.
 
 The two 900-second runs passed and saved **bit-identical** theta, primitive,
-conserved and tracer arrays at 0, 300, 600 and 900 seconds. See
-[CPU equivalence/profile data](fp32-m6-data/straka-optimization/cpu-comparison.json).
+conserved and tracer arrays at 0, 300, 600 and 900 seconds. Repository copies
+of the raw CPU equivalence/profile data have been removed.
 The five-step CPU profiles show `_to_copy` calls 2270→2255, `copy_` 4265→4250,
 `empty_strided` 3195→3165, `clone` 330→315 and `empty` 1260→1245. Operator counts
 alone do not capture the reduction in full-face tensor bytes converted. CPU
@@ -297,8 +295,9 @@ PYTHONPATH=/tmp/snapy-straka-opt-python python -u tests/run_fp32_straka.py \
 science smoke test. This includes restart/multi-block, VIC, moist 1000-step and
 standalone Jupiter checks; it does not clear the separate long paired Jupiter
 science gate. The final 30-second Straka run passed and was bit-identical to the
-original binary for all four saved fields; [checks and final binary hashes](fp32-m6-data/straka-optimization/final-30.json)
-are retained. Google clang-format verification, Python compileall/Ruff F401/F821
+original binary for all four saved fields. Repository copies of the raw checks
+and final binary hashes have been removed. Google clang-format verification,
+Python compileall/Ruff F401/F821
 and `git diff --check` passed. Optimized GPU timing remains unmeasured.
 
 ## Repeated GPU-only Straka comparison (installed binary)
@@ -338,7 +337,6 @@ were 63.4482, 63.0573 and 63.5365 s; FP32 times were 69.9918, 70.2651 and
 70.2006 s. Medians are **63.4482 / 70.2006 s**, so FP32 latency is **10.6423%**
 higher. Sample standard deviations are 0.2550 / 0.1428 s. Final theta, primitive,
 conserved and tracer fields are bit-identical across repetitions of each dtype.
-[Raw summary and provenance](fp32-m6-data/straka-gpu-repeat.json).
 
 See [the Kratos-based diagnosis](fp32-kratos-diagnosis.md) for subsequent analysis
 of the precision policy, implicit C++ promotions and GPU kernel attribution.
