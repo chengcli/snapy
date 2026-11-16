@@ -934,3 +934,66 @@ changes require CUDA CI/hardware.
   passed (exit 0), closed/heated/sedimenting cases with explicit/implicit schemes.
   Google clang-format, evidence compileall/Ruff F401/F821 and `git diff --check`
   passed. Cache/check milestone complete; 2× graph-replay milestone remains open.
+
+### Fresh post-cache FP64/FP32 GPU repeats — 2026-11-16 (complete)
+
+- User requested fresh FP64/FP32 testing. Reusing the validated isolated native
+  build on dungeon3 (hashes match the cache/check report), without recompiling.
+- Three sequential alternating pairs on RTX 5090 GPU 0, second pair reversed;
+  full 9000-step Straka, identical diagnostics and timestep checks. Eager
+  execution; production CUDA graph replay is not enabled.
+- Command: `bash /tmp/snapy-hllc-2f321dc/snapy-cache-repeat.sh`.
+  New outputs live in `results/cache-repeat/`, preserving all earlier results.
+
+- Benchmark and summary commands passed: **6/6 runs**, 9000 steps each. Median
+  FP64 **62.8547 s**, FP32 **69.8552 s**: FP32 **11.138% slower**. Ranges
+  62.7083–63.0953 / 69.4359–70.0161 s; sample stddev 0.1954 / 0.2995 s.
+- All saved fields are bit-identical across same-precision repeats and against
+  pre-cache same-precision results. Final theta error **0.00165068 K RMS**,
+  maximum **0.0338796 K**, FP32 relative mass drift **6.46765e-10**.
+- [Detailed results and reproduction](docs/notes/fp32-cache-validation.md).
+  No native changes or kintera changes. The eager 2× target remains unmet;
+  production graph replay remains the next milestone. Evidence compileall,
+  Ruff F401/F821 and `git diff --check` passed.
+
+### H3 CUDA graph replay — 2026-11-16 (Straka benchmark validated)
+
+- Added opt-in `--execution cuda-graph` to the existing Straka benchmark,
+  preserving eager as the default. No native kernel or kintera changes.
+- The fixture-specific executor keeps detached input storage alive across native
+  RK `set_`/`set_data`, copies current outputs/caller edits into those inputs
+  before replay, and recaptures on timestep or state-storage changes.
+- Warmup uses zero-duration stages and restores all state, without accepting
+  synthetic steps or resetting the integrator's retry counters. Capture setup
+  time, capture count and replay count are reported separately. Recaptures during
+  the simulation remain inside its timed interval.
+- Restrict to the dry Cartesian explicit RK3 Straka fixture with limiter off;
+  moist chemistry, implicit solves, host limiter queues and distributed exchange
+  are not supported. Configuration/reference changes require a new executor.
+- `CUDA_VISIBLE_DEVICES=0 PYTHONPATH=/tmp/snapy-hllc-2f321dc/package /home/chengcli/pyenv/bin/python tests/test_straka_cuda_graph.py`:
+  passed for FP64 and FP32: 100 bit-identical eager/replay steps, changed dt,
+  replaced storage, in-place perturbation, and native rollback after injected
+  NaNs. Added CUDA-only CTest registration.
+- Running three full eager-FP64/graph-FP64/graph-FP32 trials, reversed order in
+  trial 2, plus one fresh eager-FP32 run. CFL, retry and finite checks and snapshot
+  schedules are unchanged. Target remains 2× eager FP64 on the fixed grid.
+
+- `bash /tmp/snapy-hllc-2f321dc/snapy-replay-benchmark.sh`: **10/10 full runs passed**.
+  Three trials each: eager FP64 median **66.5690 s**, graph FP64 **29.4328 s**,
+  graph FP32 **31.1725 s**; one eager FP32 run **72.2040 s**.
+- FP32 graph versus eager FP64: **2.136×**; adding all graph setup conservatively
+  gives **31.4056 s / 2.120×**. All three matched pairs exceed 2×. Median meets
+  the original 31.7241 s target; slowest trial does not meet that historical
+  absolute threshold. Graph FP64 remains faster: this gain is from replay.
+- Summary script passed: all saved arrays at 0/300/600/900 s are bit-identical
+  to same-precision eager references across all repeats. Each graph run executes
+  9000 replays and four captures; in-run recapture stays in the timing.
+- `CUDA_VISIBLE_DEVICES=0 ctest --test-dir build --output-on-failure -R '^test_straka_cuda_graph_python$'`:
+  **1/1 passed**, 3.76 s, including final retry-budget exhaustion regression.
+- Peak graph FP64/FP32 allocation **19,572,224 / 14,952,448 bytes**. Graph storage
+  increases memory versus eager. Python compileall/Ruff and `git diff --check`
+  passed. [Report and artifacts](docs/notes/fp32-straka-graph-replay.md).
+- No native or kintera changes in this step. The fixed Straka throughput target
+  versus eager FP64 is met; this optional fixture path does not enable general
+  moist, VIC, distributed or limiter-enabled graph execution. Broader M6 gates
+  remain separate.

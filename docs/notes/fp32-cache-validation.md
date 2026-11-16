@@ -76,3 +76,37 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=/tmp/snapy-hllc-2f321dc/package \
 Passed (exit 0), covering closed, heated and sedimenting cases with the default
 explicit/implicit schemes. Kintera 2.6.10 is unchanged. Formatting, Python
 compileall, Ruff F401/F821 and `git diff --check` passed.
+
+
+## Fresh post-cache GPU repeats — 2026-11-16
+
+Command: `bash /tmp/snapy-hllc-2f321dc/snapy-cache-repeat.sh`: **6/6 passed**.
+Summary validation: `/home/chengcli/pyenv/bin/python /tmp/snapy-hllc-2f321dc/snapy-cache-repeat-summary.py`: **passed**.
+
+Three alternating pairs on dungeon3 RTX 5090 GPU 0, 9000 steps each, using the
+cache/check-validated binaries without recompiling. Both GPUs were initially
+idle; recorded host load average was 0.60. Eager execution, with graph replay
+not enabled. All CFL, rejection and finite-state checks and snapshots retained.
+
+| Trial | FP64 seconds | FP32 seconds |
+|---|---:|---:|
+| 1 | 63.095297 | 69.435885 |
+| 2 | 62.854693 | 69.855218 |
+| 3 | 62.708276 | 70.016083 |
+| Median | **62.854693** | **69.855218** |
+| Sample standard deviation | 0.195411 | 0.299541 |
+
+FP32 is **11.138% slower** (0.900× FP64 speed). The 2× target remains open.
+The current measurements do not isolate caching's performance contribution.
+
+Every saved array at 0/300/600/900 s is bit-identical across same-precision
+repeats and to the pre-cache same-precision run. At 900 s, FP32−FP64 theta error
+is **0.00165068 K RMS / 0.0338796 K maximum**, relative L2 **0.125724%**. Both
+cold fronts are at **15.35 km**. FP32 relative mass drift is **6.46765e-10**.
+
+[Raw reports, hashes and summary](fp32-m6-data/straka-cache-repeat/summary.json),
+[comparison plot](fp32-m6-data/straka-cache-repeat/theta-comparison.png), and
+[exact benchmark script](fp32-m6-data/straka-cache-repeat/snapy-cache-repeat.sh)
+are retained. Installed snapy and kintera 2.6.10 are unchanged; no source/API
+changes were made during these repeats. Evidence compileall, Ruff F401/F821
+and `git diff --check` passed.

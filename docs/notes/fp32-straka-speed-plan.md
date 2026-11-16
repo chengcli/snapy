@@ -138,3 +138,22 @@ Next: validate repeated replay with stable state storage and correct replay of
 limiter/retry bookkeeping before exposing an execution option. The separate dry
 HLLC fusion experiment failed parity checks and was removed from the active
 change; do not count it as implemented or validated.
+
+
+### Straka graph replay and throughput validation completed
+
+The runner now supports opt-in `--execution cuda-graph` through a small Python
+executor, with no new native kernels. Replay correctness, changed timesteps and
+storage, caller edits, rollback and retry-budget exhaustion are tested. Ten full
+GPU runs passed; every saved graph field matches eager execution bit for bit.
+
+Median graph FP32 **31.1725 s** versus matched eager FP64 **66.5690 s** gives
+**2.136×**, or **2.120×** with a conservative setup-inclusive bound. This meets
+the fixed-case paired throughput goal. Graph FP64 is faster still (**29.4328 s**):
+the gain comes from graph replay, not an FP32 arithmetic advantage. Median meets
+the original 31.7241 s threshold, though the slowest trial does not. Full detail:
+[graph replay report](fp32-straka-graph-replay.md).
+
+Stop expanding native fusion for this benchmark now that its throughput goal is
+met. General graph support for moist/implicit/distributed/limiter-enabled models
+and larger-grid scaling remain separate future work; eager remains the default.

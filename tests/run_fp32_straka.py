@@ -24,21 +24,7 @@ from snapy import MeshBlock, MeshBlockOptions, kIDN, kIPR
 from test_fp32_science import memory_bytes
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--precision", choices=["float64", "float32"], required=True)
-    ap.add_argument("--device", default="cuda")
-    ap.add_argument("--tlim", type=float, default=900.0)
-    ap.add_argument("--dt", type=float, default=0.1)
-    ap.add_argument("--output", type=Path, required=True)
-    ap.add_argument(
-        "--profile", action="store_true", help="Profile five extra steps after saving the run"
-    )
-    args = ap.parse_args()
-    if args.dt <= 0 or args.tlim <= 0:
-        ap.error("dt and tlim must be positive")
-    torch.set_num_threads(1)
-    device = torch.device(args.device)
+def make_case(precision, device):
     os.environ["DEVICE"] = device.type
     os.environ["DEVICE_ID"] = "0"
     root = Path(__file__).resolve().parents[1]
@@ -53,7 +39,7 @@ def main():
         {
             "anomaly": True,
             "perturbation-flux": True,
-            "precision": args.precision,
+            "precision": precision,
             "riemann-solver": {"type": "hllc"},
         }
     )
@@ -64,8 +50,6 @@ def main():
         "pressure-floor": 1.0e-10,
     }
     cfg["integration"]["ncycle_out"] = 0
-    args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "config.yaml").write_text(yaml.safe_dump(cfg))
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
         yaml.safe_dump(cfg, f)
     try:
@@ -86,9 +70,33 @@ def main():
     w[kIDN] = w[kIPR] / (rd * temp)
     ratio = torch.zeros_like(w[:1]) + (z / 6400.0).clamp(0.0, 1.0)
     state, _ = block.initialize({"hydro_w": w, "scalar_r": ratio})
-    expected = getattr(torch, args.precision)
+    expected = getattr(torch, precision)
     assert state["hydro_u"].dtype == state["scalar_s"].dtype == expected
     assert block.module("hydro").buffer("F1").dtype == expected
+    return block, state, cfg, rd, cp, x, z
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--precision", choices=["float64", "float32"], required=True)
+    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--tlim", type=float, default=900.0)
+    ap.add_argument("--execution", choices=["eager", "cuda-graph"], default="eager")
+    ap.add_argument("--dt", type=float, default=0.1)
+    ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument(
+        "--profile", action="store_true", help="Profile five extra steps after saving the run"
+    )
+    args = ap.parse_args()
+    if args.dt <= 0 or args.tlim <= 0:
+        ap.error("dt and tlim must be positive")
+    torch.set_num_threads(1)
+    device = torch.device(args.device)
+    os.environ["DEVICE"] = device.type
+    os.environ["DEVICE_ID"] = "0"
+    block, state, cfg, rd, cp, x, z = make_case(args.precision, device)
+    args.output.mkdir(parents=True, exist_ok=True)
+    (args.output / "config.yaml").write_text(yaml.safe_dump(cfg))
     sl = tuple(block.part((0, 0, 0), False))
     vol = block.module("coord").cell_volume()[sl[1:]].double()
     mass0 = (block.total_u(state)[sl][kIDN].double() * vol).sum().item()
@@ -118,6 +126,21 @@ def main():
         )
         print(data, flush=True)
 
+    graph_step = None
+    if args.execution == "cuda-graph":
+        if device.type != "cuda":
+            ap.error("cuda-graph execution requires CUDA")
+        from straka_cuda_graph import StrakaGraphStep
+
+        graph_step = StrakaGraphStep(block, state, args.dt, cfg)
+
+    def advance(dt):
+        if graph_step is not None:
+            graph_step(dt)
+        else:
+            for stage in range(len(block.intg.stages)):
+                block.forward(state, dt, stage)
+
     snapshot(0.0)
     if device.type == "cuda":
         torch.cuda.synchronize()
@@ -129,8 +152,7 @@ def main():
         dt = min(args.dt, args.tlim - current, next_output - current)
         allowed = block.max_time_step(state)
         assert dt <= allowed * (1.0 + 1.0e-10), (current, dt, allowed)
-        for stage in range(len(block.intg.stages)):
-            block.forward(state, dt, stage)
+        advance(dt)
         assert block.check_redo(state) == 0, (current, "step rejected")
         assert torch.isfinite(state["hydro_u"]).all(), current
         steps += 1
@@ -145,6 +167,10 @@ def main():
         torch.cuda.synchronize()
     report = {
         "precision": args.precision,
+        "execution": args.execution,
+        "graph_setup_seconds": graph_step.setup_seconds if graph_step else 0.0,
+        "graph_captures": graph_step.captures if graph_step else 0,
+        "graph_replays": graph_step.replays if graph_step else 0,
         "device": str(device),
         "gpu": torch.cuda.get_device_name() if device.type == "cuda" else None,
         "visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
@@ -174,8 +200,7 @@ def main():
             activities.append(torch.profiler.ProfilerActivity.CUDA)
         with torch.profiler.profile(activities=activities, record_shapes=True) as prof:
             for _ in range(5):
-                for stage in range(len(block.intg.stages)):
-                    block.forward(state, args.dt, stage)
+                advance(args.dt)
                 assert block.check_redo(state) == 0
             if device.type == "cuda":
                 torch.cuda.synchronize()
