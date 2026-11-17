@@ -99,6 +99,37 @@ not replacements for the current milestone tables.
   no predecessor filenames remain in repository references. No runtime or
   dependency changes; runtime tests are not needed for this documentation/comment-only edit.
 
+### 2026-11-16 — PR #368 covariance-off review coverage
+
+- Added a paired FP32/FP64 regression with `flux-covariance=false`, independent
+  x2/x3 sweeps, a nonuniform pressure background and 20 RK3 steps per arm.
+  Registered CPU and CUDA variants under `fp32-foundations`/`fp32-compute`.
+- Corrected the M6 note: historical Straka runs and the old 40/40 suite kept
+  covariance enabled and did not exercise the new horizontal branch. Detailed
+  commands, tolerances and results are in the
+  [review follow-up](docs/notes/fp32-m6-validation.md#pr-368-review-follow-up--covariance-off-coverage-2026-11-16).
+- Rebuilt local CPU core/bindings from reviewed head
+  `3289c456404ecd50ba0ecf7947e545940c66a65f`; reused the matching isolated CUDA
+  build on dungeon3 (RTX 5090, kintera 2.6.10). Local CPU and CUDA maximum
+  velocity errors were 1.221002e-6 m/s (x2) and 7.557630e-7 m/s (x3).
+- Mutation check: separate temporary libraries subtracting half the horizontal
+  pressure background failed both directions on CPU and CUDA (expected exit 1).
+  Errors increased to 0.4607246 and 0.2284097 m/s against a 5e-5 m/s limit.
+  No mutation was applied to the working source or normal libraries.
+- Local validation:
+  `ctest --test-dir build --output-on-failure -R '^test_(fp32_(horizontal_sweep|compute)|perturbation_flux)_python$'`
+  passed **3/3**. On dungeon3:
+  `ctest --test-dir /tmp/snapy-hllc-2f321dc/src/build --output-on-failure -R '^test_fp32_horizontal_sweep(_cuda)?_python$'`
+  passed **2/2**, including CUDA.
+- `python -m compileall -q tests/test_fp32_horizontal_sweep.py tests/test_perturbation_flux.py`,
+  `ruff check --no-cache --select F401,F821 tests/test_fp32_horizontal_sweep.py tests/test_perturbation_flux.py`,
+  `clang-format --style=Google --lines=9:16 src/utils/tensor_cast_cache.hpp | diff -u src/utils/tensor_cast_cache.hpp -`,
+  and `git diff --check` passed.
+- Documented the cast-cache restriction on independently versioned aliases and
+  unversioned writes (including CUDA graph replay). No solver, provider API or
+  dependency changes; no new cross-repository compatibility risk. M6 remains
+  open for the existing science/performance gates.
+
 ## FP32 implementation and validation history
 
 Historical foundation baseline (2026-11-08): snapy work was recorded on

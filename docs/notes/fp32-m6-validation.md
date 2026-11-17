@@ -234,11 +234,14 @@ must be measured with a rebuilt binary before claiming any benefit.
 
 ### Implemented changes and CPU equivalence
 
-`hydro_forward.cpp` now keeps horizontal FP32 face density/velocity/species in
-FP32 and batches the two pressure rows for FP64 gauge restoration, pressure
-flooring and background subtraction. It avoids a full FP64 face-state copy and
-conversion back to FP32. The gravity-balanced vertical sweep already kept faces
-in FP32. Covariance consumers and disabled sweeps retain their previous paths.
+With `dynamics/flux-covariance: false`, `hydro_forward.cpp` now keeps active
+horizontal FP32 face density/velocity/species in FP32 and batches the two
+pressure rows for FP64 gauge restoration, pressure flooring and background
+subtraction. That branch avoids a full FP64 face-state copy and conversion back
+to FP32. The gravity-balanced vertical sweep already kept faces in FP32.
+Covariance consumers and disabled sweeps retain their previous paths.
+Flux covariance defaults to true, and the Straka runner used below does not
+override it: those Straka runs did **not** exercise this new horizontal branch.
 The reconstruction input is copied directly to FP32, with its pressure anomaly
 computed in FP64 before assignment.
 
@@ -268,19 +271,23 @@ snapy package, preserving the baseline installation. The 15 unique foundation
 C++ executables were rebuilt against the changed Hydro class layout. Python CTest
 was configured with `-DSNAPY_TEST_PYTHONPATH=/tmp/snapy-straka-opt-python`.
 
-The two 900-second runs passed and saved **bit-identical** theta, primitive,
-conserved and tracer arrays at 0, 300, 600 and 900 seconds. Repository copies
-of the raw CPU equivalence/profile data have been removed.
+The two covariance-on 900-second runs passed and saved **bit-identical** theta,
+primitive, conserved and tracer arrays at 0, 300, 600 and 900 seconds. These
+results validate the shared-path/forcing changes, not the covariance-off
+horizontal sweep. Repository copies of the raw CPU equivalence/profile data
+have been removed.
 The five-step CPU profiles show `_to_copy` calls 2270→2255, `copy_` 4265→4250,
 `empty_strided` 3195→3165, `clone` 330→315 and `empty` 1260→1245. Operator counts
-alone do not capture the reduction in full-face tensor bytes converted. CPU
-elapsed times overlapped other builds/tests and are not a controlled speed claim.
+do not measure the inactive covariance-off branch's face-state conversion saving.
+CPU elapsed times overlapped other builds/tests and are not a controlled speed claim.
 
 The long optimized run preceded the final guard for disabled horizontal sweeps;
-that guard does not change Straka's active-sweep path. The final guarded binary
-is checked with the complete FP32 regression suite and a separate 30-second
-Straka comparison. Dungeon3 remains on the original installed binaries: no
-optimized GPU speedup or memory result is claimed until rebuilding is authorized.
+the covariance-off branch was inactive in Straka both before and after that guard.
+The final guarded binary was checked with the then-complete FP32 regression
+suite and a separate covariance-on 30-second Straka comparison. Neither provided
+coverage of the new covariance-off branch; PR #368 review identified that gap.
+At this historical checkpoint, dungeon3 remained on the original installed
+binaries: no optimized GPU speedup or memory result was claimed before rebuilding.
 Kintera source/API is unchanged.
 
 Final guarded-build validation:
@@ -299,6 +306,73 @@ original binary for all four saved fields. Repository copies of the raw checks
 and final binary hashes have been removed. Google clang-format verification,
 Python compileall/Ruff F401/F821
 and `git diff --check` passed. Optimized GPU timing remains unmeasured.
+
+### PR #368 review follow-up — covariance-off coverage (2026-11-16)
+
+The historical 40/40 result above did not cover the new horizontal sweep.
+`tests/test_fp32_horizontal_sweep.py` now explicitly sets
+`dynamics/flux-covariance: false` and tests x2 and x3 independently against the
+FP64 full-state reconstruction path. Both precisions start from the same FP64
+initial condition, with a horizontally varying pressure background and velocity.
+The other flux directions and gravity are disabled; zero species fractions
+isolate the dry limit. Each arm runs 20 RK3 steps at dt=0.05 s and asserts the
+requested storage dtype/device, active direction, finite state, positive density
+and nonzero reference evolution.
+
+Acceptance requires maximum active-velocity error <=5e-5 m/s and maximum
+per-field scaled primitive error <=2e-5. The latter divides each field's absolute
+error by its FP64 maximum magnitude, floored at one. CPU and CUDA CTest entries
+carry the `fp32-foundations` and `fp32-compute` labels; the CUDA entry is registered
+in CUDA builds and returns skip code 125 when CUDA is unavailable.
+
+The local CPU library and Python bindings were rebuilt from the reviewed head.
+Dungeon3 reused the matching isolated head library on RTX 5090 with PyTorch
+2.10.0+cu128 and kintera 2.6.10. Its core library SHA-256 was
+`8790a6a528893137ef209e0c8083976fd4260d67d3d734dacc9afa8fe3dd628c`.
+Separate temporary libraries changed only `pressure -= background` to
+`pressure -= 0.5 * background` inside the FP32 horizontal branch. This mutation
+leaves the FP64 reference path intact; the working source and normal libraries
+were not modified.
+
+| Case | x2 max velocity error (m/s) | x3 max velocity error (m/s) | Result |
+| --- | ---: | ---: | --- |
+| Local macOS CPU, reviewed implementation | 1.221002e-6 | 7.557630e-7 | Pass |
+| Dungeon3 CPU, reviewed implementation | 1.220634e-6 | 8.022738e-7 | Pass |
+| CUDA, reviewed implementation | 1.221002e-6 | 7.557630e-7 | Pass |
+| Local macOS CPU, half-background mutation | 4.607246e-1 | 2.284097e-1 | Fails both directions |
+| CUDA, half-background mutation | 4.607246e-1 | 2.284097e-1 | Fails both directions |
+
+The normal scaled primitive errors on local CPU and CUDA were 7.710517e-7 (x2)
+and 6.785613e-7 (x3); dungeon3 CPU gave 7.708191e-7 and 7.203210e-7.
+These are focused regression results, not new covariance-off Straka science or
+performance measurements. The separate long paired Jupiter gate remains open.
+
+Validation commands (local CTest uses `/tmp/snapy-pr368-python`):
+
+```sh
+ctest --test-dir build --output-on-failure \
+  -R '^test_(fp32_(horizontal_sweep|compute)|perturbation_flux)_python$'
+# 3/3 passed on CPU.
+
+# On dungeon3, using the matching isolated package:
+ctest --test-dir /tmp/snapy-hllc-2f321dc/src/build --output-on-failure \
+  -R '^test_fp32_horizontal_sweep(_cuda)?_python$'
+# 2/2 passed: CPU and CUDA arms on dungeon3.
+
+PYTHONPATH=/tmp/pr368-mutant-cpu/package python -u \
+  tests/test_fp32_horizontal_sweep.py --device cpu
+# Expected exit 1: x2/x3=[False, False].
+
+# On dungeon3, from /tmp/pr368-review:
+PYTHONPATH=/tmp/pr368-review/mutant/package /home/chengcli/pyenv/bin/python -u \
+  tests/test_fp32_horizontal_sweep.py --device cuda
+# Expected exit 1: x2/x3=[False, False].
+```
+
+The cast-cache header now documents its restriction against independently
+versioned aliases and unversioned writes, including raw-pointer writes and CUDA
+graph replay. No solver, provider API or dependency version changed; this review
+follow-up introduces no cross-repository compatibility change.
 
 ## Repeated GPU-only Straka comparison (installed binary)
 

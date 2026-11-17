@@ -414,6 +414,7 @@ snapy_add_python_test(test_radial_order TIMEOUT 300 LABELS "python;hydro")
 snapy_add_python_test(test_fp32_split SCRIPT test_perturbation_flux_split.py
   ARGS --precision float32 TIMEOUT 300 LABELS "python;hydro;fp32-foundations;fp32-compute")
 snapy_add_python_test(test_fp32_compute TIMEOUT 300 LABELS "python;hydro;fp32-foundations;fp32-compute")
+snapy_add_python_test(test_fp32_horizontal_sweep TIMEOUT 120 LABELS "python;hydro;fp32-foundations;fp32-compute")
 snapy_add_python_test(test_fp32_science TIMEOUT 300 LABELS "python;hydro;fp32-science")
 if(CUDAToolkit_FOUND)
   snapy_add_python_test(test_straka_cuda_graph TIMEOUT 300 LABELS "python;cuda;hydro;fp32-science")
@@ -450,6 +451,11 @@ snapy_add_python_test(test_density_ref_width_jump TIMEOUT 300 LABELS "python;hyd
 
 # CUDA variants reuse the same scripts and assertions.
 if(CUDA)
+  snapy_add_python_test(test_fp32_horizontal_sweep_cuda
+    SCRIPT test_fp32_horizontal_sweep.py ARGS --device cuda
+    TIMEOUT 120 LABELS "python;hydro;cuda;fp32-foundations;fp32-compute")
+  set_tests_properties(test_fp32_horizontal_sweep_cuda_python
+    PROPERTIES SKIP_RETURN_CODE 125)
   snapy_add_python_test(test_anomaly_storage_cuda
     SCRIPT test_anomaly_storage.py ARGS --device cuda
     TIMEOUT 300 LABELS "python;hydro;anomaly;cuda;fp32-foundations")

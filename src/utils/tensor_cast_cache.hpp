@@ -7,6 +7,13 @@ namespace snap {
 // Private, derived data: never register these tensors as module/restart
 // buffers. Reuse conversions of coefficients/geometry, not evolving simulation
 // state.
+// Aliasing contract: sources and returned values must not receive writes
+// through independently versioned aliases (including aliases made with
+// set_data), raw pointers, or CUDA graph replay. Such writes need not bump the
+// version checked here and can leave a stale conversion. Read-only aliases are
+// fine; ordinary versioned source edits and set_data on the source itself are
+// tracked. If an untracked write is possible, discard/recreate the cache before
+// its next use.
 class TensorCastCache {
  public:
   torch::Tensor get(torch::Tensor const& src, torch::Tensor const& like) {
