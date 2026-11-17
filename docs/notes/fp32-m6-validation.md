@@ -374,6 +374,70 @@ versioned aliases and unversioned writes, including raw-pointer writes and CUDA
 graph replay. No solver, provider API or dependency version changed; this review
 follow-up introduces no cross-repository compatibility change.
 
+### PR #368 review follow-up — disabled-axis guard (2026-11-17)
+
+Review of head `fb408de867c5fc904e6fe5b8b192c4afcdaf3bb8` identified another
+coverage gap: the paired test's disabled horizontal axis had uniform pressure,
+and the all-disabled check retained covariance on. Neither detected removal of
+the `disable_flux_x2`/`disable_flux_x3` checks in `active_horizontal`.
+
+The paired test now includes a 1% pressure cosine along the disabled horizontal
+axis as well as the active axis, and asserts that the other axis is disabled.
+Its existing all-field comparison catches the resulting unwanted transverse
+motion. `test_fp32_compute.py` now runs its all-disabled, at-rest check with
+covariance both on and off, requiring bitwise unchanged conserved state after
+two steps at dt=0.05 s. Existing tolerances are unchanged.
+
+In separate temporary CPU/CUDA libraries, replaced only the guard with
+`bool active_horizontal = dim == DIM2 || dim == DIM3;`, leaving sweep arithmetic
+intact. Both modified tests pass with the normal library and fail (exit 1) with
+this mutation on local CPU and dungeon3 CUDA (RTX 5090):
+
+| Check | Normal library | Guard mutation |
+| --- | ---: | ---: |
+| Paired sweep, x2 active: scaled primitive error | 6.633744e-7 | 6.169843e-1 |
+| Paired sweep, x3 active: scaled primitive error | 7.771514e-7 | 1.137464 |
+| All disabled, covariance off: max conserved change | 0 (bitwise equal) | 0.1290788 |
+| All disabled, covariance on: max conserved change | 0 (bitwise equal) | 0 (bitwise equal) |
+
+The paired test's scaled-error limit is 2e-5. Active-velocity error alone does
+not detect this mutation; checking all primitive fields is essential. This
+follow-up tests the disabled-axis guard, not the separate non-blocking mutation
+that removes only `!flux_covariance()`.
+
+Validation commands:
+
+```sh
+ctest --test-dir build --output-on-failure \
+  -R '^test_fp32_(horizontal_sweep|compute)_python$'
+# Local CPU: 2/2 passed, using /tmp/snapy-pr368-python.
+
+# On dungeon3:
+ctest --test-dir /tmp/snapy-hllc-2f321dc/src/build --output-on-failure \
+  -R '^test_fp32_(horizontal_sweep(_cuda)?|compute)_python$'
+# 3/3 passed, including the CUDA paired sweep.
+cd /tmp/snapy-hllc-2f321dc/src
+SNAP_TEST_DEVICE=cuda PYTHONPATH=/tmp/snapy-hllc-2f321dc/package \
+  /home/chengcli/pyenv/bin/python -u tests/test_fp32_compute.py
+# Passed, including both covariance settings for the all-disabled check.
+
+# Local CPU guard mutant: each command must exit 1 at the numerical assertion.
+PYTHONPATH=/tmp/pr368-guard-mutant-cpu/package python -u \
+  tests/test_fp32_horizontal_sweep.py --device cpu
+PYTHONPATH=/tmp/pr368-guard-mutant-cpu/package python -u \
+  tests/test_fp32_compute.py
+
+# On dungeon3, from /tmp/snapy-hllc-2f321dc/src: each command exited 1 as expected.
+PYTHONPATH=/tmp/pr368-guard/mutant/package /home/chengcli/pyenv/bin/python -u \
+  tests/test_fp32_horizontal_sweep.py --device cuda
+SNAP_TEST_DEVICE=cuda PYTHONPATH=/tmp/pr368-guard/mutant/package \
+  /home/chengcli/pyenv/bin/python -u tests/test_fp32_compute.py
+```
+
+Normal binaries were reused; only the isolated guard-mutant libraries were
+built. Working solver source and normal libraries were unchanged. No provider
+API/dependency changes or new cross-repository compatibility risks.
+
 ## Repeated GPU-only Straka comparison (installed binary)
 
 At the user's request, compare FP64 and FP32 only on dungeon3 GPU 0 (RTX 5090),

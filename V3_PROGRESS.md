@@ -1,6 +1,6 @@
 # V3 project progress: FP32 and CUDA graphs
 
-Updated: 2026-11-16. Plan: [V3_ROADMAP.md](V3_ROADMAP.md).
+Updated: 2026-11-17. Plan: [V3_ROADMAP.md](V3_ROADMAP.md).
 
 This tracker combines FP32 numerical implementation/science milestones M0–M6
 with CUDA graph milestones G0–G7 across snapy, kintera, pyharp and UCX/commux.
@@ -129,6 +129,32 @@ not replacements for the current milestone tables.
   unversioned writes (including CUDA graph replay). No solver, provider API or
   dependency changes; no new cross-repository compatibility risk. M6 remains
   open for the existing science/performance gates.
+
+### 2026-11-17 — PR #368 disabled-axis guard coverage
+
+- Added pressure variation along the disabled horizontal axis in the paired
+  sweep regression. The all-disabled FP32 check now runs with covariance both
+  on and off, retaining its bitwise-equality requirement.
+- Tested the exact reviewer mutation
+  `bool active_horizontal = dim == DIM2 || dim == DIM3;` in separate temporary
+  libraries. Both tests pass with the normal library and fail with the mutation
+  on local CPU and dungeon3 CUDA. Paired scaled errors become 0.6169843/1.137464
+  against 2e-5; the all-disabled covariance-off state changes by 0.1290788 instead
+  of remaining bitwise unchanged. These errors are from intentionally broken
+  temporary builds, not the working solver.
+- Validation:
+  `ctest --test-dir build --output-on-failure -R '^test_fp32_(horizontal_sweep|compute)_python$'`
+  passed **2/2** locally.
+  `ctest --test-dir /tmp/snapy-hllc-2f321dc/src/build --output-on-failure -R '^test_fp32_(horizontal_sweep(_cuda)?|compute)_python$'`
+  passed **3/3** on dungeon3.
+  `SNAP_TEST_DEVICE=cuda PYTHONPATH=/tmp/snapy-hllc-2f321dc/package /home/chengcli/pyenv/bin/python -u tests/test_fp32_compute.py`
+  also passed from the isolated dungeon3 source directory.
+- Python compileall, Ruff F401/F821 and format checks, and `git diff --check`
+  passed. Detailed commands and mutation evidence are in the
+  [validation note](docs/notes/fp32-m6-validation.md#pr-368-review-follow-up--disabled-axis-guard-2026-11-17).
+- No solver/provider changes or new cross-repository compatibility risks.
+  M6's outstanding science/performance gates are unchanged. The separate
+  non-blocking covariance-condition mutation has not been tested here.
 
 ## FP32 implementation and validation history
 

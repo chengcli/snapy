@@ -103,9 +103,16 @@ def zero_step_after_forcing():
     print("FP32 zero-duration stage after gravity: unchanged", flush=True)
 
 
-def disabled_fluxes():
+def disabled_fluxes(flux_covariance=False):
     """An inactive sweep must not introduce a background pressure source."""
-    block = make(True, precision="float32", gravity=False, disabled_dims=(1, 2, 3))
+    block = make(
+        True,
+        precision="float32",
+        gravity=False,
+        disabled_dims=(1, 2, 3),
+        flux_covariance=flux_covariance,
+    )
+    assert block.module("hydro").options.flux_covariance() is flux_covariance
     w = initial_state(block)["hydro_w"]
     w[5:].zero_()
     w[kIV1 : kIV1 + 3].zero_()
@@ -114,8 +121,13 @@ def disabled_fluxes():
     bv, _ = block.initialize({"hydro_w": w})
     before = interior(block, bv["hydro_u"]).clone()
     run_steps(block, bv, 2, dt=0.05)
-    assert torch.equal(interior(block, bv["hydro_u"]), before)
-    print("FP32 disabled fluxes: no pressure source", flush=True)
+    after = interior(block, bv["hydro_u"])
+    change = (after - before).abs().max().item()
+    print(
+        f"FP32 disabled fluxes, covariance={flux_covariance}: max conserved change={change:.6e}",
+        flush=True,
+    )
+    assert torch.equal(after, before), (flux_covariance, change)
 
 
 if __name__ == "__main__":
@@ -127,5 +139,6 @@ if __name__ == "__main__":
     for scheme in (0, 9):
         case(scheme, args.steps)
     zero_step_after_forcing()
-    disabled_fluxes()
+    for flux_covariance in (True, False):
+        disabled_fluxes(flux_covariance)
     assert torch.get_default_dtype() == original_dtype

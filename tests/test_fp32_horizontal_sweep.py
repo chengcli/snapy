@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Pair the covariance-off FP32 horizontal sweep with the FP64 reference path.
 
-Both x2 and x3 are tested independently with a nonuniform pressure background.
+Both x2 and x3 are tested independently with pressure variation along both the
+active and disabled horizontal axes, so an inactive sweep cannot add a source.
 The FP64 arm takes the full-state reconstruction path, so a mistake in FP32
 gauge restoration/background subtraction cannot cancel between the two arms.
 """
@@ -47,6 +48,13 @@ def compare(dim):
     shape[3 - dim] = -1
     phase = 2.0 * torch.pi * x.view(shape) / 4000.0
     w[kIPR] *= 1.0 + 0.01 * torch.cos(phase)
+    # A uniform disabled direction would hide a spurious background force if
+    # reconstruct_sweep stopped checking disable_flux_x2/disable_flux_x3.
+    other_dim = disabled[1]
+    other_shape = [1, 1, 1]
+    other_shape[3 - other_dim] = -1
+    other_x = coord.buffer(f"x{other_dim}v").view(other_shape)
+    w[kIPR] *= 1.0 + 0.01 * torch.cos(2.0 * torch.pi * other_x / 4000.0)
     velocity_row = kIV1 + dim - 1
     w[velocity_row] = 0.5 * torch.sin(phase)
     initial_velocity = interior(reference, w)[velocity_row].clone()
@@ -56,6 +64,7 @@ def compare(dim):
         hydro = block.module("hydro")
         assert hydro.options.flux_covariance() is False
         assert not getattr(hydro.options, f"disable_flux_x{dim}")()
+        assert getattr(hydro.options, f"disable_flux_x{other_dim}")()
         state, _ = block.initialize({"hydro_w": w.clone()})
         assert state["hydro_u"].dtype == getattr(torch, precision)
         assert state["hydro_u"].device.type == os.environ["SNAP_TEST_DEVICE"]
