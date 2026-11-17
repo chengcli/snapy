@@ -1,5 +1,10 @@
 #pragma once
 
+// C/C++
+#include <array>
+#include <functional>
+#include <map>
+
 // torch
 #include <torch/nn/cloneable.h>
 #include <torch/nn/module.h>
@@ -112,6 +117,58 @@ class InternalBoundaryImpl : public torch::nn::Cloneable<InternalBoundaryImpl> {
    * \return revised primitive left/right states
    */
   torch::Tensor forward(torch::Tensor wlr, int dim, torch::Tensor solid) const;
+
+  //! x2/x3 solid walls: one wall frame per fluid run with a solid end
+  struct Mirror {
+    std::vector<std::array<int, 2>> span;
+    std::vector<torch::Tensor> lines, src, sign;
+    torch::Tensor cov_keep;
+    //! x with the faces beside a solid set to 0 by a select (0 x NaN is NaN)
+    torch::Tensor drop_walls(torch::Tensor const &x, bool trim = false) const {
+      auto k = trim ? cov_keep.narrow(-1, 1, cov_keep.size(-1) - 2) : cov_keep;
+      return torch::where(k != 0, x, torch::zeros({}, x.options()));
+    }
+  };
+  //! the walls of other["solid"] (nullptr without one)
+  Mirror const *mirror_index(std::map<std::string, torch::Tensor> const &other,
+                             int dim) const;
+  //! recon of v, each wall frame's faces from recon of its frame
+  torch::Tensor reconstruct(
+      torch::Tensor v, Mirror const &m, int dim, int normal,
+      std::function<torch::Tensor(torch::Tensor const &)> const &recon) const;
+
+  //! x1 wall at each column's first fluid cell, grouped by depth
+  struct X1Group {
+    torch::Tensor depth;              // [nc3, nc2] int64, CPU
+    std::vector<int> depths;          // distinct, ascending
+    std::vector<torch::Tensor> cols;  // flat column indices per depth
+    bool uniform() const { return depths.size() == 1 && depths[0] == 0; }
+  };
+  //! per-column (cell) and per-face (x2, x3) groups; rest: other solids
+  struct X1Wall {
+    X1Group cell, face2, face3;
+    torch::Tensor rest;
+  };
+  //! the x1 wall of other["solid"], built once per mask (nullptr without one)
+  X1Wall const *x1_wall(
+      std::map<std::string, torch::Tensor> const &other) const;
+  //! fn on each depth's columns, x1 narrowed so il is the surface; below it
+  //! a copy of fn's first level, zeros, or (input_pad) t's own levels
+  torch::Tensor per_column(
+      X1Group const &g, torch::Tensor const &t,
+      std::function<torch::Tensor(torch::Tensor const &, int)> const &fn,
+      bool zero_pad = false, bool input_pad = false) const;
+  //! reflecting-wall ghosts below each column's surface
+  torch::Tensor x1_wall_fill(X1Group const &g, torch::Tensor const &v,
+                             int normal = -1) const;
+
+ private:
+  mutable std::shared_ptr<X1Wall> x1wall_;
+  mutable torch::Tensor x1wall_src_;  // held: its storage is not reused
+  mutable int64_t x1wall_ver_ = -1;
+  mutable std::map<int, Mirror> mirrors_;
+  mutable torch::Tensor mirror_src_;  // held, as x1wall_src_
+  mutable int64_t mirror_ver_ = -1;
 };
 TORCH_MODULE(InternalBoundary);
 

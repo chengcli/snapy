@@ -21,6 +21,10 @@ computed here from the coordinate buffers, independently of the option's own ari
       absolute AAM drift, max over the steps, must be GAIN times below off (transport is ~1.1);
   (l) with conserve-axial-momentum-closure on top of full the absolute AAM of (f)-(h) and of
       Williamson 2 at Omega and 4 Omega drifts at most TOL; with the key false the run is full's;
+  (m) with the closure over a uniform bottom-attached solid layer the fluid AAM drifts at most TOL;
+  (n) a uniform solid floor on the sphere and the plain wall two cells up agree in every field over
+      NSTEP steps, bitwise on the CPU and within the GPU's own rounding of the plain wall on CUDA;
+      twice the earth fill gives the floor bitwise on both;
   (d) the key is off by default, and a Cartesian block, where it does nothing, builds with it on;
       full is refused without geometry/cells/interp_order: 4;
   (e) an odd grid with a cell on the axis;
@@ -49,6 +53,7 @@ import math
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import torch
@@ -113,6 +118,8 @@ def aam(blocks, mesh_vars, omega=0.0):
             from snapy import kICY
             rho = u[kIDN] + u[kICY:].sum(0)  # total density: dry plus the species rows
             l = l + omega * vol * r * r * coord.buffer("aam_kk_c").double() * rho
+        if "solid" in mesh_vars[ib]:  # the fluid's AAM
+            l = l * ~mesh_vars[ib]["solid"]
         total += l[interior(block)].sum().item()
     return total
 
@@ -127,7 +134,7 @@ def energy(blocks, mesh_vars):
     return total
 
 
-def initial_state(cfg, blocks, wind, balanced, omega=0.0, w_up=0.0, vapor=0.0):
+def initial_state(cfg, blocks, wind, balanced, omega=0.0, w_up=0.0, vapor=0.0, solid=False):
     """Isothermal column in the scheme's discrete balance, times the rigid-rotation factor
     exp((w^2 + 2 w omega) s^2 / (2 RT)) when `balanced` (the frame rotates at omega), plus an east
     wind u_east(lon, lat, r cos lat)."""
@@ -145,7 +152,9 @@ def initial_state(cfg, blocks, wind, balanced, omega=0.0, w_up=0.0, vapor=0.0):
         col = torch.zeros(kIPR + 1, 1, 1, nx1, dtype=torch.float64)
         col[kIDN, 0, 0] = p * RHO0 / P0
         col[kIPR, 0, 0] = p
-        wb, _, _ = snapy.balance_column(col, dr.contiguous(), g)
+        # a solid deck (row (n)'s floor and its wall twin) balances against its own reference
+        ref = {"reference": "auto", "solid": True} if solid else {}
+        wb, _, _ = snapy.balance_column(col, dr.contiguous(), g, **ref)
         w = dict(block.named_buffers())["hydro.D"].clone().zero_()
         for c in (kIDN, kIPR):
             w[c][..., ng:ng + nx1] = wb[c, 0, 0].to(w)
@@ -597,6 +606,108 @@ def main(argv=None):
     gc.collect()
     if not worst <= TOL:
         failures.append("conserve-axial-momentum-closure: the absolute AAM drifts %.3e > %.0e" % (worst, TOL))
+
+    # (m) the closure over a uniform bottom-attached solid layer (no side walls, no mountain torque):
+    #     solid cells stay out of R, I and the increment, so the fluid AAM drifts at most TOL
+    cfg = config("full")
+    cfg["forcing"]["coriolis"] = {"type": "xyz", "omega1": W_SB}
+    mesh, blocks = build(with_full(cfg, close), args.device)
+    mv = initial_state(cfg, blocks, jet, True, W_SB)
+    for v in mv:
+        v["solid"] = torch.zeros(v["hydro_w"].shape[1:], dtype=torch.bool, device=v["hydro_w"].device)
+        ng = cfg["geometry"]["cells"]["nghost"]
+        v["solid"][..., ng:ng + 2] = True
+    _, _, drift, _, _ = run(mesh, blocks, mv, args.nstep, W_SB)
+    print("(m) solid floor, closure %s: max |dL| / |L| (fluid) = %.3e" % (close, drift))
+    if close and not drift <= TOL:
+        failures.append("closure over a solid floor: the fluid AAM drifts %.3e > %.0e" % (drift, TOL))
+    del mesh, blocks
+
+    # (n) a uniform 2-cell solid floor on the sphere is the plain wall two cells up: row (m)'s deck
+    #     (full, interp_order 4) with the closure and Coriolis off, the floor's initial fluid state and
+    #     the CPU floor's dt on every run, NSTEP steps; every primitive field, every step:
+    #     CPU: floor == wall bitwise, and the floor with twice the earth fill == the floor (no leak);
+    #     CUDA (--device cuda): the fill bitwise as on the CPU; floor vs wall within the GPU's own
+    #     rounding, measured here on the plain wall deck (no solid) as |wall_cuda - wall_cpu|: per
+    #     field, the running max over steps 1..t of |floor - wall| / max|wall| stays <= RN_CUDA times
+    #     that of the control (a field the control holds bitwise must stay bitwise). The floor's
+    #     14-cell and the wall's 12-cell x1 columns round differently on the GPU; on 23a610f the
+    #     per-step ratio reached 1.25 (p, ~1e-15) and the running-max ratio 1.0, so RN_CUDA = 2
+    RN_CUDA = 2.0
+
+    def floor_wall(k, w0, dts, device, fill=1.0):
+        cfg = with_full(config("full"), False)
+        b = cfg["geometry"]["bounds"]
+        b["x1min"] = float(b["x1min"]) + k * (float(b["x1max"]) - float(b["x1min"])) / 8
+        cfg["geometry"]["cells"]["nx1"] = 8 - k
+        if k == 0:
+            cfg["boundary-condition"]["internal"] = {"solid-density": 1.e3 * fill, "solid-pressure": 1.e9 * fill}
+        else:  # the floor's deck runs the upward x1 wall reference; the plain wall asks for it
+            cfg["dynamics"]["wb-wall-reference"] = "upward"
+        mesh, blocks = build(cfg, device)
+        mv = [{"hydro_w": w[..., k:].clone().to(device)} for w in w0]  # the wall deck drops k rows below
+        if k == 0:
+            for v in mv:
+                v["solid"] = torch.zeros(v["hydro_w"].shape[1:], dtype=torch.bool, device=v["hydro_w"].device)
+                v["solid"][..., 3:5] = True
+        mv, _ = mesh.initialize(mv)
+        l0, drift, out = aam(blocks, mv), 0.0, []
+        for cycle in range(1, args.nstep + 1):
+            mesh.set_cycle(cycle)
+            if len(dts) < cycle:  # the first run (the CPU floor) sets the steps
+                dts.append(mesh.max_time_step(mv))
+            for stage in range(len(blocks[0].module("intg").stages)):
+                mesh.forward(mv, dts[cycle - 1], stage)
+            assert mesh.check_redo(mv) == 0, "floor/wall step rejected at cycle %d" % cycle
+            drift = max(drift, abs(aam(blocks, mv) - l0) / abs(l0))
+            # clone: on the CPU .double().cpu() is a view of the state the next step overwrites
+            out.append([v["hydro_w"][:5, 3:-3, 3:-3, 3 + (2 - k):-3].double().cpu().clone() for v in mv])
+        del mesh, blocks, mv
+        return out, drift
+    cfg = config("full")
+    mesh, blocks = build(with_full(cfg, False), "cpu")
+    w0 = [v["hydro_w"].cpu() for v in initial_state(cfg, blocks, jet, True, solid=True)]
+    del mesh, blocks
+    names = (("rho", 0), ("w", 1), ("u2", 2), ("u3", 3), ("p", 4))
+
+    def gaps(fa, fb):  # per step: max |a - b| / max |b| per field (NaN propagates and fails)
+        return [{n: torch.stack([(a[r] - b[r]).abs().max() for a, b in zip(x, y)]).max().item()
+                 / max(b[r].abs().max().item() for b in y) for n, r in names} for x, y in zip(fa, fb)]
+    dts, dec = [], {}
+    for dev in ("cpu", "cuda") if args.device == "cuda" else ("cpu",):
+        t0 = time.time()
+        dec[dev, "floor"], dfl = floor_wall(0, w0, dts, dev)
+        dec[dev, "wall"], dwa = floor_wall(2, w0, dts, dev)
+        dec[dev, "fill"], _ = floor_wall(0, w0, dts, dev, 2.0)
+        gw, gf = gaps(dec[dev, "floor"], dec[dev, "wall"]), gaps(dec[dev, "fill"], dec[dev, "floor"])
+        gap = {n: max(g[n] for g in gw) for n, _ in names}
+        leak = max(max(g.values()) for g in gf)
+        print("(n) %s solid floor vs wall on the sphere, %d steps, max |diff| / max |wall|: %s; fill leak %.3e;"
+              " fluid AAM drift floor %.3e, wall %.3e; %.0f s" % (
+                  dev, args.nstep, ", ".join("%s %.3e" % kv for kv in gap.items()), leak, dfl, dwa, time.time() - t0))
+        if not all(g[n] == 0 for g in gf for n, _ in names):
+            failures.append("solid floor on the sphere, %s: the fill leaks, %.3e" % (dev, leak))
+        if dev == "cpu":
+            bad = [n for n, _ in names if not all(g[n] == 0 for g in gw)]
+            if bad:
+                failures.append("solid floor vs wall on the sphere, cpu: %s not bitwise" % ", ".join(bad))
+            continue
+        gc_ = gaps(dec["cuda", "wall"], dec["cpu", "wall"])  # the GPU's own rounding, no solid
+        bad, mg, mc, worst = [], {n: 0.0 for n, _ in names}, {n: 0.0 for n, _ in names}, {}
+        for c, (g, h) in enumerate(zip(gw, gc_), 1):
+            for n, _ in names:
+                mg[n], mc[n] = max(mg[n], g[n]), max(mc[n], h[n])
+                if not mg[n] <= RN_CUDA * mc[n] and n not in bad:
+                    bad.append(n)
+                worst[n] = max(worst.get(n, 0.0), mg[n] / mc[n] if mc[n] else (0.0 if mg[n] == 0 else math.inf))
+        print("(n) cuda control, plain wall cuda vs cpu, max |diff| / max |wall|: %s; floor-vs-wall over control"
+              " (running max): %s; bound %g" % (", ".join("%s %.3e" % kv for kv in mc.items()),
+                                                  ", ".join("%s %.2f" % kv for kv in worst.items()), RN_CUDA))
+        if bad:
+            failures.append("solid floor vs wall on the sphere, cuda: %s exceed %g x the GPU's rounding of the"
+                            " plain wall" % (", ".join(bad), RN_CUDA))
+    if args.device != "cuda":
+        print("(n) cuda arms: skipped (run with --device cuda)")
 
     # (d) off by default, and no effect where it is not defined: a Cartesian block builds with it on
     cfg = config("transport")

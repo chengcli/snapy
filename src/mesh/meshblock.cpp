@@ -7,11 +7,13 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <typeinfo>
 #include <vector>
 
 // snap
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/gnomonic_equiangle.hpp>
+#include <snap/hydro/balance_column.hpp>
 #include <snap/hydro/flux_positivity.hpp>
 #include <snap/hydro/gravity_work_radial.hpp>
 #include <snap/implicit/implicit_dispatch.hpp>
@@ -405,9 +407,12 @@ double MeshBlockImpl::initialize(Variables &vars, char const *restart_file) {
   SignalHandler::GetInstance();
 
   if (restart_file != nullptr) {
-    return _init_from_restart(vars, std::string(restart_file));
+    auto time = _init_from_restart(vars, std::string(restart_file));
+    phydro->upward_reference = wall_reference(vars.count("solid"));
+    return time;
   }
 
+  phydro->upward_reference = wall_reference(vars.count("solid"));
   initialize_local(vars);
 
   //// ------ (6) Exchange hydro and scalar buffers -------- ////
@@ -421,6 +426,7 @@ double MeshBlockImpl::initialize(Variables &vars, char const *restart_file) {
   Variables sync_vars;
   sync_vars["hydro_w"] = vars.at("hydro_w");
   exchange(sync_vars, sync_opts);
+  check_x1_wall_seams(vars);
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
@@ -476,6 +482,7 @@ void MeshBlockImpl::initialize_under_mesh(Variables &vars) {
   Variables prim_vars;
   prim_vars["hydro_w"] = vars.at("hydro_w");
   exchange(prim_vars, prim_opts);
+  check_x1_wall_seams(vars);
 
   if (pscalar->nvar() > 0) {
     SyncOptions scalar_opts;
@@ -504,6 +511,59 @@ void MeshBlockImpl::build_hydro_reference(Variables &vars) {
     SINFO(MeshBlock) << "anomaly reference built, shape "
                      << phydro->u_ref().sizes() << std::endl;
   }
+}
+
+bool MeshBlockImpl::wall_reference(bool local_solid) const {
+  std::vector<at::Tensor> any = {
+      torch::tensor({local_solid ? 1. : 0.}, torch::dtype(torch::kFloat64))};
+  if (_playout->has_process_group())
+    _playout->comm->allreduce(any, c10d::ReduceOp::MAX);
+  bool solid = any[0].item<double>() > 0.;
+  return upward_wall_reference(phydro->options->wb_wall_reference(), solid);
+}
+
+void MeshBlockImpl::check_x1_wall_seams(Variables &vars) {
+  // ghost columns take the neighbour's bottom solid run
+  // only bottom-attached runs move; other solid runs keep caller ghosts (main)
+  if (!vars.count("solid") || options->coord()->nc1() <= 1) return;
+  auto solid = vars.at("solid");
+  int il = pcoord->il(), iu = pcoord->iu();
+  auto run =
+      solid.narrow(-1, il, iu - il + 1).to(torch::kLong).cumprod(-1).sum(-1);
+  Variables dv;
+  auto wide = solid.is_mps() ? torch::kFloat32 : torch::kFloat64;  // MPS
+  dv["x1_wall_depth"] = run.to(wide)
+                            .unsqueeze(-1)
+                            .expand({-1, -1, solid.size(-1)})
+                            .unsqueeze(0)
+                            .contiguous();
+  // a copy, not an interpolation: the ghost column takes the neighbour's own
+  // integer depth through the edge mapping, so both panels build one frame
+  exchange(dv, SyncOptions().interpolate(false).type(kScalar));
+  auto got = dv.at("x1_wall_depth")[0].select(-1, il).round().to(torch::kLong);
+  // a physical x2/x3 face: the ghost columns' run is the one its own fill
+  // gives the state (reflecting mirrors the interior, outflow copies the edge)
+  int ng = pcoord->options->nghost();
+  for (int f = BoundaryFace::kInnerX2; f <= BoundaryFace::kOuterX3; ++f) {
+    if (f >= (int)options->bfuncs().size() || !options->bfuncs()[f]) continue;
+    auto const &fn = options->bfuncs()[f];
+    int ax = f < BoundaryFace::kInnerX3 ? 1 : 0, n = got.size(ax);
+    if (n <= 1) continue;
+    auto g = got.narrow(ax, f % 2 ? n - ng : 0, ng);
+    if (is_reflecting(fn))
+      g.copy_(got.narrow(ax, f % 2 ? n - 2 * ng : ng, ng).flip(ax));
+    else if (is_outflow(fn))
+      g.copy_(got.narrow(ax, f % 2 ? n - ng - 1 : ng, 1).expand_as(g));
+  }
+  auto kk = torch::arange(run.size(0), run.options()).unsqueeze(1);
+  auto jj = torch::arange(run.size(1), run.options()).unsqueeze(0);
+  auto ghost = (kk < pcoord->kl()) | (kk > pcoord->ku()) | (jj < pcoord->jl()) |
+               (jj > pcoord->ju());
+  auto take = (ghost & got.ne(run)).unsqueeze(-1);
+  auto at = torch::arange(solid.size(-1), run.options());
+  auto bottom = (at >= il) & (at < (got + il).unsqueeze(-1));
+  auto inner = (at >= il) & (at <= iu);
+  solid.copy_(torch::where(take & inner, bottom, solid));
 }
 
 void MeshBlockImpl::finalize_initialization(Variables &vars) {
@@ -546,6 +606,48 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
     TORCH_CHECK(solid.sizes() == std::vector<int64_t>({nc3, nc2, nc1}),
                 "initialize: solid has incorrect shape.", " Expected [", nc3,
                 ", ", nc2, ", ", nc1, "] but got ", solid.sizes());
+    // implicit needs the whole x1 column; build the x1 wall now
+    TORCH_CHECK(
+        !phydro->picorr || (options->is_physical_boundary(0, 0, -1) &&
+                            options->is_physical_boundary(0, 0, 1)),
+        "[Hydro] implicit scheme requires nb1 = 1 (no x1 "
+        "decomposition): the vertical solve has no cross-rank coupling.");
+    // not yet wired to the surface: refuse a solid (after 3.0)
+    bool any_solid = solid.any().item<bool>();
+    TORCH_CHECK(!any_solid || !phydro->pdiffusion,
+                "[Diffusion] forcing/diffusion (explicit, cubed-sphere and "
+                "implicit-radial) does not support immersed solids yet (full "
+                "support after 3.0): its fluxes at each column's surface face "
+                "read the solid cells. Remove forcing/diffusion or the solid.");
+    TORCH_CHECK(!any_solid || !phydro->psed,
+                "[Sedimentation] sedimentation does not support immersed "
+                "solids yet (full support after 3.0): the surface face of a "
+                "column on a solid is not sealed, so condensate settles into "
+                "the solid and is lost. Remove sedimentation or the solid.");
+    for (auto const &f : phydro->forcings) {
+      auto const &t = f.type_info();
+      TORCH_CHECK(
+          !any_solid ||
+              !(t == typeid(BotHeatImpl) || t == typeid(BotSpongeLyrImpl) ||
+                t == typeid(RelaxBotTempImpl) ||
+                t == typeid(RelaxBotCompImpl) || t == typeid(RelaxBotVeloImpl)),
+          "[Forcing] the bottom forcings (bot-heat, bot-sponge-lyr, "
+          "relax-bot-temp, relax-bot-comp, relax-bot-velo) do not "
+          "support immersed solids yet (full support after 3.0): they "
+          "act from the domain floor, not each column's surface. "
+          "Remove them or the solid.");
+    }
+    auto const &eos = phydro->peos->options;
+    TORCH_CHECK(!any_solid || !eos->limiter() || !eos->thermo() ||
+                    eos->thermo()->vapor_ids().size() +
+                            eos->thermo()->cloud_ids().size() <=
+                        1,
+                "[EquationOfState] fix_vapor (the limiter's column repair of "
+                "the species) does not support immersed solids yet (full "
+                "support after 3.0): it borrows down the column into the "
+                "solid cells, which the solid refill resets. Set "
+                "equation-of-state limiter: false or remove the solid.");
+    if (nc1 > 1) pib->x1_wall(vars);
     vars["fill_solid_hydro_w"] =
         torch::where(solid.unsqueeze(0).expand_as(hydro_w), hydro_w, 0.);
     vars["fill_solid_hydro_w"].narrow(0, IVX, 3).zero_();
@@ -767,6 +869,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   // -------- (3) launch all jobs --------
   // (3.A) hydro forward
+  if (phydro->options->conserve_axial_momentum_closure() && vars.count("solid"))
+    phydro->axial_closure_fluid() =
+        torch::logical_not(vars.at("solid")).to(hydro_u.dtype());
   fut_hydro_du = phydro->forward(dt, hydro_u, vars);
   if (options->verbose()) {
     auto end = std::chrono::high_resolution_clock::now();
@@ -1042,7 +1147,19 @@ torch::Tensor MeshBlockImpl::gravity_work_fixer_sums(
   auto mv = (m * pcoord->cell_volume()).index(in3);
   // the mass of the cells next to the x1 walls sets the wall faces' round-off
   auto mwall = torch::zeros_like(mv.select(-1, 0).sum());
-  if (phydro->is_x1_wall(0)) mwall += mv.select(-1, 0).sum();
+  auto const *xw = vars.count("solid") && pcoord->options->nc1() > 1
+                       ? pib->x1_wall(vars)
+                       : nullptr;
+  if (phydro->is_x1_wall(0) && xw && !xw->cell.uniform()) {
+    // a solid column's wall cell is its first fluid cell
+    auto j = xw->cell.depth.slice(0, pcoord->kl(), pcoord->ku() + 1)
+                 .slice(1, pcoord->jl(), pcoord->ju() + 1)
+                 .to(mv.device())
+                 .unsqueeze(-1);
+    mwall += mv.gather(-1, j).sum();
+  } else if (phydro->is_x1_wall(0)) {
+    mwall += mv.select(-1, 0).sum();
+  }
   if (phydro->is_x1_wall(1)) mwall += mv.select(-1, -1).sum();
   // the limiter patched a cell or found a NaN: the redo check discards the step
   // (the marks ride in the one device-to-host copy below)
@@ -1113,9 +1230,35 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
   SyncOptions sync_opts;
   sync_opts.interpolate(true).type(kConserved);
 
+  // a solid on the cubed sphere: a panel-edge ghost whose along-edge stencil
+  // (+-2 columns) meets a solid cell at its level takes the neighbour's own
+  // cell (a copy through the edge mapping), not a cubic interpolation
+  // through solid cells
+  torch::Tensor edge_copy;
+  if (vars.count("solid") && options->layout()->type() == "cubed-sphere") {
+    edge_copy = hydro_u.clone();
+    Variables cv{{"hydro_u", edge_copy}};
+    exchange(cv, SyncOptions().interpolate(false).type(kConserved));
+  }
+
   Variables sync_vars;
   sync_vars["hydro_u"] = hydro_u;
   exchange(sync_vars, sync_opts);
+  if (edge_copy.defined()) {
+    auto s = vars.at("solid").to(hydro_u.device(), torch::kFloat32);
+    auto near = torch::max_pool3d(s.unsqueeze(0).unsqueeze(0), {5, 5, 1},
+                                  {1, 1, 1}, {2, 2, 0})
+                    .squeeze(0)
+                    .squeeze(0) > 0.5;
+    int ng = pcoord->options->nghost();
+    auto o = torch::TensorOptions().device(near.device()).dtype(torch::kLong);
+    auto kk = torch::arange(near.size(0), o).view({-1, 1, 1});
+    auto jj = torch::arange(near.size(1), o).view({1, -1, 1});
+    auto ghost = (kk < ng) | (kk >= near.size(0) - ng) | (jj < ng) |
+                 (jj >= near.size(1) - ng);
+    hydro_u.copy_(
+        torch::where((near & ghost).unsqueeze(0), edge_copy, hydro_u));
+  }
 
   if (pscalar->nvar() > 0) {
     sync_opts.type(kScalar);
@@ -1239,6 +1382,10 @@ void print_cycle_diagnostics(
   }
 
   torch::Tensor conserved, ke_sum, pe_sum, meters, theta_min, vic_max;
+  // no PE with a solid (after 3.0)
+  bool solid = std::any_of(blocks.begin(), blocks.end(), [](auto const &b) {
+    return b.second->count("solid");
+  });
   auto add = [](torch::Tensor &total, torch::Tensor value) {
     if (total.defined())
       total += value;
@@ -1262,7 +1409,8 @@ void print_cycle_diagnostics(
       coord_vec_raise_(mom, coord->cosine_cell_kj);
       auto ke = 0.5 * (u.narrow(0, IVX, 3) * mom).sum(0, true) / rho;
       add(ke_sum, (ke * vol).index(interior).sum({1, 2, 3}));
-      if (hydro->options->grav() && hydro->options->grav()->grav1() != 0.) {
+      if (hydro->options->grav() && hydro->options->grav()->grav1() != 0. &&
+          !solid) {
         auto grav1 = hydro->options->grav()->grav1();
         auto pe = rho * (-grav1 * coord->x1v);
         // gravity-work: face books the work of the corrected potential

@@ -130,6 +130,10 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   torch::Tensor _rx_lo, _rx_mid, _rx_hi;
   //! wall third points of the exact 3-point slope, solved by Woodbury
   torch::Tensor _rx_t0, _rx_t1;
+  // solid: surface rows, surface cell and third point, per mask
+  torch::Tensor _rs_mid, _rs_lo, _rs_hi, _rs_surf, _rs_ts;
+  torch::Tensor _rs_src;  // held: its storage cannot be reused under the key
+  int64_t _rs_ver = -1;
   CorrectedPEFactors _rx_work;
 
   // grid-only factors of forward_masked, rebuilt only

@@ -74,6 +74,20 @@ void ScalarImpl::reset() {
       register_buffer("positivity_hits", torch::zeros({1}, torch::kInt64));
 }
 
+Reconstruct ScalarImpl::x1_recon(int o, torch::Tensor const& w) {
+  if (o == 0) return precon1;
+  auto& r = recon1_o_.emplace(o, nullptr).first->second;
+  if (!r) {
+    r = Reconstruct(precon->options, this);
+    auto x1f = pcoord->x1_row_faces(
+        r->options->interp()->type(), pmb->phydro->x1_depth(o).x1f, true,
+        pmb->options->is_physical_boundary(0, 0, 1));
+    if (x1f.defined()) r->set_x1_faces(x1f);
+  }
+  r->to(w.device(), w.scalar_type());
+  return r;
+}
+
 torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
                                   Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
@@ -86,15 +100,46 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
                  .to(u.options())
                  .unsqueeze(0);
   // r = q_face / rho_face; q / rho of cell averages is second order (S177)
-  auto face_r = [&](int dim) {
+  auto face_r_of = [&](torch::Tensor const& rho, torch::Tensor const& u,
+                       int dim) {
     auto recon = dim == DIM1 ? precon1 : precon;
     auto rf = recon->forward(rho, dim), r = u / rho;  // donor r if rf <= 0
     return torch::where(rf > 0., recon->forward(u, dim) / rf,
                         torch::stack({r.roll(1, dim), r}));
   };
+  // x2/x3: the hydro's solid mirror (hydro_forward.cpp), both rows even
+  auto face_r = [&](int dim) {
+    auto m = dim == DIM1 ? nullptr : pmb->pib->mirror_index(other, dim);
+    if (!m) return face_r_of(rho, u, dim);
+    int nr = rho.size(0);
+    return pmb->pib->reconstruct(
+        torch::cat({rho, u}), *m, dim, -1, [&](auto v) {
+          return face_r_of(v.narrow(0, 0, nr), v.narrow(0, nr, u.size(0)), dim);
+        });
+  };
+
+  // a solid column: the hydro's x1 wall frame and tables
+  auto const* xw = pmb->phydro->_xw;
+  auto face_r1 = [&]() {
+    if (!xw) return face_r(DIM1);
+    int nr = rho.size(0), ng = pcoord->il();
+    return pmb->pib->per_column(
+        xw->cell, torch::cat({rho, u}), [&](torch::Tensor const& t, int o) {
+          auto c = t;
+          if (o > 0) {
+            c = t.clone();
+            c.narrow(-1, 0, ng).copy_(c.narrow(-1, ng, ng).flip(-1));
+          }
+          auto recon = x1_recon(o, t);
+          auto rh = c.narrow(0, 0, nr), q = c.narrow(0, nr, c.size(0) - nr);
+          auto rf = recon->forward(rh, DIM1), r = q / rh;
+          return torch::where(rf > 0., recon->forward(q, DIM1) / rf,
+                              torch::stack({r.roll(1, DIM1), r}));
+        });
+  };
 
   if (_flux1.defined()) {
-    auto rlr = face_r(DIM1);
+    auto rlr = face_r1();
     _flux1.set_data(
         priemann->forward(rlr[ILT], rlr[IRT], DIM1, pmb->phydro->flux1()[IDN]));
   }
@@ -154,7 +199,14 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   bool cov = false;
   auto lateral = [&](torch::Tensor const& rlr, int dim,
                      torch::Tensor const& mass) {
-    auto dcov = pmb->phydro->scalar_flux_covariance(rlr[ILT], rlr[IRT], dim);
+    // below a face column's solid surface: the wall's ghost rows (hydro)
+    auto cr =
+        xw ? pmb->pib->x1_wall_fill(dim == DIM2 ? xw->face2 : xw->face3, rlr)
+           : rlr;
+    auto dcov = pmb->phydro->scalar_flux_covariance(cr[ILT], cr[IRT], dim);
+    // terrain: a face beside a solid cell carries no covariance
+    if (auto m = pmb->pib->mirror_index(other, dim); m && dcov.defined())
+      dcov = m->drop_walls(dcov);
     if (!dcov.defined())
       return priemann->forward(rlr[ILT], rlr[IRT], dim, mass);
     cov = true;
