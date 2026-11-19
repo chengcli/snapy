@@ -12,7 +12,15 @@
 namespace snap {
 
 class MeshBlockImpl;
+class LayoutImpl;
 using Variables = std::map<std::string, torch::Tensor>;
+
+//! V3 lane X, X4: the global phase's reduction, one path for a bare
+//! MeshBlock and for a Mesh's blocks. The partials (device, FP64) are summed
+//! in block order on their device; only with a process group is there a host
+//! segment, one allreduce. One partial is returned as is.
+torch::Tensor global_phase_sum(std::vector<torch::Tensor> const& partials,
+                               LayoutImpl const& layout);
 
 //! Everything a captured stage depends on; any change recaptures it.
 struct GraphKey {

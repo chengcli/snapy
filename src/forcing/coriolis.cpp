@@ -204,7 +204,7 @@ torch::Tensor CoriolisXYZImpl::forward(torch::Tensor du, torch::Tensor w,
         phydro->axial_closure_sums() =
             torch::stack(
                 {(vol * (kf - rate_c)).sum(), (vol * rho * r * r * kk).sum()})
-                .to(torch::kCPU, torch::kFloat64);
+                .to(torch::kFloat64);  // stays on the device (V3 X4)
         phydro->axial_closure_rho() = rho.clone();
       }
       pg->axial_rate_to_rows_(z2, z3, target);  // K . z = target, along K
