@@ -130,6 +130,8 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
 
  private:
   void ensure_workspace(torch::Tensor const& w);
+  //! the register monitor's implicit.column = status(), after each solve
+  void raise_column_flag() const;
   torch::Tensor _fp64_fallbacks;
   torch::Tensor _status;  // [nc3, nc2] VicStatusBit, the solve's dtype
 

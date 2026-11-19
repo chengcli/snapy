@@ -1,6 +1,7 @@
 // yaml
 #include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -506,7 +507,22 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
   _clamp_residual.copy_(torch::where(fail, _clamp_residual, clamp_next));
   _dry_clamp_step.copy_(torch::where(fail, _dry_clamp_step, dry_next));
   if (post) post_(*reg, du, fail, kdt, ptan, energy_solved, volume);
+  raise_column_flag();
   return _corr;
+}
+
+void ImplicitHydroImpl::raise_column_flag() const {
+  // the register's implicit.column mirrors status() after every solve, so a
+  // direct caller of the solve raises it too; hydro's FP64 fallback resets
+  // the status and solves again, and the flag follows it (lane X reads it as
+  // slot 5 of the redo)
+  auto const& mon = phydro->flux_register().monitor();
+  auto const& names = mon.retry_names();
+  if (!mon.retry_flags.defined() ||
+      std::find(names.begin(), names.end(), "implicit.column") == names.end())
+    return;
+  mon.retry_flags[mon.retry_index("implicit.column")].copy_(
+      (_status != 0).any().to(mon.retry_flags.scalar_type()));
 }
 
 void ImplicitHydroImpl::post_(FluxRegister& reg, torch::Tensor const& du,

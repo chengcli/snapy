@@ -1571,9 +1571,16 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
     pthermo->nfail_ = torch::Tensor();
   }
 
-  // the VIC failure latch, read in the one copy below
+  // slot 5: lane I's cause from the register monitor (R.rst 4.5), flagged
+  // after the whole-block FP64 fallback (V3 X5 m1); read in the one copy below
+  auto const &mon = phydro->flux_register().monitor();
+  auto const &causes = mon.retry_names();
+  bool has_column = std::find(causes.begin(), causes.end(),
+                              "implicit.column") != causes.end();
   auto solve =
-      phydro->picorr ? phydro->picorr->solve_failed_tensor(opts) : zero;
+      has_column && mon.retry_flags.defined()
+          ? (mon.retry_flags[mon.retry_index("implicit.column")] > 0).to(opts)
+          : zero;
   // 7th: the step's deferred vapor-repair failures, a limiter cause
   auto const &nfv = phydro->peos->vapor_failures();
   auto vapor = nfv.defined() ? (nfv > 0).to(opts) : zero;
