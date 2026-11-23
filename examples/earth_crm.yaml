@@ -42,11 +42,6 @@ dynamics:
     type: lmars
 
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.9
-    max-iter: 5
-
   external:
     x1-inner: reflecting
     x1-outer: reflecting

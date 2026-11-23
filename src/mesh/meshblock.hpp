@@ -18,8 +18,8 @@
 
 // snap
 #include <snap/bc/bc_func.hpp>
-#include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
+#include <snap/eb/geometry.hpp>
 #include <snap/eos/ef_status.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/layout/exchange.hpp>
@@ -104,7 +104,6 @@ struct MeshBlockOptionsImpl {
   ADD_ARG(CoordinateOptions, coord) = nullptr;
   ADD_ARG(HydroOptions, hydro) = nullptr;
   ADD_ARG(ScalarOptions, scalar) = nullptr;
-  ADD_ARG(InternalBoundaryOptions, ib) = nullptr;
 
   //! boundary functions
   ADD_ARG(std::vector<bcfunc_t>, bfuncs);
@@ -139,6 +138,7 @@ struct PartOptions {
 
 class StageExecutor;
 class ChemistrySource;
+class EmbeddedBoundaryUpdate;
 
 class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   friend class StageExecutor;
@@ -172,7 +172,13 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! submodules
   harp::Integrator pintg = nullptr;
   Coordinate pcoord = nullptr;
-  InternalBoundary pib = nullptr;
+  void set_embedded_boundary(EBGeometry const& geometry);
+  EBGeometry const* eb_geometry() const { return _eb.get(); }
+  //! Flat indices into the full block tensor, owned fluid cells only.
+  torch::Tensor const& eb_fluid_indices() const { return _eb_fluid_indices; }
+  void prepare_embedded_boundary();
+  void write_eb_restart(Variables& data) const;
+  void read_eb_restart(Variables const& data);
   Hydro phydro = nullptr;
   Scalar pscalar = nullptr;
 
@@ -315,6 +321,11 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   double _init_from_restart(Variables& vars, std::string fname);
 
  private:
+  std::shared_ptr<EBGeometry> _eb;
+  torch::Tensor _eb_fluid_indices, _eb_neutral_w, _eb_neutral_u;
+  std::shared_ptr<EmbeddedBoundaryUpdate> _eb_update;
+  torch::Tensor redistribute(torch::Tensor hydro, torch::Tensor scalar);
+
   //! one communication round; `exchange` splits a subdivided cubed-sphere
   //! sync into two of these
   void _exchange_once(Variables& vars, SyncOptions const& opts) const;

@@ -87,10 +87,10 @@ void check(int flag, int i) {
                                col.vol + 1, col.work_lo + 1, col.work_hi + 1, i,
                                is, ie, dt, grav, flag, 0, stride1, stride2,
                                true, true, false);
-  snap::vic_assemble_partial_impl(
-      a3, b3, c3, col.W(), col.gamma + 1, col.area + 1, col.vol + 1,
-      col.work_lo + 1, col.work_hi + 1, i, is, ie, dt, grav, flag, 0, stride1,
-      stride2, true, true, false, false, col.DU(), corr);
+  snap::vic_assemble_partial_impl(a3, b3, c3, col.W(), col.gamma + 1,
+                                  col.area + 1, col.vol + 1, col.work_lo + 1,
+                                  col.work_hi + 1, i, is, ie, dt, grav, flag, 0,
+                                  stride1, stride2, true, true, col.DU(), corr);
 
   M3 ea = S() * a5[i] * P(col, i);
   V3 er = S() * a5[i] * Tq(col, i);
@@ -131,7 +131,7 @@ TEST(vic_partial_tangential, a_wind_free_column_is_unchanged_bitwise) {
     snap::vic_assemble_partial_impl(
         a1, b1, c1, col.W(), col.gamma + 1, col.area + 1, col.vol + 1,
         col.work_lo + 1, col.work_hi + 1, i, is, ie, dt, grav, flag, 0, stride1,
-        stride2, true, true, false, false, col.DU(), corr);
+        stride2, true, true, col.DU(), corr);
     EXPECT_EQ(std::memcmp(a0[i].data(), a1[i].data(), sizeof(M3)), 0);
     EXPECT_EQ(std::memcmp(b0[i].data(), b1[i].data(), sizeof(M3)), 0);
     EXPECT_EQ(std::memcmp(c0[i].data(), c1[i].data(), sizeof(M3)), 0);

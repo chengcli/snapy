@@ -154,7 +154,6 @@ void reconcile_panel_seams(FluxRegister& reg, MeshBlockImpl const* pmb,
 }
 
 void supply_prescribed(FluxRegister& reg, MeshBlockImpl const* pmb,
-                       torch::Tensor const& solid,
                        std::vector<int> const& free_rows) {
   auto c = pmb->pcoord;
   // (dy, dx, dz) of the lower and upper block face of each direction
@@ -174,14 +173,6 @@ void supply_prescribed(FluxRegister& reg, MeshBlockImpl const* pmb,
       auto o = kFace[dim - 1][lu];
       if (pmb->options->face_kind(o[0], o[1], o[2]) == FaceKind::wall)
         faces.select(axis, kPlane[dim - 1][lu]).fill_(true);
-    }
-    if (solid.defined()) {
-      // face i lies between cells i - 1 and i
-      auto s = (solid != 0).to(faces.device());
-      int64_t n = s.size(axis);
-      faces.narrow(axis, 1, n - 1)
-          .logical_or_(
-              s.narrow(axis, 0, n - 1).logical_or(s.narrow(axis, 1, n - 1)));
     }
     auto mask = faces.unsqueeze(0).repeat({t.size(0), 1, 1, 1});
     for (int r : free_rows) mask[r].fill_(false);

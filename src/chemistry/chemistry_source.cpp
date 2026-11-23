@@ -36,9 +36,15 @@ void ChemistrySource::forward(MeshBlockImpl& block, Variables& vars,
   // kinetics needs the final dynamics state, including the saturation
   // adjustment (the pin: run_hydro.cpp:180)
   peos->forward(hydro_u, hydro_w);
-  auto temp = peos->compute("W->T", {hydro_w});
-  auto pres = hydro_w[IPR];
-  auto xfrac = thermo_y->compute("Y->X", {hydro_w.narrow(0, ICY, ny)});
+  auto w = hydro_w;
+  auto const& ids = block.eb_fluid_indices();
+  if (block.eb_geometry()) {
+    if (ids.numel() == 0) return;
+    w = w.flatten(1).index_select(1, ids).view({w.size(0), 1, 1, -1});
+  }
+  auto temp = peos->compute("W->T", {w});
+  auto pres = w[IPR];
+  auto xfrac = thermo_y->compute("Y->X", {w.narrow(0, ICY, ny)});
   auto conc = thermo_x->compute("TPX->V", {temp, pres, xfrac});
   auto cp_vol = thermo_x->compute("TV->cp", {temp, conc});
   auto conc_kinet = conc.slice(-1, 1, conc.size(-1));
@@ -52,7 +58,16 @@ void ChemistrySource::forward(MeshBlockImpl& block, Variables& vars,
   auto del_rho = del_conc / thermo_y->inv_mu.narrow(0, 1, ny).view(vec);
   // the FP64 increment on the stored dtype's species rows only (the pin's
   // Python caller asserts the same boundary for an FP32 state)
-  hydro_u.narrow(0, ICY, ny) += del_rho.permute({3, 0, 1, 2});
+  auto species = hydro_u.narrow(0, ICY, ny);
+  auto increment = del_rho.permute({3, 0, 1, 2});
+  if (block.eb_geometry()) {
+    auto flat = species.flatten(1);
+    auto next = flat.index_select(1, ids) + increment.flatten(1);
+    species.copy_(
+        flat.index_copy(1, ids, next.to(species.options())).view_as(species));
+  } else {
+    species.add_(increment);
+  }
   // the register posts (cell_amount "chem.<species>", the element stock,
   // K.rst 3.5) arrive with lane I's I-4 posts
 }

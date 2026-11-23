@@ -157,8 +157,12 @@ TEST(yaml_keys, boundary_condition_refuses_an_unknown_key) {
   expect_refused("boundary-condition", "internl");
 }
 
-TEST(yaml_keys, boundary_condition_internal_refuses_an_unknown_key) {
-  expect_refused("boundary-condition/internal", "max_iter");
+TEST(yaml_keys, retired_solid_configuration_is_rejected) {
+  auto card = YAML::LoadFile(kCard);
+  card["boundary-condition"]["internal"]["solid-density"] = 1.;
+  EXPECT_NE(
+      load_error(card, "test_retired_solid.yaml").find("set_embedded_boundary"),
+      std::string::npos);
 }
 
 TEST(yaml_keys, scalar_refuses_an_unknown_key) {

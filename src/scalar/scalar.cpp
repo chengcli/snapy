@@ -1,9 +1,11 @@
 // C/C++
 #include <numeric>
+#include <optional>
 
 // snap
 #include <snap/hydro/flux_positivity.hpp>
 #include <snap/hydro/hydro.hpp>
+#include <snap/hydro/sweep.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/layout/seam_register.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -97,11 +99,19 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
   // the TOTAL dry density (anomaly storage adds the reference)
   auto rho = ph->dry_density(other.at("hydro_u")).to(u.options()).unsqueeze(0);
   // r = q_face / rho_face; q / rho of cell averages is second order (S177)
+  std::optional<CutCellReconstruction> cut;
+  if (auto eb = pmb->eb_geometry())
+    cut.emplace(
+        *eb, u / rho,
+        std::max(precon1->pinterp1->stencils(), precon->pinterp1->stencils()) /
+                2 +
+            1);
   auto face_r = [&](int dim) {
     auto recon = dim == DIM1 ? precon1 : precon;
     auto rf = recon->forward(rho, dim), r = u / rho;  // donor r if rf <= 0
-    return torch::where(rf > 0., recon->forward(u, dim) / rf,
-                        torch::stack({r.roll(1, dim), r}));
+    auto lr = torch::where(rf > 0., recon->forward(u, dim) / rf,
+                           torch::stack({r.roll(1, dim), r}));
+    return cut ? cut->faces(lr, dim, recon->pinterp1->stencils() / 2 + 1) : lr;
   };
   // the fluxes, by direction, and the hydro dry-mass rows they ride on: the
   // hydro register's mass.dry.limited@d, row IDN of its total as limit ends
@@ -159,12 +169,7 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
         priemann->forward(rlr[d][ILT], rlr[d][IRT], 3 - d, vel) + dcov);
   }
 
-  // S step (4), boundary.prescribed on this register too (S.rst rev 2.5
-  // section 4: every register instance): every tracer row is 0 on the wall
-  // and solid faces, as the hydro's species rows are
-  supply_prescribed(freg, pmb,
-                    other.count("solid") ? other.at("solid") : torch::Tensor(),
-                    {});
+  supply_prescribed(freg, pmb, {});
   for (int d = 0; d < 3; ++d)
     if (flux[d]->defined()) freg.apply_prescribed(d + 1);
 

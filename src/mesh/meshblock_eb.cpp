@@ -1,0 +1,316 @@
+// Static Cartesian embedded boundaries and the halo of provisional states
+// consumed by weighted state redistribution.
+#include <kintera/constants.h>
+
+#include <kintera/thermo/thermo.hpp>
+#include <snap/eb/redistribution.hpp>
+#include <snap/eos/equation_of_state.hpp>
+#include <snap/mesh/meshblock.hpp>
+
+namespace snap {
+namespace {
+using Tensor = torch::Tensor;
+using Bounds = std::array<int64_t, 3>;
+// One receiving edge, two reconstruction layers, and three layers for
+// the members, their overlap counts, and neighboring donor geometry.
+constexpr int halo = 6;
+constexpr int first_centroid = 14;
+constexpr int valid_cell = 32;
+
+Tensor box(Tensor t, Bounds const &lo, Bounds const &hi) {
+  for (int d = 0; d < 3; ++d) t = t.slice(-1 - d, lo[d], hi[d]);
+  return t;
+}
+
+// Exchange successive layers, including previously received transverse
+// layers. This also handles a block narrower than the stencil and corners.
+Tensor extend(MeshBlockImpl const &block, Tensor t, std::array<int, 3> blocks,
+              bool geometry, std::array<double, 3> const &periods) {
+  Exchange ex(&block);
+  auto layout = block.get_layout();
+  auto [x2, x3, x1] = layout->loc_of(layout->options->rank());
+  std::array<int, 3> loc{x1, x2, x3};
+  for (int d = 0; d < 3; ++d) {
+    if (blocks[d] == 1) continue;
+    int ax = t.dim() - 1 - d;
+    auto n = t.size(ax);
+    for (int depth = 0; depth < halo; ++depth) {
+      // Send the next unsent cell toward each peer.
+      auto low = t.narrow(ax, 2 * depth, 1).contiguous();
+      auto high = t.narrow(ax, n - 1, 1).contiguous();
+      int tag = 21300 + 32 * d + 4 * depth;
+      auto peers = d == 0 ? ex.x1_seam_slab(low, high, tag, false)
+                          : ex.seam_slab(d + 1, low, high, tag, false);
+      auto receive = [&](Tensor value, bool lower) {
+        if (!value.defined()) {
+          value = torch::zeros_like(low);
+          if (geometry)
+            value[1].fill_(
+                1);  // exterior: covered, with a valid background volume
+        } else if (geometry && periods[d] &&
+                   loc[d] == (lower ? 0 : blocks[d] - 1)) {
+          value = value.clone();
+          double shift = lower ? -periods[d] : periods[d];
+          value[2 + d].add_(shift);
+          for (int face = 0; face < 6; ++face)
+            value[first_centroid + 3 * face + d].add_(shift);
+        }
+        return value;
+      };
+      t = torch::cat(
+          {receive(peers.first, true), t, receive(peers.second, false)}, ax);
+    }
+  }
+  return t;
+}
+}  // namespace
+
+class EmbeddedBoundaryUpdate {
+ public:
+  explicit EmbeddedBoundaryUpdate(MeshBlockImpl const &block) {
+    auto const &eb = *block.eb_geometry();
+    auto c = block.pcoord;
+    auto const &l = *block.options->layout();
+    blocks_ = {l.pz(), l.px(), l.py()};
+    std::array<bool, 3> periodic{
+        l.periodic_z() || Exchange(&block).kind(0) == FaceKind::periodic,
+        l.periodic_x(), l.periodic_y()};
+    auto co = c->options;
+    periods_ = {co->global_x1max() - co->global_x1min(),
+                co->global_x2max() - co->global_x2min(),
+                co->global_x3max() - co->global_x3min()};
+    for (int d = 0; d < 3; ++d) {
+      if (!periodic[d]) periods_[d] = 0;
+      periodic[d] = periodic[d] && blocks_[d] == 1;
+      int n = eb.volume_fraction.size(-1 - d);
+      lo_[d] = n == 1 ? 0 : co->nghost();
+      hi_[d] = n - lo_[d];
+      inner_lo_[d] = blocks_[d] == 1 ? 0 : halo;
+      inner_hi_[d] = inner_lo_[d] + hi_[d] - lo_[d];
+    }
+    auto background =
+        c->dx3f.view({-1, 1, 1}) * c->dx2f.view({1, -1, 1}) * c->dx1f;
+    std::vector<Tensor> channels{eb.volume_fraction, background};
+    for (int d = 0; d < 3; ++d) channels.push_back(eb.cell_centroid[d]);
+    for (int d = 0; d < 3; ++d) channels.push_back(eb.wall_area_vector[d]);
+    for (int d = 0; d < 3; ++d) {
+      auto face = eb.face_fraction[d];
+      auto n = eb.volume_fraction.size(-1 - d);
+      channels.push_back(face.narrow(-1 - d, 0, n));
+      channels.push_back(face.narrow(-1 - d, 1, n));
+    }
+    for (int d = 0; d < 3; ++d) {
+      auto n = eb.volume_fraction.size(-1 - d);
+      for (int side = 0; side < 2; ++side)
+        for (int comp = 0; comp < 3; ++comp)
+          channels.push_back(eb.face_centroid[d][comp].narrow(-1 - d, side, n));
+    }
+    channels.push_back(torch::ones_like(eb.volume_fraction));
+    auto data = extend(block, box(torch::stack(channels), lo_, hi_), blocks_,
+                       true, periods_);
+    EBGeometry g;
+    g.volume_fraction = data[0];
+    g.cell_centroid = data.slice(0, 2, 5);
+    g.wall_area_vector = data.slice(0, 5, 8);
+    for (int d = 0; d < 3; ++d) {
+      auto left = data[8 + 2 * d], right = data[9 + 2 * d];
+      auto n = left.size(-1 - d);
+      // At a physical exterior the packed padding cells have zero aperture.
+      // The domain-side face is still allowed to carry an exterior BC flux.
+      auto adjacent = data[valid_cell].narrow(-1 - d, 0, n - 1).ne(0) &
+                      data[valid_cell].narrow(-1 - d, 1, n - 1).ne(0);
+      auto compare = [&](Tensor lower, Tensor upper) {
+        TORCH_CHECK(torch::allclose(upper, lower, 1.e-8, 1.e-12),
+                    "embedded boundary metrics disagree at shared faces in x",
+                    d + 1);
+      };
+      auto compare_adjacent = [&](Tensor lower, Tensor upper, Tensor mask) {
+        compare(lower.narrow(-1 - d, 1, n - 1).masked_select(mask),
+                upper.narrow(-1 - d, 0, n - 1).masked_select(mask));
+      };
+      compare_adjacent(left, right, adjacent);
+      // A single-block periodic axis wraps locally, without exchanged halos.
+      // Transverse halo padding at a physical exterior has no matching face.
+      Tensor open_wrap;
+      if (periodic[d] && n > 1) {
+        auto valid = data[valid_cell];
+        auto mask =
+            valid.select(-1 - d, 0).ne(0) & valid.select(-1 - d, n - 1).ne(0);
+        auto low = left.select(-1 - d, 0), high = right.select(-1 - d, n - 1);
+        compare(low.masked_select(mask), high.masked_select(mask));
+        TORCH_CHECK(
+            !(mask & (low.gt(0) != high.gt(0))).any().item<bool>(),
+            "embedded boundary open faces disagree at periodic seam in x",
+            d + 1);
+        open_wrap = mask & low.gt(0);
+      }
+      auto faces = [&](Tensor lower, Tensor upper) {
+        return torch::cat({lower, upper.narrow(-1 - d, n - 1, 1)}, -1 - d);
+      };
+      g.face_fraction[d] = faces(left, right);
+      std::vector<Tensor> coords;
+      for (int comp = 0; comp < 3; ++comp) {
+        int i = first_centroid + 6 * d + comp;
+        compare_adjacent(data[i], data[i + 3],
+                         adjacent & right.narrow(-1 - d, 0, n - 1).gt(0));
+        if (open_wrap.defined()) {
+          auto low = data[i].select(-1 - d, 0).masked_select(open_wrap);
+          auto high =
+              data[i + 3].select(-1 - d, n - 1).masked_select(open_wrap);
+          compare(comp == d ? low + periods_[d] : low, high);
+        }
+        coords.push_back(faces(data[i], data[i + 3]));
+      }
+      g.face_centroid[d] = torch::stack(coords);
+    }
+    auto eos = block.phydro->peos;
+    hydro_rows_ = eos->nvar();
+    const int constituents = 1 + hydro_rows_ - ICY;
+    auto basis =
+        torch::zeros({hydro_rows_, 1, 1, constituents}, c->x1f.options());
+    basis[IDN].flatten()[0] = 1;
+    for (int i = 1; i < constituents; ++i) basis[ICY + i - 1].flatten()[i] = 1;
+    auto tmin = torch::full(
+        {1, 1, constituents},
+        eos->options->limiter() ? eos->options->temperature_floor() : 1.e-12,
+        basis.options());
+    min_energy_ = eos->compute("UT->I", {basis, tmin}).flatten();
+    op_ = std::make_unique<WeightedStateRedistribution>(
+        g, data[1], periodic, periods_, inner_lo_, inner_hi_);
+  }
+  Tensor apply(MeshBlockImpl const &block, Tensor state) const {
+    auto owned = box(state, lo_, hi_);
+    auto full = extend(block, owned, blocks_, false, periods_);
+    Tensor bad;
+    owned.copy_(box(op_->apply(full, hydro_rows_, &bad, min_energy_), inner_lo_,
+                    inner_hi_));
+    return bad;
+  }
+
+ private:
+  int hydro_rows_;
+  Tensor min_energy_;
+  Bounds lo_, hi_, inner_lo_, inner_hi_;
+  std::array<int, 3> blocks_;
+  std::array<double, 3> periods_;
+  std::unique_ptr<WeightedStateRedistribution> op_;
+};
+
+void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
+  TORCH_CHECK(options->coord()->type() == "cartesian" &&
+                  !phydro->options->icorr() &&
+                  !phydro->options->perturbation_flux() && !phydro->anomaly(),
+              "embedded boundaries require explicit Cartesian dynamics with "
+              "total-state storage");
+  auto type = phydro->peos->options->type();
+  TORCH_CHECK(
+      type == "ideal-gas" || type == "ideal-moist" || type == "moist-mixture",
+      "unsupported embedded-boundary EOS: ", type);
+  auto gravity = phydro->options->grav();
+  TORCH_CHECK(!gravity || (gravity->grav1() == 0 && gravity->grav2() == 0 &&
+                           gravity->grav3() == 0),
+              "embedded-boundary transport with gravity requires cut-cell "
+              "potential-energy accounting");
+  TORCH_CHECK(
+      !phydro->options->diffusion(),
+      "embedded-boundary diffusive face and wall fluxes are unsupported");
+  TORCH_CHECK(!options->execution_strict(),
+              "embedded boundaries require eager stage execution");
+  auto c = pcoord;
+  auto next = std::make_shared<EBGeometry>(
+      EBGeometry::from_metrics(
+          g.volume_fraction, g.cell_centroid, g.face_fraction, g.face_centroid,
+          g.wall_area_vector, g.wall_centroid, c->x1f, c->x2f, c->x3f)
+          .to(c->x1f.device()));
+  std::array<bool, 3> disabled{phydro->options->disable_flux_x1(),
+                               phydro->options->disable_flux_x2(),
+                               phydro->options->disable_flux_x3()};
+  for (int d = 0; d < 3; ++d) {
+    if (disabled[d] || next->volume_fraction.size(-1 - d) == 1) {
+      auto af = next->face_fraction[d];
+      TORCH_CHECK(torch::allclose(af.slice(-1 - d, 0, -1), af.slice(-1 - d, 1),
+                                  1.e-9, 1.e-12),
+                  "embedded wall varies along inactive flux direction x",
+                  d + 1);
+    }
+  }
+  auto owned = torch::zeros_like(next->flags, torch::kBool);
+  auto sub = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+  owned.index(sub).copy_(next->volume_fraction.index(sub) > 0);
+  auto indices = owned.flatten().nonzero().flatten();
+  auto const &eos = phydro->peos->options;
+  auto const &th = eos->thermo();
+  double temp = std::max(th ? th->Tref() : 300., 2 * eos->temperature_floor());
+  double rd = kintera::constants::Rgas / eos->weight();
+  double rho = std::max({(th ? th->Pref() : 1.e5) / (rd * temp),
+                         2 * eos->density_floor(),
+                         2 * eos->pressure_floor() / (rd * temp)});
+  auto neutral_w =
+      torch::zeros({phydro->peos->nvar(), 1, 1, 1}, c->x1f.options());
+  neutral_w[IDN].fill_(rho);
+  neutral_w[IPR].fill_(rho * rd * temp);
+  auto neutral_u = neutral_w.clone();
+  neutral_u[IPR].copy_(phydro->peos->compute("W->I", {neutral_w}));
+  // A device move passes the currently installed geometry back into this
+  // setter. Keep it alive until validation and all derived tensors are ready.
+  _eb = std::move(next);
+  _eb_fluid_indices = std::move(indices);
+  _eb_neutral_w = std::move(neutral_w);
+  _eb_neutral_u = std::move(neutral_u);
+  _eb_update.reset();
+  bump_config_generation();
+}
+
+void MeshBlockImpl::prepare_embedded_boundary() {
+  if (_eb && !_eb_update)
+    _eb_update = std::make_shared<EmbeddedBoundaryUpdate>(*this);
+}
+
+Tensor MeshBlockImpl::redistribute(Tensor hydro, Tensor scalar) {
+  prepare_embedded_boundary();
+  if (!scalar.defined()) {
+    return _eb_update->apply(*this, hydro);
+  }
+  auto state = torch::cat({hydro, scalar}, 0);
+  auto bad = _eb_update->apply(*this, state);
+  hydro.copy_(state.narrow(0, 0, hydro.size(0)));
+  scalar.copy_(state.narrow(0, hydro.size(0), scalar.size(0)));
+  return bad;
+}
+
+void MeshBlockImpl::write_eb_restart(Variables &data) const {
+  if (!_eb) return;
+  auto const &g = *_eb;
+  data["eb.volume_fraction"] = g.volume_fraction.cpu();
+  data["eb.cell_centroid"] = g.cell_centroid.cpu();
+  data["eb.wall_area_vector"] = g.wall_area_vector.cpu();
+  data["eb.wall_centroid"] = g.wall_centroid.cpu();
+  for (int d = 0; d < 3; ++d) {
+    auto i = std::to_string(d + 1);
+    data["eb.face_fraction" + i] = g.face_fraction[d].cpu();
+    data["eb.face_centroid" + i] = g.face_centroid[d].cpu();
+  }
+}
+
+void MeshBlockImpl::read_eb_restart(Variables const &data) {
+  TORCH_CHECK(!data.count("solid"),
+              "restart contains retired solid mask; initialize with embedded "
+              "boundary geometry");
+  if (!data.count("eb.volume_fraction")) {
+    TORCH_CHECK(
+        !_eb, "restart contains no embedded boundary geometry for this block");
+    return;
+  }
+  EBGeometry g;
+  g.volume_fraction = data.at("eb.volume_fraction");
+  g.cell_centroid = data.at("eb.cell_centroid");
+  g.wall_area_vector = data.at("eb.wall_area_vector");
+  g.wall_centroid = data.at("eb.wall_centroid");
+  for (int d = 0; d < 3; ++d) {
+    auto i = std::to_string(d + 1);
+    g.face_fraction[d] = data.at("eb.face_fraction" + i);
+    g.face_centroid[d] = data.at("eb.face_centroid" + i);
+  }
+  set_embedded_boundary(g);
+}
+}  // namespace snap

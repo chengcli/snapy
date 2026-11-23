@@ -97,50 +97,6 @@ def tall_run(nz, heights, scheme, work, steps=1, dt=None, fixer=False):
     print(json.dumps(out), flush=True)
     return out
 
-def solid_run(scheme, work, fixer, placement='top', strided=False):
-    cfg = box.config({'gravity-work': work, 'gravity-work-fixer': fixer}, scheme=scheme)
-    ng = 3
-    nz = box.NZ
-    dz = box.LZ / nz
-    z = (torch.arange(nz) + 0.5) * dz
-    T = box.TS - box.GRAV * z / box.CP
-    p = box.PS * (T / box.TS) ** (box.CP / box.RD)
-    col = torch.zeros(kIPR + 1, 1, 1, nz)
-    col[kIDN, 0, 0] = p / (box.RD * T)
-    col[kIPR, 0, 0] = p
-    (wb, _, _) = snapy.balance_column(col, torch.full((nz,), dz), box.GRAV)
-    start = {'top': nz - 4, 'middle': nz // 2 - 2, 'bottom': 0}[placement]
-    cfg['boundary-condition']['internal'] = {'solid-density': float(wb[kIDN, 0, 0, start]), 'solid-pressure': float(wb[kIPR, 0, 0, start])}
-    if strided:
-        cfg['geometry']['cells']['nx2'] = nz
-        cfg['geometry']['bounds']['x2max'] = float(nz)
-    b = create(cfg)
-    w = dict(b.named_buffers())['hydro.D'].clone().zero_()
-    for c in (kIDN, kIPR):
-        w[c][..., ng:ng + nz] = wb[c, 0, 0].to(w)
-        w[c][..., :ng] = w[c][..., ng:ng + 1]
-        w[c][..., ng + nz:] = w[c][..., ng + nz - 1:ng + nz]
-    w[kIV1][..., ng:ng + nz] = box.MACH * math.sqrt(box.GAMMA * box.RD * box.TS) * torch.sin(math.pi * z / box.LZ).to(w)
-    solid = torch.zeros_like(w[kIDN], dtype=torch.bool)
-    if strided:
-        solid = solid.transpose(-1, -2)
-    solid[..., ng + start:ng + start + 4] = True
-    w[kIV1][solid] = 0
-    for (c, key) in ((kIDN, 'solid-density'), (kIPR, 'solid-pressure')):
-        w[c][solid] = cfg['boundary-condition']['internal'][key]
-    (v, _) = b.initialize({'hydro_w': w, 'solid': solid})
-    spans = [(0, start), (start + 4, nz)]
-    spans = [(lo, hi) for (lo, hi) in spans if hi > lo]
-    initial = [v['hydro_u'][kIDN, ..., ng + lo:ng + hi].sum().item() for (lo, hi) in spans]
-    dt = b.max_time_step(v)
-    for n in range(20):
-        for stage in range(len(b.module('intg').stages)):
-            b.forward(v, dt, stage)
-    u = v['hydro_u']
-    result = {'solid': True, 'scheme': scheme, 'work': work, 'fixer': fixer, 'dt': dt, 'mass': max((abs(u[kIDN, ..., ng + lo:ng + hi].sum().item() / m - 1) for ((lo, hi), m) in zip(spans, initial))), 'placement': placement, 'finite': bool(torch.isfinite(u).all()), 'device': device}
-    print(json.dumps(result), flush=True)
-    return result
-
 def clamp_energy(scheme, work):
     cfg = tall.config(scheme)
     cfg['forcing']['const-gravity']['gravity-work'] = work
@@ -272,21 +228,6 @@ if __name__ == '__main__':
                 and abs(out['mass']) < 1e-12
                 and abs(out['epe_drift']) < tall.EPE_TOL):
             failures.append(f'coarse column 160: {out}')
-    for scheme in (0, 1, 9):
-        for (work, fixer) in (('face', False),):
-            out = solid_run(scheme, work, fixer)
-            if not (out['finite'] and abs(out['mass']) < 1e-12):
-                failures.append(f'solid mass: {out}')
-    for placement in ('middle', 'bottom'):
-        for scheme in (1, 9):
-            for work in ('face',):
-                out = solid_run(scheme, work, False, placement)
-                if not (out['finite'] and abs(out['mass']) < 1e-12):
-                    failures.append(f'segmented solid mass: {out}')
-    for scheme in (1, 9):
-        out = solid_run(scheme, 'face', False, strided=True)
-        if not out['finite'] or out['mass'] >= 1.e-12:
-            failures.append(f'transposed solid mask: {out}')
     for scheme in (1, 9):
         for geometry in ('gnomonic-equiangle', 'spherical-polar'):
             for work in ('face',):

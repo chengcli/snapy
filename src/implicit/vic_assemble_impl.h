@@ -37,18 +37,17 @@ namespace snap {
 // Jacobian columns alike), and q_t,j = du_t,j - v_t,j du_rho,j (explicit
 // increments) moves to the right-hand side:
 //   rhs_corr[i] = aT q_i + bT q_{i-1} + cT q_{i+1}   (rows rho, m1, E)
-// ForwardSweep subtracts it. A face merged into a[i] by the wall mirror (or a
-// solid neighbour) carries cell i's v_t and q_t, as the mirror does. Exact
-// zeros (rest state) leave a, b, c and the right-hand side unchanged bit for
-// bit. Without du / rhs_corr the assembly is the frozen-m_t one.
+// ForwardSweep subtracts it. A face merged into a[i] by the wall mirror carries
+// cell i's v_t and q_t, as the mirror does. Exact zeros (rest state) leave a,
+// b, c and the right-hand side unchanged bit for bit. Without du / rhs_corr the
+// assembly is the frozen-m_t one.
 template <typename T, int N>
 void DISPATCH_MACRO vic_assemble_impl(
     Eigen::Matrix<T, N, N>* a, Eigen::Matrix<T, N, N>* b,
     Eigen::Matrix<T, N, N>* c, T* w, T* gamma, T* area, T* vol, T* work_lo,
     T* work_hi, int i, int is, int ie, double dt, double grav, int dir, int ny,
     int stride1, int stride2, bool first_block, bool last_block, bool periodic,
-    bool solid_lower, bool solid_upper, T* du = nullptr,
-    Eigen::Matrix<T, N, 1>* rhs_corr = nullptr) {
+    T* du = nullptr, Eigen::Matrix<T, N, 1>* rhs_corr = nullptr) {
   static_assert(N == 3 || N == 5, "VIC blocks are 3x3 or 5x5");
   // eigenvectors, eigenvalues, inverse matrix of eigenvectors.
   Eigen::Matrix<T, 5, 5> Rmat, Rimat;
@@ -76,16 +75,12 @@ void DISPATCH_MACRO vic_assemble_impl(
 
   // Interface i-1/2 and the Jacobians in cells i-1 and i.
   CopyPrimitives(wl, wr, w, i, stride1, stride2, ny);
-  if (solid_lower) {
-    for (int n = 0; n < 5; ++n) wl[n] = wr[n];
-    wl[IVX + dir] = -wr[IVX + dir];
-  }
-  gm1 = GAMMA(solid_lower ? i : i - 1) - 1.;
+  gm1 = GAMMA(i - 1) - 1.;
   FluxJacobian(dfdq_prev, gm1, wl, dir);
   gm1 = GAMMA(i) - 1.;
   FluxJacobian(dfdq_curr, gm1, wr, dir);
 
-  gm1 = 0.5 * (GAMMA(solid_lower ? i : i - 1) + GAMMA(i)) - 1.;
+  gm1 = 0.5 * (GAMMA(i - 1) + GAMMA(i)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -96,14 +91,10 @@ void DISPATCH_MACRO vic_assemble_impl(
 
   // Interface i+1/2 and the Jacobian in cell i+1.
   CopyPrimitives(wl, wr, w, i + 1, stride1, stride2, ny);
-  if (solid_upper) {
-    for (int n = 0; n < 5; ++n) wr[n] = wl[n];
-    wr[IVX + dir] = -wl[IVX + dir];
-  }
-  gm1 = GAMMA(solid_upper ? i : i + 1) - 1.;
+  gm1 = GAMMA(i + 1) - 1.;
   FluxJacobian(dfdq_next, gm1, wr, dir);
 
-  gm1 = 0.5 * (GAMMA(i) + GAMMA(solid_upper ? i : i + 1)) - 1.;
+  gm1 = 0.5 * (GAMMA(i) + GAMMA(i + 1)) - 1.;
   RoeAverage(prim, gm1, wl, wr);
 
   cs = SoundSpeed(prim, gm1);
@@ -159,8 +150,8 @@ void DISPATCH_MACRO vic_assemble_impl(
                               grav, work_lo[i * stride2], work_hi[i * stride2]);
 
   // Fix boundary conditions for the cells at the ends of the column.
-  bool merged_lower = (i == is || solid_lower) && first_block && !periodic;
-  bool merged_upper = (i == ie || solid_upper) && last_block && !periodic;
+  bool merged_lower = i == is && first_block && !periodic;
+  bool merged_upper = i == ie && last_block && !periodic;
   if (merged_lower) a[i] += b[i] * BndN.asDiagonal();
   if (merged_upper) a[i] += c[i] * BndN.asDiagonal();
 
@@ -208,8 +199,8 @@ void DISPATCH_MACRO vic_assemble_impl(
     };
     fold_cell(a[i], aT, i);
     // a neighbour outside the fluid segment keeps the frozen coupling
-    if (!merged_lower && !solid_lower && i > is) fold_cell(b[i], bT, i - 1);
-    if (!merged_upper && !solid_upper && i < ie) fold_cell(c[i], cT, i + 1);
+    if (!merged_lower && i > is) fold_cell(b[i], bT, i - 1);
+    if (!merged_upper && i < ie) fold_cell(c[i], cT, i + 1);
   }
 }
 
@@ -219,11 +210,11 @@ void DISPATCH_MACRO vic_assemble_full_impl(
     Eigen::Matrix<T, 5, 5>* a, Eigen::Matrix<T, 5, 5>* b,
     Eigen::Matrix<T, 5, 5>* c, T* w, T* gamma, T* area, T* vol, T* work_lo,
     T* work_hi, int i, int is, int ie, double dt, double grav, int dir, int ny,
-    int stride1, int stride2, bool first_block, bool last_block, bool periodic,
-    bool solid_lower = false, bool solid_upper = false) {
+    int stride1, int stride2, bool first_block, bool last_block,
+    bool periodic) {
   vic_assemble_impl<T, 5>(a, b, c, w, gamma, area, vol, work_lo, work_hi, i, is,
                           ie, dt, grav, dir, ny, stride1, stride2, first_block,
-                          last_block, periodic, solid_lower, solid_upper);
+                          last_block, periodic);
 }
 
 //! the partial (3x3) matrix, with the m_t fold when du and rhs_corr are set
@@ -233,12 +224,10 @@ void DISPATCH_MACRO vic_assemble_partial_impl(
     Eigen::Matrix<T, 3, 3>* c, T* w, T* gamma, T* area, T* vol, T* work_lo,
     T* work_hi, int i, int is, int ie, double dt, double grav, int dir, int ny,
     int stride1, int stride2, bool first_block, bool last_block,
-    bool solid_lower = false, bool solid_upper = false, T* du = nullptr,
-    Eigen::Matrix<T, 3, 1>* rhs_corr = nullptr) {
+    T* du = nullptr, Eigen::Matrix<T, 3, 1>* rhs_corr = nullptr) {
   vic_assemble_impl<T, 3>(a, b, c, w, gamma, area, vol, work_lo, work_hi, i, is,
                           ie, dt, grav, dir, ny, stride1, stride2, first_block,
-                          last_block, /*periodic=*/false, solid_lower,
-                          solid_upper, du, rhs_corr);
+                          last_block, /*periodic=*/false, du, rhs_corr);
 }
 
 }  // namespace snap

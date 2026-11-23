@@ -193,6 +193,8 @@ void FluxRegister::reset(int nvar, std::array<int64_t, 3> const& cells,
   }
   _pmask = {};
   _pvalue = {};
+  _bweight = {};
+  _wall_rate = {};
   _coord = nullptr;
   _slot = {};
   _monitor.reset(req);
@@ -405,6 +407,7 @@ void FluxRegister::apply_prescribed(int dim) {
 }
 
 void FluxRegister::begin_stage(int stage, harp::IntegratorWeight const& w) {
+  _wall_rate = {};
   _stage = stage;
   _w1 = w.wght1();
   _w2 = w.wght2();
@@ -430,6 +433,8 @@ void FluxRegister::end_stage(double dt) {
     auto const& w = boundary_weight_(d + 1);
     b.mul_(_w1).add_((_total[d].to(w.scalar_type()) * w).sum({1, 2, 3}),
                      _w2 * dt);
+    if (_wall_rate[d].defined())
+      b[IVX + d].add_(_wall_rate[d].to(b.options()), _w2 * dt);
   }
   _monitor.end_stage(_w1, _w2 * dt);
   _in_stage = false;
@@ -463,14 +468,11 @@ void FluxRegister::post_split(int dim, std::string const& name,
   }
 }
 
-void FluxRegister::set_solid(torch::Tensor const& solid) {
-  bool same = solid.defined() == _solid.defined() &&
-              (!solid.defined() ||
-               (solid.is_same(_solid) && solid._version() == _solid_version));
-  if (same) return;
-  _solid = solid;
-  _solid_version = solid.defined() ? solid._version() : 0;
-  _bweight = {};  // the face set follows the solid field
+void FluxRegister::post_wall_pressure(int dim, torch::Tensor const& rate) {
+  TORCH_CHECK(
+      _in_stage && dim >= 1 && dim <= 3,
+      "wall pressure requires an active stage and a Cartesian direction");
+  _wall_rate[dim - 1] = rate;
 }
 
 void FluxRegister::place_boundary_() {
@@ -497,7 +499,10 @@ void FluxRegister::place_boundary_() {
 torch::Tensor const& FluxRegister::boundary_weight_(int dim) {
   int d = dim - 1;
   auto& w = _bweight[d];
-  if (w.defined()) return w;
+  bool eb = _coord && _coord->pmb && _coord->pmb->eb_geometry();
+  if (_had_eb != eb) _bweight = {};
+  _had_eb = eb;
+  if (w.defined() && !eb) return w;
   auto const& t = _total[d];
   auto wide = t.is_mps() ? torch::kFloat32 : torch::kFloat64;
   w = torch::zeros(t.sizes().slice(1), t.options().dtype(wide));
@@ -515,18 +520,6 @@ torch::Tensor const& FluxRegister::boundary_weight_(int dim) {
         .narrow(2, lo[2] - (ax == 2) * shift, n[2]);
   };
   auto sign = torch::zeros(n, w.options());
-  torch::Tensor solid;
-  if (_solid.defined()) {
-    solid = _solid.ne(0).to(w.device());
-    // a face with one solid neighbour, outward from the fluid cell, which
-    // must be this block's: the first face's left and the last face's right
-    // cell are ghosts, and the neighbour block counts its own side
-    auto left = window(solid, 1), right = window(solid, 0);
-    sign = (left.logical_not() & right).to(w.scalar_type()) -
-           (left & right.logical_not()).to(w.scalar_type());
-    sign.select(ax, 0).clamp_(c10::nullopt, 0.);
-    sign.select(ax, n[ax] - 1).clamp_(0., c10::nullopt);
-  }
   if (auto pmb = c->pmb) {
     Exchange ex(pmb);
     for (bool upper : {false, true}) {
@@ -537,13 +530,6 @@ torch::Tensor const& FluxRegister::boundary_weight_(int dim) {
         continue;  // a shared face: its two entries cancel over the blocks
       auto plane = sign.select(ax, upper ? n[ax] - 1 : 0);
       plane.fill_(upper ? 1. : -1.);
-      if (solid.defined()) {  // only where the interior cell is fluid
-        int64_t cell = upper ? hi[ax] : lo[ax];
-        auto inner = solid;
-        for (int a = 0; a < 3; ++a)
-          inner = inner.narrow(a, a == ax ? cell : lo[a], a == ax ? 1 : n[a]);
-        plane.mul_(inner.squeeze(ax).logical_not().to(w.scalar_type()));
-      }
     }
   }
   auto area = dim == 1   ? c->face_area1()

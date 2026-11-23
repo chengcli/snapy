@@ -4,12 +4,122 @@
 #include <algorithm>
 
 // snap
+#include <snap/eb/geometry.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "hydro.hpp"
 
 namespace snap {
+
+// The position and least-squares coefficients are fixed by the fluid
+// polyhedra. Store only fluid cells whose reconstructed states can replace a
+// regular face stencil. For a closed face the neighbour index is the cell
+// itself, which also excludes that neighbour from the local extrema.
+struct CutCellStencil {
+  torch::Tensor cells, positions;
+  std::vector<torch::Tensor> neighbours, coefficients;
+  int width;
+
+  CutCellStencil(EBGeometry const& g, torch::Tensor const& state, int w)
+      : width(w) {
+    auto irregular = g.flags.ne(0);
+    auto affected = irregular.clone();
+    for (int axis = 0; axis < 3; ++axis) {
+      if (irregular.size(axis) == 1) continue;
+      for (int shift = -w - 1; shift <= w + 1; ++shift)
+        affected.logical_or_(irregular.roll(shift, axis));
+    }
+    cells = (affected & g.volume_fraction.gt(0.)).flatten().nonzero().flatten();
+    auto x = g.cell_centroid.flatten(1);
+    positions = x.index_select(1, cells);
+    auto ids = torch::arange(irregular.numel(), cells.options())
+                   .reshape(irregular.sizes());
+    auto matrix = torch::zeros({cells.numel(), 3, 3}, x.options());
+    for (int d = 0; d < 3; ++d) {
+      int axis = 2 - d, n = irregular.size(axis);
+      if (n == 1) continue;
+      for (int step : {-1, 1}) {
+        auto open = g.face_fraction[d].narrow(axis, step > 0, n) > 0.;
+        open.select(axis, step > 0 ? n - 1 : 0).fill_(false);
+        auto neighbour = torch::where(open, ids.roll(-step, axis), ids)
+                             .flatten()
+                             .index_select(0, cells);
+        auto dx = (x.index_select(1, neighbour) - positions).t();
+        auto dist2 = dx.square().sum(1, true);
+        auto weighted = dx / torch::where(dist2 > 0., dist2, 1.);
+        matrix.add_(weighted.unsqueeze(-1) * dx.unsqueeze(-2));
+        coefficients.push_back(weighted.unsqueeze(-1));
+        neighbours.push_back(neighbour);
+      }
+    }
+    // A missing direction (including a degenerate axis) has zero slope.
+    auto inverse = torch::linalg_pinv(matrix, 1.e-12, true);
+    for (auto& c : coefficients)
+      c = torch::matmul(inverse, c).squeeze(-1).t().to(state.options());
+  }
+};
+
+CutCellReconstruction::CutCellReconstruction(EBGeometry const& geometry,
+                                             torch::Tensor const& state,
+                                             int width)
+    : _geometry(geometry), _state(state) {
+  auto& cached = geometry.reconstruction_stencil;
+  // EBGeometry::to and set_embedded_boundary install fresh geometry objects.
+  if (!cached || cached->width < width ||
+      cached->cells.device() != state.device() ||
+      (!cached->coefficients.empty() &&
+       cached->coefficients.front().scalar_type() != state.scalar_type()))
+    cached = std::make_shared<CutCellStencil>(geometry, state, width);
+  _stencil = cached;
+  auto flat = state.flatten(1);
+  _packed = flat.index_select(1, cached->cells);
+  _lower = _upper = _packed;
+  _gradient =
+      torch::zeros({state.size(0), 3, cached->cells.numel()}, state.options());
+  for (size_t i = 0; i < cached->neighbours.size(); ++i) {
+    auto neighbour = flat.index_select(1, cached->neighbours[i]);
+    _lower = torch::minimum(_lower, neighbour);
+    _upper = torch::maximum(_upper, neighbour);
+    _gradient.add_((neighbour - _packed).unsqueeze(1) *
+                   cached->coefficients[i]);
+  }
+}
+
+torch::Tensor CutCellReconstruction::evaluate(
+    torch::Tensor const& points) const {
+  auto const& ids = _stencil->cells;
+  auto dx = (points.flatten(1).index_select(1, ids) - _stencil->positions)
+                .to(_state.options());
+  auto value = torch::clamp(_packed + (_gradient * dx).sum(1), _lower, _upper);
+  auto out = _state.contiguous().clone();
+  out.flatten(1).index_copy_(1, ids, value);
+  return out;
+}
+
+torch::Tensor CutCellReconstruction::faces(torch::Tensor const& regular,
+                                           int dim, int width) const {
+  int d = 3 - dim, n = _state.size(dim);
+  auto const& centroid = _geometry.face_centroid[d];
+  auto left = evaluate(centroid.narrow(dim, 1, n)).roll(1, dim);
+  auto right = evaluate(centroid.narrow(dim, 0, n));
+  return torch::where(irregular_faces(dim, width), torch::stack({left, right}),
+                      regular);
+}
+
+torch::Tensor CutCellReconstruction::irregular_faces(int dim, int width) const {
+  int d = 3 - dim, n = _state.size(dim);
+  auto irregular = _geometry.flags.ne(0);
+  auto use = _geometry.face_fraction[d].narrow(dim - 1, 0, n).ne(1.);
+  // The stencil for both sides spans the face, donor cells i-1 and i.
+  for (int offset = 1 - width; offset <= width; ++offset)
+    use.logical_or_(irregular.roll(offset, dim - 1));
+  return use;
+}
+
+torch::Tensor CutCellReconstruction::wall_state() const {
+  return evaluate(_geometry.wall_centroid);
+}
 
 void post_face_floors(ReconstructImpl const& recon, RegisterMonitor& monitor) {
   if (!recon.floored.defined()) return;
@@ -135,14 +245,11 @@ void riemann_solve(HydroImpl& hydro, torch::Tensor lr, int dim,
 }
 
 void solve_faces(HydroImpl& hydro, FaceDir const& dir,
-                 torch::Tensor const& faces, Variables const& other,
+                 torch::Tensor const& faces,
                  IdealMoistPerturbations const* perturb,
                  torch::Tensor& background, bool central,
                  FaceHook const& before_solve) {
-  auto pmb = hydro.pmb;
-  bool has_solid = other.count("solid");
-  auto wlr =
-      has_solid ? pmb->pib->forward(faces, dir.dim, other.at("solid")) : faces;
+  auto wlr = faces;
   if (dir.disabled) return;
   if (before_solve) before_solve(wlr, dir.dim);
   int d = 4 - dir.dim;

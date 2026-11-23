@@ -118,8 +118,9 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
                      torch::nn::Module* p = nullptr);
   void reset() override;
 
-  double max_time_step(torch::Tensor hydro_w,
-                       torch::Tensor solid = torch::Tensor()) const;
+  double max_time_step(torch::Tensor hydro_w) const;
+
+  torch::Tensor const& eb_transport_increment() const { return _eb_transport; }
 
   //! Advance the conserved variables by one time step.
   torch::Tensor forward(double dt, torch::Tensor hydro_u,
@@ -283,7 +284,6 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! post_dt: the step's dt, for the solve's register posts (V3 I-4)
   torch::Tensor _apply_implicit_correction(torch::Tensor& du,
                                            torch::Tensor const& w, double dt,
-                                           Variables const& other,
                                            double post_dt = 0.);
 
  private:
@@ -320,6 +320,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   CellVolume _cell_vol;
 
   FluxRegister freg;
+  torch::Tensor _eb_transport;
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   // Reusable stage scratch; not restart state. Recreated on shape/device
   // change.
@@ -329,6 +330,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   torch::Tensor _conv4_trips;
   //! this stage's x2 [0] / x3 [1] face states the covariance was built from
   //! and the dry-mass row it added (undefined when the switch is off)
+  torch::Tensor _cov_regular[2];
   torch::Tensor _cov_wl[2], _cov_wr[2], _cov_dry[2];
 };
 

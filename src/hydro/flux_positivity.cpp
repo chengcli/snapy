@@ -6,6 +6,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/eb/geometry.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "flux_positivity.hpp"
@@ -185,7 +186,25 @@ torch::Tensor PositivityLimiter::theta(PositivityInputs const& in,
   // where the dry air drains too, drain as far as the poorer neighbour repays
   auto td = flux_positivity_theta(in.rho_dry, in.mass[0], in.mass[1],
                                   in.mass[2], pc, in.dt);
-  auto phi = flux_positivity_share(in.u / in.rho_dry);
+  auto q = in.u / in.rho_dry;
+  torch::Tensor phi;
+  if (auto eb = pmb_->eb_geometry()) {
+    // Only fluid neighbours with an open shared face can replenish a donor.
+    // A covered placeholder has no mixing ratio and must not suppress the
+    // relaxation for a tracer proportional to the dry mass.
+    auto low = q;
+    for (int d = 0; d < 3; ++d) {
+      int axis = 3 - d, n = q.size(axis);
+      if (n == 1) continue;
+      for (int step : {-1, 1}) {
+        auto open = eb->face_fraction[d].narrow(axis - 1, step > 0, n).gt(0.);
+        low = torch::where(open, torch::minimum(low, q.roll(-step, axis)), low);
+      }
+    }
+    phi = torch::where(q > 0., (low / q).clamp(0., 1.), 0.);
+  } else {
+    phi = flux_positivity_share(q);
+  }
   // nothing refills settling mass: a cell it drains keeps the plain theta
   if (in.fsed1.defined()) {
     auto out = in.fsed1.clamp_min(0.).roll(-1, 3) + (-in.fsed1).clamp_min(0.);

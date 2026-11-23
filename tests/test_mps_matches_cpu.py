@@ -176,20 +176,6 @@ def recon_arms():
             yield compare(f"recon {kind} scale={scale}", run, tol=0.0)
 
 
-def solid_arm():
-    from snapy import InternalBoundary, InternalBoundaryOptions
-
-    torch.manual_seed(0)
-    solid = (torch.rand(1, 12, 16) > 0.6).int()
-
-    def run(device, dtype):
-        out, flips = InternalBoundary(InternalBoundaryOptions()).rectify_solid(
-            solid.clone().to(device))
-        assert flips > 0
-        return {"out": torch.cat([out.cpu().double().flatten(), torch.tensor([flips])])[None]}
-    yield compare("rectify_solid", run)
-
-
 def deck_arms():
     moist = with_(moist_cfg(), integration__implicit_scheme=0)
     dry = {
@@ -243,7 +229,7 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
     failures = []
-    for name, err, f64, msg, tol in [*recon_arms(), *solid_arm(), *deck_arms()]:
+    for name, err, f64, msg, tol in [*recon_arms(), *deck_arms()]:
         ok = err <= (max(TOL, 3 * f64) if tol is None else tol)
         print(f"{'ok  ' if ok else 'FAIL'} {name:28s} err={err:.2e} f64={f64:.2e} {msg}")
         if not ok:

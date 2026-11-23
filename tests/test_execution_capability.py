@@ -1,8 +1,7 @@
 """V3 X7: a block's row of the capability matrix (X.rst section 10).
 
 The dry Straka case in FP64 and FP32: on CPU it runs eager only and says why;
-on CUDA it can run as CUDA graphs in its own precision, and a solid mask in
-its variables makes it eager again, with the reason named.
+on CUDA it can run as CUDA graphs in its own precision.
 """
 
 import torch
@@ -20,11 +19,6 @@ def check(precision, device, capturable):
     assert (c["eager_reasons"] == []) is capturable, c
     if not capturable:
         assert any("not on a CUDA device" in r for r in c["eager_reasons"]), c
-    solid = dict(state)
-    solid["solid"] = torch.zeros_like(state["hydro_w"][0], dtype=torch.bool)
-    s = block.execution_capability(solid)
-    assert not s["graph_fp64"] and not s["graph_fp32"], s
-    assert "a solid mask is set" in s["eager_reasons"], s
     return c
 
 

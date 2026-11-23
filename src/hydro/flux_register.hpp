@@ -91,9 +91,8 @@ class RegisterMonitor {
   //! R-7 (R.rst 4.2 O, L-3): the step's outward transfer through dim's faces
   //! of the fluid domain's boundary, area-integrated, (nrows,) FP64 (FP32 on
   //! MPS), in units of each row's conserved quantity: sum A_f S_d over the
-  //! block faces whose S FaceKind is wall, outflow or custom (interior cell
-  //! fluid) and the faces with one solid neighbour, outward from the fluid
-  //! cell. Zero before the first step and for an inactive direction.
+  //! open parts of wall, outflow and custom block faces, plus the corresponding
+  //! Cartesian component of the embedded-wall pressure impulse.
   torch::Tensor boundary(int dim) const;
 
   std::vector<std::string> const& row_names() const { return _rows; }
@@ -218,10 +217,9 @@ class FluxRegister {
   //! field; begin_step clears the direct part.
   void post_split(int dim, std::string const& name, torch::Tensor const& flux,
                   double weight, double dt);
-  //! R-7: this stage's immersed-solid cells (nonzero: solid), shaped like a
-  //! cell field, for boundary(dim)'s solid faces; undefined: no solid. The
-  //! face set is rebuilt only when the solid field changes.
-  void set_solid(torch::Tensor const& solid);
+  //! Integrated outward wall-pressure force in one Cartesian direction.
+  //! It has the same units and stage weights as sum(face area * flux).
+  void post_wall_pressure(int dim, torch::Tensor const& rate);
 
   RegisterMonitor& monitor() { return _monitor; }
   RegisterMonitor const& monitor() const { return _monitor; }
@@ -244,10 +242,10 @@ class FluxRegister {
   void overwrite_(int dim, std::string const& name, torch::Tensor const& after);
   //! R-7: per direction, the outward sign times A_f of each boundary face,
   //! zero elsewhere, shaped like total(dim) without rows (FP64, FP32 on MPS);
-  //! undefined until built, rebuilt when the solid field changes
+  //! undefined until built; open areas follow the installed embedded geometry
   std::array<torch::Tensor, 3> _bweight;
-  torch::Tensor _solid;
-  uint32_t _solid_version = 0;
+  std::array<torch::Tensor, 3> _wall_rate;
+  bool _had_eb = false;
   torch::Tensor const& boundary_weight_(int dim);
   void place_boundary_();
   std::array<bool, 3> _want_step = {false, false, false};

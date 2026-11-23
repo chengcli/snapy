@@ -44,14 +44,18 @@ int call_fix_vapor_cuda(at::TensorIterator& iter, bool count,
   AT_DISPATCH_FLOATING_TYPES(iter.dtype(), "call_fix_vapor_cuda", [&] {
     auto nx1 = at::native::ensure_nonempty_size(iter.output(), -1);
 
-    native::gpu_kernel<3>(
-        iter, [=] __device__(char* const data[3], unsigned int strides[3]) {
-          auto vapor = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
-          auto major = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
-          auto vol = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
-          int err = fix_vapor_impl(vapor, major, vol, nx1);
-          if (err && nerr_ptr) atomicAdd(nerr_ptr, err);
-        });
+    const bool eb = iter.ntensors() == 4;
+    auto repair = [=] __device__(char* const* data, unsigned int* strides) {
+      auto vapor = reinterpret_cast<scalar_t*>(data[0] + strides[0]);
+      auto major = reinterpret_cast<scalar_t*>(data[1] + strides[1]);
+      auto vol = reinterpret_cast<scalar_t*>(data[2] + strides[2]);
+      auto face = eb ? reinterpret_cast<scalar_t*>(data[3] + strides[3]) : nullptr;
+      int err = eb ? fix_vapor_impl(vapor, major, vol, nx1, face)
+                   : fix_vapor_segment(vapor, major, vol, nx1);
+      if (err && nerr_ptr) atomicAdd(nerr_ptr, err);
+    };
+    if (eb) native::gpu_kernel<4>(iter, repair);
+    else native::gpu_kernel<3>(iter, repair);
   });
 
   return read ? nerr.item<int>() : 0;

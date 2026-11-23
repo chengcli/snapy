@@ -157,8 +157,7 @@ boundary-condition:
     ASSERT_TRUE(torch::isfinite(gamma).all().item<bool>());
     // Finite float32 assembly with a long, positive time step: rejection
     // must come from the relative pivot guard, not a NaN or dt=0 input.
-    block->phydro->picorr->forward_masked(du, prim, gamma, 1.e4,
-                                          torch::Tensor());
+    block->phydro->picorr->forward_stage(du, prim, gamma, 1.e4);
     EXPECT_TRUE(block->phydro->picorr->solve_failed());
   } else {
     block->phydro->picorr->forward(du, prim, gamma, assembly_failure ? 0. : 1.);
@@ -316,8 +315,7 @@ void rest_column_clamp(torch::Dtype dtype) {
   auto du = torch::zeros_like(prim);
   auto gamma = torch::full_like(prim[IDN], 1.4);
   for (int step = 0; step < 2; ++step) {
-    auto correction = block->phydro->picorr->forward_masked(du, prim, gamma, 1.,
-                                                            torch::Tensor());
+    auto correction = block->phydro->picorr->forward_stage(du, prim, gamma, 1.);
     ASSERT_FALSE(block->phydro->picorr->solve_failed());
     EXPECT_TRUE(torch::equal(du, torch::zeros_like(du)));
     EXPECT_TRUE(torch::equal(correction, torch::zeros_like(correction)));
@@ -379,7 +377,7 @@ void column_status_case(torch::Device device) {
   auto gamma = torch::full_like(prim[IDN], 1.4);
   int j = coord->jl() + 2;  // the bad column
   gamma.select(-2, j).fill_(std::numeric_limits<double>::quiet_NaN());
-  ic->forward_masked(du, prim, gamma, 1., torch::Tensor());
+  ic->forward_stage(du, prim, gamma, 1.);
   auto st = ic->col_status().cpu();
   ASSERT_EQ(st.scalar_type(), torch::kInt32);
   EXPECT_EQ(st.sizes(), (std::vector<int64_t>{coord->options->nc3(),
@@ -396,7 +394,7 @@ void column_status_case(torch::Device device) {
   ic->reset_status();
   EXPECT_FALSE(ic->status().item<bool>());
   gamma.fill_(1.4);  // a clean solve leaves every column clear
-  ic->forward_masked(du, prim, gamma, 1., torch::Tensor());
+  ic->forward_stage(du, prim, gamma, 1.);
   EXPECT_FALSE(ic->status().item<bool>());
   EXPECT_GT(ic->correction().abs().max().item<double>(), 0.);
 }
@@ -455,7 +453,7 @@ void fp64_retry_case(bool fp64_fails) {
   auto du32 = 1.e-3 * torch::ones_like(prim32);
   auto gamma32 = torch::full_like(prim32[IDN], 1.4);
   gamma32.select(-2, j).fill_(std::numeric_limits<float>::quiet_NaN());
-  ic->forward_masked(du32, prim32, gamma32, 1., torch::Tensor());
+  ic->forward_stage(du32, prim32, gamma32, 1.);
   auto retry = ic->stage_failed();
   ASSERT_TRUE(retry.defined());
   EXPECT_EQ(retry.sum().item<int64_t>(), 1);
@@ -467,8 +465,7 @@ void fp64_retry_case(bool fp64_fails) {
   auto gamma64 = torch::full_like(prim64[IDN], 1.4);
   if (fp64_fails)
     gamma64.select(-2, j).fill_(std::numeric_limits<double>::quiet_NaN());
-  ic->forward_masked(du64, prim64, gamma64, 1., torch::Tensor(), nullptr, 0.,
-                     retry);
+  ic->forward_stage(du64, prim64, gamma64, 1., nullptr, 0., retry);
   // the other columns are left as they came in, bit for bit
   auto other = retry.logical_not().unsqueeze(0).unsqueeze(-1).expand_as(du64);
   EXPECT_TRUE(

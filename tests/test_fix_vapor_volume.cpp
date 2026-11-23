@@ -9,6 +9,7 @@
 #include <torch/torch.h>
 
 // snap
+#include <snap/eos/fix_vapor_impl.h>
 #include <snap/snap.h>
 
 #include <snap/mesh/meshblock.hpp>
@@ -35,6 +36,23 @@ double unweighted_fill(double q, double d) {
 }
 
 }  // namespace
+
+TEST(EmbeddedBoundaryVapor, CoveredCellsSeparateFluidColumnSegments) {
+  double v[] = {0., 1., 0.25, 0., 1., 1.};
+  double major[] = {0., 1., 1., 0., 1., 1.};
+  double y[] = {-42., 1., -2., -42., 0., 0.};
+  EXPECT_EQ(fix_vapor_impl(y, major, v, 6), 0);
+  EXPECT_EQ(y[0], -42.);
+  EXPECT_EQ(y[1], 0.5);
+  EXPECT_EQ(y[2], 0.);
+  EXPECT_EQ(y[3], -42.);
+  y[4] = -0.1;
+  EXPECT_EQ(fix_vapor_impl(y, major, v, 6), 1);
+  EXPECT_EQ(y[1], 0.5);  // unable to borrow through the solid barrier
+  double cut_vol[] = {0.25, 0.75}, lower_face[] = {1., 0.}, ycut[] = {1., -0.1};
+  EXPECT_EQ(fix_vapor_impl(ycut, major + 1, cut_vol, 2, lower_face), 1);
+  EXPECT_EQ(ycut[0], 1.);  // two positive volumes can share a closed face
+}
 
 // The column repair of a negative vapor (fix_vapor) must keep the column's
 // vapor mass, sum(rho q V). On a grid whose x1 cell volume varies (here

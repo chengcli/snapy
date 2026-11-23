@@ -394,12 +394,6 @@ TEST(diffusion_options, wall_names_are_an_exact_whitelist) {
     EXPECT_TRUE(options->is_physical_boundary(0, 0, -1)) << name;
   }
 
-  // `solid` writes a bare 1 into every variable, so its GRADIENT is nonsense
-  // too and a coefficient fix would not rescue the face
-  options->bfuncs()[BoundaryFace::kInnerX1] = get_bc_func().at("solid_inner");
-  options->bcnames()[BoundaryFace::kInnerX1] = "solid_inner";
-  EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
-
   // an unnamed function, e.g. one installed from Python, is not a wall
   options->bcnames()[BoundaryFace::kInnerX1] = "";
   EXPECT_FALSE(options->is_wall_boundary(0, 0, -1));
