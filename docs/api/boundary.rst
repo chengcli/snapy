@@ -76,7 +76,8 @@ when choosing the resolution and number of blocks per process.
 
 Cartesian embedded boundaries also support vertical implicit correction with
 schemes 1 and 9, HLLC or LMARS wall pressure, and a single block through the
-resolved vertical direction with reflecting ends. Mapped embedded boundaries
+resolved vertical direction with reflecting ends. See the column and wall
+settings in :doc:`../user_guide/configuration`. Mapped embedded boundaries
 require explicit transport. Both use total-state dynamics with the
 ideal-gas, ideal-moist, or moist-mixture EOS. Nonzero gravity and diffusion
 require wall-specific energy or diffusive fluxes and are rejected at setup. Assign
