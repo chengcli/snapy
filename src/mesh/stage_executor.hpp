@@ -49,6 +49,12 @@ struct GraphKey {
   //! (Op::reads_host_dt): a new dt recaptures that segment; else 0. Every
   //! other segment reads the executor's device dt (V3 D) and keeps no dt
   double dt = 0.;
+  //! the implicit correction's options its call reads (hydro.cpp), baked
+  //! into a capture: a change recaptures (V3 C1; X.rst:296). The correction
+  //! runs in advance_local, an op that reads the host dt (VIC kernel
+  //! parameters, dt_corr), so its segment keeps dt above until C4
+  std::string implicit_precision;
+  bool implicit_fallback_fp64 = false;
   //! kintera::alloc_epoch of the EOS thermo (K.rst 3.3): its counter,
   //! active set or table reallocated (reset(), a new shape) recaptures
   int64_t thermo_epoch = 0;
