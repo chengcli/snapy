@@ -5,10 +5,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 // torch
 #include <torch/torch.h>
+
+// snap
+#include "segment.hpp"
 
 namespace kintera {
 class ThermoYImpl;
@@ -33,8 +37,11 @@ struct GraphKey {
   std::vector<int64_t> layout;     // its dtype, shape and strides
   int store_generation = 0;        // StateStore::generation(): addresses
   int config_generation = 0;       // StageExecutor::bump_config_generation()
-  int stage = -1;
-  double dt = 0.;  // host double: a new dt recaptures
+  int block = -1, stage = -1,
+      segment = -1;  // one graph per (block, stage, segment)
+  //! the host dt, only for a segment holding an op that reads it (until dt
+  //! is a graph input, C4/D): a new dt recaptures that segment; else 0
+  double dt = 0.;
   //! kintera::alloc_epoch of the EOS thermo (K.rst 3.3): its counter,
   //! active set or table reallocated (reset(), a new shape) recaptures
   int64_t thermo_epoch = 0;
@@ -48,7 +55,18 @@ struct GraphKey {
 struct Capability {
   bool eager_fp64 = false, eager_fp32 = false;  // this block's precision
   bool graph_fp64 = false, graph_fp32 = false;  // and whether it can capture
-  std::vector<std::string> eager_reasons;       // why its stages run eager
+  //! why its stages run eager: the case's reasons and every eager op's
+  std::vector<std::string> eager_reasons;
+  //! one row per segment of the block's stage schedule
+  struct SegmentRow {
+    int index = 0;
+    std::string kind;
+    bool capturable = false;     //!< runs as a graph in this case
+    bool reads_host_dt = false;  //!< dt is in its graph key
+    std::vector<std::string> ops;
+    std::vector<std::string> reasons;  //!< why it runs eager
+  };
+  std::vector<SegmentRow> segments;
 };
 
 //! V3 lane X, X3: a block's stages run eagerly (default, reference) or as CUDA
@@ -64,6 +82,9 @@ class StageExecutor {
   int num_blocks() const { return static_cast<int>(_blocks.size()); }
   //! the block at index `block` (checked)
   MeshBlockImpl* block_at(int block) const;
+  //! the ops and segments of the block's stages (A2: one segment per stage,
+  //! the exchange and advance_local)
+  StageSchedule const& schedule(int block) const;
 
   //! a bare block's stage: exchange_ghost_zones, then advance_local, eager or
   //! replayed
@@ -85,21 +106,25 @@ class StageExecutor {
 
  private:
   struct Captured;
-  using Slot = std::pair<int, int>;  // (block, stage)
+  using Slot = std::tuple<int, int, int>;  // (block, stage, segment)
 
-  void run_eager(int block, Variables& vars, double dt, int stage);
-  GraphKey make_key(int block, Variables const& vars, double dt,
+  void build_schedule(int block);
+  //! the ops of a segment (all segments: -1), in order, eagerly
+  void run_eager(int block, Variables& vars, double dt, int stage,
+                 int segment = -1);
+  GraphKey make_key(int block, int segment, Variables const& vars, double dt,
                     int stage) const;
   //! the EOS's kintera ThermoY (hydro.eos.thermo), or null
   std::shared_ptr<kintera::ThermoYImpl> thermo_of(int block) const;
   //! the save list: the state, the registered storage and hydro_w
   std::map<std::string, torch::Tensor> save_list(int block,
                                                  Variables& vars) const;
-  void capture(int block, Variables& vars, double dt, int stage);
-  void replay(int block, Variables& vars, int stage);
+  void capture(int block, int segment, Variables& vars, double dt, int stage);
+  void replay(int block, int segment, Variables& vars, int stage);
 
   std::vector<MeshBlockImpl*> _blocks;
-  std::map<Slot, std::shared_ptr<Captured>> _graphs;  // one per block, stage
+  std::vector<StageSchedule> _schedules;  // one per block
+  std::map<Slot, std::shared_ptr<Captured>> _graphs;
   int _config_generation = 0;
   //! run_local runs on the block worker pool
   std::atomic<int64_t> _captures{0}, _replays{0}, _eager{0};
