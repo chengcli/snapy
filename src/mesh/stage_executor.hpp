@@ -109,7 +109,11 @@ class StageExecutor {
   struct Captured;
   using Slot = std::tuple<int, int, int>;  // (block, stage, segment)
 
-  void build_schedule(int block);
+  //! (re)builds the block's schedule; an op's mode follows the block's
+  //! options (an outflow boundary makes the boundaries op eager)
+  void build_schedule(int block) const;
+  //! whether the block has an outflow (radiating) boundary function
+  bool outflow_boundary(int block) const;
   //! the ops of a segment (all segments: -1), in order, eagerly
   void run_eager(int block, Variables& vars, double dt, int stage,
                  int segment = -1);
@@ -124,7 +128,12 @@ class StageExecutor {
   void replay(int block, int segment, Variables& vars, int stage);
 
   std::vector<MeshBlockImpl*> _blocks;
-  std::vector<StageSchedule> _schedules;  // one per block
+  //! one per block, rebuilt when the block's outflow boundaries change
+  //! (Python can reset its boundary functions after construction); a
+  //! rebuild drops the block's graphs at its next stage
+  mutable std::vector<StageSchedule> _schedules;
+  mutable std::vector<int> _schedule_outflow;
+  mutable std::vector<char> _schedule_rebuilt;
   std::map<Slot, std::shared_ptr<Captured>> _graphs;
   int _config_generation = 0;
   //! run_local runs on the block worker pool
