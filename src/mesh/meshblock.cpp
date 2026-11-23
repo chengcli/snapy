@@ -449,6 +449,11 @@ void MeshBlockImpl::register_flux_storage() {
     for (size_t i = 0; i < amounts.size(); ++i)
       _state.register_storage(names[i], amounts[i]);
   }
+  // V3 C1: the implicit correction's step status, FP64-stage predicate and
+  // meters, written in every stage with the solve
+  if (phydro->picorr)
+    for (auto const &[name, t] : phydro->picorr->capture_storage())
+      _state.register_storage(name, t);
 }
 
 std::shared_ptr<kintera::ThermoYImpl> MeshBlockImpl::thermo() const {
