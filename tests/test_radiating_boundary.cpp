@@ -249,12 +249,11 @@ TEST(radiating, mixed_faces_preserve_representation_and_order) {
       EXPECT_TRUE(torch::allclose(tracers, expected_tracers, 1.e-12, 1.e-12));
       EXPECT_TRUE(torch::equal(
           active, u.narrow(1, 3, 8).narrow(2, 3, 8).narrow(3, 3, 8)));
-      // The nonradiating solid face must keep literal conserved values where
-      // subsequent faces do not overlap it.
-      EXPECT_TRUE(torch::equal(
-          u.narrow(1, 11, 3).narrow(2, 3, 8).narrow(3, 3, 8),
-          torch::ones_like(
-              u.narrow(1, 11, 3).narrow(2, 3, 8).narrow(3, 3, 8))));
+      // The upper x3 face extrapolates the last owned plane into each ghost.
+      auto column = u.narrow(2, 3, 8).narrow(3, 3, 8);
+      auto ghosts = column.narrow(1, 11, 3);
+      EXPECT_TRUE(
+          torch::equal(ghosts, column.narrow(1, 10, 1).expand_as(ghosts)));
     }
 }
 

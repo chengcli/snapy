@@ -190,14 +190,31 @@ class EmbeddedBoundaryUpdate {
       // The domain-side face is still allowed to carry an exterior BC flux.
       auto adjacent = data[valid_cell].narrow(-1 - d, 0, n - 1).ne(0) &
                       data[valid_cell].narrow(-1 - d, 1, n - 1).ne(0);
-      auto compare = [&](Tensor lower, Tensor upper, Tensor mask) {
-        TORCH_CHECK(
-            torch::allclose(upper.narrow(-1 - d, 0, n - 1).masked_select(mask),
-                            lower.narrow(-1 - d, 1, n - 1).masked_select(mask),
-                            1.e-8, 1.e-12),
-            "embedded boundary metrics disagree at shared faces in x", d + 1);
+      auto compare = [&](Tensor lower, Tensor upper) {
+        TORCH_CHECK(torch::allclose(upper, lower, 1.e-8, 1.e-12),
+                    "embedded boundary metrics disagree at shared faces in x",
+                    d + 1);
       };
-      compare(left, right, adjacent);
+      auto compare_adjacent = [&](Tensor lower, Tensor upper, Tensor mask) {
+        compare(lower.narrow(-1 - d, 1, n - 1).masked_select(mask),
+                upper.narrow(-1 - d, 0, n - 1).masked_select(mask));
+      };
+      compare_adjacent(left, right, adjacent);
+      // A single-block periodic axis wraps locally, without exchanged halos.
+      // Transverse halo padding at a physical exterior has no matching face.
+      Tensor open_wrap;
+      if (periodic[d] && n > 1) {
+        auto valid = data[valid_cell];
+        auto mask =
+            valid.select(-1 - d, 0).ne(0) & valid.select(-1 - d, n - 1).ne(0);
+        auto low = left.select(-1 - d, 0), high = right.select(-1 - d, n - 1);
+        compare(low.masked_select(mask), high.masked_select(mask));
+        TORCH_CHECK(
+            !(mask & (low.gt(0) != high.gt(0))).any().item<bool>(),
+            "embedded boundary open faces disagree at periodic seam in x",
+            d + 1);
+        open_wrap = mask & low.gt(0);
+      }
       auto faces = [&](Tensor lower, Tensor upper) {
         return torch::cat({lower, upper.narrow(-1 - d, n - 1, 1)}, -1 - d);
       };
@@ -205,8 +222,14 @@ class EmbeddedBoundaryUpdate {
       std::vector<Tensor> coords;
       for (int comp = 0; comp < 3; ++comp) {
         int i = first_centroid + 6 * d + comp;
-        compare(data[i], data[i + 3],
-                adjacent & right.narrow(-1 - d, 0, n - 1).gt(0));
+        compare_adjacent(data[i], data[i + 3],
+                         adjacent & right.narrow(-1 - d, 0, n - 1).gt(0));
+        if (open_wrap.defined()) {
+          auto low = data[i].select(-1 - d, 0).masked_select(open_wrap);
+          auto high =
+              data[i + 3].select(-1 - d, n - 1).masked_select(open_wrap);
+          compare(comp == d ? low + periods_[d] : low, high);
+        }
         coords.push_back(faces(data[i], data[i + 3]));
       }
       g.face_centroid[d] = torch::stack(coords);
@@ -313,7 +336,7 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
   TORCH_CHECK(!options->execution_strict(),
               "embedded boundaries require eager stage execution");
   auto c = pcoord;
-  _eb = std::make_shared<EBGeometry>(
+  auto next = std::make_shared<EBGeometry>(
       (sphere ? EBGeometry::from_cubed_sphere_metrics(
                     g.volume_fraction, g.cell_centroid, g.face_fraction,
                     g.face_centroid, g.face_area_vector, g.wall_area_vector,
@@ -324,18 +347,18 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
                                          c->x1f, c->x2f, c->x3f))
           .to(c->x1f.device()));
   for (int d = 0; d < 3; ++d) {
-    if (disabled[d] || g.volume_fraction.size(-1 - d) == 1) {
-      auto af = _eb->face_fraction[d];
+    if (disabled[d] || next->volume_fraction.size(-1 - d) == 1) {
+      auto af = next->face_fraction[d];
       TORCH_CHECK(torch::allclose(af.slice(-1 - d, 0, -1), af.slice(-1 - d, 1),
                                   1.e-9, 1.e-12),
                   "embedded wall varies along inactive flux direction x",
                   d + 1);
     }
   }
-  auto owned = torch::zeros_like(_eb->flags, torch::kBool);
+  auto owned = torch::zeros_like(next->flags, torch::kBool);
   auto sub = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-  owned.index(sub).copy_(_eb->volume_fraction.index(sub) > 0);
-  _eb_fluid_indices = owned.flatten().nonzero().flatten();
+  owned.index(sub).copy_(next->volume_fraction.index(sub) > 0);
+  auto indices = owned.flatten().nonzero().flatten();
   auto const& eos = phydro->peos->options;
   auto const& th = eos->thermo();
   double temp = std::max(th ? th->Tref() : 300., 2 * eos->temperature_floor());
@@ -343,12 +366,18 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
   double rho = std::max({(th ? th->Pref() : 1.e5) / (rd * temp),
                          2 * eos->density_floor(),
                          2 * eos->pressure_floor() / (rd * temp)});
-  _eb_neutral_w =
+  auto neutral_w =
       torch::zeros({phydro->peos->nvar(), 1, 1, 1}, c->x1f.options());
-  _eb_neutral_w[IDN].fill_(rho);
-  _eb_neutral_w[IPR].fill_(rho * rd * temp);
-  _eb_neutral_u = _eb_neutral_w.clone();
-  _eb_neutral_u[IPR].copy_(phydro->peos->compute("W->I", {_eb_neutral_w}));
+  neutral_w[IDN].fill_(rho);
+  neutral_w[IPR].fill_(rho * rd * temp);
+  auto neutral_u = neutral_w.clone();
+  neutral_u[IPR].copy_(phydro->peos->compute("W->I", {neutral_w}));
+  // A device move passes the currently installed geometry back into this
+  // setter. Keep it alive until validation and all derived tensors are ready.
+  _eb = std::move(next);
+  _eb_fluid_indices = std::move(indices);
+  _eb_neutral_w = std::move(neutral_w);
+  _eb_neutral_u = std::move(neutral_u);
   _eb_update.reset();
   bump_config_generation();
 }

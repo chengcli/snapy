@@ -63,13 +63,16 @@ def main():
     # V3 I-6: both meters count the retried columns (one step); a retry that
     # succeeds is not a failure of the step: implicit.column stays clear
     assert b.buffer("hydro.monitor_counters")[-1].item() == n
-    assert b.buffer("hydro.monitor_retry")[-1].item() == 0
+    # The first four retry flags are EF causes. Subsequent operators can
+    # append their own flags after implicit.column.
+    implicit_column = 4
+    assert b.buffer("hydro.monitor_retry")[implicit_column].item() == 0
     b, v = column("float32", gravity=False, fallback=False)
     for stage in range(len(b.intg.stages)):
         b.forward(v, 1.0e9, stage)
     expected = b.buffer("u0").clone()
     # no FP64 retry ran: the FP32 failure is the last solve of its columns
-    assert b.buffer("hydro.monitor_retry")[-1].item() == 1
+    assert b.buffer("hydro.monitor_retry")[implicit_column].item() == 1
     assert b.check_redo(v) == 1
     assert torch.equal(v["hydro_u"], expected)
     print("FP64 fallback and FP32-only retry passed", flush=True)
