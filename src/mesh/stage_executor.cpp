@@ -38,7 +38,9 @@ bool GraphKey::operator==(GraphKey const& other) const {
   return device_index == other.device_index && names == other.names &&
          layout == other.layout && store_generation == other.store_generation &&
          config_generation == other.config_generation && stage == other.stage &&
-         dt == other.dt && thermo_epoch == other.thermo_epoch;
+         dt == other.dt && implicit_precision == other.implicit_precision &&
+         implicit_fallback_fp64 == other.implicit_fallback_fp64 &&
+         thermo_epoch == other.thermo_epoch;
 }
 
 struct StageExecutor::Captured {
@@ -102,7 +104,6 @@ std::vector<std::string> StageExecutor::capture_reasons(
   if (hydro->riemann()->type() != "hllc")
     why.push_back("riemann solver is " + hydro->riemann()->type() +
                   ", not hllc");
-  if (hydro->icorr()) why.push_back("implicit-scheme is not 0");
   if (op->intg()->type() != "rk3")
     why.push_back("integration type is " + op->intg()->type() + ", not rk3");
   auto const& lo = pmb->_playout->options;
@@ -156,6 +157,10 @@ GraphKey StageExecutor::make_key(int block, Variables const& vars, double dt,
   key.config_generation = _config_generation;
   key.stage = stage;
   key.dt = dt;
+  if (auto const& icorr = pmb->options->hydro()->icorr()) {
+    key.implicit_precision = icorr->precision();
+    key.implicit_fallback_fp64 = icorr->fallback_fp64();
+  }
   if (auto pthermo = thermo_of(block))
     key.thermo_epoch = kintera::alloc_epoch(*pthermo);
   return key;
@@ -263,6 +268,13 @@ void StageExecutor::capture(int block, Variables& vars, double dt, int stage) {
     pmb->place_flux_storage();
     pmb->register_flux_storage();
   }
+  // V3 C1: the implicit correction's scratch, status and FP64-stage predicate
+  // are allocated here, not in the warm-up, and registered, so the save list
+  // holds them
+  auto wit = vars.find("hydro_w");
+  if (wit != vars.end() && wit->second.defined())
+    pmb->phydro->prepare_implicit(wit->second);
+  pmb->register_flux_storage();
   kintera::NoTableBuild no_table_build;
   auto handles = save_list(block, vars);
   std::map<std::string, torch::Tensor> saved;

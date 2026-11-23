@@ -35,6 +35,12 @@ struct GraphKey {
   int config_generation = 0;       // StageExecutor::bump_config_generation()
   int stage = -1;
   double dt = 0.;  // host double: a new dt recaptures
+  //! the implicit correction's options its call reads (hydro.cpp), baked
+  //! into a capture: a change recaptures (V3 C1; X.rst:296). Its op reads dt
+  //! on the host (VIC kernel parameters, dt_corr), so dt above stays keyed
+  //! until it reads the device dt (C4)
+  std::string implicit_precision;
+  bool implicit_fallback_fp64 = false;
   //! kintera::alloc_epoch of the EOS thermo (K.rst 3.3): its counter,
   //! active set or table reallocated (reset(), a new shape) recaptures
   int64_t thermo_epoch = 0;
