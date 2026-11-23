@@ -76,8 +76,13 @@ bool StageExecutor::user_forcing(int block) const {
   return !block_at(block)->user_stage_forcings.empty();
 }
 
+bool StageExecutor::chemistry_slot(int block) const {
+  return block_at(block)->_chemistry != nullptr;
+}
+
 int StageExecutor::schedule_signature(int block) const {
-  return (outflow_boundary(block) ? 1 : 0) | (user_forcing(block) ? 2 : 0);
+  return (outflow_boundary(block) ? 1 : 0) | (user_forcing(block) ? 2 : 0) |
+         (chemistry_slot(block) ? 4 : 0);
 }
 
 bool StageExecutor::outflow_boundary(int block) const {
@@ -155,6 +160,16 @@ void StageExecutor::build_schedule(int block) const {
   Op chemistry;
   chemistry.name = "chemistry";
   chemistry.reads_host_dt = true;  // ChemistrySource::forward(dt)
+  // V3 C2: a registered chemistry step is an eager FP64 segment (X.rst
+  // section 3, K 3.6): its kintera Kinetics and ThermoX build their tables
+  // on first use, which a capture refuses (NoTableBuild). The ops before it
+  // and the boundaries after it still capture; it reads and writes hydro_u
+  // and hydro_w, the fixed StateStore buffers the graphs replay into
+  if (chemistry_slot(block)) {
+    chemistry.capturable = false;
+    chemistry.eager_reason =
+        "a chemistry step is registered (eager FP64 kinetics, V3 C2)";
+  }
   chemistry.run = [this, block](Variables& vars, StageContext const& ctx) {
     block_at(block)->stage_chemistry(vars, ctx.dt, ctx.stage);
   };
@@ -304,9 +319,13 @@ std::vector<std::string> StageExecutor::capture_reasons(
     why.push_back(
         "an outflow boundary is set with conversion-order 4 (the hydro step "
         "refills its primitive ghosts with it)");
-  // S-K4: the chemistry step runs inside the last stage; whether kintera's
-  // kinetics path captures is not verified, so a block with one runs eagerly
-  if (pmb->_chemistry) why.push_back("a chemistry step is registered");
+  // V3 C2: a bare block's chemistry step is its own eager op (the schedule's
+  // chemistry slot). A Mesh runs its blocks' chemistry in its global phase,
+  // after the stages (Mesh::forward); that path is not captured yet (C5)
+  if (pmb->_chemistry && pmb->_mesh_executor)
+    why.push_back(
+        "a chemistry step is registered on a Mesh block: the Mesh's chemistry "
+        "phase is not captured yet (C5)");
   return why;
 }
 
