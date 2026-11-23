@@ -104,9 +104,26 @@ void StageExecutor::build_schedule(int block) const {
     pmb->register_flux_storage();
   };
   stage.run = [this, block](Variables& vars, StageContext const& ctx) {
-    block_at(block)->advance_core(vars, ctx.dt, ctx.stage);
+    block_at(block)->stage_advance(vars, ctx.dt, ctx.stage);
   };
   s.add(std::move(stage));
+
+  // the user stage forcings (A3b), between the tendencies and the combine
+  Op forcing;
+  forcing.name = "forcing";
+  forcing.reads_host_dt = true;  // a user forcing is called with the host dt
+  forcing.run = [this, block](Variables& vars, StageContext const& ctx) {
+    block_at(block)->stage_forcing(vars, ctx.dt, ctx.stage);
+  };
+  s.add(std::move(forcing));
+
+  Op combine;
+  combine.name = "combine";
+  combine.reads_host_dt = true;  // end_stage(dt) and the RK combine's w2 dt
+  combine.run = [this, block](Variables& vars, StageContext const& ctx) {
+    block_at(block)->stage_combine(vars, ctx.dt, ctx.stage);
+  };
+  s.add(std::move(combine));
 
   // the end-of-stage slots, in the pin's order (A3a)
   Op saturation;
