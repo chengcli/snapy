@@ -9,7 +9,8 @@ using namespace snap;
 
 namespace {
 Mesh mesh(int blocks, std::string integrator = "rk3",
-          std::string output_dir = {}, bool periodic_x2 = false) {
+          std::string output_dir = {}, bool periodic_x2 = false,
+          torch::Device device = torch::kCPU) {
   auto b = MeshBlockOptionsImpl::from_yaml("test_eb_transport.yaml");
   b->intg()->type(integrator);
   if (!output_dir.empty()) {
@@ -19,10 +20,13 @@ Mesh mesh(int blocks, std::string integrator = "rk3",
     b->output_dir(output_dir).basename("eb");
   }
   b->layout()->px(blocks).periodic_x(periodic_x2);
+  if (device.is_cuda()) b->layout()->device("cuda").device_id(device.index());
   auto opts = MeshOptionsImpl::create();
   opts->block(b);
   opts->blocks_per_process(blocks);
-  return Mesh(opts);
+  auto m = Mesh(opts);
+  if (device.is_cuda()) m->to(device);
+  return m;
 }
 
 MeshVariables initialize(Mesh &m, bool uniform) {
@@ -120,23 +124,26 @@ TEST(EmbeddedBoundary, decomposition) {
   EXPECT_TRUE(torch::allclose(torch::cat(parts, 2), full, 1.e-10, 1.e-10));
 }
 
-TEST(EmbeddedBoundary, restart_and_retry) {
+static void check_restart_and_retry(torch::Device device) {
   auto dir = std::filesystem::temp_directory_path();
   dir /= "snapy-eb-" +
          std::to_string(
              std::chrono::steady_clock::now().time_since_epoch().count());
   std::filesystem::create_directories(dir);
-  auto first = mesh(1, "rk3", dir.string());
+  auto first = mesh(1, "rk3", dir.string(), false, device);
   auto v = initialize(first, false);
+  ASSERT_EQ(v[0].at("hydro_u").device(), device);
   double dt = first->max_time_step(v);
   auto before = v[0]["hydro_u"].clone();
   first->forward(v, dt, 0);
   EXPECT_EQ(first->blocks[0]->apply_redo(v[0], 1), 1);
   EXPECT_TRUE(torch::equal(before, v[0]["hydro_u"]));
   first->make_outputs(v, 0.);
-  auto next = mesh(1);
+  auto next = mesh(1, "rk3", {}, false, device);
   MeshVariables restored(1);
-  next->initialize(restored, (dir / "eb.00000.restart").c_str());
+  auto checkpoint = dir / "eb.00000.restart";
+  next->initialize(restored, checkpoint.c_str());
+  ASSERT_EQ(restored[0].at("hydro_u").device(), device);
   EXPECT_TRUE(torch::equal(v[0]["hydro_u"], restored[0]["hydro_u"]));
   auto mass = [&](MeshVariables const &state) {
     auto b = first->blocks[0];
@@ -161,7 +168,18 @@ TEST(EmbeddedBoundary, restart_and_retry) {
   r = r.index(interior);
   EXPECT_TRUE(torch::allclose(r.masked_select(fluid),
                               torch::full_like(r.masked_select(fluid), 0.23)));
-  std::filesystem::remove_all(dir);
+  // Some Linux LibTorch builds export a broken filesystem::remove_all.
+  EXPECT_TRUE(std::filesystem::remove(checkpoint));
+  EXPECT_TRUE(std::filesystem::remove(dir));
+}
+
+TEST(EmbeddedBoundary, restart_and_retry) {
+  check_restart_and_retry(torch::kCPU);
+}
+
+TEST(EmbeddedBoundary, restart_and_retry_cuda) {
+  if (!torch::cuda::is_available()) GTEST_SKIP() << "no CUDA device";
+  check_restart_and_retry(torch::Device(torch::kCUDA, 0));
 }
 
 TEST(EmbeddedBoundary, rejects_retired_mask) {
