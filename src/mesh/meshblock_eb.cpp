@@ -17,15 +17,15 @@ constexpr int halo = 6;
 constexpr int first_centroid = 14;
 constexpr int valid_cell = 32;
 
-Tensor box(Tensor t, Bounds const &lo, Bounds const &hi) {
+Tensor box(Tensor t, Bounds const& lo, Bounds const& hi) {
   for (int d = 0; d < 3; ++d) t = t.slice(-1 - d, lo[d], hi[d]);
   return t;
 }
 
 // Exchange successive layers, including previously received transverse
 // layers. This also handles a block narrower than the stencil and corners.
-Tensor extend(MeshBlockImpl const &block, Tensor t, std::array<int, 3> blocks,
-              bool geometry, std::array<double, 3> const &periods) {
+Tensor extend(MeshBlockImpl const& block, Tensor t, std::array<int, 3> blocks,
+              bool geometry, std::array<double, 3> const& periods) {
   Exchange ex(&block);
   auto layout = block.get_layout();
   auto [x2, x3, x1] = layout->loc_of(layout->options->rank());
@@ -67,10 +67,10 @@ Tensor extend(MeshBlockImpl const &block, Tensor t, std::array<int, 3> blocks,
 
 class EmbeddedBoundaryUpdate {
  public:
-  explicit EmbeddedBoundaryUpdate(MeshBlockImpl const &block) {
-    auto const &eb = *block.eb_geometry();
+  explicit EmbeddedBoundaryUpdate(MeshBlockImpl const& block) {
+    auto const& eb = *block.eb_geometry();
     auto c = block.pcoord;
-    auto const &l = *block.options->layout();
+    auto const& l = *block.options->layout();
     blocks_ = {l.pz(), l.px(), l.py()};
     std::array<bool, 3> periodic{
         l.periodic_z() || Exchange(&block).kind(0) == FaceKind::periodic,
@@ -155,7 +155,7 @@ class EmbeddedBoundaryUpdate {
     op_ = std::make_unique<WeightedStateRedistribution>(
         g, data[1], periodic, periods_, inner_lo_, inner_hi_);
   }
-  Tensor apply(MeshBlockImpl const &block, Tensor state) const {
+  Tensor apply(MeshBlockImpl const& block, Tensor state) const {
     auto owned = box(state, lo_, hi_);
     auto full = extend(block, owned, blocks_, false, periods_);
     Tensor bad;
@@ -173,16 +173,29 @@ class EmbeddedBoundaryUpdate {
   std::unique_ptr<WeightedStateRedistribution> op_;
 };
 
-void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
+void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
   TORCH_CHECK(options->coord()->type() == "cartesian" &&
-                  !phydro->options->icorr() &&
                   !phydro->options->perturbation_flux() && !phydro->anomaly(),
-              "embedded boundaries require explicit Cartesian dynamics with "
+              "embedded boundaries require Cartesian dynamics with "
               "total-state storage");
   auto type = phydro->peos->options->type();
   TORCH_CHECK(
       type == "ideal-gas" || type == "ideal-moist" || type == "moist-mixture",
       "unsupported embedded-boundary EOS: ", type);
+  if (phydro->options->icorr()) {
+    auto scheme = phydro->options->icorr()->scheme();
+    TORCH_CHECK(scheme == 1 || scheme == 9,
+                "embedded-boundary VIC supports x1 schemes 1 and 9");
+    auto solver = phydro->options->riemann()->type();
+    TORCH_CHECK(solver == "hllc" || solver == "lmars",
+                "embedded-boundary VIC supports HLLC or LMARS wall pressure");
+    TORCH_CHECK(options->coord()->nx1() > 1 && options->layout()->pz() == 1 &&
+                    !phydro->options->disable_flux_x1() &&
+                    Exchange(this).kind(0) == FaceKind::wall &&
+                    Exchange(this).kind(1) == FaceKind::wall,
+                "embedded-boundary VIC requires one resolved x1 column with "
+                "reflecting endpoints");
+  }
   auto gravity = phydro->options->grav();
   TORCH_CHECK(!gravity || (gravity->grav1() == 0 && gravity->grav2() == 0 &&
                            gravity->grav3() == 0),
@@ -215,8 +228,8 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
   auto sub = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
   owned.index(sub).copy_(_eb->volume_fraction.index(sub) > 0);
   _eb_fluid_indices = owned.flatten().nonzero().flatten();
-  auto const &eos = phydro->peos->options;
-  auto const &th = eos->thermo();
+  auto const& eos = phydro->peos->options;
+  auto const& th = eos->thermo();
   double temp = std::max(th ? th->Tref() : 300., 2 * eos->temperature_floor());
   double rd = kintera::constants::Rgas / eos->weight();
   double rho = std::max({(th ? th->Pref() : 1.e5) / (rd * temp),
@@ -249,9 +262,9 @@ Tensor MeshBlockImpl::redistribute(Tensor hydro, Tensor scalar) {
   return bad;
 }
 
-void MeshBlockImpl::write_eb_restart(Variables &data) const {
+void MeshBlockImpl::write_eb_restart(Variables& data) const {
   if (!_eb) return;
-  auto const &g = *_eb;
+  auto const& g = *_eb;
   data["eb.volume_fraction"] = g.volume_fraction.cpu();
   data["eb.cell_centroid"] = g.cell_centroid.cpu();
   data["eb.wall_area_vector"] = g.wall_area_vector.cpu();
@@ -263,7 +276,7 @@ void MeshBlockImpl::write_eb_restart(Variables &data) const {
   }
 }
 
-void MeshBlockImpl::read_eb_restart(Variables const &data) {
+void MeshBlockImpl::read_eb_restart(Variables const& data) {
   TORCH_CHECK(!data.count("solid"),
               "restart contains retired solid mask; initialize with embedded "
               "boundary geometry");

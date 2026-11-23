@@ -16,6 +16,7 @@
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
 
+#include "eb_wall.hpp"
 #include "implicit_dispatch.hpp"
 #include "implicit_hydro.hpp"
 
@@ -261,7 +262,8 @@ torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
 torch::Tensor ImplicitHydroImpl::forward_stage(
     torch::Tensor du, torch::Tensor w, torch::Tensor gamma, double dt,
     FluxRegister* reg, double post_dt, torch::Tensor const& retry) {
-  TORCH_CHECK(phydro->options->grav(),
+  auto eb = phydro->pmb->eb_geometry();
+  TORCH_CHECK(eb || phydro->options->grav(),
               "[ImplicitHydro] forcing does not have const-gravity");
 
   auto pcoord = phydro->pmb->pcoord;
@@ -315,7 +317,8 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
   pcoord->prim2local1_(du);
 
   // the geometry below depends on the grid only
-  _gw.update(*pcoord, w, gamma, phydro->options->grav()->grav1());
+  auto grav1 = phydro->options->grav() ? phydro->options->grav()->grav1() : 0.;
+  _gw.update(*pcoord, w, gamma, grav1, eb != nullptr);
 
   auto area = _gw.area();
   auto volume = _gw.volume();
@@ -349,7 +352,7 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
   // Linearize the FULL gravity: du always carries it (body force + rho_grav
   // sum to grav1); scaling by non_hydrostatic() drops the gravity coupling
   // and destabilizes the solve at dt >> dt_acoustic whenever nh < 1.
-  auto grav1 = phydro->options->grav()->grav1();
+
   // the energy row books the metric-weighted face work, always (V3 I-8: no
   // kVicFaceWork switch; with grav1 = 0 its rows add zeros)
 
@@ -418,6 +421,54 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
     return prm;
   };
   at::native::vic_stage(du.device().type(), iter, stage(VicStage::assemble, 0));
+  torch::Tensor grad, wall_vector, explicit_tangent, lower_pressure, wall_rate;
+  int m = options->size();
+  auto cellshape = std::vector<int64_t>{
+      pcoord->options->nx3(), pcoord->options->nx2(), pcoord->options->nx1()};
+  auto vectors = [&](torch::Tensor t) {
+    auto shape = cellshape;
+    shape.push_back(m);
+    return t.view(shape).movedim(-1, 0);
+  };
+  if (eb) {
+    auto wall = phydro->eb_wall_state().to(w.options());
+    auto area = eb->wall_area_vector.to(w.options());
+    auto norm = area.square().sum(0).sqrt();
+    auto normal = area / torch::where(norm > 0., norm, 1.);
+    auto gw = phydro->peos->compute("W->A", {wall});
+    grad = wall_pressure_gradient(wall, w, normal, gw, gamma,
+                                  phydro->priemann->kind == RiemannKind::hllc)
+               .index(interior);
+    auto vol = volume.index(in3);
+    wall_vector = area.index(interior);
+    auto av = wall_vector / torch::where(vol > 0., vol, 1.);
+    if (m == 3) {
+      // Eliminate the two transverse wall impulses from the local pressure
+      // equation: dm_t = v_t drho + q_t - dt (A_t/V) dp_wall.
+      grad = grad /
+             (1. + dt * (grad.narrow(0, IVY, 2) * av.narrow(0, 1, 2)).sum(0));
+    }
+    auto shape = cellshape;
+    shape.insert(shape.end(), {m, m});
+    auto matrix =
+        _a.view(shape);  // Eigen columns are contiguous blocks of rows.
+    auto tangential_v = w.narrow(0, IVY, 2).index(interior);
+    auto dr = du[IDN].index(in3).clone();
+    if (du.size(0) > ICY)
+      dr += du.narrow(0, ICY, du.size(0) - ICY).index(interior).sum(0);
+    explicit_tangent = du.narrow(0, IVY, 2).index(interior) - tangential_v * dr;
+    for (int row = 1; row < (m == 5 ? 4 : 2); ++row) {
+      for (int col = 0; col < m; ++col) {
+        auto gp = grad[m == 3 && col == 2 ? IPR : col];
+        if (m == 3 && col == 0)
+          gp = gp + (grad.narrow(0, IVY, 2) * tangential_v).sum(0);
+        matrix.select(-2, col).select(-1, row).add_(av[row - 1] * gp);
+      }
+      if (m == 3)
+        vectors(_delta)[row].add_(
+            av[row - 1] * (grad.narrow(0, IVY, 2) * explicit_tangent).sum(0));
+    }
+  }
   couple_radial_exact();
   // Woodbury: the wall third points (E row of cells 0 and n-1, mass column of
   // cells 2 and n-3) are a rank-2 update U V^T of the block-tridiagonal T:
@@ -441,8 +492,34 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
                           stage(VicStage::solve, 0, /*woodbury=*/true));
   }
 
+  if (eb) {
+    auto raw = vectors(_delta);
+    auto delta =
+        m == 5 ? raw
+               : torch::cat({raw.narrow(0, 0, 2),
+                             explicit_tangent +
+                                 w.narrow(0, IVY, 2).index(interior) * raw[0],
+                             raw.narrow(0, 2, 1)});
+    // Pressure flux *increment* through the facet. The explicit solver
+    // already posted the wall flux of the current state.
+    wall_rate = wall_vector * (grad * delta).sum(0);
+    if (m == 3) {
+      auto vol = volume.index(in3);
+      delta.narrow(0, IVY, 2).sub_(dt * wall_rate.narrow(0, 1, 2) /
+                                   torch::where(vol > 0., vol, 1.));
+    }
+    lower_pressure = reflecting_lower_pressure_increment(
+        w.index(interior).select(-1, 0), gamma.index(in3).select(-1, 0),
+        delta.select(-1, 0));
+  }
   at::native::vic_stage(du.device().type(), iter,
                         stage(VicStage::redistribute, 0));
+
+  if (eb && m == 3) {
+    auto vol = volume.index(in3);
+    du.narrow(0, IVY, 2).index(interior).sub_(dt * wall_rate.narrow(0, 1, 2) /
+                                              torch::where(vol > 0., vol, 1.));
+  }
 
   // V3 I-4: the face transfers go to the register. A face i of total(1) is
   // the face below cell i, as MASS(IVX+dir, i); the posts are M_f / (A_f dt)
@@ -453,6 +530,7 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
   if (post) {
     kdt = pcoord->face_area1().narrow(-1, 0, nc1).to(_mass_corr.options()) *
           post_dt;
+    if (eb) kdt = torch::where(kdt > 0., kdt, 1.);
     // partial matrix: the donor-cell tangential transfers of
     // vic_tangential_momentum_column, q w_t(donor), in the local frame
     if (partial) {
@@ -479,8 +557,9 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
         reg->kept(1, "vic.mass_total")[IDN].to(_mass_corr.options()) * kdt;
     energy_solved = du[IPR].clone();  // vic.cell: without the remainder
   }
-  book_remainder_(du, w.size(0), radial_exact, grav1, rx_mass0, nx1,
-                  moved_total);
+  if (!eb || grav1 != 0.)
+    book_remainder_(du, w.size(0), radial_exact, grav1, rx_mass0, nx1,
+                    moved_total);
 
   _corr.copy_(du);
   _corr.sub_(_du0);
@@ -548,18 +627,54 @@ torch::Tensor ImplicitHydroImpl::forward_stage(
     _status.bitwise_or_(sbits);
     _stage_failed = failed;
   }
-  if (post)
-    post_(*reg, du, drop3, kdt, ptan, energy_solved, volume, kept_before);
+  if (post) {
+    torch::Tensor eb_flux;
+    if (eb) {
+      // Recover the face-integrated transfers from the solved momentum and
+      // energy balances. Each run begins with zero flux at a closed aperture.
+      auto ok_col = (~drop)
+                        .slice(0, pcoord->kl(), pcoord->ku() + 1)
+                        .slice(1, pcoord->jl(), pcoord->ju() + 1);
+      wall_rate = torch::where(ok_col.unsqueeze(-1), wall_rate, 0.);
+      for (int d = 0; d < 3; ++d)
+        if (reg->total(d + 1).defined())
+          reg->post_wall_pressure(d + 1, wall_rate[d].sum() * (dt / post_dt));
+      auto change = _corr.narrow(0, IVX, 4).index(interior).clone();
+      change[3].add_(phydro->peos->internal_energy_offset(_corr).index(in3));
+      auto transfer = -change * volume.index(in3);
+      transfer.narrow(0, 0, 3).sub_(dt * wall_rate);
+      auto face = area.slice(0, pcoord->kl(), pcoord->ku() + 1)
+                      .slice(1, pcoord->jl(), pcoord->ju() + 1)
+                      .narrow(-1, pcoord->il(), nx1 + 1);
+      auto base = torch::zeros_like(transfer.select(-1, 0));
+      base[0].copy_(torch::where(ok_col, lower_pressure, 0.) *
+                    face.select(-1, 0) * dt);
+      auto prefix = torch::cat(
+          {base.unsqueeze(-1), base.unsqueeze(-1) + transfer.cumsum(-1)}, -1);
+      auto fi = torch::arange(nx1 + 1, face.options().dtype(torch::kLong));
+      auto closed = face == 0.;
+      auto last = std::get<0>(torch::cummax(torch::where(closed, fi, -1), -1));
+      auto anchor =
+          prefix.gather(-1, last.clamp_min(0).unsqueeze(0).expand_as(prefix));
+      prefix = torch::where(last >= 0, prefix - anchor, prefix);
+      eb_flux = torch::zeros_like(du.narrow(0, IVX, 4));
+      auto flux = prefix / torch::where(face > 0., face * post_dt, 1.);
+      eb_flux.slice(1, pcoord->kl(), pcoord->ku() + 1)
+          .slice(2, pcoord->jl(), pcoord->ju() + 1)
+          .narrow(-1, pcoord->il(), nx1 + 1)
+          .copy_(flux);
+    }
+    post_(*reg, du, drop3, kdt, ptan, energy_solved, volume, kept_before,
+          eb_flux);
+  }
   return _corr;
 }
 
-void ImplicitHydroImpl::post_(FluxRegister& reg, torch::Tensor const& du,
-                              torch::Tensor const& drop,
-                              torch::Tensor const& kdt,
-                              torch::Tensor const& ptan,
-                              torch::Tensor const& energy_solved,
-                              torch::Tensor const& volume,
-                              torch::Tensor const& kept_before) {
+void ImplicitHydroImpl::post_(
+    FluxRegister& reg, torch::Tensor const& du, torch::Tensor const& drop,
+    torch::Tensor const& kdt, torch::Tensor const& ptan,
+    torch::Tensor const& energy_solved, torch::Tensor const& volume,
+    torch::Tensor const& kept_before, torch::Tensor const& eb_flux) {
   auto pcoord = phydro->pmb->pcoord;
   int is = pcoord->il(), ie = pcoord->iu() + 1;
   int ny = du.size(0) - ICY;
@@ -582,7 +697,18 @@ void ImplicitHydroImpl::post_(FluxRegister& reg, torch::Tensor const& du,
     auto q = torch::zeros_like(_mass_corr.narrow(0, ICY, ny));
     if (ie - is > 1) {
       auto s = (_mass_corr.narrow(0, ICY, ny) * volume).slice(-1, is, ie - 1);
-      q.slice(-1, is + 1, ie) = -s.cumsum(-1);
+      auto prefix = -s.cumsum(-1);
+      if (eb_flux.defined()) {
+        // Each closed aperture starts a fresh mass balance for each species.
+        auto closed = pcoord->face_area1().slice(-1, is + 1, ie).eq(0.);
+        auto i =
+            torch::arange(ie - is - 1, closed.options().dtype(torch::kLong));
+        auto last = std::get<0>(torch::cummax(torch::where(closed, i, -1), -1));
+        auto base =
+            prefix.gather(-1, last.clamp_min(0).unsqueeze(0).expand_as(prefix));
+        prefix = torch::where(last >= 0, prefix - base, prefix);
+      }
+      q.slice(-1, is + 1, ie).copy_(prefix);
     }
     std::vector<int> rows(ny);
     for (int n = 0; n < ny; ++n) rows[n] = ICY + n;
@@ -590,7 +716,11 @@ void ImplicitHydroImpl::post_(FluxRegister& reg, torch::Tensor const& du,
   }
   // tangential momenta, in the explicit x1 flux's global components
   torch::Tensor pt;
-  if (ptan.defined()) {  // partial matrix: donor transfers, local frame
+  if (eb_flux.defined()) {
+    pt = eb_flux.narrow(0, 1, 2) * kdt;
+    reg.add(1, "vic.normal_energy", {IVX, IPR},
+            torch::stack({eb_flux[0], eb_flux[3]}));
+  } else if (ptan.defined()) {  // partial matrix: donor transfers, local frame
     auto tmp = torch::zeros_like(du);
     tmp.narrow(0, IVY, 2).copy_(ok(ptan));
     pcoord->flux2global1_(tmp);
@@ -618,7 +748,8 @@ void ImplicitHydroImpl::post_(FluxRegister& reg, torch::Tensor const& du,
   cell[IVX] = du[IVX] - _du0[IVX];
   cell[IPR] = ok(energy_solved - _du0[IPR]);
   if (!ptan.defined()) cell.narrow(0, IVY, 2) = _corr.narrow(0, IVY, 2);
-  reg.cell_amount("vic.cell", in(cell * volume), w2, AmountKind::cell_source);
+  if (!eb_flux.defined())
+    reg.cell_amount("vic.cell", in(cell * volume), w2, AmountKind::cell_source);
   // V div(moved - requested) of the total mass, on row IDN
   auto d = _mass_corr[IVZ] - _mass_corr[IVX];
   auto clamped = torch::zeros({nvar}, du.options());

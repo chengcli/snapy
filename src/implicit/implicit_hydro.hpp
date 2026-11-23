@@ -169,7 +169,8 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   void post_(FluxRegister& reg, torch::Tensor const& du,
              torch::Tensor const& drop, torch::Tensor const& kdt,
              torch::Tensor const& ptan, torch::Tensor const& energy_solved,
-             torch::Tensor const& volume, torch::Tensor const& kept_before);
+             torch::Tensor const& volume, torch::Tensor const& kept_before,
+             torch::Tensor const& eb_flux);
 };
 TORCH_MODULE(ImplicitHydro);
 

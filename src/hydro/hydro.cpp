@@ -387,9 +387,15 @@ double HydroImpl::max_time_step(torch::Tensor w) const {
         auto hi = w[iv].slice(2, 1, n1);
         auto prod = (lo.abs() * hi.abs()).clamp_min(1.e-30);
         auto dts = scale * csf * width.slice(2, 0, n1 - 1) / prod;
-        return torch::where((hi - lo).abs() >= csf, dts, 1.e9)
-            .index(sub3)
-            .min();
+        auto shear = (hi - lo).abs() >= csf;
+        if (auto eb = pmb->eb_geometry()) {
+          // A closed aperture transports no shear. Two covered neighbors
+          // would otherwise give csf == dts == 0 and stop the time step.
+          auto open =
+              eb->face_fraction[0].narrow(-1, 1, n1 - 1).to(w.device()) > 0.;
+          shear.logical_and_(open);
+        }
+        return torch::where(shear, dts, 1.e9).index(sub3).min();
       };
       if (cs.size(1) > 1) {
         dt_min[0] = torch::minimum(

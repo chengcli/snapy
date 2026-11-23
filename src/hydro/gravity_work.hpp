@@ -275,7 +275,7 @@ class GravityWork {
   //! shape (of gamma) or grav1 changed
   template <class Coord>
   void update(Coord const& pc, torch::Tensor const& w,
-              torch::Tensor const& gamma, double grav1) {
+              torch::Tensor const& gamma, double grav1, bool embedded = false) {
     Key key;
     key.f1 = pc.x1f.unsafeGetTensorImpl();
     key.f2 = pc.x2f.unsafeGetTensorImpl();
@@ -287,14 +287,17 @@ class GravityWork {
     key.st = w.scalar_type();
     key.shape = gamma.sizes().vec();
     key.grav1 = grav1;
-    if (_key == key && _area.defined()) return;
+    if (_key == key && _area.defined() &&
+        (!embedded || _volume.is_same(pc.cell_volume())))
+      return;
     _area = pc.face_area1().to(w.options()).contiguous();
     _volume = pc.cell_volume().to(w.options()).contiguous();
     int nc1g = w.size(-1);
+    auto v = embedded ? torch::where(_volume > 0., _volume, 1.) : _volume;
     _face_lo = .5 * _area.narrow(-1, 0, nc1g) *
-               (pc.x1v - pc.x1f.narrow(0, 0, nc1g)) / _volume;
+               (pc.x1v - pc.x1f.narrow(0, 0, nc1g)) / v;
     _face_hi = .5 * _area.narrow(-1, 1, nc1g) *
-               (pc.x1f.narrow(0, 1, nc1g) - pc.x1v) / _volume;
+               (pc.x1f.narrow(0, 1, nc1g) - pc.x1v) / v;
     _face_lo = _face_lo.to(w.options()).unsqueeze(0).contiguous();
     _face_hi = _face_hi.to(w.options()).unsqueeze(0).contiguous();
     int isg = pc.il(), ieg = pc.iu() + 1;

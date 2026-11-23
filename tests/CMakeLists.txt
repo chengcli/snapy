@@ -38,6 +38,8 @@ setup_test(test_scalar)
 setup_test(test_eb_geometry)
 setup_test(test_weighted_srd)
 setup_test(test_eb_transport)
+setup_test(test_eb_vic)
+set_tests_properties(test_eb_vic.${buildl} PROPERTIES LABELS "weighted-srd;implicit")
 set_tests_properties(test_eb_geometry.${buildl} test_weighted_srd.${buildl}
                      test_eb_transport.${buildl} PROPERTIES LABELS "weighted-srd")
 setup_test(test_cubed_sphere_exchange)

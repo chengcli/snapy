@@ -78,6 +78,15 @@ DISPATCH_MACRO void vic_assemble_cell(char* const* p, VicLayout const& L, int i,
   auto c = vic_op<Matrix>(p, kVicC);
   int nlayer = L.nlayer, stride2 = L.stride2;
   if (vic_skipped<T>(p)) return;
+  if (vol[i * stride2] == 0) {
+    // Covered rows have no control volume or exchange with adjacent rows.
+    a[i].setIdentity();
+    a[i] /= dt;
+    b[i].setZero();
+    c[i].setZero();
+    delta[i].setZero();
+    return;
+  }
   if constexpr (N == 3) {
     vic_assemble_partial_impl(a, b, c, w, gamma, area, vol, work_lo, work_hi, i,
                               0, nlayer - 1, dt, grav, dir, L.ny, L.stride1,
@@ -205,11 +214,23 @@ DISPATCH_MACRO void vic_redistribute_column(char* const* p, VicLayout const& L,
   auto delta = vic_op<Vector>(p, kVicDelta);
   int nlayer = L.nlayer, stride1 = L.stride1, stride2 = L.stride2;
   if (vic_skipped<T>(p)) return;
-  vic_constituent_column<T, N>(du, w, mass_fix, delta, vol, nlayer, dir, L.ny,
-                               stride1, stride2);
-  if constexpr (N == 3)
-    vic_tangential_momentum_column(du, w, mass_fix, vol, nlayer, dir, stride1,
-                                   stride2);
+  auto area = vic_op<T>(p, kVicArea);
+  for (int lo = 0; lo < nlayer;) {
+    if (vol[lo * stride2] == 0) {
+      ++lo;
+      continue;
+    }
+    int hi = lo + 1;
+    while (hi < nlayer && area[hi * stride2] > 0 && vol[hi * stride2] > 0) ++hi;
+    vic_constituent_column<T, N>(
+        du + lo * stride2, w + lo * stride2, mass_fix + lo * stride2,
+        delta + lo, vol + lo * stride2, hi - lo, dir, L.ny, stride1, stride2);
+    if constexpr (N == 3)
+      vic_tangential_momentum_column(
+          du + lo * stride2, w + lo * stride2, mass_fix + lo * stride2,
+          vol + lo * stride2, hi - lo, dir, stride1, stride2);
+    lo = hi;
+  }
 }
 
 //! the redistribution of fluid cell i
@@ -217,7 +238,7 @@ template <typename T, int N>
 DISPATCH_MACRO void vic_redistribute_one(char* const* p, VicLayout const& L,
                                          int i, int dir) {
   using Vector = Eigen::Matrix<T, N, 1>;
-  if (vic_skipped<T>(p)) return;
+  if (vic_skipped<T>(p) || vic_op<T>(p, kVicVol)[i * L.stride2] == 0) return;
   vic_redistribute_cell(vic_op<T>(p, kVicDu), vic_op<T>(p, kVicMassFix),
                         vic_op<Vector>(p, kVicDelta), i, dir, L.ny, L.stride1,
                         L.stride2);
