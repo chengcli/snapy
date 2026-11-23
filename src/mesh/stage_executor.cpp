@@ -69,7 +69,7 @@ StageExecutor::~StageExecutor() = default;
 
 void StageExecutor::build_schedule(int block) {
   // A3a: the stage-entry exchange is its own host-exchange segment (eager by
-  // design, a segment boundary), then advance_local as one graph
+  // design, a segment boundary), then advance_local in its slots as one graph
   StageSchedule s;
   Op exchange;
   exchange.name = "exchange";
@@ -80,7 +80,7 @@ void StageExecutor::build_schedule(int block) {
   s.add(std::move(exchange), SegmentKind::host_exchange);
 
   Op stage;
-  stage.name = "advance_local";
+  stage.name = "advance";
   // the RK combine scales the tendency by w2 dt and FluxRegister::end_stage
   // folds the stage with w2 dt, both from the host dt: until dt is a graph
   // input (C4/D), this segment keeps dt in its key
@@ -95,9 +95,32 @@ void StageExecutor::build_schedule(int block) {
     pmb->register_flux_storage();
   };
   stage.run = [this, block](Variables& vars, StageContext const& ctx) {
-    block_at(block)->advance_local(vars, ctx.dt, ctx.stage);
+    block_at(block)->advance_core(vars, ctx.dt, ctx.stage);
   };
   s.add(std::move(stage));
+
+  // the end-of-stage slots, in the pin's order (A3a)
+  Op saturation;
+  saturation.name = "saturation";
+  saturation.run = [this, block](Variables& vars, StageContext const& ctx) {
+    block_at(block)->stage_saturation(vars, ctx.dt, ctx.stage);
+  };
+  s.add(std::move(saturation));
+
+  Op chemistry;
+  chemistry.name = "chemistry";
+  chemistry.reads_host_dt = true;  // ChemistrySource::forward(dt)
+  chemistry.run = [this, block](Variables& vars, StageContext const& ctx) {
+    block_at(block)->stage_chemistry(vars, ctx.dt, ctx.stage);
+  };
+  s.add(std::move(chemistry));
+
+  Op boundaries;
+  boundaries.name = "boundaries";
+  boundaries.run = [this, block](Variables& vars, StageContext const& ctx) {
+    block_at(block)->stage_boundaries(vars, ctx.dt, ctx.stage);
+  };
+  s.add(std::move(boundaries));
   _schedules[block] = std::move(s);
 }
 
@@ -359,7 +382,7 @@ void StageExecutor::capture(int block, int segment, Variables& vars, double dt,
   // first capture; from then on no kintera table is built inside the
   // warm-up or the capture (a missing one throws)
   // The segment's ops prepare (Op::prepare, outside capture) with the
-  // state's device, dtype and shape: advance_local's prepares the thermo and
+  // state's device, dtype and shape: advance's prepares the thermo and
   // the monitor's amounts (still on the host before a block's first step),
   // so the save list below holds them from the first capture on.
   {

@@ -225,6 +225,14 @@ class MeshBlockImpl : public torch::nn::Cloneable<MeshBlockImpl> {
   //! advance the variables by one stage of the integrator
   void forward(Variables& vars, double dt, int stage);
   void advance_local(Variables& vars, double dt, int stage);
+  //! advance_local in its slots (A3a): the stage through the combine, the
+  //! limiter, the scalar slot and the solid fill; then the last stage's
+  //! saturation adjustment, the bare block's chemistry step and the physical
+  //! boundaries. advance_local runs the four in this order.
+  void advance_core(Variables& vars, double dt, int stage);
+  void stage_saturation(Variables& vars, double dt, int stage);
+  void stage_chemistry(Variables& vars, double dt, int stage);
+  void stage_boundaries(Variables& vars, double dt, int stage);
 
   //! V3 S-K4 (K.rst 3.6): the chemistry step after the last stage, from a
   //! by-value copy of the reaction options; one adapter for this block,
