@@ -85,8 +85,11 @@ torch::Tensor SphereExchange::gather(const torch::Tensor& owned) const {
   }
   if (layout_->has_process_group()) {
     // Every slot has a single owner. A sum here only assembles disjoint data.
-    std::vector<torch::Tensor> values{global};
+    // Snapy's Gloo process group is bound to CPU. UCX accepts device tensors.
+    std::vector<torch::Tensor> values{layout_->comm->is_ucx() ? global
+                                                              : global.cpu()};
     layout_->comm->allreduce(values, c10d::ReduceOp::SUM);
+    global = values.front().to(owned.device());
   }
   for (int i = 1; i < l.blocks_per_process(); ++i)
     layout_->post_to_local_block(root + i, global, result_tag);
