@@ -79,6 +79,16 @@ TEST(EmbeddedBoundary, single_block_periodic_face_metrics) {
   EXPECT_THROW(b->prepare_embedded_boundary(), c10::Error);
 }
 
+TEST(EmbeddedBoundary, moving_block_reinstalls_its_geometry) {
+  auto m = mesh(1);
+  auto vars = initialize(m, true);
+  auto b = m->blocks.front();
+  auto flags = b->eb_geometry()->flags.clone();
+  b->to(vars.front().at("hydro_u").device());
+  EXPECT_TRUE(torch::equal(flags, b->eb_geometry()->flags));
+  EXPECT_NO_THROW(b->prepare_embedded_boundary());
+}
+
 TEST(EmbeddedBoundary, stationary_oblique_wall) {
   for (auto rk : {"rk1", "rk2", "rk3", "rk3s4"}) {
     auto m = mesh(1, rk);

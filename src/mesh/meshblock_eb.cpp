@@ -217,7 +217,7 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
   TORCH_CHECK(!options->execution_strict(),
               "embedded boundaries require eager stage execution");
   auto c = pcoord;
-  _eb = std::make_shared<EBGeometry>(
+  auto next = std::make_shared<EBGeometry>(
       EBGeometry::from_metrics(
           g.volume_fraction, g.cell_centroid, g.face_fraction, g.face_centroid,
           g.wall_area_vector, g.wall_centroid, c->x1f, c->x2f, c->x3f)
@@ -226,18 +226,18 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
                                phydro->options->disable_flux_x2(),
                                phydro->options->disable_flux_x3()};
   for (int d = 0; d < 3; ++d) {
-    if (disabled[d] || g.volume_fraction.size(-1 - d) == 1) {
-      auto af = _eb->face_fraction[d];
+    if (disabled[d] || next->volume_fraction.size(-1 - d) == 1) {
+      auto af = next->face_fraction[d];
       TORCH_CHECK(torch::allclose(af.slice(-1 - d, 0, -1), af.slice(-1 - d, 1),
                                   1.e-9, 1.e-12),
                   "embedded wall varies along inactive flux direction x",
                   d + 1);
     }
   }
-  auto owned = torch::zeros_like(_eb->flags, torch::kBool);
+  auto owned = torch::zeros_like(next->flags, torch::kBool);
   auto sub = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-  owned.index(sub).copy_(_eb->volume_fraction.index(sub) > 0);
-  _eb_fluid_indices = owned.flatten().nonzero().flatten();
+  owned.index(sub).copy_(next->volume_fraction.index(sub) > 0);
+  auto indices = owned.flatten().nonzero().flatten();
   auto const &eos = phydro->peos->options;
   auto const &th = eos->thermo();
   double temp = std::max(th ? th->Tref() : 300., 2 * eos->temperature_floor());
@@ -245,12 +245,18 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const &g) {
   double rho = std::max({(th ? th->Pref() : 1.e5) / (rd * temp),
                          2 * eos->density_floor(),
                          2 * eos->pressure_floor() / (rd * temp)});
-  _eb_neutral_w =
+  auto neutral_w =
       torch::zeros({phydro->peos->nvar(), 1, 1, 1}, c->x1f.options());
-  _eb_neutral_w[IDN].fill_(rho);
-  _eb_neutral_w[IPR].fill_(rho * rd * temp);
-  _eb_neutral_u = _eb_neutral_w.clone();
-  _eb_neutral_u[IPR].copy_(phydro->peos->compute("W->I", {_eb_neutral_w}));
+  neutral_w[IDN].fill_(rho);
+  neutral_w[IPR].fill_(rho * rd * temp);
+  auto neutral_u = neutral_w.clone();
+  neutral_u[IPR].copy_(phydro->peos->compute("W->I", {neutral_w}));
+  // A device move passes the currently installed geometry back into this
+  // setter. Keep it alive until validation and all derived tensors are ready.
+  _eb = std::move(next);
+  _eb_fluid_indices = std::move(indices);
+  _eb_neutral_w = std::move(neutral_w);
+  _eb_neutral_u = std::move(neutral_u);
   _eb_update.reset();
   bump_config_generation();
 }
