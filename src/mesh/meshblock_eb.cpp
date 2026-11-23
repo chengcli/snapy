@@ -119,14 +119,31 @@ class EmbeddedBoundaryUpdate {
       // The domain-side face is still allowed to carry an exterior BC flux.
       auto adjacent = data[valid_cell].narrow(-1 - d, 0, n - 1).ne(0) &
                       data[valid_cell].narrow(-1 - d, 1, n - 1).ne(0);
-      auto compare = [&](Tensor lower, Tensor upper, Tensor mask) {
-        TORCH_CHECK(
-            torch::allclose(upper.narrow(-1 - d, 0, n - 1).masked_select(mask),
-                            lower.narrow(-1 - d, 1, n - 1).masked_select(mask),
-                            1.e-8, 1.e-12),
-            "embedded boundary metrics disagree at shared faces in x", d + 1);
+      auto compare = [&](Tensor lower, Tensor upper) {
+        TORCH_CHECK(torch::allclose(upper, lower, 1.e-8, 1.e-12),
+                    "embedded boundary metrics disagree at shared faces in x",
+                    d + 1);
       };
-      compare(left, right, adjacent);
+      auto compare_adjacent = [&](Tensor lower, Tensor upper, Tensor mask) {
+        compare(lower.narrow(-1 - d, 1, n - 1).masked_select(mask),
+                upper.narrow(-1 - d, 0, n - 1).masked_select(mask));
+      };
+      compare_adjacent(left, right, adjacent);
+      // A single-block periodic axis wraps locally, without exchanged halos.
+      // Transverse halo padding at a physical exterior has no matching face.
+      Tensor open_wrap;
+      if (periodic[d] && n > 1) {
+        auto valid = data[valid_cell];
+        auto mask =
+            valid.select(-1 - d, 0).ne(0) & valid.select(-1 - d, n - 1).ne(0);
+        auto low = left.select(-1 - d, 0), high = right.select(-1 - d, n - 1);
+        compare(low.masked_select(mask), high.masked_select(mask));
+        TORCH_CHECK(
+            !(mask & (low.gt(0) != high.gt(0))).any().item<bool>(),
+            "embedded boundary open faces disagree at periodic seam in x",
+            d + 1);
+        open_wrap = mask & low.gt(0);
+      }
       auto faces = [&](Tensor lower, Tensor upper) {
         return torch::cat({lower, upper.narrow(-1 - d, n - 1, 1)}, -1 - d);
       };
@@ -134,8 +151,14 @@ class EmbeddedBoundaryUpdate {
       std::vector<Tensor> coords;
       for (int comp = 0; comp < 3; ++comp) {
         int i = first_centroid + 6 * d + comp;
-        compare(data[i], data[i + 3],
-                adjacent & right.narrow(-1 - d, 0, n - 1).gt(0));
+        compare_adjacent(data[i], data[i + 3],
+                         adjacent & right.narrow(-1 - d, 0, n - 1).gt(0));
+        if (open_wrap.defined()) {
+          auto low = data[i].select(-1 - d, 0).masked_select(open_wrap);
+          auto high =
+              data[i + 3].select(-1 - d, n - 1).masked_select(open_wrap);
+          compare(comp == d ? low + periods_[d] : low, high);
+        }
         coords.push_back(faces(data[i], data[i + 3]));
       }
       g.face_centroid[d] = torch::stack(coords);

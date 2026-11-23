@@ -9,7 +9,7 @@ using namespace snap;
 
 namespace {
 Mesh mesh(int blocks, std::string integrator = "rk3",
-          std::string output_dir = {}) {
+          std::string output_dir = {}, bool periodic_x2 = false) {
   auto b = MeshBlockOptionsImpl::from_yaml("test_eb_transport.yaml");
   b->intg()->type(integrator);
   if (!output_dir.empty()) {
@@ -18,7 +18,7 @@ Mesh mesh(int blocks, std::string integrator = "rk3",
     b->outputs({rst});
     b->output_dir(output_dir).basename("eb");
   }
-  b->layout()->px(blocks);
+  b->layout()->px(blocks).periodic_x(periodic_x2);
   auto opts = MeshOptionsImpl::create();
   opts->block(b);
   opts->blocks_per_process(blocks);
@@ -50,6 +50,34 @@ MeshVariables initialize(Mesh &m, bool uniform) {
   return vars;
 }
 }  // namespace
+
+TEST(EmbeddedBoundary, single_block_periodic_face_metrics) {
+  auto m = mesh(1, "rk3", {}, true);
+  auto b = m->blocks[0];
+  auto c = b->pcoord;
+  auto nodes = torch::meshgrid({c->x3f, c->x2f, c->x1f}, "ij");
+  auto make = [&](double slope) {
+    return EBGeometry::from_level_set(nodes[2] - 0.41 + slope * nodes[1],
+                                      c->x1f, c->x2f, c->x3f);
+  };
+  const auto hi = c->x2f.size(0) - 1 - c->options->nghost();
+  auto g = make(0.);
+  auto aperture = g.face_fraction[1].select(1, hi);
+  auto tangent = g.face_centroid[1][0].select(1, hi);
+  // Closed faces have no physical centroid. Matching open faces translate
+  // by one period in x2 and have identical tangential coordinates.
+  tangent.masked_fill_(aperture.eq(0), 17.);
+  b->set_embedded_boundary(g);
+  EXPECT_NO_THROW(b->prepare_embedded_boundary());
+
+  tangent.add_((aperture.gt(0) & aperture.lt(1)) * 0.001);
+  b->set_embedded_boundary(g);
+  EXPECT_THROW(b->prepare_embedded_boundary(), c10::Error);
+
+  // The sloped wall gives two different, locally consistent apertures.
+  b->set_embedded_boundary(make(0.005));
+  EXPECT_THROW(b->prepare_embedded_boundary(), c10::Error);
+}
 
 TEST(EmbeddedBoundary, stationary_oblique_wall) {
   for (auto rk : {"rk1", "rk2", "rk3", "rk3s4"}) {
