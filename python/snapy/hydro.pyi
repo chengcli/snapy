@@ -4,7 +4,6 @@ Stub file for snapy.hydro module
 
 from typing import Callable, Dict, List, Optional, Tuple, overload
 import torch
-from .boundary import InternalBoundaryOptions
 from .coordinate import CoordinateOptions
 from .eos import EquationOfStateOptions
 from .forcing import ConstGravityOptions, CoriolisOptions, DiffusionOptions

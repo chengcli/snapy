@@ -314,25 +314,44 @@ double MeshImpl::initialize(MeshVariables& vars, char const* restart_file) {
   TORCH_CHECK(vars.size() == blocks.size(),
               "Mesh::initialize expects one Variables map per local MeshBlock");
 
-  if (restart_file) {
-    double current_time = 0.;
-    for (int i = 0; i < blocks.size(); ++i) {
-      auto block_time = blocks[i]->initialize(vars[i], restart_file);
-      if (i == 0) {
-        current_time = block_time;
-      }
-    }
-    return current_time;
-  }
-
   auto layout = blocks.front()->get_layout();
-  if (layout->has_process_group()) {
-    layout->comm->barrier();
+  double current_time = 0.;
+  if (restart_file) {
+    for (size_t i = 0; i < blocks.size(); ++i) {
+      auto t = blocks[i]->initialize(vars[i], restart_file);
+      if (i == 0) current_time = t;
+    }
   }
+  // A rank without a cut cell still supplies states to neighboring cut
+  // cells. Verify participation before any point-to-point halo exchange.
+  int local_count = 0;
+  for (auto const& b : blocks) local_count += b->eb_geometry() != nullptr;
+  std::vector<torch::Tensor> count{torch::tensor({local_count}, torch::kInt32)};
+  if (layout->has_process_group())
+    layout->comm->allreduce(count, c10d::ReduceOp::SUM);
+  int participants = count.front().item<int>();
+  TORCH_CHECK(
+      participants == 0 || participants == layout->options->world_size(),
+      "install embedded boundary geometry on every block, including regular "
+      "blocks");
+  if (participants) {
+    std::exception_ptr failure;
+    try {
+      run_block_jobs([&](size_t i) { blocks[i]->prepare_embedded_boundary(); });
+    } catch (...) {
+      failure = std::current_exception();
+    }
+    std::vector<torch::Tensor> failed{torch::tensor({int(bool(failure))})};
+    if (layout->has_process_group())
+      layout->comm->allreduce(failed, c10d::ReduceOp::MAX);
+    if (failure) std::rethrow_exception(failure);
+    TORCH_CHECK(!failed.front().item<int>(),
+                "invalid embedded geometry on another rank");
+  }
+  if (restart_file) return current_time;
+  if (layout->has_process_group()) layout->comm->barrier();
   SignalHandler::GetInstance();
-
   run_block_jobs([&](size_t i) { blocks[i]->initialize_under_mesh(vars[i]); });
-
   return 0.;
 }
 

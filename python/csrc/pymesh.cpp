@@ -105,7 +105,6 @@ void bind_mesh(py::module& m) {
       .ADD_OPTION(snap::CoordinateOptions, snap::MeshBlockOptionsImpl, coord)
       .ADD_OPTION(snap::HydroOptions, snap::MeshBlockOptionsImpl, hydro)
       .ADD_OPTION(snap::ScalarOptions, snap::MeshBlockOptionsImpl, scalar)
-      .ADD_OPTION(snap::InternalBoundaryOptions, snap::MeshBlockOptionsImpl, ib)
       .def("bfuncs", (std::vector<bcfunc_t> const& (
                          snap::MeshBlockOptionsImpl::*)() const) &
                          snap::MeshBlockOptionsImpl::bfuncs)
@@ -216,6 +215,7 @@ reaction options, copied) to run after the last stage of every step.)doc")
           py::arg("offset"), py::arg("exterior") = true,
           py::arg("extend_x1") = 0, py::arg("extend_x2") = 0,
           py::arg("extend_x3") = 0)
+      .def("set_embedded_boundary", &snap::MeshBlockImpl::set_embedded_boundary)
       .def(
           "initialize",
           [](snap::MeshBlockImpl& self, snap::Variables& vars) {

@@ -46,21 +46,6 @@ std::vector<std::string> names_of(RegisterMonitor const& mon, int nvar) {
   return rows;
 }
 
-//! a block face is the fluid domain's boundary when a boundary function
-//! acts on it and does not wrap: the wall, outflow and custom faces (the
-//! base nulls the functions of interior, seam and periodic-layout faces)
-bool boundary_face(MeshBlockImpl const& block, int dim, bool upper) {
-  int side = upper ? 1 : -1;
-  int dy = dim == 3 ? side : 0, dx = dim == 2 ? side : 0,
-      dz = dim == 1 ? side : 0;
-  auto const& op = block.options;
-  if (!op->is_physical_boundary(dy, dx, dz)) return false;
-  int face = 2 * (dim - 1) + (upper ? 1 : 0);
-  auto const& names = op->bcnames();
-  return face >= static_cast<int>(names.size()) ||
-         names[face].rfind("periodic", 0) != 0;
-}
-
 }  // namespace
 
 torch::Tensor BudgetConsumer::totals(MeshBlockImpl const& block,
@@ -78,78 +63,11 @@ std::vector<std::string> BudgetConsumer::row_names(MeshBlockImpl const& block) {
 torch::Tensor BudgetConsumer::boundary(MeshBlockImpl const& block,
                                        Variables const& vars,
                                        FluxRegister const& reg) {
-  auto c = block.pcoord;
-  std::array<int64_t, 3> lo = {c->kl(), c->jl(), c->il()};
-  std::array<int64_t, 3> hi = {c->ku(), c->ju(), c->iu()};
-  if (!_weights_ready) {
-    torch::Tensor solid;
-    if (vars.count("solid") && vars.at("solid").defined())
-      solid = vars.at("solid").ne(0);
-    std::array<torch::Tensor, 3> area = {c->face_area1(), c->face_area2(),
-                                         c->face_area3()};
-    for (int dim = 1; dim <= 3; ++dim) {
-      _weight[dim - 1] = torch::Tensor();
-      if (!reg.has_step_field(dim)) continue;
-      int ax = 3 - dim;  // axis of a [k, j, i] tensor
-      std::array<int64_t, 3> b = lo, n;
-      for (int a = 0; a < 3; ++a) n[a] = hi[a] - lo[a] + 1;
-      n[ax] += 1;  // the faces of the interior cells, both ends
-      auto window = [&](torch::Tensor const& t, int shift) {
-        return t.narrow(0, b[0] - (ax == 0) * shift, n[0])
-            .narrow(1, b[1] - (ax == 1) * shift, n[1])
-            .narrow(2, b[2] - (ax == 2) * shift, n[2]);
-      };
-      auto sign = torch::zeros(n, area[dim - 1].options().dtype(kF64));
-      if (solid.defined()) {
-        // a face with one solid neighbour, outward from the fluid cell, which
-        // must be this block's: the first face's left and the last face's
-        // right cell are ghosts
-        auto left = window(solid, 1), right = window(solid, 0);
-        sign = (left.logical_not() & right).to(kF64) -
-               (left & right.logical_not()).to(kF64);
-        sign.select(ax, 0).clamp_(c10::nullopt, 0.);
-        sign.select(ax, n[ax] - 1).clamp_(0., c10::nullopt);
-      }
-      for (bool upper : {false, true}) {
-        if (!boundary_face(block, dim, upper)) continue;
-        int p = upper ? n[ax] - 1 : 0;
-        auto plane = sign.select(ax, p);
-        plane.fill_(upper ? 1. : -1.);
-        if (solid.defined()) {
-          int cell = upper ? hi[ax] : lo[ax];
-          auto inner =
-              solid.narrow(0, ax == 0 ? cell : b[0], ax == 0 ? 1 : n[0])
-                  .narrow(1, ax == 1 ? cell : b[1], ax == 1 ? 1 : n[1])
-                  .narrow(2, ax == 2 ? cell : b[2], ax == 2 ? 1 : n[2])
-                  .squeeze(ax);
-          plane.mul_(inner.logical_not().to(kF64));
-        }
-      }
-      _weight[dim - 1] = sign * window(area[dim - 1], 0).to(kF64);
-      for (int a = 0; a < 3; ++a) {
-        _window[dim - 1][a] = b[a];
-        _window[dim - 1][3 + a] = n[a];
-      }
-    }
-    _weights_ready = true;
-  }
-
-  torch::Tensor out;
+  auto out = torch::zeros({block.phydro->peos->nvar()},
+                          vars.at("hydro_u").options().dtype(kF64));
   for (int dim = 1; dim <= 3; ++dim) {
-    auto const& w = _weight[dim - 1];
-    if (!w.defined() || !reg.has_step_field(dim)) continue;
-    auto const& win = _window[dim - 1];
-    auto s = reg.step_field(dim)
-                 .narrow(1, win[0], win[3])
-                 .narrow(2, win[1], win[4])
-                 .narrow(3, win[2], win[5]);
-    auto t = (s.to(kF64) * w.to(s.device())).sum({1, 2, 3});
-    out = out.defined() ? out + t : t;
-  }
-  if (!out.defined()) {
-    int nvar = block.phydro->peos->nvar();
-    out = torch::zeros({nvar},
-                       torch::dtype(kF64).device(vars.at("hydro_u").device()));
+    if (reg.total(dim).defined())
+      out.add_(reg.monitor().boundary(dim).to(out.options()));
   }
   return out;
 }

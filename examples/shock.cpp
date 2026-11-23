@@ -45,12 +45,12 @@ int main(int argc, char** argv) {
 
   std::map<std::string, torch::Tensor> vars;
 
-  // internal boundary
-  auto r1 = torch::sqrt(x1v * x1v + x2v * x2v + x3v * x3v);
-  auto solid = torch::where(r1 < 0.1, 1, 0).to(torch::kBool);
-
+  // A circular cylinder extruded through the inactive x3 dimension.
+  auto nodes = torch::meshgrid({pcoord->x3f, pcoord->x2f, pcoord->x1f}, "ij");
+  auto phi = nodes[2].square() + nodes[1].square() - 0.01;
+  block->set_embedded_boundary(
+      EBGeometry::from_level_set(phi, pcoord->x1f, pcoord->x2f, pcoord->x3f));
   vars["hydro_w"] = w;
-  vars["solid"] = solid;
 
   block->initialize(vars);
 

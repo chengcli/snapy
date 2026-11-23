@@ -18,15 +18,13 @@
 #include <yaml-cpp/yaml.h>
 
 // snap
-#include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/output/output_type.hpp>
 
-// generated from src/options/{coord,layout,internal_boundary}.yaml
+// generated from src/options/{coord,layout}.yaml
 #include <snap_options/coord_rows.hpp>
-#include <snap_options/internal_boundary_rows.hpp>
 #include <snap_options/layout_rows.hpp>
 
 using namespace snap;
@@ -235,7 +233,7 @@ TEST(options_table, output_domain_checks) {
 
 // Lane S's three parsers against the generated rows, deck by deck.
 TEST(options_table, lane_s_rows_match_parsers) {
-  int ndeck = 0, ngeom = 0, nlayout = 0, ninternal = 0;
+  int ndeck = 0, ngeom = 0, nlayout = 0;
   for (auto const& p : in_tree_decks()) {
     YAML::Node config;
     if (!load(p, &config)) continue;
@@ -291,20 +289,11 @@ TEST(options_table, lane_s_rows_match_parsers) {
       EXPECT_EQ(d.backend(), lo->backend());
       EXPECT_EQ(d.device(), lo->device());
     }
-
-    auto io = InternalBoundaryOptionsImpl::from_yaml(p.string());
-    auto r = InternalBoundaryRows::read(config);
-    if (r.present()) ++ninternal;
-    EXPECT_EQ(r.max_iter(), io->max_iter());
-    EXPECT_EQ(r.solid_density(), io->solid_density());
-    EXPECT_EQ(r.solid_pressure(), io->solid_pressure());
   }
   std::cout << "decks " << ndeck << ": geometry " << ngeom << ", distribute "
-            << nlayout << ", boundary-condition/internal " << ninternal
-            << std::endl;
+            << nlayout << std::endl;
   EXPECT_GT(ngeom, 50);
   EXPECT_GT(nlayout, 20);
-  EXPECT_GT(ninternal, 0);
 }
 
 // The cross-option checks of the geometry table refuse what lane S refuses.

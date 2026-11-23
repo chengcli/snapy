@@ -202,7 +202,7 @@ TEST(radiating, mixed_faces_preserve_representation_and_order) {
           get_bc_func().at("reflecting_inner"),
           get_bc_func().at("outflow_outer"),
           get_bc_func().at("outflow_inner"),
-          get_bc_func().at("solid_outer")};
+          get_bc_func().at("extrapolation_outer")};
       auto w = ref.clone();
       w[IVX].fill_(2.);
       w[IVY].fill_(3.);

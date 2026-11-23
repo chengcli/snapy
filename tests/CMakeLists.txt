@@ -35,8 +35,11 @@ endif()
 setup_test(test_backward_substitution)
 setup_test(test_lu_failure)
 setup_test(test_scalar)
-setup_test(test_rectify)
-setup_test(test_flip_zero_count)
+setup_test(test_eb_geometry)
+setup_test(test_weighted_srd)
+setup_test(test_eb_transport)
+set_tests_properties(test_eb_geometry.${buildl} test_weighted_srd.${buildl}
+                     test_eb_transport.${buildl} PROPERTIES LABELS "weighted-srd")
 setup_test(test_cubed_sphere_exchange)
 setup_test(test_coordinate)
 # cubed-sphere seams
@@ -354,6 +357,9 @@ function(snapy_add_python_test name)
   set_property(GLOBAL APPEND PROPERTY SNAPY_PYTHON_TESTS ${name}_python)
 endfunction()
 
+snapy_add_python_test(test_eb_advection TIMEOUT 180 LABELS "python;weighted-srd")
+snapy_add_python_test(test_eb_moist TIMEOUT 120 LABELS "python;weighted-srd")
+snapy_add_python_test(test_eb_distributed TIMEOUT 120 LABELS "python;weighted-srd")
 snapy_add_python_test(test_mesh_exchange LABELS "python;exchange")
 snapy_add_python_test(test_cubed_sphere_vertical_velocity_exchange
                       LABELS "python;exchange;cubed-sphere;diagnostic")

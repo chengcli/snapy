@@ -6,8 +6,8 @@
 namespace snap {
 
 template <typename T>
-inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, T const* vol,
-                                         int nx1) {
+inline DISPATCH_MACRO int fix_vapor_segment(T* vapor, T const* major,
+                                            T const* vol, int nx1) {
   int is = nx1 - 1;
   int ie = 0;
   // volumes relative to the first cell (1 on a uniform column); sums in FP64
@@ -86,6 +86,29 @@ inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, T const* vol,
     is = i;
   }
 
+  return 0;
+}
+
+// A covered Cartesian cell has zero fluid volume. It splits the x1
+// column into independent donors and prevents a zero normalization volume.
+template <typename T>
+inline DISPATCH_MACRO int fix_vapor_impl(T* vapor, T const* major, T const* vol,
+                                         int nx1,
+                                         T const* lower_face = nullptr) {
+  int end = nx1;
+  while (end > 0) {
+    while (end > 0 && vol[end - 1] == 0.) --end;
+    if (end == 0) break;
+    int start = end - 1;
+    if (!(vol[start] > 0.)) return 1;  // nonfinite or negative volume
+    while (start > 0 && vol[start - 1] > 0. &&
+           (!lower_face || lower_face[start] > 0.))
+      --start;
+    if (fix_vapor_segment(vapor + start, major + start, vol + start,
+                          end - start))
+      return 1;
+    end = start;
+  }
   return 0;
 }
 

@@ -297,7 +297,6 @@ class GravityWork {
                (pc.x1f.narrow(0, 1, nc1g) - pc.x1v) / _volume;
     _face_lo = _face_lo.to(w.options()).unsqueeze(0).contiguous();
     _face_hi = _face_hi.to(w.options()).unsqueeze(0).contiguous();
-    _mask0 = torch::zeros_like(gamma);
     int isg = pc.il(), ieg = pc.iu() + 1;
     _phi = -grav1 * pc.x1v.slice(0, isg, ieg);
     auto zg = pc.x1v.slice(0, isg, ieg);
@@ -311,8 +310,6 @@ class GravityWork {
   //! W's face weights for the operator's energy row, [1, ..., nc1]
   torch::Tensor const& face_lo() const { return _face_lo; }
   torch::Tensor const& face_hi() const { return _face_hi; }
-  //! a zero solid mask of gamma's shape
-  torch::Tensor const& mask0() const { return _mask0; }
   //! cell potentials and face-minus-cell potentials of the interior x1 range
   torch::Tensor const& phi() const { return _phi; }
   torch::Tensor const& dp_lo() const { return _dp_lo; }
@@ -356,9 +353,8 @@ class GravityWork {
   torch::Tensor const& k_t1() const { return _k_t1; }
 
   //! K's rows applied to q [nx3, nx2, nx1] (the full corrected-PE operator,
-  //! no lumping); fluid (1 or 0 per cell) masks the rows of solid cells
-  torch::Tensor apply_rows(torch::Tensor const& q, torch::Tensor const& fluid,
-                           int nx1) const {
+  //! no lumping).
+  torch::Tensor apply_rows(torch::Tensor const& q, int nx1) const {
     auto s = _k_mid * q;
     s.narrow(-1, 1, nx1 - 1) +=
         _k_lo.narrow(-1, 1, nx1 - 1) * q.narrow(-1, 0, nx1 - 1);
@@ -366,7 +362,7 @@ class GravityWork {
         _k_hi.narrow(-1, 0, nx1 - 1) * q.narrow(-1, 1, nx1 - 1);
     s.select(-1, 0) += _k_t0 * q.select(-1, 2);
     s.select(-1, nx1 - 1) += _k_t1 * q.select(-1, nx1 - 3);
-    return fluid.defined() ? fluid * s : s;  // 1 * s == s
+    return s;
   }
 
   //! the stencil and work factors of corrected_pe_work, shared with the rows
@@ -374,8 +370,7 @@ class GravityWork {
 
  private:
   Key _key;
-  torch::Tensor _area, _volume, _face_lo, _face_hi, _mask0, _phi, _dp_lo,
-      _dp_hi;
+  torch::Tensor _area, _volume, _face_lo, _face_hi, _phi, _dp_lo, _dp_hi;
   X1GridKey _rows_key;
   torch::Tensor _k_lo, _k_mid, _k_hi, _k_t0, _k_t1;
   CorrectedPEFactors _pe;

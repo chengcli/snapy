@@ -37,6 +37,8 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
 
   auto data = load_restart(restart_path.string(), options->layout()->rank());
 
+  read_eb_restart(data);
+
   // check required variables
   TORCH_CHECK(data.count("hydro_u"),
               "Restart file is missing required variable: hydro_u");
@@ -133,9 +135,9 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       continue;
     }
     // held by hydro.ref / used below, or a budget carry: not kept in vars
-    if (name.rfind(kBudgetCarryPrefix, 0) == 0 || name == "hydro_ref" ||
-        name == "hydro_ref_species" || name == "hydro_u_stored" ||
-        name == kHydroRestartMetadata ||
+    if (name.rfind("eb.", 0) == 0 || name.rfind(kBudgetCarryPrefix, 0) == 0 ||
+        name == "hydro_ref" || name == "hydro_ref_species" ||
+        name == "hydro_u_stored" || name == kHydroRestartMetadata ||
         std::find(kHydroReferenceGrid.begin(), kHydroReferenceGrid.end(),
                   name) != kHydroReferenceGrid.end())
       continue;
@@ -185,12 +187,6 @@ double MeshBlockImpl::_init_from_restart(Variables &vars, std::string fname) {
       build_hydro_reference(tmp);
     }
     if (!stored) phydro->sub_reference_(hydro_u);
-    // the solid fill values are kept in the stored form too; the file has
-    // them in totals
-    if (vars.count("fill_solid_hydro_u") &&
-        vars.at("fill_solid_hydro_u").defined() &&
-        !vars.at("fill_solid_hydro_u").is_same(hydro_u))
-      phydro->sub_reference_(vars.at("fill_solid_hydro_u"));
   }
 
   if (phydro->options->perturbation_flux()) {

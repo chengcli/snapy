@@ -8,6 +8,7 @@
 #include <snap/snap.h>
 
 #include <snap/coord/x1_centroid.hpp>
+#include <snap/eb/geometry.hpp>
 #include <snap/layout/exchange.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
@@ -211,8 +212,8 @@ void HydroImpl::reset() {
   req.counters.push_back("implicit.fp64_columns");
   req.minima = {"ef.pos_min"};
   // V3 I-5: lane I's cause (R.rst 4.5); X maps it to its cause bit 5
-  req.retry = {"ef.floor_patch", "ef.nan", "ef.vapor_fail", "ef.heat_capacity",
-               "implicit.column"};
+  req.retry = {"ef.floor_patch",   "ef.nan",          "ef.vapor_fail",
+               "ef.heat_capacity", "implicit.column", "eb.inadmissible"};
   // conserve-axial-momentum exact: A's riemann.central on the x2/x3 faces
   // (R-2), kept until the next stage
   paam->request(req);
@@ -332,7 +333,7 @@ std::pair<int, int> HydroImpl::x1_neighbors() const {
   return Exchange(pmb).x1_neighbors();
 }
 
-double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
+double HydroImpl::max_time_step(torch::Tensor w) const {
   auto sub3 = pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
 
   torch::Tensor cs;
@@ -343,8 +344,10 @@ double HydroImpl::max_time_step(torch::Tensor w, torch::Tensor solid) const {
     cs = peos->compute("WA->L", {w, gamma});
   }
 
-  if (solid.defined()) {
-    cs = torch::where(solid, 1.e-8, cs);
+  if (auto eb = pmb->eb_geometry()) {
+    auto covered = eb->volume_fraction.eq(0).to(w.device());
+    w = torch::where(covered.unsqueeze(0), 0., w);
+    cs = torch::where(covered, 0., cs);
   }
 
   auto dt_min = torch::tensor({1.e9, 1.e9, 1.e9},
@@ -428,9 +431,7 @@ torch::Tensor HydroImpl::implicit_mass_correction() const {
 
 torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
                                                     torch::Tensor const& w,
-                                                    double dt,
-                                                    Variables const& other,
-                                                    double post_dt) {
+                                                    double dt, double post_dt) {
   if (!picorr) return torch::Tensor();
   // V3 I-4: the solve posts its face transfers into total(1), which the
   // Riemann slot rewrites each stage; with the x1 flux off nothing does, so
@@ -444,15 +445,7 @@ torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
               "[Hydro] implicit scheme requires nb1 = 1 (no x1 decomposition): "
               "the vertical solve has no cross-rank coupling.");
 
-  torch::Tensor wi;
-  if (other.count("solid")) {
-    wi = torch::where(other.at("solid").unsqueeze(0).expand_as(w),
-                      other.at("fill_solid_hydro_w"), w);
-    du.masked_fill_(other.at("solid").unsqueeze(0).expand_as(du), 0.0);
-  } else {
-    wi = w;
-  }
-
+  auto wi = w;
   auto destination = du;
   bool solve_float = options->icorr()->precision() == "float32" ||
                      (options->icorr()->precision() == "auto" && fp32());
@@ -476,9 +469,8 @@ torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
     }
     return peos->compute("W->A", {state});
   };
-  auto solid = other.count("solid") ? other.at("solid") : torch::Tensor();
   auto correction =
-      picorr->forward_masked(du, wi, gamma_for(wi), dt, solid, reg, post_dt);
+      picorr->forward_stage(du, wi, gamma_for(wi), dt, reg, post_dt);
   // V3 I-6: the predicated FP64 stage, always run with the FP32 solve and
   // its fallback: only the columns whose FP32 solve failed are solved again,
   // from rhs64 and wi64, and no host read decides it; the other columns keep
@@ -486,8 +478,8 @@ torch::Tensor HydroImpl::_apply_implicit_correction(torch::Tensor& du,
   torch::Tensor retry;
   if (solve_float && options->icorr()->fallback_fp64()) {
     retry = picorr->stage_failed();
-    picorr->forward_masked(rhs64, wi64, gamma_for(wi64), dt, solid, reg,
-                           post_dt, retry);
+    picorr->forward_stage(rhs64, wi64, gamma_for(wi64), dt, reg, post_dt,
+                          retry);
     correction = picorr->merge_fp64(retry);
     picorr->count_fp64_columns(retry);
     freg.monitor().count("implicit.fp64_columns", retry);

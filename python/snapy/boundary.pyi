@@ -51,109 +51,20 @@ class BoundaryFuncOptions:
         """Set the number of ghost zones."""
         ...
 
-class InternalBoundaryOptions:
-    """
-    Internal boundary configuration options.
-
-    This class manages internal boundary parameters for solid boundaries.
-    """
-
-    def __init__(self) -> None:
-        """Initialize InternalBoundaryOptions with default values."""
-        ...
-
-    def __repr__(self) -> str: ...
-
-    @overload
-    def max_iter(self) -> int:
-        """Get the maximum number of iterations."""
-        ...
-
-    @overload
-    def max_iter(self, value: int) -> "InternalBoundaryOptions":
-        """Set the maximum number of iterations."""
-        ...
-
-    @overload
-    def solid_density(self) -> float:
-        """Get the solid density value."""
-        ...
-
-    @overload
-    def solid_density(self, value: float) -> "InternalBoundaryOptions":
-        """Set the solid density value."""
-        ...
-
-    @overload
-    def solid_pressure(self) -> float:
-        """Get the solid pressure value."""
-        ...
-
-    @overload
-    def solid_pressure(self, value: float) -> "InternalBoundaryOptions":
-        """Set the solid pressure value."""
-        ...
-
-class InternalBoundary:
-    """
-    Internal boundary implementation for solid boundaries.
-
-    This module handles internal boundary conditions in the simulation.
-    """
-
-    @overload
-    def __init__(self) -> None:
-        """Construct a new default module."""
-        ...
-
-    @overload
-    def __init__(self, options: InternalBoundaryOptions, block = None) -> None:
-        """
-        Construct an InternalBoundary module.
-
-        Args:
-            options: Internal boundary configuration options
-            block: Parent block module (optional)
-        """
-        ...
-
-    def __repr__(self) -> str: ...
-
-    options: InternalBoundaryOptions
-
-    def forward(self, *args) -> torch.Tensor:
-        """Forward pass through the module."""
-        ...
-
-    def module(self, name: str) -> torch.nn.Module:
-        """Get a named sub-module."""
-        ...
-
-    def buffer(self, name: str) -> torch.Tensor:
-        """Get a named buffer."""
-        ...
-
-    def mark_prim_solid_(self, *args) -> None:
-        """Mark primitive variables in solid regions."""
-        ...
-
-    def fill_cons_solid_(self, *args) -> None:
-        """Fill conserved variables in solid regions."""
-        ...
-
-    def rectify_solid(
-        self,
-        solid: torch.Tensor,
-        bfuncs: List[bcfunc_t] = []
-    ) -> Tuple[torch.Tensor, int]:
-        """
-        Rectify solid boundary.
-
-        Args:
-            solid: Solid boundary tensor
-            bfuncs: List of boundary functions
-
-        Returns:
-            Tuple of (result tensor, total number of flips)
-        """
-        ...
+class EmbeddedBoundaryGeometry:
+    """Static Cartesian geometry. Positive level-set values denote fluid."""
+    volume_fraction: torch.Tensor
+    cell_centroid: torch.Tensor
+    face_fraction: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    face_centroid: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    wall_area_vector: torch.Tensor
+    wall_centroid: torch.Tensor
+    flags: torch.Tensor
+    @staticmethod
+    def from_level_set(phi: torch.Tensor, x1f: torch.Tensor, x2f: torch.Tensor, x3f: torch.Tensor) -> "EmbeddedBoundaryGeometry": ...
+    @staticmethod
+    def from_metrics(volume_fraction: torch.Tensor, cell_centroid: torch.Tensor,
+                     face_fraction: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+                     face_centroid: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+                     wall_area_vector: torch.Tensor, wall_centroid: torch.Tensor,
+                     x1f: torch.Tensor, x2f: torch.Tensor, x3f: torch.Tensor) -> "EmbeddedBoundaryGeometry": ...

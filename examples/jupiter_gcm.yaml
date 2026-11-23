@@ -92,11 +92,6 @@ dynamics:
     type: hllc
 
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.e9
-    max-iter: 5
-
   external:
     x1-inner: reflecting
     x1-outer: reflecting

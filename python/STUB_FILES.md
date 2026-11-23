@@ -107,7 +107,7 @@ The actual pybind11 implementation is in:
 The stub files are split into logical modules:
 
 - **`snapy/__init__.pyi`**: Main module with common enums (`index`, `BoundaryFace`) and type aliases (`bcfunc_t`), imports all submodules
-- **`snapy/boundary.pyi`**: `BoundaryFuncOptions`, `InternalBoundaryOptions`, `InternalBoundary`
+- **`snapy/boundary.pyi`**: `BoundaryFuncOptions`, `EmbeddedBoundaryGeometry`
 - **`snapy/coordinate.pyi`**: `CoordinateOptions`, `Cartesian`
 - **`snapy/eos.pyi`**: `EquationOfStateOptions`, `EquationOfState`
 - **`snapy/forcing.pyi`**: `ConstGravityOptions`, `CoriolisOptions`
@@ -156,7 +156,7 @@ This separation ensures that the API remains well-documented and type-safe while
 ## Module Overview
 
 ### Boundary Conditions (`pybc.cpp`)
-Defines boundary condition functions and internal boundary handling for solid boundaries.
+Defines boundary condition functions and embedded boundary handling for solid boundaries.
 
 ### Coordinate Systems (`pycoord.cpp`)
 Provides Cartesian coordinate system with grid geometry calculations.

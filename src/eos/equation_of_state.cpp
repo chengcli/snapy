@@ -377,6 +377,14 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
                    .contiguous()
                    .index(interior);
 
+    auto eb = pmb->eb_geometry();
+    auto lower_face = eb ? eb->face_fraction[0]
+                               .narrow(-1, 0, cons.size(-1))
+                               .to(cons.options())
+                               .unsqueeze(0)
+                               .contiguous()
+                               .index(interior)
+                         : torch::Tensor();
     // Keep the two repairs separate: clouds tolerate an unrepairable column
     // and clamp it; vapor must throw before a gathered column is copied back.
     auto repair_column = [&](torch::Tensor field, bool require_success) {
@@ -386,20 +394,27 @@ void EquationOfStateImpl::apply_conserved_limiter_(torch::Tensor const& cons,
       auto layout = pmb->get_layout();
       bool split =
           count > 0 && whole_column && layout && layout->options->pz() > 1;
-      auto column = split ? layout->gather_x1(torch::cat(
-                                {field, major, vol.expand_as(major)}))
-                          : torch::Tensor();
+      torch::Tensor column;
+      if (split) {
+        std::vector<torch::Tensor> rows{field, major, vol.expand_as(major)};
+        if (eb) rows.push_back(lower_face);
+        column = layout->gather_x1(torch::cat(rows));
+      }
       auto repaired = split ? column.narrow(0, 0, count) : field;
       auto cmajor = split ? column.narrow(0, count, 1) : major;
       auto cvol = split ? column.narrow(0, count + 1, 1) : vol;
-      auto iter = at::TensorIteratorConfig()
-                      .resize_outputs(false)
-                      .declare_static_shape(repaired.sizes(),
-                                            /*squash_dim=*/repaired.dim() - 1)
-                      .add_output(repaired)
-                      .add_owned_input(cmajor.expand_as(repaired))
-                      .add_owned_input(cvol.expand_as(repaired))
-                      .build();
+      at::TensorIteratorConfig config;
+      config.resize_outputs(false)
+          .declare_static_shape(repaired.sizes(),
+                                /*squash_dim=*/repaired.dim() - 1)
+          .add_output(repaired)
+          .add_owned_input(cmajor.expand_as(repaired))
+          .add_owned_input(cvol.expand_as(repaired));
+      if (eb) {
+        auto face = split ? column.narrow(0, count + 2, 1) : lower_face;
+        config.add_owned_input(face.expand_as(repaired));
+      }
+      auto iter = config.build();
       // deferred: the count waits for check_redo (on CUDA, on the device)
       bool defer = require_success && defer_vapor_check_;
       auto sink = defer ? status.flag(EfStatus::kVaporFail, cons, torch::kInt)

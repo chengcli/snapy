@@ -80,14 +80,12 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
   // output slices are checked once, by MeshBlock (check_domain)
   if (verbose) op->coord()->report(SINFO(MeshBlockOptions));
 
-  // --------- internal boundary ---------- //
-  op->ib() = InternalBoundaryOptionsImpl::from_yaml(input_file);
-  if (op->ib() && verbose) op->ib()->report(SINFO(MeshBlockOptions));
-
   // --------- external boundary ---------- //
   if (!config["boundary-condition"]) return op;
-  check_keys(config["boundary-condition"], "boundary-condition",
-             {"external", "internal"});
+  TORCH_CHECK(
+      !config["boundary-condition"]["internal"],
+      "boundary-condition/internal was retired; use set_embedded_boundary");
+  check_keys(config["boundary-condition"], "boundary-condition", {"external"});
   if (!config["boundary-condition"]["external"]) return op;
 
   auto external_bc = config["boundary-condition"]["external"];
@@ -192,9 +190,7 @@ FaceKind MeshBlockOptionsImpl::face_kind(int dy, int dx, int dz) const {
   // operator may extrapolate past both. Everything else keeps
   // the two-cell average -- periodic's ghost is a true neighbour, outflow's
   // zero-gradient ghost IS that condition's statement about the face, custom is
-  // written by user code this cannot interpret, and `solid` writes a bare 1
-  // into every variable, which makes the GRADIENT nonsense too; fixing the
-  // coefficient alone would not rescue that face.
+  // written by user code this cannot interpret.
   auto const &name = bcnames()[i];
   if (name.compare(0, 8, "periodic") == 0) return FaceKind::periodic;
   if (name == "reflecting_inner" || name == "reflecting_outer" ||

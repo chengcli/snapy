@@ -14,6 +14,25 @@
 namespace snap {
 
 class HydroImpl;
+struct EBGeometry;
+struct CutCellStencil;
+
+// Linear reconstruction on physically connected volume centroids. Only faces
+// whose ordinary stencil intersects the embedded wall use this reconstruction.
+class CutCellReconstruction {
+ public:
+  CutCellReconstruction(EBGeometry const& geometry, torch::Tensor const& state,
+                        int width);
+  torch::Tensor faces(torch::Tensor const& regular, int dim, int width) const;
+  torch::Tensor wall_state() const;
+  torch::Tensor irregular_faces(int dim, int width) const;
+
+ private:
+  torch::Tensor evaluate(torch::Tensor const& points) const;
+  EBGeometry const& _geometry;
+  std::shared_ptr<CutCellStencil> _stencil;
+  torch::Tensor _state, _packed, _gradient, _lower, _upper;
+};
 class ReconstructImpl;
 class RegisterMonitor;
 struct IdealMoistPerturbations;
@@ -47,14 +66,14 @@ void riemann_solve(HydroImpl& hydro, torch::Tensor lr, int dim,
                    IdealMoistPerturbations const* perturb,
                    torch::Tensor central = torch::Tensor());
 
-//! called with the post-solid, unrotated face states before the solve
+//! called with the unrotated face states before the solve
 using FaceHook = std::function<void(torch::Tensor const&, int)>;
 
-//! the x2/x3 sweep after reconstruction: immersed solid -> before_solve ->
+//! the x2/x3 sweep after reconstruction: before_solve ->
 //! Riemann into slot(d, "riemann"), riemann.central@d when central, then
-//! post_slot. Disabled: the solid step only
+//! post_slot. Disabled sweeps return immediately
 void solve_faces(HydroImpl& hydro, FaceDir const& dir,
-                 torch::Tensor const& faces, Variables const& other,
+                 torch::Tensor const& faces,
                  IdealMoistPerturbations const* perturb,
                  torch::Tensor& background, bool central,
                  FaceHook const& before_solve = {});

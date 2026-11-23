@@ -20,23 +20,35 @@ BoundaryFuncOptions
       :return: Direction index
       :rtype: int
 
-InternalBoundaryOptions
-~~~~~~~~~~~~~~~~~~~~~~~
+EmbeddedBoundaryGeometry
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. class:: InternalBoundaryOptions
+Install stationary Cartesian obstacles before initialization. Supply a level
+set at all block vertices, including ghost vertices. Positive values denote
+fluid. Tensor spatial axes are (x3, x2, x1). For a two-dimensional obstacle,
+extrude the level set through both vertices of the inactive axis.
 
-   Internal boundary configuration options.
+.. code-block:: python
 
-   .. staticmethod:: from_yaml(filename: str, verbose: bool = False) -> InternalBoundaryOptions
+   z, y, x = (block.buffer("coord." + name) for name in ("x3f", "x2f", "x1f"))
+   zz, yy, xx = torch.meshgrid(z, y, x, indexing="ij")
+   phi = xx.square() + yy.square() - radius**2
+   geometry = snapy.EmbeddedBoundaryGeometry.from_level_set(phi, x, y, z)
+   block.set_embedded_boundary(geometry)
 
-      Load InternalBoundaryOptions from a YAML file.
+Alternatively, use ``from_metrics`` with the fluid volume fraction, fluid
+centroid, three staggered face fractions and centroids, outward wall area
+vector, wall centroid, and the three coordinate face arrays. Centroids are in
+physical coordinates. Vector components are ordered (x1, x2, x3). The flag
+values are 0 for regular, 1 for cut or wall-adjacent, and 2 for covered.
 
-      :param filename: Path to YAML file
-      :type filename: str
-      :param verbose: Enable verbose output
-      :type verbose: bool, optional
-      :return: InternalBoundaryOptions loaded from file
-      :rtype: InternalBoundaryOptions
+Embedded boundaries use explicit total-state Cartesian dynamics with the
+ideal-gas, ideal-moist, or moist-mixture EOS. Nonzero gravity and diffusion
+require wall-specific energy or diffusive fluxes and are rejected at setup. Assign
+geometry to every block of a decomposed mesh, including blocks containing
+only fluid. Restarts store geometry and resume the accepted state. Input
+decks and checkpoints containing the former Boolean solid mask must be
+recreated with the geometry interface.
 
 External outflow and extrapolation
 ---------------------------------

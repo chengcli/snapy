@@ -76,12 +76,9 @@ void RestartOutput::write_output_file(MeshBlockImpl* pmb, Variables const& vars,
       out_vars["hydro_ref_species"] =
           pmb->phydro->species_ref().to(torch::kCPU);
     }
-    if (vars.count("fill_solid_hydro_u") &&
-        vars.at("fill_solid_hydro_u").defined()) {
-      out_vars["fill_solid_hydro_u"] =
-          pmb->phydro->total_u(vars.at("fill_solid_hydro_u")).to(torch::kCPU);
-    }
   }
+
+  pmb->write_eb_restart(out_vars);
 
   // store last time and cycle
   out_vars["last_time"] = torch::tensor({current_time}, torch::kFloat64);

@@ -103,15 +103,30 @@ torch::Tensor MeshBlockImpl::local_redo_flag_tensor(Variables const &vars) {
   auto const &hydro_w = vars.at("hydro_w");
   {
     DeferVaporCheck defer(phydro->peos.get());
-    phydro->peos->forward(hydro_u.clone(), hydro_w);
+    auto checked =
+        _eb ? torch::where(_eb->flags.eq(2),
+                           _eb_neutral_u.to(hydro_u.options()), hydro_u)
+            : hydro_u.clone();
+    phydro->peos->forward(checked, hydro_w);
   }
   auto w = hydro_w.index(interior);
   auto const &eos = phydro->peos->options;
   // negated so a NaN, which fails every comparison, counts as a hit
-  auto floor = (w[IDN].min() > 1.001 * eos->density_floor()).logical_not();
+  auto fluid = _eb ? _eb->flags.ne(2).index(
+                         part({0, 0, 0}, PartOptions().exterior(false).ndim(3)))
+                   : torch::Tensor();
+  auto floor_hit = [&](int row, double threshold) {
+    if (!_eb) return (w[row].min() > threshold).logical_not();
+    return ((w[row] > threshold).logical_not() & fluid).any();
+  };
+  auto floor = floor_hit(IDN, 1.001 * eos->density_floor());
   if (w.size(0) > IPR) {  // shallow water carries no pressure row
-    floor = floor.logical_or(
-        (w[IPR].min() > 1.001 * eos->pressure_floor()).logical_not());
+    floor = floor.logical_or(floor_hit(IPR, 1.001 * eos->pressure_floor()));
+  }
+  if (_eb) {
+    auto const &mon = phydro->flux_register().monitor();
+    floor =
+        floor.logical_or(mon.retry_flags[mon.retry_index("eb.inadmissible")]);
   }
   auto opts = hydro_u.options();
   auto zero = torch::zeros({}, opts);

@@ -255,13 +255,12 @@ void ImplicitHydroImpl::report_failure(std::ostream& os) const {
 
 torch::Tensor ImplicitHydroImpl::forward(torch::Tensor du, torch::Tensor w,
                                          torch::Tensor gamma, double dt) {
-  return forward_masked(du, w, gamma, dt, torch::Tensor());
+  return forward_stage(du, w, gamma, dt);
 }
 
-torch::Tensor ImplicitHydroImpl::forward_masked(
+torch::Tensor ImplicitHydroImpl::forward_stage(
     torch::Tensor du, torch::Tensor w, torch::Tensor gamma, double dt,
-    torch::Tensor solid, FluxRegister* reg, double post_dt,
-    torch::Tensor const& retry) {
+    FluxRegister* reg, double post_dt, torch::Tensor const& retry) {
   TORCH_CHECK(phydro->options->grav(),
               "[ImplicitHydro] forcing does not have const-gravity");
 
@@ -316,10 +315,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
   pcoord->prim2local1_(du);
 
   // the geometry below depends on the grid only
-  bool no_solid = !solid.defined();
   _gw.update(*pcoord, w, gamma, phydro->options->grav()->grav1());
-  auto mask =
-      solid.defined() ? solid.to(w.options()).contiguous() : _gw.mask0();
 
   auto area = _gw.area();
   auto volume = _gw.volume();
@@ -343,7 +339,6 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
         .add_input(_b)
         .add_input(_c)
         .add_input(_delta)
-        .add_owned_input(mask.unsqueeze(0).index(interior))
         .add_owned_input(_gw.face_lo().index(interior))
         .add_owned_input(_gw.face_hi().index(interior))
         .add_owned_input(per_column(status_in));  // written per column
@@ -371,11 +366,11 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
   auto in3 =
       phydro->pmb->part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
   int nx1 = pcoord->options->nx1();
-  torch::Tensor rx_lo, rx_mid, rx_hi, rx_t0, rx_t1, rx_fluid, rx_mass0;
+  torch::Tensor rx_lo, rx_mid, rx_hi, rx_t0, rx_t1, rx_mass0;
   // the full corrected-PE operator: tridiagonal part plus the two wall
   // third points of the exact 3-point slope (no lumping)
   auto rx_tri = [&](torch::Tensor const& q) {  // q: [nx3, nx2, nx1]
-    return _gw.apply_rows(q, no_solid ? torch::Tensor() : rx_fluid, nx1);
+    return _gw.apply_rows(q, nx1);
   };
   auto couple_radial_exact = [&]() {
     if (!radial_exact || nx1 < 3) return;
@@ -395,22 +390,15 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
     rx_hi = _gw.k_hi();
     rx_t0 = _gw.k_t0();
     rx_t1 = _gw.k_t1();
-    if (!no_solid) rx_fluid = (mask.index(in3) == 0).to(w.options());
     // row IPR, column 0 (the total mass) of each cell's blocks; Eigen stores
     // them column-major
     int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
     auto entry = [&](torch::Tensor const& t) {
       return t.view({nx3, nx2, nx1, m, m}).select(-2, 0).select(-1, m - 1);
     };
-    if (no_solid) {  // 1 * x == x
-      entry(_a).sub_(rx_mid / dt);
-      entry(_b).sub_(rx_lo / dt);
-      entry(_c).sub_(rx_hi / dt);
-    } else {
-      entry(_a).sub_(rx_fluid * rx_mid / dt);
-      entry(_b).sub_(rx_fluid * rx_lo / dt);
-      entry(_c).sub_(rx_fluid * rx_hi / dt);
-    }
+    entry(_a).sub_(rx_mid / dt);
+    entry(_b).sub_(rx_lo / dt);
+    entry(_c).sub_(rx_hi / dt);
     rx_mass0 = _du0[IDN].index(in3).clone();
     if (du.size(0) > ICY)
       rx_mass0 += _du0.narrow(0, ICY, du.size(0) - ICY).sum(0).index(in3);
@@ -443,19 +431,12 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
     // each column (V3 I-5), with its wall coefficients one value per column
     int nx2 = pcoord->options->nx2(), nx3 = pcoord->options->nx3();
     auto z0 = torch::empty_like(_delta), z1 = torch::empty_like(_delta);
-    auto one = torch::ones({}, w.options());
-    auto it =
-        vic_config()
-            .add_input(z0)
-            .add_input(z1)
-            .add_owned_input(per_column(rx_t0.expand({nx3, nx2})))
-            .add_owned_input(per_column(rx_t1.expand({nx3, nx2})))
-            .add_owned_input(per_column(no_solid ? one.expand({nx3, nx2})
-                                                 : rx_fluid.select(-1, 0)))
-            .add_owned_input(per_column(no_solid
-                                            ? one.expand({nx3, nx2})
-                                            : rx_fluid.select(-1, nx1 - 1)))
-            .build();
+    auto it = vic_config()
+                  .add_input(z0)
+                  .add_input(z1)
+                  .add_owned_input(per_column(rx_t0.expand({nx3, nx2})))
+                  .add_owned_input(per_column(rx_t1.expand({nx3, nx2})))
+                  .build();
     at::native::vic_stage(du.device().type(), it,
                           stage(VicStage::solve, 0, /*woodbury=*/true));
   }
@@ -498,8 +479,8 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
         reg->kept(1, "vic.mass_total")[IDN].to(_mass_corr.options()) * kdt;
     energy_solved = du[IPR].clone();  // vic.cell: without the remainder
   }
-  book_remainder_(du, w.size(0), mask, no_solid, radial_exact, grav1, rx_mass0,
-                  rx_fluid, nx1, moved_total);
+  book_remainder_(du, w.size(0), radial_exact, grav1, rx_mass0, nx1,
+                  moved_total);
 
   _corr.copy_(du);
   _corr.sub_(_du0);
@@ -660,10 +641,10 @@ std::shared_ptr<ImplicitHydroImpl> ImplicitHydroImpl::create(
   return p->register_module(name, ImplicitHydro(opts, p));
 }
 
-void ImplicitHydroImpl::book_remainder_(
-    torch::Tensor du, int wsize, torch::Tensor const& mask, bool no_solid,
-    bool radial_exact, double grav1, torch::Tensor const& rx_mass0,
-    torch::Tensor const& rx_fluid, int nx1, torch::Tensor const& moved_total) {
+void ImplicitHydroImpl::book_remainder_(torch::Tensor du, int wsize,
+                                        bool radial_exact, double grav1,
+                                        torch::Tensor const& rx_mass0, int nx1,
+                                        torch::Tensor const& moved_total) {
   auto pcoord = phydro->pmb->pcoord;
   // du[IPR] is a scalar row: the frame de-projection before this call
   // (flux2global1_) leaves it as it was, so the order of the two terms below
@@ -699,11 +680,7 @@ void ImplicitHydroImpl::book_remainder_(
                            .slice(-2, pcoord->jl(), pcoord->ju() + 1)
                            .slice(-3, pcoord->kl(), pcoord->ku() + 1) /
                       volume;
-    if (no_solid)  // where(true, x, 0) == x
-      du[IPR].index(in3).add_(projection_work + clamp_work);
-    else
-      du[IPR].index(in3).add_(
-          torch::where(mask.index(in3) == 0, projection_work + clamp_work, 0.));
+    du[IPR].index(in3).add_(projection_work + clamp_work);
   }
 
   // gravity-work: face: the matrix books the face form for the
@@ -729,15 +706,9 @@ void ImplicitHydroImpl::book_remainder_(
       auto raw = _delta.view({nx3, nx2, nx1, options->size()}).select(-1, 0);
       work.slice(-2, pcoord->jl(), pcoord->ju() + 1)
           .slice(-3, pcoord->kl(), pcoord->ku() + 1)
-          .sub_(_gw.apply_rows(raw - rx_mass0,
-                               no_solid ? torch::Tensor() : rx_fluid, nx1));
+          .sub_(_gw.apply_rows(raw - rx_mass0, nx1));
     }
-    // solid cells get none: their slope stencil reads fluid neighbours
-    if (no_solid)
-      du[IPR].slice(-1, is, ie) += work;
-    else
-      du[IPR].slice(-1, is, ie) +=
-          torch::where(mask.slice(-1, is, ie) == 0, work, 0.);
+    du[IPR].slice(-1, is, ie) += work;
   }
 }
 

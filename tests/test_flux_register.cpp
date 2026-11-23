@@ -890,9 +890,8 @@ TEST(FluxRegister, post_split_is_never_scaled_by_a_later_w1) {
 
 // R-7 (R.rst 4.2 O, L-3): boundary(dim) is the area-integrated outward step
 // transfer through the fluid domain's boundary faces: the block faces whose S
-// FaceKind is wall, outflow or custom, and the faces with one solid
-// neighbour, outward from the fluid cell. It follows S_d's recursion, split
-// posts included.
+// FaceKind is wall, outflow or custom, outward from the fluid. It follows S_d's
+// recursion, split posts included.
 namespace {
 // sum over dim's faces of sign A_f S, with the sign given by the caller
 torch::Tensor face_sum(Seam& s, FluxRegister& reg, int dim,
@@ -946,41 +945,26 @@ TEST(FluxRegister, boundary_is_the_outward_step_transfer_of_the_wall_faces) {
   EXPECT_EQ(reg.monitor().boundary(1).abs().max().item<double>(), 0.);
 }
 
-TEST(FluxRegister, boundary_counts_solid_faces_outward_from_the_fluid) {
+TEST(FluxRegister, wall_pressure_is_an_outward_runge_kutta_boundary_transfer) {
   Seam s;
   RegisterRequest req;
-  req.step_field = {1, 2};
   auto reg = s.make(req, 31);
-  auto co = s.block->pcoord;
-  int il = co->il(), iu = co->iu(), jl = co->jl(), ju = co->ju();
-  int const i0 = il + 5, i1 = il + 9, j0 = jl + 4, j1 = jl + 12;
-  auto solid = torch::zeros_like(reg.total(1)[0], torch::kInt32);
-  solid.slice(1, j0, j1 + 1).slice(2, i0, i1 + 1).fill_(1);
-  reg.set_solid(solid);
+  double expected = 0.;
   reg.begin_step();
-  reg.begin_stage(0, s.block->pintg->stages[0]);  // rk3 stage 0: w2 = 1
-  reg.end_stage(1.);
-  for (int dim : {1, 2}) {
-    auto sign = torch::zeros_like(reg.total(dim)[0], torch::kFloat64);
-    auto in_j = sign.slice(1, jl, ju + 1);
-    auto in_i = sign.slice(2, il, iu + 1);
-    if (dim == 1) {
-      in_j.select(2, il).fill_(-1.);
-      in_j.select(2, iu + 1).fill_(1.);
-      // fluid left of i0 flows out through face i0; fluid right of i1
-      // through face i1 + 1, towards -x1
-      sign.slice(1, j0, j1 + 1).select(2, i0).fill_(1.);
-      sign.slice(1, j0, j1 + 1).select(2, i1 + 1).fill_(-1.);
-    } else {
-      in_i.select(1, jl).fill_(-1.);
-      in_i.select(1, ju + 1).fill_(1.);
-      sign.slice(2, i0, i1 + 1).select(1, j0).fill_(1.);
-      sign.slice(2, i0, i1 + 1).select(1, j1 + 1).fill_(-1.);
-    }
-    EXPECT_LE(rel(reg.monitor().boundary(dim), face_sum(s, reg, dim, sign)),
-              1.e-14)
-        << dim;
+  for (int stage = 0; stage < s.block->pintg->stages.size(); ++stage) {
+    auto const& weight = s.block->pintg->stages[stage];
+    reg.begin_stage(stage, weight);
+    for (int dim : {1, 2}) reg.total(dim).zero_();
+    double rate = 4. - stage;
+    reg.post_wall_pressure(2, torch::tensor(rate, torch::kFloat64));
+    reg.end_stage(0.25);
+    expected = weight.wght1() * expected + weight.wght2() * 0.25 * rate;
+    auto boundary = reg.monitor().boundary(2);
+    EXPECT_DOUBLE_EQ(boundary[IVY].item<double>(), expected);
+    EXPECT_DOUBLE_EQ(boundary.sum().item<double>(), expected);
   }
+  reg.rollback();
+  EXPECT_EQ(reg.monitor().boundary(2).abs().max().item<double>(), 0.);
 }
 
 // G-R4's lane R part: with no source, every conserved row's step change over

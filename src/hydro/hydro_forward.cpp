@@ -2,12 +2,14 @@
 #include <chrono>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <typeinfo>
 
 // snap
 #include <snap/snap.h>
 
 #include <snap/coord/x1_centroid.hpp>
+#include <snap/eb/geometry.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/layout/exchange.hpp>
 #include <snap/layout/seam_register.hpp>
@@ -291,26 +293,22 @@ torch::Tensor HydroImpl::scalar_flux_covariance(torch::Tensor const& rl,
   auto dflx = torch::zeros_like(q);
   auto c = cov(un, q);
   dflx.narrow(-1, 1, n1 - 2) = centroid ? c + ctr(rho * un * q) : c;
+  if (_cov_regular[k].defined()) dflx = torch::where(_cov_regular[k], dflx, 0.);
   return dflx;
 }
 
 torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
-  bool has_solid = other.count("solid");
+  auto eb = pmb->eb_geometry();
   auto start = std::chrono::high_resolution_clock::now();
   _check_stretched_x1(u);
 
   auto playout = pmb->get_layout();
   for (int k = 0; k < 2; ++k) {
-    _cov_wl[k] = _cov_wr[k] = _cov_dry[k] = torch::Tensor();
+    _cov_regular[k] = _cov_wl[k] = _cov_wr[k] = _cov_dry[k] = torch::Tensor();
   }
-  // S step (4), boundary.prescribed: the walls and solid faces S hands to
-  // R's register; R applies them after reconcile and after the implicit step
-  supply_prescribed(freg, pmb, has_solid ? other.at("solid") : torch::Tensor(),
-                    {IVX, IVX + 1, IVX + 2});
-  // R-7: the solid side of boundary(dim)'s solid faces (R.rst 4.2 O)
-  freg.set_solid(has_solid ? other.at("solid") : torch::Tensor());
+  supply_prescribed(freg, pmb, {IVX, IVY, IVZ});
 
   //// ------------ (1) Calculate Primitives ------------ ////
   auto const& w = other.at("hydro_w");
@@ -336,8 +334,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   IdealMoistPerturbations perturb;
   torch::Tensor raw_primitive;
   if (split_flux) {
-    TORCH_CHECK(!has_solid,
-                "perturbation-flux does not support immersed solids");
+    TORCH_CHECK(!eb, "perturbation-flux does not support immersed solids");
     TORCH_CHECK(
         w.scalar_type() == torch::kFloat64,
         "perturbation-flux currently requires FP64 compute (M4 enables FP32)");
@@ -396,9 +393,13 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         perturb.density_delta + (w[IDN] - raw_primitive[IDN]);
   }
 
-  if (has_solid) {
-    pmb->pib->mark_prim_solid_(w, other.at("solid"));
-  }
+  std::optional<CutCellReconstruction> cut;
+  if (eb)
+    cut.emplace(*eb, w,
+                std::max(precon1->pinterp1->stencils(),
+                         precon23->pinterp1->stencils()) /
+                        2 +
+                    1);
 
   // hydrostatic pressure correction
   torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
@@ -536,7 +537,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     }
 
     auto wlr1 =
-        has_solid ? pmb->pib->forward(wtmp, DIM1, other.at("solid")) : wtmp;
+        cut ? cut->faces(wtmp, DIM1, precon1->pinterp1->stencils() / 2 + 1)
+            : wtmp;
 
     // Compute hydrostatic pressure correction
     if (options->grav() && (options->grav()->grav1() != 0) &&
@@ -794,6 +796,14 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       covariance = [&](torch::Tensor const& wlr, int dim) {
         auto [cwl, cwr] = x1_seam_rows(wlr[ILT], wlr[IRT], dir.seam_tag);
         dcov = _flux_covariance(cwl, cwr, dim);
+        if (cut && dcov.defined()) {
+          auto near =
+              cut->irregular_faces(dim, precon23->pinterp1->stencils() / 2 + 1);
+          // Cartesian covariance uses all three x1 rows of the face stencil.
+          _cov_regular[k] = ~(near | near.roll(-1, -1) | near.roll(1, -1));
+          dcov = torch::where(_cov_regular[k].narrow(-1, 1, dcov.size(-1)),
+                              dcov, 0.);
+        }
         // the passive scalars' rows are built from the same face states
         // (scalar_flux_covariance), taken before the solver may project them
         if (dcov.defined() && has_scalars) {
@@ -803,7 +813,10 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
         }
       };
     }
-    solve_faces(*this, dir, faces, other, split, background, c2, covariance);
+    auto lr =
+        cut ? cut->faces(faces, dir.dim, precon23->pinterp1->stencils() / 2 + 1)
+            : faces;
+    solve_faces(*this, dir, lr, split, background, c2, covariance);
     if (dir.disabled) return false;
     if (dcov.defined()) add_cov(flux, dcov);
     if (options->verbose()) {
@@ -977,6 +990,31 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   auto du = torch::zeros_like(_div);
   auto interior = pmb->part({0, 0, 0}, PartOptions().exterior(false));
   du.index(interior) = -dt * _div.index(interior);
+
+  if (eb) {
+    auto area = eb->wall_area_vector.to(w.options());
+    auto norm = area.square().sum(0).sqrt();
+    auto normal = area / torch::where(norm > 0., norm, 1.);
+    auto wall = cut->wall_state();
+    auto vn = (wall.narrow(0, IVX, 3) * normal).sum(0);
+    // In the normal frame the stationary slip wall has opposite normal
+    // velocities. The tangential velocity is common and drops out of p*.
+    wall.narrow(0, IVX, 3).zero_();
+    wall[IVX].copy_(vn);
+    auto mirror = wall.clone();
+    mirror[IVX].neg_();
+    auto wall_flux = torch::zeros_like(wall);
+    priemann->forward(wall, mirror, DIM1, wall_flux);
+    auto traction = wall_flux[IVX] * area;
+    auto volume = pmb->pcoord->cell_volume().to(du.options());
+    auto wall_du = -dt * traction / torch::where(volume > 0., volume, 1.);
+    du.narrow(0, IVX, 3).index(interior).add_(wall_du.index(interior));
+    for (int d = 0; d < 3; ++d)
+      if (freg.total(d + 1).defined())
+        freg.post_wall_pressure(d + 1,
+                                traction.narrow(0, d, 1).index(interior).sum());
+    _eb_transport = du.clone();
+  }
 
   auto temp = peos->compute("W->T", {w});
   // only a block carrying tracers needs the forcings' dry-density increment
@@ -1174,7 +1212,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       du[IPR].slice(-1, is, ie) += gravity_energy_correction;
       gravity_energy_correction = torch::Tensor();
     }
-    _apply_implicit_correction(du, w, dt_corr, other, dt);
+    _apply_implicit_correction(du, w, dt_corr, dt);
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();

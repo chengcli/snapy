@@ -17,6 +17,7 @@ dynamics:
     type: ideal-gas
     density-floor:  1.e-10
     pressure-floor: 1.e-10
+    temperature-floor: 1.e-6
     limiter: false
 
   reconstruct:
@@ -29,11 +30,6 @@ dynamics:
 # outflow radiates perturbations about the initial Sod states. Use
 # extrapolation to reproduce the former nearest-cell copy boundaries.
 boundary-condition:
-  internal:
-    solid-density: 1.e3
-    solid-pressure: 1.e9
-    max-iter: 5
-
   external:
     x1-inner: outflow
     x1-outer: outflow

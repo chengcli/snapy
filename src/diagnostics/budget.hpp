@@ -34,9 +34,8 @@ struct BudgetRecord {
 //! residual columns (O8-cols, after lane R's R-7). Per block, in FP64:
 //! the row totals of the conserved state, the outward register transfer
 //! through the fluid domain's boundary (S's wall, outflow and custom faces
-//! whose interior cell is fluid, and every face of an immersed solid with
-//! one solid neighbour, outward from the fluid; never interior, x1-seam,
-//! panel or periodic faces), and the monitor's counters and minima. An
+//! weighted by their open areas, plus the embedded-wall pressure impulse),
+//! and the monitor's counters and minima. An
 //! interval starts at a record, from a BudgetCarry, or (neither yet) at the
 //! first observe, whose own step then stays out.
 class BudgetConsumer : public Consumer {
@@ -78,11 +77,6 @@ class BudgetConsumer : public Consumer {
   bool _started = false;
   torch::Tensor _total_start, _pending, _counter, _minimum;
   double _interval = 0., _dt = 0.;
-  //! per direction: the outward weight (sign x face area) of the counted
-  //! faces, and its window in the step field (begin, size along k, j, i)
-  std::array<torch::Tensor, 3> _weight;
-  std::array<std::array<int64_t, 6>, 3> _window{};
-  bool _weights_ready = false;
   BudgetRecord _local;
 };
 

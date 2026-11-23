@@ -65,27 +65,6 @@ BC_FUNCTION(extrapolation_outer, var, dim, op) {
   var.narrow(dim, nc - nghost, nghost) = var.narrow(dim, nc - nghost - 1, 1);
 }
 
-BC_FUNCTION(solid_inner, var, dim, op) {
-  if (var.size(dim) == 1) return;
-  int nghost = op.nghost();
-
-  std::vector<int64_t> shape(var.dim(), -1);
-  shape[dim] = nghost;
-
-  var.narrow(dim, 0, nghost) = 1;
-}
-
-BC_FUNCTION(solid_outer, var, dim, op) {
-  if (var.size(dim) == 1) return;
-  int nc1 = var.size(dim);
-  int nghost = op.nghost();
-
-  std::vector<int64_t> shape(var.dim(), -1);
-  shape[dim] = nghost;
-
-  var.narrow(dim, nc1 - nghost, nghost) = 1;
-}
-
 namespace {
 using namespace snap;
 

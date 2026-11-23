@@ -10,6 +10,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/eb/geometry.hpp>
 #include <snap/input/check_keys.hpp>
 #include <snap/layout/layout.hpp>
 #include <snap/mesh/meshblock.hpp>
@@ -562,7 +563,8 @@ torch::Tensor CoordinateImpl::center_distance3() const {
 
 // grid-only geometry is built once and rebuilt only when its inputs change
 torch::Tensor CoordinateImpl::cached_geometry_(
-    GeomCache& c, std::function<torch::Tensor()> const& build) const {
+    GeomCache& c, std::function<torch::Tensor()> const& build,
+    torch::Tensor const& fraction) const {
   auto version = [](torch::Tensor const& t) {
     return t.is_inference() ? int64_t(0) : int64_t(t._version());
   };
@@ -571,8 +573,15 @@ torch::Tensor CoordinateImpl::cached_geometry_(
       c.dtype != dx1f.scalar_type() || !c.dx1.is_same(dx1f) ||
       !c.dx2.is_same(dx2f) || !c.dx3.is_same(dx3f) || c.v1 != version(dx1f) ||
       c.v2 != version(dx2f) || c.v3 != version(dx3f) ||
-      c.vv != version(c.value)) {
+      c.vv != version(c.value) || c.fraction.defined() != fraction.defined() ||
+      (fraction.defined() &&
+       (!c.fraction.is_same(fraction) || c.vf != version(fraction)))) {
     c.value = build();
+    c.fraction = fraction;
+    if (fraction.defined()) {
+      c.value = c.value * fraction.to(c.value.options());
+      c.vf = version(fraction);
+    }
     c.device = dx1f.device();
     c.dtype = dx1f.scalar_type();
     c.dx1 = dx1f;
@@ -587,28 +596,44 @@ torch::Tensor CoordinateImpl::cached_geometry_(
 }
 
 torch::Tensor CoordinateImpl::face_area1() const {
-  return cached_geometry_(_area1_cache, [&] {
-    return dx3f.outer(dx2f).unsqueeze(2).expand({-1, -1, x1f.size(0)});
-  });
+  auto eb = pmb ? pmb->eb_geometry() : nullptr;
+  return cached_geometry_(
+      _area1_cache,
+      [&] {
+        return dx3f.outer(dx2f).unsqueeze(2).expand({-1, -1, x1f.size(0)});
+      },
+      eb ? eb->face_fraction[0] : torch::Tensor());
 }
 
 torch::Tensor CoordinateImpl::face_area2() const {
-  return cached_geometry_(_area2_cache, [&] {
-    return dx3f.outer(dx1f).unsqueeze(1).expand({-1, x2f.size(0), -1});
-  });
+  auto eb = pmb ? pmb->eb_geometry() : nullptr;
+  return cached_geometry_(
+      _area2_cache,
+      [&] {
+        return dx3f.outer(dx1f).unsqueeze(1).expand({-1, x2f.size(0), -1});
+      },
+      eb ? eb->face_fraction[1] : torch::Tensor());
 }
 
 torch::Tensor CoordinateImpl::face_area3() const {
-  return cached_geometry_(_area3_cache, [&] {
-    return dx2f.outer(dx1f).unsqueeze(0).expand({x3f.size(0), -1, -1});
-  });
+  auto eb = pmb ? pmb->eb_geometry() : nullptr;
+  return cached_geometry_(
+      _area3_cache,
+      [&] {
+        return dx2f.outer(dx1f).unsqueeze(0).expand({x3f.size(0), -1, -1});
+      },
+      eb ? eb->face_fraction[2] : torch::Tensor());
 }
 
 torch::Tensor CoordinateImpl::cell_volume() const {
-  return cached_geometry_(_vol_cache, [&] {
-    return torch::einsum("km,mji->kji",
-                         {dx3f.unsqueeze(1), dx2f.outer(dx1f).unsqueeze(0)});
-  });
+  auto eb = pmb ? pmb->eb_geometry() : nullptr;
+  return cached_geometry_(
+      _vol_cache,
+      [&] {
+        return torch::einsum(
+            "km,mji->kji", {dx3f.unsqueeze(1), dx2f.outer(dx1f).unsqueeze(0)});
+      },
+      eb ? eb->volume_fraction : torch::Tensor());
 }
 
 torch::Tensor CoordinateImpl::face_moment2_x1() const {
@@ -705,7 +730,12 @@ torch::Tensor CoordinateImpl::divergence(torch::Tensor flux1,
         area.slice(0, sk, ek) * flux3.slice(DIM3, sk, ek);
   }
 
-  return dflx / volume_cast_.get(vol, dflx);
+  auto volume = volume_cast_.get(vol, dflx);
+  if (pmb && pmb->eb_geometry()) {
+    auto fluid = volume > 0.;
+    return torch::where(fluid, dflx / torch::where(fluid, volume, 1.), 0.);
+  }
+  return dflx / volume;
 }
 
 torch::Tensor CoordinateImpl::curl(torch::Tensor velocity) const {

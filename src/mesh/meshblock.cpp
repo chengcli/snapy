@@ -38,17 +38,20 @@ void MeshBlockImpl::to(torch::Device device, torch::Dtype dtype,
     torch::nn::Module::to(device, non_blocking);
   else
     torch::nn::Module::to(device, dtype, non_blocking);
+  if (_eb) set_embedded_boundary(*_eb);
   _state.reallocate();  // like the moved u0 and s0
   if (_executor) _executor->invalidate();
 }
 void MeshBlockImpl::to(torch::Dtype dtype, bool non_blocking) {
   if (policy.fp32()) return;
   torch::nn::Module::to(dtype, non_blocking);
+  if (_eb) set_embedded_boundary(*_eb);
   _state.reallocate();
   if (_executor) _executor->invalidate();
 }
 void MeshBlockImpl::to(torch::Device device, bool non_blocking) {
   torch::nn::Module::to(device, non_blocking);
+  if (_eb) set_embedded_boundary(*_eb);
   _state.reallocate();
   if (_executor) _executor->invalidate();
 }
@@ -192,7 +195,8 @@ void MeshBlockImpl::reset() {
         ", got ", co->nghost());
 
   //// ------ (8) set up internal boundary ---- ////
-  pib = InternalBoundaryImpl::create(options->ib(), this);
+  _eb.reset();
+  _eb_update.reset();
 
   // dimensions
   int nc1 = options->coord()->nc1();
@@ -283,7 +287,9 @@ double MeshBlockImpl::initialize(Variables &vars, char const *restart_file) {
 }
 
 void MeshBlockImpl::initialize_local(Variables &vars) {
-  torch::Tensor hydro_w, scalar_r, solid;
+  TORCH_CHECK(!vars.count("solid"),
+              "solid was retired; use set_embedded_boundary");
+  torch::Tensor hydro_w, scalar_r;
 
   //// ------------ (2) Check hydro primitive ------------ ////
   int64_t nc3 = options->coord()->nc3();
@@ -309,6 +315,14 @@ void MeshBlockImpl::initialize_local(Variables &vars) {
                     std::vector<int64_t>({pscalar->nvar(), nc3, nc2, nc1}),
                 "initialize: scalar_r has incorrect shape");
   }
+  // The dense EOS and face solvers require admissible storage in solid
+  // cells. Their primitive state is a resting dry gas at reference conditions.
+  if (_eb) {
+    auto covered = _eb->flags.eq(2);
+    hydro_w.copy_(
+        torch::where(covered, _eb_neutral_w.to(hydro_w.options()), hydro_w));
+    if (scalar_r.defined()) scalar_r.masked_fill_(covered, 0.);
+  }
   // Capture before any physical face fill, independently of mutable inputs.
   if (has_radiating_boundary()) {
     vars["boundary_reference_w"] = hydro_w.clone();
@@ -321,6 +335,9 @@ void MeshBlockImpl::initialize_under_mesh(Variables &vars) {
   initialize_local(vars);
   exchange_state(vars, "hydro_w", kPrimitive, "scalar_r");
   finalize_initialization(vars);
+  // Initial redistribution can also change the neighbouring block's donor
+  // cells after the primitive ghost exchange. Publish the conserved result.
+  if (_eb) exchange_ghost_zones(vars);
 }
 
 void MeshBlockImpl::build_hydro_reference(Variables &vars) {
@@ -345,11 +362,6 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
   auto hydro_w = vars.at("hydro_w");
   auto scalar_r =
       vars.count("scalar_r") ? vars.at("scalar_r") : torch::Tensor();
-  auto solid = vars.count("solid") ? vars.at("solid") : torch::Tensor();
-  int64_t nc3 = options->coord()->nc3();
-  int64_t nc2 = options->coord()->nc2();
-  int64_t nc1 = options->coord()->nc1();
-
   //// ------ (7) Computer hydro and scalar conserved -------- ////
 
   vars["hydro_u"] = phydro->peos->compute("W->U", {hydro_w});
@@ -369,24 +381,15 @@ void MeshBlockImpl::finalize_initialization(Variables &vars) {
           policy.store(Quantity::kScalarState, vars.at("scalar_s"));
   }
 
-  //// ------------- (8) Fill solid boundaries -------------- ////
-  if (vars.count("solid")) {
-    solid = vars.at("solid");
-    TORCH_CHECK(solid.sizes() == std::vector<int64_t>({nc3, nc2, nc1}),
-                "initialize: solid has incorrect shape.", " Expected [", nc3,
-                ", ", nc2, ", ", nc1, "] but got ", solid.sizes());
-    vars["fill_solid_hydro_w"] =
-        torch::where(solid.unsqueeze(0).expand_as(hydro_w), hydro_w, 0.);
-    vars["fill_solid_hydro_w"].narrow(0, IVX, 3).zero_();
-    pib->mark_prim_solid_(hydro_w, solid);
-
-    vars["fill_solid_hydro_u"] =
-        torch::where(solid.unsqueeze(0).expand_as(vars.at("hydro_u")),
-                     vars.at("hydro_u"), 0.);
-    vars["fill_solid_hydro_u"].narrow(0, IVX, 3).zero_();
-  } else {
-    vars["fill_solid_hydro_w"] = hydro_w;
-    vars["fill_solid_hydro_u"] = vars.at("hydro_u");
+  if (_eb) {
+    auto u = vars.at("hydro_u");
+    auto scalar =
+        vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
+    auto bad = redistribute(u, scalar);
+    TORCH_CHECK(!bad.item<bool>(),
+                "inadmissible initial embedded-boundary neighborhood state");
+    phydro->peos->forward(u, hydro_w);
+    if (scalar.defined()) set_scalar_primitive(vars, scalar, u, *phydro);
   }
 
   apply_boundaries(
@@ -445,7 +448,8 @@ void MeshBlockImpl::prepare_thermo(torch::Tensor const &hydro_u) {
   // or a capture (K.rst 3.3, 3.5); an unprepared module throws in a capture
   auto sub3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
   // index() with slices is a view: the interior's shape without a copy
-  auto shape = hydro_u[0].index(sub3).sizes().vec();
+  auto shape = _eb ? std::vector<int64_t>{1, 1, _eb_fluid_indices.numel()}
+                   : hydro_u[0].index(sub3).sizes().vec();
   // the EOS computes in the state's dtype; the adjustment takes total_u(),
   // FP64 for an FP32 anomaly state (HydroImpl::total_u). The module's own
   // table is the adjustment's (prepare), so no call inside a capture swaps

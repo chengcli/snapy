@@ -95,11 +95,10 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   //! V3 I-6: with retry ([nc3, nc2] bool) defined, the predicated FP64
   //! stage: only those columns are solved, every other one is left as it
   //! came in (and posts -0)
-  torch::Tensor forward_masked(torch::Tensor du, torch::Tensor w,
-                               torch::Tensor gamma, double dt,
-                               torch::Tensor solid, FluxRegister* reg = nullptr,
-                               double post_dt = 0.,
-                               torch::Tensor const& retry = {});
+  torch::Tensor forward_stage(torch::Tensor du, torch::Tensor w,
+                              torch::Tensor gamma, double dt,
+                              FluxRegister* reg = nullptr, double post_dt = 0.,
+                              torch::Tensor const& retry = {});
 
   //! I-6: the columns the last FP32 (or only) stage failed, [nc3, nc2] bool
   //! on the device: the FP64 stage's predicate
@@ -162,10 +161,8 @@ class ImplicitHydroImpl : public torch::nn::Cloneable<ImplicitHydroImpl> {
   //! projection and the availability clamp, then the corrected potential
   //! energy's remainder g1 sigma^2 s[du - du0] beyond what the matrix booked;
   //! added to du[IPR] in that order
-  void book_remainder_(torch::Tensor du, int wsize, torch::Tensor const& mask,
-                       bool no_solid, bool radial_exact, double grav1,
-                       torch::Tensor const& rx_mass0,
-                       torch::Tensor const& rx_fluid, int nx1,
+  void book_remainder_(torch::Tensor du, int wsize, bool radial_exact,
+                       double grav1, torch::Tensor const& rx_mass0, int nx1,
                        torch::Tensor const& moved_total);
   //! I-4: the posts, the kept total and the amounts, after the stage's
   //! failure mask

@@ -73,16 +73,7 @@ double MeshBlockImpl::global_time_step(double dt_local) const {
 
 double MeshBlockImpl::local_max_time_step(Variables const &vars) const {
   auto const &w = vars.at("hydro_w");
-  double dt_min = 1.e9;
-
-  // hyperbolic hydro time step
-  if (vars.count("solid")) {
-    dt_min = phydro->max_time_step(w, vars.at("solid"));
-  } else {
-    dt_min = phydro->max_time_step(w);
-  }
-
-  return dt_min;
+  return phydro->max_time_step(w);
 }
 
 void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
@@ -202,6 +193,31 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
       P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
       fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
     }
+  }
+  if (_eb) {
+    auto const &weight = pintg->stages[stage];
+    double substep = weight.wght2() / weight.wght1();
+    auto transport = phydro->eb_transport_increment();
+    auto before = hydro_u + substep * transport;
+    auto after = before.clone();
+    torch::Tensor tracer, tracer_before;
+    if (scalar_s.defined()) {
+      tracer_before = scalar_s + substep * fut_scalar_ds;
+      tracer = tracer_before.clone();
+    }
+    auto bad = redistribute(after, tracer);
+    freg.monitor().flag_retry("eb.inadmissible", bad);
+    // A rejected candidate must not reach a thermodynamic solve before
+    // the global decision. Keep its transport state at the stage input.
+    after = torch::where(bad, hydro_u, after);
+    if (tracer.defined()) tracer = torch::where(bad, scalar_s, tracer);
+    auto adjusted = (after - hydro_u) / substep;
+    fut_hydro_du.copy_(torch::where(
+        after.ne(before), (fut_hydro_du - transport) + adjusted, fut_hydro_du));
+    if (tracer.defined())
+      fut_scalar_ds.add_((tracer - tracer_before) / substep);
+  }
+  if (pscalar->nvar() > 0) {
     // Native dry sources follow transport and the implicit tracer transfer.
     carry_dry_source(phydro->forcing_dry_increment(), fut_scalar_ds);
   }
@@ -278,6 +294,9 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   pintg->forward(stage, _state.u0(), hydro_u, fut_hydro_du, hydro_u);
   if (stage + 1 == static_cast<int>(pintg->stages.size()))
     for (auto &s : phydro->sources.splits()) s->finish_split(hydro_u, dt, freg);
+  // The RK combination and external sources never evolve covered storage.
+  auto covered = _eb ? _eb->flags.eq(2) : torch::Tensor();
+  if (_eb) hydro_u.copy_(torch::where(covered, _state.u0(), hydro_u));
   // skipped dry and scalar-free before the last stage: next U->W applies it
   if (hydro_u.size(0) > ICY || pscalar->nvar() > 0 ||
       stage + 1 == static_cast<int>(pintg->stages.size()))
@@ -285,15 +304,11 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
   if (pscalar->nvar() > 0) {
     pintg->forward(stage, _state.s0(), scalar_s, fut_scalar_ds, scalar_s);
+    if (_eb) scalar_s.copy_(torch::where(covered, _state.s0(), scalar_s));
     set_scalar_primitive(vars, scalar_s, hydro_u, *phydro);
   }
 
   // -------- (5) update ghost zones --------
-
-  if (vars.count("solid")) {
-    pib->fill_cons_solid_(hydro_u, vars.at("solid"),
-                          vars.at("fill_solid_hydro_u"));
-  }
 
   // -------- (6) saturation adjustment --------
   if (stage == pintg->stages.size() - 1 && phydro->options->eos()->thermo() &&
@@ -304,21 +319,41 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 
     // thermodynamics needs totals; only the species rows are written back
     auto ut = phydro->total_u(hydro_u);
-    auto ke = phydro->peos->compute("U->K", {ut});
-    auto rho = ut[IDN] + ut.narrow(0, ICY, ny).sum(0);
-    auto ie = ut[IPR] - ke;
-
-    auto yfrac = hydro_u.narrow(0, ICY, ny) / rho;
-
     auto pthermo = thermo();
     TORCH_CHECK(pthermo, "saturation adjustment needs hydro.eos.thermo");
-
-    auto sub = part({0, 0, 0}, PartOptions().exterior(false));
-    auto sub3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
-    pthermo->forward(rho.index(sub3), ie.index(sub3), yfrac.index(sub),
-                     /*warm_start=*/true);
-
-    hydro_u.narrow(0, ICY, ny) = yfrac * rho;
+    if (_eb) {
+      // Kintera stores one warm-start active set per adjusted cell. Its
+      // ordering agrees with prepare_thermo and stays fixed across retries.
+      auto const &ids = eb_fluid_indices();
+      if (ids.numel() > 0) {
+        auto packed =
+            ut.flatten(1).index_select(1, ids).view({ut.size(0), 1, 1, -1});
+        auto rho = packed[IDN] + packed.narrow(0, ICY, ny).sum(0);
+        // Evaluate kinetic energy in the coordinate module's native layout.
+        auto ke = phydro->peos->compute("U->K", {ut})
+                      .flatten()
+                      .index_select(0, ids)
+                      .view_as(rho);
+        auto ie = packed[IPR] - ke;
+        auto y = packed.narrow(0, ICY, ny) / rho;
+        pthermo->forward(rho, ie, y, /*warm_start=*/true);
+        auto species = hydro_u.narrow(0, ICY, ny);
+        species.copy_(
+            species.flatten(1)
+                .index_copy(1, ids, (y * rho).flatten(1).to(species.options()))
+                .view_as(species));
+      }
+    } else {
+      auto ke = phydro->peos->compute("U->K", {ut});
+      auto rho = ut[IDN] + ut.narrow(0, ICY, ny).sum(0);
+      auto ie = ut[IPR] - ke;
+      auto yfrac = hydro_u.narrow(0, ICY, ny) / rho;
+      auto sub = part({0, 0, 0}, PartOptions().exterior(false));
+      auto sub3 = part({0, 0, 0}, PartOptions().exterior(false).ndim(3));
+      pthermo->forward(rho.index(sub3), ie.index(sub3), yfrac.index(sub),
+                       /*warm_start=*/true);
+      hydro_u.narrow(0, ICY, ny) = yfrac * rho;
+    }
     // K2 (K.rst 3.2): rows 1-2 of the counter, the step's temperature and
     // pressure solves that did not converge, posted once per step; they are
     // not retry causes. Row 0 is consumed by local_redo_flag_tensor.

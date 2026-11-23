@@ -371,15 +371,16 @@ class CoordinateImpl {
 
   //! one cached face_area1/2/3() or cell_volume() and its grid inputs
   struct GeomCache {
-    torch::Tensor value, dx1, dx2, dx3;
+    torch::Tensor value, dx1, dx2, dx3, fraction;
     c10::Device device = c10::kCPU;
     c10::ScalarType dtype = c10::kDouble;
-    int64_t v1 = -1, v2 = -1, v3 = -1, vv = -1;
+    int64_t v1 = -1, v2 = -1, v3 = -1, vv = -1, vf = -1;
   };
   mutable GeomCache _area1_cache, _area2_cache, _area3_cache, _vol_cache;
   //! the cached value of `build()`, rebuilt when dx1f/dx2f/dx3f change
-  torch::Tensor cached_geometry_(
-      GeomCache& c, std::function<torch::Tensor()> const& build) const;
+  torch::Tensor cached_geometry_(GeomCache& c,
+                                 std::function<torch::Tensor()> const& build,
+                                 torch::Tensor const& fraction = {}) const;
 };
 using Coordinate = std::shared_ptr<CoordinateImpl>;
 

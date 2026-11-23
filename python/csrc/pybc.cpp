@@ -7,8 +7,8 @@
 
 // snap
 #include <snap/bc/bc.hpp>
-#include <snap/bc/internal_boundary.hpp>
 #include <snap/coord/coordinate.hpp>
+#include <snap/eb/geometry.hpp>
 
 // python
 #include "pyoptions.hpp"
@@ -37,33 +37,20 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(int, snap::BoundaryFuncOptions, type)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
-  auto pyInternalBoundaryOptions =
-      py::class_<snap::InternalBoundaryOptionsImpl,
-                 snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
-
-  pyInternalBoundaryOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::InternalBoundaryOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("InternalBoundaryOptions(\n{})", ss.str());
-           })
-      .ADD_OPTION(int, snap::InternalBoundaryOptionsImpl, max_iter)
-      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_density)
-      .ADD_OPTION(double, snap::InternalBoundaryOptionsImpl, solid_pressure);
-
-  ADD_SNAP_MODULE(InternalBoundary, InternalBoundaryOptions)
-      .def(py::init<snap::InternalBoundaryOptions, torch::nn::Module *>(),
-           py::arg("options"), py::arg("block") = nullptr)
-      .def("mark_prim_solid_", &snap::InternalBoundaryImpl::mark_prim_solid_)
-      .def("fill_cons_solid_", &snap::InternalBoundaryImpl::fill_cons_solid_)
-      .def(
-          "rectify_solid",
-          [](snap::InternalBoundaryImpl &self, torch::Tensor solid_in,
-             std::vector<bcfunc_t> const &bfuncs) {
-            int total_num_flips = 0;
-            auto result = self.rectify_solid(solid_in, total_num_flips, bfuncs);
-            return std::make_pair(result, total_num_flips);
-          },
-          py::arg("solid"), py::arg("bfuncs") = std::vector<bcfunc_t>{});
+  py::class_<snap::EBGeometry>(m, "EmbeddedBoundaryGeometry")
+      .def_static("from_level_set", &snap::EBGeometry::from_level_set,
+                  py::arg("phi"), py::arg("x1f"), py::arg("x2f"),
+                  py::arg("x3f"))
+      .def_static("from_metrics", &snap::EBGeometry::from_metrics,
+                  py::arg("volume_fraction"), py::arg("cell_centroid"),
+                  py::arg("face_fraction"), py::arg("face_centroid"),
+                  py::arg("wall_area_vector"), py::arg("wall_centroid"),
+                  py::arg("x1f"), py::arg("x2f"), py::arg("x3f"))
+      .def_readonly("volume_fraction", &snap::EBGeometry::volume_fraction)
+      .def_readonly("cell_centroid", &snap::EBGeometry::cell_centroid)
+      .def_readonly("face_fraction", &snap::EBGeometry::face_fraction)
+      .def_readonly("face_centroid", &snap::EBGeometry::face_centroid)
+      .def_readonly("wall_area_vector", &snap::EBGeometry::wall_area_vector)
+      .def_readonly("wall_centroid", &snap::EBGeometry::wall_centroid)
+      .def_readonly("flags", &snap::EBGeometry::flags);
 }
