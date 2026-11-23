@@ -5,6 +5,7 @@
 #include <Eigen/QR>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <utility>
@@ -21,7 +22,7 @@ using Point = std::array<double, 3>;
 using Row = std::vector<Index>;
 using Weights = std::vector<double>;
 
-torch::Tensor host(const torch::Tensor &value) {
+torch::Tensor host(const torch::Tensor& value) {
   return value.to(torch::kCPU, torch::kFloat64).contiguous();
 }
 
@@ -31,6 +32,69 @@ struct Grid {
   Point periods;
   torch::Tensor fraction, volume, centroids, wall;
   std::array<torch::Tensor, 3> faces;
+
+  // The sphere supplies a canonical owner graph with closed faces removed.
+  // Global Cartesian centroids make neighborhoods span panels without charts.
+  torch::Tensor adjacency;
+
+  Row adjacent(Index i) const {
+    Row result;
+    const auto links = adjacency.accessor<int64_t, 2>();
+    for (int side = 0; side < 6; ++side) {
+      Index j = links[side][i];
+      if (j >= 0 && value(fraction, j) > 0) result.push_back(j);
+    }
+    return result;
+  }
+
+  Row graph_ball(Index i, int depth) const {
+    Row queue{i};
+    std::set<Index> seen{i};
+    size_t first = 0;
+    for (int layer = 0; layer < depth; ++layer) {
+      size_t last = queue.size();
+      for (size_t k = first; k < last; ++k)
+        for (auto j : adjacent(queue[k]))
+          if (seen.insert(j).second) queue.push_back(j);
+      first = last;
+    }
+    return queue;
+  }
+
+  Row graph_neighborhood(Index i, double target) const {
+    Row result{i};
+    std::set<Index> seen{i};
+    auto origin = point(centroids, i), normal = point(wall, i);
+    double total = value(volume, i);
+    while (total < target && result.size() < 8) {
+      std::set<Index> candidates;
+      for (auto member : result)
+        for (auto j : adjacent(member))
+          if (!seen.count(j)) candidates.insert(j);
+      Index best = -1;
+      double score = -std::numeric_limits<double>::infinity();
+      for (auto j : candidates) {
+        auto dx = offset(point(centroids, j), origin);
+        double dot = 0, distance2 = 0;
+        for (int d = 0; d < 3; ++d) {
+          dot -= dx[d] * normal[d];
+          distance2 += dx[d] * dx[d];
+        }
+        // Projection into the fluid, penalized by distance. IDs break ties
+        // deterministically at cube corners independent of process layout.
+        double weight = distance2 > 0 ? dot / distance2 : 0;
+        if (weight > score) {
+          best = j;
+          score = weight;
+        }
+      }
+      if (best < 0) break;
+      result.push_back(best);
+      seen.insert(best);
+      total += value(volume, best);
+    }
+    return result;
+  }
 
   Index id(Indices p) const { return (p[2] * size[1] + p[1]) * size[0] + p[0]; }
 
@@ -45,11 +109,11 @@ struct Grid {
     return true;
   }
 
-  double value(const torch::Tensor &t, Index i) const {
+  double value(const torch::Tensor& t, Index i) const {
     return t.const_data_ptr<double>()[i];
   }
 
-  Point point(const torch::Tensor &t, Index i) const {
+  Point point(const torch::Tensor& t, Index i) const {
     Index n = fraction.numel();
     return {value(t, i), value(t, n + i), value(t, 2 * n + i)};
   }
@@ -67,7 +131,7 @@ struct Grid {
     auto cell = position(i);
     auto face = cell;
     if (sign > 0) ++face[axis];
-    const auto &f = faces[axis];
+    const auto& f = faces[axis];
     Index fi = (face[2] * f.size(1) + face[1]) * f.size(2) + face[0];
     if (value(f, fi) <= 0) return -1;
 
@@ -155,8 +219,8 @@ struct Average {
 
 // Build a scaled least-squares inverse. A singular stencil signals that the
 // caller should grow the stencil or use a constant reconstruction.
-bool least_squares(const std::vector<Point> &offsets, Indices size,
-                   std::array<Weights, 3> &coefficients) {
+bool least_squares(const std::vector<Point>& offsets, Indices size,
+                   std::array<Weights, 3>& coefficients) {
   std::vector<int> axes;
   for (int d = 0; d < 3; ++d)
     if (size[d] > 1) axes.push_back(d);
@@ -174,41 +238,41 @@ bool least_squares(const std::vector<Point> &offsets, Indices size,
   if (qr.rank() != design.cols()) return false;
   Eigen::MatrixXd inverse =
       qr.solve(Eigen::MatrixXd::Identity(design.rows(), design.rows()));
-  for (auto &row : coefficients) row.assign(offsets.size(), 0.);
+  for (auto& row : coefficients) row.assign(offsets.size(), 0.);
   for (size_t col = 0; col < axes.size(); ++col)
     for (size_t k = 0; k < offsets.size(); ++k)
       coefficients[axes[col]][k] = inverse(col, k) / scale[axes[col]];
   return true;
 }
 
-Index width(const std::vector<Row> &rows) {
+Index width(const std::vector<Row>& rows) {
   size_t result = 1;
-  for (auto const &row : rows) result = std::max(result, row.size());
+  for (auto const& row : rows) result = std::max(result, row.size());
   return static_cast<Index>(result);
 }
 
 // Pad an index row with its first index, keeping padding local and finite.
 torch::Tensor indices(std::vector<Row> rows, Index columns,
                       torch::Device device) {
-  for (auto &row : rows) row.resize(columns, row.front());
+  for (auto& row : rows) row.resize(columns, row.front());
   return x1_stencil_index(rows, columns).to(device);
 }
 
-torch::Tensor gather(const torch::Tensor &state, const torch::Tensor &rows) {
+torch::Tensor gather(const torch::Tensor& state, const torch::Tensor& rows) {
   return state.index_select(1, rows.flatten())
       .reshape({state.size(0), rows.size(0), rows.size(1)});
 }
 
 // All functions below accept [components, cells, members] or
 // [components,cells].
-torch::Tensor mass(const torch::Tensor &u, int hydro_rows) {
+torch::Tensor mass(const torch::Tensor& u, int hydro_rows) {
   auto rho = u[IDN];
   if (hydro_rows > ICY) rho = rho + u.slice(0, ICY, hydro_rows).sum(0);
   return rho;
 }
 
-torch::Tensor thermal_margin(const torch::Tensor &u, int hydro_rows,
-                             const torch::Tensor &minima) {
+torch::Tensor thermal_margin(const torch::Tensor& u, int hydro_rows,
+                             const torch::Tensor& minima) {
   auto rho = mass(u, hydro_rows);
   auto kinetic = 0.5 * u.narrow(0, IVX, 3).square().sum(0) /
                  torch::where(rho > 0, rho, 1.);
@@ -221,8 +285,8 @@ torch::Tensor thermal_margin(const torch::Tensor &u, int hydro_rows,
   return margin;
 }
 
-torch::Tensor inadmissible(const torch::Tensor &u, int hydro_rows,
-                           const torch::Tensor &minima) {
+torch::Tensor inadmissible(const torch::Tensor& u, int hydro_rows,
+                           const torch::Tensor& minima) {
   return (~u.isfinite().all()) | (u[IDN] < 0).any() |
          (u.slice(0, ICY) < 0).any() | (mass(u, hydro_rows) <= 0).any() |
          (thermal_margin(u, hydro_rows, minima) <= 0).any();
@@ -230,7 +294,7 @@ torch::Tensor inadmissible(const torch::Tensor &u, int hydro_rows,
 
 // For f(theta) concave, its chord from f(0) to f(1) is a lower bound.
 // Back away from a limiting root to leave room for storage rounding.
-torch::Tensor chord_factor(const torch::Tensor &start, const torch::Tensor &end,
+torch::Tensor chord_factor(const torch::Tensor& start, const torch::Tensor& end,
                            double safety) {
   auto crossed = end <= 0;
   auto denom = torch::where(crossed & (start > end), start - end, 1.);
@@ -238,9 +302,9 @@ torch::Tensor chord_factor(const torch::Tensor &start, const torch::Tensor &end,
                       safety * (start / denom).clamp(0, 1), 1.);
 }
 
-torch::Tensor limit_members(const torch::Tensor &center,
+torch::Tensor limit_members(const torch::Tensor& center,
                             torch::Tensor increment, int hydro_rows,
-                            const torch::Tensor &minima, double safety) {
+                            const torch::Tensor& minima, double safety) {
   auto end = center + increment;
   auto factor = chord_factor(center[IDN], end[IDN], safety);
   if (end.size(0) > ICY) {
@@ -261,8 +325,9 @@ torch::Tensor limit_members(const torch::Tensor &center,
 }  // namespace
 
 WeightedStateRedistribution::WeightedStateRedistribution(
-    const EBGeometry &geometry, const torch::Tensor &background_volume,
-    std::array<bool, 3> periodic, Point periods, Indices lo, Indices hi) {
+    const EBGeometry& geometry, const torch::Tensor& background_volume,
+    std::array<bool, 3> periodic, Point periods, Indices lo, Indices hi,
+    torch::Tensor adjacency) {
   auto fraction = host(geometry.volume_fraction);
   TORCH_CHECK(fraction.dim() == 3,
               "EB volume fractions must have shape [z,y,x]");
@@ -283,6 +348,13 @@ WeightedStateRedistribution::WeightedStateRedistribution(
             host(geometry.cell_centroid),
             host(geometry.wall_area_vector),
             {}};
+  bool graph = adjacency.defined();
+  if (graph) {
+    TORCH_CHECK(adjacency.dim() == 2 && adjacency.size(0) == 6 &&
+                    adjacency.size(1) == fraction.numel(),
+                "invalid WSRD graph dimensions");
+    grid.adjacency = adjacency.to(torch::kCPU, torch::kInt64).contiguous();
+  }
   std::array<torch::Tensor, 3> face_coords;
   for (int d = 0; d < 3; ++d) {
     if (grid.hi[d] == -1) grid.hi[d] = dims[d];
@@ -292,6 +364,7 @@ WeightedStateRedistribution::WeightedStateRedistribution(
     if (grid.periodic[d])
       TORCH_CHECK(std::isfinite(periods[d]) && periods[d] > 0,
                   "periodic WSRD requires a physical period on axis ", d);
+    if (graph) continue;
     grid.faces[d] = host(geometry.face_fraction[d]);
     face_coords[d] = host(geometry.face_centroid[d].select(0, d));
   }
@@ -303,7 +376,8 @@ WeightedStateRedistribution::WeightedStateRedistribution(
     if (vf > 0 && grid.owned(i)) owned_fluid.push_back(i);
     if (vf <= 0 || vf >= 0.5) continue;
     double target = 0.5 * grid.value(bg, i);
-    Row cells = grid.neighborhood(i, target);
+    Row cells = graph ? grid.graph_neighborhood(i, target)
+                      : grid.neighborhood(i, target);
     double neighbor_volume = 0;
     for (size_t k = 1; k < cells.size(); ++k)
       neighbor_volume += grid.value(grid.volume, cells[k]);
@@ -344,7 +418,7 @@ WeightedStateRedistribution::WeightedStateRedistribution(
       auto dx = grid.offset(grid.point(grid.centroids, j), origin);
       for (int d = 0; d < 3; ++d) shift[d] += volume_weight * dx[d];
     }
-    for (auto &w : a.weight) w /= total_volume;
+    for (auto& w : a.weight) w /= total_volume;
     for (int d = 0; d < 3; ++d)
       a.centroid[d] = origin[d] + shift[d] / total_volume;
     return a;
@@ -353,7 +427,7 @@ WeightedStateRedistribution::WeightedStateRedistribution(
   // Cache only neighborhoods that contribute to owned targets or supply a
   // slope. Interior regular cells bypass the stage entirely.
   std::set<Index> targets, owners;
-  for (auto const &[i, m] : merged)
+  for (auto const& [i, m] : merged)
     for (auto j : m.cells)
       if (grid.owned(j)) targets.insert(j);
   for (auto j : targets) {
@@ -404,7 +478,8 @@ WeightedStateRedistribution::WeightedStateRedistribution(
       slope_row.clear();
       displacements.clear();
       Point reach{};
-      for (auto j : grid.connected(i, lower, upper)) {
+      for (auto j : graph ? grid.graph_ball(i, radius + 1)
+                          : grid.connected(i, lower, upper)) {
         Index q = cache(j);
         auto dx = grid.offset(averages[q].centroid, a.centroid);
         slope_row.push_back(q);
@@ -415,32 +490,34 @@ WeightedStateRedistribution::WeightedStateRedistribution(
       bool enough = true;
       const auto pos = grid.position(i);
       for (int d = 0; d < 3; ++d) {
-        if (dims[d] == 1) continue;
+        if (graph || dims[d] == 1) continue;
         auto f = face_coords[d].accessor<double, 3>();
         auto high = pos;
         ++high[d];
         double h = f[high[2]][high[1]][high[0]] - f[pos[2]][pos[1]][pos[0]];
         enough &= reach[d] > 0.5 * h;
       }
-      if (enough && least_squares(displacements, dims, coeff)) break;
+      if (enough &&
+          least_squares(displacements, graph ? Indices{2, 2, 2} : dims, coeff))
+        break;
     }
     slopes.push_back(std::move(slope_row));
     for (int d = 0; d < 3; ++d) {
       if (coeff[d].empty()) coeff[d].assign(displacements.size(), 0.);
       ls[d].push_back(std::move(coeff[d]));
       Weights coord;
-      for (auto const &dx : displacements) coord.push_back(dx[d]);
+      for (auto const& dx : displacements) coord.push_back(dx[d]);
       slope_offsets[d].push_back(std::move(coord));
     }
   }
-  for (auto &a : averages) {
+  for (auto& a : averages) {
     q_cells.push_back(std::move(a.cells));
     q_weights.push_back(std::move(a.weight));
   }
   for (auto j : targets) {
     Row rows;
     Weights w;
-    for (auto const &[edge, weight] : contributions.at(j)) {
+    for (auto const& [edge, weight] : contributions.at(j)) {
       rows.push_back(edge);
       w.push_back(weight);
     }
@@ -452,7 +529,7 @@ WeightedStateRedistribution::WeightedStateRedistribution(
   // the other backends and cast to the state accumulation dtype at application.
   auto options = torch::TensorOptions().device(device).dtype(
       device.is_mps() ? torch::kFloat32 : torch::kFloat64);
-  auto weights = [&](const std::vector<Weights> &w, Index columns) {
+  auto weights = [&](const std::vector<Weights>& w, Index columns) {
     return x1_stencil_weight(w, columns).to(options);
   };
   auto q_width = width(q_cells), slope_width = width(slopes),
@@ -473,8 +550,8 @@ WeightedStateRedistribution::WeightedStateRedistribution(
 }
 
 torch::Tensor WeightedStateRedistribution::apply(
-    const torch::Tensor &state, int hydro_rows, torch::Tensor *bad,
-    const torch::Tensor &minimum_specific_internal_energy) const {
+    const torch::Tensor& state, int hydro_rows, torch::Tensor* bad,
+    const torch::Tensor& minimum_specific_internal_energy) const {
   TORCH_CHECK((state.dim() == 3 || state.dim() == 4) &&
                   state.is_floating_point() &&
                   state.sizes().slice(state.dim() - 3).vec() == shape_,

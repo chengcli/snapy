@@ -42,7 +42,39 @@ vector, wall centroid, and the three coordinate face arrays. Centroids are in
 physical coordinates. Vector components are ordered (x1, x2, x3). The flag
 values are 0 for regular, 1 for cut or wall-adjacent, and 2 for covered.
 
-Embedded boundaries use explicit total-state Cartesian dynamics with the
+On gnomonic-equiangle cubed-sphere blocks, construct the mapped geometry with
+``from_cubed_sphere_level_set(phi, x1f, x2f, x3f, panel)``. Supply radius in
+length units and the two angular face axes in radians. Panel IDs 0 through 5
+denote +X, +Y, -X, +Z, -Y, -Z respectively. Give the level set the same
+physical value on shared vertices, including edges joining different panels.
+The radius must stay positive and both angular coordinates must stay strictly
+between -pi/2 and pi/2 through the ghost faces.
+
+Mapped centroids and wall vectors use global Cartesian XYZ. The three
+``face_area_vector`` arrays store open vector areas pointing in the direction of
+increasing radius, first panel angle, or second panel angle. Each vector is
+the integral of the surface normal over the aperture. The scalar area is
+``background_face_area[d] * face_fraction[d]``. To supply mapped metrics
+directly, use ``from_cubed_sphere_metrics`` with these vector areas after
+``face_centroid``, and the panel ID after the three coordinate axes.
+
+Cubed-sphere transport evaluates the Riemann flux on each open face and the
+pressure force on each stationary wall in a common Cartesian frame. Weighted
+state redistribution uses fluid volumes and physical centroids across panel
+edges and cube corners, including for species and passive tracers. Enable
+flux in every direction with more than one global cell. A single radial
+layer retains pressure forces on both spherical surfaces. Set
+``conserve-axial-momentum: off``, ``flux-covariance: false``, and
+``x1-mass-covariance: false`` for mapped embedded boundaries.
+
+Each block's exchange and reconstruction caches span the entire six-panel
+mesh. Stage exchanges also gather fields over all owned cells into global
+tensors. For a panel with ``n`` cells on each angular axis and ``nr`` radial
+cells, each gathered field has ``6 * n * n * nr`` entries per component on
+each participating block. Account for this replicated memory and communication
+when choosing the resolution and number of blocks per process.
+
+Embedded boundaries use explicit total-state dynamics with the
 ideal-gas, ideal-moist, or moist-mixture EOS. Nonzero gravity and diffusion
 require wall-specific energy or diffusive fluxes and are rejected at setup. Assign
 geometry to every block of a decomposed mesh, including blocks containing

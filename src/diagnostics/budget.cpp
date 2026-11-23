@@ -4,6 +4,8 @@
 
 #include "budget.hpp"
 
+#include <snap/eb/sphere_transport.hpp>
+
 // C/C++
 #include <iomanip>
 #include <limits>
@@ -52,7 +54,12 @@ torch::Tensor BudgetConsumer::totals(MeshBlockImpl const& block,
                                      torch::Tensor const& u) {
   auto interior = block.part({0, 0, 0}, PartOptions().exterior(false));
   auto vol = block.pcoord->cell_volume();
-  return (u * vol).index(interior).sum({1, 2, 3});
+  auto totals = (u * vol).index(interior).sum({1, 2, 3});
+  if (block.eb_geometry() && block.eb_geometry()->panel >= 0) {
+    auto xyz = sphere_momentum_to_cart(block, u.narrow(0, IVX, 3));
+    totals.narrow(0, IVX, 3).copy_((xyz * vol).index(interior).sum({1, 2, 3}));
+  }
+  return totals;
 }
 
 std::vector<std::string> BudgetConsumer::row_names(MeshBlockImpl const& block) {

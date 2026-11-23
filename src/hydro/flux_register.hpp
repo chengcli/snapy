@@ -237,6 +237,9 @@ class FluxRegister {
   std::map<std::string, torch::Tensor> _parts;
   std::array<std::vector<std::string>, 3> _kept;
   std::array<torch::Tensor, 3> _pmask, _pvalue;
+  torch::Tensor boundary_amount(torch::Tensor const& flux,
+                                torch::Tensor const& weights,
+                                int direction) const;
   CoordinateImpl const* _coord = nullptr;
   //! total(dim) <- after; books sum A_f (after - before) per row as name
   void overwrite_(int dim, std::string const& name, torch::Tensor const& after);

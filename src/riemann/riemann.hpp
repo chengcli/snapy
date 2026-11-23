@@ -122,6 +122,10 @@ class RiemannSolverImpl : public torch::nn::Cloneable<RiemannSolverImpl> {
                         torch::Tensor face_pressure = torch::Tensor(),
                         torch::Tensor central = torch::Tensor());
 
+  //! Solve with states already expressed in an orthonormal face frame.
+  torch::Tensor orthonormal(torch::Tensor wl, torch::Tensor wr, int dim,
+                            torch::Tensor out, torch::Tensor pressure = {},
+                            torch::Tensor central = {});
   //! hllc only: pressure rows are perturbations about one face background
   //! (lane-c-notes.md); central as in forward
   torch::Tensor forward_perturbations(
@@ -138,7 +142,8 @@ class RiemannSolverImpl : public torch::nn::Cloneable<RiemannSolverImpl> {
   //! the face functions' solve: one EOS face pass, rotation, call_riemann
   torch::Tensor solve(torch::Tensor wl, torch::Tensor wr, int dim,
                       torch::Tensor flx, torch::Tensor face_pressure,
-                      torch::Tensor reference_pressure, torch::Tensor central);
+                      torch::Tensor reference_pressure, torch::Tensor central,
+                      bool rotate = true);
 };
 using RiemannSolver = std::shared_ptr<RiemannSolverImpl>;
 

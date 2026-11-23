@@ -105,7 +105,8 @@ torch::Tensor ScalarImpl::forward(double dt, torch::Tensor u,
         *eb, u / rho,
         std::max(precon1->pinterp1->stencils(), precon->pinterp1->stencils()) /
                 2 +
-            1);
+            1,
+        eb->panel >= 0 ? pmb : nullptr);
   auto face_r = [&](int dim) {
     auto recon = dim == DIM1 ? precon1 : precon;
     auto rf = recon->forward(rho, dim), r = u / rho;  // donor r if rf <= 0

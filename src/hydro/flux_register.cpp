@@ -1,3 +1,4 @@
+#include <snap/eb/sphere_transport.hpp>
 // C/C++
 #include <algorithm>
 #include <cstdlib>
@@ -414,6 +415,22 @@ void FluxRegister::begin_stage(int stage, harp::IntegratorWeight const& w) {
   _in_stage = true;
 }
 
+// Rotate each face before summing: the native basis varies over a panel.
+torch::Tensor FluxRegister::boundary_amount(torch::Tensor const& flux,
+                                            torch::Tensor const& weights,
+                                            int direction) const {
+  auto value = flux.to(weights.options());
+  auto out = (value * weights).sum({1, 2, 3});
+  auto block = _coord ? _coord->pmb : nullptr;
+  if (block && block->eb_geometry() && block->eb_geometry()->panel >= 0 &&
+      this == &block->phydro->flux_register()) {
+    auto xyz =
+        sphere_momentum_to_cart(*block, value.narrow(0, IVX, 3), direction);
+    out.narrow(0, IVX, 3).copy_((xyz * weights).sum({1, 2, 3}));
+  }
+  return out;
+}
+
 void FluxRegister::end_stage(double dt) {
   for (int d = 0; d < 3; ++d) {
     if (!_step[d].defined()) continue;
@@ -431,10 +448,14 @@ void FluxRegister::end_stage(double dt) {
     auto& b = _monitor._boundary[d];
     if (!b.defined()) continue;
     auto const& w = boundary_weight_(d + 1);
-    b.mul_(_w1).add_((_total[d].to(w.scalar_type()) * w).sum({1, 2, 3}),
-                     _w2 * dt);
-    if (_wall_rate[d].defined())
-      b[IVX + d].add_(_wall_rate[d].to(b.options()), _w2 * dt);
+    b.mul_(_w1).add_(boundary_amount(_total[d], w, d + 1), _w2 * dt);
+    if (_wall_rate[d].defined()) {
+      auto rate = _wall_rate[d].to(b.options());
+      if (rate.dim() == 1)
+        b.narrow(0, IVX, 3).add_(rate, _w2 * dt);
+      else
+        b[IVX + d].add_(rate, _w2 * dt);
+    }
   }
   _monitor.end_stage(_w1, _w2 * dt);
   _in_stage = false;
@@ -464,7 +485,7 @@ void FluxRegister::post_split(int dim, std::string const& name,
   auto& b = _monitor._bdirect[d];  // R-7: the direct part, never scaled
   if (b.defined()) {
     auto const& w = boundary_weight_(dim);
-    b.add_((flux.to(w.scalar_type()) * w).sum({1, 2, 3}), weight * dt);
+    b.add_(boundary_amount(flux, w, dim), weight * dt);
   }
 }
 

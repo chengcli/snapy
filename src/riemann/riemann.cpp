@@ -216,11 +216,18 @@ static torch::Tensor interior_faces(CoordinateImpl const& c, int dim,
   return x;
 }
 
+torch::Tensor RiemannSolverImpl::orthonormal(torch::Tensor wl, torch::Tensor wr,
+                                             int dim, torch::Tensor out,
+                                             torch::Tensor pressure,
+                                             torch::Tensor central) {
+  return solve(wl, wr, dim, out, pressure, {}, central, false);
+}
+
 torch::Tensor RiemannSolverImpl::solve(torch::Tensor wl, torch::Tensor wr,
                                        int dim, torch::Tensor flx,
                                        torch::Tensor face_pressure,
                                        torch::Tensor reference_pressure,
-                                       torch::Tensor central) {
+                                       torch::Tensor central, bool rotate) {
   auto pcoord = phydro->pmb->pcoord;
   auto peos = phydro->peos;
   bool aneos = peos->options->type() == "aneos";
@@ -301,7 +308,7 @@ torch::Tensor RiemannSolverImpl::solve(torch::Tensor wl, torch::Tensor wr,
   }
 
   // solve in the face-local orthonormal frame
-  to_face_frame_(*pcoord, dim, wl, wr);
+  if (rotate) to_face_frame_(*pcoord, dim, wl, wr);
 
   at::TensorIteratorConfig config;
   config.resize_outputs(false)
@@ -352,7 +359,7 @@ torch::Tensor RiemannSolverImpl::solve(torch::Tensor wl, torch::Tensor wr,
   if (llf.defined())
     events[1].add_(interior_faces(*pcoord, dim, llf > 0.).sum());
 
-  to_global_frame_(*pcoord, dim, flx);
+  if (rotate) to_global_frame_(*pcoord, dim, flx);
 
   return flx;
 }

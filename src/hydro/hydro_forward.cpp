@@ -10,6 +10,7 @@
 
 #include <snap/coord/x1_centroid.hpp>
 #include <snap/eb/geometry.hpp>
+#include <snap/eb/sphere_transport.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/layout/exchange.hpp>
 #include <snap/layout/seam_register.hpp>
@@ -301,6 +302,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                                  Variables const& other) {
   enum { DIM1 = 3, DIM2 = 2, DIM3 = 1 };
   auto eb = pmb->eb_geometry();
+  bool sphere_eb = eb && eb->panel >= 0;
   auto start = std::chrono::high_resolution_clock::now();
   _check_stretched_x1(u);
 
@@ -399,7 +401,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                 std::max(precon1->pinterp1->stencils(),
                          precon23->pinterp1->stencils()) /
                         2 +
-                    1);
+                    1,
+                sphere_eb ? pmb : nullptr, true);
 
   // hydrostatic pressure correction
   torch::Tensor rho_grav = torch::zeros_like(w[IDN]);
@@ -703,6 +706,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
 
   if (u.size(DIM2) > 1) {
     wtmp2 = reconstruct_faces(*this, dir2, w, split, pressure_base2);
+    if (sphere_eb)
+      wtmp2 = cut->faces(wtmp2, DIM2, precon23->pinterp1->stencils() / 2 + 1);
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
@@ -715,6 +720,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   //// ------------ (3.B) Calculate dimension 3 LR states ------------ ////
   if (u.size(DIM3) > 1) {
     wtmp3 = reconstruct_faces(*this, dir3, w, split, pressure_base3);
+    if (sphere_eb)
+      wtmp3 = cut->faces(wtmp3, DIM3, precon23->pinterp1->stencils() / 2 + 1);
 
     // sync left/right states across faces for cubed sphere layout
     if (playout->options->type() == "cubed-sphere") {
@@ -814,7 +821,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       };
     }
     auto lr =
-        cut ? cut->faces(faces, dir.dim, precon23->pinterp1->stencils() / 2 + 1)
+        cut && !sphere_eb
+            ? cut->faces(faces, dir.dim, precon23->pinterp1->stencils() / 2 + 1)
             : faces;
     solve_faces(*this, dir, lr, split, background, c2, covariance);
     if (dir.disabled) return false;
@@ -945,7 +953,9 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
   // nx3 > 1 keeps the x2 balance.
   bool any2 = u.size(DIM2) > 1, any3 = u.size(DIM3) > 1;
   // a zero centroid shift (Cartesian) leaves p* == p, the plain source
-  if ((!cov2 && !cov3) || pmb->pcoord->face_centroid_shift_zero()) {
+  if (sphere_eb) {
+    _div.set_data(sphere_flux_divergence(*this, w, {_flux1, _flux2, _flux3}));
+  } else if ((!cov2 && !cov3) || pmb->pcoord->face_centroid_shift_zero()) {
     _div.set_data(
         pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
   } else {
@@ -1004,15 +1014,24 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto mirror = wall.clone();
     mirror[IVX].neg_();
     auto wall_flux = torch::zeros_like(wall);
-    priemann->forward(wall, mirror, DIM1, wall_flux);
+    if (sphere_eb)
+      priemann->orthonormal(wall, mirror, DIM1, wall_flux);
+    else
+      priemann->forward(wall, mirror, DIM1, wall_flux);
     auto traction = wall_flux[IVX] * area;
+    if (sphere_eb && w.size(-1) == 1)
+      traction += sphere_radial_wall_traction(*this, w);
     auto volume = pmb->pcoord->cell_volume().to(du.options());
-    auto wall_du = -dt * traction / torch::where(volume > 0., volume, 1.);
+    auto force = sphere_eb ? sphere_cart_to_momentum(*pmb, traction) : traction;
+    auto wall_du = -dt * force / torch::where(volume > 0., volume, 1.);
     du.narrow(0, IVX, 3).index(interior).add_(wall_du.index(interior));
-    for (int d = 0; d < 3; ++d)
-      if (freg.total(d + 1).defined())
-        freg.post_wall_pressure(d + 1,
-                                traction.narrow(0, d, 1).index(interior).sum());
+    if (sphere_eb) {
+      freg.post_wall_pressure(2, traction.index(interior).sum({1, 2, 3}));
+    } else
+      for (int d = 0; d < 3; ++d)
+        if (freg.total(d + 1).defined())
+          freg.post_wall_pressure(
+              d + 1, traction.narrow(0, d, 1).index(interior).sum());
     _eb_transport = du.clone();
   }
 
@@ -1246,7 +1265,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     for (auto const& r : sources.runs(SourcePhase::post_implicit))
       sources.run(r, du, {w, temp, dt, wc2});
     if (!aam) {
-      pc->x1_mass_source_(du, w, m1, dt);
+      if (!sphere_eb) pc->x1_mass_source_(du, w, m1, dt);
     } else {
       // The explicit x1 faces are already in the flux form of step 5 (their
       // AAM flux carries r_f, which is -rho w u / r for the K component), so
@@ -1261,7 +1280,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
                       picorr ? picorr->correction() : torch::Tensor());
       du.narrow(0, IVY, 2) += src.narrow(0, IVY, 2);
     }
-  } else if (ptype == "gnomonic-equiangle") {
+  } else if (ptype == "gnomonic-equiangle" && !sphere_eb) {
     // no x1 mass-flux w (nc1 == 1, shallow water): m1 = rho w. Only the
     // gnomonic grid has an x1_mass_source_; the others add nothing
     auto src = torch::zeros_like(du);
