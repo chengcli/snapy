@@ -118,22 +118,6 @@ jobs:
                   --target test_eos.release test_plm.release test_gloo_one_tensor.release
           fi
 
-      - name: Trace embedded-boundary restart on Linux
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        working-directory: build/tests
-        env:
-          UCX_HANDLE_ERRORS: none
-        run: |
-          if ! command -v gdb >/dev/null; then
-            sudo apt-get install -y gdb
-          fi
-          for filter in 'EmbeddedBoundary.restart_and_retry' 'EmbeddedBoundary.*'; do
-            gdb -q -batch -ex 'set pagination off' \
-              -ex 'handle SIGSEGV stop print nopass' -ex run -ex 'bt full' \
-              --args ./test_eb_transport.release --gtest_filter="$filter" || true
-          done
-
       - name: Install the project
         run: pip install --no-build-isolation --no-deps .
 
