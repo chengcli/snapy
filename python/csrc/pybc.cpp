@@ -15,7 +15,7 @@
 
 namespace py = pybind11;
 
-void bind_bc(py::module &m) {
+void bind_bc(py::module& m) {
   m.attr("kUnknown") = (int)snap::BoundaryFace::kUnknown;
   m.attr("kInnerX1") = (int)snap::BoundaryFace::kInnerX1;
   m.attr("kOuterX1") = (int)snap::BoundaryFace::kOuterX1;
@@ -29,7 +29,7 @@ void bind_bc(py::module &m) {
 
   pyBoundaryFunctionOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::BoundaryFuncOptions &a) {
+           [](const snap::BoundaryFuncOptions& a) {
              std::stringstream ss;
              a.report(ss);
              return fmt::format("BoundaryFuncOptions(\n{})", ss.str());
@@ -38,6 +38,22 @@ void bind_bc(py::module &m) {
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
   py::class_<snap::EBGeometry>(m, "EmbeddedBoundaryGeometry")
+      .def_static("from_cubed_sphere_level_set",
+                  &snap::EBGeometry::from_cubed_sphere_level_set,
+                  py::arg("phi"), py::arg("x1f"), py::arg("x2f"),
+                  py::arg("x3f"), py::arg("panel"))
+      .def_static("from_cubed_sphere_metrics",
+                  &snap::EBGeometry::from_cubed_sphere_metrics,
+                  py::arg("volume_fraction"), py::arg("cell_centroid"),
+                  py::arg("face_fraction"), py::arg("face_centroid"),
+                  py::arg("face_area_vector"), py::arg("wall_area_vector"),
+                  py::arg("wall_centroid"), py::arg("x1f"), py::arg("x2f"),
+                  py::arg("x3f"), py::arg("panel"))
+      .def_readonly("panel", &snap::EBGeometry::panel)
+      .def_readonly("background_volume", &snap::EBGeometry::background_volume)
+      .def_readonly("background_face_area",
+                    &snap::EBGeometry::background_face_area)
+      .def_readonly("face_area_vector", &snap::EBGeometry::face_area_vector)
       .def_static("from_level_set", &snap::EBGeometry::from_level_set,
                   py::arg("phi"), py::arg("x1f"), py::arg("x2f"),
                   py::arg("x3f"))

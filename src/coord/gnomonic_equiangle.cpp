@@ -4,6 +4,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/eb/geometry.hpp>
 #include <snap/eos/equation_of_state.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/layout/cubed_sphere_layout.hpp>
@@ -271,18 +272,26 @@ torch::Tensor GnomonicEquiangleImpl::center_width3() const {
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area1() const {
+  if (auto eb = pmb->eb_geometry())
+    return eb->background_face_area[0] * eb->face_fraction[0];
   return (x1f * x1f).unsqueeze(0).unsqueeze(1) * solid_angle_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area2() const {
+  if (auto eb = pmb->eb_geometry())
+    return eb->background_face_area[1] * eb->face_fraction[1];
   return (x1v * dx1f).unsqueeze(0).unsqueeze(1) * dx3f_ang_face2_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::face_area3() const {
+  if (auto eb = pmb->eb_geometry())
+    return eb->background_face_area[2] * eb->face_fraction[2];
   return (x1v * dx1f).unsqueeze(0).unsqueeze(1) * dx2f_ang_face3_kj;
 }
 
 torch::Tensor GnomonicEquiangleImpl::cell_volume() const {
+  if (auto eb = pmb->eb_geometry())
+    return eb->background_volume * eb->volume_fraction;
   // exact: solid angle times (rp^3 - rm^3) / 3, written as
   // dr (rp^2 + rp rm + rm^2) / 3 so that thin shells do not cancel
   auto rm = x1f.slice(0, 0, options->nc1());

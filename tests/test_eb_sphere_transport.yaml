@@ -1,0 +1,20 @@
+reference-state: {Tref: 0., Pref: 1.e5}
+species: [{name: dry, composition: {N: 2}, cv_R: 2.5}]
+geometry:
+  type: gnomonic-equiangle
+  bounds: {x1min: 10., x1max: 11., x2min_pi: -0.25, x2max_pi: 0.25, x3min_pi: -0.25, x3max_pi: 0.25}
+  cells: {nx1: 3, nx2: 12, nx3: 12, nghost: 3}
+distribute: {layout: cubed-sphere, nb2: 1, nb3: 1, blocks_per_process: 6}
+dynamics:
+  flux-covariance: false
+  x1-mass-covariance: false
+  conserve-axial-momentum: false
+  equation-of-state: {type: ideal-gas, limiter: false, temperature-floor: 1.e-6}
+  reconstruct:
+    vertical: {type: plm, shock: false}
+    horizontal: {type: plm, shock: false}
+  riemann-solver: {type: hllc}
+scalar: {names: [tracer], reconstruct: {type: dc}}
+boundary-condition:
+  external: {x1-inner: reflecting, x1-outer: reflecting, x2-inner: custom, x2-outer: custom, x3-inner: custom, x3-outer: custom}
+integration: {type: rk2, implicit-scheme: 0, cfl: 0.12}

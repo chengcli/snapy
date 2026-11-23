@@ -52,7 +52,11 @@ class BoundaryFuncOptions:
         ...
 
 class EmbeddedBoundaryGeometry:
-    """Static Cartesian geometry. Positive level-set values denote fluid."""
+    """Static Cartesian or gnomonic geometry. Positive level-set values denote fluid."""
+    panel: int
+    background_volume: torch.Tensor
+    background_face_area: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    face_area_vector: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     volume_fraction: torch.Tensor
     cell_centroid: torch.Tensor
     face_fraction: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
@@ -68,3 +72,16 @@ class EmbeddedBoundaryGeometry:
                      face_centroid: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
                      wall_area_vector: torch.Tensor, wall_centroid: torch.Tensor,
                      x1f: torch.Tensor, x2f: torch.Tensor, x3f: torch.Tensor) -> "EmbeddedBoundaryGeometry": ...
+
+    @staticmethod
+    def from_cubed_sphere_level_set(phi: torch.Tensor, x1f: torch.Tensor,
+                                    x2f: torch.Tensor, x3f: torch.Tensor,
+                                    panel: int) -> "EmbeddedBoundaryGeometry": ...
+    @staticmethod
+    def from_cubed_sphere_metrics(volume_fraction: torch.Tensor, cell_centroid: torch.Tensor,
+                                  face_fraction: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+                                  face_centroid: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+                                  face_area_vector: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+                                  wall_area_vector: torch.Tensor, wall_centroid: torch.Tensor,
+                                  x1f: torch.Tensor, x2f: torch.Tensor, x3f: torch.Tensor,
+                                  panel: int) -> "EmbeddedBoundaryGeometry": ...

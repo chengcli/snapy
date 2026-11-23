@@ -14,15 +14,18 @@
 namespace snap {
 
 class HydroImpl;
+class MeshBlockImpl;
 struct EBGeometry;
 struct CutCellStencil;
+class SphereReconstruction;
 
 // Linear reconstruction on physically connected volume centroids. Only faces
 // whose ordinary stencil intersects the embedded wall use this reconstruction.
 class CutCellReconstruction {
  public:
   CutCellReconstruction(EBGeometry const& geometry, torch::Tensor const& state,
-                        int width);
+                        int width, const MeshBlockImpl* sphere_block = nullptr,
+                        bool velocity = false);
   torch::Tensor faces(torch::Tensor const& regular, int dim, int width) const;
   torch::Tensor wall_state() const;
   torch::Tensor irregular_faces(int dim, int width) const;
@@ -30,6 +33,7 @@ class CutCellReconstruction {
  private:
   torch::Tensor evaluate(torch::Tensor const& points) const;
   EBGeometry const& _geometry;
+  std::shared_ptr<SphereReconstruction> _mapped;
   std::shared_ptr<CutCellStencil> _stencil;
   torch::Tensor _state, _packed, _gradient, _lower, _upper;
 };

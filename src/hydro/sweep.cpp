@@ -5,6 +5,8 @@
 
 // snap
 #include <snap/eb/geometry.hpp>
+#include <snap/eb/sphere_reconstruction.hpp>
+#include <snap/eb/sphere_transport.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/mesh/meshblock.hpp>
 
@@ -20,6 +22,8 @@ struct CutCellStencil {
   torch::Tensor cells, positions;
   std::vector<torch::Tensor> neighbours, coefficients;
   int width;
+  std::shared_ptr<SphereStencil> sphere;
+  explicit CutCellStencil(int w) : width(w) {}
 
   CutCellStencil(EBGeometry const& g, torch::Tensor const& state, int w)
       : width(w) {
@@ -62,8 +66,22 @@ struct CutCellStencil {
 
 CutCellReconstruction::CutCellReconstruction(EBGeometry const& geometry,
                                              torch::Tensor const& state,
-                                             int width)
+                                             int width,
+                                             MeshBlockImpl const* sphere,
+                                             bool velocity)
     : _geometry(geometry), _state(state) {
+  if (sphere) {
+    auto& cached = geometry.reconstruction_stencil;
+    if (!cached || !cached->sphere || cached->width < width) {
+      cached = std::make_shared<CutCellStencil>(width);
+      cached->sphere =
+          std::make_shared<SphereStencil>(*sphere, geometry, width);
+    }
+    _stencil = cached;
+    _mapped = std::make_shared<SphereReconstruction>(*cached->sphere, state,
+                                                     velocity);
+    return;
+  }
   auto& cached = geometry.reconstruction_stencil;
   // EBGeometry::to and set_embedded_boundary install fresh geometry objects.
   if (!cached || cached->width < width ||
@@ -72,7 +90,7 @@ CutCellReconstruction::CutCellReconstruction(EBGeometry const& geometry,
        cached->coefficients.front().scalar_type() != state.scalar_type()))
     cached = std::make_shared<CutCellStencil>(geometry, state, width);
   _stencil = cached;
-  auto flat = state.flatten(1);
+  auto flat = _state.flatten(1);
   _packed = flat.index_select(1, cached->cells);
   _lower = _upper = _packed;
   _gradient =
@@ -99,6 +117,7 @@ torch::Tensor CutCellReconstruction::evaluate(
 
 torch::Tensor CutCellReconstruction::faces(torch::Tensor const& regular,
                                            int dim, int width) const {
+  if (_mapped) return _mapped->faces(regular, dim);
   int d = 3 - dim, n = _state.size(dim);
   auto const& centroid = _geometry.face_centroid[d];
   auto left = evaluate(centroid.narrow(dim, 1, n)).roll(1, dim);
@@ -118,7 +137,7 @@ torch::Tensor CutCellReconstruction::irregular_faces(int dim, int width) const {
 }
 
 torch::Tensor CutCellReconstruction::wall_state() const {
-  return evaluate(_geometry.wall_centroid);
+  return _mapped ? _mapped->wall() : evaluate(_geometry.wall_centroid);
 }
 
 void post_face_floors(ReconstructImpl const& recon, RegisterMonitor& monitor) {
@@ -214,6 +233,11 @@ void riemann_solve(HydroImpl& hydro, torch::Tensor lr, int dim,
     hydro.flux_register().monitor().count("riemann.llf",
                                           hydro.priemann->events[1]);
   };
+  if (auto g = hydro.pmb->eb_geometry(); g && g->panel >= 0) {
+    sphere_riemann(hydro, lr, dim, flux, face_pressure, central);
+    post_events();
+    return;
+  }
   if (!perturb) {
     hydro.priemann->forward(lr[ILT], lr[IRT], dim, flux, face_pressure,
                             central);

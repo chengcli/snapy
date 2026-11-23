@@ -12,12 +12,13 @@ struct EBGeometry;
 //! Spatial tensor axes are (z,y,x); geometry arguments below use (x,y,z).
 class WeightedStateRedistribution {
  public:
-  WeightedStateRedistribution(const EBGeometry &geometry,
-                              const torch::Tensor &background_volume,
+  WeightedStateRedistribution(const EBGeometry& geometry,
+                              const torch::Tensor& background_volume,
                               std::array<bool, 3> periodic = {},
                               std::array<double, 3> periods = {},
                               std::array<int64_t, 3> owned_lo = {0, 0, 0},
-                              std::array<int64_t, 3> owned_hi = {-1, -1, -1});
+                              std::array<int64_t, 3> owned_hi = {-1, -1, -1},
+                              torch::Tensor adjacency = {});
 
   //! Redistribute a provisional state [components,z,y,x] (or [z,y,x]).
   //! Nonparticipants and cells outside the owned box retain their input.
@@ -25,9 +26,9 @@ class WeightedStateRedistribution {
   //! jointly. EOS floor energies are per unit species mass, dry species first.
   //! bad receives a scalar device flag for an inadmissible mean or fluid cell.
   torch::Tensor apply(
-      const torch::Tensor &state, int hydro_rows = 0,
-      torch::Tensor *bad = nullptr,
-      const torch::Tensor &minimum_specific_internal_energy = {}) const;
+      const torch::Tensor& state, int hydro_rows = 0,
+      torch::Tensor* bad = nullptr,
+      const torch::Tensor& minimum_specific_internal_energy = {}) const;
 
  private:
   std::vector<int64_t> shape_;

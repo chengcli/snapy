@@ -38,6 +38,12 @@ setup_test(test_scalar)
 setup_test(test_eb_geometry)
 setup_test(test_weighted_srd)
 setup_test(test_eb_transport)
+setup_test(test_eb_sphere_transport)
+add_test(NAME test_eb_sphere_decomp
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/run_eb_sphere_decomp.py
+                 $<TARGET_FILE:test_eb_sphere_transport.${buildl}>)
+set_tests_properties(test_eb_sphere_transport.${buildl} test_eb_sphere_decomp
+                     PROPERTIES LABELS "weighted-srd;cubed-sphere" TIMEOUT 150)
 setup_test(test_eb_vic)
 set_tests_properties(test_eb_vic.${buildl} PROPERTIES LABELS "weighted-srd;implicit")
 set_tests_properties(test_eb_geometry.${buildl} test_weighted_srd.${buildl}
