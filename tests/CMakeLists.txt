@@ -44,6 +44,8 @@ add_test(NAME test_eb_sphere_decomp
                  $<TARGET_FILE:test_eb_sphere_transport.${buildl}>)
 set_tests_properties(test_eb_sphere_transport.${buildl} test_eb_sphere_decomp
                      PROPERTIES LABELS "weighted-srd;cubed-sphere" TIMEOUT 150)
+setup_test(test_eb_vic)
+set_tests_properties(test_eb_vic.${buildl} PROPERTIES LABELS "weighted-srd;implicit")
 set_tests_properties(test_eb_geometry.${buildl} test_weighted_srd.${buildl}
                      test_eb_transport.${buildl} PROPERTIES LABELS "weighted-srd")
 setup_test(test_cubed_sphere_exchange)

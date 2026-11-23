@@ -262,13 +262,14 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
                                get_layout()->loc_of(options->layout()->rank())))
              : coord_type == "cartesian",
       "embedded geometry must match the block coordinate system and panel");
-  TORCH_CHECK(!phydro->options->icorr() &&
-                  !phydro->options->perturbation_flux() && !phydro->anomaly(),
-              "embedded boundaries require explicit total-state dynamics");
+  TORCH_CHECK(!phydro->options->perturbation_flux() && !phydro->anomaly(),
+              "embedded boundaries require total-state dynamics");
   std::array<bool, 3> disabled{phydro->options->disable_flux_x1(),
                                phydro->options->disable_flux_x2(),
                                phydro->options->disable_flux_x3()};
   if (sphere) {
+    TORCH_CHECK(!phydro->options->icorr(),
+                "mapped embedded boundaries require explicit dynamics");
     auto coord = pcoord->options;
     std::array<int, 3> cells{coord->global_nx1(), coord->global_nx2(),
                              coord->global_nx3()};
@@ -287,6 +288,20 @@ void MeshBlockImpl::set_embedded_boundary(EBGeometry const& g) {
   TORCH_CHECK(
       type == "ideal-gas" || type == "ideal-moist" || type == "moist-mixture",
       "unsupported embedded-boundary EOS: ", type);
+  if (phydro->options->icorr()) {
+    auto scheme = phydro->options->icorr()->scheme();
+    TORCH_CHECK(scheme == 1 || scheme == 9,
+                "embedded-boundary VIC supports x1 schemes 1 and 9");
+    auto solver = phydro->options->riemann()->type();
+    TORCH_CHECK(solver == "hllc" || solver == "lmars",
+                "embedded-boundary VIC supports HLLC or LMARS wall pressure");
+    TORCH_CHECK(options->coord()->nx1() > 1 && options->layout()->pz() == 1 &&
+                    !phydro->options->disable_flux_x1() &&
+                    Exchange(this).kind(0) == FaceKind::wall &&
+                    Exchange(this).kind(1) == FaceKind::wall,
+                "embedded-boundary VIC requires one resolved x1 column with "
+                "reflecting endpoints");
+  }
   auto gravity = phydro->options->grav();
   TORCH_CHECK(!gravity || (gravity->grav1() == 0 && gravity->grav2() == 0 &&
                            gravity->grav3() == 0),

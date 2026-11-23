@@ -493,7 +493,8 @@ void FluxRegister::post_wall_pressure(int dim, torch::Tensor const& rate) {
   TORCH_CHECK(
       _in_stage && dim >= 1 && dim <= 3,
       "wall pressure requires an active stage and a Cartesian direction");
-  _wall_rate[dim - 1] = rate;
+  auto& sum = _wall_rate[dim - 1];
+  sum = sum.defined() ? sum + rate : rate;
 }
 
 void FluxRegister::place_boundary_() {

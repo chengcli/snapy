@@ -120,6 +120,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   double max_time_step(torch::Tensor hydro_w) const;
 
+  torch::Tensor const& eb_wall_state() const { return _eb_wall_state; }
   torch::Tensor const& eb_transport_increment() const { return _eb_transport; }
 
   //! Advance the conserved variables by one time step.
@@ -320,7 +321,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   CellVolume _cell_vol;
 
   FluxRegister freg;
-  torch::Tensor _eb_transport;
+  torch::Tensor _eb_transport, _eb_wall_state;
   torch::Tensor _flux1, _flux2, _flux3, _face_pressure1, _div, _forcing_dry;
   // Reusable stage scratch; not restart state. Recreated on shape/device
   // change.

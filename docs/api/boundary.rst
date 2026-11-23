@@ -74,7 +74,10 @@ cells, each gathered field has ``6 * n * n * nr`` entries per component on
 each participating block. Account for this replicated memory and communication
 when choosing the resolution and number of blocks per process.
 
-Embedded boundaries use explicit total-state dynamics with the
+Cartesian embedded boundaries also support vertical implicit correction with
+schemes 1 and 9, HLLC or LMARS wall pressure, and a single block through the
+resolved vertical direction with reflecting ends. Mapped embedded boundaries
+require explicit transport. Both use total-state dynamics with the
 ideal-gas, ideal-moist, or moist-mixture EOS. Nonzero gravity and diffusion
 require wall-specific energy or diffusive fluxes and are rejected at setup. Assign
 geometry to every block of a decomposed mesh, including blocks containing
