@@ -95,6 +95,12 @@ def check_moist(precision):
         assert_equal(state, expected, (precision, "after retry"))
         assert_meters(block, ref, (precision, "after retry"))
     keys += 1
+    # a dt change keys a capture only while the graph segment reads the host
+    # dt; with the device dt (C4) only the first launch and the rebind capture
+    host_dt = any(r["reads_host_dt"] for r in block.execution_capability(state)["segments"]
+                  if r["capturable"])
+    if not host_dt:
+        keys = 2
 
     report = block.execution_report()
     assert report["eager"] == 0, report
