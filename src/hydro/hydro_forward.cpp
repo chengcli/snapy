@@ -996,6 +996,7 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
     auto norm = area.square().sum(0).sqrt();
     auto normal = area / torch::where(norm > 0., norm, 1.);
     auto wall = cut->wall_state();
+    if (picorr) _eb_wall_state = wall.clone();
     auto vn = (wall.narrow(0, IVX, 3) * normal).sum(0);
     // In the normal frame the stationary slip wall has opposite normal
     // velocities. The tangential velocity is common and drops out of p*.
@@ -1212,7 +1213,8 @@ torch::Tensor HydroImpl::forward(double dt, torch::Tensor u,
       du[IPR].slice(-1, is, ie) += gravity_energy_correction;
       gravity_energy_correction = torch::Tensor();
     }
-    _apply_implicit_correction(du, w, dt_corr, dt);
+    auto implicit = _apply_implicit_correction(du, w, dt_corr, dt);
+    if (eb) _eb_transport.add_(implicit.to(_eb_transport.options()));
 
     if (options->verbose()) {
       auto end = std::chrono::high_resolution_clock::now();

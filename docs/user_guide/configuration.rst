@@ -254,3 +254,23 @@ You can also configure individual components:
     eos_opts.type("ideal")
     eos_opts.gamma(1.4)
     hydro_opts.eos(eos_opts)
+
+
+Vertical implicit correction with embedded boundaries
+-----------------------------------------------------
+
+For a static Cartesian embedded boundary, set ``integration.implicit-scheme``
+to ``1`` for the three-variable vertical implicit correction or ``9`` for
+the five-variable correction. Supply the cut-cell geometry before initialization.
+The vertical direction must have reflecting lower and upper boundaries and
+must fit on one block. Use HLLC or LMARS and zero gravitational acceleration.
+
+The column solve uses each open horizontal face area and the fluid volume in
+each cell. A closed face divides the column into independent fluid segments.
+At a stationary slip facet the wall Riemann pressure contributes momentum
+along the outward facet area vector. Its linearization freezes the wall
+reconstruction offsets, mixture composition, and heat-capacity ratio during
+the stage. The wall transfers zero mass and energy. The partial scheme
+applies the transverse wall impulse to the two momenta outside its solve.
+Weighted state redistribution acts once on the combined explicit and implicit
+transport increment before the Runge--Kutta update.

@@ -42,8 +42,10 @@ vector, wall centroid, and the three coordinate face arrays. Centroids are in
 physical coordinates. Vector components are ordered (x1, x2, x3). The flag
 values are 0 for regular, 1 for cut or wall-adjacent, and 2 for covered.
 
-Embedded boundaries use explicit total-state Cartesian dynamics with the
-ideal-gas, ideal-moist, or moist-mixture EOS. Nonzero gravity and diffusion
+Embedded boundaries support total-state Cartesian dynamics with the ideal-gas,
+ideal-moist, or moist-mixture EOS. For vertical implicit correction, use
+scheme 1 or 9 and the column and wall settings in
+:doc:`../user_guide/configuration`. Nonzero gravity and diffusion
 require wall-specific energy or diffusive fluxes and are rejected at setup. Assign
 geometry to every block of a decomposed mesh, including blocks containing
 only fluid. Restarts store geometry and resume the accepted state. Input

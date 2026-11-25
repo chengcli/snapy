@@ -31,23 +31,23 @@
 namespace snap {
 
 static c10::impl::GenericDict stage_forcing_variables(
-    MeshBlockImpl const &block, Variables const &vars) {
+    MeshBlockImpl const& block, Variables const& vars) {
   c10::impl::GenericDict inputs(c10::StringType::get(), c10::TensorType::get());
-  for (auto const &item : block.named_buffers(/*recurse=*/true)) {
+  for (auto const& item : block.named_buffers(/*recurse=*/true)) {
     inputs.insert(item.key(), item.value());
   }
-  for (auto const &[name, value] : vars) {
+  for (auto const& [name, value] : vars) {
     inputs.insert_or_assign(name, value);
   }
   return inputs;
 }
 
-static Variables stage_forcing_result(c10::IValue const &result, size_t index) {
+static Variables stage_forcing_result(c10::IValue const& result, size_t index) {
   TORCH_CHECK(result.isGenericDict(), "User stage forcing ", index,
               " must return Dict[str, Tensor], but returned ", result.tagKind(),
               ".");
   Variables output;
-  for (auto const &item : result.toGenericDict()) {
+  for (auto const& item : result.toGenericDict()) {
     TORCH_CHECK(item.key().isString(), "User stage forcing ", index,
                 " returned a dictionary with a non-string key.");
     TORCH_CHECK(item.value().isTensor(), "User stage forcing ", index,
@@ -58,7 +58,7 @@ static Variables stage_forcing_result(c10::IValue const &result, size_t index) {
   return output;
 }
 
-double MeshBlockImpl::max_time_step(Variables const &vars) {
+double MeshBlockImpl::max_time_step(Variables const& vars) {
   return global_time_step(local_max_time_step(vars));
 }
 
@@ -71,12 +71,12 @@ double MeshBlockImpl::global_time_step(double dt_local) const {
   return pow(2., -pintg->current_redo) * pintg->options->cfl() * dt;
 }
 
-double MeshBlockImpl::local_max_time_step(Variables const &vars) const {
-  auto const &w = vars.at("hydro_w");
+double MeshBlockImpl::local_max_time_step(Variables const& vars) const {
+  auto const& w = vars.at("hydro_w");
   return phydro->max_time_step(w);
 }
 
-void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
+void MeshBlockImpl::forward(Variables& vars, double dt, int stage) {
   // Exchange BEFORE reconstruction consumes the ghosts (same count per step):
   // host-side operator-split source terms applied between forward calls
   // (e.g. condensation on hydro_u) are then synced before use, removing a
@@ -94,7 +94,7 @@ void MeshBlockImpl::forward(Variables &vars, double dt, int stage) {
   }
 }
 
-void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
+void MeshBlockImpl::advance_local(Variables& vars, double dt, int stage) {
   TORCH_CHECK(stage >= 0 && stage < pintg->stages.size(),
               "Invalid stage: ", stage);
   DeferVaporCheck defer(phydro->peos.get());
@@ -102,7 +102,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // Publish the stage: the vertical implicit correction is nonlinear in dt and
   // must weight dt INSIDE the solve, so it needs to know which stage it is in.
   phydro->rk_stage = stage;
-  auto &freg = phydro->flux_register();
+  auto& freg = phydro->flux_register();
 
   _state.adopt(vars);  // a rebound hydro_u/scalar_s is copied in
   auto hydro_u = vars.at("hydro_u");
@@ -116,7 +116,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     // survive into the step
     freg.begin_step();
     auto splits = phydro->sources.splits();
-    for (auto &s : splits) s->begin_split(hydro_u, dt, freg);
+    for (auto& s : splits) s->begin_split(hydro_u, dt, freg);
     if (!splits.empty()) {
       apply_boundaries(vars, hydro_u, scalar_s);
       exchange_ghost_zones(vars);
@@ -126,7 +126,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     // attempt's start
     prepare_thermo(hydro_u);
     if (auto pthermo = thermo()) pthermo->snapshot_active_set(_active_set0);
-    if (auto moist = dynamic_cast<IdealMoistImpl *>(phydro->peos.get()))
+    if (auto moist = dynamic_cast<IdealMoistImpl*>(phydro->peos.get()))
       moist->clear_heat_capacity_failure();
     if (phydro->picorr) {
       phydro->picorr->reset_dry_clamp_step();
@@ -148,8 +148,8 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // A dry source is inside the RK tendency. Addition carries the ratio at
   // source entry; removal carries the complete source-free stage result so it
   // cannot amplify a ratio that transport or the implicit solve just changed.
-  auto carry_dry_source = [&](torch::Tensor const &dry,
-                              torch::Tensor const &scalar_base) {
+  auto carry_dry_source = [&](torch::Tensor const& dry,
+                              torch::Tensor const& scalar_base) {
     if (!dry.defined() || !vars.count("scalar_r")) return;
     auto rho_base = pintg->forward(stage, _state.u0()[IDN], hydro_u[IDN],
                                    fut_hydro_du[IDN] - dry);
@@ -191,11 +191,13 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
                             pcoord->iu());
       auto P_above = torch::zeros_like(P);
       P_above.slice(-1, 0, nc1 - 1) = P.slice(-1, 1, nc1);
-      fut_scalar_ds.add_((P - P_above) / pcoord->cell_volume());
+      auto vol = pcoord->cell_volume();
+      if (_eb) vol = torch::where(vol > 0., vol, 1.);
+      fut_scalar_ds.add_((P - P_above) / vol);
     }
   }
   if (_eb) {
-    auto const &weight = pintg->stages[stage];
+    auto const& weight = pintg->stages[stage];
     double substep = weight.wght2() / weight.wght1();
     auto transport = phydro->eb_transport_increment();
     auto before = hydro_u + substep * transport;
@@ -223,10 +225,10 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   }
 
   // (3.C) user stage forcings
-  auto apply_extra_forcing = [&](Variables const &extra_forcing,
-                                 std::string const &source) {
+  auto apply_extra_forcing = [&](Variables const& extra_forcing,
+                                 std::string const& source) {
     // the two keys in map order (hydro_du, then scalar_ds), as added before
-    for (auto const &[name, d] : extra_forcing) {
+    for (auto const& [name, d] : extra_forcing) {
       TORCH_CHECK(name == "hydro_du" || name == "scalar_ds", source,
                   " returned unsupported key '", name,
                   "'. Expected one or both of: hydro_du, scalar_ds.");
@@ -240,7 +242,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
                     " returned scalar_ds before native scalar tendencies were "
                     "initialized.");
       }
-      auto &target = scalar ? fut_scalar_ds : fut_hydro_du;
+      auto& target = scalar ? fut_scalar_ds : fut_hydro_du;
       TORCH_CHECK(d.sizes() == target.sizes(), source, " returned ", name,
                   " with shape ", d.sizes(), ", expected ", target.sizes(),
                   ".");
@@ -293,7 +295,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
   // -------- (4) multi-stage averaging --------
   pintg->forward(stage, _state.u0(), hydro_u, fut_hydro_du, hydro_u);
   if (stage + 1 == static_cast<int>(pintg->stages.size()))
-    for (auto &s : phydro->sources.splits()) s->finish_split(hydro_u, dt, freg);
+    for (auto& s : phydro->sources.splits()) s->finish_split(hydro_u, dt, freg);
   // The RK combination and external sources never evolve covered storage.
   auto covered = _eb ? _eb->flags.eq(2) : torch::Tensor();
   if (_eb) hydro_u.copy_(torch::where(covered, _state.u0(), hydro_u));
@@ -324,7 +326,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     if (_eb) {
       // Kintera stores one warm-start active set per adjusted cell. Its
       // ordering agrees with prepare_thermo and stays fixed across retries.
-      auto const &ids = eb_fluid_indices();
+      auto const& ids = eb_fluid_indices();
       if (ids.numel() > 0) {
         auto packed =
             ut.flatten(1).index_select(1, ids).view({ut.size(0), 1, 1, -1});
@@ -357,7 +359,7 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
     // K2 (K.rst 3.2): rows 1-2 of the counter, the step's temperature and
     // pressure solves that did not converge, posted once per step; they are
     // not retry causes. Row 0 is consumed by local_redo_flag_tensor.
-    auto const &fails = pthermo->failures();
+    auto const& fails = pthermo->failures();
     freg.monitor().count("thermo.temp_solve", fails[1]);
     freg.monitor().count("thermo.pres_solve", fails[2]);
   }
@@ -372,14 +374,14 @@ void MeshBlockImpl::advance_local(Variables &vars, double dt, int stage) {
 }
 
 torch::Tensor MeshBlockImpl::axial_closure_sums() const {
-  auto const &s = phydro->axial_closure_sums();  // device, FP64 (MPS: FP32)
+  auto const& s = phydro->axial_closure_sums();  // device, FP64 (MPS: FP32)
   auto wide = pcoord->x1v.is_mps() ? torch::kFloat32 : torch::kFloat64;
   return s.defined() ? s.clone()
                      : torch::zeros({2}, pcoord->x1v.options().dtype(wide));
 }
 
-void MeshBlockImpl::apply_axial_closure(Variables &vars, double dt, int stage,
-                                        torch::Tensor const &global) {
+void MeshBlockImpl::apply_axial_closure(Variables& vars, double dt, int stage,
+                                        torch::Tensor const& global) {
   // lane A's fixer (A.rst 3.3), with this stage's weight; R and I stay on
   // the device (X4): a mask replaces the host branch
   AxialClosureFixer(phydro->paam.get())
