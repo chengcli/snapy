@@ -7,7 +7,7 @@ and the kernel's values stand. The cache-validity check must not read the device
 undefined weights: before the fix the second RK stage threw "tensor does not have a device".
 
 Each case runs two RK3 steps of a resting isothermal column in one block of nx1 cells (reflecting
-x1 walls, weno5, explicit, gravity-work: face) in its own process, since the switches are read
+x1 walls, weno5, explicit, face-based gravity work) in its own process, since the switches are read
 once per process. A case passes when every stage runs and the state stays finite, or when the
 block is refused at setup with a clean error; an exception during a step fails it.
   SNAP_X1_CENTROID_EXACT=1, spherical-polar, nx1 = 2..6;
@@ -51,7 +51,7 @@ def config(nx1, geometry):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.5, "implicit-scheme": 0, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": {"grav1": -GRAV, "gravity-work": "face", "gravity-work-fixer": False}},
+        "forcing": {"const-gravity": {"grav1": -GRAV}},
     }
 
 

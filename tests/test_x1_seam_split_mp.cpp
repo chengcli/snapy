@@ -6,7 +6,7 @@
 //
 // The arm is read from the environment, one ctest entry each
 // (tests/CMakeLists.txt): switches off checks the cross-rank split against
-// the in-process split only; X1_SEAM_ARM=face (gravity-work: face with its
+// the in-process split only; X1_SEAM_ARM=face (face-based gravity work with its
 // corrected-PE work, whose seam slope is centred across ranks, #303),
 // SNAP_X1_CENTROID_EXACT and X1_SEAM_ARM=co4 (plm at conversion-order 4 on
 // the cold column, its face-density flag switching on above the seam) check it
@@ -46,7 +46,7 @@ namespace {
 constexpr double kR0 = 5.0, kLz = 2.0, kGamma = 1.4, kSeed = 0.05;
 
 // test_x1_seam_split's column
-std::string column_yaml(int nx1, double nh, char const* gw) {
+std::string column_yaml(int nx1, double nh) {
   char buf[2048];
   std::snprintf(buf, sizeof(buf), R"(
 geometry:
@@ -72,7 +72,7 @@ integration:
   cfl: 0.4
   implicit-scheme: 0
 forcing:
-  const-gravity: {grav1: -1., non-hydrostatic: %g, gravity-work: %s}
+  const-gravity: {grav1: -1., non-hydrostatic: %g}
 boundary-condition:
   external:
     x1-inner: reflecting
@@ -82,7 +82,7 @@ boundary-condition:
     x3-inner: periodic
     x3-outer: periodic
 )",
-                kR0, kR0 + kLz, nx1, nh, gw);
+                kR0, kR0 + kLz, nx1, nh);
   return buf;
 }
 
@@ -91,13 +91,13 @@ boundary-condition:
 // X1_SEAM_ARM=co4: conversion-order 4 with plm
 bool g_co4 = false;
 
-Mesh make_column(int nb1, bool split, int nx1, double nh, char const* gw) {
+Mesh make_column(int nb1, bool split, int nx1, double nh) {
   char fname[] = "/tmp/x1-seam-split-mp-XXXXXX";
   int fd = mkstemp(fname);
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
   std::ofstream out(fname);
-  out << column_yaml(nx1, nh, gw);
+  out << column_yaml(nx1, nh);
   out.close();
   auto block_opts = MeshBlockOptionsImpl::from_yaml(fname);
   std::remove(fname);
@@ -173,7 +173,7 @@ torch::Tensor allreduce_sum(Mesh mesh, torch::Tensor t) {
 }
 
 // sum V [E + rho phi(x1v) - g1 <(x1 - x1v)^2> s[rho]] over the local blocks:
-// the E + P that the corrected-PE work of gravity-work: face conserves
+// the E + P that the corrected-PE work of face-based gravity work conserves
 // (meshblock.cpp pe=)
 double energy_p(Mesh mesh, MeshVariables const& vars) {
   double total = 0.;
@@ -211,16 +211,15 @@ struct Gaps {
 
 // the 2-rank split after nstep steps against one block and against the
 // in-process split, both on rank 0 only; drift: the split E + P, both ranks
-Gaps split_gaps(int rank, int nx1, double nh, char const* gw, int nstep,
-                bool cold) {
+Gaps split_gaps(int rank, int nx1, double nh, int nstep, bool cold) {
   // the 2-rank split first, the in-process split last: process-local layouts
   // are registered by (process rank, local block), so the last one owns them
-  auto mp = make_column(2, true, nx1, nh, gw);
+  auto mp = make_column(2, true, nx1, nh);
   EXPECT_EQ(mp->blocks.size(), 1u);
   Mesh one = nullptr, two = nullptr;
   if (rank == 0) {
-    one = make_column(1, false, nx1, nh, gw);
-    two = make_column(2, false, nx1, nh, gw);
+    one = make_column(1, false, nx1, nh);
+    two = make_column(2, false, nx1, nh);
     EXPECT_EQ(one->blocks.size(), 1u);
     EXPECT_EQ(two->blocks.size(), 2u);
   }
@@ -278,7 +277,7 @@ TEST(X1SeamSplitMp, split_across_two_ranks_matches_one_process) {
   ASSERT_EQ(x1_centroid_exact_enabled(), centroid);
   torch::set_num_threads(1);
 
-  auto probe = make_column(2, true, 16, 1., "face");
+  auto probe = make_column(2, true, 16, 1.);
   auto layout = probe->blocks.front()->get_layout();
   ASSERT_TRUE(layout->has_process_group() &&
               layout->options->process_world_size() == 2 &&
@@ -293,7 +292,7 @@ TEST(X1SeamSplitMp, split_across_two_ranks_matches_one_process) {
   // EXPECT, not ASSERT, below: both ranks must reach every collective
   if (radial) {
     for (int nx1 : {32, 64, 128}) {
-      auto g = split_gaps(rank, nx1, 1., "face", 20 * nx1 / 32, false);
+      auto g = split_gaps(rank, nx1, 1., 20 * nx1 / 32, false);
       if (rank == 0) {
         std::printf(
             "%s, nz %d: 2 ranks vs 2 blocks %.3e, vs 1 block %.3e; split E+P "
@@ -312,7 +311,7 @@ TEST(X1SeamSplitMp, split_across_two_ranks_matches_one_process) {
   // co4: the cold column, its face-density flag switching on above the seam
   int nx1 = co4 ? 16 : 32;
   for (double nh : {1., 0.}) {
-    auto g = split_gaps(rank, nx1, nh, "face", 20, co4);
+    auto g = split_gaps(rank, nx1, nh, 20, co4);
     if (rank != 0) continue;
     std::printf(
         "%s, non-hydrostatic %g: 2 ranks vs 2 blocks %.3e, vs 1 block %.3e\n",

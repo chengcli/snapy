@@ -11,7 +11,7 @@ NZ, MACH = 32, 1.0e-2
 TOL = 1.0e-12
 
 
-def config(gravity, x1bc="reflecting", scheme=0):
+def config(x1bc="reflecting", scheme=0):
     rgas = 8.31446261815324
     return {
         "geometry": {"type": "cartesian",
@@ -29,6 +29,5 @@ def config(gravity, x1bc="reflecting", scheme=0):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9},
-        # face, the one gravity-work form since V3 I-7
-        "forcing": {"const-gravity": dict({"grav1": -GRAV, "gravity-work": "face"}, **gravity)},
+        "forcing": {"const-gravity": {"grav1": -GRAV}},
     }

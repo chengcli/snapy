@@ -2,7 +2,7 @@
 """Corrected-PE gravity work (derivation docs/derivations/curved-gravity-work-weight.md,
 option F).
 
-gravity-work: face adds g1 sigma^2 s[drho] to each cell's x1 gravity work,
+face-based gravity work adds g1 sigma^2 s[drho] to each cell's x1 gravity work,
 sigma^2 = <(x1 - r_c)^2> about the centroid r_c of the cell measure (h^2/12 on a Cartesian grid;
 r^2-weighted on spherical-polar and the cubed sphere), s = the slope at x1v of
 the quadratic through the cell and its two x1 neighbours (one-sided at the block's x1 ends),
@@ -19,7 +19,7 @@ sin(pi z / L) (2-D: times cos(2 pi x2 / L)), weno5, lmars, rk3. Checked:
   2. the cycle diagnostics (print_cycle_info) log the potential energy the booked work conserves:
      ie= + pe= equals this test's E + P to the printed digits (spherical, Cartesian, 2-D Cartesian
      and gnomonic, after a few explicit steps);
-  3. a gnomonic-equiangle (cubed-sphere) block with gravity-work: face sets up and does not warn
+  3. a gnomonic-equiangle (cubed-sphere) block with face-based gravity work sets up and does not warn
      (the work has a form there); a cylindrical block, which has none, warns;
   4. one VIC solve whose availability clamp binds (a momentum kick, as in
      test_implicit_stratified_solid.py's clamp_energy), so the solved density change differs from the raw
@@ -84,7 +84,7 @@ def config(geometry, scheme, nx2, recon, ncycle_out=0):
                                             "x3-inner": x3bc, "x3-outer": x3bc}},
         "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9,
                         "ncycle_out": ncycle_out},
-        "forcing": {"const-gravity": {"grav1": -G, "gravity-work": "face"}},
+        "forcing": {"const-gravity": {"grav1": -G}},
     }
 
 
@@ -254,7 +254,7 @@ def diag(case, out, device="cpu"):
 
 
 def setup_error(geometry):
-    """the setup error of a gnomonic-equiangle or cylindrical block with gravity-work: face, or ''
+    """the setup error of a gnomonic-equiangle or cylindrical block with face-based gravity work, or ''
     if it builds, and what the setup wrote to stderr"""
     from snapy import MeshBlock, MeshBlockOptions
     if geometry == "gnomonic-equiangle":

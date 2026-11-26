@@ -109,20 +109,19 @@ Hydrodynamic solver configuration:
 Physical Forcing
 ----------------
 
-Add gravitational and Coriolis forcing:
+Set constant gravity and rotation under ``forcing``. Vertical gravity uses
+the mass flux through cell faces to compute its work in the energy equation.
 
 .. code-block:: yaml
 
-    hydro:
-      gravity:
-        enabled: true
-        g: 9.81             # Gravitational acceleration
-        direction: -1       # Direction (-1 for downward in x1)
-
+    forcing:
+      const-gravity:
+        grav1: -9.81        # Downward acceleration along x1
       coriolis:
-        enabled: true
-        omega: 7.27e-5      # Rotation rate (rad/s)
-        latitude: 45.0      # Latitude (degrees)
+        omega1: 7.27e-5     # Rotation about x1 (rad/s)
+
+When migrating older decks, delete ``gravity-work`` and ``gravity-work-fixer``
+from ``const-gravity``. Both are rejected as unknown keys.
 
 Add constant isotropic viscosity and heat conduction on a Cartesian mesh:
 

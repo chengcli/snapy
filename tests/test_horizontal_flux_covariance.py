@@ -57,7 +57,7 @@ def config(nz, cov=None):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": 0, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": {"grav1": -1.0, "gravity-work": "face"}},
+        "forcing": {"const-gravity": {"grav1": -1.0}},
     }
     if cov is not None:
         cfg["dynamics"]["flux-covariance"] = cov

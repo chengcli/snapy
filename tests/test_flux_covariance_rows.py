@@ -36,7 +36,7 @@ UNIFORM_TOL = 1e-13   # max |q - q0|
 OFFSET_TOL = 1e-10    # max relative primitive difference between the two offsets
 NREST, NFLOW = 20, 20
 # eps_eff nz^2 of the dry Cartesian one-step test, term on, with the x1 wall continuation,
-# the corrected-PE face work (gravity-work: face; no dx^2/12 curvature flux) and the unsmoothed
+# the corrected-PE face work (face-based gravity work; no dx^2/12 curvature flux) and the unsmoothed
 # x1 density reference (0.003339, 0.005166, 0.005633 with the binomial-smoothed one: the term-off
 # arm moves by the same amount, so the shift is the x1 reference's, not the covariance term's)
 CART_REF = {16: 0.009686, 32: 0.007529, 64: 0.006987}

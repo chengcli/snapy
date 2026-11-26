@@ -5,7 +5,7 @@ per-direction gating of the p* geometric source.
   1. conservation: six cubed-sphere panels in one process, closed x1 walls, moist (vapor/cloud), the term on,
      a non-rest state (a sheared solid-body wind and a vapor field varying in r and in the horizontal). Every
      correction is added to the face flux, so total mass, vapor mass and E+P = sum (E + rho g x1) dV plus the
-     corrected potential energy (gravity-work: face, V3 I-7; derivation curved-gravity-work-weight.md sec 7, 12) must
+     corrected potential energy (face-based gravity work, V3 I-7; derivation curved-gravity-work-weight.md sec 7, 12) must
      hold to round-off over NSTEP steps: a seam face whose two panels disagree on the correction would leak.
   2. gating: a discretely balanced spherical-polar shell at rest with the x3 flux disabled (nx3 > 1) and the
      term on stays at rest: the x2 faces carry p* in their flux, so the x2 geometric source must carry p*
@@ -38,7 +38,7 @@ DIFF_TOL = 1e-13      # minimum relative on/off difference that shows the switch
 
 def totals(blocks, mv):
     """mass, vapor and E+P: E + rho g x1 plus the corrected PE g (sigma^2 s[rho] + (r_c - x1v) rho) of
-    gravity-work: face (test_gravity_work_radial_exact's E+P, on the total density)"""
+    face-based gravity work (test_gravity_work_radial_exact's E+P, on the total density)"""
     from snapy import kIDN, kIPR
     from test_gravity_work_radial_exact import centroid_offset, slope, variance
     icy = kIPR + 1
@@ -63,9 +63,6 @@ def arm_conservation(device):
     import snapy
     from snapy import kIPR
     cfg = rows.card("gnomonic-equiangle", moist=True)
-    # V3 I-7: face is the one gravity-work form (cell and its fixer were removed);
-    # it conserves E+P (corrected PE), not E+PE
-    cfg["forcing"]["const-gravity"]["gravity-work"] = "face"
     mesh, blocks = rows.blocks_of(cfg, device)
     nx1 = cfg["geometry"]["cells"]["nx1"]
     r0 = float(cfg["geometry"]["bounds"]["x1min"])

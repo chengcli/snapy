@@ -23,8 +23,7 @@
 using namespace snap;
 
 namespace {
-std::string card(bool stretched, std::string const& forcing = "}",
-                 std::string const& inner = "reflecting",
+std::string card(bool stretched, std::string const& inner = "reflecting",
                  std::string const& outer = "reflecting",
                  std::string const& geometry = "cartesian",
                  std::string const& recon = "weno5") {
@@ -52,9 +51,7 @@ std::string card(bool stretched, std::string const& forcing = "}",
          "    horizontal: {type: weno5, scale: false, shock: false}\n"
          "  riemann-solver: {type: lmars}\n"
          "forcing:\n"
-         "  const-gravity: {grav1: -9.8" +
-         forcing +
-         "\n"
+         "  const-gravity: {grav1: -9.8}\n"
          "boundary-condition:\n"
          "  external:\n"
          "    x1-inner: " +
@@ -108,14 +105,14 @@ void build_and_step(std::string const& text) {
   vars["hydro_w"] = torch::empty_like(w);
   block->phydro->forward(1.e-3, u, vars);
 }
-void refuses(std::string const& message, std::string const& forcing = "}",
+void refuses(std::string const& message,
              std::string const& inner = "reflecting",
              std::string const& outer = "reflecting",
              std::string const& geometry = "cartesian",
              std::string const& recon = "weno5") {
   bool threw = false;
   try {
-    build_and_step(card(true, forcing, inner, outer, geometry, recon));
+    build_and_step(card(true, inner, outer, geometry, recon));
   } catch (c10::Error const& e) {
     threw = true;
     EXPECT_NE(std::string(e.what()).find(message), std::string::npos)
@@ -124,11 +121,10 @@ void refuses(std::string const& message, std::string const& forcing = "}",
   }
   EXPECT_TRUE(threw) << "a stretched x1 did not refuse: " << message;
   if (geometry == "cartesian") {
-    EXPECT_NO_THROW(
-        build_and_step(card(false, forcing, inner, outer, geometry, recon)));
+    EXPECT_NO_THROW(build_and_step(card(false, inner, outer, geometry, recon)));
   } else {  // the uniform twin need not be a runnable deck; it must not refuse
     try {
-      build_and_step(card(false, forcing, inner, outer, geometry));
+      build_and_step(card(false, inner, outer, geometry));
     } catch (c10::Error const& e) {
       EXPECT_EQ(std::string(e.what()).find(message), std::string::npos)
           << e.what();
@@ -143,8 +139,8 @@ TEST(StretchedX1Ref, uniform_and_stretched_reflecting_decks_run) {
 }
 
 TEST(StretchedX1Ref, refuses_a_stretched_cp3_deck_outright) {
-  refuses("[cp3] has no stretched-x1 reconstruction", ", gravity-work: face}",
-          "reflecting", "reflecting", "cartesian", "cp3");
+  refuses("[cp3] has no stretched-x1 reconstruction", "reflecting",
+          "reflecting", "cartesian", "cp3");
 }
 
 // vx = a x1 heats by dt nu (4/3) a^2 exactly; RED: refused
@@ -211,14 +207,14 @@ TEST(StretchedX1Ref, covariance_slopes_exact_for_quadratic) {
 }
 
 TEST(StretchedX1Ref, refuses_periodic_x1) {
-  refuses("needs reflecting x1 boundaries", "}", "periodic", "periodic");
+  refuses("needs reflecting x1 boundaries", "periodic", "periodic");
 }
 
 namespace {
 std::string cubed_card(bool stretched, int axis) {
-  auto text = "distribute: {layout: cubed}\n" +
-              (axis == 1 ? card(stretched, "}", "periodic", "periodic")
-                         : card(stretched));
+  auto text =
+      "distribute: {layout: cubed}\n" +
+      (axis == 1 ? card(stretched, "periodic", "periodic") : card(stretched));
   if (axis > 1) {
     auto n = std::string("nx") + char('0' + axis);
     text.replace(text.find(n + ": 1"), n.size() + 3, n + ": 4");
@@ -265,23 +261,21 @@ TEST(StretchedX1Ref, layout_periodic_x2_x3_pass_the_x1_check) {
 }
 
 TEST(StretchedX1Ref, refuses_outflow_x1_outer) {
-  refuses("the x1-outer boundary is not reflecting", "}", "reflecting",
-          "outflow");
+  refuses("the x1-outer boundary is not reflecting", "reflecting", "outflow");
 }
 
 TEST(StretchedX1Ref, refuses_outflow_x1_inner) {
-  refuses("the x1-inner boundary is not reflecting", "}", "outflow",
-          "reflecting");
+  refuses("the x1-inner boundary is not reflecting", "outflow", "reflecting");
 }
 
 TEST(StretchedX1Ref, refuses_spherical_polar) {  // x2 from 0: a pole
-  refuses("pole-free spherical-polar", "}", "reflecting", "reflecting",
+  refuses("pole-free spherical-polar", "reflecting", "reflecting",
           "spherical-polar");
 }
 
 // block 1, x2 [0.5, 1], of a deck on x2 [0, 1] split in two refuses too
 TEST(StretchedX1Ref, refuses_the_off_pole_block_of_a_pole_deck) {
-  auto text = card(true, "}", "reflecting", "reflecting", "spherical-polar");
+  auto text = card(true, "reflecting", "reflecting", "spherical-polar");
   text.replace(text.find("nx2: 1"), 6, "nx2: 8");
   auto fname = write_temp(text +
                           "    x2-inner: reflecting\n    x2-outer: reflecting\n"

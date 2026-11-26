@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
-#include <functional>
 #include <limits>
 #include <snap/hydro/flux_register.hpp>
 #include <snap/layout/seam_register.hpp>
@@ -1029,48 +1028,6 @@ TEST(FluxRegister, hydro_declares_only_retry_causes_it_sets) {
     EXPECT_THROW(mon.retry_index(name), c10::Error)
         << name << " has a retry slot but no setter";
   EXPECT_EQ(mon.retry_flags.numel(), 1);
-}
-
-// V3 I-7: gravity-work: cell is removed. A deck that selects cell is
-// refused, from YAML and from code, with a message that names face. The
-// global fixer went in V3 X5: gravity-work-fixer: true is refused with X5's
-// message, false still loads.
-TEST(GravityWork, the_cell_form_is_refused_and_names_face) {
-  auto refused = [](std::function<void()> f) {
-    try {
-      f();
-    } catch (c10::Error const& e) {
-      return std::string(e.what_without_backtrace());
-    }
-    return std::string();
-  };
-  auto deck = [](std::string const& gravity) {
-    std::string d = kDeck;
-    auto at = d.find("const-gravity: {grav1: -9.8}");
-    EXPECT_NE(at, std::string::npos);
-    d.replace(at, 28, "const-gravity: {grav1: -9.8, " + gravity + "}");
-    std::ofstream f("test_flux_register_gw.yaml");
-    f << d;
-    return std::string("test_flux_register_gw.yaml");
-  };
-  // from YAML
-  auto msg = refused(
-      [&] { MeshBlockOptionsImpl::from_yaml(deck("gravity-work: cell")); });
-  EXPECT_NE(msg.find("gravity-work: face"), std::string::npos) << msg;
-  msg = refused([&] {
-    MeshBlockOptionsImpl::from_yaml(deck("gravity-work-fixer: true"));
-  });
-  EXPECT_NE(msg.find("removed in V3"), std::string::npos) << msg;
-  EXPECT_EQ(
-      refused([&] {
-        MeshBlockOptionsImpl::from_yaml(deck("gravity-work-fixer: false"));
-      }),
-      "");
-  // from code: refused at Hydro construction
-  auto opts = MeshBlockOptionsImpl::from_yaml(deck("gravity-work: face"));
-  opts->hydro()->grav()->gravity_work("cell");
-  msg = refused([&] { auto block = MeshBlock(opts); });
-  EXPECT_NE(msg.find("gravity-work: face"), std::string::npos) << msg;
 }
 
 // R-6 follow-up (R.rst 3.4, skeleton R:79-81): a radial post_split lands in
