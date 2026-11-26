@@ -71,7 +71,7 @@ This CPU build uses the Kintera version pinned in CI for its numerical reference
 mkdir -p build/runs/shallow
 cd build/runs/shallow
 sed 's/nlim: -1/nlim: 2/' ../../bin/shallow_xy_single.yaml > shallow.yaml
-BACKEND=gloo DEVICE=cpu pd-run 1 ../../bin/shallow_xy.release shallow.yaml
+../../bin/shallow_xy.release shallow.yaml
 cd ../../..
 ```
 
