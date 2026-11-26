@@ -58,7 +58,6 @@ pd-inspect = "snapy.api.pd_inspect:main"
 [tool.setuptools]
 packages = ["snapy"]
 include-package-data = false
-script-files = ["api/pd-run", "api/slurm.sbatch"]
 
 [tool.setuptools.package-data]
 "snapy" = [

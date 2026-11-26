@@ -1,181 +1,88 @@
 # Snapy
 
-**Compressible Finite Volume Solver for Atmospheric Dynamics, Chemistry and Thermodynamics**
+Snapy is a finite-volume atmospheric dynamics solver built on PyTorch tensors. Its C++ core and Python bindings support compressible flow with thermodynamics and chemistry from Kintera, as well as shallow-water models on Cartesian and cubed-sphere grids.
 
-Snapy is the dynamic core for simulating atmospheric and planetary dynamics using PyTorch tensors and GPU acceleration.
+[![PyPI version](https://badge.fury.io/py/snapy.svg)](https://pypi.org/project/snapy/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[![PyPI version](https://badge.fury.io/py/snapy.svg)](https://badge.fury.io/py/snapy)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Getting started
 
-## Features
-
-- **GPU-Accelerated**: Built on PyTorch for efficient GPU computation
-- **Flexible Interfaces**: Both Python and C++ APIs available
-- **Compressible Flow**: Finite volume solver for atmospheric dynamics
-- **Multi-platform**: Support for Linux and macOS
-- **NetCDF Output**: Standard output format for scientific data
-
-## Installation
-
-### Quick Install (Python Interface)
-
-The easiest way to get started is to install via pip:
+The release workflow targets CPython 3.10–3.13 on Linux x86-64 and macOS arm64. Install the Python package in an active environment with the matching PyTorch version.
 
 ```bash
-pip install snapy
+python -m pip install 'torch==2.10.0' snapy
 ```
 
-This will install the Python interface with pre-built binaries for Python 3.9-3.13 on Linux (x86_64) and macOS (ARM64).
+Each example pairs a YAML input deck with a driver. The deck selects the grid, numerical schemes, time integrator and outputs. The driver supplies the initial state and advances it. From the repository root, load the Sod shock-tube deck and construct its block in Python.
 
-### Parallel run
-```
-pd-run 6 ./test_exchange.release
+```python
+import snapy
+
+options = snapy.MeshBlockOptions.from_yaml("examples/shock.yaml")
+block = snapy.MeshBlock(options)
 ```
 
-### list listening port
+The [shock driver](examples/shock.cpp) shows how to set the left and right gas states, initialize the block and advance Runge–Kutta stages. For a multi-block example, the [shallow-water driver](examples/shallow_xy.cpp) initializes each block and advances the mesh as a whole. The [example decks](examples/) include single-block and distributed versions of the same problem.
+
+## How V3 advances a simulation
+
+| Component | Role |
+| --- | --- |
+| [Mesh and MeshBlock](src/mesh/) | A block owns its local grid, physics and state tensors. A mesh coordinates its blocks, their exchanges and operations that need a global reduction. |
+| [StageExecutor](src/mesh/stage_executor.hpp) | Schedules the operations in each integration stage. CPU and MPS execute eagerly. On CUDA, the default execution mode captures eligible stage segments per block and runs other segments eagerly. |
+| [StateStore](src/mesh/state_store.hpp) and [PrecisionPolicy](src/mesh/precision_policy.hpp) | The store keeps conserved state and Runge–Kutta backups in stable buffers. The policy selects storage and computation dtypes for state, fluxes, reference fields and the vertical implicit solve. |
+| [FluxRegister](src/hydro/flux_register.hpp) | Tracks face fluxes, corrections and cell sources so conservation budgets can account for transport across boundaries and changes within cells. |
+| [Layout and exchange](src/layout/) | Map blocks to processes and exchange data across slab boundaries and cubed-sphere panel seams. |
+| [Output](src/output/) | Writes requested fields and diagnostics. Restart handling lives with the [mesh block](src/mesh/meshblock_restart.cpp). |
+
+### Choosing a configuration
+
+Start from a deck with the geometry and physics you want. For example, [shock.yaml](examples/shock.yaml) selects an ideal gas, WENO5 reconstruction, HLLC fluxes and RK3 integration. Its two output entries give primitive fields and restarts independent write intervals.
+
+- Set `dynamics.precision` to choose the block precision and `integration.implicit-precision` to control the vertical solve. The precision policy uses FP32 for quantities that would otherwise require FP64 on MPS.
+- Set `integration.execution` to `auto`, `eager` or `cuda-graph`. In Python, `block.execution_capability(vars)` reports capture eligibility for the configured block and its initialized variables.
+- Set `dynamics.flux-covariance` (default `true`) for the x2/x3 face-flux correction and `dynamics.x1-mass-covariance` (default `false`) for the reconstructed x1 velocity correction. Use the same settings on every block. The x1 correction needs at least three x1 cells per block.
+
+The [option tables](src/options/) document keys and defaults for geometry, layout, output, hydro and individual forcings. CMake generates their C++ readers during configuration. Physics modules such as the [equations of state](src/eos/) also read their own options.
+
+## Build and run from source
+
+Use CMake 3.22 or newer, a C++17 compiler and the NetCDF C library. On Ubuntu, install the native build and test dependencies with the following command.
+
 ```bash
-lsof -i:29500
+sudo apt-get install libnetcdf-dev libucx-dev nco autoconf automake libtool pkg-config
 ```
 
-### kill listening port
+On macOS, use `brew install netcdf nco`. From the repository root, install the Python dependencies before configuring CMake so it can import PyTorch and generate the option readers with PyYAML.
+
 ```bash
-pkill -9 XXXXX
-```
-
-**Requirements:**
-- Python 3.9 or higher
-- PyTorch 2.10.x
-- NumPy
-- kintera >= 2.6.13
-
-### Build from Source (Advanced)
-
-Building from source is recommended only for advanced users who need to:
-- Modify the C++ core
-- Use custom PyTorch versions
-- Access the C++ interface directly
-- Develop new features
-
-**Prerequisites:**
-- CMake 3.20+
-- C++17 compatible compiler
-- Autoconf, Automake, Libtool, and pkg-config on Linux (for fetched UCX)
-- PyTorch 2.10.x with C++ libraries
-- NetCDF C library
-- kintera >= 2.6.13
-
-**Build steps:**
-
-1. Clone the repository:
-```bash
-git clone https://github.com/chengcli/snapy.git
-cd snapy
-```
-
-2. Install dependencies:
-```bash
-pip install numpy "kintera>=2.6.13" torch==2.10.0
-```
-
-Kintera 2.6.11 introduced the `compute_into` solves required by this
-branch; 2.6.13 is the floor because the recorded test references use its
-exact SI gas constant (8.31446261815324 J/mol/K). The 2.6.13 wheel is on
-PyPI and is what CI installs; to build it from source instead, install tag
-`v2.6.13` of [chengcli/kintera](https://github.com/chengcli/kintera) first.
-
-3. Install NetCDF:
-   - **Linux (Ubuntu/Debian):**
-     ```bash
-     sudo apt-get install libnetcdf-dev
-     ```
-   - **macOS:**
-     ```bash
-     brew install netcdf
-     ```
-
-UCX support is provided by the Python package ``commux``. Install snapy's
-Python dependencies in the active environment before configuring; use
-``-DUCX=OFF`` only when building a Gloo-only configuration.
-
-4. Configure and build:
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DNETCDF=ON
+python -m pip install numpy pyyaml wheel setuptools-scm pytest netcdf4 \
+  'torch==2.10.0' 'kintera==2.6.13' 'pyharp>=2.7.17' \
+  'commux>=0.1.4; platform_system == "Linux"' \
+  'pinc>=0.2.0; platform_system == "Linux"'
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCUDA=OFF -DNETCDF=ON -DBUILD_TESTS=ON
 cmake --build build --parallel 3
+python -m pip install --no-build-isolation --no-deps .
 ```
 
-5. Install the Python package:
+This CPU build uses the Kintera version pinned in CI for its numerical references. Use `-DCUDA=ON` for a CUDA build with a compatible toolkit. Release builds place example executables and input decks in `build/bin`. For a quick CPU run, copy the single-block shallow-water deck and limit it to two steps. The driver writes NetCDF output in the run directory.
+
 ```bash
-pip install .
+mkdir -p build/runs/shallow
+cd build/runs/shallow
+sed 's/nlim: -1/nlim: 2/' ../../bin/shallow_xy_single.yaml > shallow.yaml
+../../bin/shallow_xy.release shallow.yaml
+cd ../../..
 ```
 
-## Examples
+## Tests
 
-The `examples/` directory contains several working examples:
-
-**Python Examples:**
-- `shock.py` - Sod shock tube with internal boundary
-- `straka.py` - Straka cold bubble convection test
-- `robert.py` - Robert warm bubble convection test
-
-**C++ Examples:**
-- `shock.cpp` - Sod shock tube (C++)
-- `straka.cpp` - Straka cold bubble (C++)
-
-Run a Python example:
 ```bash
-cd examples
-python shock.py
+ctest --test-dir build/tests --output-on-failure
 ```
 
-Run a C++ example (after building):
-```bash
-cd build/examples
-./shock
-```
+Configure with `-DFULL_TESTS=ON` to include additional reference and decomposition cases. The [test guide](tests/README.md) describes the platform-specific suites and how to test against a matching Python installation.
 
-See `examples/README` for detailed documentation on the code structure and available examples.
+## License and contact
 
-## Configuration
-
-Simulations are configured using YAML files that specify:
-- Grid dimensions and domain size
-- Time integration settings (RK stages, CFL number)
-- Boundary conditions
-- Output settings (frequency, variables, format)
-- Equation of state and thermodynamics
-
-Example configuration files (`.yaml`) are provided alongside the examples.
-
-Scheme choices are deck keys under `dynamics:`, read per block; every block
-of a run must make the same choice, which blocks built from one deck do:
-
-| key | default | what it does |
-|---|---|---|
-| `flux-covariance` | `true` | the x2/x3 face-flux covariance correction (#289, `docs/derivations/289-covariance-x3-curved.md`) |
-| `x1-mass-covariance` | `false` | subtract the x1 rho-w covariance from the reconstructed cell velocity; needs at least 3 x1 cells per block |
-
-They replace the environment switches `SNAP_FLUX_COVARIANCE` and
-`SNAP_X1_MASS_COVARIANCE`, which are no longer read. Defaults are the same
-whether options come from a deck without the key or are built in code: EOS
-floors `density-floor: 1.e-6`, `pressure-floor: 1.e-3`,
-`temperature-floor: 20.`; a `riemann-solver` without `type` is `hllc`.
-
-## Development
-
-### Testing
-
-Run tests after building:
-```bash
-cd build/tests
-ctest --output-on-failure
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contact
-
-- **Author**: Cheng Li
-- **Email**: chengcli@umich.edu
-- **GitHub**: [https://github.com/chengcli/snapy](https://github.com/chengcli/snapy)
+Snapy is distributed under the [MIT License](LICENSE). Contact Cheng Li at chengcli@umich.edu.
