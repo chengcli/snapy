@@ -73,48 +73,33 @@ void HydroImpl::reset() {
                  << "\n";
   }
 
-  // gravity-work options, checked here so YAML and Python construction agree
-  if (options->grav()) {
-    auto const& gw = options->grav()->gravity_work();
-    // V3 I-7 (rulings (a), (b)): the cell form is removed; face is the one
-    // gravity-work form
-    TORCH_CHECK(gw == "face", "const-gravity gravity-work: '", gw,
-                "' is not supported: the cell form was removed (V3 I-7); use "
-                "gravity-work: face");
-    // the global gravity-work fixer is removed (V3 X5, gw1; Cheng)
-    TORCH_CHECK(!options->grav()->gravity_work_fixer(),
-                "const-gravity gravity-work-fixer was removed in V3; "
-                "set it false or drop the key");
+  if (options->grav() && options->grav()->grav1() != 0.) {
     // the corrected PE needs a single-valued potential; -grav1 * x1 jumps at
     // a periodic x1 face: warn, no change. The layout's x1 wrap is read from
     // its topology: a Python bfuncs() call clears the names.
     auto const& nm = pmb->options->bcnames();
-    bool wrap = pmb->options->layout()->periodic_z();
-    if (options->grav()->grav1() != 0. && gw == "face") {
-      bool periodic_x1 = wrap;
-      for (int f : {0, 1})
-        periodic_x1 = periodic_x1 || (f < static_cast<int>(nm.size()) &&
-                                      nm[f].compare(0, 8, "periodic") == 0);
-      if (periodic_x1)
-        TORCH_WARN_ONCE(
-            "gravity-work: face with periodic x1: -grav1*x1 jumps at the "
-            "periodic face, so the corrected PE its work books is not defined "
-            "there; use x1 walls");
-    }
+    bool periodic_x1 = pmb->options->layout()->periodic_z();
+    for (int f : {0, 1})
+      periodic_x1 = periodic_x1 || (f < static_cast<int>(nm.size()) &&
+                                    nm[f].compare(0, 8, "periodic") == 0);
+    if (periodic_x1)
+      TORCH_WARN_ONCE(
+          "x1 gravity with periodic x1: -grav1*x1 jumps at the "
+          "periodic face, so the corrected PE its work books is not defined "
+          "there; use x1 walls");
     // the corrected-PE work has no form on other grids: plain face work there
-    if (options->grav()->grav1() != 0. && gw == "face" && pmb && pmb->pcoord) {
+    if (pmb->pcoord) {
       auto const& type = pmb->pcoord->options->type();
       if (x1_measure(type) == X1Measure::none)
-        TORCH_WARN_ONCE(
-            "the corrected-PE work of gravity-work: face has no form on a '",
-            type, "' grid: it books the plain face work there");
+        TORCH_WARN_ONCE("the corrected-PE gravity work has no form on a '",
+                        type, "' grid: it books the plain face work there");
     }
     // the conversion-order 4 resolution flag (wb_ref4.cpp) reads scan pressures
     // three cells away, so x1 seam sides agree only with nghost >= 3;
     // SNAP_X1_CENTROID_EXACT keeps the requirement it had while it switched
     // that flag on
     if ((x1_centroid_exact_enabled() || options->conversion_order() == 4) &&
-        options->grav()->grav1() != 0. && pmb && pmb->pcoord) {
+        pmb->pcoord) {
       int ng = pmb->pcoord->options->nghost();
       TORCH_CHECK(ng >= 3,
                   "SNAP_X1_CENTROID_EXACT (or dynamics/conversion-order 4) "
@@ -122,8 +107,7 @@ void HydroImpl::reset() {
                   ng);
     }
     // the one-sided rho_1 at a wall spans three cells: fewer reads the ghost
-    if (x1_mass_covariance() && options->grav()->grav1() != 0. && pmb &&
-        pmb->pcoord) {
+    if (x1_mass_covariance() && pmb->pcoord) {
       int nx1 = pmb->pcoord->options->nx1();
       TORCH_CHECK(nx1 >= 3,
                   "dynamics/x1-mass-covariance needs at least 3 x1 cells "
@@ -322,8 +306,7 @@ void HydroImpl::_check_stretched_x1(torch::Tensor const& u) const {
 bool HydroImpl::radial_exact_work() const {
   auto g = options->grav();
   auto const& type = pmb->pcoord->options->type();
-  return g && g->grav1() != 0. && g->gravity_work() == "face" &&
-         x1_measure(type) != X1Measure::none;
+  return g && g->grav1() != 0. && x1_measure(type) != X1Measure::none;
 }
 
 std::pair<int, int> HydroImpl::x1_neighbors() const {

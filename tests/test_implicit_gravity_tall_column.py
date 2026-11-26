@@ -11,7 +11,7 @@ to test a strictly radial column. Angular-mode stability is a separate gate.
 centroid term of the derivation's sec 12 (#300).
 
 The face ladder runs in a child process, with the corrected-PE work of
-docs/derivations/curved-gravity-work-weight.md sec 7 that gravity-work: face books
+docs/derivations/curved-gravity-work-weight.md sec 7 that face-based gravity work books
 inside the implicit operator (#296), including the two wall rows of its slope.
 Every rung must stay below W_TOL and end the run below W_SETTLED.
 A child that exits non-zero or prints an incomplete ladder fails the parent (#299).
@@ -53,8 +53,7 @@ def config(geometry="cartesian"):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": "rk3", "cfl": 0.5, "implicit-scheme": 9, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": {"grav1": -GRAV, "gravity-work": "face",
-                                          "gravity-work-fixer": False}},
+        "forcing": {"const-gravity": {"grav1": -GRAV}},
     }
 
     if geometry == "spherical-polar":

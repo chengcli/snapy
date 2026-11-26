@@ -64,7 +64,7 @@ void sweep_cases() {
       Mat a[2], b[2], c[2];
       Vec delta[2];
       T du[10];
-      for (auto &x : du) x = 1;
+      for (auto& x : du) x = 1;
       for (int i = 0; i < 2; ++i) {
         a[i].setIdentity();
         b[i].setZero();
@@ -107,7 +107,7 @@ dynamics:
     horizontal: {type: plm}
   riemann-solver: {type: lmars}
 forcing:
-  const-gravity: {grav1: -1, gravity-work: face, gravity-work-fixer: false}
+  const-gravity: {grav1: -1}
 integration: {type: rk3, implicit-scheme: 9, cfl: 0.5}
 boundary-condition:
   external: {x1-inner: reflecting, x1-outer: reflecting,
@@ -229,7 +229,6 @@ TEST(lu_failure, mesh_terminal_failure_restores_all_blocks) {
   opts->layout()->py(1);
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");
   opts->hydro()->grav() = gravity;
   auto implicit = ImplicitOptionsImpl::create();
   implicit->scheme(9);
@@ -264,7 +263,7 @@ TEST(lu_failure, mesh_terminal_failure_restores_all_blocks) {
   mesh->blocks[1]->phydro->picorr->forward(du, prim, gamma, 0.);
   mesh->set_cycle(7);
   EXPECT_EQ(mesh->check_redo(vars), -1);
-  for (auto const &block : mesh->blocks) EXPECT_EQ(block->cycle, 7);
+  for (auto const& block : mesh->blocks) EXPECT_EQ(block->cycle, 7);
   for (int n = 0; n < 2; ++n)
     EXPECT_TRUE(torch::equal(vars[n].at("hydro_u"), saved[n]))
         << "local block " << n << " was not restored on terminal failure";
@@ -296,7 +295,6 @@ void rest_column_clamp(torch::Dtype dtype) {
   opts->layout()->py(1);
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(0.);
-  gravity->gravity_work("face");
   opts->hydro()->grav() = gravity;
   auto implicit = ImplicitOptionsImpl::create();
   implicit->scheme(9);
@@ -358,7 +356,6 @@ void column_status_case(torch::Device device) {
   opts->layout()->py(1);
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-9.8);
-  gravity->gravity_work("face");
   opts->hydro()->grav() = gravity;
   auto implicit = ImplicitOptionsImpl::create();
   implicit->scheme(9);
@@ -373,7 +370,7 @@ void column_status_case(torch::Device device) {
   w[IPR].fill_(1.e5);
   Variables vars{{"hydro_w", w}};
   block->initialize(vars);
-  auto &ic = block->phydro->picorr;
+  auto& ic = block->phydro->picorr;
   auto prim = vars.at("hydro_w").clone(), prim0 = prim.clone();
   auto du = 1.e-3 * torch::ones_like(prim), du0 = du.clone();
   auto gamma = torch::full_like(prim[IDN], 1.4);
@@ -433,7 +430,6 @@ void fp64_retry_case(bool fp64_fails) {
   opts->layout()->py(1);
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-9.8);
-  gravity->gravity_work("face");
   opts->hydro()->grav() = gravity;
   auto implicit = ImplicitOptionsImpl::create();
   implicit->scheme(9);
@@ -448,7 +444,7 @@ void fp64_retry_case(bool fp64_fails) {
   w[IPR].fill_(1.e5);
   Variables vars{{"hydro_w", w}};
   block->initialize(vars);
-  auto &ic = block->phydro->picorr;
+  auto& ic = block->phydro->picorr;
   int j = coord->jl() + 1;
   // the FP32 stage: one column's gamma is not finite
   auto prim32 = vars.at("hydro_w").to(torch::kFloat32);
@@ -544,7 +540,7 @@ boundary-condition:
   std::string msg;
   try {
     auto block = MeshBlock(opts);
-  } catch (c10::Error const &e) {
+  } catch (c10::Error const& e) {
     msg = e.what_without_backtrace();
   }
   EXPECT_NE(msg.find("implicit-scheme 0 has no module"), std::string::npos)

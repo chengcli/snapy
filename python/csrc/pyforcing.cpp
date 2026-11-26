@@ -10,23 +10,21 @@
 
 namespace py = pybind11;
 
-void bind_forcing(py::module &m) {
+void bind_forcing(py::module& m) {
   auto pyConstGravityOptions =
       py::class_<snap::ConstGravityOptionsImpl, snap::ConstGravityOptions>(
           m, "ConstGravityOptions");
 
   pyConstGravityOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::ConstGravityOptions &a) {
+           [](const snap::ConstGravityOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("ConstGravityOptions(\n{})", ss.str());
            })
       .ADD_OPTION(double, snap::ConstGravityOptionsImpl, grav1)
       .ADD_OPTION(double, snap::ConstGravityOptionsImpl, grav2)
-      .ADD_OPTION(double, snap::ConstGravityOptionsImpl, grav3)
-      .ADD_OPTION(std::string, snap::ConstGravityOptionsImpl, gravity_work)
-      .ADD_OPTION(bool, snap::ConstGravityOptionsImpl, gravity_work_fixer);
+      .ADD_OPTION(double, snap::ConstGravityOptionsImpl, grav3);
 
   auto pyCoriolisOptions =
       py::class_<snap::CoriolisOptionsImpl, snap::CoriolisOptions>(
@@ -34,7 +32,7 @@ void bind_forcing(py::module &m) {
 
   pyCoriolisOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::CoriolisOptions &a) {
+           [](const snap::CoriolisOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("CoriolisOptions(\n{})", ss.str());
@@ -49,7 +47,7 @@ void bind_forcing(py::module &m) {
 
   pyDiffusionOptions.def(py::init<>())
       .def("__repr__",
-           [](const snap::DiffusionOptions &a) {
+           [](const snap::DiffusionOptions& a) {
              std::stringstream ss;
              a->report(ss);
              return fmt::format("DiffusionOptions(\n{})", ss.str());

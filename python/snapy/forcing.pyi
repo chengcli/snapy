@@ -49,26 +49,6 @@ class ConstGravityOptions:
         """Set gravity in x3 direction."""
         ...
 
-    @overload
-    def gravity_work(self) -> str:
-        """Get the x1 gravity-work form: "face" (the one form)."""
-        ...
-
-    @overload
-    def gravity_work(self, value: str) -> "ConstGravityOptions":
-        """Set the x1 gravity-work form."""
-        ...
-
-    @overload
-    def gravity_work_fixer(self) -> bool:
-        """Always false: the global E+PE fixer was removed in V3."""
-        ...
-
-    @overload
-    def gravity_work_fixer(self, value: bool) -> "ConstGravityOptions":
-        """Only false is accepted: the global E+PE fixer was removed in V3."""
-        ...
-
 class CoriolisOptions:
     """
     Coriolis forcing options.

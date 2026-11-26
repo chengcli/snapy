@@ -1082,9 +1082,9 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
                                 potential_flux_div);
     }
 
-    // gravity-work: face adds the work of the corrected potential energy for
-    // this stage's x1 density change (derivation sec 7), where the grid has a
-    // form for it
+    // face-based gravity work adds the work of the corrected potential energy
+    // for this stage's x1 density change (derivation sec 7), where the grid has
+    // a form for it
     bool radial_exact = radial_exact_work();
     if (radial_exact) {
       auto drho = -dt * vertical_mass_div;

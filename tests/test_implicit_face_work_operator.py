@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""gravity-work: face with an implicit scheme keeps the #283 tall column at rest and E+PE closed.
+"""face-based gravity work with an implicit scheme keeps the #283 tall column at rest and E+PE closed.
 
 The column of test_implicit_gravity_tall_column.py (45 cells of dz = 29.9 km, 11.3
 scale heights, reflecting x1 walls, rk3 + weno5 + lmars), put into the scheme's own
-discrete hydrostatic balance with snapy.balance_column, run with gravity-work: face
+discrete hydrostatic balance with snapy.balance_column, run with face-based gravity work
 (no fixer) for NSTEP fixed steps at acoustic Courant 65.6, 197 and 657, with vic-full
 (implicit-scheme 9) and vic-partial (1), at rest and moving (w = w0 sin(pi z / H),
 w0 = 10 m/s, 1 m/s at Courant 657 to keep the advective Courant number below 1):
   every run finite with |E+PE drift| < EPE_TOL (E+PE the interior sum of E + rho g z);
   at rest also max |w| < W_TOL.
-With gravity-work: face the corrected-PE work is always booked (hydro.cpp
+With face-based gravity work the corrected-PE work is always booked (hydro.cpp
 radial_exact_work), so the conserved energy is E + P, P the corrected PE of
 docs/derivations/curved-gravity-work-weight.md sec 7, and the drift is measured on it
 (E+PE then drifts by the O(dz^2) error of PE itself, ~1e-10 here); the same runs blew up
@@ -58,13 +58,13 @@ def config(scheme, integ="rk3", key=2):
                                             "x2-inner": "periodic", "x2-outer": "periodic",
                                             "x3-inner": "periodic", "x3-outer": "periodic"}},
         "integration": {"type": integ, "cfl": 0.5, "implicit-scheme": scheme, "nlim": -1, "tlim": 1.e9},
-        "forcing": {"const-gravity": {"grav1": -GRAV, "gravity-work": "face"}},
+        "forcing": {"const-gravity": {"grav1": -GRAV}},
     }
 
 
 def corrected_pe(rho, x1f, x1v, grav1, spherical=False, centroid=False):
     """per-cell -grav1 sigma^2 s[rho] (times the cell volume by the caller): what P adds
-    to PE_d under gravity-work: face, rho along the last dimension;
+    to PE_d under face-based gravity work, rho along the last dimension;
     centroid (gnomonic-equiangle, where x1v is not the r^2 centroid r_c): also
     -grav1 (r_c - x1v) rho (derivation sec 12)"""
     from test_gravity_work_radial_exact import centroid_offset, slope, variance
@@ -140,7 +140,7 @@ def main():
 
     cs = math.sqrt(GAMMA * RD * T0)
     failures = []
-    print("gravity-work: face, E+PE is E + P", flush=True)
+    print("face-based gravity work, E+PE is E + P", flush=True)
     for scheme, sname in SCHEMES:
         for dt, w0_moving in RUNGS:
             for w0 in (0.0, w0_moving):

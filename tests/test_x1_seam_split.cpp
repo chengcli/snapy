@@ -9,13 +9,13 @@
 // force and in hydrostatic-split mode. RED before that exchange (one-sided
 // windows at every block edge).
 //
-// The corrected-PE work of gravity-work: face exchanges the stage's density
-// change across the seam and takes the centred slope there, one-sided only at
-// the walls (#303), so the split column keeps the one-block state; the second
-// test checks a round-off gap at nz 32/64/128 and E + P (the one-block P) on
-// the split column
-// (docs/derivations/curved-gravity-work-weight.md sec 7). An implicit scheme
-// refuses an x1 split, so the VIC row has no seam (vic_refuses_x1_split).
+// The corrected-PE work of face-based gravity work exchanges the stage's
+// density change across the seam and takes the centred slope there, one-sided
+// only at the walls (#303), so the split column keeps the one-block state; the
+// second test checks a round-off gap at nz 32/64/128 and E + P (the one-block
+// P) on the split column (docs/derivations/curved-gravity-work-weight.md sec
+// 7). An implicit scheme refuses an x1 split, so the VIC row has no seam
+// (vic_refuses_x1_split).
 //
 // conversion-order 4 (ctest test_x1_seam_split_co4_face_density): the
 // fourth-order face density (wb_ref4.cpp) computes its resolution flag per
@@ -72,7 +72,7 @@ int g_conv_order = 2;
 // x1 and x2/x3 reconstruction of the next make_column (nullptr: the card's)
 char const* g_recon = nullptr;
 
-std::string column_yaml(int nx1, double nh, char const* gw, int ng = 3) {
+std::string column_yaml(int nx1, double nh, int ng = 3) {
   char buf[2048];
   std::snprintf(buf, sizeof(buf), R"(
 geometry:
@@ -98,7 +98,7 @@ integration:
   cfl: 0.4
   implicit-scheme: %d
 forcing:
-  const-gravity: {grav1: -1., non-hydrostatic: %g, gravity-work: %s}
+  const-gravity: {grav1: -1., non-hydrostatic: %g}
 boundary-condition:
   external:
     x1-inner: reflecting
@@ -108,11 +108,11 @@ boundary-condition:
     x3-inner: periodic
     x3-outer: periodic
 )",
-                kR0, kR0 + kLz, nx1, ng, g_scheme, nh, gw);
+                kR0, kR0 + kLz, nx1, ng, g_scheme, nh);
   return buf;
 }
 
-Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3,
+Mesh make_column(int nb1, int nx1, double nh, int ng = 3,
                  torch::Device device = torch::kCPU, double g1 = -1.,
                  bool x1_mass_covariance = false) {
   char fname[] = "/tmp/x1-seam-split-XXXXXX";
@@ -120,7 +120,7 @@ Mesh make_column(int nb1, int nx1, double nh, char const* gw, int ng = 3,
   EXPECT_NE(fd, -1);
   if (fd != -1) close(fd);
   std::ofstream out(fname);
-  out << column_yaml(nx1, nh, gw, ng);
+  out << column_yaml(nx1, nh, ng);
   out.close();
   auto block_opts = MeshBlockOptionsImpl::from_yaml(fname);
   std::remove(fname);
@@ -201,7 +201,7 @@ torch::Tensor column_state(Mesh mesh, MeshVariables const& vars) {
 }
 
 // sum V [E + rho phi(x1v) - g1 <(x1 - x1v)^2> s[rho]] over the blocks: the
-// E + P that the corrected-PE work of gravity-work: face conserves
+// E + P that the corrected-PE work of face-based gravity work conserves
 // (meshblock.cpp pe=)
 double energy_p(Mesh mesh, MeshVariables const& vars) {
   double total = 0.;
@@ -224,11 +224,10 @@ double energy_p(Mesh mesh, MeshVariables const& vars) {
 }
 
 // max over rho, rho v1 and E of |split - one| / max|one| after nstep steps
-double split_gap(int nx1, double nh, char const* gw, int nstep,
-                 double* ep_drift = nullptr, bool cold = false,
-                 torch::Device device = torch::kCPU) {
-  auto one = make_column(1, nx1, nh, gw, 3, device);
-  auto two = make_column(2, nx1, nh, gw, 3, device);
+double split_gap(int nx1, double nh, int nstep, double* ep_drift = nullptr,
+                 bool cold = false, torch::Device device = torch::kCPU) {
+  auto one = make_column(1, nx1, nh, 3, device);
+  auto two = make_column(2, nx1, nh, 3, device);
   EXPECT_EQ(one->blocks.size(), 1u);
   EXPECT_EQ(two->blocks.size(), 2u);
   MeshVariables v1(1), v2(2);
@@ -259,7 +258,7 @@ void centroid_exact_split_matches_one_block(torch::Device device) {
   torch::set_num_threads(1);
   ASSERT_TRUE(x1_centroid_exact_enabled());
   for (double nh : {1., 0.}) {
-    double gap = split_gap(32, nh, "face", 20, nullptr, false, device);
+    double gap = split_gap(32, nh, 20, nullptr, false, device);
     std::printf("non-hydrostatic %g: 2 blocks vs 1, max rel gap %.3e\n", nh,
                 gap);
     // round-off: 20 steps of a 32-cell column
@@ -271,8 +270,7 @@ void radial_exact_split_gap(torch::Device device) {
   torch::set_num_threads(1);
   for (int nx1 : {32, 64, 128}) {
     double drift = 0.;
-    double gap =
-        split_gap(nx1, 1., "face", 20 * nx1 / 32, &drift, false, device);
+    double gap = split_gap(nx1, 1., 20 * nx1 / 32, &drift, false, device);
     std::printf(
         "nz %d: 2 blocks vs 1, max rel gap %.3e; split E+P drift %.3e\n", nx1,
         gap, drift);
@@ -299,14 +297,14 @@ void co4_face_density_at_the_seam_split_matches_one_block(
   double const pinned[2] = {0.017100679797010639, 0.036674368501359349};
   int k = 0;
   for (double nh : {1., 0.}) {
-    auto one = make_column(1, 16, nh, "face", 3, device);
+    auto one = make_column(1, 16, nh, 3, device);
     MeshVariables v1(1);
     fill_column(one, v1, /*cold=*/true);
     one->initialize(v1);
     double dt = 0.3 * (kLz / 16) / std::sqrt(kGamma);
     for (int n = 0; n < 20; ++n) step(one, v1, dt);
     double m1 = column_state(one, v1)[IVX].abs().max().item<double>();
-    double gap = split_gap(16, nh, "face", 20, nullptr, /*cold=*/true, device);
+    double gap = split_gap(16, nh, 20, nullptr, /*cold=*/true, device);
     std::printf(
         "conversion-order 4, plm, cold, non-hydrostatic %g: 2 blocks vs 1, "
         "max rel gap %.3e; one block max|m1| %.17g\n",
@@ -324,8 +322,8 @@ void co4_face_density_at_the_seam_split_matches_one_block(
 TEST(X1SeamSplit, switches_off_nghost_1_sets_up) {
   ASSERT_FALSE(std::getenv("SNAP_X1_CENTROID_EXACT"));
   // the nghost >= 3 check is the switches' own: the default nghost is 1
-  EXPECT_NO_THROW(make_column(1, 16, 1., "face", 1));
-  EXPECT_NO_THROW(make_column(2, 16, 1., "face", 1));
+  EXPECT_NO_THROW(make_column(1, 16, 1., 1));
+  EXPECT_NO_THROW(make_column(2, 16, 1., 1));
 }
 
 TEST(X1SeamSplit, centroid_exact_split_matches_one_block) {
@@ -348,16 +346,16 @@ TEST(X1SeamSplit, nghost_check_refuses_fewer_than_3_ghosts) {
   char const* setting =
       centroid ? "SNAP_X1_CENTROID_EXACT" : "dynamics/conversion-order 4";
   for (int ng : {1, 2}) try {
-      make_column(1, 16, 1., "face", ng);
+      make_column(1, 16, 1., ng);
       ADD_FAILURE() << setting << ": nghost " << ng << " accepted";
     } catch (c10::Error const& e) {
       std::string what = e.what();
       EXPECT_NE(what.find("needs nghost >= 3"), std::string::npos) << what;
       EXPECT_NE(what.find(setting), std::string::npos) << what;
     }
-  EXPECT_NO_THROW(make_column(1, 16, 1., "face", 3));
+  EXPECT_NO_THROW(make_column(1, 16, 1., 3));
   // no gravity, no reference: the check stays off
-  EXPECT_NO_THROW(make_column(1, 16, 1., "face", 1, torch::kCPU, 0.));
+  EXPECT_NO_THROW(make_column(1, 16, 1., 1, torch::kCPU, 0.));
   g_conv_order = 2;
 }
 
@@ -365,8 +363,8 @@ TEST(X1SeamSplit, nghost_check_refuses_fewer_than_3_ghosts) {
 // slope only because an implicit scheme refuses an x1 split: pin the refusal
 TEST(X1SeamSplit, vic_refuses_x1_split) {
   g_scheme = 9;
-  auto one = make_column(1, 32, 1., "face");
-  auto two = make_column(2, 32, 1., "face");
+  auto one = make_column(1, 32, 1.);
+  auto two = make_column(2, 32, 1.);
   g_scheme = 0;
   MeshVariables v1(1), v2(2);
   fill_column(one, v1, false);
@@ -409,14 +407,14 @@ TEST(X1SeamSplit, co4_face_density_at_the_seam_split_matches_one_block_cuda) {
 // nghost 3 the coordinate setup already refuses two cells, so use nghost 2.
 TEST(X1SeamSplit, x1_mass_covariance_needs_3_x1_cells) {
   try {
-    make_column(1, 2, 1., "face", 2, torch::kCPU, -1., true);
+    make_column(1, 2, 1., 2, torch::kCPU, -1., true);
     ADD_FAILURE() << "nx1 2 accepted";
   } catch (c10::Error const& e) {
     EXPECT_NE(std::string(e.what()).find("needs at least 3 x1 cells"),
               std::string::npos)
         << e.what();
   }
-  EXPECT_NO_THROW(make_column(1, 3, 1., "face", 2, torch::kCPU, -1., true));
+  EXPECT_NO_THROW(make_column(1, 3, 1., 2, torch::kCPU, -1., true));
 }
 
 // The x1 relays are seam sides of the one transport: on a column split in
@@ -425,7 +423,7 @@ TEST(X1SeamSplit, x1_mass_covariance_needs_3_x1_cells) {
 // receiver's side), x1_seam_slab hands each block the neighbour's face slab
 // and x1_rows overwrites its ghost rows with the neighbour's interior rows.
 TEST(X1SeamSplit, the_x1_relays_are_seam_sides) {
-  auto mesh = make_column(2, 16, 1., "face");
+  auto mesh = make_column(2, 16, 1.);
   ASSERT_EQ(mesh->blocks.size(), 2u);
   auto on_every_block = [&](auto f) {
     std::vector<std::thread> threads;

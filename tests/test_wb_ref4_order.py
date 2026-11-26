@@ -62,7 +62,7 @@ def config(nz, lz):
                                                 "x2-inner": "periodic", "x2-outer": "periodic",
                                                 "x3-inner": "periodic", "x3-outer": "periodic"}},
             "integration": {"type": "rk3", "cfl": 0.4, "implicit-scheme": 0, "nlim": -1, "tlim": 1.e9},
-            "forcing": {"const-gravity": {"grav1": -G, "gravity-work": "face"}}}
+            "forcing": {"const-gravity": {"grav1": -G}}}
 
 
 def cell_average_prims(zf, xf, lz, amp):

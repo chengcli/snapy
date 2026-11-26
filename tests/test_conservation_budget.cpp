@@ -11,8 +11,8 @@
 
 #include "cuda_test_gate.hpp"
 using namespace snap;
-struct Case {  // gw: face (V3 I-7); per: periodic x2/x3; vsed: rain
-  char const *name, *deck, *gw;  // qv: vapor, supersaturated above ~0.022
+struct Case {               // per: periodic x2/x3; vsed: rain
+  char const *name, *deck;  // qv: vapor, supersaturated above ~0.022
   int scheme;
   bool per, pocket;
   double vsed = 0., qv = 0.01;
@@ -37,7 +37,6 @@ std::string card(Case const& c) {  // the in-tree deck, closed and small
       d["boundary-condition"]["external"][f] =
           c.per ? "periodic" : "reflecting";
   d["forcing"]["const-gravity"]["grav1"] = -g;
-  d["forcing"]["const-gravity"]["gravity-work"] = c.gw;
   d["dynamics"]["conversion-order"] = c.key;
   bool cubed = d["geometry"]["type"].as<std::string>() == "gnomonic-equiangle";
   if (cubed && c.vsed != 0.)  // the AAM in flux form (#314), gated below
@@ -79,7 +78,6 @@ TEST_P(Budget, closes_to_round_off) {
   auto mesh = Mesh(MeshOptionsImpl::from_yaml(card(c)));
   int nb = mesh->blocks.size(),
       ny = mesh->blocks[0]->phydro->peos->nvar() - ICY;
-  bool face = std::string(c.gw) == "face";
   bool aam = c.vsed != 0. && std::dynamic_pointer_cast<GnomonicEquiangleImpl>(
                                  mesh->blocks[0]->pcoord) != nullptr;
   MeshVariables vars(nb);
@@ -123,11 +121,10 @@ TEST_P(Budget, closes_to_round_off) {
       auto dV = vol[i].index(in3), rho = u[IDN] + u.narrow(0, ICY, ny).sum(0);
       auto pe = rho * phi[i].index(in3);
       auto f = co->x1f.slice(0, il, iu + 2), v = co->x1v.slice(0, il, iu + 1);
-      auto ms = x1_measure(co->options->type());  // P by hand, not through
-      if (face)  // corrected_pe_work: P = sum V [rho phi(r_c) - g1 <(x1 -
-        pe += g * x1_variance(f, ms != X1Measure::plain) *  // r_c)^2> rho']
-              centroid_slope(rho, v);
-      if (face && ms == X1Measure::radial_mid)  // r_c != x1v
+      auto ms = x1_measure(co->options->type());
+      // Compute the corrected potential energy independently of the solver.
+      pe += g * x1_variance(f, ms != X1Measure::plain) * centroid_slope(rho, v);
+      if (ms == X1Measure::radial_mid)  // r_c != x1v
         pe += g * rho * x1_centroid_offset(f, v);
       auto mom = u[IVY];  // or AAM about z: r k . m (#314)
       if (aam) {
@@ -210,23 +207,23 @@ char const *A = "test_gravity_energy.yaml", *B = "test_species_face_clamp.yaml",
 // V3 X5 removed (gw1): its cell arms went with it. V3 I-7 keeps a_cell_s1's
 // closed x2/x3 case on face as a_face_s1_closed
 Case const kDecks[] = {
-    {"a_face_s1_closed", A, "face", 1},
-    {"a_face_s0", A, "face", 0},
-    {"a_face_s1", A, "face", 1, true},
-    {"a_face_s9", A, "face", 9},
-    {"a_per", A, "face", 0, true},
-    {"b_moist_slab", B, "face", 0, true, true},
-    {"b_sat", B, "face", 0, true, false, 0., 0.03},
-    {"b_key4", B, "face", 0, true, false, 0., 0.01, 4},
-    {"c_face_s0", Cs, "face", 0, false, false, -0.5},
-    {"c_face_s9", Cs, "face", 9},
-    {"d_cubed", D, "face", 0},
-    {"d_cubed_s9", D, "face", 9},
-    {"e2_mp", A, "face", 0, true},
+    {"a_face_s1_closed", A, 1},
+    {"a_face_s0", A, 0},
+    {"a_face_s1", A, 1, true},
+    {"a_face_s9", A, 9},
+    {"a_per", A, 0, true},
+    {"b_moist_slab", B, 0, true, true},
+    {"b_sat", B, 0, true, false, 0., 0.03},
+    {"b_key4", B, 0, true, false, 0., 0.01, 4},
+    {"c_face_s0", Cs, 0, false, false, -0.5},
+    {"c_face_s9", Cs, 9},
+    {"d_cubed", D, 0},
+    {"d_cubed_s9", D, 9},
+    {"e2_mp", A, 0, true},
     // settling rain, s9: the carry at a panel seam
-    {"d_sed", D, "face", 9, 0, 0, -.5, .01, 2, Cs, 2e4, 5},
+    {"d_sed", D, 9, 0, 0, -.5, .01, 2, Cs, 2e4, 5},
     // lane A's G7s: the same under exact (A.rst 5.3)
-    {"d_sed_exact", D, "face", 9, 0, 0, -.5, .01, 2, Cs, 2e4, 5, "exact"}};
+    {"d_sed_exact", D, 9, 0, 0, -.5, .01, 2, Cs, 2e4, 5, "exact"}};
 INSTANTIATE_TEST_SUITE_P(Decks, Budget, testing::ValuesIn(kDecks),
                          [](auto const& p) {
                            return std::string(p.param.name);

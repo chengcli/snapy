@@ -199,7 +199,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   //! reconstructed cell velocity? dynamics/x1-mass-covariance, off by default
   bool x1_mass_covariance() const { return options->x1_mass_covariance(); }
   //! the x1 gravity work of the corrected potential energy is booked here
-  //! (derivation curved-gravity-work-weight.md sec 7): gravity-work: face on a
+  //! (derivation curved-gravity-work-weight.md sec 7) on a
   //! Cartesian, a spherical-polar or a gnomonic-equiangle grid, grav1 != 0.
   //! E+P is then the conserved invariant: E+PE_d checks measure the wrong one
   bool radial_exact_work() const;

@@ -323,7 +323,7 @@ void print_cycle_line(
       if (hydro->options->grav() && hydro->options->grav()->grav1() != 0.) {
         auto grav1 = hydro->options->grav()->grav1();
         auto pe = rho * (-grav1 * coord->x1v);
-        // gravity-work: face books the work of the corrected potential
+        // face-based gravity work books the work of the corrected potential
         // energy P, so log P: E + P is what that work conserves
         if (hydro->radial_exact_work()) {
           int is = coord->il(), ie = coord->iu() + 1;

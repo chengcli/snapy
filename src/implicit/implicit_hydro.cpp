@@ -398,7 +398,7 @@ torch::Tensor ImplicitHydroImpl::forward_masked(
   // the energy row books the metric-weighted face work, always (V3 I-8: no
   // kVicFaceWork switch; with grav1 = 0 its rows add zeros)
 
-  // gravity-work: face: the energy row also carries the corrected
+  // the energy row also carries the corrected
   // potential energy's work g1 sigma^2 s[drho] of the mass this solve moves
   // (derivation sec 7, eq. 7). Booked only after the solve, that work is
   // explicit in a fixed fraction of the face work of a grid-scale density
@@ -756,7 +756,7 @@ void ImplicitHydroImpl::book_remainder_(
           torch::where(mask.index(in3) == 0, projection_work + clamp_work, 0.));
   }
 
-  // gravity-work: face: the matrix books the face form for the
+  // the matrix books the face form for the
   // mass this solve moved and the corrected potential energy's remainder
   // (derivation sec 7) for its raw density change, with the exact 3-point
   // slope s (tridiagonal part in the blocks, the two wall third points by

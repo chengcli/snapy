@@ -602,7 +602,6 @@ TEST(forcing, implicit_correction_reports_total_energy_delta) {
 
     auto gravity = ConstGravityOptionsImpl::create();
     gravity->grav1(-1.);
-    gravity->gravity_work("face");  // the form these tests pin
     options->hydro()->grav() = gravity;
 
     if (implicit) {
@@ -639,8 +638,8 @@ TEST(forcing, implicit_correction_reports_total_energy_delta) {
             0.);
 }
 
-// The corrected potential-energy work gravity-work: face books for a density
-// change drho of the interior x1 cells [is, ie) of a cartesian deck,
+// The corrected potential-energy work face-based gravity work books for a
+// density change drho of the interior x1 cells [is, ie) of a cartesian deck,
 // grav1 <(x1 - x1v)^2> d(drho)/dx1 (gravity_work_radial.hpp). E + P, not
 // E + PE_d, is what face work conserves, so the energy checks below add it.
 static torch::Tensor booked_pe_work(Coordinate const& coord,
@@ -663,7 +662,6 @@ std::tuple<double, torch::Tensor, bool> implicit_gravity_energy(
 
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
   auto icorr = ImplicitOptionsImpl::create();
   icorr->scheme(1);
@@ -951,7 +949,6 @@ TEST(forcing, vertical_gravity_work_uses_continuity_mass_flux) {
 
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
 
   auto block = std::make_shared<MeshBlockImpl>(options);
@@ -1003,7 +1000,6 @@ TEST(forcing, vertical_gravity_work_includes_sedimentation_mass_flux) {
 
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
 
   auto block = std::make_shared<MeshBlockImpl>(options);
@@ -1063,7 +1059,6 @@ TEST(forcing, vertical_gravity_work_excludes_horizontal_mass_divergence) {
 
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
 
   auto block = std::make_shared<MeshBlockImpl>(options);
@@ -1132,7 +1127,6 @@ static void implicit_gravity_work_holds_under_rk3_stage_weighting(
 
     auto gravity = ConstGravityOptionsImpl::create();
     gravity->grav1(-1.);
-    gravity->gravity_work("face");  // the form these tests pin
     options->hydro()->grav() = gravity;
     auto icorr = ImplicitOptionsImpl::create();
     icorr->scheme(1);
@@ -1214,7 +1208,6 @@ TEST(forcing, rk3_stage_is_published_by_block_step) {
   options->intg()->type("rk3");
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
   auto icorr = ImplicitOptionsImpl::create();
   icorr->scheme(1);
@@ -1442,7 +1435,6 @@ TEST(forcing, sedimentation_is_sealed_only_at_physical_walls) {
   options->hydro()->icorr() = nullptr;
   auto gravity = ConstGravityOptionsImpl::create();
   gravity->grav1(-1.);
-  gravity->gravity_work("face");  // the form these tests pin
   options->hydro()->grav() = gravity;
   options->bfuncs()[BoundaryFace::kInnerX1] = nullptr;
   auto block = std::make_shared<MeshBlockImpl>(options);

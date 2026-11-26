@@ -43,18 +43,10 @@ struct ConstGravityOptionsImpl {
     os << "* grav1 = " << grav1() << "\n"
        << "* grav2 = " << grav2() << "\n"
        << "* grav3 = " << grav3() << "\n"
-       << "* non-hydrostatic = " << non_hydrostatic() << "\n"
-       << "* gravity-work = " << gravity_work() << "\n";
+       << "* non-hydrostatic = " << non_hydrostatic() << "\n";
   }
 
   ADD_ARG(double, non_hydrostatic) = 1.;
-  //! x1 gravity work in the energy equation (#283):
-  //!   "face" (default): face-mass-flux work in every cell (the form before
-  //!     #283), plus the work of the corrected potential energy on grids with
-  //!     a form for it (derivation curved-gravity-work-weight.md sec 7)
-  ADD_ARG(std::string, gravity_work) = "face";
-  //! removed in V3 (X5, gw1): must stay false; read so old decks still load
-  ADD_ARG(bool, gravity_work_fixer) = false;
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
   ADD_ARG(double, grav3) = 0.;

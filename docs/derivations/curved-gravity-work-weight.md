@@ -1,6 +1,6 @@
 # Face-form gravity work on a radial grid: exact weights versus discrete E+PE conservation
 
-Scope: the x1 face-form gravity work (`gravity-work: face`) on a spherical-polar grid, explicit path
+Scope: the x1 face-form gravity work on a spherical-polar grid, explicit path
 (`src/hydro/hydro_forward.cpp`, the `face_gravity_work` block) and implicit path (`src/implicit/implicit_hydro.cpp`,
 `work_lo`/`work_hi`, which carry the same weights times 1/2 for the face average of the two cell momenta).
 Base: 8cea3ae (the pre-rebase head of #293, merged to main as aea71ed). Every closed form below is checked by `curved_gravity_work_weight.py` (sympy + numpy;
@@ -15,7 +15,7 @@ to $O(h^4)$), instead of $\mathrm{PE}_d$ resolves the conflict: the work $W = W_
 $O(h^4)$-exact and conserves E+$P$ to round-off by construction. It changes Cartesian too and replaces (not adds to)
 the cp3/cp5/weno5 curvature flux. §8 is the Cartesian case written to be ported on its own: there F removes the
 $O(h)$ wall-cell error that face+H leaves, and leaves the interior unchanged to $O(h^4)$. §9 compares F with the $\bar r$ potential form; §10 lists
-every place that computes a PE. F is always on with `gravity-work: face` (§11.2).
+every place that computes a PE. F applies on supported grids (§11.2).
 
 ## 1. Setup
 
@@ -108,7 +108,7 @@ $+g_1\frac{h^2}{6}\int G'/r\,dr = g_1\frac{h^2}{6}\int F\,dr$ for closed walls. 
 local face differences, so no local telescoping correction of the *weights* cancels it (the potential is held at
 $\mathrm{PE}_d$ here; §7 lifts that). The Cartesian part, $(h^2/12)[G']_{\rm walls}$, is a pure wall term, so it is no real conflict:
 a wall closure plus a modified discrete PE removes it with exact conservation (§§7–8, the corrected-PE work that
-`gravity-work: face` books, and an independent four-point booking that is $O(h^4)$ in every cell including the
+face work books, and an independent four-point booking that is $O(h^4)$ in every cell including the
 walls). Only the face form with $\mathrm{PE}_d$ pays the trapezoid error to conserve.
 
 ## 5. Numbers (replica §2, §3)
@@ -141,7 +141,7 @@ So the exact weights pass oracle (e) and fail oracle (c).
 | B. exact weights (3) | both removed | defect $g_1(h^2/3)\int F\,dr$, rel $h^2/(3R^2)$ | no ($O(h^2/R^2)$) |
 | C. conserving, $\lambda = +1/6$ | $F$ term removed, $F'$ doubled | round-off | no |
 | D. conserving, $\lambda = -1/6$ | $F'$ term removed, $F$ doubled | round-off | no |
-| E. B plus a global E+PE fixer (as gravity-work-fixer does for cell) | both removed | round-off after the fix | no |
+| E. B plus a global E+PE fixer (as the former cell-work fixer did) | both removed | round-off after the fix | no |
 
 Hypothesis (unverified): the ablation's sign surprise (shift +1.05 / +1.19 against the predicted -1.07 / -1.23)
 comes from option B's defect, which is the same order as the term removed. The check that settles it: rerun the
@@ -426,11 +426,10 @@ Searched: `src/`, `python/`, `tests/`.
 |---|---|---|
 | explicit face work, `hydro_forward.cpp` | $P$ | the booked work (7); the reference |
 | implicit face work: the matrix's work rows and the projection/clamp work in `implicit_hydro.cpp` | $\mathrm{PE}_d$ increments | consistent: the energy row books $g_1\sigma^2\tilde s[\delta\rho_{\rm raw} - \Delta\rho_0]$ (below) and the post-solve term the rest, so the total is $g_1\sigma^2s[\Delta\rho]$ with $\Delta\rho$ the solved change `du - du0`, which includes the redistributed and projected mass; $\Delta(E + P)$ per step $\le 4\times10^{-16}$ on the implicit cases of the test |
-| gravity-work fixer (`gwfix_stage` in `hydro_forward.cpp`, the implicit `epe` lambda) and its `fixgrav=` printout | $\mathrm{PE}_d$ | consistent by construction: the fixer runs only with `gravity-work: cell` (`hydro.cpp`), F acts only with `gravity-work: face` (`radial_exact_work()`); they never meet |
 | cycle diagnostics `pe=` (`print_cycle_diagnostics`, `meshblock.cpp`) | $P$ | logs $P$ via `corrected_pe_work` with the same per-block one-sided slope stencil, so the logged `ie=` + `pe=` is the conserved $E + P$ (it logged $\mathrm{PE}_d$ before; the test's check 5 failed on that at $\sim2\times10^{-5}$ relative and passes at $\le 3\times10^{-14}$) |
 | netCDF outputs | none | no PE field is written |
-| energy oracles of the face-work tests in `test_forcing.cpp` | $P$ | each check adds the corrected-PE work the stage books (`corrected_pe_work` on its density change, x1 flux only where the deck is 3-D) to $E + \mathrm{PE}_d$, so it checks $E + P$; the cell-work tests are unchanged |
-| `test_gravity_work_fixer`, `test_horizontal_flux_covariance`, `test_flux_covariance_rows` | $\mathrm{PE}_d$ (cell work) / recorded values | the fixer arms use `gravity-work: cell`; the covariance tests' recorded values are those of the face work with F; the reference oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
+| energy oracles of the face-work tests in `test_forcing.cpp` | $P$ | each check adds the corrected-PE work the stage books (`corrected_pe_work` on its density change, x1 flux only where the deck is 3-D) to $E + \mathrm{PE}_d$, so it checks $E + P$ |
+| `test_horizontal_flux_covariance`, `test_flux_covariance_rows` | recorded values | the covariance tests' recorded values are those of the face work with F; the reference oracle is `tests/test_gravity_work_radial_exact.py` ($E + P$ per step, and the logged `ie=` + `pe=` against it) |
 | face-work energy oracles of `test_implicit_face_work_operator` and `test_implicit_stratified_solid` | $P$ | they measure $E + P$ on the final state ($P$ with the centroid term of §12 on a gnomonic-equiangle block) (#296) |
 
 **The work inside the implicit operator (#296).** Booked only after the solve, the implicit part of (7) is explicit,
@@ -486,7 +485,7 @@ up to $N\Delta t = 600$, where the lumped rows had a wall mode from $N\Delta t \
 the Woodbury solve matches a dense solve of the full matrix to $\le 4.7\times10^{-12}$, and its cost is one more
 pair of back-substitutions per column.
 
-## 11. The default reference at the walls, F on by default with `gravity-work: face`, the remaining error, and the x1 mass-flux covariance
+## 11. The default reference at the walls, F on supported grids, the remaining error, and the x1 mass-flux covariance
 
 ### 11.1 The wall closure of the default x1 reference
 
@@ -504,11 +503,11 @@ Taking per column the branch that stays closer to $r_0$ keeps the continuation i
 observed order at faces 1-2 of both walls is 1.81-2.12 (nz 32 to 64), and every interior face and cell is bit for
 bit as before. The tests that pinned values of the old wall reference were re-pinned with it.
 
-### 11.2 Why F is on by default with `gravity-work: face`
+### 11.2 Why face work uses F
 
-`gravity-work: face` is the default x1 gravity-work form (const_gravity.cpp:28, forcing.hpp:61); `cell` (with its global fixer) must now be set explicitly.
+The solver computes x1 gravity work from the face mass flux.
 
-With `gravity-work: face` on a Cartesian, spherical-polar or gnomonic-equiangle grid and $g_1 \ne 0$, F is always on;
+On a Cartesian, spherical-polar or gnomonic-equiangle grid and $g_1 \ne 0$, F is always on;
 there is no switch to turn it off. The reasons for making it the default are that the plain face work it replaces
 is first order in the two x1 wall cells (§8) while F is $O(h^4)$ there and in the interior, that F conserves the
 exact discrete energy $E + P$ to round-off (§7), and that with F on the cp3/cp5/weno5 curvature flux has nothing
@@ -518,11 +517,11 @@ variant `face-wallc` are removed. The first-order wall error of plain face work 
   the one-step $\varepsilon_{\rm eff}\,n_z^2$ at $n_z$ 16, 32, 64 is $+0.0306$, $+0.0158$, $+0.0080$ without F and
   $-0.00092$, $-0.00020$, $-0.00004$ with F;
 - on a coarse polytrope the kinetic energy runs away to $3.1\times10^{-4}$ without F, $5.4\times10^{-5}$ with F, and
-  $8.5\times10^{-5}$ with `gravity-work: cell`.
+  $8.5\times10^{-5}$ with the former cell-work scheme.
 
 On a gnomonic-equiangle (cubed-sphere) grid F carries one more term, because `x1v` is not the $r^2$ centroid
 there (§12). Other grids (cylindrical) have no form for F: there the setup warns once and the plain face work is
-kept. `gravity-work: cell` is unchanged bit for bit. The energy oracles of §10 measure $E + P$.
+kept. The energy oracles of §10 measure $E + P$.
 
 ### 11.3 The remaining error
 
@@ -810,7 +809,7 @@ implicit parts as before.
 ### 12.10 Measured in the code (CPU)
 
 The deck is `tests/test_cubed_sphere_cell_volume.yaml` (six panels, shell $6.0$–$6.4\times10^6$ m, weno5, rk3,
-reflecting x1 walls, `gravity-work: face`, switch on), with $8\times8$ columns per panel. Every number below compares
+reflecting x1 walls, face work, switch on), with $8\times8$ columns per panel. Every number below compares
 a CPU build of this branch with one of e894700.
 
 **Work error against the exact cell average, one RK stage** from radial flow $u_1 = 0.05c_s\sin(\pi z/L)$. The
