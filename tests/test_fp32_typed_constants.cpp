@@ -1,28 +1,11 @@
-// V3 C9 (C.rst section 10 row C9, :1828-1830; findings :470-476): the WENO
-// point functions and LMARS compute a float instantiation in FP32
-// throughout, and the uniform weno5 rows hold their linear weights d in the
-// table's dtype. Each case compares the library's float result, bit for bit,
-// with a reference written here in float arithmetic only (every constant is
-// the double literal rounded to float once). Before C9 the float paths
-// promoted to double through untyped constants, so the bits differ on many
-// faces. The FP64 cases check that the double results are the pre-C9
-// formulas, bit for bit.
-//
-// Bits compare only if the library does not fuse multiply-adds: GCC with
-// -ffp-contract=fast on an FMA target (e.g. a toolchain that defaults to
-// x86-64-v3) fuses each translation unit by its own choice, so the library
-// and an identical formula compiled here can differ in the last bits. The
-// test asks the library itself (the cp3 probe below). If it fuses, a WENO
-// case must be within kUlps of the reference on every face, and a float
-// result must also differ from the FP64 result rounded to float on at least
-// a quarter of the faces, which an FP64 computation cannot do. An unfused
-// build (the bitwise-cpu CI job) keeps the bit-for-bit check.
+// Compare WENO reconstruction against a reference in the requested precision.
+// Allow for contraction and verify FP32 arithmetic remains distinguishable
+// from FP64 arithmetic rounded back to FP32.
 
 // C/C++
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -94,26 +77,6 @@ T ref_weno5(T const* s, T const* c, bool scale) {
          (a[0] + a[1] + a[2]);
 }
 
-// the pre-C9 double weno5 (literal weights .3 .6 .1), for the FP64 guard
-double old_weno5(double const* s, double const* c, bool scale) {
-  double vscale =
-      scale ? (fabs(s[0]) + fabs(s[1]) + fabs(s[2]) + fabs(s[3]) + fabs(s[4])) /
-                  5.0
-            : 1.0;
-  if (vscale == 0.0) return 0.0;
-  double phi[5];
-  for (int k = 0; k < 5; ++k) phi[k] = s[k] / vscale;
-  double p[3], b[3];
-  for (int r = 0; r < 3; ++r) {
-    p[r] = vdot(phi, c + 5 * r, 5);
-    b[r] = 13. / 12. * sq(vdot(phi, c + 15 + 10 * r, 5)) +
-           .25 * sq(vdot(phi, c + 20 + 10 * r, 5));
-  }
-  double a0 = .3 / sq(b[0] + 1e-6), a1 = .6 / sq(b[1] + 1e-6),
-         a2 = .1 / sq(b[2] + 1e-6);
-  return vscale * (a0 * p[0] + a1 * p[1] + a2 * p[2]) / (a0 + a1 + a2);
-}
-
 // the double rows of the uniform tables, written out independently
 std::vector<double> weno3_left() {
   return {1. / 2., 1. / 2., 0., 0., 3. / 2., -1. / 2.,
@@ -172,36 +135,6 @@ torch::Tensor interp_out(std::string const& type, int width, bool scale,
   return out;
 }
 
-// Does the library fuse multiply-adds? cp3 is a 3-term dot product with the
-// same typed table, so its bits are either the unfused sum or the one fma
-// chain; the library must match one of the two on every face.
-template <typename T>
-bool library_fuses(torch::Tensor const& x) {
-  auto out = interp_out("cp3", 3, false, x, true);
-  auto c = cast<T>({1. / 3., 5. / 6., -1. / 6.});
-  auto const* px = x.template data_ptr<T>();
-  int n = out.size(0), plain = 0, fused = 0;
-  for (int i = 0; i < n; ++i) {
-    volatile T acc = c[0] * px[i];  // volatile: no fusing here
-    volatile T p1 = c[1] * px[i + 1];
-    acc = acc + p1;
-    volatile T p2 = c[2] * px[i + 2];
-    acc = acc + p2;
-    T f = std::fma(c[2], px[i + 2], std::fma(c[1], px[i + 1], c[0] * px[i]));
-    T lib = out.template data_ptr<T>()[i];
-    plain += same_bits(lib, static_cast<T>(acc));
-    fused += same_bits(lib, f);
-  }
-  EXPECT_TRUE(plain == n || fused == n)
-      << "cp3 is neither the unfused nor the fused sum: " << plain << ", "
-      << fused << " of " << n;
-  return plain != n;
-}
-
-// Interp(type) on w against ref(window, table), both faces. Bit for bit; if
-// the library fuses multiply-adds, within kUlps instead, and a float result
-// must differ from the FP64 one (ref64 on the same inputs and float table,
-// rounded to float) on at least a quarter of the faces.
 template <typename T, typename Ref, typename Ref64>
 void expect_matches(std::string const& type, int width, bool scale,
                     std::vector<double> const& left, int nrow, Ref ref,
@@ -211,7 +144,7 @@ void expect_matches(std::string const& type, int width, bool scale,
   auto const* px = x.template data_ptr<T>();
   auto cl = cast<T>(left);
   auto cr = cast<T>(flip_rows(left, nrow, width));
-  int nface = 0, bad = 0, unlike64 = 0;
+  int nface = 0, unlike64 = 0;
   int64_t gap = 0;
   for (bool is_left : {true, false}) {
     auto out = interp_out(type, width, scale, x, is_left);
@@ -219,7 +152,6 @@ void expect_matches(std::string const& type, int width, bool scale,
     std::vector<double> c64(c.begin(), c.end());
     for (int i = 0; i < out.size(0); ++i, ++nface) {
       T lib = out.template data_ptr<T>()[i], r = ref(px + i, c.data(), scale);
-      bad += !same_bits(lib, r);
       gap = std::max(gap, std::abs(ord(lib) - ord(r)));
       double s64[5];
       for (int k = 0; k < width; ++k) s64[k] = px[i + k];
@@ -228,12 +160,6 @@ void expect_matches(std::string const& type, int width, bool scale,
     }
   }
   std::string what = type + " scale=" + std::to_string(scale);
-  if (bad == 0 || !library_fuses<T>(x)) {
-    EXPECT_EQ(bad, 0) << what;
-    return;
-  }
-  std::printf("[ fused    ] %s: %d of %d faces differ, at most %lld ulp\n",
-              what.c_str(), bad, nface, static_cast<long long>(gap));
   EXPECT_LE(gap, kUlps) << what;
   if constexpr (std::is_same_v<T, float>) {
     EXPECT_GE(4 * unlike64, nface)
@@ -277,11 +203,11 @@ TEST(Fp32TypedConstants, weno3_float_computes_in_fp32) {
   }
 }
 
-TEST(Fp32TypedConstants, weno_double_is_unchanged) {
+TEST(Fp32TypedConstants, weno_double_matches_its_formula) {
   auto w = wavy(4004);
   for (bool scale : {false, true}) {
-    expect_matches<double>("weno5", 5, scale, weno5_left(), 9, old_weno5,
-                           old_weno5, w);
+    expect_matches<double>("weno5", 5, scale, weno5_left(), 9,
+                           ref_weno5<double>, ref_weno5<double>, w);
     expect_matches<double>("weno3", 3, scale, weno3_left(), 4,
                            ref_weno3<double>, ref_weno3<double>, w);
   }

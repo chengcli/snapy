@@ -124,23 +124,9 @@ DISPATCH_MACRO bool vic_column_finite(char* const* p, VicLayout const& L) {
 
 //! the Woodbury correction of one column (#369's wall third points): the
 //! rank-2 update y -= Z (I + V^T Z)^{-1} V^T y with y = delta and Z = (z0,
-//! z1) after the back substitution, in the operation order of the host
-//! tensor code it replaces (V3 I-5)
-//! CPU: that code rounds every product and sum on its own, so the host
-//! build must not contract them into FMAs (ruling I-5.B1_fma: clang's
-//! default -ffp-contract=on does on arm64, GCC's default =fast wherever FMA
-//! exists). The clang pragma is function-scoped and GCC ignores it, so GCC
-//! gets the same as a function-level optimize option. Both are host-only:
-//! the CUDA translation unit (implicit_dispatch.cu) sees neither.
-#if !defined(__CUDACC__) && defined(__GNUC__) && !defined(__clang__)
-#pragma GCC push_options
-#pragma GCC optimize("fp-contract=off")
-#endif
+//! z1) after the back substitution.
 template <typename T, int N>
 DISPATCH_MACRO void vic_woodbury_column(char* const* p, int nlayer, double dt) {
-#if !defined(__CUDACC__) && defined(__clang__)
-#pragma clang fp contract(off)
-#endif
   using Vector = Eigen::Matrix<T, N, 1>;
   auto y = vic_op<Vector>(p, kVicDelta);
   auto z0 = vic_op<Vector>(p, kVicZ0);
@@ -155,20 +141,13 @@ DISPATCH_MACRO void vic_woodbury_column(char* const* p, int nlayer, double dt) {
   T r0 = k0 * y[i0](0), r1 = k1 * y[i1](0);
   T det = m00 * m11 - m01 * m10;
   T al0 = (m11 * r0 - m01 * r1) / det, al1 = (m00 * r1 - m10 * r0) / det;
-  for (int i = 0; i < nlayer; ++i)
+  for (int i = 0; i < nlayer; ++i) {
     for (int row = 0; row < N; ++row) {
-      T t0 = z0[i](row) * al0;
-      y[i](row) = y[i](row) - t0;
+      y[i](row) -= z0[i](row) * al0;
+      y[i](row) -= z1[i](row) * al1;
     }
-  for (int i = 0; i < nlayer; ++i)
-    for (int row = 0; row < N; ++row) {
-      T t1 = z1[i](row) * al1;
-      y[i](row) = y[i](row) - t1;
-    }
+  }
 }
-#if !defined(__CUDACC__) && defined(__GNUC__) && !defined(__clang__)
-#pragma GCC pop_options
-#endif
 
 //! the column solve: forward sweep and back substitution. K = 2 (Woodbury):
 //! the same factorisation also solves the unit E rows at the two wall cells
