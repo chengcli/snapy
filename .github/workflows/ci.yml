@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
+
+# Converting an open PR back to draft also stops its active checks.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event.action == 'converted_to_draft' }}
 
 env:
   PYTHON_VERSION: "3.11"
@@ -14,6 +19,7 @@ env:
 
 jobs:
   pre-commit:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
