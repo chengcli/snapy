@@ -107,20 +107,47 @@ TEST(SourceRegistry, a_deck_declares_its_sources_in_deck_order) {
                        "coriolis", "diffusion", "body-heat", "top-cool",
                        "bot-heat", "relax-bot-comp", "relax-bot-temp",
                        "relax-bot-velo", "top-sponge-lyr", "bot-sponge-lyr"}));
-  // diffusion (host reads of its profiles) and relax-bot-comp (kintera's
-  // VT->U, A.rst 8) are not capturable: five runs, in deck order
   auto runs = reg.runs(SourcePhase::pre_implicit);
-  ASSERT_EQ(runs.size(), 5u);
-  for (int i = 0; i < 5; ++i) EXPECT_EQ(runs[i].capturable, i % 2 == 0) << i;
-  EXPECT_EQ(runs[1].begin, 1u);
-  EXPECT_EQ(runs[3].begin, 5u);
-  EXPECT_EQ(runs[3].end, 6u);
+  ASSERT_EQ(runs.size(), 1u);
+  EXPECT_TRUE(runs.front().capturable);
+  EXPECT_EQ(runs.front().begin, 0u);
+  EXPECT_EQ(runs.front().end, names.size());
   // Coriolis runs again after the implicit solve (#355)
   names.clear();
   for (auto const& r : reg.runs(SourcePhase::post_implicit))
     reg.run(r, du, s, sink);
   EXPECT_EQ(names, std::vector<std::string>{"coriolis"});
   EXPECT_TRUE(reg.splits().empty());
+}
+
+TEST(SourceRegistry, plume_forcing_refuses_capture) {
+  auto block = forced_block();
+  block->phydro->options->plumeForcing() = PlumeForcingOptionsImpl::create();
+  auto why = block->execution_capability({}).eager_reasons;
+  EXPECT_NE(std::find(why.begin(), why.end(),
+                      "plume-forcing does not support CUDA graph capture"),
+            why.end());
+}
+
+TEST(SourceRegistry, device_timestep_matches_eager_for_all_builtin_sources) {
+  auto block = forced_block();
+  auto& reg = block->phydro->sources;
+  auto stage = stage_of(block);
+  auto device_dt = torch::zeros({}, torch::kFloat64);
+  for (double dt : {0.173, 0.041}) {
+    device_dt.fill_(dt);
+    for (auto phase : {SourcePhase::pre_implicit, SourcePhase::post_implicit}) {
+      for (auto const& run : reg.runs(phase)) {
+        auto expected = torch::zeros_like(stage.w);
+        auto actual = torch::zeros_like(stage.w);
+        stage.dt = dt;
+        reg.run(run, expected, stage);
+        stage.dt = StepDt::device(device_dt);
+        reg.run(run, actual, stage);
+        EXPECT_TRUE(torch::equal(expected, actual)) << dt;
+      }
+    }
+  }
 }
 
 TEST(SourceRegistry, budgets_on_give_the_budgets_off_du) {

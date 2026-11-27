@@ -37,7 +37,6 @@ RelaxBotCompOptions RelaxBotCompOptionsImpl::from_yaml(
 RelaxBotCompImpl::RelaxBotCompImpl(RelaxBotCompOptions op, HydroImpl const* p)
     : BottomSlab(std::move(op), p, "relax-bot-comp",
                  kMass | kSpecies | kEnergy) {
-  decl_.capturable = false;  // kintera's VT->U is not capturable (section 8)
   reset();
 }
 
@@ -92,7 +91,7 @@ void RelaxBotCompImpl::add(torch::Tensor du, StageState const& s) {
   delta[IDN] = -rho * (target_y - current_y).sum(0);
   delta.narrow(0, ICY, ny) = rho * (target_y - current_y);
   delta[IPR] = target_ie - current_ie;
-  du.index(bottom) += s.dt.value() / options->tau() * delta;
+  du.index(bottom) += (s.dt / options->tau()) * delta;
 }
 
 }  // namespace snap

@@ -1,11 +1,20 @@
 #include <cmath>
+#include <snap/mesh/exchange_cut.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
 
 namespace snap {
+void DiffusionImpl::save_split_initial(torch::Tensor const& u) {
+  if (!split_initial_.defined() || split_initial_.device() != u.device() ||
+      split_initial_.scalar_type() != u.scalar_type() ||
+      split_initial_.sizes() != u.sizes())
+    split_initial_ = torch::empty_like(u);
+  split_initial_.copy_(u);
+}
+
 void DiffusionImpl::begin_split(torch::Tensor u, double dt) {
-  split_initial_ = u.clone();
+  save_split_initial(u);
   radial_conduction_step(u, 0.5 * dt);
 }
 void DiffusionImpl::finish_split(torch::Tensor u, double dt) {
@@ -14,7 +23,7 @@ void DiffusionImpl::finish_split(torch::Tensor u, double dt) {
 // ruling A-ph3.radial_step_field: Hydro requested the x1 step field when
 // radial conduction is on, so the post is unguarded
 void DiffusionImpl::begin_split(torch::Tensor u, double dt, FluxRegister& reg) {
-  split_initial_ = u.clone();
+  save_split_initial(u);
   auto flux = radial_conduction_step(u, 0.5 * dt);
   if (flux.defined()) reg.post_split(1, "diffusion.radial", flux, 0.5, dt);
 }
@@ -35,7 +44,7 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
     return torch::Tensor();
   TORCH_CHECK(std::isfinite(dt) && dt > 0.,
               "[Diffusion] Invalid radial step dt.");
-  check_profiles();
+  if (!in_segment_capture()) check_profiles();
   auto c = phydro->pmb->pcoord;
   TORCH_CHECK(c->options->type() == "gnomonic-equiangle" &&
                   phydro->peos->options->type() == "ideal-gas",
@@ -50,10 +59,9 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
   auto k = options->dynamic() ? torch::full_like(temp, options->kappa_iso())
                               : options->kappa_iso() * capacity;
   int n = temp.size(-1), start = c->il();
-  if (kappa_scale_.defined())
-    k.mul_(kappa_scale_.to(u.options())
-               .slice(0, start, start + n)
-               .view({1, 1, -1}));
+  profiles_on(u);
+  if (kappa_scale_w_.defined())
+    k.mul_(kappa_scale_w_.slice(0, start, start + n).view({1, 1, -1}));
   auto r = c->x1v.to(u.options()).slice(0, start, start + n);
   auto rf = c->x1f.to(u.options()).slice(0, start, start + n + 1);
   auto rm = rf.slice(0, 0, n), rp = rf.slice(0, 1, n + 1);
@@ -107,10 +115,12 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
   };
   auto first = solve(temp);
   auto next = solve(temp + (1. - gamma) / gamma * (first - temp));
-  TORCH_CHECK(torch::isfinite(next).all().item<bool>() &&
-                  next.min().item<double>() > 0.,
-              "[Diffusion] Radial SDIRK step produced nonpositive/nonfinite "
-              "temperature; reduce dt.");
+  auto valid = (torch::isfinite(next) & (next > 0.)).all();
+  check_on_replay([valid]() {
+    TORCH_CHECK(valid.item<bool>(),
+                "[Diffusion] Radial SDIRK step produced nonpositive/nonfinite "
+                "temperature; reduce dt.");
+  });
   u[IPR].index(sl).add_(capacity * (next - temp));
   // the step's x1 heat flux density (A.rst 3.7). Per unit solid angle the
   // step moves dt [(1 - gamma) Q(first) + gamma Q(next)] up through face f,

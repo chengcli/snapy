@@ -33,6 +33,7 @@ class StepDt {
   torch::Tensor divide(torch::Tensor const& x) const;
   StepDt operator-() const;
   StepDt scaled(double a) const;  // a * dt
+  StepDt operator/(double divisor) const;
   //! x *= dt in place
   torch::Tensor& mul_into(torch::Tensor& x) const;
 

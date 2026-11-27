@@ -38,6 +38,13 @@ StepDt StepDt::scaled(double a) const {
   return device(_t * a);
 }
 
+StepDt StepDt::operator/(double divisor) const {
+  if (!_t.defined()) return StepDt(_v / divisor);
+  // CUDA scalar division multiplies by a rounded reciprocal. Use a tensor
+  // divisor so dt / tau rounds once, as the eager double quotient does.
+  return device(_t / torch::full_like(_t, divisor));
+}
+
 torch::Tensor& StepDt::mul_into(torch::Tensor& x) const {
   if (_t.defined())
     x.mul_(_t);

@@ -47,8 +47,17 @@ Numerical support is the eager columns; graph support is separate.
 CPU and MPS run eager only. The graph rows that say yes cover the dry Straka
 case: a CUDA device, Cartesian geometry, one species, no reactions, the EOS
 limiter off, an ideal-moist EOS, the hllc Riemann solver, rk3, one block,
-const-gravity as the only forcing and no solid mask. A vertical implicit
-scheme captures on that case: its solve reads the block's device ``dt``.
+no solid mask and constant gravity. Its vertical implicit solve reads the
+block's device timestep.
+
+CUDA graphs support
+``const-gravity``, ``coriolis``, ``diffusion``, ``body-heat``, ``bot-heat``,
+``top-cool``, ``relax-bot-comp``, ``relax-bot-temp``, ``relax-bot-velo``,
+``top-sponge-lyr`` and ``bot-sponge-lyr``, individually or together.
+``plume-forcing`` requires eager execution. User TorchScript forcings run
+in an eager segment between graphs when strict execution is disabled.
+With ``diffusion.implicit_radial``, changing the timestep recaptures the
+segments that perform the radial half-steps.
 
 ``MeshBlock.execution_capability(vars)`` returns a block's row for its own
 configuration and variables: ``eager_fp64``/``eager_fp32`` (its precision),
@@ -60,8 +69,9 @@ What a graph depends on
 
 A stage's graph is captured again when any of these changes: the device, the
 shapes, strides or dtypes of the state, the state store's generation, the
-configuration generation, the stage or ``dt``. ``dt`` is a host number baked
-into the graph, so a new ``dt`` recaptures. The store's generation changes
+configuration generation or the stage. Ordinary forcing kernels read ``dt``
+from a device scalar at replay. A segment that reads the host timestep
+also includes ``dt`` in its capture key. The store's generation changes
 when its buffers move: ``to()``, a restart, or a variable that the caller
 replaced between steps (it is copied into the block's fixed storage).
 ``bump_config_generation()`` recaptures after a change the graph cannot see,

@@ -70,14 +70,20 @@ def deck(execution, strict, scalar, co4):
     return d
 
 
-def make(execution, strict, scalar, co4):
+def make(execution, strict, scalar, co4, forcing=None):
     import snapy
     from snapy import Mesh, MeshOptions, kIDN, kIPR, kIV1, kIV2, kIV3
 
     os.environ["DEVICE"] = "cuda"
     os.environ["DEVICE_ID"] = "0"
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
-        yaml.safe_dump(deck(execution, strict, scalar, co4), f)
+        cfg = deck(execution, strict, scalar, co4)
+        if forcing:
+            cfg["forcing"].update(forcing)
+            if forcing.get("diffusion", {}).get("implicit_radial"):
+                cfg["dynamics"]["equation-of-state"] = {
+                    "type": "ideal-gas", "gammad": 1.4, "weight": 0.029}
+        yaml.safe_dump(cfg, f)
     try:
         opts = MeshOptions.from_yaml(f.name)
         opts.blocks_per_process(6)

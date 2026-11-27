@@ -217,9 +217,11 @@ void StageExecutor::build_schedule(int block) const {
   // the RK combine's w2 dt and FluxRegister::end_stage(w2 dt) read the
   // block's device dt (V3 D: a StepDt), not the host dt, and so does the
   // vertical implicit solve (C4: its kernels, its I/dt rows and its posts),
-  // so this segment keeps no dt in its key; a host read under capture
-  // throws (StepDt::value)
-  stage.reads_host_dt = false;
+  // so ordinary stages can replay with a new dt.
+  // The optional radial split uses a host dt for its zero-step branch and
+  // flux posts. Both halves must recapture if that dt changes.
+  const bool split = !block_at(block)->phydro->sources.splits().empty();
+  stage.reads_host_dt = split;
   // the thermo's tables and buffers, the implicit correction's scratch,
   // status and FP64-stage predicate (V3 C1), and the register monitor's
   // amounts on the register's device, before the save list (K.rst 3.5)
@@ -227,6 +229,10 @@ void StageExecutor::build_schedule(int block) const {
     auto* pmb = block_at(block);
     auto const& u = vars.at("hydro_u");
     pmb->prepare_thermo(u.device(), u.scalar_type(), u.sizes());
+    if (auto comp = pmb->phydro->prelax_comp) {
+      auto thermo = comp->pthermo_y;
+      kintera::tables_for(thermo->options, thermo->inv_mu);
+    }
     auto w = vars.find("hydro_w");
     if (w != vars.end() && w->second.defined())
       pmb->phydro->prepare_implicit(w->second);
@@ -261,7 +267,7 @@ void StageExecutor::build_schedule(int block) const {
   Op combine;
   combine.name = "combine";
   // end_stage(dt) and the RK combine's w2 dt read the device dt (V3 D)
-  combine.reads_host_dt = false;
+  combine.reads_host_dt = split;
   combine.run = [this, block](Variables& vars, StageContext const& ctx) {
     block_at(block)->stage_combine(vars, ctx.dt, ctx.stage);
   };
@@ -404,6 +410,19 @@ struct CutScope {
 };
 }  // namespace
 #endif
+
+void check_on_replay(std::function<void()> check) {
+#ifdef USE_CUDA
+  if (in_segment_capture()) {
+    // The preceding kernels have been recorded but have no results yet.
+    g_cut->close();
+    g_cut->steps->push_back({nullptr, std::move(check)});
+    g_cut->begin();
+    return;
+  }
+#endif
+  check();
+}
 
 void exchange_cut(std::function<void()> host,
                   std::function<void()> const& outside) {
@@ -661,12 +680,8 @@ std::vector<std::string> StageExecutor::config_reasons(int block) const {
     why.push_back(
         "an x1 split (pz > 1): its relays inside the stage are not cut into "
         "segments yet (P2, P3)");
-  // no forcing block at all captures as const-gravity does
-  if (hydro->coriolis() || hydro->diffusion() || hydro->bodyHeat() ||
-      hydro->botHeat() || hydro->topCool() || hydro->relaxBotComp() ||
-      hydro->relaxBotTemp() || hydro->relaxBotVelo() || hydro->topSpongeLyr() ||
-      hydro->botSpongeLyr() || hydro->plumeForcing())
-    why.push_back("forcing is not const-gravity alone");
+  if (hydro->plumeForcing())
+    why.push_back("plume-forcing does not support CUDA graph capture");
   // an outflow (radiating) ghost fill checks its inputs on the host (#314):
   // per op (the boundaries op, eager) unless conversion-order 4 also fills
   // the primitive ghosts with it inside the hydro step (hydro_forward.cpp)
@@ -836,6 +851,7 @@ void StageExecutor::run_segments(int block, Variables& vars, double dt,
 #ifdef USE_CUDA
   auto* pmb = block_at(block);
   auto const& segs = schedule(block).segments();
+  if (auto diffusion = pmb->phydro->pdiffusion) diffusion->check_profiles();
   pmb->_state.adopt(vars);  // a rebound tensor bumps the generation
   pmb->register_flux_storage();
   for (int i = 0; i < static_cast<int>(segs.size()); ++i) {
@@ -1004,8 +1020,9 @@ void StageExecutor::capture(int block, int segment, Variables& vars, double dt,
         multi ? cudaStreamCaptureModeThreadLocal : cudaStreamCaptureModeGlobal;
     cut.begin();
     try {
-      // a lone block's exchanges reach no other block: no cut context
-      CutScope scope(multi ? &cut : nullptr);
+      // Radial temperature checks also cut the graph at a single block.
+      CutScope scope(multi || !pmb->phydro->sources.splits().empty() ? &cut
+                                                                     : nullptr);
       run_eager(block, vars, wdt, stage, segment);
     } catch (...) {
       abandon_capture(cut.open);

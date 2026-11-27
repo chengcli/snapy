@@ -111,6 +111,7 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
   ConstGravity pgrav = nullptr;
   SourceRegistry sources;
   Diffusion pdiffusion = nullptr;
+  RelaxBotComp prelax_comp = nullptr;
 
   //! Constructor to initialize the layers
   HydroImpl() = default;

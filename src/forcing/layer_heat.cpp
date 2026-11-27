@@ -72,16 +72,16 @@ void LayerHeatImpl::add(torch::Tensor du, StageState const& s) {
     auto overlap =
         (xf.slice(0, 1).clamp_max(hi) - xf.slice(0, 0, -1).clamp_min(lo))
             .clamp_min(0.);
-    du[IPR].slice(-1, il, iu + 1) += s.dt.value() * options->flux() /
-                                     options->thickness() * overlap /
-                                     pcoord->dx1f.slice(0, il, iu + 1);
+    du[IPR].slice(-1, il, iu + 1) +=
+        (s.dt.scaled(options->flux()) / options->thickness()) * overlap /
+        pcoord->dx1f.slice(0, il, iu + 1);
     return;
   }
   int i = top_ ? pcoord->iu() : pcoord->il();
   auto dz = pcoord->dx1f[i];
   int i0 = top_ ? i + 1 - options->depth() : i;
   du[IPR].narrow(-1, i0, options->depth()) +=
-      s.dt.value() * options->flux() / (dz * options->depth());
+      s.dt.scaled(options->flux()) * (dz * options->depth()).reciprocal();
 }
 
 }  // namespace snap

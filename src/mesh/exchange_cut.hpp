@@ -28,6 +28,10 @@ namespace snap {
 void exchange_cut(std::function<void()> host,
                   std::function<void()> const& outside = {});
 
+//! A host check of a device result: check immediately in eager execution,
+//! or between graphs at replay, once the producing kernels have run.
+void check_on_replay(std::function<void()> check);
+
 //! true on a thread capturing a segment, outside the host step of a cut: a
 //! cross-block exchange there must go through exchange_cut (a board or
 //! communicator call that does not throws, naming itself)
