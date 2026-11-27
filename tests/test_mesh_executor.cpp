@@ -183,6 +183,17 @@ TEST_P(DeviceTest,
       });
     }
   }
+  if (device.is_cuda()) {
+    // A host field on one block must fail before issuing a host/device copy.
+    vars[0]["field"] = vars[0]["field"].cpu();
+    try {
+      mesh->exchange(vars, sync);
+      FAIL() << "expected a device mismatch";
+    } catch (c10::Error const& error) {
+      EXPECT_NE(std::string(error.what()).find("both halo buffers on cuda"),
+                std::string::npos);
+    }
+  }
 }
 
 // Opt-in A/B benchmark. Run this same fixture against both revisions with
