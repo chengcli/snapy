@@ -25,12 +25,7 @@ void bind_layout(py::module& m) {
                                                                "LayoutOptions");
 
   pyLayoutOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::LayoutOptions& a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("LayoutOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_x)
       .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_y)
       .ADD_OPTION(bool, snap::LayoutOptionsImpl, periodic_z)
@@ -69,12 +64,10 @@ void bind_layout(py::module& m) {
   py::class_<snap::LayoutImpl, snap::Layout>(m, "Layout")
       .def(py::init<snap::LayoutOptions>(), py::arg("options"))
       .def_readonly("options", &snap::LayoutImpl::options)
-      .def("__repr__",
-           [](const snap::LayoutImpl& self) {
-             std::stringstream ss;
-             self.options->report(ss);
-             return fmt::format("Layout(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::LayoutImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::LayoutImpl>,
+           py::prepend())
       .def("get_procs", &snap::LayoutImpl::get_procs)
       .def("rank_of", &snap::LayoutImpl::rank_of)
       .def("loc_of", &snap::LayoutImpl::loc_of)

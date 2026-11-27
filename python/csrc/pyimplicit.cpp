@@ -23,12 +23,7 @@ void bind_implicit(py::module &m) {
                   py::overload_cast<std::string const &, bool>(
                       &snap::ImplicitOptionsImpl::from_yaml),
                   py::arg("filename"), py::arg("verbose") = false)
-      .def("__repr__",
-           [](const snap::ImplicitOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("ImplicitOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .def("type", &snap::ImplicitOptionsImpl::type)
       .ADD_OPTION(int, snap::ImplicitOptionsImpl, scheme)
       .ADD_OPTION(std::string, snap::ImplicitOptionsImpl, precision)

@@ -21,12 +21,7 @@ void bind_hydro(py::module& m) {
   pyHydroOptions.def(py::init<>())
       .def_static("from_yaml", &snap::HydroOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
-      .def("__repr__",
-           [](const snap::HydroOptions& a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("HydroOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
   // the dynamics/* rows of src/options/hydro.yaml
 #include <snap_options/hydro_pybind.inc>
       .ADD_OPTION(snap::ConstGravityOptions, snap::HydroOptionsImpl, grav)

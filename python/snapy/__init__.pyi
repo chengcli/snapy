@@ -25,6 +25,8 @@ kOuterX2: int   # Outer boundary in the X2 direction (north)
 kInnerX3: int   # Inner boundary in the X3 direction (west)
 kOuterX3: int   # Outer boundary in the X3 direction (east)
 
+def report_input(filename: str, section: str) -> str: ...
+
 # Import all submodules
 from .boundary import *
 from .coordinate import *

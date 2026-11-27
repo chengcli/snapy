@@ -2,7 +2,6 @@
 module: bot_sponge_lyr
 struct: BotSpongeLyrOptionsImpl
 yaml_node: forcing/bot-sponge-lyr
-report_title: "-- bottom sponge layer options --"
 options:
   - {name: tau, key: tau, type: double, default: 0., doc: "Damping time [s]."}
   - {name: width, key: width, type: double, default: 0., doc: "Layer width in x1 length units."}

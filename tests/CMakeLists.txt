@@ -82,6 +82,7 @@ setup_test(test_yaml_keys)
 
 # gate G-3 (lane O): the option tables against the pin's members, defaults and
 # parsers, on every in-tree deck; and the checked-in stub blocks against them
+setup_test(test_input_report)
 setup_test(test_options_table)
 target_compile_definitions(test_options_table.${buildl}
                            PRIVATE SNAPY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -423,6 +424,7 @@ snapy_add_python_test(test_implicit_face_work_operator TIMEOUT 300 LABELS "pytho
 snapy_add_python_test(test_implicit_stratified_solid TIMEOUT 300 LABELS "python;hydro;implicit;gravity")
 snapy_add_python_test(test_const_gravity_options TIMEOUT 60 LABELS "python;hydro;gravity")
 snapy_add_python_test(test_gravity_work_radial_exact TIMEOUT 300 LABELS "python;hydro;gravity")
+snapy_add_python_test(test_python_option_print LABELS "python;options")
 snapy_add_python_test(test_implicit_options_type TIMEOUT 60 LABELS "python;implicit")
 snapy_add_python_test(test_shear_cfl TIMEOUT 60 LABELS "python;hydro;implicit")
 snapy_add_python_test(test_check_redo_floor TIMEOUT 60 LABELS "python;mesh;redo")

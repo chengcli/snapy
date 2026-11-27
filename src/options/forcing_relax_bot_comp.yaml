@@ -2,7 +2,6 @@
 module: relax_bot_comp
 struct: RelaxBotCompOptionsImpl
 yaml_node: forcing/relax-bot-comp
-report_title: "-- relax bottom composition options --"
 options:
   - {name: tau, key: tau, type: double, default: 0., doc: "Relaxation time [s]."}
   - {name: species, key: species, type: "list[string]", default: [], read_default: {cpp: "std::vector<std::string>{}"}, doc: "Species relaxed (not the dry one)."}

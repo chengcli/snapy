@@ -31,12 +31,6 @@ struct MeshOptionsImpl {
   static std::shared_ptr<MeshOptionsImpl> from_yaml(std::string input_file,
                                                     bool verbose = false);
 
-  void report(std::ostream& os) const {
-    os << "-- mesh options --\n";
-    if (block() && block()->layout())
-      os << "* blocks_per_process = " << blocks_per_process() << "\n";
-  }
-
   std::string device_str() const {
     return block() ? block()->device_str() : "";
   }

@@ -8,6 +8,7 @@
 // snap
 #include <snap/forcing/forcing.hpp>
 #include <snap/input/check_keys.hpp>
+#include <snap/input/report.hpp>
 #include <snap/utils/log.hpp>
 
 #include "hydro.hpp"
@@ -22,31 +23,27 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
 
   // ------------ equation of state ------------ //
   op->eos() = EquationOfStateOptionsImpl::from_yaml(filename, verbose);
-  if (verbose) op->eos()->report(SINFO(HydroOptions));
 
   // ------------- reconstruction ------------ //
   op->recon1() = ReconstructOptionsImpl::from_yaml(filename, "vertical");
-  if (verbose) op->recon1()->report(SINFO(HydroOptions : vertical));
 
   op->recon23() = ReconstructOptionsImpl::from_yaml(filename, "horizontal");
-  if (verbose) op->recon23()->report(SINFO(HydroOptions : horizontal));
 
   // ------------ riemann solver ------------ //
   op->riemann() = RiemannSolverOptionsImpl::from_yaml(filename, "dynamics");
-  if (verbose) op->riemann()->report(SINFO(HydroOptions));
 
   // ---------- implicit correction --------- //
   op->icorr() = ImplicitOptionsImpl::from_yaml(filename);
-  if (op->icorr() && verbose) op->icorr()->report(SINFO(HydroOptions));
 
   // ------------ sedimentation ------------- //
   op->sed() = SedHydroOptionsImpl::from_yaml(filename);
-  if (op->sed() && verbose) op->sed()->report(SINFO(HydroOptions));
 
   // -------------- others ------------------ //
   auto config = YAML::LoadFile(filename);
   // dynamics/* rows and the SNAP_ANOMALY override (src/options/hydro.yaml)
   read_hydro_rows(*op, config["dynamics"], "dynamics", verbose);
+  if (verbose)
+    report_input(SINFO(HydroOptions), "dynamics", config["dynamics"]);
   if (verbose && op->anomaly()) {
     SINFO(HydroOptions) << "anomaly storage of hydro_u {IDN, IPR} is on\n";
   }
@@ -73,44 +70,24 @@ HydroOptions HydroOptionsImpl::from_yaml(std::string const& filename,
     if (op->disable_flux_x1()) op->grav()->grav1(0.);
     if (op->disable_flux_x2()) op->grav()->grav2(0.);
     if (op->disable_flux_x3()) op->grav()->grav3(0.);
-    op->grav()->report(SINFO(HydroOptions));
   }
 
   op->coriolis() = CoriolisOptionsImpl::from_yaml(forcing);
-  if (op->coriolis()) op->coriolis()->report(SINFO(HydroOptions));
-
   op->diffusion() = DiffusionOptionsImpl::from_yaml(forcing);
-  if (op->diffusion()) op->diffusion()->report(SINFO(HydroOptions));
-
   op->bodyHeat() = BodyHeatOptionsImpl::from_yaml(forcing);
-  if (op->bodyHeat()) op->bodyHeat()->report(SINFO(HydroOptions));
-
   op->topCool() = TopCoolOptionsImpl::from_yaml(forcing);
-  if (op->topCool()) op->topCool()->report(SINFO(HydroOptions));
-
   op->botHeat() = BotHeatOptionsImpl::from_yaml(forcing);
-  if (op->botHeat()) op->botHeat()->report(SINFO(HydroOptions));
-
   op->relaxBotComp() = RelaxBotCompOptionsImpl::from_yaml(forcing);
-  if (op->relaxBotComp()) op->relaxBotComp()->report(SINFO(HydroOptions));
-
   op->relaxBotTemp() = RelaxBotTempOptionsImpl::from_yaml(forcing);
-  if (op->relaxBotTemp()) op->relaxBotTemp()->report(SINFO(HydroOptions));
-
   op->relaxBotVelo() = RelaxBotVeloOptionsImpl::from_yaml(forcing);
-  if (op->relaxBotVelo()) op->relaxBotVelo()->report(SINFO(HydroOptions));
-
   op->topSpongeLyr() = TopSpongeLyrOptionsImpl::from_yaml(forcing);
-  if (op->topSpongeLyr()) op->topSpongeLyr()->report(SINFO(HydroOptions));
-
   op->botSpongeLyr() = BotSpongeLyrOptionsImpl::from_yaml(forcing);
-  if (op->botSpongeLyr()) op->botSpongeLyr()->report(SINFO(HydroOptions));
 
   if (op->eos()->type() == "plume-eos") {
     op->plumeForcing() = PlumeForcingOptionsImpl::from_yaml(forcing);
-    if (op->plumeForcing()) op->plumeForcing()->report(SINFO(HydroOptions));
   }
 
+  report_input(SINFO(HydroOptions), "forcing", forcing);
   return op;
 }
 

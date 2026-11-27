@@ -17,13 +17,7 @@ void bind_output(py::module &m) {
       py::class_<snap::OutputOptionsImpl, snap::OutputOptions>(m,
                                                                "OutputOptions");
 
-  pyOutputOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::OutputOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("OutputOptions{}", ss.str());
-           })
+  pyOutputOptions.def(py::init<>()).def("__repr__", &snap_python::options_repr)
   // the rows of src/options/output.yaml
 #include <snap_options/output_pybind.inc>
       ;  // NOLINT(whitespace/semicolon)

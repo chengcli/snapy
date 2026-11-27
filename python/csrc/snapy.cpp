@@ -6,8 +6,11 @@
 
 // snap
 #include <snap/snap.h>
+#include <yaml-cpp/yaml.h>
 
+#include <snap/input/report.hpp>
 #include <snap/output/restart.hpp>
+#include <sstream>
 
 // python
 #include "pyoptions.hpp"
@@ -42,6 +45,17 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.attr("kPrimitive") = (int)snap::kPrimitive;
   m.attr("kConserved") = (int)snap::kConserved;
   m.attr("kScalar") = (int)snap::kScalar;
+
+  m.def(
+      "report_input",
+      [](std::string const& filename, std::string const& section) {
+        YAML::Node const deck = YAML::LoadFile(filename);
+        std::ostringstream text;
+        snap::report_input(text, section, deck[section]);
+        return text.str();
+      },
+      py::arg("filename"), py::arg("section"),
+      "Render a simulation input section with its schema defaults.");
 
   m.def("load_restart", &snap::load_restart);
 

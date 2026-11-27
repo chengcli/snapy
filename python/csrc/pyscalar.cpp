@@ -22,12 +22,7 @@ void bind_scalar(py::module& m) {
                                                                "ScalarOptions");
 
   pyScalarOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::ScalarOptions& a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("ScalarOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(bool, snap::ScalarOptionsImpl, verbose)
       .ADD_OPTION(int, snap::ScalarOptionsImpl, nvar)
       .ADD_OPTION(std::vector<std::string>, snap::ScalarOptionsImpl, names)

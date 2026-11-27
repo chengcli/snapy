@@ -35,16 +35,6 @@ struct ImplicitOptionsImpl {
   static std::shared_ptr<ImplicitOptionsImpl> from_yaml(const YAML::Node& node);
 
   ImplicitOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- implicit hydro options --\n";
-    os << "* type = " << type() << "\n"
-       << "* precision = " << precision() << "\n"
-       << "* fallback_fp64 = " << fallback_fp64() << "\n"
-       << "* scheme = " << scheme() << "\n"
-       << "* advection_cfl = " << advection_cfl() << "\n"
-       << "* shear_cfl = " << shear_cfl() << "\n";
-  }
-
   //! the VIC matrix: scheme 9 (bit 3 set) is the full one
   VicMatrix matrix() const {
     return (scheme() >> 3) & 1 ? VicMatrix::full : VicMatrix::partial;

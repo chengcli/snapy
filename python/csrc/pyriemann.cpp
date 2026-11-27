@@ -15,12 +15,7 @@ void bind_riemann(py::module &m) {
           m, "RiemannSolverOptions");
 
   pyRiemannSolverOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::RiemannSolverOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("RiemannSolverOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(std::string, snap::RiemannSolverOptionsImpl, type);
 
   ADD_SNAP_MODULE(UpwindSolver, RiemannSolverOptions)

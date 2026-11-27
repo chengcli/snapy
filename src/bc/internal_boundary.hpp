@@ -38,14 +38,6 @@ struct InternalBoundaryOptionsImpl {
   std::shared_ptr<InternalBoundaryOptionsImpl> clone() const {
     return std::make_shared<InternalBoundaryOptionsImpl>(*this);
   }
-  void report(std::ostream &os) const {
-    os << "-- internal boundary options --\n";
-    os << "* MAXRUN = " << MAXRUN << "\n"
-       << "* max_iter = " << max_iter() << "\n"
-       << "* solid_density = " << solid_density() << "\n"
-       << "* solid_pressure = " << solid_pressure() << "\n";
-  }
-
 #include <snap_options/internal_boundary_members.inc>
 };
 using InternalBoundaryOptions = std::shared_ptr<InternalBoundaryOptionsImpl>;

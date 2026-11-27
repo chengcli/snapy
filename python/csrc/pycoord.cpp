@@ -19,12 +19,7 @@ void bind_coord(py::module &m) {
           m, "CoordinateOptions");
 
   pyCoordinateOptions.def(py::init<>(&snap::CoordinateOptionsImpl::create))
-      .def("__repr__",
-           [](const snap::CoordinateOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("CoordinateOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(double, snap::CoordinateOptionsImpl, x1min)
       .ADD_OPTION(double, snap::CoordinateOptionsImpl, x1max)
       .ADD_OPTION(double, snap::CoordinateOptionsImpl, x2min)
@@ -47,12 +42,10 @@ void bind_coord(py::module &m) {
   pyCoordinate
       .def(py::init<snap::CoordinateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("hydro") = nullptr)
-      .def("__repr__",
-           [](const snap::CoordinateImpl &self) {
-             std::stringstream ss;
-             self.options->report(ss);
-             return fmt::format("Coordinate(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::CoordinateImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::CoordinateImpl>,
+           py::prepend())
       .def("il", &snap::CoordinateImpl::il)
       .def("iu", &snap::CoordinateImpl::iu)
       .def("jl", &snap::CoordinateImpl::jl)

@@ -27,23 +27,6 @@ struct EquationOfStateOptionsImpl {
       std::string const& filename, bool verbose = false);
 
   EquationOfStateOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- equation of state options --\n";
-    os << "* type = " << type() << "\n"
-       << "* gammad = " << gammad() << "\n"
-       << "* weight = " << weight() << "\n"
-       << "* density_floor = " << density_floor() << "\n"
-       << "* pressure_floor = " << pressure_floor() << "\n"
-       << "* temperature_floor = " << temperature_floor() << "\n"
-       << "* verbose = " << (verbose() ? "true" : "false") << "\n"
-       << "* limiter = " << (limiter() ? "true" : "false") << "\n"
-       << "* eos_file = " << eos_file() << "\n";
-    if (thermo()) {
-      os << "-- thermo options --\n";
-      thermo()->report(os);
-    }
-  }
-
   ADD_ARG(std::string, type) = "moist-mixture";
   ADD_ARG(double, gammad) = 1.4;     // ratio of specific heats (cp/cv)
   ADD_ARG(double, weight) = 29.e-3;  // mean molecular weight in kg/mol

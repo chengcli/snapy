@@ -27,12 +27,6 @@ enum BoundaryFace {
 };
 
 struct BoundaryFuncOptions {
-  void report(std::ostream& os) const {
-    os << "-- boundary func options --\n";
-    os << "* type: " << type() << "\n"
-       << "* nghost: " << nghost() << "\n";
-  }
-
   // Non-owning EOS/coordinate context and independent initial backgrounds.
   EquationOfStateImpl* eos = nullptr;
   CoordinateImpl const* coord = nullptr;

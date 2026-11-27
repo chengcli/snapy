@@ -34,28 +34,6 @@ struct ScalarOptionsImpl {
       std::string const& filename, bool verbose = false);
 
   ScalarOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- scalar options --\n";
-    os << "* verbose = " << (verbose() ? "true" : "false") << "\n"
-       << "* nvar = " << nvar() << "\n"
-       << "* names = " << fmt::format("{}", names()) << "\n"
-       << "* upper-bound = " << upper_bound() << "\n";
-    if (recon()) {
-      recon()->report(os);
-    }
-    if (riemann()) {
-      riemann()->report(os);
-    }
-    if (thermo()) {
-      os << "-- thermo options --\n";
-      thermo()->report(os);
-    }
-    if (kinetics()) {
-      os << "-- kinetics options --\n";
-      kinetics()->report(os);
-    }
-  }
-
   ADD_ARG(bool, verbose) = false;
   ADD_ARG(int, nvar) = 0;
   ADD_ARG(std::vector<std::string>, names);

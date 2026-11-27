@@ -270,26 +270,6 @@ bool active(Coordinate const& coord, int idir) {
 
 }  // namespace
 
-void DiffusionOptionsImpl::report(std::ostream& os) const {
-  auto show = [&os](char const* name, torch::Tensor const& cells,
-                    torch::Tensor const& table) {
-    os << "* " << name << " = ";
-    if (cells.defined()) {
-      os << cells.numel() << " cells\n";
-    } else if (table.defined()) {
-      os << "table of " << table.size(-1) << " points in x1\n";
-    } else {
-      os << "none (uniform)\n";
-    }
-  };
-  os << "-- diffusion options --\n";
-  os << "* nu_iso = " << nu_iso() << "\n"
-     << "* kappa_iso = " << kappa_iso() << "\n"
-     << "* dynamic = " << (dynamic() ? "true" : "false") << "\n";
-  show("nu_scale_x1", nu_scale_x1(), nu_scale_x1_table());
-  show("kappa_scale_x1", kappa_scale_x1(), kappa_scale_x1_table());
-}
-
 DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
   if (!forcing["diffusion"]) return nullptr;
 

@@ -57,6 +57,7 @@ file(GLOB src_files
 add_library(${namel}_${buildl}
     SHARED
     ${src_files}
+    ${CMAKE_BINARY_DIR}/snap_options/input_schemas.cpp
     )
 
 set_target_properties(${namel}_${buildl}

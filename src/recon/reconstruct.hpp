@@ -33,11 +33,6 @@ struct InterpOptionsImpl {
 
   InterpOptionsImpl() = default;
   explicit InterpOptionsImpl(std::string name) { type(name); }
-  void report(std::ostream& os) const {
-    os << "* type = " << type() << "\n"
-       << "* scale = " << (scale() ? "true" : "false") << "\n";
-  }
-
   ADD_ARG(std::string, type) = "dc";
   ADD_ARG(bool, scale) = false;
 };
@@ -118,12 +113,6 @@ struct ReconstructOptionsImpl {
       std::vector<std::string> const& keys = {"shock", "type", "scale"});
 
   ReconstructOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- reconstruction options --\n";
-    interp()->report(os);
-    os << "* shock = " << (shock() ? "true" : "false") << "\n";
-  }
-
   //! configure options; false as in the YAML reader (V3 C10)
   ADD_ARG(bool, shock) = false;
 

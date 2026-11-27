@@ -2,7 +2,6 @@
 module: relax_bot_temp
 struct: RelaxBotTempOptionsImpl
 yaml_node: forcing/relax-bot-temp
-report_title: "-- relax bottom temperature options --"
 options:
   - {name: tau, key: tau, type: double, default: 0., doc: "Relaxation time [s]."}
   - {name: btemp, key: btemp, type: double, default: 300., doc: "Bottom temperature [K]; required."}

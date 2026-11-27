@@ -22,7 +22,6 @@ void CubedLayoutImpl::_initialize() {
 }
 
 void CubedLayoutImpl::pretty_print(std::ostream &os) const {
-  options->report(os);
   os << " Rank | (rx,ry,rz)\n";
   os << "-------------------\n";
   for (int r = 0; r < options->nblocks(); ++r) {

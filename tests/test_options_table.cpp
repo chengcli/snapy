@@ -1,5 +1,5 @@
-// Gate G-3 (lane O, O4): src/options/*.yaml give 730b3500's members, defaults
-// and report text; lane S's tables read what its parsers read on every deck.
+// Gate G-3 (lane O, O4): src/options/*.yaml give 730b3500's members and
+// defaults; lane S's tables read what its parsers read on every deck.
 
 // C/C++
 #include <algorithm>
@@ -95,26 +95,6 @@ TEST(options_table, pin_defaults) {
   EXPECT_EQ(h.conserve_axial_momentum(), "off");
   EXPECT_EQ(h.grav(), nullptr);
   EXPECT_EQ(h.eos(), nullptr);
-}
-
-// The pin's report text for the defaults (730b3500), less F13's two rows.
-TEST(options_table, pin_report) {
-  std::stringstream so;
-  OutputOptionsImpl().report(so);
-  EXPECT_EQ(so.str(),
-            "-- output options --\n* fid = 0\n* dt = 0\n* output_sumx1 = 0\n"
-            "* output_sumx2 = 0\n* output_sumx3 = 0\n"
-            "* include_ghost_zones = 0\n"
-            "* double_precision = 0\n* x1_slice = []\n* x2_slice = []\n"
-            "* x3_slice = []\n* file_type = \n"
-            "* variables = []\n* combine = 1\n");
-  std::stringstream sh;
-  HydroOptionsImpl().report(sh);
-  EXPECT_EQ(sh.str(),
-            "-- hydro options --\n* verbose = 0\n* precision = float64\n"
-            "* disable_flux_x1 = 0\n* disable_flux_x2 = 0\n"
-            "* disable_flux_x3 = 0\n* flux_covariance = 1\n"
-            "* x1_mass_covariance = 0\n* conserve_axial_momentum = off\n");
 }
 
 // SNAP_ANOMALY keeps its words and its refusal.

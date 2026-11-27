@@ -1,12 +1,11 @@
 # Options of one entry of the deck's `outputs:` list (OutputOptionsImpl,
 # src/output/output_type.hpp). tools/gen_options.py generates the members,
-# report(), the deck reader, the Python bindings and the stub block of
+# the deck reader, the Python bindings and the stub block of
 # python/snapy/output.pyi from this table. Columns: see
 # tools/gen_options.py.
 module: output
 struct: OutputOptionsImpl
 yaml_node: outputs[]
-report_title: "-- output options --"
 pyi: {file: python/snapy/output.pyi, cls: OutputOptions}
 doc: >
   One output stream. The deck lists them under `outputs:`; each entry is

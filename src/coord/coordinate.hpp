@@ -42,23 +42,6 @@ struct CoordinateOptionsImpl {
     return std::make_shared<CoordinateOptionsImpl>(*this);
   }
 
-  void report(std::ostream& os) const {
-    os << "-- coordinate options --\n";
-    os << "* type = " << type() << "\n"
-       << "* x1min = " << x1min() << "\n"
-       << "* x2min = " << x2min() << "\n"
-       << "* x3min = " << x3min() << "\n"
-       << "* x1max = " << x1max() << "\n"
-       << "* x2max = " << x2max() << "\n"
-       << "* x3max = " << x3max() << "\n"
-       << "* nx1 = " << nx1() << "\n"
-       << "* nx2 = " << nx2() << "\n"
-       << "* nx3 = " << nx3() << "\n"
-       << "* nghost = " << nghost() << "\n";
-    if (stretched_x1())
-      os << "* x1f = " << x1f_interior().size() << " stretched faces\n";
-  }
-
   int nc1() const { return nx1() > 1 ? nx1() + 2 * nghost() : 1; }
   int nc2() const { return nx2() > 1 ? nx2() + 2 * nghost() : 1; }
   int nc3() const { return nx3() > 1 ? nx3() + 2 * nghost() : 1; }

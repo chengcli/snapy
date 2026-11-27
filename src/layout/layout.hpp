@@ -64,28 +64,6 @@ struct LayoutOptionsImpl {
 
   LayoutOptionsImpl();
 
-  void report(std::ostream& os) const {
-    os << "-- layout options --\n";
-    os << "* type = " << type() << "\n"
-       << "* px = " << px() << "\n"
-       << "* py = " << py() << "\n"
-       << "* pz = " << pz() << "\n"
-       << "* periodic_x = " << (periodic_x() ? "true" : "false") << "\n"
-       << "* periodic_y = " << (periodic_y() ? "true" : "false") << "\n"
-       << "* periodic_z = " << (periodic_z() ? "true" : "false") << "\n"
-       << "* backend = " << backend() << "\n"
-       << "* device = " << device() << "\n"
-       << "* master_addr = " << master_addr() << "\n"
-       << "* process_rank = " << process_rank() << "\n"
-       << "* rank = " << rank() << "\n"
-       << "* local_rank = " << local_rank() << "\n"
-       << "* process_world_size = " << process_world_size() << "\n"
-       << "* world_size = " << world_size() << "\n"
-       << "* blocks_per_process = " << blocks_per_process() << "\n"
-       << "* master_port = " << master_port() << "\n"
-       << "* verbose = " << (verbose() ? "true" : "false") << "\n";
-  }
-
   int owner_process_rank(int block_rank) const {
     return block_rank / std::max(1, blocks_per_process());
   }

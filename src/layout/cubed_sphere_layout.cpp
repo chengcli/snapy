@@ -448,7 +448,6 @@ void CubedSphereLayoutImpl::_initialize() {
 }
 
 void CubedSphereLayoutImpl::pretty_print(std::ostream& os) const {
-  options->report(os);
   for (int f = 0; f < 6; ++f) {
     os << " Rank | (rx,ry;f)\n";
     os << "----------------\n";

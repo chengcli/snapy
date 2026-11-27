@@ -24,12 +24,7 @@ void bind_mesh(py::module& m) {
       py::class_<snap::MeshOptionsImpl, snap::MeshOptions>(m, "MeshOptions");
 
   pyMeshBlockOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::MeshBlockOptions& a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("MeshBlockOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .def_static("from_yaml", &snap::MeshBlockOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verbose") = false)
       .def("device_str", &snap::MeshBlockOptionsImpl::device_str)

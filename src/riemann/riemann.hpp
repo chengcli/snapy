@@ -51,12 +51,6 @@ struct RiemannSolverOptionsImpl {
       YAML::Node const& node, std::string const& path = "riemann-solver");
 
   RiemannSolverOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- riemann solver options --\n";
-    os << "* type = " << type() << "\n"
-       << "* dir = " << dir() << "\n";
-  }
-
   // type of Riemann solver
   ADD_ARG(std::string, type) = "hllc";
 

@@ -21,6 +21,7 @@
 
 // snap
 #include <snap/input/check_keys.hpp>
+#include <snap/input/report.hpp>
 #include <snap/mesh/exchange_cut.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <snap/utils/log.hpp>
@@ -299,7 +300,7 @@ LayoutOptions LayoutOptionsImpl::from_yaml(std::string const& filename,
   if (!node) return op;
   read_layout_rows(*op, node, "distribute", verbose);
 
-  if (op->verbose()) op->report(SINFO(LayoutOptions));
+  if (op->verbose()) report_input(SINFO(LayoutOptions), "distribute", node);
 
   return op;
 }

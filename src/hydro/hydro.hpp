@@ -42,7 +42,7 @@ struct HydroOptionsImpl {
 
   HydroOptionsImpl() = default;
   std::shared_ptr<HydroOptionsImpl> clone() const;
-  // the dynamics/* option rows and report(), generated from
+  // the dynamics/* option rows generated from
   // src/options/hydro.yaml by tools/gen_options.py
 #include <snap_options/hydro_members.inc>
 

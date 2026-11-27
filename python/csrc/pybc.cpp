@@ -28,12 +28,7 @@ void bind_bc(py::module &m) {
       py::class_<snap::BoundaryFuncOptions>(m, "BoundaryFuncOptions");
 
   pyBoundaryFunctionOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::BoundaryFuncOptions &a) {
-             std::stringstream ss;
-             a.report(ss);
-             return fmt::format("BoundaryFuncOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, type)
       .ADD_OPTION(int, snap::BoundaryFuncOptions, nghost);
 
@@ -42,12 +37,7 @@ void bind_bc(py::module &m) {
                  snap::InternalBoundaryOptions>(m, "InternalBoundaryOptions");
 
   pyInternalBoundaryOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::InternalBoundaryOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("InternalBoundaryOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
   // the rows of src/options/internal_boundary.yaml
 #include <snap_options/internal_boundary_pybind.inc>
       ;  // NOLINT(whitespace/semicolon)

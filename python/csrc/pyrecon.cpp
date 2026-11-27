@@ -17,12 +17,7 @@ void bind_recon(py::module &m) {
 
   pyInterpOptions.def(py::init<>())
       .def(py::init<std::string>())
-      .def("__repr__",
-           [](const snap::InterpOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("InterpOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(std::string, snap::InterpOptionsImpl, type)
       .ADD_OPTION(bool, snap::InterpOptionsImpl, scale);
 
@@ -31,12 +26,7 @@ void bind_recon(py::module &m) {
           m, "ReconstructOptions");
 
   pyReconstructOptions.def(py::init<>())
-      .def("__repr__",
-           [](const snap::ReconstructOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("ReconstructOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(bool, snap::ReconstructOptionsImpl, shock)
       .ADD_OPTION(snap::InterpOptions, snap::ReconstructOptionsImpl, interp);
 

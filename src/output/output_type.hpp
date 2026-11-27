@@ -43,7 +43,7 @@ struct OutputOptionsImpl {
   //! them for every output, read from a deck or built in code.
   void check_domain(CoordinateOptionsImpl const &co) const;
 
-  // the option rows and report(), generated from src/options/output.yaml by
+  // the option rows generated from src/options/output.yaml by
   // tools/gen_options.py
 #include <snap_options/output_members.inc>
 };

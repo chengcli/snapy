@@ -24,7 +24,6 @@ void SlabLayoutImpl::_initialize() {
 }
 
 void SlabLayoutImpl::pretty_print(std::ostream& os) const {
-  options->report(os);
   os << " Rank | (rx,ry)\n";
   os << "----------------\n";
   for (int r = 0; r < options->nblocks(); ++r) {

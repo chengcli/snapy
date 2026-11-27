@@ -26,17 +26,6 @@ struct SedVelOptionsImpl {
   }
   static std::shared_ptr<SedVelOptionsImpl> from_yaml(YAML::Node const& node);
 
-  void report(std::ostream& os) const {
-    os << "-- sedimentation velocity options --\n";
-    os << "* particle_ids = " << fmt::format("{}", particle_ids()) << "\n"
-       << "* radius = " << fmt::format("{}", radius()) << "\n"
-       << "* density = " << fmt::format("{}", density()) << "\n"
-       << "* const_vsed = " << fmt::format("{}", const_vsed()) << "\n"
-       << "* a_diameter = " << a_diameter() << "\n"
-       << "* a_epsilon_LJ = " << a_epsilon_LJ() << "\n"
-       << "* a_mass = " << a_mass() << "\n"
-       << "* upper_limit = " << upper_limit() << "\n";
-  }
   //! \return species names
   std::vector<std::string> species() const;
 
@@ -69,12 +58,6 @@ struct SedHydroOptionsImpl {
   }
   static std::shared_ptr<SedHydroOptionsImpl> from_yaml(
       std::string const& filename);
-
-  void report(std::ostream& os) const {
-    os << "-- sedimentation hydro options --\n";
-    os << "* hydro_ids = " << fmt::format("{}", hydro_ids()) << "\n";
-    sedvel()->report(os);
-  }
 
   //! id of precipitating particles in hydro
   ADD_ARG(std::vector<int>, hydro_ids) = {};

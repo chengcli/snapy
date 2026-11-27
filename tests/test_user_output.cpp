@@ -507,17 +507,12 @@ TEST(OutputScheduleKey, precise_cadences_do_not_collide) {
   EXPECT_NE(near_one_a.second, near_one_b.second);
 }
 
-TEST(OutputPrecision, yaml_double_precision_defaults_off_and_is_reported) {
+TEST(OutputPrecision, yaml_double_precision_defaults_off_and_accepts_override) {
   auto off = OutputOptionsImpl::from_yaml(YAML::Load("{type: netcdf}"));
   EXPECT_FALSE(off->double_precision());
   auto on = OutputOptionsImpl::from_yaml(
       YAML::Load("{type: netcdf, double_precision: true}"));
   EXPECT_TRUE(on->double_precision());
-
-  std::stringstream ss;
-  on->report(ss);
-  EXPECT_NE(ss.str().find("* double_precision = 1"), std::string::npos)
-      << ss.str();
 }
 
 #ifdef NETCDFOUTPUT

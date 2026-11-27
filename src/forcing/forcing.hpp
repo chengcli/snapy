@@ -38,14 +38,6 @@ struct ConstGravityOptionsImpl {
     return std::make_shared<ConstGravityOptionsImpl>(*this);
   }
 
-  void report(std::ostream& os) const {
-    os << "-- constant gravity options --\n";
-    os << "* grav1 = " << grav1() << "\n"
-       << "* grav2 = " << grav2() << "\n"
-       << "* grav3 = " << grav3() << "\n"
-       << "* non-hydrostatic = " << non_hydrostatic() << "\n";
-  }
-
   ADD_ARG(double, non_hydrostatic) = 1.;
   ADD_ARG(double, grav1) = 0.;
   ADD_ARG(double, grav2) = 0.;
@@ -75,7 +67,7 @@ TORCH_MODULE(ConstGravity);
 
 //////// lane-A forcing options (src/options/forcing_*.yaml) ////////
 
-//! create() and clone(); members, report() and reader are generated
+//! create() and clone(); members and reader are generated
 template <class T>
 struct ForcingOptions {
   static std::shared_ptr<T> create() { return std::make_shared<T>(); }
@@ -118,7 +110,6 @@ struct CoriolisOptionsImpl : ForcingOptions<CoriolisOptionsImpl> {
 
 struct DiffusionOptionsImpl : ForcingOptions<DiffusionOptionsImpl> {
   static DiffusionOptions from_yaml(YAML::Node const& forcing);
-  void report(std::ostream& os) const;
 #include <snap_options/diffusion_members.inc>
   //! x1 profiles multiplying the kinematic nu_iso/kappa_iso, one value per x1
   //! cell centre of the block (ghosts included), set before it is built;

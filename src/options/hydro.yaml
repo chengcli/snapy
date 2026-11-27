@@ -7,9 +7,6 @@ struct: HydroOptionsImpl
 yaml_node: dynamics
 node_error: "HydroOptions: dynamics must be a map."
 args: bool verbose
-report_title: "-- hydro options --"
-report_order: [verbose, precision, disable_flux_x1, disable_flux_x2, disable_flux_x3,
-               flux_covariance, x1_mass_covariance, conserve_axial_momentum]
 pyi: {file: python/snapy/hydro.pyi, cls: HydroOptions}
 extra_keys:
   "": [equation-of-state, reconstruct, riemann-solver]

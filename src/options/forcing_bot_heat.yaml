@@ -2,7 +2,6 @@
 module: bot_heat
 struct: BotHeatOptionsImpl
 yaml_node: forcing/bot-heat
-report_title: "-- bottom heating options --"
 options:
   - {name: flux, key: flux, type: double, default: 0., doc: "Heat flux [W/m^2], >= 0."}
   - {name: depth, key: depth, type: int, default: 1, doc: "Layer depth in cells."}

@@ -48,12 +48,7 @@ void bind_eos(py::module &m) {
       .def(py::init<>(&snap::EquationOfStateOptionsImpl::create))
       .def_static("from_yaml", &snap::EquationOfStateOptionsImpl::from_yaml,
                   py::arg("filename"), py::arg("verobse") = false)
-      .def("__repr__",
-           [](const snap::EquationOfStateOptions &a) {
-             std::stringstream ss;
-             a->report(ss);
-             return fmt::format("EquationOfStateOptions(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::options_repr)
       .ADD_OPTION(std::string, snap::EquationOfStateOptionsImpl, type)
       .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, density_floor)
       .ADD_OPTION(double, snap::EquationOfStateOptionsImpl, pressure_floor)
@@ -73,12 +68,10 @@ void bind_eos(py::module &m) {
   pyEquationOfState.def(py::init<>())
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
-      .def("__repr__",
-           [](const snap::EquationOfStateImpl &a) {
-             std::stringstream ss;
-             a.options->report(ss);
-             return fmt::format("EquationOfState(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::EquationOfStateImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::EquationOfStateImpl>,
+           py::prepend())
       .def("nvar", &snap::EquationOfStateImpl::nvar)
       .def("species_weight", &snap::EquationOfStateImpl::species_weight,
            py::arg("n") = 0)
@@ -98,12 +91,10 @@ void bind_eos(py::module &m) {
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
       .def_readonly("options", &snap::IdealGasImpl::options)
-      .def("__repr__",
-           [](const snap::IdealGasImpl &a) {
-             std::stringstream ss;
-             a.options->report(ss);
-             return fmt::format("IdealGas(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::IdealGasImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::IdealGasImpl>,
+           py::prepend())
       .def("nvar", &snap::IdealGasImpl::nvar)
       .def("compute", &snap::IdealGasImpl::compute);
 
@@ -116,12 +107,10 @@ void bind_eos(py::module &m) {
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
       .def_readonly("options", &snap::IdealMoistImpl::options)
-      .def("__repr__",
-           [](const snap::IdealMoistImpl &a) {
-             std::stringstream ss;
-             a.options->report(ss);
-             return fmt::format("IdealMoist(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::IdealMoistImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::IdealMoistImpl>,
+           py::prepend())
       .def("nvar", &snap::IdealMoistImpl::nvar)
       .def("compute", &checked_compute, py::arg("ab"),
            py::arg("args") = std::vector<torch::Tensor>{});
@@ -134,12 +123,10 @@ void bind_eos(py::module &m) {
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
       .def_readonly("options", &snap::MoistMixtureImpl::options)
-      .def("__repr__",
-           [](const snap::MoistMixtureImpl &a) {
-             std::stringstream ss;
-             a.options->report(ss);
-             return fmt::format("MoistMixture(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::MoistMixtureImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::MoistMixtureImpl>,
+           py::prepend())
       .def("nvar", &snap::MoistMixtureImpl::nvar)
       .def("compute", &snap::MoistMixtureImpl::compute);
 
@@ -152,12 +139,10 @@ void bind_eos(py::module &m) {
       .def(py::init<snap::EquationOfStateOptions, torch::nn::Module *>(),
            py::arg("options"), py::arg("phydro") = nullptr)
       .def_readonly("options", &snap::ShallowWaterImpl::options)
-      .def("__repr__",
-           [](const snap::ShallowWaterImpl &a) {
-             std::stringstream ss;
-             a.options->report(ss);
-             return fmt::format("ShallowWater(\n{})", ss.str());
-           })
+      .def("__repr__", &snap_python::module_repr<snap::ShallowWaterImpl>,
+           py::prepend())
+      .def("__str__", &snap_python::module_repr<snap::ShallowWaterImpl>,
+           py::prepend())
       .def("nvar", &snap::ShallowWaterImpl::nvar)
       .def("compute", &snap::ShallowWaterImpl::compute);
 }

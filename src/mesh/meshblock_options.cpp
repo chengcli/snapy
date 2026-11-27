@@ -7,6 +7,7 @@
 
 // snap
 #include <snap/input/check_keys.hpp>
+#include <snap/input/report.hpp>
 #include <snap/output/output_type.hpp>
 #include <snap/utils/log.hpp>
 
@@ -31,20 +32,31 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
 
   // -------------- hydro --------------- //
   op->hydro() = HydroOptionsImpl::from_yaml(input_file, verbose);
-  if (verbose) op->hydro()->report(SINFO(MeshBlockOptions));
 
   // ------------- scalar --------------- //
   op->scalar() = ScalarOptionsImpl::from_yaml(input_file, verbose);
   if (op->scalar()->recon() == nullptr) {
     op->scalar()->recon() = op->hydro()->recon23();
   }
-  if (verbose) op->scalar()->report(SINFO(MeshBlockOptions));
 
   // ------------- integrator ------------ //
   op->intg() = harp::IntegratorOptionsImpl::from_yaml(input_file);
-  if (verbose) op->intg()->report(SINFO(MeshBlockOptions));
 
   auto config = YAML::LoadFile(input_file);
+  if (verbose) {
+    // Hydro reports dynamics and forcing for its standalone reader as well.
+    for (auto entry : config) {
+      auto section = entry.first.as<std::string>();
+      if (section == "dynamics" || section == "forcing") continue;
+      if (section == "distribute" && op->layout()->verbose()) continue;
+      report_input(SINFO(MeshBlockOptions), section, entry.second);
+    }
+    // These modules also exist when their entire input section is omitted.
+    for (auto section : {"geometry", "distribute"}) {
+      if (!config[section])
+        report_input(SINFO(MeshBlockOptions), section, config[section]);
+    }
+  }
   op->verbose() = config["verbose"].as<bool>(verbose);
 
   // ------------- execution ------------- //
@@ -69,22 +81,14 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
     for (auto const &out_cfg : config["outputs"]) {
       op->outputs().push_back(OutputOptionsImpl::from_yaml(out_cfg, fid++));
     }
-
-    if (verbose) {
-      for (auto const &out_op : op->outputs()) {
-        out_op->report(SINFO(MeshBlockOptions));
-      }
-    }
   }
 
   // ------------- coordinate ------------- //
   op->coord() = CoordinateOptionsImpl::from_yaml(input_file);
   // output slices are checked once, by MeshBlock (check_domain)
-  if (verbose) op->coord()->report(SINFO(MeshBlockOptions));
 
   // --------- internal boundary ---------- //
   op->ib() = InternalBoundaryOptionsImpl::from_yaml(input_file);
-  if (op->ib() && verbose) op->ib()->report(SINFO(MeshBlockOptions));
 
   // --------- external boundary ---------- //
   if (!config["boundary-condition"]) return op;
@@ -130,8 +134,6 @@ MeshBlockOptions MeshBlockOptionsImpl::from_yaml(std::string input_file,
       }
     }
   }
-
-  if (verbose) op->layout()->report(SINFO(MeshBlockOptions));
 
   return op;
 }

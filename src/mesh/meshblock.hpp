@@ -58,12 +58,6 @@ struct MeshBlockOptionsImpl {
                                                          bool verbose = false);
 
   MeshBlockOptionsImpl() = default;
-  void report(std::ostream& os) const {
-    os << "-- meshblock options --\n";
-    os << "* verbose = " << (verbose() ? "true" : "false") << "\n"
-       << "* basename = " << basename() << "\n";
-  }
-
   bool is_physical_boundary(int dy, int dx, int dz) const;
 
   //! true if the face carries a physical wall, i.e. a boundary function whose
