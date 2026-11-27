@@ -96,7 +96,10 @@ class MeshImpl::BlockWorkerPool {
     }
   }
 
-  ~BlockWorkerPool() { stop(); }
+  ~BlockWorkerPool() {
+    stop();
+    clear_local_exchange(mesh_id_);
+  }
 
   //! the pool's CUDA streams: one per block on a CUDA device, else none
   std::vector<void*> streams() const {

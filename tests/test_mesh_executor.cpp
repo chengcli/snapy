@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 // C/C++
+#include <chrono>
 #include <thread>
 #include <vector>
 
@@ -137,4 +138,90 @@ TEST_P(DeviceTest, bare_block_and_clone_own_their_executor) {
   EXPECT_NE(copy->executor(), mesh->executor())
       << "a clone of a Mesh's block must not run through the Mesh's executor";
   EXPECT_EQ(copy->executor()->block_at(0), copy.get());
+}
+
+TEST_P(DeviceTest,
+       repeated_local_exchange_reads_current_buffers_after_failure) {
+  auto opts = MeshOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
+  opts->blocks_per_process(4);
+  if (device.is_cuda()) opts->block()->layout()->device("cuda").device_id(0);
+  auto mesh = Mesh(opts);
+  mesh->to(device, dtype);
+  MeshVariables vars(4);
+  auto sync = SyncOptions().type(kScalar);
+  auto fill = [&](int round, bool mismatch) {
+    for (int i = 0; i < 4; ++i) {
+      auto block = mesh->blocks[i];
+      auto coord = block->pcoord->options;
+      int channels = round + 1 + (mismatch && i == 0);
+      auto field =
+          torch::full({channels, coord->nc3(), coord->nc2(), coord->nc1()}, -1.,
+                      block->pcoord->x2v.options());
+      field.index_put_(block->part({0, 0, 0}, PartOptions().exterior(false)),
+                       10 * round + i);
+      vars[i]["field"] = field;
+    }
+  };
+  for (int round = 0; round < 3; ++round) {
+    if (round == 2) {
+      fill(round, true);
+      EXPECT_THROW(mesh->exchange(vars, sync), c10::Error);
+    }
+    fill(round, false);
+    mesh->exchange(vars, sync);
+    for (int i = 0; i < 4; ++i) {
+      auto block = mesh->blocks[i];
+      auto layout = block->get_layout();
+      auto loc = layout->loc_of(i);
+      layout->for_each_direction(sync, [&](int dy, int dx, int dz) {
+        auto offset = std::make_tuple(dy, dx, dz);
+        int peer = layout->neighbor_rank(loc, offset);
+        if (peer < 0) return;
+        auto ghost = vars[i]["field"].index(
+            block->part(offset, PartOptions().exterior(true)));
+        EXPECT_TRUE(ghost.eq(10 * round + peer).all().item<bool>());
+      });
+    }
+  }
+}
+
+// Opt-in A/B benchmark. Run this same fixture against both revisions with
+// --gtest_also_run_disabled_tests
+// --gtest_filter='*DISABLED_local_halo_latency*'.
+TEST_P(DeviceTest, DISABLED_local_halo_latency) {
+  torch::set_num_threads(1);
+  torch::NoGradGuard no_grad;
+  int side = 8;
+  auto opts = MeshOptionsImpl::from_yaml("test_mesh_multi_block.yaml");
+  opts->block()->layout()->px(side).py(side);
+  opts->blocks_per_process(side * side);
+  auto co = opts->block()->coord();
+  co->nx1(16)
+      .global_nx1(16)
+      .nx2(side * 32)
+      .global_nx2(side * 32)
+      .nx3(side * 32)
+      .global_nx3(side * 32)
+      .nghost(2);
+  if (device.is_cuda()) opts->block()->layout()->device("cuda").device_id(0);
+  auto mesh = Mesh(opts);
+  MeshVariables vars(mesh->blocks.size());
+  for (size_t i = 0; i < vars.size(); ++i) {
+    auto coord = mesh->blocks[i]->pcoord->options;
+    vars[i]["field"] =
+        torch::full({5, coord->nc3(), coord->nc2(), coord->nc1()}, double(i),
+                    torch::TensorOptions().device(device).dtype(dtype));
+  }
+  auto sync = SyncOptions().type(kScalar);
+  auto run = [&](int count) {
+    for (int i = 0; i < count; ++i) mesh->exchange(vars, sync);
+    if (device.is_cuda()) torch::cuda::synchronize();
+  };
+  run(10);
+  using Clock = std::chrono::steady_clock;
+  auto start = Clock::now();
+  run(50);
+  auto ms =
+      std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+  std::cout << "Mean ms/exchange: " << ms / 50 << "\n";
 }

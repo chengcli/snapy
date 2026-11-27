@@ -30,13 +30,13 @@
 
 namespace snap {
 
-void MeshBlockImpl::exchange(Variables &vars, SyncOptions const &opts) const {
+void MeshBlockImpl::exchange(Variables& vars, SyncOptions const& opts) const {
   // A subdivided cubed-sphere panel packs its cross-panel strip EXTENDED into
   // its own tangential halo (cs_interp_margin), and that halo is only written
   // by deserialize(). So the intra-panel round must COMPLETE before the
   // cross-panel round packs, which one round cannot do. Corners are synthesized
   // from the edge strips, so they come after both.
-  auto const &lo = *options->layout();
+  auto const& lo = *options->layout();
   if (opts.interpolate() && !opts.intra_panel_only() &&
       !opts.cross_panel_only() && lo.is_cubed_sphere() &&
       (lo.px() > 1 || lo.py() > 1)) {
@@ -50,8 +50,8 @@ void MeshBlockImpl::exchange(Variables &vars, SyncOptions const &opts) const {
   _exchange_once(vars, opts);
 }
 
-void MeshBlockImpl::_exchange_once(Variables &vars,
-                                   SyncOptions const &opts) const {
+void MeshBlockImpl::_exchange_once(Variables& vars,
+                                   SyncOptions const& opts) const {
   std::vector<CommWorkPtr> works;
   begin_exchange(vars, opts);
   launch_exchange(opts, works);
@@ -59,21 +59,21 @@ void MeshBlockImpl::_exchange_once(Variables &vars,
 }
 
 torch::Tensor MeshBlockImpl::board_buffer(std::tuple<int, int, int> key,
-                                          torch::Tensor const &like) const {
-  auto &buf = board_buffers[key];
+                                          torch::Tensor const& like) const {
+  auto& buf = board_buffers[key];
   ensure_like(buf, like);
   return buf;
 }
 
-void MeshBlockImpl::begin_exchange(Variables &vars,
-                                   SyncOptions const &opts) const {
+void MeshBlockImpl::begin_exchange(Variables& vars,
+                                   SyncOptions const& opts) const {
   // the pack: device copies into the cached send buffers (captured in a
   // segment, B3; the warm-up allocates them)
   _playout->serialize(this, vars, opts);
 }
 
-void MeshBlockImpl::launch_exchange(SyncOptions const &opts,
-                                    std::vector<CommWorkPtr> &works) const {
+void MeshBlockImpl::launch_exchange(SyncOptions const& opts,
+                                    std::vector<CommWorkPtr>& works) const {
   // B3: a cut in a segment capture (exchange_cut decides; else the launch as
   // is). The host step is the rendezvous with this process's blocks (and
   // their seam copies) or the communicator, waited on, so the unpack
@@ -81,27 +81,27 @@ void MeshBlockImpl::launch_exchange(SyncOptions const &opts,
   // segment's next graph. It runs again at every replay, when the pack ran
   // inside a graph and set no host state: it restores the send and receive
   // buffers this pack chose (serialize points them at its cache entry)
-  auto sends = send_bufs;
-  auto recvs = recv_bufs;
-  exchange_cut(
-      [this, opts, sends, recvs]() {
-        send_bufs = sends;
-        recv_bufs = recvs;
-        std::vector<CommWorkPtr> w;
-        _playout->launch_exchange(this, opts, w);
-        for (auto &x : w)
-          if (x) x->wait();
-      },
-      [&]() { _playout->launch_exchange(this, opts, works); });
+  if (!in_segment_capture()) {
+    _playout->launch_exchange(this, opts, works);
+    return;
+  }
+  exchange_cut([this, opts, sends = send_bufs, recvs = recv_bufs]() {
+    send_bufs = sends;
+    recv_bufs = recvs;
+    std::vector<CommWorkPtr> w;
+    _playout->launch_exchange(this, opts, w);
+    for (auto& x : w)
+      if (x) x->wait();
+  });
 }
 
-void MeshBlockImpl::finalize_exchange(Variables &vars, SyncOptions const &opts,
-                                      std::vector<CommWorkPtr> &works) const {
+void MeshBlockImpl::finalize_exchange(Variables& vars, SyncOptions const& opts,
+                                      std::vector<CommWorkPtr>& works) const {
   _playout->finalize(this, vars, opts, works);
 }
 
-void MeshBlockImpl::exchange_state(Variables &vars, char const *hydro, int type,
-                                   char const *scalar) {
+void MeshBlockImpl::exchange_state(Variables& vars, char const* hydro, int type,
+                                   char const* scalar) {
   SyncOptions opts;
   opts.interpolate(true).type(type);
   Variables sync_vars;
@@ -115,7 +115,7 @@ void MeshBlockImpl::exchange_state(Variables &vars, char const *hydro, int type,
   }
 }
 
-void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
+void MeshBlockImpl::exchange_ghost_zones(Variables& vars) {
   auto hydro_u = vars.at("hydro_u");
   auto scalar_s =
       vars.count("scalar_s") ? vars.at("scalar_s") : torch::Tensor();
@@ -132,8 +132,8 @@ void MeshBlockImpl::exchange_ghost_zones(Variables &vars) {
   // cells whose stencils reach it, depend on the decomposition.
   {
     int ng = pcoord->options->nghost();
-    auto const &fns = options->bfuncs();
-    auto const &names = options->bcnames();
+    auto const& fns = options->bfuncs();
+    auto const& names = options->bcnames();
     BoundaryFuncOptions op;
     op.nghost(ng);
     op.eos = phydro->peos.get();
@@ -211,7 +211,7 @@ bool MeshBlockImpl::has_radiating_boundary() const {
   return false;
 }
 
-void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
+void MeshBlockImpl::apply_boundaries(Variables& vars, torch::Tensor hydro,
                                      torch::Tensor tracers, bool primitive) {
   BoundaryFuncOptions op;
   op.nghost(pcoord->options->nghost());
@@ -254,7 +254,7 @@ void MeshBlockImpl::apply_boundaries(Variables &vars, torch::Tensor hydro,
   };
 
   for (int f = 0; f < options->bfuncs().size(); ++f) {
-    auto const &fn = options->bfuncs()[f];
+    auto const& fn = options->bfuncs()[f];
     int dim = 3 - f / 2;
     if (!fn || hydro.size(dim) == 1) continue;
     if (radiating && is_outflow(fn)) {

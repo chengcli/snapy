@@ -10,6 +10,7 @@
 #include <optional>
 #include <random>
 #include <sstream>
+#include <utility>
 
 // base
 #include <configure.h>
@@ -43,6 +44,89 @@ std::string default_backend() {
   return "gloo";
 #endif
 }
+
+// Routes name slots only. Each exchange reads the tensors currently packed
+// into those slots, including after a change of variables or tensor sizes.
+struct LocalExchangePlan {
+  struct Route {
+    LayoutImpl* sender;
+    int send_slot;
+    int recv_slot;
+  };
+  std::vector<std::vector<Route>> incoming;
+
+  LocalExchangePlan(std::vector<LayoutImpl*> const& layouts,
+                    SyncOptions const& opts)
+      : incoming(layouts.size()) {
+    for (auto* sender : layouts) {
+      TORCH_CHECK(sender, "missing block at the local exchange rendezvous");
+      int rank = sender->options->rank();
+      auto loc = sender->loc_of(rank);
+      sender->for_each_direction(opts, [&](int dy, int dx, int dz) {
+        auto offset = sender->_remap_exchange_offset(loc, dy, dx, dz);
+        int nb = sender->neighbor_rank(loc, offset);
+        if (nb < 0 || nb == rank || !sender->is_local_block(nb) ||
+            !sender->_in_phase(loc, nb, opts))
+          return;
+        auto peer = sender->_peer_exchange_offset(nb, rank, opts, offset);
+        incoming.at(sender->options->local_block_index(nb))
+            .push_back({sender, get_buffer_id(offset), get_buffer_id(peer)});
+      });
+    }
+  }
+
+  template <typename Visit>
+  void visit(int receiver, LayoutImpl* layout, Visit visit_pair) const {
+    for (auto const& route : incoming.at(receiver)) {
+      auto const& sends = route.sender->owner()->send_bufs.at(route.send_slot);
+      auto const& recvs = layout->owner()->recv_bufs.at(route.recv_slot);
+      int rank = route.sender->options->rank(), nb = layout->options->rank();
+      TORCH_CHECK(sends.size() == recvs.size(), "local exchange: block ", rank,
+                  " sends ", sends.size(), " variables to block ", nb,
+                  ", which expects ", recvs.size(),
+                  "; every block must exchange the same variables");
+      for (size_t n = 0; n < sends.size(); ++n) {
+        TORCH_CHECK(
+            sends[n].numel() == recvs[n].numel(),
+            "local exchange size mismatch from rank ", rank, " to rank ", nb,
+            " send_slot=", route.send_slot, " recv_slot=", route.recv_slot,
+            " send_shape=", sends[n].sizes(), " recv_shape=", recvs[n].sizes());
+        if (recvs[n].is_contiguous() && sends[n].is_contiguous() &&
+            recvs[n].sizes() == sends[n].sizes()) {
+          visit_pair(recvs[n], sends[n]);
+        } else {
+          visit_pair(recvs[n].view({-1}), sends[n].reshape({-1}));
+        }
+      }
+    }
+  }
+
+  void copy_device(std::vector<LayoutImpl*> const& layouts,
+                   torch::Device device,
+                   std::shared_ptr<SeamCopies>& cache) const {
+    std::vector<std::pair<torch::Tensor, torch::Tensor>> pairs;
+    std::vector<int64_t> signature;
+    bool graph = in_cut_host_step();
+    for (int i = 0; i < layouts.size(); ++i) {
+      visit(i, layouts[i], [&](auto dst, auto src) {
+        TORCH_CHECK(src.device() == device && dst.device() == device,
+                    "local device exchange requires both halo buffers on ",
+                    device);
+        if (graph) {
+          signature.push_back(reinterpret_cast<int64_t>(dst.data_ptr()));
+          signature.push_back(reinterpret_cast<int64_t>(src.data_ptr()));
+          signature.push_back(dst.numel());
+          signature.push_back(static_cast<int64_t>(dst.scalar_type()));
+          signature.push_back(static_cast<int64_t>(src.scalar_type()));
+        }
+        pairs.emplace_back(std::move(dst), std::move(src));
+      });
+    }
+    run_seam_copies(cache, signature, [&]() {
+      for (auto& [dst, src] : pairs) dst.copy_(src);
+    });
+  }
+};
 
 namespace {
 
@@ -84,6 +168,11 @@ struct LocalExchangeState {
   int released = 0;
   bool ready = false;
   std::exception_ptr error;
+  std::exception_ptr completed_error;
+  std::vector<LayoutImpl*> layouts;
+  using Grid = std::tuple<int, int, int, bool, bool, bool>;
+  std::vector<Grid> grids;
+  std::optional<LocalExchangePlan> plan;
 #ifdef USE_CUDA
   std::vector<std::shared_ptr<at::cuda::CUDAEvent>> arrival_events;
   std::shared_ptr<at::cuda::CUDAEvent> completion_event;
@@ -108,8 +197,6 @@ std::mutex g_local_exchange_mutex;
 std::condition_variable g_local_exchange_cv;
 //! every same-process map below is keyed first by the Mesh (S-L1:
 //! LayoutOptions::mesh_id), so a second Mesh in the process never meets it
-//! (mesh, process, local block index)
-std::map<std::tuple<int64_t, int, int>, LayoutImpl*> g_local_layouts;
 std::map<LocalExchangeKey, LocalExchangeState> g_local_exchange_states;
 std::mutex g_process_comm_mutex;
 
@@ -146,30 +233,6 @@ std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
   if (layout.num_exchange_buffers() < 27) return {0, 0};
   return {opts.dz_min(), opts.dz_max()};
-}
-
-std::vector<LayoutImpl*> local_layouts_for(LayoutImpl const& layout) {
-  std::vector<LayoutImpl*> layouts(layout.options->blocks_per_process(),
-                                   nullptr);
-
-  for (auto const& [key, local_layout] : g_local_layouts) {
-    auto const& [mesh, process, index] = key;
-    if (mesh == layout.options->mesh_id() &&
-        process == layout.options->process_rank()) {
-      TORCH_CHECK(index >= 0 && index < layout.options->blocks_per_process(),
-                  "invalid local block index ", index,
-                  " for process-local layout registry");
-      layouts[index] = local_layout;
-    }
-  }
-
-  for (int i = 0; i < layouts.size(); ++i) {
-    TORCH_CHECK(layouts[i] != nullptr,
-                "missing process-local layout registration for process ",
-                layout.options->process_rank(), " local block ", i);
-  }
-
-  return layouts;
 }
 
 LocalExchangeKey make_local_exchange_key(LayoutImpl const& layout,
@@ -321,36 +384,23 @@ std::shared_ptr<LayoutImpl> LayoutImpl::create(LayoutOptions const& options,
     TORCH_CHECK(false, "Unsupported layout type: ", options->type());
   }
 
-  if (p != nullptr) {
-    std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-    g_local_layouts[{options->mesh_id(), options->process_rank(),
-                     options->local_block_index(options->rank())}] = pl.get();
-  }
-
   return pl;
 }
 
-LayoutImpl::~LayoutImpl() {
-  if (options == nullptr || owner() == nullptr) return;
-
-  std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
-  auto key = std::make_tuple(options->mesh_id(), options->process_rank(),
-                             options->local_block_index(options->rank()));
-  auto it = g_local_layouts.find(key);
-  // A restarted mesh may register its replacement before the old Python
-  // mesh/block references are released. Do not unregister that replacement.
-  if (it != g_local_layouts.end() && it->second == this)
-    g_local_layouts.erase(it);
-}
+LayoutImpl::~LayoutImpl() = default;
 
 void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
                                          SyncOptions const& opts) {
   if (options->blocks_per_process() <= 1) return;
+  // Mesh::to can move a block after its layout was constructed.
+  auto device = pmb->pcoord->x2v.device();
+  if (options->device() == "cuda")
+    device = torch::Device(pmb->options->device_str());
 
 #ifdef USE_CUDA
   std::optional<c10::cuda::CUDAStream> current_stream;
-  if (options->device() == "cuda") {
-    current_stream.emplace(c10::cuda::getCurrentCUDAStream());
+  if (device.is_cuda()) {
+    current_stream.emplace(c10::cuda::getCurrentCUDAStream(device.index()));
   }
 #endif
 
@@ -359,14 +409,25 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   auto& state = g_local_exchange_states[key];
   int generation = state.generation;
+  int local = options->local_block_index(options->rank());
+  state.layouts.resize(expected);
+  state.grids.resize(expected);
+  auto grid = std::make_tuple(options->px(), options->py(), options->pz(),
+                              options->periodic_x(), options->periodic_y(),
+                              options->periodic_z());
+  if (state.layouts.at(local) != this || state.grids[local] != grid) {
+    state.layouts[local] = this;
+    state.grids[local] = grid;
+    state.plan.reset();
+  }
+  bool cpu = device.is_cpu();
 
 #ifdef USE_CUDA
   if (current_stream) {
     if (state.arrival_events.size() != expected) {
       state.arrival_events.resize(expected);
     }
-    int local_block = options->local_block_index(options->rank());
-    auto& arrival_event = state.arrival_events.at(local_block);
+    auto& arrival_event = state.arrival_events.at(local);
     if (!arrival_event) {
       arrival_event = std::make_shared<at::cuda::CUDAEvent>();
     }
@@ -379,7 +440,6 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
 
   state.arrived += 1;
   if (state.arrived == expected) {
-    auto layouts = local_layouts_for(*this);
     lock.unlock();
     std::exception_ptr error;
 #ifdef USE_CUDA
@@ -395,7 +455,10 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
         }
       }
 #endif
-      _copy_local_exchange_buffers(layouts, opts, state.seam_copies);
+      if (!state.plan) state.plan.emplace(state.layouts, opts);
+      if (!cpu) {
+        state.plan->copy_device(state.layouts, device, state.seam_copies);
+      }
 #ifdef USE_CUDA
       if (current_stream && completion_event) {
         completion_event->record(*current_stream);
@@ -423,31 +486,34 @@ void LayoutImpl::_prepare_local_exchange(MeshBlockImpl const* pmb,
   }
 #endif
 
-  if (state.error != nullptr) {
-    auto error = state.error;
-    state.released -= 1;
-    if (state.released == 0) {
-      state.arrived = 0;
-      state.ready = false;
-      state.error = nullptr;
-      state.generation += 1;
-      g_local_exchange_cv.notify_all();
-    } else {
-      local_wait(lock, [&]() { return state.generation != generation; });
+  if (cpu && !state.error) {
+    lock.unlock();
+    std::exception_ptr copy_error;
+    try {
+      state.plan->visit(local, this, [](auto dst, auto src) {
+        TORCH_CHECK(src.device().is_cpu() && dst.device().is_cpu(),
+                    "local CPU exchange requires CPU halo buffers");
+        dst.copy_(src);
+      });
+    } catch (...) {
+      copy_error = std::current_exception();
     }
-    std::rethrow_exception(error);
+    lock.lock();
+    if (copy_error && !state.error) state.error = copy_error;
   }
 
+  // Every receiver must finish reading its peers before any sender repacks.
   state.released -= 1;
   if (state.released == 0) {
     state.arrived = 0;
     state.ready = false;
-    state.error = nullptr;
+    state.completed_error = std::exchange(state.error, nullptr);
     state.generation += 1;
     g_local_exchange_cv.notify_all();
   } else {
     local_wait(lock, [&]() { return state.generation != generation; });
   }
+  if (state.completed_error) std::rethrow_exception(state.completed_error);
 }
 
 std::tuple<int, int, int> LayoutImpl::_remap_exchange_offset(
@@ -479,68 +545,6 @@ std::tuple<int, int, int> LayoutImpl::_peer_exchange_offset(
   (void)opts;
   auto [dy, dx, dz] = offset;
   return {-dy, -dx, -dz};
-}
-
-void LayoutImpl::_copy_local_exchange_buffers(
-    std::vector<LayoutImpl*> const& layouts, SyncOptions const& opts,
-    std::shared_ptr<SeamCopies>& cache) const {
-  // (receiving view, sending buffer) pairs, checked, then copied: eagerly,
-  // or as the rendezvous's copy graph inside a cut's host step (B3)
-  std::vector<std::pair<torch::Tensor, torch::Tensor>> pairs;
-  std::vector<int64_t> signature;
-  for (auto* layout : layouts) {
-    auto rank = layout->options->rank();
-    auto iloc = layout->loc_of(rank);
-
-    layout->for_each_direction(opts, [&](int dy_, int dx_, int dz_) {
-      auto offset = layout->_remap_exchange_offset(iloc, dy_, dx_, dz_);
-      int nb = layout->neighbor_rank(iloc, offset);
-      if (nb < 0 || nb == rank) return;
-
-      // this phase's peers only
-      if (!layout->_in_phase(iloc, nb, opts)) return;
-      if (layout->options->owner_process_rank(nb) !=
-          layout->options->process_rank()) {
-        return;
-      }
-
-      int bid = get_buffer_id(offset);
-      auto peer = layouts.at(layout->options->local_block_index(nb));
-      auto peer_offset = layout->_peer_exchange_offset(nb, rank, opts, offset);
-      int peer_bid = get_buffer_id(peer_offset);
-
-      auto& send_bufs = layout->owner()->send_bufs;
-      auto& peer_recv_bufs = peer->owner()->recv_bufs;
-      // a block that packed different variables than its peer would make
-      // the copy below read past the peer's buffers
-      TORCH_CHECK(peer_recv_bufs[peer_bid].size() == send_bufs[bid].size(),
-                  "local exchange: block ", rank, " sends ",
-                  send_bufs[bid].size(), " variables to block ", nb,
-                  ", which expects ", peer_recv_bufs[peer_bid].size(),
-                  "; every block must exchange the same variables");
-      for (int n = 0; n < send_bufs[bid].size(); ++n) {
-        TORCH_CHECK(
-            peer_recv_bufs[peer_bid][n].numel() == send_bufs[bid][n].numel(),
-            "local exchange size mismatch from rank ", rank, " to rank ", nb,
-            " send_offset=(", std::get<0>(offset), ",", std::get<1>(offset),
-            ",", std::get<2>(offset), ") recv_offset=(",
-            std::get<0>(peer_offset), ",", std::get<1>(peer_offset), ",",
-            std::get<2>(peer_offset),
-            ") send_shape=", send_bufs[bid][n].sizes(),
-            " recv_shape=", peer_recv_bufs[peer_bid][n].sizes());
-        pairs.emplace_back(peer_recv_bufs[peer_bid][n].view({-1}),
-                           send_bufs[bid][n].reshape({-1}));
-      }
-    });
-  }
-  for (auto const& [dst, src] : pairs) {
-    signature.push_back(reinterpret_cast<int64_t>(dst.data_ptr()));
-    signature.push_back(reinterpret_cast<int64_t>(src.data_ptr()));
-    signature.push_back(dst.numel());
-  }
-  run_seam_copies(cache, signature, [&pairs]() {
-    for (auto& [dst, src] : pairs) dst.copy_(src);
-  });
 }
 
 void LayoutImpl::serialize(MeshBlockImpl const* pmb, Variables& vars,
