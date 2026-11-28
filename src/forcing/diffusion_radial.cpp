@@ -136,8 +136,8 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
   // A zero host step returns above. Preserve that exact no-op on replay too,
   // rather than adding the roundoff of a solve with a zero step.
   if (dt.on_device())
-    increment = torch::where(dt.tensor() == 0.,
-                             torch::zeros_like(increment), increment);
+    increment = torch::where(dt.tensor() == 0., torch::zeros_like(increment),
+                             increment);
   u[IPR].index(sl).add_(increment);
   // the step's x1 heat flux density (A.rst 3.7). Per unit solid angle the
   // step moves dt [(1 - gamma) Q(first) + gamma Q(next)] up through face f,
