@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 
 // C/C++
+#include <atomic>
 #include <chrono>
+#include <future>
 #include <thread>
 #include <vector>
 
@@ -65,6 +67,51 @@ MeshVariables initial(Mesh mesh) {
 }
 
 }  // namespace
+
+// Failure must release both a sender waiting for space and a receiver waiting
+// for a different tag. The failure predicate runs under the mailbox lock, so
+// the promises let the test signal failure after both waits have registered.
+TEST(LocalMailbox, failure_wakes_blocked_sender_and_receiver) {
+  auto mesh = make_mesh(torch::kCPU, torch::kFloat32);
+  auto a = mesh->blocks[0]->get_layout(), b = mesh->blocks[1]->get_layout();
+  auto tensor = torch::ones({1});
+  a->post_to_local_block(1, tensor, 0);
+  std::atomic<bool> failed{false};
+  std::promise<void> sender_waiting, receiver_waiting;
+  auto worker = [&](auto& waiting, auto operation) {
+    bool first = true;
+    g_local_job_failed = [&] {
+      if (first) {
+        waiting.set_value();
+        first = false;
+      }
+      return failed.load();
+    };
+    EXPECT_THROW(operation(), c10::Error);
+    g_local_job_failed = {};
+  };
+  std::thread sender([&] {
+    worker(sender_waiting, [&] { a->post_to_local_block(1, tensor, 0); });
+  });
+  std::thread receiver([&] {
+    worker(receiver_waiting, [&] { b->take_from_local_block(0, 1); });
+  });
+  auto timeout = std::chrono::seconds(5);
+  EXPECT_EQ(sender_waiting.get_future().wait_for(timeout),
+            std::future_status::ready);
+  EXPECT_EQ(receiver_waiting.get_future().wait_for(timeout),
+            std::future_status::ready);
+  failed = true;
+  wake_local_exchanges();
+  sender.join();
+  receiver.join();
+
+  clear_local_exchange(a->options->mesh_id());
+  for (int tag : {0, 1}) {
+    a->post_to_local_block(1, tensor, tag);
+    EXPECT_TRUE(b->take_from_local_block(0, tag).is_same(tensor));
+  }
+}
 
 TEST_P(DeviceTest, mesh_owns_one_executor_and_steps_through_it) {
   auto mesh = make_mesh(device, dtype);

@@ -15,6 +15,9 @@
 // base
 #include <configure.h>
 
+// torch
+#include <c10/util/ScopeExit.h>
+
 #ifdef USE_CUDA
 #include <ATen/cuda/CUDAEvent.h>
 #include <c10/cuda/CUDAStream.h>
@@ -216,18 +219,47 @@ std::map<std::tuple<int64_t, int, int>, torch::Tensor> g_x1_anchors;
 
 //! same-process block-to-block messages in flight (post_to_local_block),
 //! keyed by (mesh, process, sender block rank, receiver block rank, tag)
-std::map<std::tuple<int64_t, int, int, int, int>, torch::Tensor> g_local_mail;
+using MailKey = std::tuple<int64_t, int, int, int, int>;
+std::map<MailKey, torch::Tensor> g_local_mail;
 
 //! every same-process wait; throws once a block job of the Mesh failed
 template <class Ready>
 bool local_wait(std::unique_lock<std::mutex>& lock, Ready ready,
-                std::chrono::minutes cap = std::chrono::hours(24 * 365)) {
-  bool done = g_local_exchange_cv.wait_for(lock, cap, [&]() {
+                std::chrono::minutes cap = std::chrono::hours(24 * 365),
+                std::condition_variable& cv = g_local_exchange_cv) {
+  bool done = cv.wait_for(lock, cap, [&]() {
     return ready() || (g_local_job_failed && g_local_job_failed());
   });
   TORCH_CHECK(!done || ready(), "same-process wait left: a block job failed");
   return done;
 }
+
+// Only blocked calls register here. The exchange mutex protects registration,
+// notification and removal, including when a worker exits on failure.
+struct MailWaiters {
+  std::multimap<MailKey, std::condition_variable*> blocked;
+
+  template <class Ready>
+  bool wait(std::unique_lock<std::mutex>& lock, MailKey const& key,
+            Ready ready) {
+    if (ready()) return true;
+    std::condition_variable cv;
+    auto entry = blocked.emplace(key, &cv);
+    auto remove = c10::make_scope_exit([&] { blocked.erase(entry); });
+    return local_wait(lock, ready, std::chrono::minutes(5), cv);
+  }
+
+  void notify_one(MailKey const& key) {
+    auto entry = blocked.find(key);
+    if (entry != blocked.end()) entry->second->notify_one();
+  }
+
+  void wake_on_failure() {
+    for (auto& entry : blocked) entry.second->notify_one();
+  }
+};
+
+MailWaiters g_waiting_senders, g_waiting_receivers;
 
 std::pair<int, int> exchange_dz_bounds(LayoutImpl const& layout,
                                        SyncOptions const& opts) {
@@ -259,6 +291,8 @@ thread_local std::function<bool()> g_local_job_failed;
 void wake_local_exchanges() {
   std::lock_guard<std::mutex> lock(g_local_exchange_mutex);
   g_local_exchange_cv.notify_all();
+  g_waiting_receivers.wake_on_failure();
+  g_waiting_senders.wake_on_failure();
 }
 
 void clear_local_exchange(int64_t mesh_id) {
@@ -933,20 +967,18 @@ void LayoutImpl::post_to_local_block(int block_rank, torch::Tensor const& t,
   // the receiving block reads this tensor on its own stream
   if (posted.is_cuda()) c10::cuda::getCurrentCUDAStream().synchronize();
 #endif
-  std::tuple<int64_t, int, int, int, int> key = {
-      options->mesh_id(), options->process_rank(), options->rank(), block_rank,
-      tag};
+  MailKey key = {options->mesh_id(), options->process_rank(), options->rank(),
+                 block_rank, tag};
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
   // one message per (sender, receiver, tag) in flight: wait for the previous
   // one to be taken
-  bool free = local_wait(
-      lock, [&]() { return !g_local_mail.count(key); },
-      std::chrono::minutes(5));
+  bool free = g_waiting_senders.wait(lock, key,
+                                     [&] { return !g_local_mail.count(key); });
   TORCH_CHECK(free, "[Layout:post_to_local_block] block ", options->rank(),
               " waited 5 min for block ", block_rank,
               " to take its previous message, tag ", tag);
   g_local_mail[key] = posted;
-  g_local_exchange_cv.notify_all();
+  g_waiting_receivers.notify_one(key);
 }
 
 torch::Tensor LayoutImpl::take_from_local_block(int block_rank, int tag) {
@@ -954,18 +986,17 @@ torch::Tensor LayoutImpl::take_from_local_block(int block_rank, int tag) {
   TORCH_CHECK(is_local_block(block_rank),
               "[Layout:take_from_local_block] block ", block_rank,
               " is not in this process");
-  std::tuple<int64_t, int, int, int, int> key = {
-      options->mesh_id(), options->process_rank(), block_rank, options->rank(),
-      tag};
+  MailKey key = {options->mesh_id(), options->process_rank(), block_rank,
+                 options->rank(), tag};
   std::unique_lock<std::mutex> lock(g_local_exchange_mutex);
-  bool posted = local_wait(
-      lock, [&]() { return g_local_mail.count(key); }, std::chrono::minutes(5));
+  bool posted = g_waiting_receivers.wait(
+      lock, key, [&] { return g_local_mail.count(key); });
   TORCH_CHECK(posted, "[Layout:take_from_local_block] block ", options->rank(),
               " waited 5 min for block ", block_rank, ", tag ", tag,
               "; local blocks must run concurrently");
   auto t = g_local_mail.at(key);
   g_local_mail.erase(key);
-  g_local_exchange_cv.notify_all();
+  g_waiting_senders.notify_one(key);
 #ifdef USE_CUDA
   // written on the poster's stream, freed after use on this one
   if (t.is_cuda()) t.record_stream(c10::cuda::getCurrentCUDAStream());
