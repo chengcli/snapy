@@ -4,6 +4,25 @@ The case uses a reflecting spherical shell from 113 m to 30 km above the JW06 re
 
 The benchmark uses the dry ideal-moist EOS, HLLC, WENO5, RK3, constant gravity and traditional Coriolis forcing. All six panels run on one device in one process. FP64 uses conventional total-state fluxes. FP32 uses anomaly storage and split fluxes. Both use the same physical options, timestep and accepted-step checks.
 
+## Optimized GPU speed gate
+
+The release build of `8bc11ceb` ran on GPU 0 of each Quadro RTX 4000 host.
+The two hosts used identical native libraries. Each pair compares 100 complete
+accepted RK3 steps after ten warm-up steps. Both modes used strict CUDA graph
+replay. Precision order alternated across nine pairs per host and resolution.
+
+| Grid | Host | FP64 median, s | FP32 median, s | Wall time saved | FP32 wins |
+|---|---|---:|---:|---:|---:|
+| C48/L26 | dart10 | 11.427 | 10.034 | 12.2% | 9/9 |
+| C48/L26 | dart11 | 11.403 | 10.076 | 11.6% | 9/9 |
+| C96/L26 | dart10 | 39.797 | 34.199 | 14.1% | 9/9 |
+| C96/L26 | dart11 | 39.984 | 34.331 | 14.1% | 9/9 |
+
+```sh
+python tests/bench_jw06.py --resolution 48
+python tests/bench_jw06.py --resolution 96
+```
+
 ## Correctness
 
 The CPU and both Quadro RTX 4000 hosts passed the six-block and 24-block comparisons, including a check that subdivision preserves the panel solution. The test compares both split FP64 and FP32 against conventional FP64. On CUDA it also compares FP32 graph replay to eager execution with zero tolerance. The independent FP32 rest test measured a maximum velocity of 4.13e-11 times the sound speed after 20 cycles.
@@ -24,7 +43,7 @@ python tests/run_jw06_science.py --device cpu --seconds 120
 python tests/run_jw06_science.py --device cpu --seconds 120 --balanced
 ```
 
-## Throughput
+## Throughput before the optimization
 
 Each GPU sample times 100 complete accepted RK3 steps at dt = 1 s after 10 warm-up steps. The executable synchronizes CUDA at both timing boundaries and checks graph replay and final state validity. The two modes run in separate processes on the same GPU, in alternating order across nine pairs. Acceptance requires seven FP32 wins and a lower FP32 median on each host. Both hosts ran identical native libraries and Python bindings with Torch 2.10.0+cu128 and Kintera 2.6.14. The feature commit is `2213d8b3` and the benchmark replay check is `a2c7828b`.
 
@@ -84,3 +103,89 @@ A post-benchmark Nsight Systems capture on dart10 covered one accepted C48 RK3 s
 | All GPU kernels, summed ms | 217.38 | 284.23 | 261.01 |
 
 All three paths executed 54 HLLC kernels. FP32 reduced their summed time by a factor of 4.35 relative to conventional FP64. Both split paths still used the paired radial reference kernel. Its summed time and the additional copy work account for much of the difference in the kernel totals. The copy category covers kernels with `copy_kernel` or `direct_copy` in their symbols and includes data movement within device memory.
+
+## Four-field radial reference
+
+For a uniform column of 6–128 cells that fits in 32 KiB of scratch and has no radial neighbour,
+the CPU and CUDA operators read background density and pressure in FP64 and
+their stored increments in FP32. Each column evaluates the original nonlinear
+pressure scan once, using paired FP64 arithmetic for the anchor, pressure floor
+and reference stencils. It writes the five totals and four pressure components
+directly. On CUDA the workers for a column share the face pressures and smoothed
+density-to-pressure ratios in shared memory. Stretched, vertically decomposed
+and longer columns continue to use the general paired operator.
+
+The horizontal cubed-sphere solve exchanges total face pressure before forming
+the shared gauge. The radial reconstruction forms the pressure and density
+differences in FP64 before narrowing its working state. The conserved state
+and restart representation retain their configured precision.
+
+The direct-operator regression compares each returned field with the packed
+operator, including pressure increments below one FP64 ulp and a pressure floor.
+The JW06 timing record also reports the peak CUDA allocation in bytes, measured
+from the end of warm-up through the last timed synchronization.
+
+The kernel computes each cell's hydrostatic pressure drop and each
+extrapolated wall sample once per column. The scan still accumulates from the
+upper anchor in the original order. Dry FP32 HLLC reads the total pressure and
+density for its thermodynamics and retains the residual pressure for the flux.
+A regression with a nonzero internal-energy offset checks the face energy,
+adiabatic index and sound speed against the same EOS evaluated on total states.
+
+The local CPU regression command selects the native reference and HLLC oracles,
+the split-column exchange, reconstruction floors, perturbation fluxes, restart
+and JW06 checks.
+
+```sh
+ctest --test-dir /tmp/snapy-mailbox-compare/build -R 'test_(eos|riemann|hydro_ref_x1|split_reference).release|test_cubed_sphere_fp32_rest_python|test_jw06.*python|test_fp32_(split|face_floor_counts|restart|horizontal_sweep)_python|test_perturbation_flux.*python|test_x1_seam_split.release' --output-on-failure
+```
+
+All 15 tests passed. One C48 CPU sample took 21.38 s in conventional FP64 and
+23.30 s in optimized FP32, compared with the earlier 25.48 s FP32 sample.
+
+On dart10 the native oracle ran on both CPU and CUDA. Fourteen reference
+tests and all four dry-face tests passed. The two FP64 cases of the FP32-only
+wall-stencil test were skipped. At 120 model seconds the final GPU pressure
+differences were 9.46e-5 Pa RMS for the disturbed case on dart10 and 9.28e-5
+Pa RMS for the unperturbed case on dart11. Both resolution differences were
+0.532 Pa RMS. The six- and 24-block tests also compare strict graph execution
+with eager execution on the same initial state.
+
+### Effect of the changes
+
+On dart11's second GPU, two C48 samples per variant ran in forward and reverse
+order. The initial four-field implementation took 12.60 and 12.90 s per 100
+steps. Reusing the pressure drops and extended wall stencil took 11.39 and
+11.44 s. Removing dry face thermodynamic staging alone took 12.28 and 12.57 s.
+Enabling both took 11.27 and 11.31 s.
+
+On dart10's second GPU, three alternating old/new FP32 pairs per resolution
+used the same Python binding and deck. Median C48 time fell from 14.879 s to
+11.266 s. Median C96 time fell from 51.066 s to 36.417 s. These comparisons
+use the saved pre-optimization libraries and the production build of
+`8bc11ceb`.
+
+| One traced C48 RK3 step, dart10 GPU 1 | Conventional FP64 | Previous FP32 | Optimized FP32 |
+|---|---:|---:|---:|
+| Kernel executions | 18,932 | 23,996 | 22,862 |
+| Radial reference, summed kernel-ms | 15.91 | 41.72 | 10.53 |
+| HLLC, summed kernel-ms | 7.78 | 1.88 | 1.90 |
+| ATen copies, summed kernel-ms | 13.90 | 33.97 | 30.48 |
+
+All three traces contain 18 radial evaluations and 54 HLLC solves. The largest
+reduction came from the radial operator. Kernel times are summed across
+overlapping block streams. The gate measures synchronized wall time with
+profiling disabled.
+
+| Peak CUDA allocation after warm-up, MiB | Conventional FP64 | Previous FP32 | Optimized FP32 |
+|---|---:|---:|---:|
+| C48/L26 | 462.1 | 467.3 | 469.8 |
+| C96/L26 | 1,572.7 | 1,639.0 | 1,631.6 |
+
+The split solver stores conserved fields in FP32 and retains FP64 reference
+fields and work buffers. Its measured peak allocation exceeded conventional
+FP64 at both sizes.
+
+Additional C48 controls on dart10 GPU 1 took 17.30 s for split FP64 with
+graph replay, 19.64 s for eager FP32 and 19.01 s for eager conventional
+FP64. These were single samples while GPU 0 ran the gate. The paired speed gate uses graph replay.
