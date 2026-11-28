@@ -348,7 +348,7 @@ class FluxRegister {
   //! shaped like total(dim); total(dim) is untouched. dim must have a step
   //! field; begin_step clears the direct part.
   void post_split(int dim, std::string const& name, torch::Tensor const& flux,
-                  double weight, double dt);
+                  double weight, StepDt dt);
 
   torch::Tensor split_rec(int dim) const { return _rec.at(dim - 1); }
   torch::Tensor split_direct(int dim) const { return _direct.at(dim - 1); }

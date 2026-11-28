@@ -10,6 +10,8 @@
 // torch
 #include <torch/torch.h>
 
+#include "cuda_test_gate.hpp"
+
 // snap
 #include <snap/snap.h>
 
@@ -122,7 +124,8 @@ TEST(SourceRegistry, a_deck_declares_its_sources_in_deck_order) {
 
 TEST(SourceRegistry, plume_forcing_refuses_capture) {
   auto block = forced_block();
-  block->phydro->options->plumeForcing() = PlumeForcingOptionsImpl::create();
+  block->phydro->sources.add(std::make_shared<PlumeForcingImpl>(
+      PlumeForcingOptionsImpl::create()));
   auto why = block->execution_capability({}).eager_reasons;
   EXPECT_NE(std::find(why.begin(), why.end(),
                       "plume-forcing does not support CUDA graph capture"),
@@ -130,21 +133,29 @@ TEST(SourceRegistry, plume_forcing_refuses_capture) {
 }
 
 TEST(SourceRegistry, device_timestep_matches_eager_for_all_builtin_sources) {
-  auto block = forced_block();
-  auto& reg = block->phydro->sources;
-  auto stage = stage_of(block);
-  auto device_dt = torch::zeros({}, torch::kFloat64);
-  for (double dt : {0.173, 0.041}) {
-    device_dt.fill_(dt);
-    for (auto phase : {SourcePhase::pre_implicit, SourcePhase::post_implicit}) {
-      for (auto const& run : reg.runs(phase)) {
-        auto expected = torch::zeros_like(stage.w);
-        auto actual = torch::zeros_like(stage.w);
-        stage.dt = dt;
-        reg.run(run, expected, stage);
-        stage.dt = StepDt::device(device_dt);
-        reg.run(run, actual, stage);
-        EXPECT_TRUE(torch::equal(expected, actual)) << dt;
+  for (auto device : {torch::Device(torch::kCPU), torch::Device(torch::kCUDA)}) {
+    if (device.is_cuda() && !snapy_cuda_test_enabled()) continue;
+    for (auto dtype : {torch::kFloat64, torch::kFloat32}) {
+      auto block = forced_block();
+      auto stage = stage_of(block);
+      block->to(device, dtype);
+      stage.w = stage.w.to(device, dtype);
+      stage.temp = stage.temp.to(device, dtype);
+      auto& reg = block->phydro->sources;
+      auto device_dt = torch::zeros({}, stage.w.options().dtype(torch::kFloat64));
+      for (double dt : {0.173, 0.041}) {
+        device_dt.fill_(dt);
+        for (auto phase : {SourcePhase::pre_implicit, SourcePhase::post_implicit}) {
+          for (auto const& run : reg.runs(phase)) {
+            auto expected = torch::zeros_like(stage.w);
+            auto actual = torch::zeros_like(stage.w);
+            stage.dt = dt;
+            reg.run(run, expected, stage);
+            stage.dt = StepDt::device(device_dt);
+            reg.run(run, actual, stage);
+            EXPECT_TRUE(torch::equal(expected, actual)) << device << " " << dtype << " " << dt;
+          }
+        }
       }
     }
   }
@@ -212,4 +223,36 @@ TEST(SourceRegistry, the_options_table_keeps_the_defaults_and_checks) {
       DiffusionOptionsImpl::from_yaml(YAML::Load("diffusion: {K: 1.}")));
   EXPECT_ANY_THROW(
       DiffusionOptionsImpl::from_yaml(YAML::Load("diffusion: {dynamic: yes}")));
+}
+
+TEST(SourceRegistry, noncapturable_declarations_refuse_both_phases) {
+  for (auto phase : {SourcePhase::pre_implicit, SourcePhase::post_implicit}) {
+    auto block = forced_block();
+    block->phydro->sources.add(std::make_shared<Fake>("host-source", false), phase);
+    auto why = block->execution_capability({}).eager_reasons;
+    EXPECT_NE(std::find(why.begin(), why.end(),
+                        "host-source does not support CUDA graph capture"), why.end());
+  }
+}
+
+TEST(SourceRegistry, plume_registry_runs_last_eager_and_changes_the_increment) {
+  auto block = forced_block();
+  auto plume = std::make_shared<PlumeForcingImpl>(PlumeForcingOptionsImpl::create());
+  auto& reg = block->phydro->sources;
+  auto s = stage_of(block);
+  auto before = torch::zeros_like(s.w);
+  for (auto const& run : reg.runs(SourcePhase::pre_implicit)) reg.run(run, before, s);
+  reg.add(plume);
+  auto runs = reg.runs(SourcePhase::pre_implicit);
+  ASSERT_EQ(runs.size(), 2u);
+  EXPECT_TRUE(runs.front().capturable);
+  EXPECT_FALSE(runs.back().capturable);
+  auto after = torch::zeros_like(s.w);
+  for (auto const& run : runs) reg.run(run, after, s);
+  auto expected = before.clone();
+  plume->add(expected, s);
+  EXPECT_TRUE(torch::equal(after, expected));
+  EXPECT_FALSE(torch::equal(after, before));
+  s.dt = StepDt::device(torch::full({}, .37, torch::kFloat64));
+  EXPECT_THROW(plume->add(expected, s), c10::Error);
 }

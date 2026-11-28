@@ -1,5 +1,6 @@
 // C/C++
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <set>
 
@@ -218,10 +219,8 @@ void StageExecutor::build_schedule(int block) const {
   // block's device dt (V3 D: a StepDt), not the host dt, and so does the
   // vertical implicit solve (C4: its kernels, its I/dt rows and its posts),
   // so ordinary stages can replay with a new dt.
-  // The optional radial split uses a host dt for its zero-step branch and
-  // flux posts. Both halves must recapture if that dt changes.
-  const bool split = !block_at(block)->phydro->sources.splits().empty();
-  stage.reads_host_dt = split;
+  // Radial split solves and their flux posts also read the device dt.
+  stage.reads_host_dt = false;
   // the thermo's tables and buffers, the implicit correction's scratch,
   // status and FP64-stage predicate (V3 C1), and the register monitor's
   // amounts on the register's device, before the save list (K.rst 3.5)
@@ -267,7 +266,7 @@ void StageExecutor::build_schedule(int block) const {
   Op combine;
   combine.name = "combine";
   // end_stage(dt) and the RK combine's w2 dt read the device dt (V3 D)
-  combine.reads_host_dt = split;
+  combine.reads_host_dt = false;
   combine.run = [this, block](Variables& vars, StageContext const& ctx) {
     block_at(block)->stage_combine(vars, ctx.dt, ctx.stage);
   };
@@ -680,8 +679,8 @@ std::vector<std::string> StageExecutor::config_reasons(int block) const {
     why.push_back(
         "an x1 split (pz > 1): its relays inside the stage are not cut into "
         "segments yet (P2, P3)");
-  if (hydro->plumeForcing())
-    why.push_back("plume-forcing does not support CUDA graph capture");
+  auto source_reasons = pmb->phydro->sources.capture_reasons();
+  why.insert(why.end(), source_reasons.begin(), source_reasons.end());
   // an outflow (radiating) ghost fill checks its inputs on the host (#314):
   // per op (the boundaries op, eager) unless conversion-order 4 also fills
   // the primitive ghosts with it inside the hydro step (hydro_forward.cpp)
@@ -851,7 +850,13 @@ void StageExecutor::run_segments(int block, Variables& vars, double dt,
 #ifdef USE_CUDA
   auto* pmb = block_at(block);
   auto const& segs = schedule(block).segments();
-  if (auto diffusion = pmb->phydro->pdiffusion) diffusion->check_profiles();
+  if (auto diffusion = pmb->phydro->pdiffusion) {
+    diffusion->check_profiles();
+    if (diffusion->options->implicit_radial() &&
+        diffusion->options->kappa_iso() != 0.)
+      TORCH_CHECK(std::isfinite(dt) && dt >= 0.,
+                  "[Diffusion] Invalid radial step dt.");
+  }
   pmb->_state.adopt(vars);  // a rebound tensor bumps the generation
   pmb->register_flux_storage();
   for (int i = 0; i < static_cast<int>(segs.size()); ++i) {

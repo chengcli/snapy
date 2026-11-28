@@ -70,14 +70,25 @@ def deck(execution, strict, scalar, co4):
     return d
 
 
-def make(execution, strict, scalar, co4, forcing=None):
+def make(execution, strict, scalar, co4, forcing=None, stretched=False, vapor=False):
     import snapy
-    from snapy import Mesh, MeshOptions, kIDN, kIPR, kIV1, kIV2, kIV3
+    from snapy import Mesh, MeshOptions, kIDN, kIPR, kIV1, kIV2, kIV3, kICY
 
     os.environ["DEVICE"] = "cuda"
     os.environ["DEVICE_ID"] = "0"
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
         cfg = deck(execution, strict, scalar, co4)
+        if vapor:
+            cfg["species"] += [
+                {"name": "H2O", "composition": {"H": 2, "O": 1},
+                 "cv_R": 1.534301, "u0_R": 0.},
+                {"name": "H2O(l)", "composition": {"H": 2, "O": 1},
+                 "cv_R": 7.52031, "u0_R": -6786.6602}]
+            cfg["reactions"] = [{"equation": "H2O <=> H2O(l)", "type": "nucleation",
+                                 "rate-constant": {"formula": "h2o_bryan"}}]
+        if stretched:
+            cfg["geometry"]["x1f"] = [6.371e6 + 1.e4 * (i / NX1) ** 1.2
+                                      for i in range(NX1 + 1)]
         if forcing:
             cfg["forcing"].update(forcing)
             if forcing.get("diffusion", {}).get("implicit_radial"):
@@ -116,6 +127,8 @@ def make(execution, strict, scalar, co4, forcing=None):
         w[kIV1] = vel[0].unsqueeze(-1) + 0.0 * z
         w[kIV2] = vel[1].unsqueeze(-1) + 0.0 * z
         w[kIV3] = vel[2].unsqueeze(-1) + 0.0 * z
+        if vapor:
+            w[kICY] = 0.005
         v = {"hydro_w": w}
         if scalar:
             s = bufs["scalar.D"].double().clone().zero_()

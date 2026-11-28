@@ -13,23 +13,23 @@ void DiffusionImpl::save_split_initial(torch::Tensor const& u) {
   split_initial_.copy_(u);
 }
 
-void DiffusionImpl::begin_split(torch::Tensor u, double dt) {
+void DiffusionImpl::begin_split(torch::Tensor u, StepDt dt) {
   save_split_initial(u);
-  radial_conduction_step(u, 0.5 * dt);
+  radial_conduction_step(u, dt.scaled(0.5));
 }
-void DiffusionImpl::finish_split(torch::Tensor u, double dt) {
-  radial_conduction_step(u, 0.5 * dt);
+void DiffusionImpl::finish_split(torch::Tensor u, StepDt dt) {
+  radial_conduction_step(u, dt.scaled(0.5));
 }
 // ruling A-ph3.radial_step_field: Hydro requested the x1 step field when
 // radial conduction is on, so the post is unguarded
-void DiffusionImpl::begin_split(torch::Tensor u, double dt, FluxRegister& reg) {
+void DiffusionImpl::begin_split(torch::Tensor u, StepDt dt, FluxRegister& reg) {
   save_split_initial(u);
-  auto flux = radial_conduction_step(u, 0.5 * dt);
+  auto flux = radial_conduction_step(u, dt.scaled(0.5));
   if (flux.defined()) reg.post_split(1, "diffusion.radial", flux, 0.5, dt);
 }
-void DiffusionImpl::finish_split(torch::Tensor u, double dt,
+void DiffusionImpl::finish_split(torch::Tensor u, StepDt dt,
                                  FluxRegister& reg) {
-  auto flux = radial_conduction_step(u, 0.5 * dt);
+  auto flux = radial_conduction_step(u, dt.scaled(0.5));
   if (flux.defined()) reg.post_split(1, "diffusion.radial", flux, 0.5, dt);
 }
 void DiffusionImpl::restore_split(torch::Tensor u) const {
@@ -39,12 +39,23 @@ void DiffusionImpl::restore_split(torch::Tensor u) const {
 }
 
 torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
-                                                    double dt) {
-  if (!options->implicit_radial() || options->kappa_iso() == 0. || dt == 0.)
+                                                    StepDt dt) {
+  if (!options->implicit_radial() || options->kappa_iso() == 0.)
     return torch::Tensor();
-  TORCH_CHECK(std::isfinite(dt) && dt > 0.,
-              "[Diffusion] Invalid radial step dt.");
-  if (!in_segment_capture()) check_profiles();
+  if (!dt.on_device()) {
+    if (dt.value() == 0.) return torch::Tensor();
+    TORCH_CHECK(std::isfinite(dt.value()) && dt.value() > 0.,
+                "[Diffusion] Invalid radial step dt.");
+  }
+  // The executor validates the host dt before capture/replay. Direct callers
+  // with a device dt are checked eagerly; capture needs no additional cut.
+  if (dt.on_device() && !in_segment_capture()) {
+    auto valid_dt = torch::isfinite(dt.tensor()) & (dt.tensor() >= 0.);
+    check_on_replay([valid_dt]() {
+      TORCH_CHECK(valid_dt.item<bool>(), "[Diffusion] Invalid radial step dt.");
+    });
+  }
+  if (!dt.on_device() && !in_segment_capture()) check_profiles();
   auto c = phydro->pmb->pcoord;
   TORCH_CHECK(c->options->type() == "gnomonic-equiangle" &&
                   phydro->peos->options->type() == "ideal-gas",
@@ -92,7 +103,7 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
   // SDIRK(2,2), gamma=1-1/sqrt(2): second order and L-stable.
   // Frozen density and ideal-gas cv make this an exact linear column system.
   constexpr double gamma = 1. - 0.7071067811865475244;
-  double step = gamma * dt;
+  auto step = dt.scaled(gamma);
   auto lower = -step * conductance.narrow(-1, 0, n);
   auto upper = -step * conductance.narrow(-1, 1, n);
   auto diag = mass - lower - upper;
@@ -121,7 +132,13 @@ torch::Tensor DiffusionImpl::radial_conduction_step(torch::Tensor u,
                 "[Diffusion] Radial SDIRK step produced nonpositive/nonfinite "
                 "temperature; reduce dt.");
   });
-  u[IPR].index(sl).add_(capacity * (next - temp));
+  auto increment = capacity * (next - temp);
+  // A zero host step returns above. Preserve that exact no-op on replay too,
+  // rather than adding the roundoff of a solve with a zero step.
+  if (dt.on_device())
+    increment = torch::where(dt.tensor() == 0.,
+                             torch::zeros_like(increment), increment);
+  u[IPR].index(sl).add_(increment);
   // the step's x1 heat flux density (A.rst 3.7). Per unit solid angle the
   // step moves dt [(1 - gamma) Q(first) + gamma Q(next)] up through face f,
   // Q_f = conductance_f (T below - T above), a wall's T_w outside; a face

@@ -80,8 +80,13 @@ void LayerHeatImpl::add(torch::Tensor du, StageState const& s) {
   int i = top_ ? pcoord->iu() : pcoord->il();
   auto dz = pcoord->dx1f[i];
   int i0 = top_ ? i + 1 - options->depth() : i;
+  // Match double / Tensor: round the numerator to dz's dtype, then divide.
+  // Multiplication by a rounded reciprocal changes the increment's bits.
+  auto amount = s.dt.scaled(options->flux());
+  auto numerator = amount.on_device() ? amount.tensor().to(dz.scalar_type())
+                                      : torch::full_like(dz, amount.value());
   du[IPR].narrow(-1, i0, options->depth()) +=
-      s.dt.scaled(options->flux()) * (dz * options->depth()).reciprocal();
+      numerator / (dz * options->depth());
 }
 
 }  // namespace snap

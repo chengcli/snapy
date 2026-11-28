@@ -779,7 +779,7 @@ void FluxRegister::end_stage(StepDt dt) {
 
 void FluxRegister::post_split(int dim, std::string const& name,
                               torch::Tensor const& flux, double weight,
-                              double dt) {
+                              StepDt dt) {
   TORCH_CHECK(dim >= 1 && dim <= 3 && _step[dim - 1].defined(),
               "[FluxRegister] post_split '", name, "' needs the step field ",
               dim, " (request it, then begin_step)");
@@ -800,7 +800,7 @@ void FluxRegister::post_split(int dim, std::string const& name,
     _direct[d].zero_();
     _split_posted[d] = true;
   }
-  _direct[d].add_(flux.to(_direct[d].scalar_type()), weight * dt);
+  axpy_(_direct[d], flux.to(_direct[d].scalar_type()), dt.scaled(weight));
   torch::add_out(_step[d], _rec[d], _direct[d]);
 }
 

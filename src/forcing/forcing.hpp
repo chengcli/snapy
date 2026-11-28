@@ -216,13 +216,13 @@ class DiffusionImpl : public SourceModule<DiffusionImpl, DiffusionOptions> {
   std::array<torch::Tensor, 3> face_fluxes(torch::Tensor w, torch::Tensor temp);
   //! radial conduction over dt; returns its x1 face heat flux density (the
   //! register's [nvar, faces...] layout, row IPR), undefined when off
-  torch::Tensor radial_conduction_step(torch::Tensor u, double dt);
-  void begin_split(torch::Tensor u, double dt) override;
-  void finish_split(torch::Tensor u, double dt) override;
+  torch::Tensor radial_conduction_step(torch::Tensor u, StepDt dt);
+  void begin_split(torch::Tensor u, StepDt dt) override;
+  void finish_split(torch::Tensor u, StepDt dt) override;
   //! the same, posting each half's x1 heat flux with
   //! post_split(1, "diffusion.radial", flux, 0.5, dt) (A.rst 3.7)
-  void begin_split(torch::Tensor u, double dt, FluxRegister& reg) override;
-  void finish_split(torch::Tensor u, double dt, FluxRegister& reg) override;
+  void begin_split(torch::Tensor u, StepDt dt, FluxRegister& reg) override;
+  void finish_split(torch::Tensor u, StepDt dt, FluxRegister& reg) override;
   void restore_split(torch::Tensor u) const override;
 
  private:

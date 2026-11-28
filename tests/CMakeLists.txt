@@ -519,6 +519,7 @@ snapy_add_python_test(test_graph_stretched_x1 TIMEOUT 900 LABELS "python;hydro")
 snapy_add_python_test(test_seam_rotation_cache TIMEOUT 300 LABELS "python;hydro;cubed-sphere")
 snapy_add_python_test(test_mesh_capture_moist TIMEOUT 900 LABELS "python;hydro;eos")
 snapy_add_python_test(test_graph_builtin_forcing TIMEOUT 900 LABELS "python;hydro;forcing")
+snapy_add_python_test(test_graph_radial_dt TIMEOUT 300 LABELS "python;hydro;forcing")
 # the shipped dry Straka (ideal-gas, lmars; 1 and 2 blocks; no forcing) captures
 snapy_add_python_test(test_graph_capture_lifts TIMEOUT 600 LABELS "python;hydro")
 # integration.execution defaults to cuda-graph on a CUDA device, eager on CPU
@@ -553,7 +554,7 @@ set_tests_properties(
   test_stage_executor_capture_python test_execution_capability_python
   test_graph_pool_recapture_python test_graph_user_forcing_python
   test_cubed_sphere_capture_python test_mesh_capture_moist_python
-  test_graph_builtin_forcing_python test_graph_capture_lifts_python test_graph_outflow_refused_python
+  test_graph_builtin_forcing_python test_graph_radial_dt_python test_graph_capture_lifts_python test_graph_outflow_refused_python
   test_sk3_capture_moist_python test_graph_implicit_dt_python
   test_graph_chemistry_slot_python test_graph_mesh_chemistry_python
   test_graph_implicit_python test_graph_stretched_x1_python
