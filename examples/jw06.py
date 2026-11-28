@@ -170,6 +170,9 @@ def run(args):
     if args.device == "cuda":
         torch.cuda.synchronize()
     seconds = time.perf_counter() - start
+    report = mesh.execution_report()
+    if args.execution == "cuda-graph" and (not report["replays"] or report["eager"]):
+        raise RuntimeError(f"strict CUDA graph execution was not used: {report}")
     minima = []
     for block, state in zip(mesh.blocks, states):
         w = final_primitive(block, state)[:, 3:-3, 3:-3, 3:-3]
@@ -183,6 +186,10 @@ def run(args):
             dict(
                 mode=args.mode,
                 device=args.device,
+                execution=args.execution,
+                graph_replays=report["replays"],
+                resolution=args.resolution,
+                levels=args.levels,
                 steps=count,
                 dt=dt,
                 model_seconds=elapsed,
