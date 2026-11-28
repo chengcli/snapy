@@ -4,6 +4,65 @@ The case uses a reflecting spherical shell from 113 m to 30 km above the JW06 re
 
 The benchmark uses the dry ideal-moist EOS, HLLC, WENO5, RK3, constant gravity and traditional Coriolis forcing. All six panels run on one device in one process. FP64 uses conventional total-state fluxes. FP32 uses anomaly storage and split fluxes. Both use the same physical options, timestep and accepted-step checks.
 
+## Tensor copies in the flux rotation and diagnostic counters
+
+The x2 and x3 gnomonic flux rotations now retain the two intermediate
+momentum rows and round each to the flux dtype before lowering its index.
+The diagnostic register reduces each posted mask or count vector into one
+int64 slot. The stage still publishes counts at its flush, and a rejected
+step discards its pending counts.
+
+A matched Nsight Systems capture on dart10 GPU 1 covered one complete C48/L26
+FP32 RK3 step after ten warm-up steps. The CUDA runtime recorded 1,818
+device-to-device copies totaling 1,385.2 MiB on the baseline and 1,602
+totaling 1,257.2 MiB with these changes. ATen copy kernels fell from 3,390
+to 3,264 executions. Their summed durations were 30.75 and 28.71 kernel-ms
+across six overlapping block streams. The elapsed times below were measured
+with tracing disabled.
+
+Each GPU pair compared FP32 on the prior draft (`5f8bc5f4`) and `ab2575bf`
+on the same Quadro RTX 4000. The binaries used the same Python binding,
+deck and CUDA kernels. Run order alternated across nine pairs per grid.
+The table gives medians for 100 accepted RK3 steps after ten warm-up steps.
+
+| Grid | Host, GPU | Prior (s) | Updated (s) | Time saved | Updated wins | Peak allocated MiB, prior → updated |
+|---|---|---:|---:|---:|---:|---:|
+| C48/L26 | dart11, GPU 1 | 11.561 | 11.356 | 1.8% | 9/9 | 469.8 → 414.6 |
+| C96/L26 | dart10, GPU 1 | 36.427 | 35.787 | 1.8% | 8/9 | 1,631.6 → 1,425.8 |
+
+On the development CPU, C48 eager FP32 medians were 22.949 s before and
+21.661 s after across three alternating pairs. The existing C48 precision
+gate on dart10 GPU 0 also passed with the updated code in both modes. FP32
+took 9.825 s and conventional FP64 took 11.159 s
+(9/9 FP32 wins).
+
+For the revision comparison, run the following command against each build,
+using `--resolution 96` for C96. The CPU measurements used
+`--device cpu --execution eager`.
+
+```sh
+python examples/jw06.py --resolution 48 --mode fp32 --device cuda --execution cuda-graph --warmup 10 --steps 100 --dt 1
+```
+
+At C16/L8, the reconstructed primitive fields after three accepted GPU steps
+were bitwise equal to the prior build for both six and 24 blocks. The final
+120 s GPU pressure differences between FP32 and FP64 were 9.46e-5 Pa RMS
+(disturbed) and 9.28e-5 Pa RMS (balanced). The corresponding C48–C96
+differences rounded to 0.532 Pa RMS.
+
+The local release build passed all 12 selected CTest entries. On dart10,
+nine native tests passed across the register, CUDA graph save/rollback and
+horizontal flux rounding cases. The science checks and FP64 speed gate used
+the following commands.
+
+```sh
+ctest --test-dir /tmp/snapy-mailbox-compare/build -R 'test_(coordinate|flux_register|face_floor|graph_monitor_amounts|riemann|cubed_sphere_exchange|cubed_sphere_seams).release|test_cubed_sphere_fp32_rest_python|test_jw06.*python|test_fp32_(face_floor_counts|horizontal_sweep)_python' --output-on-failure
+python tests/test_jw06.py --device cuda --subdivide 2
+python tests/run_jw06_science.py --device cuda --seconds 120
+python tests/run_jw06_science.py --device cuda --seconds 120 --balanced
+python tests/bench_jw06.py --resolution 48
+```
+
 ## Optimized GPU speed gate
 
 The release build of `8bc11ceb` ran on GPU 0 of each Quadro RTX 4000 host.
