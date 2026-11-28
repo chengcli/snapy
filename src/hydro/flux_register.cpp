@@ -75,9 +75,10 @@ int RegisterMonitor::retry_index(std::string const& name) const {
 void RegisterMonitor::count(std::string const& name, torch::Tensor const& n) {
   int i = counter_index(name);
   if (n.dim() > 0) {  // a mask or a vector: its slot of the stage's buffer
-    auto flat = n.reshape({-1});
-    pend_slot_(_pend_cursor, i, flat.numel(), flat);
-    _pend_buf.narrow(0, 1 + _pend_off[_pend_cursor], flat.numel()).copy_(flat);
+    // Reduce directly from the strided input into its fixed graph-replay slot.
+    pend_slot_(_pend_cursor, i, 1, n);
+    auto slot = _pend_buf[1 + _pend_off[_pend_cursor]];
+    torch::sum_out(slot, n, at::IntArrayRef{}, false, torch::kInt64);
     ++_pend_cursor;
     return;
   }
@@ -140,8 +141,8 @@ void RegisterMonitor::flush_counts() {
   if (!_pend_buf.defined()) return;
   // V3 S4: the segment sums without atomics. The slots lie behind one zero
   // element and are summed as integers by one cumulative sum over the
-  // buffer, so a segment's count is cs[end] - cs[start] (exact: the
-  // additions are integer); the ends of each counter's segments are gathered
+  // compact buffer of posted totals. A segment's exact integer count is
+  // cs[end] - cs[start]. The ends of each counter's segments are gathered
   // densely (zero-padded to the largest number of segments per counter: the
   // pad points at the zero element) and summed along the segment axis; then
   // one add into the counters and one zero of the buffer, so a slot no

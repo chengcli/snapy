@@ -644,6 +644,44 @@ TEST_P(DeviceTest, flux_projection3) {
   EXPECT_TRUE(torch::allclose(prim, prim_ori));
 }
 
+// Mixed-precision geometry rounds the local-to-contravariant result into
+// the flux dtype before lowering the index. Exercise both horizontal faces.
+TEST_P(DeviceTest, horizontal_flux_rounds_each_contravariant_component) {
+  auto block =
+      MeshBlock(MeshBlockOptionsImpl::from_yaml("test_coordinate.yaml"));
+  block->to(device, torch::kFloat64);
+  auto& coord = dynamic_cast<GnomonicEquiangleImpl&>(*block->pcoord);
+  auto nc1 = coord.options->nc1(), nc2 = coord.options->nc2();
+  auto nc3 = coord.options->nc3();
+  auto opt = torch::TensorOptions().dtype(dtype).device(device);
+  auto input =
+      torch::arange(5 * nc1 * nc2 * nc3, opt).sin().reshape({5, nc3, nc2, nc1});
+  for (int dim : {2, 3}) {
+    auto actual = input.clone();
+    if (dim == 2)
+      coord.flux2global2_(actual);
+    else
+      coord.flux2global3_(actual);
+    auto y = input[IVY], z = input[IVZ];
+    auto intermediate = torch::empty_like(input.narrow(0, IVY, 2));
+    if (dim == 2) {
+      auto r = coord.gi22.sqrt();
+      intermediate[0] = r * y;
+      intermediate[1] =
+          (-r * coord.g23 / coord.g33) * y + (1. / coord.g33.sqrt()) * z;
+    } else {
+      auto r = coord.gi33.sqrt();
+      intermediate[0] =
+          (1. / coord.g22.sqrt()) * y + (-coord.g23 / coord.g22 * r) * z;
+      intermediate[1] = r * z;
+    }
+    auto expected = input.clone();
+    expected[IVY] = intermediate[0] + intermediate[1] * coord.g23;
+    expected[IVZ] = intermediate[1] + intermediate[0] * coord.g23;
+    EXPECT_TRUE(torch::equal(actual, expected)) << dim;
+  }
+}
+
 TEST_P(DeviceTest, radial_source_uses_face_pressure_in_x1_momentum) {
   auto fname = write_temp_config(gnomonic_radial_config);
   auto op = MeshBlockOptionsImpl::from_yaml(fname);

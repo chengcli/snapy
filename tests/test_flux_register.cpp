@@ -103,6 +103,29 @@ TEST(RegisterMonitor, census_counts_minima_and_retry_flags) {
             std::numeric_limits<double>::infinity());
 }
 
+TEST(RegisterMonitor, strided_masks_use_one_pending_count_per_post) {
+  RegisterRequest req;
+  req.counters = {"a", "b"};
+  RegisterMonitor monitor;
+  monitor.reset(req);
+  auto mask = torch::zeros({128, 4}, torch::kBool);
+  mask.select(1, 1).fill_(true);
+  monitor.count("b", mask.slice(1, 1, 3));
+  monitor.count("a", torch::tensor({1.9, -0.8, 2.9}));
+  monitor.count("b", torch::empty({0}, torch::kBool));
+  EXPECT_LT(monitor.count_storage().numel(), mask.size(0));
+  mask.zero_();
+  EXPECT_EQ(monitor.counters.sum().item<int64_t>(), 0);
+  monitor.flush_counts();
+  EXPECT_TRUE(
+      torch::equal(monitor.counters, torch::tensor({3, 128}, torch::kInt64)));
+
+  monitor.count("b", torch::ones({16, 64}, torch::kBool));
+  monitor.rollback();
+  monitor.flush_counts();
+  EXPECT_EQ(monitor.counters.sum().item<int64_t>(), 0);
+}
+
 TEST(FluxRegister, hydro_fluxes_are_the_stage_totals) {
   Variables vars;
   auto block = bubble(vars);

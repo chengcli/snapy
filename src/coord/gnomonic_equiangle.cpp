@@ -423,13 +423,9 @@ void GnomonicEquiangleImpl::flux2global2_(torch::Tensor const& flux) const {
   auto T32 = -gi22.sqrt() * g23 / g33;
   auto T33 = 1.0 / g33.sqrt();
 
-  // Set fluxes
-  flux[IVZ] = T32 * txy + T33 * txz;
-  flux[IVY] = T22 * txy;
-
-  // Extract contravariant fluxes
-  auto ty = flux[IVY].clone();
-  auto tz = flux[IVZ].clone();
+  // Round both contravariant rows to flux precision before lowering them.
+  auto ty = (T22 * txy).to(flux.scalar_type());
+  auto tz = (T32 * txy + T33 * txz).to(flux.scalar_type());
 
   // Transform to covariant fluxes
   flux[IVY] = ty + tz * cosine_face2_kj.narrow(1, 0, options->nc2());
@@ -449,13 +445,9 @@ void GnomonicEquiangleImpl::flux2global3_(torch::Tensor const& flux) const {
   auto T23 = -g23 / g22 * gi33.sqrt();
   auto T33 = gi33.sqrt();
 
-  // Set fluxes
-  flux[IVY] = T22 * txy + T23 * txz;
-  flux[IVZ] = T33 * txz;
-
-  // Extract contravariant fluxes
-  auto ty = flux[IVY].clone();
-  auto tz = flux[IVZ].clone();
+  // Round both contravariant rows to flux precision before lowering them.
+  auto ty = (T22 * txy + T23 * txz).to(flux.scalar_type());
+  auto tz = (T33 * txz).to(flux.scalar_type());
 
   // Transform to covariant fluxes
   flux[IVY] = ty + tz * cosine_face3_kj.narrow(0, 0, options->nc3());
