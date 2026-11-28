@@ -28,7 +28,8 @@ std::vector<std::string> HydroImpl::_register_forcings_module() {
   if (options->bodyHeat()) add(BodyHeat(options->bodyHeat(), this));
   if (options->topCool()) add(LayerHeat(options->topCool(), this));
   if (options->botHeat()) add(LayerHeat(options->botHeat(), this));
-  if (options->relaxBotComp()) add(RelaxBotComp(options->relaxBotComp(), this));
+  if (options->relaxBotComp())
+    prelax_comp = add(RelaxBotComp(options->relaxBotComp(), this));
   if (options->relaxBotTemp()) add(RelaxBotTemp(options->relaxBotTemp(), this));
   if (options->relaxBotVelo()) add(RelaxBotVelo(options->relaxBotVelo(), this));
   if (options->topSpongeLyr()) add(Sponge(options->topSpongeLyr(), this));

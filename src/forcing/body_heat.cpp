@@ -36,7 +36,7 @@ void BodyHeatImpl::add(torch::Tensor du, StageState const& s) {
   auto mask =
       torch::logical_and(pres >= options->pmin(), pres <= options->pmax());
   du[IPR].index(interior) += torch::where(
-      mask, s.dt.value() * options->dTdt() * rho * cv, torch::zeros_like(pres));
+      mask, s.dt.scaled(options->dTdt()) * rho * cv, torch::zeros_like(pres));
 }
 
 void PlumeForcingImpl::add(torch::Tensor du, StageState const& s) {

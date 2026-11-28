@@ -5,6 +5,7 @@
 #include <snap/coord/coord_utils.hpp>
 #include <snap/coord/cubed_sphere_utils.hpp>
 #include <snap/layout/exchange.hpp>
+#include <snap/mesh/exchange_cut.hpp>
 #include <snap/mesh/meshblock.hpp>
 #include <vector>
 
@@ -34,13 +35,12 @@ std::array<Tensor, 3> basis(Tensor a, Tensor b, Tensor r, int panel) {
 // Four-point polynomial weights. At block boundaries use inward stencils,
 // never an unfilled corner or an interpolated neighbor-panel coordinate.
 // Cubic traces make the seam jump penalty O(h^3) on a smooth solution.
-struct Stencil {
-  Tensor indices, values;
-};
+
 // With nodes, the weights are in those positions (cell centres) and evaluated
 // at `at` (faces or centres): a stretched x1 (#280), h = 1.
-Stencil weights(int n, bool faces, bool derivative, double h, Tensor like,
-                Tensor nodes = Tensor(), Tensor at = Tensor()) {
+std::pair<Tensor, Tensor> weights(int n, bool faces, bool derivative, double h,
+                                  Tensor like, Tensor nodes = Tensor(),
+                                  Tensor at = Tensor()) {
   TORCH_CHECK(n >= 4, "Cubed-sphere diffusion needs four stencil cells.");
   std::vector<double> x(n), t(n + (faces ? 1 : 0));
   for (int k = 0; k < n; ++k) x[k] = k;
@@ -81,6 +81,7 @@ Stencil weights(int n, bool faces, bool derivative, double h, Tensor like,
   }
   return {indices.to(like.device()), w.to(like.options())};
 }
+template <typename Stencil>
 Tensor transform(Tensor t, Stencil const &stencil, int dim) {
   // Keep the same four coefficients and summation order, including the
   // one-sided rows. A dense n-by-n product wasted O(n) work per output.
@@ -124,19 +125,23 @@ void share_fluxes(MeshBlockImpl const *block, std::array<Tensor, 3> &flux,
                                 0)
                          .to(flux[0].scalar_type());
   }
-  // Row 18 (S.rst row M6): each side's 12 channels go to the neighbour
-  // across it as one face slab, both faces of a direction in one
-  // Exchange::seam_slab; a slab arrives in this block's along-edge order,
-  // where the ghost exchange used to put it.
+  // Post all four faces before taking any. An x2 panel edge may meet an
+  // x3 edge. Fixed send buffers are shared by the graphs on both sides.
   Exchange ex(block);
+  auto seams = std::make_shared<std::vector<Exchange::SeamSide>>();
+  for (int side = 0; side < 4; ++side) {
+    int dim = side < 2 ? 2 : 3, axis = 4 - dim;
+    auto slab = outgoing[side].squeeze(axis).contiguous();
+    Exchange::SeamSide edge{dim, side};
+    if (!ex.resolve_seam(edge, false)) continue;
+    edge.send = slab;  // retained by this exchange across replays
+    seams->push_back(std::move(edge));
+  }
+  exchange_cut([ex, seams]() { ex.seam_exchange(*seams, kTagDiffusionSeam); });
   std::array<Tensor, 4> others;
-  for (int dir = 1; dir <= 2; ++dir) {
-    int s0 = dir == 1 ? 0 : 2, axis = dir == 1 ? 2 : 1;  // the face's axis
-    auto [below, above] =
-        ex.seam_slab(dir + 1, outgoing[s0].squeeze(axis),
-                     outgoing[s0 + 1].squeeze(axis), kTagDiffusionSeam, false);
-    if (below.defined()) others[s0] = below.unsqueeze(axis);
-    if (above.defined()) others[s0 + 1] = above.unsqueeze(axis);
+  for (auto const &edge : *seams) {
+    auto received = edge.reversed ? edge.recv.flip(1) : edge.recv;
+    others[edge.side] = received.unsqueeze(4 - edge.dim);
   }
   for (int side = 0; side < 4; ++side) {
     if (!others[side].defined()) continue;
@@ -192,22 +197,43 @@ std::array<Tensor, 3> DiffusionImpl::cubed_sphere_fluxes(Tensor w,
   k = Tensor();
   std::array<double, 3> h{op->dx1(), op->dx2(), op->dx3()};
   // x1 stencils on the actual radii when x1 is stretched (#280)
-  auto stencil = [&](int j, bool faces, bool derivative) {
-    int m = hi[2 - j] - lo[2 - j];
-    if (j || !op->stretched_x1()) return weights(m, faces, derivative, h[j], w);
-    auto xv = c->x1v.slice(0, lo[2], hi[2]);
-    return weights(m, faces, derivative, 1., w, xv,
-                   faces ? c->x1f.slice(0, lo[2], hi[2] + 1) : xv);
+  auto const version = [](Tensor const &t) {
+    return t.is_inference() ? int64_t{-1} : int64_t{t._version()};
   };
+  auto const &cached = stencils_[0][0].values;
+  if (!cached.defined() || cached.device() != w.device() ||
+      cached.scalar_type() != w.scalar_type() ||
+      !stencil_x1v_.is_same(c->x1v) || !stencil_x1f_.is_same(c->x1f) ||
+      stencil_v_version_ != version(c->x1v) ||
+      stencil_f_version_ != version(c->x1f)) {
+    for (int j = 0; j < 3; ++j) {
+      int m = hi[2 - j] - lo[2 - j];
+      for (int k = 0; k < 3; ++k) {
+        bool faces = k != 2, derivative = k != 0;
+        Tensor nodes, at;
+        if (j == 0 && op->stretched_x1()) {
+          nodes = c->x1v.slice(0, lo[2], hi[2]);
+          at = faces ? c->x1f.slice(0, lo[2], hi[2] + 1) : nodes;
+        }
+        auto [indices, values] = weights(
+            m, faces, derivative, nodes.defined() ? 1. : h[j], w, nodes, at);
+        stencils_[j][k] = {indices, values};
+      }
+    }
+    stencil_x1v_ = c->x1v;
+    stencil_x1f_ = c->x1f;
+    stencil_v_version_ = version(c->x1v);
+    stencil_f_version_ = version(c->x1f);
+  }
   std::array<Tensor, 3> flux;
   std::array<Tensor, 4> trace, normals;
   for (int dir = 0; dir < 3; ++dir) {
     int dim = 2 - dir, axis = dim - 3, n = hi[dim] - lo[dim];
-    auto face = transform(cells, stencil(dir, true, false), axis);
+    auto face = transform(cells, stencils_[dir][0], axis);
     std::array<Tensor, 3> deriv;
     for (int j = 0; j < 3; ++j) {
-      deriv[j] = j == dir ? transform(cells, stencil(j, true, true), axis)
-                          : transform(face, stencil(j, false, true), -1 - j);
+      deriv[j] = j == dir ? transform(cells, stencils_[j][1], axis)
+                          : transform(face, stencils_[j][2], -1 - j);
     }
     Box fl = lo, fh = hi;
     ++fh[dim];
@@ -365,7 +391,7 @@ std::array<Tensor, 3> DiffusionImpl::face_fluxes(Tensor w, Tensor temp) {
 void DiffusionImpl::post_fluxes(FluxRegister &reg, StageState const &s) {
   if (options->nu_iso() == 0. && options->kappa_iso() == 0.) return;
   bool cubed = phydro->pmb->pcoord->options->type() == "gnomonic-equiangle";
-  check_profiles();
+  if (!s.dt.on_device() && !in_segment_capture()) check_profiles();
   profiles_on(s.w);
   auto temp = s.temp.defined() ? s.temp : phydro->peos->compute("W->T", {s.w});
   auto flux =
@@ -377,7 +403,7 @@ void DiffusionImpl::post_fluxes(FluxRegister &reg, StageState const &s) {
 }
 
 Tensor DiffusionImpl::forward_cubed_sphere(Tensor du, Tensor w, Tensor temp,
-                                           double dt) {
+                                           StepDt dt) {
   auto block = phydro->pmb;
   auto c = block->pcoord;
   int panel = block->get_layout()->panel_of(block->options->layout()->rank());

@@ -1451,3 +1451,38 @@ TEST(forcing, sedimentation_is_sealed_only_at_physical_walls) {
     EXPECT_DOUBLE_EQ(vsed.select(-1, iu + 1).item<double>(), 0.);
   }
 }
+
+TEST(forcing, layer_depth_preserves_true_division_bits) {
+  for (auto device :
+       {torch::Device(torch::kCPU), torch::Device(torch::kCUDA)}) {
+    if (device.is_cuda() && !snapy_cuda_test_enabled()) continue;
+    for (auto dtype : {torch::kFloat64, torch::kFloat32}) {
+      auto block = make_block();
+      block->to(device, dtype);
+      // A non-power-of-two width makes reciprocal rounding observable.
+      block->pcoord->dx1f.fill_(312.5);
+      auto w = make_primitive(block).to(device, dtype);
+      auto op = BotHeatOptionsImpl::from_yaml(
+          YAML::Load("bot-heat: {flux: 7., depth: 2}"));
+      LayerHeat heat(op, block->phydro.get());
+      auto denominator = block->pcoord->dx1f[block->pcoord->il()] * 2;
+      for (int i = 1; i <= 64; ++i) {
+        double dt = 0.00173 * i;
+        auto expected = torch::zeros_like(w);
+        expected[IPR].narrow(-1, block->pcoord->il(), 2) +=
+            (dt * 7.) / denominator;
+        for (bool tensor_dt : {false, true}) {
+          auto actual = torch::zeros_like(w);
+          auto step = tensor_dt
+                          ? StepDt::device(torch::full(
+                                {}, dt, w.options().dtype(torch::kFloat64)))
+                          : StepDt(dt);
+          heat->add(actual, {w, {}, step});
+          ASSERT_TRUE(torch::equal(actual, expected))
+              << device << " " << dtype << " dt=" << dt
+              << " tensor=" << tensor_dt;
+        }
+      }
+    }
+  }
+}

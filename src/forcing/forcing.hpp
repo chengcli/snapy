@@ -203,6 +203,9 @@ class DiffusionImpl : public SourceModule<DiffusionImpl, DiffusionOptions> {
   DiffusionImpl(DiffusionOptions op, HydroImpl const* p);
   void reset() override;
   void add(torch::Tensor du, StageState const& s) override;
+  //! refuses a profile changed since reset; every entry point that reads the
+  //! cached profiles (forward, max_time_step) calls it first
+  void check_profiles() const;
   double max_time_step(StageState const& s) const override;
   //! the energy row of the diffusion face fluxes goes to the register as
   //! "diffusion" (A.rst 3.7); the momentum rows stay in add()
@@ -213,18 +216,25 @@ class DiffusionImpl : public SourceModule<DiffusionImpl, DiffusionOptions> {
   std::array<torch::Tensor, 3> face_fluxes(torch::Tensor w, torch::Tensor temp);
   //! radial conduction over dt; returns its x1 face heat flux density (the
   //! register's [nvar, faces...] layout, row IPR), undefined when off
-  torch::Tensor radial_conduction_step(torch::Tensor u, double dt);
-  void begin_split(torch::Tensor u, double dt) override;
-  void finish_split(torch::Tensor u, double dt) override;
+  torch::Tensor radial_conduction_step(torch::Tensor u, StepDt dt);
+  void begin_split(torch::Tensor u, StepDt dt) override;
+  void finish_split(torch::Tensor u, StepDt dt) override;
   //! the same, posting each half's x1 heat flux with
   //! post_split(1, "diffusion.radial", flux, 0.5, dt) (A.rst 3.7)
-  void begin_split(torch::Tensor u, double dt, FluxRegister& reg) override;
-  void finish_split(torch::Tensor u, double dt, FluxRegister& reg) override;
+  void begin_split(torch::Tensor u, StepDt dt, FluxRegister& reg) override;
+  void finish_split(torch::Tensor u, StepDt dt, FluxRegister& reg) override;
   void restore_split(torch::Tensor u) const override;
 
  private:
+  struct Stencil {
+    torch::Tensor indices, values;
+  };
+  // Face interpolation, face derivative and centre derivative on each axis.
+  std::array<std::array<Stencil, 3>, 3> stencils_;
+  torch::Tensor stencil_x1v_, stencil_x1f_;
+  int64_t stencil_v_version_ = -1, stencil_f_version_ = -1;
   torch::Tensor forward_cubed_sphere(torch::Tensor du, torch::Tensor w,
-                                     torch::Tensor temp, double dt);
+                                     torch::Tensor temp, StepDt dt);
   //! the cubed-sphere face fluxes (rows IDN..IPR), seams shared
   std::array<torch::Tensor, 3> cubed_sphere_fluxes(torch::Tensor w,
                                                    torch::Tensor temp);
@@ -232,13 +242,11 @@ class DiffusionImpl : public SourceModule<DiffusionImpl, DiffusionOptions> {
   //! direction)
   std::array<torch::Tensor, 3> cartesian_fluxes(torch::Tensor w,
                                                 torch::Tensor temp);
+  void save_split_initial(torch::Tensor const& u);
   torch::Tensor split_initial_;
   //! the x1 profiles in w's device and dtype, so a profile of ones changes
   //! no bit
   void profiles_on(torch::Tensor const& w);
-  //! refuses a profile changed since reset; every entry point that reads the
-  //! cached profiles (forward, max_time_step) calls it first
-  void check_profiles() const;
 
   //! the x1 profiles on this block's cells (float64, CPU), their maxima, and
   //! copies in the state's device and dtype
@@ -344,8 +352,13 @@ class PlumeForcingImpl
   PlumeForcingImpl() = default;
   explicit PlumeForcingImpl(PlumeForcingOptions op)
       : SourceModule(std::move(op), nullptr) {
-    decl_ = {"plume-forcing", SourcePhase::pre_implicit, false,
-             SourceKind::physical, kMass | kMomentum | kEnergy};
+    decl_ = {"plume-forcing",
+             SourcePhase::pre_implicit,
+             false,
+             SourceKind::physical,
+             kMass | kMomentum | kEnergy,
+             SourceRegion::interior,
+             false};
   }
   void add(torch::Tensor du, StageState const& s) override;
 };

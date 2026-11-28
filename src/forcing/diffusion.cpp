@@ -16,6 +16,7 @@
 #include <snap/coord/coordinate.hpp>
 #include <snap/hydro/hydro.hpp>
 #include <snap/input/check_keys.hpp>
+#include <snap/mesh/exchange_cut.hpp>
 #include <snap/mesh/meshblock.hpp>
 
 #include "forcing.hpp"
@@ -358,18 +359,13 @@ DiffusionOptions DiffusionOptionsImpl::from_yaml(YAML::Node const& forcing) {
 
 DiffusionImpl::DiffusionImpl(DiffusionOptions op, HydroImpl const* p)
     : SourceModule(std::move(op), p) {
-  // check_profiles reads the profiles on the host each call
-  decl_ = {"diffusion",
-           SourcePhase::pre_implicit,
-           options->implicit_radial(),
-           SourceKind::physical,
-           kMomentum | kEnergy,
-           SourceRegion::interior,
-           false};
+  decl_ = {"diffusion", SourcePhase::pre_implicit, options->implicit_radial(),
+           SourceKind::physical, kMomentum | kEnergy};
   reset();
 }
 
 void DiffusionImpl::reset() {
+  stencils_ = {};
   TORCH_CHECK(phydro, "[Diffusion] Parent Hydro is null");
 
   auto coord = phydro->pmb->pcoord;
@@ -530,10 +526,10 @@ void DiffusionImpl::profiles_on(torch::Tensor const& w) {
 
 void DiffusionImpl::add(torch::Tensor du, StageState const& s) {
   auto w = s.w, temp = s.temp;
-  double dt = s.dt.value();
+  auto const& dt = s.dt;
   auto coord = phydro->pmb->pcoord;
 
-  check_profiles();
+  if (!s.dt.on_device() && !in_segment_capture()) check_profiles();
   profiles_on(w);
   if (coord->options->type() == "gnomonic-equiangle") {
     if (options->nu_iso() == 0. && options->kappa_iso() == 0.) return;

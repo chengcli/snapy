@@ -72,16 +72,21 @@ void LayerHeatImpl::add(torch::Tensor du, StageState const& s) {
     auto overlap =
         (xf.slice(0, 1).clamp_max(hi) - xf.slice(0, 0, -1).clamp_min(lo))
             .clamp_min(0.);
-    du[IPR].slice(-1, il, iu + 1) += s.dt.value() * options->flux() /
-                                     options->thickness() * overlap /
-                                     pcoord->dx1f.slice(0, il, iu + 1);
+    du[IPR].slice(-1, il, iu + 1) +=
+        (s.dt.scaled(options->flux()) / options->thickness()) * overlap /
+        pcoord->dx1f.slice(0, il, iu + 1);
     return;
   }
   int i = top_ ? pcoord->iu() : pcoord->il();
   auto dz = pcoord->dx1f[i];
   int i0 = top_ ? i + 1 - options->depth() : i;
+  // Match double / Tensor: round the numerator to dz's dtype, then divide.
+  // Multiplication by a rounded reciprocal changes the increment's bits.
+  auto amount = s.dt.scaled(options->flux());
+  auto numerator = amount.on_device() ? amount.tensor().to(dz.scalar_type())
+                                      : torch::full_like(dz, amount.value());
   du[IPR].narrow(-1, i0, options->depth()) +=
-      s.dt.value() * options->flux() / (dz * options->depth());
+      numerator / (dz * options->depth());
 }
 
 }  // namespace snap

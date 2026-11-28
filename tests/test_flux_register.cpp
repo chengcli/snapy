@@ -1077,3 +1077,31 @@ TEST(FluxRegister, post_split_is_never_scaled_by_a_later_w1) {
   reg.begin_step();
   EXPECT_EQ(reg.step_field(1).abs().max().item<double>(), 0.);
 }
+
+TEST(FluxRegister, split_posts_read_device_dt_bitwise) {
+  for (auto device :
+       {torch::Device(torch::kCPU), torch::Device(torch::kCUDA)}) {
+    if (device.is_cuda() && !snapy_cuda_test_enabled()) continue;
+    for (auto dtype : {torch::kFloat64, torch::kFloat32}) {
+      RegisterRequest req;
+      req.step_field = {1};
+      FluxRegister host, tensor;
+      auto options = torch::TensorOptions().device(device).dtype(dtype);
+      for (auto* reg : {&host, &tensor}) {
+        reg->reset(5, {1, 1, 8}, {true, false, false}, dtype, req);
+        reg->total(1).set_data(reg->total(1).to(device));
+        reg->begin_step();
+      }
+      auto flux = torch::randn_like(host.total(1));
+      auto dt_tensor = torch::zeros({}, options.dtype(torch::kFloat64));
+      for (double dt : {0., .173, .041, .173}) {
+        dt_tensor.fill_(dt);
+        host.post_split(1, "diffusion.radial", flux, .5, dt);
+        tensor.post_split(1, "diffusion.radial", flux, .5,
+                          StepDt::device(dt_tensor));
+        EXPECT_TRUE(torch::equal(host.step_field(1), tensor.step_field(1)))
+            << device << " " << dtype << " " << dt;
+      }
+    }
+  }
+}

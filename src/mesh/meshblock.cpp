@@ -443,6 +443,10 @@ void MeshBlockImpl::register_flux_storage() {
     auto name = std::to_string(d);
     if (freg.total(d).defined())
       _state.register_storage("freg.total" + name, freg.total(d));
+    if (freg.split_direct(d).defined()) {
+      _state.register_storage("freg.rec" + name, freg.split_rec(d));
+      _state.register_storage("freg.direct" + name, freg.split_direct(d));
+    }
     if (freg.has_step_field(d))
       _state.register_storage("freg.step" + name, freg.step_field(d));
   }

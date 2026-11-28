@@ -40,7 +40,7 @@ struct SourceDeclaration {
   SourceKind kind = SourceKind::physical;
   uint32_t rows = 0;  //!< SourceRows bit set
   SourceRegion region = SourceRegion::interior;
-  bool capturable = true;  //!< false: host reads, an eager segment (N14)
+  bool capturable = true;  //!< false: the executor runs the whole block eager
 };
 
 //! read-only stage view; wc: the Coriolis input (rho, m1, rho v2, rho v3)
@@ -71,14 +71,14 @@ class SourceTerm {
     return std::numeric_limits<double>::infinity();
   }
   //! split sources: before / after the stages, and on a redo
-  virtual void begin_split(torch::Tensor u, double dt) {}
-  virtual void finish_split(torch::Tensor u, double dt) {}
+  virtual void begin_split(torch::Tensor u, StepDt dt) {}
+  virtual void finish_split(torch::Tensor u, StepDt dt) {}
   //! the same, run by MeshBlock: a split source posts its step transfer with
   //! reg.post_split (R.rst 3.4)
-  virtual void begin_split(torch::Tensor u, double dt, FluxRegister& reg) {
+  virtual void begin_split(torch::Tensor u, StepDt dt, FluxRegister& reg) {
     begin_split(u, dt);
   }
-  virtual void finish_split(torch::Tensor u, double dt, FluxRegister& reg) {
+  virtual void finish_split(torch::Tensor u, StepDt dt, FluxRegister& reg) {
     finish_split(u, dt);
   }
   virtual void restore_split(torch::Tensor u) const {}
@@ -104,6 +104,18 @@ class SourceRegistry {
   void add(std::shared_ptr<SourceTerm> s, SourcePhase p) { at(p).push_back(s); }
   void add(std::shared_ptr<SourceTerm> s) { add(s, s->declaration().phase); }
   bool empty() const { return at(kPre).empty() && at(kPost).empty(); }
+  //! Sources execute inside stage ops; a host-only source refuses the
+  //! whole block, not just its registry run. Both phases share this gate.
+  std::vector<std::string> capture_reasons() const {
+    std::vector<std::string> why;
+    for (auto phase : {kPre, kPost})
+      for (auto const& source : at(phase)) {
+        auto const& d = source->declaration();
+        if (!d.capturable)
+          why.push_back(d.name + " does not support CUDA graph capture");
+      }
+    return why;
+  }
   //! maximal runs of equal `capturable`; never reorders (A.rst 3.6)
   std::vector<Run> runs(SourcePhase p) const {
     std::vector<Run> out;

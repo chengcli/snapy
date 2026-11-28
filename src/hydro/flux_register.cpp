@@ -412,6 +412,8 @@ void FluxRegister::reset(int nvar, std::array<int64_t, 3> const& cells,
   for (int d = 0; d < 3; ++d) {
     _total[d] = active[d] ? torch::zeros(shape, kflux) : torch::Tensor();
     _step[d] = torch::Tensor();
+    _rec[d] = _direct[d] = torch::Tensor();
+    _split_posted[d] = false;
     _want_step[d] = false;
   }
   for (int d : req.step_field) request_step_field(d);
@@ -469,7 +471,7 @@ void FluxRegister::begin_attempt_() {
     else
       _step[d].zero_();
   }
-  _rec = _direct = {};  // the step's split posts start again
+  _split_posted.fill(false);
   _in_stage = false;
   for (auto const& t : _total)
     if (t.defined() && _monitor._step_amount.defined()) {
@@ -763,7 +765,7 @@ void FluxRegister::end_stage(StepDt dt) {
   for (int d = 0; d < 3; ++d) {
     if (!_step[d].defined()) continue;
     // in FP64 (FP32 on MPS), whatever the flux dtype: S <- w1 S + w2 dt T
-    if (!_direct[d].defined()) {
+    if (!_split_posted[d]) {
       axpy_(_step[d].mul_(_w1), _total[d].to(_step[d].scalar_type()), w2dt);
       continue;
     }
@@ -777,7 +779,7 @@ void FluxRegister::end_stage(StepDt dt) {
 
 void FluxRegister::post_split(int dim, std::string const& name,
                               torch::Tensor const& flux, double weight,
-                              double dt) {
+                              StepDt dt) {
   TORCH_CHECK(dim >= 1 && dim <= 3 && _step[dim - 1].defined(),
               "[FluxRegister] post_split '", name, "' needs the step field ",
               dim, " (request it, then begin_step)");
@@ -788,11 +790,17 @@ void FluxRegister::post_split(int dim, std::string const& name,
   TORCH_CHECK(flux.sizes() == _total[d].sizes(), "[FluxRegister] post_split '",
               name, "' flux ", flux.sizes(), " is not shaped like total(", dim,
               ") ", _total[d].sizes());
-  if (!_direct[d].defined()) {  // S_d so far is the recursion alone
-    _rec[d] = _step[d].clone();
-    _direct[d] = torch::zeros_like(_step[d]);
+  if (!_split_posted[d]) {  // S_d so far is the recursion alone
+    if (!_direct[d].defined() || _direct[d].device() != _step[d].device() ||
+        _direct[d].scalar_type() != _step[d].scalar_type()) {
+      _rec[d] = torch::empty_like(_step[d]);
+      _direct[d] = torch::empty_like(_step[d]);
+    }
+    _rec[d].copy_(_step[d]);
+    _direct[d].zero_();
+    _split_posted[d] = true;
   }
-  _direct[d].add_(flux.to(_direct[d].scalar_type()), weight * dt);
+  axpy_(_direct[d], flux.to(_direct[d].scalar_type()), dt.scaled(weight));
   torch::add_out(_step[d], _rec[d], _direct[d]);
 }
 

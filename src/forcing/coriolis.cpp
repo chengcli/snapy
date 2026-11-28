@@ -109,18 +109,19 @@ void CoriolisImpl::reset() {
 
 void CoriolisImpl::add(torch::Tensor du, StageState const &s) {
   auto w = s.wc.defined() ? s.wc : s.w;
-  double dt = s.dt.value();
+  auto const &dt = s.dt;
   if (options->type() == "123") {  // the x3 row only in 3D
     if (options->omega1() == 0.0 && options->omega2() == 0.0 &&
         options->omega3() == 0.0)
       return;
+    auto twice_dt = dt.scaled(2.);
     auto m1 = w[IDN] * w[IVX];
     auto m2 = w[IDN] * w[IVY];
     auto m3 = w[IDN] * w[IVZ];
-    du[IVX] += 2. * dt * (options->omega3() * m2 - options->omega2() * m3);
-    du[IVY] += 2. * dt * (options->omega1() * m3 - options->omega3() * m1);
+    du[IVX] += twice_dt * (options->omega3() * m2 - options->omega2() * m3);
+    du[IVY] += twice_dt * (options->omega1() * m3 - options->omega3() * m1);
     if (w.size(1) > 1)
-      du[IVZ] += 2. * dt * (options->omega2() * m1 - options->omega1() * m2);
+      du[IVZ] += twice_dt * (options->omega2() * m1 - options->omega1() * m2);
     return;
   }
   if (cubed_sphere) {
@@ -156,12 +157,13 @@ void CoriolisImpl::add(torch::Tensor du, StageState const &s) {
     return;
   }
 
+  auto twice_dt = dt.scaled(2.);
   auto m1 = w[IDN] * w[IVX];
   auto m2 = w[IDN] * w[IVY];
   auto m3 = w[IDN] * w[IVZ];
 
-  du[IVX] += 2. * dt * (omega3 * m2 - omega2 * m3);
-  du[IVY] += 2. * dt * (omega1 * m3 - omega3 * m1);
-  du[IVZ] += 2. * dt * (omega2 * m1 - omega1 * m2);
+  du[IVX] += twice_dt * (omega3 * m2 - omega2 * m3);
+  du[IVY] += twice_dt * (omega1 * m3 - omega3 * m1);
+  du[IVZ] += twice_dt * (omega2 * m1 - omega1 * m2);
 }
 }  // namespace snap

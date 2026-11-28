@@ -47,8 +47,30 @@ Numerical support is the eager columns; graph support is separate.
 CPU and MPS run eager only. The graph rows that say yes cover the dry Straka
 case: a CUDA device, Cartesian geometry, one species, no reactions, the EOS
 limiter off, an ideal-moist EOS, the hllc Riemann solver, rk3, one block,
-const-gravity as the only forcing and no solid mask. A vertical implicit
-scheme captures on that case: its solve reads the block's device ``dt``.
+no solid mask and constant gravity. Its vertical implicit solve reads the
+block's device timestep.
+
+CUDA graphs support
+``const-gravity``, ``coriolis``, ``diffusion``, ``body-heat``, ``bot-heat``,
+``top-cool``, ``relax-bot-comp``, ``relax-bot-temp``, ``relax-bot-velo``,
+``top-sponge-lyr`` and ``bot-sponge-lyr``, individually or together.
+Capture eligibility follows each registered source's ``capturable``
+declaration in both source phases. A noncapturable built-in (including
+``plume-forcing``) makes the entire block eager; in a Mesh this makes every
+block eager. Strict execution refuses the configuration before launch.
+This is a registry-level guarantee for plume: the current EOS factory does
+not implement ``plume-eos``, so an end-to-end plume deck cannot be constructed.
+A ``plume-forcing`` entry under another EOS does not register a plume source.
+User TorchScript forcings run in an eager segment between graphs when strict
+execution is disabled, including when built-ins and radial diffusion are present.
+
+The implicit radial half-steps and their flux-register posts read the device
+timestep. Changing a finite, nonnegative timestep, including between RK
+stages or returning to a previous value, does not invalidate their graphs.
+A zero radial timestep is a no-op; negative or nonfinite values are refused.
+Previously, radial splitting keyed both advance and combine on the host dt,
+so every stage's compute segments recaptured on every dt change, including
+the middle stage, which performs neither radial half-step.
 
 ``MeshBlock.execution_capability(vars)`` returns a block's row for its own
 configuration and variables: ``eager_fp64``/``eager_fp32`` (its precision),
@@ -60,17 +82,33 @@ What a graph depends on
 
 A stage's graph is captured again when any of these changes: the device, the
 shapes, strides or dtypes of the state, the state store's generation, the
-configuration generation, the stage or ``dt``. ``dt`` is a host number baked
-into the graph, so a new ``dt`` recaptures. The store's generation changes
+configuration generation or the stage. Ordinary forcing kernels read ``dt``
+from a device scalar at replay. A segment that reads the host timestep
+also includes ``dt`` in its capture key. The store's generation changes
 when its buffers move: ``to()``, a restart, or a variable that the caller
 replaced between steps (it is copied into the block's fixed storage).
 ``bump_config_generation()`` recaptures after a change the graph cannot see,
-such as ``implicit-fallback-fp64``. A restart never serializes graphs.
+such as ``implicit-fallback-fp64`` or a live forcing scalar (``type: 123``
+Coriolis ``omega*``, heating ``flux``/``dTdt``, relaxation ``tau``, diffusion
+``nu_iso``/``kappa_iso``
+and wall temperatures). These host options are baked into captures; after
+mutating them, call ``block.bump_config_generation()`` before advancing.
+This does not rebuild module caches: for example, ``type: xyz`` Coriolis
+precomputes rotation fields during construction; construct a new block to
+change those options.
+The generation belongs to the executor: for a Mesh it invalidates all blocks'
+compute segments, which recapture as their stages next execute. Even a
+block-local invalidation aligns recapture of the corresponding stage/segment
+across all Mesh blocks so their panel exchanges rendezvous correctly.
+Diffusion profiles are immutable after construction and remain refused if
+changed, even with a generation bump; construct a new block to change them.
+A restart never serializes graphs.
 
 Capture warms each stage up eagerly first, with the step's ``dt``, and then
 restores the state, the registered flux-register storage and ``hydro_w``.
 Retries stay on the host after the replay: ``check_redo`` restores the
-step's backup, and the smaller ``dt`` captures again.
+step's backup, and a smaller ``dt`` reuses the graphs unless another capture
+key component changed.
 
 ``MeshBlock.execution_report()`` counts captures, replays, eager stages and
 held graphs.

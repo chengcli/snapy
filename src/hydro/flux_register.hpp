@@ -348,7 +348,10 @@ class FluxRegister {
   //! shaped like total(dim); total(dim) is untouched. dim must have a step
   //! field; begin_step clears the direct part.
   void post_split(int dim, std::string const& name, torch::Tensor const& flux,
-                  double weight, double dt);
+                  double weight, StepDt dt);
+
+  torch::Tensor split_rec(int dim) const { return _rec.at(dim - 1); }
+  torch::Tensor split_direct(int dim) const { return _direct.at(dim - 1); }
 
   RegisterMonitor& monitor() { return _monitor; }
   RegisterMonitor const& monitor() const { return _monitor; }
@@ -358,10 +361,10 @@ class FluxRegister {
 
  private:
   std::array<torch::Tensor, 3> _total, _step;
-  //! from a direction's first post_split of the step: S_d's stage recursion
-  //! and its direct part, S_d = _rec + _direct; undefined otherwise, when
-  //! S_d is the recursion itself
+  //! Persistent storage shared by the stage graphs. After the first split
+  //! post of a step, S_d = _rec + _direct. Before it, _step holds S_d.
   std::array<torch::Tensor, 3> _rec, _direct;
+  std::array<bool, 3> _split_posted{};
   std::array<std::string, 3> _slot;
   std::map<std::string, torch::Tensor> _parts;
   std::array<std::vector<std::string>, 3> _kept;
