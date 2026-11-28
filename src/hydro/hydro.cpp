@@ -502,8 +502,7 @@ void HydroImpl::_revise_x1outer_lr(torch::Tensor const& wl,
   wr[IDN].narrow(-1, ie + 1, 1) = wl[IDN].narrow(-1, ie + 1, 1);
 }
 
-ReferenceFaces HydroImpl::_hydro_ref_x1(torch::Tensor const& w,
-                                        torch::Tensor const& dw) const {
+ReferenceFaces HydroImpl::_hydro_ref_x1(ReferenceInput const& input) const {
   auto pcoord = pmb->pcoord;
   X1ReferenceConfig cfg;
   cfg.coord = pcoord.get();
@@ -519,7 +518,7 @@ ReferenceFaces HydroImpl::_hydro_ref_x1(torch::Tensor const& w,
   cfg.interp_x1_coeffs = precon1->pinterp1->has_x1_coeffs();
   ExchangeX1Link link(pmb);
   // downward magnitude (>0)
-  return x1_reference_.evaluate(cfg, {w, dw}, -options->grav()->grav1(), &link);
+  return x1_reference_.evaluate(cfg, input, -options->grav()->grav1(), &link);
 }
 
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,

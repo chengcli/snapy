@@ -157,6 +157,7 @@ def run(args):
         advance(dt)
     if args.device == "cuda":
         torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
     start = time.perf_counter()
     elapsed = 0.0
     count = 0
@@ -170,6 +171,7 @@ def run(args):
     if args.device == "cuda":
         torch.cuda.synchronize()
     seconds = time.perf_counter() - start
+    peak_bytes = torch.cuda.max_memory_allocated() if args.device == "cuda" else None
     report = mesh.execution_report()
     if args.execution == "cuda-graph" and (not report["replays"] or report["eager"]):
         raise RuntimeError(f"strict CUDA graph execution was not used: {report}")
@@ -194,6 +196,7 @@ def run(args):
                 dt=dt,
                 model_seconds=elapsed,
                 wall_seconds=seconds,
+                peak_allocated_bytes=peak_bytes,
                 min_pressure=min(x[0] for x in minima),
             )
         ),

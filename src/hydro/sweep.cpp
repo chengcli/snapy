@@ -130,9 +130,11 @@ void riemann_solve(HydroImpl& hydro, torch::Tensor lr, int dim,
       background = 0.5 * (lr[ILT][IPR] + lr[IRT][IPR]);
     else
       background = static_face_gauge(perturb->pressure0, dim - 1);
-    lr = lr.clone();
-    lr[ILT][IPR] -= background;
-    lr[IRT][IPR] -= background;
+    auto pressure = lr.select(1, IPR) - background;
+    lr = hydro.fp32() ? lr.to(torch::kFloat32, /*non_blocking=*/false,
+                              /*copy=*/true)
+                      : lr.clone();
+    lr.select(1, IPR).copy_(pressure);
   }
   if (hydro.fp32()) lr = lr.to(torch::kFloat32);
   hydro.priemann->forward_perturbations(lr[ILT], lr[IRT], dim, flux, background,

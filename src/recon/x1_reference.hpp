@@ -11,6 +11,8 @@
 #include <torch/torch.h>
 
 // snap
+#include <snap/snap.h>
+
 #include <snap/hydro/hydro_dispatch.hpp>
 
 #include "x1_rows.hpp"
@@ -136,6 +138,33 @@ class HydroReferenceX1Operator {
         rows_.defined() ? pair(rows_) : torch::Tensor());
   }
 
+  // Undefined selects the general paired operator for unsupported layouts.
+  torch::Tensor uniform_split(torch::Tensor const& rho, torch::Tensor const& p,
+                              torch::Tensor const& dr, torch::Tensor const& dp,
+                              double grav) const {
+    auto n = dx1f_.numel();
+    if (grid_ != kX1RefUniform || n < 6 || n > 128 ||
+        (IPR + 7) * n * 2 * sizeof(double) > 32768 || dr.dim() != 3 ||
+        dr.size(-1) != n || dr.numel() == 0 || dp.sizes() != dr.sizes() ||
+        dr.scalar_type() != torch::kFloat32 ||
+        dp.scalar_type() != torch::kFloat32 || !(dr.is_cpu() || dr.is_cuda()))
+      return {};
+    for (auto const& t : {rho, p}) {
+      if (t.device() != dr.device() || t.scalar_type() != torch::kFloat64 ||
+          !(t.sizes() == dr.sizes() || (t.numel() == n && t.size(-1) == n)))
+        return {};
+    }
+    TORCH_CHECK(dp.device() == dr.device(),
+                "pressure increment device mismatch");
+    auto opts = rho.options();
+    auto result = torch::empty({9, dr.size(0), dr.size(1), n}, opts);
+    at::native::call_uniform_split(
+        dr.device().type(), rho.contiguous(), p.contiguous(), dr.contiguous(),
+        dp.contiguous(), dx1f_.to(opts).contiguous(), result, iu_, grav,
+        phys_in_, phys_out_, wall_clamp_);
+    return result;
+  }
+
   void evaluate(torch::Tensor const& w, double grav,
                 torch::Tensor const& anchor, HydroReferenceX1& out) const {
     TORCH_CHECK(w.dim() == 4 && w.size(-1) == dx1f_.numel(),
@@ -163,11 +192,12 @@ class HydroReferenceX1Operator {
   bool stretched_, phys_in_, phys_out_, wall_clamp_;
 };
 
-//! total path: delta undefined. Split path (perturbation flux): base is the
-//! FP64 background, delta the perturbation; the kernel's nonlinear decisions
-//! read the FP64 total, its arithmetic keeps the increment
+//! base supplies the primitive shape and options. A packed-input caller
+//! supplies base and delta. Hydro supplies the four pressure and density
+//! fields separately so a local column can read the increments in FP32.
 struct ReferenceInput {
   torch::Tensor base, delta;
+  torch::Tensor rho0, pressure0, drho, dp;
 };
 
 //! the well-balanced x1 reference of one evaluation

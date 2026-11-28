@@ -92,9 +92,13 @@ IdealMoistPerturbations IdealMoistImpl::perturbations(
   int ny = nvar() - ICY;
   TORCH_CHECK(stored.size(0) == nvar() && species0.size(0) == ny,
               "ideal-moist perturbations: species count mismatch");
-  auto s0 = species0.expand({ny, u.size(1), u.size(2), u.size(3)});
-  auto rho0 = torch::cat({ref[0].unsqueeze(0), s0}, 0);
-  auto drho = torch::cat({u[IDN].unsqueeze(0), u.narrow(0, ICY, ny) - s0}, 0);
+  auto rho0 = ref[0].unsqueeze(0);
+  auto drho = u[IDN].unsqueeze(0);
+  if (ny > 0) {
+    auto s0 = species0.expand({ny, u.size(1), u.size(2), u.size(3)});
+    rho0 = torch::cat({rho0, s0}, 0);
+    drho = torch::cat({drho, u.narrow(0, ICY, ny) - s0}, 0);
+  }
 
   // Compare host options, preserving double-valued constants even after
   // Module::to(float32). Warmup populates device tensors before graph capture.
@@ -120,10 +124,11 @@ IdealMoistPerturbations IdealMoistImpl::perturbations(
   auto const& offset = split_offset_;
   auto const& gas = split_gas_;
   auto dot = [](torch::Tensor const& r, torch::Tensor const& c) {
+    if (r.size(0) == 1) return r[0] * c[0];
     return (r * c.view({-1, 1, 1, 1})).sum(0);
   };
-  auto density0 = rho0.sum(0);
-  auto density_delta = drho.sum(0);
+  auto density0 = ny ? rho0.sum(0) : rho0[0];
+  auto density_delta = ny ? drho.sum(0) : drho[0];
   auto density = density0 + density_delta;
   auto momentum = u.narrow(0, IVX, 3);
   auto raised = momentum.clone();

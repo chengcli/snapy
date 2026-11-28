@@ -57,13 +57,55 @@ __global__ void hydro_ref_x1_cuda_kernel(T const *w, T const *dx1f,
   }
 }
 
-void hydro_ref_x1_cuda(torch::Tensor const &w, torch::Tensor const &dx1f,
-                       torch::Tensor const &anchor, torch::Tensor const &psf_lo,
-                       torch::Tensor const &psf_hi, torch::Tensor const &pref,
-                       torch::Tensor const &dsf, torch::Tensor const &dref,
+__global__ void uniform_split_tile_kernel(const double* rho, const double* p,
+                                          const float* dr, const float* dp,
+                                          const double* dx, double* out,
+                                          bool shared_rho, bool shared_p, int n,
+                                          int iu, double g, bool inner,
+                                          bool outer, bool clamp) {
+  extern __shared__ double buf[];
+  UniformSplitColumn col(reinterpret_cast<SRS*>(buf), n);
+  int64_t k = int64_t(blockIdx.x) * n;
+  int i = threadIdx.x;
+  if (i < n) {
+    col.dx[i] = dx[i];
+    col.w[IDN * n + i] = {rho[(shared_rho ? 0 : k) + i], dr[k + i]};
+    col.w[IPR * n + i] = {p[(shared_p ? 0 : k) + i], dp[k + i]};
+  }
+  __syncthreads();
+  if (i < n) col.pref[i] = SRS(g) * col.w[IDN * n + i] * col.dx[i];
+  for (int j = i - 2; j < n + 2; j += blockDim.x)
+    col.ratio(j, iu, inner, outer, clamp);
+  __syncthreads();
+  if (i < n) col.smooth(i, iu, inner, outer, clamp);
+  if (i == 0) col.scan(iu, g);
+  __syncthreads();
+  if (i < n)
+    col.cell(i, iu, g, inner, outer, clamp, out + k, int64_t(gridDim.x) * n);
+}
+
+void uniform_split_cuda(const torch::Tensor& rho, const torch::Tensor& p,
+                        const torch::Tensor& dr, const torch::Tensor& dp,
+                        const torch::Tensor& dx, const torch::Tensor& result,
+                        int iu, double g, bool inner, bool outer, bool clamp) {
+  at::cuda::CUDAGuard guard(dr.device());
+  int n = dx.numel();
+  uniform_split_tile_kernel<<<dr.numel() / n, ((n + 31) / 32) * 32,
+                              (IPR + 7) * n * sizeof(SRS),
+                              at::cuda::getCurrentCUDAStream()>>>(
+      rho.data_ptr<double>(), p.data_ptr<double>(), dr.data_ptr<float>(),
+      dp.data_ptr<float>(), dx.data_ptr<double>(), result.data_ptr<double>(),
+      rho.numel() == n, p.numel() == n, n, iu, g, inner, outer, clamp);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+void hydro_ref_x1_cuda(torch::Tensor const& w, torch::Tensor const& dx1f,
+                       torch::Tensor const& anchor, torch::Tensor const& psf_lo,
+                       torch::Tensor const& psf_hi, torch::Tensor const& pref,
+                       torch::Tensor const& dsf, torch::Tensor const& dref,
                        int iu, double grav, int x1_grid, bool phys_in,
                        bool phys_out, bool wall_clamp,
-                       torch::Tensor const &rows) {
+                       torch::Tensor const& rows) {
   TORCH_CHECK(x1_grid != kX1RefStretched || rows.defined(),
               "hydro_ref_x1: a stretched x1 needs its six-face rows");
   TORCH_CHECK(!rows.defined() || (rows.device() == w.device() &&
@@ -113,6 +155,7 @@ void hydro_ref_x1_cuda(torch::Tensor const &w, torch::Tensor const &dx1f,
 namespace at::native {
 
 REGISTER_CUDA_DISPATCH(call_hydro_pressure_scan_x1, &snap::hydro_pressure_scan_x1_cuda);
+REGISTER_CUDA_DISPATCH(call_uniform_split, &snap::uniform_split_cuda);
 REGISTER_CUDA_DISPATCH(call_hydro_ref_x1, &snap::hydro_ref_x1_cuda);
 
 } // namespace at::native

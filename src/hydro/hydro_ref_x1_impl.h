@@ -32,12 +32,12 @@ inline DISPATCH_MACRO T hydro_ref_x1_face(T const* psf_lo, T const* psf_hi,
 template <typename T, bool Clamp>
 inline DISPATCH_MACRO void hydro_ref_x1_pressure_scan_impl(
     T const* rho, T const* dx1f, T top_anchor, T* psf_lo, T* psf_hi, int column,
-    int nc1, int iu, T grav) {
+    int nc1, int iu, T grav, T const* drops = nullptr) {
   int flat = column * nc1;
   T face = top_anchor;
   T min_positive = reference_min_positive<T>();
   for (int i = iu; i >= 0; --i) {
-    T dp = grav * rho[flat + i] * dx1f[i];
+    T dp = drops ? drops[i] : grav * rho[flat + i] * dx1f[i];
     T lo = face + dp;
     T hi = face;
     psf_lo[flat + i] = Clamp ? (lo > min_positive ? lo : min_positive) : lo;
@@ -47,7 +47,7 @@ inline DISPATCH_MACRO void hydro_ref_x1_pressure_scan_impl(
 
   face = top_anchor;
   for (int i = iu + 1; i < nc1; ++i) {
-    T dp = grav * rho[flat + i] * dx1f[i];
+    T dp = drops ? drops[i] : grav * rho[flat + i] * dx1f[i];
     T lo = face;
     T hi = lo - dp;
     psf_lo[flat + i] = Clamp ? (lo > min_positive ? lo : min_positive) : lo;
@@ -61,7 +61,8 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
                                                   T const* anchor, T* psf_lo,
                                                   T* psf_hi, int column,
                                                   int ncolumns, int nc1, int iu,
-                                                  T grav) {
+                                                  T grav,
+                                                  T const* drops = nullptr) {
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
   T top_anchor;
@@ -76,7 +77,7 @@ inline DISPATCH_MACRO void hydro_ref_x1_scan_impl(T const* w, T const* dx1f,
 
   hydro_ref_x1_pressure_scan_impl<T, true>(w + IDN * ncells, dx1f, top_anchor,
                                            psf_lo, psf_hi, column, nc1, iu,
-                                           grav);
+                                           grav, drops);
 }
 
 //! rho/p k cells past a wall from r0 (wall) and r1: linear where it rises
@@ -157,7 +158,8 @@ template <typename T>
 inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
     T const* w, T const* dx1f, T const* psf_lo, T const* psf_hi, T* pref,
     T* dsf, T* dref, int column, int i, int ncolumns, int nc1, int iu, T grav,
-    int x1_grid, bool phys_in, bool phys_out, bool wall_clamp, T const* rows) {
+    int x1_grid, bool phys_in, bool phys_out, bool wall_clamp, T const* rows,
+    T const* smooth = nullptr) {
   bool uniform = x1_grid == kX1RefUniform;
   int ncells = ncolumns * nc1;
   int flat = column * nc1;
@@ -241,12 +243,15 @@ inline DISPATCH_MACRO void hydro_ref_x1_cell_impl(
   bool ext_lo = wall_clamp && phys_in && il + 1 <= iu;
   bool ext_hi = wall_clamp && phys_out && iu - 1 >= il;
   bool stretched = x1_grid == kX1RefStretched;
-  T rs = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi, ext_lo,
-                                 ext_hi, dx1f, stretched);
+  T rs = smooth ? smooth[i]
+                : hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i, jlo, jhi,
+                                          ext_lo, ext_hi, dx1f, stretched);
   T rf = rs;
   if (i > 0) {
-    T rs_dn = hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1, jlo, jhi,
-                                      ext_lo, ext_hi, dx1f, stretched);
+    T rs_dn =
+        smooth ? smooth[i - 1]
+               : hydro_ref_x1_rop_smooth(w, ncells, flat, nc1, i - 1, jlo, jhi,
+                                         ext_lo, ext_hi, dx1f, stretched);
     rf = stretched
              ? (dx1f[i] * rs_dn + dx1f[i - 1] * rs) / (dx1f[i - 1] + dx1f[i])
              : T(0.5) * (rs_dn + rs);
@@ -268,5 +273,70 @@ inline DISPATCH_MACRO void hydro_ref_x1_impl(
                            wall_clamp, rows);
   }
 }
+
+// One column of temporary pairs. Only the density and pressure rows of w
+// are read by the shared nonlinear operator.
+struct UniformSplitColumn {
+  SRS *w, *dx, *lo, *hi, *pref, *dsf, *dref;
+  int n;
+  DISPATCH_MACRO UniformSplitColumn(SRS* buf, int n)
+      : w(buf),
+        dx(w + (IPR + 1) * n),
+        lo(dx + n),
+        hi(lo + n),
+        pref(hi + n),
+        dsf(pref + n),
+        dref(dsf + n),
+        n(n) {}
+  DISPATCH_MACRO void scan(int iu, double g) {
+    hydro_ref_x1_scan_impl<SRS>(w, dx, nullptr, lo, hi, 0, 1, n, iu, SRS(g),
+                                pref);
+  }
+  // IVY and IVZ provide n+4 slots for rho/p including the two stencil
+  // samples outside each end. Only the two physical walls use extrapolation.
+  DISPATCH_MACRO void ratio(int j, int iu, bool inner, bool outer, bool clamp) {
+    int il = n - 1 - iu;
+    int first = inner && clamp ? il : 0, last = outer && clamp ? iu : n - 1;
+    auto rop = [&](int k) { return w[IDN * n + k] / w[IPR * n + k]; };
+    SRS r;
+    if (j < first)
+      r = inner && clamp && il < iu
+              ? hydro_ref_x1_wall_rop(rop(first), rop(first + 1),
+                                      SRS(first - j))
+              : rop(first);
+    else if (j > last)
+      r = outer && clamp && il < iu
+              ? hydro_ref_x1_wall_rop(rop(last), rop(last - 1), SRS(j - last))
+              : rop(last);
+    else
+      r = rop(j);
+    w[IVY * n + j + 2] = r;
+  }
+  DISPATCH_MACRO void smooth(int i, int iu, bool inner, bool outer,
+                             bool clamp) {
+    int il = n - 1 - iu;
+    auto const* r = w + IVY * n + i;
+    w[IVX * n + i] =
+        (il < iu && clamp && ((inner && i - 2 < il) || (outer && i + 2 > iu)))
+            ? (r[0] + SRS(4) * r[1] + SRS(6) * r[2] + SRS(4) * r[3] + r[4]) /
+                  SRS(16)
+            : r[2];
+  }
+  DISPATCH_MACRO void cell(int i, int iu, double g, bool inner, bool outer,
+                           bool clamp, double* out, int64_t cells) {
+    hydro_ref_x1_cell_impl<SRS>(w, dx, lo, hi, pref, dsf, dref, 0, i, 1, n, iu,
+                                SRS(g), kX1RefUniform, inner, outer, clamp,
+                                nullptr, w + IVX * n);
+    out[i] = lo[i].total();
+    out[cells + i] = hi[i].total();
+    out[2 * cells + i] = pref[i].total();
+    out[3 * cells + i] = dsf[i].total();
+    out[4 * cells + i] = dref[i].total();
+    out[5 * cells + i] = lo[i].base;
+    out[6 * cells + i] = lo[i].delta;
+    out[7 * cells + i] = pref[i].base;
+    out[8 * cells + i] = pref[i].delta;
+  }
+};
 
 }  // namespace snap
