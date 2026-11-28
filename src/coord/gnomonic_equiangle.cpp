@@ -467,6 +467,13 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
                                              torch::Tensor flux2,
                                              torch::Tensor flux3,
                                              torch::Tensor face_pressure1) {
+  return forward_split(prim, flux1, flux2, flux3, face_pressure1, {}, {});
+}
+
+torch::Tensor GnomonicEquiangleImpl::forward_split(
+    torch::Tensor prim, torch::Tensor flux1, torch::Tensor flux2,
+    torch::Tensor flux3, torch::Tensor face_pressure1,
+    torch::Tensor const& pressure_base2, torch::Tensor const& pressure_base3) {
   std::string eos_type = pmb->phydro->peos->options->type();
   auto div = CoordinateImpl::forward(prim, flux1, flux2, flux3);
 
@@ -508,14 +515,29 @@ torch::Tensor GnomonicEquiangleImpl::forward(torch::Tensor prim,
     div[IVX] -= src1;
   }
 
-  // Update flux 2
-  // the -rho v1 v_2 / r part is x1_mass_source_
-  auto src2 = x_ov_rD_kji * (pr + rho * v3 * v3 * sine2);
-  div[IVY] -= src2;
-
-  // Update flux 3
-  auto src3 = y_ov_rC_kji * (pr + rho * v2 * v2 * sine2);
-  div[IVZ] -= src3;
+  // The metric pressure source is p_cell * diff(area*sin(theta))/volume.
+  // Combine it with the removed face stress before rounding to flux precision.
+  auto lateral = [&](int row, int axis, int start, int stop,
+                     torch::Tensor const& base, torch::Tensor const& metric,
+                     torch::Tensor const& velocity) {
+    auto kinetic = rho * velocity * velocity * sine2;
+    if (!base.defined()) {
+      div[row] -= metric * (pr + kinetic);
+      return;
+    }
+    auto area_sine =
+        axis == 1 ? face_area2() * sine_face2_kj : face_area3() * sine_face3_kj;
+    auto cell = pr.slice(axis, start, stop);
+    auto stress = [&](int offset) {
+      auto f = base.slice(axis, start + offset, stop + offset);
+      return area_sine.slice(axis, start + offset, stop + offset) * (f - cell);
+    };
+    div[row] -= metric * kinetic;
+    div[row].slice(axis, start, stop) +=
+        (stress(1) - stress(0)) / cell_volume().slice(axis, start, stop);
+  };
+  lateral(IVY, 1, jl(), ju() + 1, pressure_base2, x_ov_rD_kji, v3);
+  lateral(IVZ, 0, kl(), ku() + 1, pressure_base3, y_ov_rC_kji, v2);
 
   return div;
 }

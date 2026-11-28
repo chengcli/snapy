@@ -355,6 +355,12 @@ void MeshBlockImpl::build_hydro_reference(Variables &vars) {
   auto u_ref = phydro->peos->compute("W->U", {w_ref});
   Variables tmp = vars;  // apply_boundaries reads only the references
   apply_boundaries(tmp, u_ref, torch::Tensor());
+  if (options->layout()->is_cubed_sphere()) {
+    // The state exchange interpolates conserved cell averages. Its static
+    // part must use exactly the same stencil, including subdivided corners.
+    Variables background{{"hydro_u", u_ref}};
+    exchange(background, SyncOptions().interpolate(true).type(kConserved));
+  }
   phydro->set_reference(u_ref);
   if (options->verbose()) {
     SINFO(MeshBlock) << "anomaly reference built, shape "

@@ -8,6 +8,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/coord/x1_centroid.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/eos/species_sum.hpp>
@@ -943,9 +944,21 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
   // nx3 > 1 keeps the x2 balance.
   bool any2 = u.size(DIM2) > 1, any3 = u.size(DIM3) > 1;
   // a zero centroid shift (Cartesian) leaves p* == p, the plain source
+  auto sphere_split =
+      split_flux ? dynamic_cast<GnomonicEquiangleImpl*>(pmb->pcoord.get())
+                 : nullptr;
+  auto divergence = [&](torch::Tensor const& prim) {
+    if (!sphere_split)
+      return pmb->pcoord->forward(prim, _flux1, _flux2, _flux3,
+                                  _face_pressure1);
+    // The radial gradient of the background is already booked as a force.
+    auto p1 = pressure_base1.defined() ? _face_pressure1 - pressure_base1
+                                       : _face_pressure1;
+    return sphere_split->forward_split(prim, _flux1, _flux2, _flux3, p1,
+                                       pressure_base2, pressure_base3);
+  };
   if ((!cov2 && !cov3) || pmb->pcoord->face_centroid_shift_zero()) {
-    _div.set_data(
-        pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+    _div.set_data(divergence(w));
   } else {
     int n1 = w.size(-1);
     auto dsh = pmb->pcoord->face_centroid_shift_x1()
@@ -955,12 +968,10 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
     auto wsrc = w.clone();
     wsrc[IPR].narrow(-1, 1, n1 - 2) -=
         dsh * d1_pressure(w[IPR], x1v, pmb->pcoord->il(), pmb->pcoord->iu());
-    auto div =
-        pmb->pcoord->forward(wsrc, _flux1, _flux2, _flux3, _face_pressure1);
+    auto div = divergence(wsrc);
     // a resolved direction whose faces are NOT corrected keeps the plain p
     if ((any2 && !cov2) || (any3 && !cov3)) {
-      auto plain =
-          pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1);
+      auto plain = divergence(w);
       if (any2 && !cov2) div[IVY].copy_(plain[IVY]);
       if (any3 && !cov3) div[IVZ].copy_(plain[IVZ]);
     }
@@ -1032,9 +1043,9 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
       } else
         force[IVX] = -face_gradient(pressure_base1, DIM1);
     }
-    if (pressure_base2.defined())
+    if (!sphere_split && pressure_base2.defined())
       force[IVY] = -face_gradient(pressure_base2, DIM2);
-    if (pressure_base3.defined())
+    if (!sphere_split && pressure_base3.defined())
       force[IVZ] = -face_gradient(pressure_base3, DIM3);
     du.index(interior) += dt * force.index(interior);
   }

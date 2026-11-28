@@ -1,0 +1,25 @@
+# Flat-bottom, height-coordinate adaptation of Jablonowski & Williamson (2006).
+# The Python driver sets the radial bounds, resolution and precision.
+reference-state: {Tref: 0., Pref: 100000.}
+species:
+  - name: dry
+    composition: {O: 0.4200039819342909, N: 1.560014790041652, Ar: 0.01}
+    cv_R: 2.5
+geometry:
+  type: gnomonic-equiangle
+  bounds: {x1min: 6371342., x1max: 6401229., x2min_pi: -0.25, x2max_pi: 0.25, x3min_pi: -0.25, x3max_pi: 0.25}
+  cells: {nx1: 26, nx2: 48, nx3: 48, nghost: 3}
+distribute: {layout: cubed-sphere, nb2: 1, nb3: 1, blocks_per_process: 6, verbose: false}
+dynamics:
+  precision: float64
+  equation-of-state: {type: ideal-moist, limiter: false}
+  reconstruct:
+    vertical: {type: weno5, scale: false, shock: false}
+    horizontal: {type: weno5, scale: false, shock: false}
+  riemann-solver: {type: hllc}
+boundary-condition:
+  external: {x1-inner: reflecting, x1-outer: reflecting, x2-inner: custom, x2-outer: custom, x3-inner: custom, x3-outer: custom}
+integration: {type: rk3, cfl: 0.5, implicit-scheme: 0, ncycle_out: 0}
+forcing:
+  const-gravity: {grav1: -9.80616}
+  coriolis: {type: xyz, traditional: true, omega1: 0.0000729212}

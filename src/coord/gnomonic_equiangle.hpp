@@ -80,6 +80,11 @@ class GnomonicEquiangleImpl
       torch::Tensor prim, torch::Tensor flux1, torch::Tensor flux2,
       torch::Tensor flux3,
       torch::Tensor face_pressure1 = torch::Tensor()) override;
+  torch::Tensor forward_split(torch::Tensor prim, torch::Tensor flux1,
+                              torch::Tensor flux2, torch::Tensor flux3,
+                              torch::Tensor face_pressure1,
+                              torch::Tensor const& pressure_base2,
+                              torch::Tensor const& pressure_base3);
   void x1_mass_source_(torch::Tensor du, torch::Tensor const& prim,
                        torch::Tensor const& m1, StepDt dt) const override;
 

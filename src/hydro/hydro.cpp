@@ -122,14 +122,10 @@ void HydroImpl::reset() {
                 "dynamics: anomaly is implemented for the ideal-moist "
                 "equation of state only, got '",
                 options->eos()->type(), "'; unset it (or SNAP_ANOMALY)");
-    // curved grids interpolate ghosts (cubed-sphere seams): the reference's
-    // ghosts would not match the interpolated anomaly's, so on/off would no
-    // longer agree to round-off. Step 1 is cartesian only.
-    TORCH_CHECK(!pmb->pcoord || pmb->pcoord->options->type() == "cartesian",
-                "dynamics: anomaly supports cartesian grids only in Step 1, "
-                "got '",
-                pmb->pcoord ? pmb->pcoord->options->type() : std::string(),
-                "'");
+    TORCH_CHECK(
+        !pmb->pcoord || pmb->pcoord->options->type() == "cartesian" ||
+            pmb->pcoord->options->type() == "gnomonic-equiangle",
+        "anomaly storage requires Cartesian or gnomonic-equiangle geometry");
     pref = register_module("ref", Fp64Store());
   }
 

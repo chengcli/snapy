@@ -1,6 +1,6 @@
 """Built-in increments, changing stage dt, mixed scripts and radial replay.
 
-CUDA FP32/FP64 on Cartesian; sphere FP64 (anomaly storage is Cartesian only).
+CUDA FP32/FP64 on Cartesian; sphere FP64.
 Plume's unavailable EOS is covered at registry level in test_source_registry.
 """
 import copy
