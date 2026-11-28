@@ -282,9 +282,8 @@ class HydroImpl : public torch::nn::Cloneable<HydroImpl> {
 
   // Per-column hydrostatic references for the well-balanced x1
   // reconstruction (X1Reference over this block's x1 column), rebuilt from
-  // the current field on every call; dw defined: the split path
-  ReferenceFaces _hydro_ref_x1(torch::Tensor const& w,
-                               torch::Tensor const& dw = torch::Tensor()) const;
+  // the current pressure and density fields on every call
+  ReferenceFaces _hydro_ref_x1(ReferenceInput const& input) const;
   //! post_dt: the step's dt, for the solve's register posts (V3 I-4)
   torch::Tensor _apply_implicit_correction(torch::Tensor& du,
                                            torch::Tensor const& w, StepDt dt,

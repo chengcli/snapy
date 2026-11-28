@@ -73,10 +73,8 @@ class RegisterMonitor {
   //! rewrites them at the redo's own begin_stage/end_stage (V3 S4)
   void rollback();
 
-  //! += n. A reduced count (0-d) adds at once; a mask or a vector is copied
-  //! into its slot of the stage's fixed count buffer and reduced with the
-  //! others by flush_counts() (V3 S4: one segment sum per stage, not one
-  //! per mask)
+  //! Scalar counts add immediately. Each mask or vector sums into one
+  //! fixed int64 slot; flush_counts() adds the posted counts by name.
   void count(std::string const& name, torch::Tensor const& n);
   //! the stage's count buffer into the counters: one integer cumsum, one
   //! gather of the segment ends, one add, then the buffer is zeroed (no
@@ -150,10 +148,10 @@ class RegisterMonitor {
   //! fold of the stages ended so far, written by amounts()
   torch::Tensor _rate, _post;
   mutable torch::Tensor _step_amount;
-  //! the stage's count masks in fixed device storage: one int64 buffer
+  //! the stage's reduced counts in fixed device storage: one int64 buffer
   //! behind a leading zero element, one slot per post in the stage's order
   //! (the pattern: counter index and numel per slot, grown at a new post,
-  //! eager). A host queue of the masks would be drained by the combine's
+  //! eager). A host queue of the counts would be drained by the combine's
   //! first warm-up and never refilled by a replayed advance, so the captured
   //! combine would count nothing (V3 S4). The segment ends [2, ncounters,
   //! dup] into the cumulative sum are cached per pattern

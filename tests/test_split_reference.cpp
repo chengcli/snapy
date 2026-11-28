@@ -18,6 +18,7 @@ TEST_P(DeviceTest, split_reference_matches_total_nonlinear_operator) {
     auto w = torch::zeros({5, 2, 1, 20}, opts);
     w[IPR] = torch::linspace(1.e5, 8.e4, 20, opts);
     w[IDN] = w[IPR] / 8.e4;
+    w[IPR][1] *= 1.01;
     for (double amplitude : {0., 1.e-8, .2, -.5}) {
       auto dw = torch::zeros_like(w);
       dw[IPR] = amplitude * w[IPR] * torch::sin(torch::arange(20, opts));
@@ -25,6 +26,23 @@ TEST_P(DeviceTest, split_reference_matches_total_nonlinear_operator) {
       dw = dw.to(dtype);
       snap::HydroReferenceX1 actual(torch::stack({w, dw}, -1)), expected(w);
       op.evaluate_split(w, dw, 10., {}, actual);
+      if (grid == 0 && dw.scalar_type() == torch::kFloat32) {
+        // Exercise a broadcast background column and a full three-D field.
+        auto direct =
+            op.uniform_split(w[IDN][0], w[IPR], dw[IDN], dw[IPR], 10.);
+        ASSERT_TRUE(direct.defined());
+        int row = 0;
+        for (auto t : {actual.psf_lo, actual.psf_hi, actual.pref, actual.dsf,
+                       actual.dref}) {
+          EXPECT_TRUE(torch::allclose(direct[row++],
+                                      t.select(-1, 0) + t.select(-1, 1), 2.e-14,
+                                      1.e-30));
+        }
+        for (auto t : {actual.psf_lo, actual.pref})
+          for (int lane : {0, 1})
+            EXPECT_TRUE(torch::allclose(direct[row++], t.select(-1, lane),
+                                        2.e-14, 1.e-30));
+      }
       op.evaluate(w + dw, 10., {}, expected);
       for (auto pair : {std::make_pair(actual.psf_lo, expected.psf_lo),
                         std::make_pair(actual.psf_hi, expected.psf_hi),
@@ -37,6 +55,37 @@ TEST_P(DeviceTest, split_reference_matches_total_nonlinear_operator) {
         if (amplitude == 0.)
           EXPECT_EQ(pair.first.select(-1, 1).abs().max().item<double>(), 0.);
       }
+    }
+  }
+}
+
+TEST_P(DeviceTest, uniform_column_stencil_matches_packed_at_walls) {
+  if (dtype != torch::kFloat32) GTEST_SKIP() << "FP32 increment specialization";
+  auto opts = torch::TensorOptions().device(device).dtype(torch::kFloat64);
+  for (int n : {8, 33, 128, 129}) {
+    auto dx = torch::ones({n}, opts);
+    auto w = torch::ones({IPR + 1, 2, 3, n}, opts);
+    auto x = torch::arange(w[IDN].numel(), opts).reshape_as(w[IDN]);
+    w[IDN] += 0.2 * torch::sin(x);
+    w[IPR] = 1000. + x;
+    auto dw = (w * 1.e-5).to(dtype);
+    for (int walls = 0; walls < 4; ++walls) {
+      snap::HydroReferenceX1Operator op(dx, n - 4, false, walls & 1, walls & 2,
+                                        true);
+      auto direct = op.uniform_split(w[IDN], w[IPR], dw[IDN], dw[IPR], 1.);
+      if (n > 128) {
+        EXPECT_FALSE(direct.defined());
+        continue;
+      }
+      ASSERT_TRUE(direct.defined());
+      snap::HydroReferenceX1 pairs;
+      op.evaluate_split(w, dw, 1., {}, pairs);
+      EXPECT_TRUE(torch::allclose(
+          direct[3], pairs.dsf.select(-1, 0) + pairs.dsf.select(-1, 1), 1.e-13,
+          1.e-15));
+      EXPECT_TRUE(torch::allclose(
+          direct[4], pairs.dref.select(-1, 0) + pairs.dref.select(-1, 1),
+          1.e-13, 1.e-15));
     }
   }
 }
@@ -58,6 +107,12 @@ TEST_P(DeviceTest, split_reference_retains_increments_below_fp64_ulp) {
                               dw[IPR].to(torch::kFloat64), 1.e-14, 1.e-24));
   EXPECT_TRUE(torch::allclose(out.pref.select(-1, 1),
                               dw[IPR].to(torch::kFloat64), 1.e-14, 1.e-24));
+  if (dtype == torch::kFloat32) {
+    auto result = op.uniform_split(w[IDN], w[IPR], dw[IDN], dw[IPR], 0.);
+    EXPECT_TRUE(torch::equal(result[6], out.psf_lo.select(-1, 1)));
+    EXPECT_TRUE(
+        torch::allclose(result[8], out.pref.select(-1, 1), 1.e-14, 1.e-24));
+  }
   EXPECT_LT(out.dref.select(-1, 1).abs().max().item<double>(), 1.e-34);
 }
 
@@ -78,5 +133,10 @@ TEST_P(DeviceTest,
   EXPECT_TRUE(
       torch::allclose(out.psf_lo.select(-1, 0) + out.psf_lo.select(-1, 1),
                       expected.psf_lo, 1.e-14, 1.e-14));
+  if (dtype == torch::kFloat32) {
+    auto result = op.uniform_split(w[IDN], w[IPR], dw[IDN], dw[IPR], 10.);
+    EXPECT_TRUE(torch::equal(
+        result[1], out.psf_hi.select(-1, 0) + out.psf_hi.select(-1, 1)));
+  }
   EXPECT_EQ(out.psf_hi.select(-1, 1).select(-1, 13).item<double>(), 0.);
 }

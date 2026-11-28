@@ -28,15 +28,28 @@ torch::Tensor WellBalancedX1::forward(torch::Tensor wx1,
       conv4->fill_walls(a, c, pos, r, {}, conv4_trips);
   };
 
-  auto pressure = wx1[IPR].clone();
-  auto density = wx1[IDN].clone();
-
-  if (split)
-    wx1[IPR].copy_((pressure0 - ref.cell0) + (pressure_delta - ref.cell_delta));
-  else
-    wx1[IPR] -= pref;
-  if (policy->fp32()) wx1[IPR] -= ref.gauge;
-  wx1[IDN] -= dref;
+  // The ordinary FP32 reconstruction owns a narrow working state. Form the
+  // two cancellation-sensitive differences before narrowing either row.
+  bool narrow_input = split && policy->fp32() && !covariance && !wall4[0] &&
+                      !wall4[1] && wx1.scalar_type() == torch::kFloat64;
+  auto density = narrow_input ? wx1[IDN] : wx1[IDN].clone();
+  torch::Tensor pressure;
+  if (narrow_input) {
+    wx1 = wx1.to(torch::kFloat32);
+    wx1[IPR].copy_(
+        ((pressure0 - ref.cell0) + (pressure_delta - ref.cell_delta)) -
+        ref.gauge);
+    wx1[IDN].copy_(density - dref);
+  } else {
+    pressure = wx1[IPR].clone();
+    if (split)
+      wx1[IPR].copy_((pressure0 - ref.cell0) +
+                     (pressure_delta - ref.cell_delta));
+    else
+      wx1[IPR] -= pref;
+    if (policy->fp32()) wx1[IPR] -= ref.gauge;
+    wx1[IDN] -= dref;
+  }
 
   // Even-parity ghost perturbations at the walls: p'(is-m) =
   // p'(is+m-1), rho' likewise. Only apply this at physical x1 walls.
@@ -96,8 +109,10 @@ torch::Tensor WellBalancedX1::forward(torch::Tensor wx1,
       /*floor=*/false);
   post_face_floors(recon, monitor);
 
-  wx1[IPR].copy_(pressure);
-  wx1[IDN].copy_(density);
+  if (!narrow_input) {
+    wx1[IPR].copy_(pressure);
+    wx1[IDN].copy_(density);
+  }
   if (velocity.defined()) wx1[IVX].copy_(velocity);
   // Restore full face pressure/density; floor any nonlinear-WENO overshoot
   // that would go non-positive (the references are tiny near the top) back

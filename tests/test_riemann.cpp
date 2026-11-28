@@ -480,6 +480,36 @@ TEST(HLLCFloat, shocks_rarefactions_and_boosts_match_double) {
   }
 }
 
+TEST_P(DeviceTest, dry_split_hllc_face_thermo_matches_total_eos) {
+  auto opts = MeshBlockOptionsImpl::from_yaml("test_abnormal_exit_floor.yaml");
+  opts->hydro()->riemann()->type() = "hllc";
+  auto block = MeshBlock(opts);
+  block->to(device, dtype);
+  auto eos = block->phydro->peos;
+  auto& dry = dynamic_cast<IdealMoistImpl&>(*eos);
+  ASSERT_EQ(eos->nvar(), ICY);
+  dry.u0[0].fill_(12345.);
+  auto solver = block->phydro->priemann;
+  auto shape = solver->elr.sizes().vec();
+  shape[0] = ICY;
+  auto left = torch::zeros(shape, solver->elr.options());
+  left[IDN].fill_(1.2);
+  left[IPR].fill_(0.01);
+  auto right = left.clone();
+  right[IDN].fill_(0.9);
+  right[IPR].fill_(-0.02);
+  auto bg = torch::full_like(left[IPR], 1.e5);
+  auto flux = torch::empty_like(left);
+  solver->forward_perturbations(left, right, DIM1, flux, bg);
+  for (auto [side, w] : {std::pair{ILT, left}, std::pair{IRT, right}}) {
+    w[IPR] += bg;
+    auto [g, c] = eos->gamma_sound_speed(w);
+    EXPECT_TRUE(torch::equal(solver->glr[side], g));
+    EXPECT_TRUE(torch::equal(solver->clr[side], c));
+    EXPECT_TRUE(torch::equal(solver->elr[side], eos->compute("W->I", {w})));
+  }
+}
+
 TEST_P(DeviceTest, hllc_pressure_split_dispatch_and_on_host) {
   auto opts = MeshBlockOptionsImpl::from_yaml("test_eos_temp2inteng.yaml");
   opts->hydro()->riemann()->type() = "hllc";

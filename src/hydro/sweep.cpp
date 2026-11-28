@@ -71,7 +71,8 @@ torch::Tensor reconstruct_faces(HydroImpl& hydro, FaceDir const& dir,
   // Covariance consumers still require total face states; retain their path.
   bool active_horizontal = (dim == DIM2 && !hydro.options->disable_flux_x2()) ||
                            (dim == DIM3 && !hydro.options->disable_flux_x3());
-  if (active_horizontal && !hydro.flux_covariance()) {
+  if (active_horizontal && !hydro.flux_covariance() &&
+      hydro.pmb->pcoord->options->type() == "cartesian") {
     background = static_face_gauge(perturb->pressure0, dim - 1);
     auto pressure = lr.select(1, IPR).to(torch::kFloat64);
     pressure += gauge;
@@ -122,10 +123,18 @@ void riemann_solve(HydroImpl& hydro, torch::Tensor lr, int dim,
     // be hydrostatic. Its full gradient is retained in the momentum source.
     // A static gauge keeps physical pressure increments in the Riemann
     // flux instead of moving them into a difference of large backgrounds.
-    background = static_face_gauge(perturb->pressure0, dim - 1);
-    lr = lr.clone();
-    lr[ILT][IPR] -= background;
-    lr[IRT][IPR] -= background;
+    // Both panels have the same pair of total interface pressures after
+    // face-state exchange. Their mean gives the owner and receiver the same
+    // scalar to subtract before rotating and reconciling the residual flux.
+    if (dim != 3 && hydro.pmb->options->layout()->is_cubed_sphere())
+      background = 0.5 * (lr[ILT][IPR] + lr[IRT][IPR]);
+    else
+      background = static_face_gauge(perturb->pressure0, dim - 1);
+    auto pressure = lr.select(1, IPR) - background;
+    lr = hydro.fp32() ? lr.to(torch::kFloat32, /*non_blocking=*/false,
+                              /*copy=*/true)
+                      : lr.clone();
+    lr.select(1, IPR).copy_(pressure);
   }
   if (hydro.fp32()) lr = lr.to(torch::kFloat32);
   hydro.priemann->forward_perturbations(lr[ILT], lr[IRT], dim, flux, background,

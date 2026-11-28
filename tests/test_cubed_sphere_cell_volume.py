@@ -26,11 +26,16 @@ ROUNDOFF = 1e-12
 REST_TOL = 1e-6  # max |v| / c_s after the short rest run
 
 
-def build(yaml_file: str, device: str):
+def build(yaml_file: str, device: str, split_precision=None):
     from snapy import Mesh, MeshOptions
 
     with open(yaml_file) as f:
         cfg = yaml.safe_load(f)
+    if split_precision:
+        dynamics = cfg["dynamics"]
+        dynamics.update(precision=split_precision, anomaly=True, **{"perturbation-flux": True})
+        dynamics["equation-of-state"]["type"] = "ideal-moist"
+        dynamics["riemann-solver"]["type"] = "hllc"
     nx = cfg["geometry"]["cells"]["nx2"]
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, dir=os.getcwd()) as f:
         yaml.safe_dump(cfg, f)
@@ -98,7 +103,7 @@ def rest(cfg, mesh, blocks):
     vmax, cs = 0.0, math.sqrt(1.4 * p0 / rho0)
     for ib, block in enumerate(blocks):
         sl = block.part((0, 0, 0), False)[1:]
-        u = mesh_vars[ib]["hydro_u"]  # end-of-step state (hydro_w is a stage input)
+        u = block.total_u(mesh_vars[ib])  # accepted end-of-step state
         v = u[1:4][(slice(None),) + tuple(sl)] / u[kIDN][sl]
         vmax = max(vmax, v.abs().max().item())
     return vmax / cs
@@ -106,6 +111,7 @@ def rest(cfg, mesh, blocks):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
+    ap.add_argument("--split-precision", choices=("float32", "float64"))
     ap.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     ap.add_argument(
         "--yaml",
@@ -116,7 +122,7 @@ def main(argv=None):
         print("SKIP: cuda requested but not available")
         return 125
 
-    cfg, mesh, blocks = build(args.yaml, args.device)
+    cfg, mesh, blocks = build(args.yaml, args.device, args.split_precision)
     b = cfg["geometry"]["bounds"]
     ri, ro = float(b["x1min"]), float(b["x1max"])
     exact = 4.0 * math.pi * (ro**3 - ri**3) / 3.0

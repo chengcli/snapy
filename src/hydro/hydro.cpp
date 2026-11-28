@@ -122,14 +122,10 @@ void HydroImpl::reset() {
                 "dynamics: anomaly is implemented for the ideal-moist "
                 "equation of state only, got '",
                 options->eos()->type(), "'; unset it (or SNAP_ANOMALY)");
-    // curved grids interpolate ghosts (cubed-sphere seams): the reference's
-    // ghosts would not match the interpolated anomaly's, so on/off would no
-    // longer agree to round-off. Step 1 is cartesian only.
-    TORCH_CHECK(!pmb->pcoord || pmb->pcoord->options->type() == "cartesian",
-                "dynamics: anomaly supports cartesian grids only in Step 1, "
-                "got '",
-                pmb->pcoord ? pmb->pcoord->options->type() : std::string(),
-                "'");
+    TORCH_CHECK(
+        !pmb->pcoord || pmb->pcoord->options->type() == "cartesian" ||
+            pmb->pcoord->options->type() == "gnomonic-equiangle",
+        "anomaly storage requires Cartesian or gnomonic-equiangle geometry");
     pref = register_module("ref", Fp64Store());
   }
 
@@ -506,8 +502,7 @@ void HydroImpl::_revise_x1outer_lr(torch::Tensor const& wl,
   wr[IDN].narrow(-1, ie + 1, 1) = wl[IDN].narrow(-1, ie + 1, 1);
 }
 
-ReferenceFaces HydroImpl::_hydro_ref_x1(torch::Tensor const& w,
-                                        torch::Tensor const& dw) const {
+ReferenceFaces HydroImpl::_hydro_ref_x1(ReferenceInput const& input) const {
   auto pcoord = pmb->pcoord;
   X1ReferenceConfig cfg;
   cfg.coord = pcoord.get();
@@ -523,7 +518,7 @@ ReferenceFaces HydroImpl::_hydro_ref_x1(torch::Tensor const& w,
   cfg.interp_x1_coeffs = precon1->pinterp1->has_x1_coeffs();
   ExchangeX1Link link(pmb);
   // downward magnitude (>0)
-  return x1_reference_.evaluate(cfg, {w, dw}, -options->grav()->grav1(), &link);
+  return x1_reference_.evaluate(cfg, input, -options->grav()->grav1(), &link);
 }
 
 std::shared_ptr<HydroImpl> HydroImpl::create(HydroOptions const& opts,

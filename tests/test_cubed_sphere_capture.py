@@ -14,9 +14,7 @@ hllc, weno5, rk3, constant radial gravity, solid-body zonal wind and a warm
 bubble. Strict cuda-graph against eager, FP64, 10 steps with dt changing
 every step, bitwise after every step, four variants: dry; a tracer with
 flux-covariance; conversion-order 4; both. One capture per (block, stage,
-segment) and replays after. FP32 is not run: on this base float32 requires
-perturbation-flux, which requires anomaly storage, which is Cartesian only
-(G5: the cubed-sphere gate is FP64).
+segment) and replays after. The FP32 JW06 graph/eager comparison lives in test_jw06.py.
 
   python test_cubed_sphere_capture.py
 """

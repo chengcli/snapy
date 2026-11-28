@@ -33,6 +33,12 @@ using hydro_ref_x1_fn =
 
 DECLARE_DISPATCH(hydro_ref_x1_fn, call_hydro_ref_x1);
 
+using uniform_split_fn = void (*)(const torch::Tensor&, const torch::Tensor&,
+                                  const torch::Tensor&, const torch::Tensor&,
+                                  const torch::Tensor&, const torch::Tensor&,
+                                  int, double, bool, bool, bool);
+DECLARE_DISPATCH(uniform_split_fn, call_uniform_split);
+
 using hydro_pressure_scan_x1_fn = void (*)(torch::Tensor const& rho,
                                            torch::Tensor const& dx1f,
                                            torch::Tensor const& anchor,

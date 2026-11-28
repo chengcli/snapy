@@ -77,7 +77,7 @@ ReferenceFaces X1Reference::evaluate(X1ReferenceConfig const& cfg,
                                      X1ColumnLink* link) const {
   auto const& w = in.base;
   auto const& dw = in.delta;
-  bool paired = dw.defined();
+  bool paired = dw.defined() || in.dp.defined();
   bool fp32 = cfg.policy->fp32();
   auto pcoord = cfg.coord;
   int is = pcoord->il();
@@ -101,10 +101,34 @@ ReferenceFaces X1Reference::evaluate(X1ReferenceConfig const& cfg,
   }
   HydroReferenceX1 reference;
   ReferenceFaces out;
-  if (paired) {
+  auto direct =
+      in.dp.defined() && !x1_split
+          ? op_->uniform_split(in.rho0, in.pressure0, in.drho, in.dp, g)
+          : torch::Tensor();
+  if (direct.defined()) {
+    reference.psf_lo = direct[0];
+    reference.psf_hi = direct[1];
+    reference.pref = direct[2];
+    reference.dsf = direct[3];
+    reference.dref = direct[4];
+    out.face0 = direct[5];
+    out.face_delta = direct[6];
+    out.cell0 = direct[7];
+    out.cell_delta = direct[8];
+    out.gauge = in.pressure0.narrow(-1, iu, 1) - out.cell0.narrow(-1, iu, 1);
+  } else if (paired) {
+    auto base = w, delta = dw;
+    if (in.dp.defined()) {
+      base = w.clone();
+      base[IDN].copy_(in.rho0);
+      base[IPR].copy_(in.pressure0);
+      delta = torch::zeros_like(base);
+      delta[IDN].copy_(in.drho);
+      delta[IPR].copy_(in.dp);
+    }
     HydroReferenceX1 pairs;
     op_->evaluate_split(
-        w, dw, g,
+        base, delta, g,
         anchor.defined() ? anchor.narrow(-1, 0, 2).unsqueeze(-2) : anchor,
         pairs);
     auto total = [](torch::Tensor const& p) {
@@ -120,9 +144,10 @@ ReferenceFaces X1Reference::evaluate(X1ReferenceConfig const& cfg,
     out.cell0 = pairs.pref.select(-1, 0).contiguous();
     out.cell_delta = pairs.pref.select(-1, 1).contiguous();
     if (fp32)
-      out.gauge = anchor.defined()
-                      ? anchor.narrow(-1, 2, 1).clone()
-                      : (w[IPR] - out.cell0).narrow(-1, iu, 1).clone();
+      out.gauge =
+          anchor.defined()
+              ? anchor.narrow(-1, 2, 1).clone()
+              : (base[IPR].narrow(-1, iu, 1) - out.cell0.narrow(-1, iu, 1));
   } else {
     reference = HydroReferenceX1(w);
     op_->evaluate(w, g, anchor, reference);

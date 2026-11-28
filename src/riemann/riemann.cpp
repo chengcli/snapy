@@ -236,21 +236,33 @@ torch::Tensor RiemannSolverImpl::solve(torch::Tensor wl, torch::Tensor wr,
         buffer->set_data(torch::empty(buffer->sizes(), wl.options()));
     }
     // the perturbation entry: the EOS sees the totals
-    auto wl_total = wl, wr_total = wr;
-    if (reference_pressure.defined()) {
+    auto* moist = dynamic_cast<IdealMoistImpl*>(peos.get());
+    bool dry_split = reference_pressure.defined() && moist &&
+                     wl.scalar_type() == torch::kFloat32 && wl.size(0) == ICY;
+    if (reference_pressure.defined())
       reference_pressure =
           reference_pressure.to(wl.options()).expand_as(wl[IPR]);
-      wl_total = wl.clone();
-      wr_total = wr.clone();
-      wl_total[IPR] += reference_pressure;
-      wr_total[IPR] += reference_pressure;
-    }
-    for (auto [side, w] :
-         {std::pair{ILT, wl_total}, std::pair{IRT, wr_total}}) {
-      elr[side] = peos->compute("W->I", {w});
-      auto [g, cs] = peos->gamma_sound_speed(w);
-      glr[side] = g;
-      clr[side] = cs;
+    if (dry_split) {
+      // The dry EOS needs only density and total pressure at a face. Keep
+      // both input states in their residual representation for HLLC.
+      double gm1 = moist->gammad_(moist->pthermo->options->cref_R()[0]) - 1.;
+      glr.fill_(1.f + static_cast<float>(gm1));
+      for (auto [side, w] : {std::pair{ILT, wl}, std::pair{IRT, wr}}) {
+        auto pressure = w[IPR] + reference_pressure;
+        elr[side].copy_(pressure / gm1 + w[IDN] * moist->u0[0]);
+        clr[side].copy_((glr[side] * pressure / w[IDN]).sqrt());
+      }
+    } else {
+      for (auto [side, w] : {std::pair{ILT, wl}, std::pair{IRT, wr}}) {
+        if (reference_pressure.defined()) {
+          w = w.clone();
+          w[IPR] += reference_pressure;
+        }
+        elr[side] = peos->compute("W->I", {w});
+        auto [g, cs] = peos->gamma_sound_speed(w);
+        glr[side] = g;
+        clr[side] = cs;
+      }
     }
     e = elr, gamma = glr, c = clr;
   } else if (kind == RiemannKind::lmars) {

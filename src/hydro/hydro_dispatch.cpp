@@ -29,6 +29,37 @@ void hydro_pressure_scan_x1_cpu(torch::Tensor const& rho,
       });
 }
 
+void uniform_split_cpu(const torch::Tensor& rho, const torch::Tensor& p,
+                       const torch::Tensor& dr, const torch::Tensor& dp,
+                       const torch::Tensor& dx, const torch::Tensor& result,
+                       int iu, double g, bool inner, bool outer, bool clamp) {
+  int n = dx.numel();
+  auto count = dr.numel();
+  auto r = rho.data_ptr<double>(), pressure = p.data_ptr<double>();
+  auto rd = dr.data_ptr<float>(), pd = dp.data_ptr<float>();
+  auto widths = dx.data_ptr<double>(), out = result.data_ptr<double>();
+  at::parallel_for(0, count / n, 0, [&](int64_t first, int64_t end) {
+    std::vector<SRS> scratch((IPR + 7) * n);
+    UniformSplitColumn col(scratch.data(), n);
+    for (int i = 0; i < n; ++i) col.dx[i] = widths[i];
+    for (auto c = first; c < end; ++c) {
+      auto k = c * n;
+      for (int i = 0; i < n; ++i) {
+        col.w[IDN * n + i] = {r[(rho.numel() == n ? 0 : k) + i], rd[k + i]};
+        col.w[IPR * n + i] = {pressure[(p.numel() == n ? 0 : k) + i],
+                              pd[k + i]};
+      }
+      for (int i = 0; i < n; ++i)
+        col.pref[i] = SRS(g) * col.w[IDN * n + i] * col.dx[i];
+      for (int j = -2; j < n + 2; ++j) col.ratio(j, iu, inner, outer, clamp);
+      col.scan(iu, g);
+      for (int i = 0; i < n; ++i) col.smooth(i, iu, inner, outer, clamp);
+      for (int i = 0; i < n; ++i)
+        col.cell(i, iu, g, inner, outer, clamp, out + k, count);
+    }
+  });
+}
+
 void hydro_ref_x1_cpu(torch::Tensor const& w, torch::Tensor const& dx1f,
                       torch::Tensor const& anchor, torch::Tensor const& psf_lo,
                       torch::Tensor const& psf_hi, torch::Tensor const& pref,
@@ -83,6 +114,8 @@ REGISTER_ALL_CPU_DISPATCH(call_hydro_pressure_scan_x1,
                           &snap::hydro_pressure_scan_x1_cpu);
 REGISTER_MPS_DISPATCH(call_hydro_pressure_scan_x1,
                       &snap::OnHost<&snap::hydro_pressure_scan_x1_cpu>::run);
+DEFINE_DISPATCH(call_uniform_split);
+REGISTER_ALL_CPU_DISPATCH(call_uniform_split, &snap::uniform_split_cpu);
 DEFINE_DISPATCH(call_hydro_ref_x1);
 REGISTER_ALL_CPU_DISPATCH(call_hydro_ref_x1, &snap::hydro_ref_x1_cpu);
 REGISTER_MPS_DISPATCH(call_hydro_ref_x1,

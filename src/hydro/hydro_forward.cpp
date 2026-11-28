@@ -8,6 +8,7 @@
 // snap
 #include <snap/snap.h>
 
+#include <snap/coord/gnomonic_equiangle.hpp>
 #include <snap/coord/x1_centroid.hpp>
 #include <snap/eos/ideal_moist.hpp>
 #include <snap/eos/species_sum.hpp>
@@ -501,17 +502,14 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
     }
     torch::Tensor wtmp;
     if (wb_x1) {
-      auto base = wx1;
-      torch::Tensor delta;
+      ReferenceInput input{wx1, {}};
       if (split_flux) {
-        base = wx1.clone();
-        base[IPR].copy_(perturb.pressure0);
-        base[IDN].copy_(perturb.density0);
-        delta = torch::zeros_like(base);
-        delta[IPR].copy_(perturb.pressure_delta);
-        delta[IDN].copy_(perturb.density_delta);
+        input.rho0 = perturb.density0;
+        input.pressure0 = perturb.pressure0;
+        input.drho = perturb.density_delta;
+        input.dp = perturb.pressure_delta;
       }
-      auto ref = _hydro_ref_x1(base, delta);
+      auto ref = _hydro_ref_x1(input);
       if (split_flux) {
         pressure_base1 = ref.face0;
         // The unclamped scan satisfies grad(p0)=g*rho0 analytically. Retain
@@ -523,7 +521,8 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
             clamped, options->grav()->grav1() * perturb.density0 - grad,
             torch::zeros_like(grad));
         if (pmb->policy.fp32()) pressure_base1 = pressure_base1 + ref.gauge;
-        pressure_base1_before_seam = pressure_base1.clone();
+        if (playout && playout->options->nb(1) > 1)
+          pressure_base1_before_seam = pressure_base1.clone();
       }
 
       WellBalancedX1 wb;
@@ -571,7 +570,8 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
                                   pmb->pcoord->dx1f.slice(0, is, ie);
     }
 
-    if (pressure_base1.defined()) {
+    if (pressure_base1.defined() && options->grav() &&
+        options->grav()->non_hydrostatic() < 1.) {
       rho_grav_delta = rho_grav.clone();
       rho_grav += face_gradient(pressure_base1, DIM1);
     }
@@ -943,9 +943,21 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
   // nx3 > 1 keeps the x2 balance.
   bool any2 = u.size(DIM2) > 1, any3 = u.size(DIM3) > 1;
   // a zero centroid shift (Cartesian) leaves p* == p, the plain source
+  auto sphere_split =
+      split_flux ? dynamic_cast<GnomonicEquiangleImpl*>(pmb->pcoord.get())
+                 : nullptr;
+  auto divergence = [&](torch::Tensor const& prim) {
+    if (!sphere_split)
+      return pmb->pcoord->forward(prim, _flux1, _flux2, _flux3,
+                                  _face_pressure1);
+    // The radial gradient of the background is already booked as a force.
+    auto p1 = pressure_base1.defined() ? _face_pressure1 - pressure_base1
+                                       : _face_pressure1;
+    return sphere_split->forward_split(prim, _flux1, _flux2, _flux3, p1,
+                                       pressure_base2, pressure_base3);
+  };
   if ((!cov2 && !cov3) || pmb->pcoord->face_centroid_shift_zero()) {
-    _div.set_data(
-        pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1));
+    _div.set_data(divergence(w));
   } else {
     int n1 = w.size(-1);
     auto dsh = pmb->pcoord->face_centroid_shift_x1()
@@ -955,12 +967,10 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
     auto wsrc = w.clone();
     wsrc[IPR].narrow(-1, 1, n1 - 2) -=
         dsh * d1_pressure(w[IPR], x1v, pmb->pcoord->il(), pmb->pcoord->iu());
-    auto div =
-        pmb->pcoord->forward(wsrc, _flux1, _flux2, _flux3, _face_pressure1);
+    auto div = divergence(wsrc);
     // a resolved direction whose faces are NOT corrected keeps the plain p
     if ((any2 && !cov2) || (any3 && !cov3)) {
-      auto plain =
-          pmb->pcoord->forward(w, _flux1, _flux2, _flux3, _face_pressure1);
+      auto plain = divergence(w);
       if (any2 && !cov2) div[IVY].copy_(plain[IVY]);
       if (any3 && !cov3) div[IVZ].copy_(plain[IVZ]);
     }
@@ -1026,15 +1036,17 @@ torch::Tensor HydroImpl::forward(StepDt dt, torch::Tensor u,
     auto force = torch::zeros_like(du);
     if (!options->disable_flux_x1() && pressure_base1.defined()) {
       if (split_gravity) {
-        force[IVX] =
-            background_force1 * options->grav()->non_hydrostatic() -
-            face_gradient(pressure_base1 - pressure_base1_before_seam, DIM1);
+        auto radial = background_force1 * options->grav()->non_hydrostatic();
+        if (pressure_base1_before_seam.defined())
+          radial -=
+              face_gradient(pressure_base1 - pressure_base1_before_seam, DIM1);
+        force[IVX] = radial;
       } else
         force[IVX] = -face_gradient(pressure_base1, DIM1);
     }
-    if (pressure_base2.defined())
+    if (!sphere_split && pressure_base2.defined())
       force[IVY] = -face_gradient(pressure_base2, DIM2);
-    if (pressure_base3.defined())
+    if (!sphere_split && pressure_base3.defined())
       force[IVZ] = -face_gradient(pressure_base3, DIM3);
     du.index(interior) += dt * force.index(interior);
   }

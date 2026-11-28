@@ -511,6 +511,12 @@ snapy_add_python_test(test_stage_executor_capture TIMEOUT 300 LABELS "python;hyd
 snapy_add_python_test(test_execution_capability TIMEOUT 120 LABELS "python;hydro")
 snapy_add_python_test(test_graph_pool_recapture TIMEOUT 600 LABELS "python;hydro")
 snapy_add_python_test(test_graph_user_forcing TIMEOUT 600 LABELS "python;hydro;forcing")
+snapy_add_python_test(test_cubed_sphere_fp32_rest SCRIPT test_cubed_sphere_cell_volume.py
+                      ARGS --split-precision float32 TIMEOUT 300
+                      LABELS "python;hydro;cubed-sphere;fp32-foundations")
+snapy_add_python_test(test_jw06 TIMEOUT 300 LABELS "python;hydro;cubed-sphere;fp32-foundations")
+snapy_add_python_test(test_jw06_subdivided SCRIPT test_jw06.py ARGS --subdivide 2
+                      TIMEOUT 300 LABELS "python;hydro;cubed-sphere;fp32-foundations")
 snapy_add_python_test(test_cubed_sphere_capture TIMEOUT 900 LABELS "python;hydro")
 # a stretched x1 (explicit faces) cubed sphere captures: no host copy of the
 # x1 reference rows inside a captured segment
